@@ -1,0 +1,12 @@
+# Configuration for crypto bot
+exchange: binance
+symbol: BTC/USDT
+timeframe: 15m
+risk:
+  max_drawdown: 0.7
+  stop_loss_pct: 0.02
+  take_profit_pct: 0.04
+telegram:
+  chat_id: "YOUR_CHAT_ID"
+loop_interval_minutes: 5
+mode: dry_run  # or live
