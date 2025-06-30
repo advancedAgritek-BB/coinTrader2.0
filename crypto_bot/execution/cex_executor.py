@@ -1,12 +1,15 @@
 import os
+import json
+import asyncio
 import ccxt
-from typing import Dict
+from typing import Dict, Optional
 import pandas as pd
 from dotenv import dotenv_values
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 from crypto_bot.utils.telegram import send_message
+from crypto_bot.data.kraken_ws import KrakenWebsocketClient
 
 
 
@@ -60,3 +63,39 @@ def log_trade(order: Dict) -> None:
             sheet.append_row(list(order.values()))
     except Exception:
         pass
+
+
+def get_ws_token(exchange: ccxt.Exchange) -> Optional[str]:
+    """Return a WebSocket authentication token if supported."""
+    try:
+        method = getattr(exchange, "private_post_getwebsocketstoken")
+    except AttributeError:
+        return None
+    try:
+        result = method()
+        return result.get("result", {}).get("token")
+    except Exception:
+        return None
+
+
+def place_trailing_stop_ws(
+    client: KrakenWebsocketClient,
+    symbol: str,
+    side: str,
+    qty: float,
+    price_pct: float,
+) -> None:
+    """Send trailing-stop order via Kraken WebSocket."""
+    msg = {
+        "method": "add_order",
+        "params": {
+            "order_type": "trailing-stop",
+            "side": side,
+            "symbol": symbol,
+            "order_qty": qty,
+            "triggers": {"reference": "last", "price": price_pct, "price_type": "pct"},
+            "token": client.token,
+        },
+    }
+    if client.private_ws:
+        asyncio.create_task(client.private_ws.send(json.dumps(msg)))

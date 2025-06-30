@@ -2,6 +2,7 @@ import pandas as pd
 import ta
 
 from crypto_bot.utils.logger import setup_logger
+from crypto_bot.execution.cex_executor import place_trailing_stop_ws, KrakenWebsocketClient
 
 logger = setup_logger(__name__, "crypto_bot/logs/exit.log")
 
@@ -83,3 +84,15 @@ def get_partial_exit_percent(pnl_pct: float) -> int:
     if pnl_pct > 25:
         return 20
     return 0
+
+
+def send_trailing_stop_order(
+    ws_client: KrakenWebsocketClient, symbol: str, side: str, qty: float, pct: float
+) -> None:
+    """Convenience wrapper to submit a trailing-stop order over WebSocket."""
+    try:
+        place_trailing_stop_ws(ws_client, symbol, side, qty, pct)
+        logger.info("Submitted trailing stop via WebSocket")
+    except Exception as exc:
+        logger.warning("Failed to submit trailing stop: %s", exc)
+
