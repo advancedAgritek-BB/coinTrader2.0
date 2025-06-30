@@ -1,3 +1,4 @@
+import os
 import ccxt
 from typing import Dict
 import pandas as pd
@@ -8,12 +9,26 @@ from oauth2client.service_account import ServiceAccountCredentials
 from crypto_bot.utils.telegram import send_message
 
 
-def load_exchange(api_key: str, api_secret: str) -> ccxt.Exchange:
-    return ccxt.binance({
-        'apiKey': api_key,
-        'secret': api_secret,
-        'enableRateLimit': True,
-    })
+
+def get_exchange(config):
+    """Instantiate and return a ccxt exchange based on config."""
+    exchange_name = config.get("exchange", "coinbase")
+
+    if exchange_name == "coinbase":
+        return ccxt.coinbase({
+            "apiKey": os.getenv("API_KEY"),
+            "secret": os.getenv("API_SECRET"),
+            "password": os.getenv("API_PASSPHRASE"),
+            "enableRateLimit": True,
+        })
+    elif exchange_name == "kraken":
+        return ccxt.kraken({
+            "apiKey": os.getenv("API_KEY"),
+            "secret": os.getenv("API_SECRET"),
+            "enableRateLimit": True,
+        })
+    else:
+        raise ValueError(f"Unsupported exchange: {exchange_name}")
 
 
 def execute_trade(exchange: ccxt.Exchange, symbol: str, side: str, amount: float, token: str, chat_id: str, dry_run: bool = True) -> Dict:
