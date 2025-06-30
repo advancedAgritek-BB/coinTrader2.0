@@ -1,24 +1,25 @@
 import time
+import os
 import pandas as pd
-import ccxt
 import yaml
 from dotenv import dotenv_values
 from pathlib import Path
 import json
+from crypto_bot.utils.telegram import send_message
 
 from crypto_bot.wallet_manager import load_or_create
 from crypto_bot.regime.regime_classifier import classify_regime
 from crypto_bot.strategy_router import route
 from crypto_bot.signals.signal_scoring import evaluate
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
-from crypto_bot.execution.executor import execute_trade, load_exchange
+from crypto_bot.execution.executor import execute_trade
 from crypto_bot.risk.exit_manager import (
     calculate_trailing_stop,
     should_exit,
     get_partial_exit_percent,
 )
 
-from crypto_bot.execution.cex_executor import execute_trade as cex_trade, load_exchange
+from crypto_bot.execution.cex_executor import execute_trade as cex_trade, get_exchange
 from crypto_bot.execution.solana_executor import execute_swap
 
 CONFIG_PATH = Path(__file__).resolve().parent / 'config.yaml'
@@ -34,7 +35,14 @@ def main():
     config = load_config()
     user = load_or_create()
     secrets = dotenv_values(ENV_PATH)
-    exchange = load_exchange(secrets['API_KEY'], secrets['API_SECRET'])
+    os.environ.update(secrets)
+    exchange = get_exchange(config)
+    try:
+        exchange.fetch_balance()
+    except Exception as e:
+        print(f"Exchange API setup failed: {e}")
+        send_message(secrets.get('TELEGRAM_TOKEN'), config['telegram']['chat_id'], f"API error: {e}")
+        return
     risk_config = RiskConfig(**config['risk'])
     risk_manager = RiskManager(risk_config)
 
@@ -60,7 +68,7 @@ def main():
         env = mode if mode != 'auto' else 'cex'
         strategy_fn = route(regime, env)
         score, direction = evaluate(strategy_fn, df)
-        balance = exchange.fetch_balance()['USDT']['free'] if config['mode'] != 'dry_run' else 1000
+        balance = exchange.fetch_balance()['USDT']['free'] if config['execution_mode'] != 'dry_run' else 1000
         size = risk_manager.position_size(score, balance)
 
         current_price = df['close'].iloc[-1]
@@ -85,7 +93,7 @@ def main():
                     config,
                     secrets['TELEGRAM_TOKEN'],
                     config['telegram']['chat_id'],
-                    dry_run=config['mode'] == 'dry_run',
+                    dry_run=config['execution_mode'] == 'dry_run',
                 )
                 if sell_amount >= position_size:
                     open_side = None
@@ -95,9 +103,6 @@ def main():
                     highest_price = 0.0
                 else:
                     position_size -= sell_amount
-
-        if open_side is None and direction != 'none' and score > 0:
-            execute_trade(
 
         if score < config['signal_threshold'] or direction == 'none':
             time.sleep(config['loop_interval_minutes'] * 60)

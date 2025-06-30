@@ -1,5 +1,6 @@
 # Configuration for hybrid crypto bot
 mode: auto  # auto, cex, onchain
+exchange: coinbase  # Options: coinbase, kraken
 wallet_address: "your_wallet"
 preferred_chain: "solana"
 symbol: "BTC/USDT"
@@ -8,7 +9,7 @@ trade_size_pct: 0.2
 sl_pct: 0.03
 tp_pct: 0.07
 signal_threshold: 0.75
-execution_mode: "dry_run"
+execution_mode: dry_run  # or live
 telegram_alerts: true
 log_to_google: true
 risk:
@@ -18,7 +19,6 @@ risk:
 telegram:
   chat_id: "YOUR_CHAT_ID"
 loop_interval_minutes: 5
-mode: dry_run  # or live
 exit_strategy:
   trailing_stop_pct: 0.1
   min_gain_to_trail: 0.2
