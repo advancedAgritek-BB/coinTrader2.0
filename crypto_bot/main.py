@@ -6,6 +6,7 @@ from dotenv import dotenv_values
 from pathlib import Path
 import json
 from crypto_bot.utils.telegram import send_message
+from crypto_bot.utils.logger import setup_logger
 
 from crypto_bot.wallet_manager import load_or_create
 from crypto_bot.regime.regime_classifier import classify_regime
@@ -25,13 +26,17 @@ from crypto_bot.execution.solana_executor import execute_swap
 CONFIG_PATH = Path(__file__).resolve().parent / 'config.yaml'
 ENV_PATH = Path(__file__).resolve().parent / '.env'
 
+logger = setup_logger('bot', 'crypto_bot/logs/bot.log')
+
 
 def load_config() -> dict:
     with open(CONFIG_PATH) as f:
+        logger.info("Loading config from %s", CONFIG_PATH)
         return yaml.safe_load(f)
 
 
 def main():
+    logger.info("Starting bot")
     config = load_config()
     user = load_or_create()
     secrets = dotenv_values(ENV_PATH)
@@ -40,7 +45,7 @@ def main():
     try:
         exchange.fetch_balance()
     except Exception as e:
-        print(f"Exchange API setup failed: {e}")
+        logger.error("Exchange API setup failed: %s", e)
         send_message(secrets.get('TELEGRAM_TOKEN'), config['telegram']['chat_id'], f"API error: {e}")
         return
     risk_config = RiskConfig(**config['risk'])
@@ -65,9 +70,11 @@ def main():
             continue
 
         regime = classify_regime(df)
+        logger.info("Market regime classified as %s", regime)
         env = mode if mode != 'auto' else 'cex'
         strategy_fn = route(regime, env)
         score, direction = evaluate(strategy_fn, df)
+        logger.info("Signal score %.2f direction %s", score, direction)
         balance = exchange.fetch_balance()['USDT']['free'] if config['execution_mode'] != 'dry_run' else 1000
         size = risk_manager.position_size(score, balance)
 
@@ -85,6 +92,7 @@ def main():
             if exit_signal:
                 pct = get_partial_exit_percent(pnl_pct * 100)
                 sell_amount = position_size * (pct / 100) if config['exit_strategy']['scale_out'] and pct > 0 else position_size
+                logger.info("Executing exit trade amount %.4f", sell_amount)
                 execute_trade(
                     exchange,
                     config['symbol'],
@@ -114,6 +122,7 @@ def main():
         if env == 'onchain':
             execute_swap('SOL', 'USDC', size, user['telegram_token'], user['telegram_chat_id'], dry_run=config['execution_mode'] == 'dry_run')
         else:
+            logger.info("Executing entry %s %.4f", direction, size)
             cex_trade(
                 exchange,
                 config['symbol'],
@@ -127,11 +136,13 @@ def main():
             entry_price = current_price
             position_size = size
             highest_price = entry_price
+            logger.info("Trade opened at %.4f", entry_price)
 
         key = f"{env}_{regime}"
         stats.setdefault(key, {'trades': 0})
         stats[key]['trades'] += 1
         stats_file.write_text(json.dumps(stats))
+        logger.info("Updated trade stats %s", stats[key])
 
         time.sleep(config['loop_interval_minutes'] * 60)
 

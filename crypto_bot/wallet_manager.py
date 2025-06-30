@@ -1,6 +1,10 @@
 import yaml
 from pathlib import Path
 
+from crypto_bot.utils.logger import setup_logger
+
+logger = setup_logger(__name__, "crypto_bot/logs/wallet.log")
+
 CONFIG_FILE = Path(__file__).resolve().parent / 'user_config.yaml'
 
 
@@ -20,9 +24,11 @@ def prompt_user() -> dict:
 def load_or_create() -> dict:
     """Load credentials from file or prompt the user."""
     if CONFIG_FILE.exists():
+        logger.info("Loading user configuration from %s", CONFIG_FILE)
         with open(CONFIG_FILE) as f:
             return yaml.safe_load(f)
     creds = prompt_user()
+    logger.info("Creating new user configuration at %s", CONFIG_FILE)
     with open(CONFIG_FILE, 'w') as f:
         yaml.safe_dump(creds, f)
     return creds
