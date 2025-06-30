@@ -18,3 +18,11 @@ risk:
 telegram:
   chat_id: "YOUR_CHAT_ID"
 loop_interval_minutes: 5
+mode: dry_run  # or live
+exit_strategy:
+  trailing_stop_pct: 0.1
+  min_gain_to_trail: 0.2
+  fib_tp_enabled: true
+  scale_out: true
+  partial_levels: [25, 50, 100]
+
