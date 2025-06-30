@@ -1,28 +1,50 @@
 # Configuration for hybrid crypto bot
-mode: auto  # auto, cex, onchain
-exchange: coinbase  # Options: coinbase, kraken
+# mode selects the trading environment: auto chooses based on regime, or use cex/onchain
+mode: auto
+# exchange used for centralized trading (coinbase or kraken)
+exchange: coinbase
+# wallet address for on-chain transactions
 wallet_address: "your_wallet"
+# preferred blockchain when using on-chain mode
 preferred_chain: "solana"
+# market symbol to trade on the exchange
 symbol: "BTC/USDT"
+# timeframe of candles to fetch
 timeframe: "1h"
+# percent of available balance to allocate per trade
 trade_size_pct: 0.2
+# default stop loss percentage
 sl_pct: 0.03
+# default take profit percentage
 tp_pct: 0.07
+# minimum signal score required to open a position
 signal_threshold: 0.75
-execution_mode: dry_run  # or live
+# run in dry_run to simulate trades or live for real trading
+execution_mode: dry_run
+# enable or disable telegram notifications
 telegram_alerts: true
+# log trades to Google Sheets if credentials are provided
 log_to_google: true
 risk:
+  # maximum drawdown allowed before trading is halted
   max_drawdown: 0.7
+  # stop loss percent managed by the risk manager
   stop_loss_pct: 0.02
+  # take profit percent managed by the risk manager
   take_profit_pct: 0.04
 telegram:
+  # telegram chat id to receive alerts
   chat_id: "YOUR_CHAT_ID"
+# minutes to wait between trading loops
 loop_interval_minutes: 5
 exit_strategy:
+  # trailing stop percent applied after trade moves in our favor
   trailing_stop_pct: 0.1
+  # profit percent before trailing stop activates
   min_gain_to_trail: 0.2
+  # use Fibonacci extensions for take profit targets
   fib_tp_enabled: true
+  # allow scaling out of positions
   scale_out: true
+  # profit levels (%) at which partial exits occur
   partial_levels: [25, 50, 100]
-
