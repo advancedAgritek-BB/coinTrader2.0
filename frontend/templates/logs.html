@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="mb-4">Logs</h1>
+<pre id="log-area" class="bg-dark text-light p-3" style="height:400px; overflow:auto;"></pre>
+{% endblock %}
+{% block scripts %}
+<script>
+async function fetchLogs() {
+  const resp = await fetch('{{ url_for('logs_tail') }}');
+  const text = await resp.text();
+  document.getElementById('log-area').textContent = text;
+}
+fetchLogs();
+setInterval(fetchLogs, 3000);
+</script>
+{% endblock %}
