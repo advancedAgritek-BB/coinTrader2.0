@@ -1,7 +1,16 @@
-# Configuration for crypto bot
-exchange: binance
-symbol: BTC/USDT
-timeframe: 15m
+# Configuration for hybrid crypto bot
+mode: auto  # auto, cex, onchain
+wallet_address: "your_wallet"
+preferred_chain: "solana"
+symbol: "BTC/USDT"
+timeframe: "1h"
+trade_size_pct: 0.2
+sl_pct: 0.03
+tp_pct: 0.07
+signal_threshold: 0.75
+execution_mode: "dry_run"
+telegram_alerts: true
+log_to_google: true
 risk:
   max_drawdown: 0.7
   stop_loss_pct: 0.02
@@ -9,4 +18,3 @@ risk:
 telegram:
   chat_id: "YOUR_CHAT_ID"
 loop_interval_minutes: 5
-mode: dry_run  # or live
