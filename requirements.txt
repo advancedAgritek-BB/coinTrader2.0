@@ -1,0 +1,11 @@
+pandas
+numpy
+ta
+ccxt
+gspread
+oauth2client
+python-dotenv
+PyYAML
+python-telegram-bot
+Flask
+pytest
