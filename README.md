@@ -1,12 +1,15 @@
 # Crypto Trading Bot
 
-This project provides a modular cryptocurrency trading bot that can classify market regimes and switch strategies automatically. Key features include:
+This project provides a modular hybrid cryptocurrency trading bot. It can trade on centralized exchanges like Binance as well as on-chain DEXes on Solana.
 
-- Regime detection using common technical indicators
-- Strategy routing for trending, sideways, breakout and mean-reverting markets
-- Risk management and position sizing
-- Telegram notifications and trade logging to CSV/Google Sheets
-- Support for live trading or dry-run simulation
-- Optional backtesting
+Main features include:
 
-See `crypto_bot/config.yaml` to configure exchange parameters.
+- Regime detection using EMA, ADX, RSI and Bollinger Band width
+- Strategy routing for trending, sideways, breakout or volatile markets
+- Support for CEX strategies (trend and grid) and on-chain strategies (sniper and DEX scalper)
+- Telegram notifications and optional Google Sheets logging
+- Risk management with drawdown limits and volume/volatility filters
+- Live trading or dry-run simulation
+- Optional backtesting per regime
+
+Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credentials.
