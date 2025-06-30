@@ -10,6 +10,11 @@ from crypto_bot.strategy.router import route
 from crypto_bot.signals.signal_scoring import evaluate
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.execution.executor import execute_trade, load_exchange
+from crypto_bot.risk.exit_manager import (
+    calculate_trailing_stop,
+    should_exit,
+    get_partial_exit_percent,
+)
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / 'config.yaml'
@@ -28,6 +33,12 @@ def main():
     risk_config = RiskConfig(**config['risk'])
     risk_manager = RiskManager(risk_config)
 
+    open_side = None
+    entry_price = None
+    trailing_stop = 0.0
+    position_size = 0.0
+    highest_price = 0.0
+
     while True:
         ohlcv = exchange.fetch_ohlcv(config['symbol'], timeframe=config['timeframe'], limit=100)
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
@@ -36,7 +47,41 @@ def main():
         score, direction = evaluate(strategy_fn, df)
         balance = exchange.fetch_balance()['USDT']['free'] if config['mode'] != 'dry_run' else 1000
         size = risk_manager.position_size(score, balance)
-        if direction != 'none' and score > 0:
+
+        current_price = df['close'].iloc[-1]
+
+        if open_side:
+            pnl_pct = ((current_price - entry_price) / entry_price) * (1 if open_side == 'buy' else -1)
+            if pnl_pct >= config['exit_strategy']['min_gain_to_trail']:
+                if current_price > highest_price:
+                    highest_price = current_price
+                if highest_price:
+                    trailing_stop = calculate_trailing_stop(pd.Series([highest_price]), config['exit_strategy']['trailing_stop_pct'])
+
+            exit_signal, trailing_stop = should_exit(df, current_price, trailing_stop, config)
+            if exit_signal:
+                pct = get_partial_exit_percent(pnl_pct * 100)
+                sell_amount = position_size * (pct / 100) if config['exit_strategy']['scale_out'] and pct > 0 else position_size
+                execute_trade(
+                    exchange,
+                    config['symbol'],
+                    'sell' if open_side == 'buy' else 'buy',
+                    sell_amount,
+                    config,
+                    secrets['TELEGRAM_TOKEN'],
+                    config['telegram']['chat_id'],
+                    dry_run=config['mode'] == 'dry_run',
+                )
+                if sell_amount >= position_size:
+                    open_side = None
+                    entry_price = None
+                    position_size = 0.0
+                    trailing_stop = 0.0
+                    highest_price = 0.0
+                else:
+                    position_size -= sell_amount
+
+        if open_side is None and direction != 'none' and score > 0:
             execute_trade(
                 exchange,
                 config['symbol'],
@@ -47,6 +92,10 @@ def main():
                 config['telegram']['chat_id'],
                 dry_run=config['mode'] == 'dry_run'
             )
+            open_side = direction
+            entry_price = current_price
+            position_size = size
+            highest_price = entry_price
         time.sleep(config['loop_interval_minutes'] * 60)
 
 
