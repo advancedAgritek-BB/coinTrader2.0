@@ -34,3 +34,19 @@ Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credent
    ```
 
 Binance.US is not recommended because of API limitations.
+
+## Web UI
+
+A small Flask web dashboard is included for running the bot and inspecting logs.
+It features a responsive layout built with [Bootswatch](https://bootswatch.com/)
+and provides separate pages for logs and trading statistics.
+
+Start the UI with:
+
+```bash
+python -m frontend.app
+```
+
+Navigate to `http://localhost:5000` to start or stop the bot, watch the logs
+refresh live and review the trade stats collected in
+`crypto_bot/logs/strategy_stats.json`.

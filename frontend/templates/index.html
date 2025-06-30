@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="mb-4">Bot Control</h1>
+{% if running %}
+  <a class="btn btn-danger" href="{{ url_for('stop') }}">Stop Bot</a>
+{% else %}
+  <a class="btn btn-success" href="{{ url_for('start') }}">Start Bot</a>
+{% endif %}
+{% endblock %}
