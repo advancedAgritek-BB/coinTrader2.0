@@ -6,6 +6,8 @@ import threading
 import time
 import psutil
 import yaml
+from crypto_bot import log_reader
+import pandas as pd
 from crypto_bot import ml_signal_model as ml
 
 app = Flask(__name__)
@@ -21,6 +23,8 @@ MODEL_REPORT = Path('crypto_bot/ml_signal_model/models/model_report.json')
 TRADE_FILE = Path('crypto_bot/logs/trades.csv')
 ERROR_FILE = Path('crypto_bot/logs/errors.log')
 CONFIG_FILE = Path('crypto_bot/config.yaml')
+TRADES_FILE = Path('crypto_bot/logs/trades.csv')
+REGIME_FILE = Path('crypto_bot/logs/regime_history.txt')
 
 
 def load_execution_mode() -> str:
@@ -52,6 +56,27 @@ def watch_bot():
             bot_start_time = time.time()
 
 
+def compute_performance(df: pd.DataFrame) -> dict:
+    """Return PnL per symbol from the trades dataframe."""
+    perf: dict[str, float] = {}
+    open_pos: dict[str, list[tuple[float, float]]] = {}
+    for _, row in df.iterrows():
+        symbol = row.get("symbol")
+        side = row.get("side")
+        price = float(row.get("price", 0))
+        amount = float(row.get("amount", 0))
+        if side == "buy":
+            open_pos.setdefault(symbol, []).append((price, amount))
+        elif side == "sell":
+            lst = open_pos.setdefault(symbol, [])
+            while amount > 0 and lst:
+                entry_price, qty = lst.pop(0)
+                traded = min(qty, amount)
+                perf[symbol] = perf.get(symbol, 0.0) + (price - entry_price) * traded
+                if qty > traded:
+                    lst.insert(0, (entry_price, qty - traded))
+                amount -= traded
+    return perf
 
 
 def is_running() -> bool:
@@ -168,6 +193,26 @@ def scans():
     return render_template('scans.html', scans=data)
 
 
+@app.route('/dashboard')
+def dashboard():
+    summary = log_reader.trade_summary(TRADES_FILE)
+    df = log_reader._read_trades(TRADES_FILE)
+    perf = compute_performance(df)
+    allocation = {}
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE) as f:
+            cfg = yaml.safe_load(f) or {}
+            allocation = cfg.get('strategy_allocation', {})
+    regimes = []
+    if REGIME_FILE.exists():
+        regimes = REGIME_FILE.read_text().splitlines()[-20:]
+    return render_template(
+        'dashboard.html',
+        pnl=summary.get('total_pnl', 0.0),
+        performance=perf,
+        allocation=allocation,
+        regimes=regimes,
+    )
 @app.route('/model')
 def model_page():
     report = {}

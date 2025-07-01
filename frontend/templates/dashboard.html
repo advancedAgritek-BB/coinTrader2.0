@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="mb-4">Trade Dashboard</h1>
+<p><strong>Total PnL:</strong> {{ pnl }}</p>
+<div class="row">
+  <div class="col-md-6">
+    <canvas id="perfChart"></canvas>
+  </div>
+  <div class="col-md-6">
+    <canvas id="allocChart"></canvas>
+  </div>
+</div>
+<h2 class="mt-4">Recent Regimes</h2>
+<ul>
+  {% for r in regimes %}
+  <li>{{ r }}</li>
+  {% else %}
+  <li>No data</li>
+  {% endfor %}
+</ul>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const perfData = {{ performance|tojson }};
+const allocData = {{ allocation|tojson }};
+new Chart(document.getElementById('perfChart'), {
+    type: 'bar',
+    data: {labels: Object.keys(perfData), datasets: [{label:'PnL', data:Object.values(perfData), backgroundColor:'rgba(54,162,235,0.6)'}]},
+});
+new Chart(document.getElementById('allocChart'), {
+    type: 'pie',
+    data: {labels: Object.keys(allocData), datasets: [{data:Object.values(allocData), backgroundColor:['#ff6384','#36a2eb','#ffcd56','#4bc0c0','#9966ff','#c9cbcf']}]},
+});
+</script>
+{% endblock %}
