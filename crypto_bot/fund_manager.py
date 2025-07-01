@@ -50,7 +50,7 @@ async def auto_convert_funds(
         tx_hash = "DRYRUN"
     else:
         try:
-            result = execute_swap(
+            result = await execute_swap(
                 from_token,
                 to_token,
                 amount,
@@ -59,7 +59,6 @@ async def auto_convert_funds(
                 slippage_bps=slippage_bps,
                 dry_run=False,
             )
-            result = await execute_swap(from_token, to_token, amount, "", "", dry_run=False)
             tx_hash = result["tx_hash"]
         except Exception as e:
             logger.error("Conversion failed: %s", e)
