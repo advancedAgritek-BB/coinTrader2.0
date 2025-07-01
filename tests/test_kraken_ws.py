@@ -40,7 +40,7 @@ def test_reconnect_and_resubscribe(monkeypatch):
     assert client.public_ws is not old_ws
     assert client.public_ws.sent == [expected]
 
-    client.subscribe_orders()
+    client.subscribe_orders("BTC/USD")
     assert created[-1] == (PRIVATE_URL, "private")
     expected_private = json.dumps(
         {
