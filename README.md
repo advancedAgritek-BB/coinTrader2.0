@@ -75,7 +75,12 @@ before being written.
    KRAKEN_API_TOKEN=your_api_token
    ```
 
-   Generate `KRAKEN_WS_TOKEN` by calling Kraken's `GetWebSocketsToken` REST endpoint with your API credentials. The response contains a short-lived token used for authenticating WebSocket connections.
+Generate `KRAKEN_WS_TOKEN` by calling Kraken's `GetWebSocketsToken` REST endpoint with your API credentials. The response contains a short-lived token used for authenticating WebSocket connections. A helper is provided in `crypto_bot.utils`:
+
+```python
+from crypto_bot.utils import get_ws_token
+token = get_ws_token(API_KEY, API_SECRET, "123456")
+```
 
 5. In `crypto_bot/config.yaml` set:
 
