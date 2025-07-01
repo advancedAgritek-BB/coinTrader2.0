@@ -13,7 +13,6 @@ from crypto_bot.regime.regime_classifier import classify_regime
 from crypto_bot.strategy_router import route
 from crypto_bot.signals.signal_scoring import evaluate
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
-from crypto_bot.execution.executor import execute_trade
 from crypto_bot.risk.exit_manager import (
     calculate_trailing_stop,
     should_exit,
@@ -48,7 +47,7 @@ def main():
     user = load_or_create()
     secrets = dotenv_values(ENV_PATH)
     os.environ.update(secrets)
-    exchange = get_exchange(config)
+    exchange, ws_client = get_exchange(config)
     try:
         exchange.fetch_balance()
     except Exception as e:
@@ -113,12 +112,12 @@ def main():
                 pct = get_partial_exit_percent(pnl_pct * 100)
                 sell_amount = position_size * (pct / 100) if config['exit_strategy']['scale_out'] and pct > 0 else position_size
                 logger.info("Executing exit trade amount %.4f", sell_amount)
-                execute_trade(
+                cex_trade(
                     exchange,
+                    ws_client,
                     config['symbol'],
                     'sell' if open_side == 'buy' else 'buy',
                     sell_amount,
-                    config,
                     secrets['TELEGRAM_TOKEN'],
                     config['telegram']['chat_id'],
                     dry_run=config['execution_mode'] == 'dry_run',
@@ -145,6 +144,7 @@ def main():
             logger.info("Executing entry %s %.4f", direction, size)
             cex_trade(
                 exchange,
+                ws_client,
                 config['symbol'],
                 direction,
                 size,
