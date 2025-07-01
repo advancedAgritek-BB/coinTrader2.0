@@ -41,6 +41,8 @@ async def auto_convert_funds(
     amount: float,
     dry_run: bool = True,
     slippage_bps: int = 50,
+    telegram_token: str = "",
+    chat_id: str = "",
 ) -> Dict:
     """Convert funds using the Solana Jupiter aggregator."""
 
@@ -54,8 +56,8 @@ async def auto_convert_funds(
                 from_token,
                 to_token,
                 amount,
-                "",
-                "",
+                telegram_token,
+                chat_id,
                 slippage_bps=slippage_bps,
                 dry_run=False,
             )
