@@ -1,9 +1,9 @@
 import pandas as pd
 import ta
 
-from crypto_bot.utils.logger import setup_logger
+import logging
 
-logger = setup_logger(__name__, "crypto_bot/logs/exit.log")
+logger = logging.getLogger(__name__)
 
 
 def calculate_trailing_stop(price_series: pd.Series, trail_pct: float = 0.1) -> float:

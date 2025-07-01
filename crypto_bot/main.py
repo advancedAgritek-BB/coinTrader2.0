@@ -6,7 +6,7 @@ from dotenv import dotenv_values
 from pathlib import Path
 import json
 from crypto_bot.utils.telegram import send_message
-from crypto_bot.utils.logger import setup_logger
+import logging
 
 from crypto_bot.wallet_manager import load_or_create
 from crypto_bot.regime.regime_classifier import classify_regime
@@ -32,7 +32,7 @@ from crypto_bot.fund_manager import (
 CONFIG_PATH = Path(__file__).resolve().parent / 'config.yaml'
 ENV_PATH = Path(__file__).resolve().parent / '.env'
 
-logger = setup_logger('bot', 'crypto_bot/logs/bot.log')
+logger = logging.getLogger(__name__)
 
 
 def load_config() -> dict:
@@ -64,6 +64,8 @@ def main():
     highest_price = 0.0
     stats_file = Path('crypto_bot/logs/strategy_stats.json')
     stats = json.loads(stats_file.read_text()) if stats_file.exists() else {}
+    stats.setdefault('equity_curve', [])
+    stats.setdefault('open_position', None)
 
     mode = user.get('mode', config['mode'])
 
@@ -161,6 +163,20 @@ def main():
         key = f"{env}_{regime}"
         stats.setdefault(key, {'trades': 0})
         stats[key]['trades'] += 1
+
+        balance_equity = (
+            exchange.fetch_balance()['USDT']['free']
+            if config['execution_mode'] != 'dry_run'
+            else 1000
+        )
+        equity = balance_equity + (position_size * current_price if open_side else 0)
+        stats['equity_curve'].append(equity)
+        stats['open_position'] = (
+            {'side': open_side, 'size': position_size}
+            if open_side
+            else None
+        )
+
         stats_file.write_text(json.dumps(stats))
         logger.info("Updated trade stats %s", stats[key])
 

@@ -1,9 +1,9 @@
 import yaml
 from pathlib import Path
 
-from crypto_bot.utils.logger import setup_logger
+import logging
 
-logger = setup_logger(__name__, "crypto_bot/logs/wallet.log")
+logger = logging.getLogger(__name__)
 
 CONFIG_FILE = Path(__file__).resolve().parent / 'user_config.yaml'
 

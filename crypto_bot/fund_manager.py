@@ -3,9 +3,9 @@ import json
 import os
 from pathlib import Path
 
-from crypto_bot.utils.logger import setup_logger
+import logging
 
-logger = setup_logger(__name__, "crypto_bot/logs/fund_manager.log")
+logger = logging.getLogger(__name__)
 
 SUPPORTED_FUNDING = ["BTC", "ETH", "XRP"]
 REQUIRED_TOKENS = ["USDC", "SOL"]

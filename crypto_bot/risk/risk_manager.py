@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from crypto_bot.utils.logger import setup_logger
+import logging
 
-logger = setup_logger(__name__, "crypto_bot/logs/risk.log")
+logger = logging.getLogger(__name__)
 
 
 @dataclass

@@ -6,11 +6,36 @@
   <thead><tr><th>Strategy</th><th>Trades</th></tr></thead>
   <tbody>
   {% for key, val in stats.items() %}
-    <tr><td>{{ key }}</td><td>{{ val.trades }}</td></tr>
+    {% if key not in ['equity_curve', 'open_position'] %}
+      <tr><td>{{ key }}</td><td>{{ val.trades }}</td></tr>
+    {% endif %}
   {% endfor %}
   </tbody>
 </table>
+
+<h2 class="mt-4">Open Position</h2>
+{% if stats.open_position %}
+  <p>{{ stats.open_position.side }} - {{ stats.open_position.size }}</p>
+{% else %}
+  <p>None</p>
+{% endif %}
+
+<h2 class="mt-4">Equity Curve</h2>
+<canvas id="equityChart" height="100"></canvas>
 {% else %}
 <p>No stats available.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if stats and stats.equity_curve %}
+<script>
+const eqData = {{ stats.equity_curve | tojson }};
+new Chart(document.getElementById('equityChart'), {
+  type: 'line',
+  data: { labels: eqData.map((_, i) => i + 1), datasets: [{ label: 'Equity', data: eqData, borderColor: 'blue', fill: false }] },
+  options: { responsive: true }
+});
+</script>
 {% endif %}
 {% endblock %}

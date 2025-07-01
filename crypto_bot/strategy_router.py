@@ -1,9 +1,9 @@
 from typing import Callable
 import pandas as pd
 
-from crypto_bot.utils.logger import setup_logger
+import logging
 
-logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+logger = logging.getLogger(__name__)
 
 from crypto_bot.strategy import trend_bot, grid_bot, sniper_bot, dex_scalper
 
