@@ -11,6 +11,7 @@ Main features include:
 - Risk management with drawdown limits and volume/volatility filters
 - Live trading or dry-run simulation
 - Optional backtesting per regime
+- Centralized logging configuration with rotating file handlers
 On-chain DEX execution on Solana now uses the Jupiter aggregator to submit real
 transactions when not running in dry-run mode.
 
@@ -58,6 +59,9 @@ Binance.US is not recommended because of API limitations.
 A small Flask web dashboard is included for running the bot and inspecting logs.
 It features a responsive layout built with [Bootswatch](https://bootswatch.com/)
 and provides separate pages for logs and trading statistics.
+
+The stats page now graphs your equity curve and lists any open position so you
+can quickly monitor performance.
 
 Start the UI with:
 
