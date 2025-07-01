@@ -14,6 +14,14 @@ Main features include:
 
 Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credentials.
 
+## Installation
+
+Install the required Python packages with:
+
+```bash
+pip install -r requirements.txt
+```
+
 ## Exchange Setup for U.S. Users
 
 1. Create API keys on **Coinbase Advanced Trade** or **Kraken**.
