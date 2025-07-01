@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from pathlib import Path
 from typing import Dict
+
+import schedule
 
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.telegram import send_message
+from crypto_bot import log_reader
 
 
 class TelegramBotUI:
@@ -44,16 +49,31 @@ class TelegramBotUI:
         dp.add_handler(CommandHandler("toggle_mode", self.toggle_mode_cmd))
 
         self.thread: threading.Thread | None = None
+        self.scheduler_thread: threading.Thread | None = None
+
+        schedule.every().day.at("00:00").do(self.send_daily_summary)
+        self.scheduler_thread = threading.Thread(
+            target=self._run_scheduler, daemon=True
+        )
+        self.scheduler_thread.start()
 
     def run_async(self) -> None:
         """Start polling in a background thread."""
         self.thread = threading.Thread(target=self.updater.start_polling, daemon=True)
         self.thread.start()
 
+    def _run_scheduler(self) -> None:
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+
     def stop(self) -> None:
         self.updater.stop()
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=2)
+        schedule.clear()
+        if self.scheduler_thread and self.scheduler_thread.is_alive():
+            self.scheduler_thread.join(timeout=2)
 
     # Command handlers -------------------------------------------------
     def start_cmd(self, update: Update, context: CallbackContext) -> None:
@@ -98,6 +118,19 @@ class TelegramBotUI:
         except Exception as exc:  # pragma: no cover - network
             self.logger.error("Rotation failed: %s", exc)
             update.message.reply_text("Rotation failed")
+
+    def send_daily_summary(self) -> None:
+        stats = log_reader.trade_summary("crypto_bot/logs/trades.csv")
+        msg = (
+            "Daily Summary\n"
+            f"Trades: {stats['num_trades']}\n"
+            f"Total PnL: {stats['total_pnl']:.2f}\n"
+            f"Win rate: {stats['win_rate']*100:.1f}%\n"
+            f"Active positions: {stats['active_positions']}"
+        )
+        err = send_message(self.token, self.chat_id, msg)
+        if err:
+            self.logger.error("Failed to send summary: %s", err)
 
     def toggle_mode_cmd(self, update: Update, context: CallbackContext) -> None:
         mode = self.state.get("mode")

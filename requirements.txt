@@ -18,3 +18,4 @@ hvac
 psutil
 aiohttp
 cryptography
+schedule
