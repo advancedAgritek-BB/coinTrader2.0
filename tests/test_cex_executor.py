@@ -168,3 +168,25 @@ def test_execute_trade_skips_on_slippage(monkeypatch):
         config={"max_slippage_pct": 0.05},
     )
     assert order == {}
+
+
+def test_ws_client_refreshes_expired_token(monkeypatch):
+    from crypto_bot.execution.kraken_ws import KrakenWSClient
+    from datetime import timedelta, timezone, datetime
+
+    ws = KrakenWSClient(ws_token="old")
+    ws.token_created = datetime.now(timezone.utc) - timedelta(minutes=15)
+
+    refreshed = {}
+
+    def fake_get_token():
+        refreshed["called"] = True
+        ws.token = "new"
+        ws.token_created = datetime.now(timezone.utc)
+        return ws.token
+
+    monkeypatch.setattr(ws, "_start_ws", lambda *a, **k: object())
+    monkeypatch.setattr(ws, "get_token", fake_get_token)
+
+    ws.connect_private()
+    assert refreshed.get("called") is True
