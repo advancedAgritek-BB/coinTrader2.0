@@ -21,7 +21,7 @@ def _run_single(df: pd.DataFrame, stop_loss: float, take_profit: float, mode: st
         subset = df.iloc[: i + 1]
         regime = classify_regime(subset)
         strategy_fn = route(regime, mode)
-        score, direction = evaluate(strategy_fn, subset)
+        score, direction = evaluate(strategy_fn, subset, None)
         price = subset['close'].iloc[-1]
 
         if position is None and direction in {'long', 'short'}:
