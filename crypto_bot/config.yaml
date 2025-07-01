@@ -50,3 +50,8 @@ exit_strategy:
   scale_out: true
   # profit levels (%) at which partial exits occur
   partial_levels: [25, 50, 100]
+mempool_monitor:
+  enabled: false
+  suspicious_fee_threshold: 100
+  action: pause
+  reprice_multiplier: 1.05

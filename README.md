@@ -68,3 +68,19 @@ python -m frontend.app
 Navigate to `http://localhost:5000` to start or stop the bot, watch the logs
 refresh live and review the trade stats collected in
 `crypto_bot/logs/strategy_stats.json`.
+
+## Solana Mempool Monitoring
+
+The bot can monitor Solana priority fees to avoid swaps when congestion
+is high. Enable the monitor in `crypto_bot/config.yaml`:
+
+```yaml
+mempool_monitor:
+  enabled: true
+  suspicious_fee_threshold: 100
+  action: pause  # or reprice
+  reprice_multiplier: 1.05
+```
+
+When enabled, `execute_swap` checks the current priority fee and pauses
+or adjusts the trade according to the selected action.
