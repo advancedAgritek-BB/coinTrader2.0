@@ -17,6 +17,7 @@ class RiskManager:
         self.config = config
         self.equity = 1.0
         self.peak_equity = 1.0
+        self.stop_order = None
 
     def update_equity(self, new_equity: float) -> bool:
         self.equity = new_equity
@@ -46,3 +47,27 @@ class RiskManager:
             return False
         logger.info("Trade allowed")
         return True
+
+    def register_stop_order(self, order: dict) -> None:
+        """Store the protective stop order."""
+        self.stop_order = order
+        logger.info("Registered stop order %s", order)
+
+    def update_stop_order(self, new_amount: float) -> None:
+        """Update the stored stop order amount."""
+        if self.stop_order:
+            self.stop_order["amount"] = new_amount
+            logger.info("Updated stop order amount to %.4f", new_amount)
+
+    def cancel_stop_order(self, exchange) -> None:
+        """Cancel the existing stop order on the exchange if needed."""
+        if not self.stop_order:
+            return
+        order = self.stop_order
+        if not order.get("dry_run") and "id" in order:
+            try:
+                exchange.cancel_order(order["id"], order.get("symbol"))
+                logger.info("Cancelled stop order %s", order.get("id"))
+            except Exception as e:
+                logger.error("Failed to cancel stop order: %s", e)
+        self.stop_order = None

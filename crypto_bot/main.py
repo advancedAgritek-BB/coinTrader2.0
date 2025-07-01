@@ -19,7 +19,11 @@ from crypto_bot.risk.exit_manager import (
     get_partial_exit_percent,
 )
 
-from crypto_bot.execution.cex_executor import execute_trade as cex_trade, get_exchange
+from crypto_bot.execution.cex_executor import (
+    execute_trade as cex_trade,
+    get_exchange,
+    place_stop_order,
+)
 from crypto_bot.execution.solana_executor import execute_swap
 from crypto_bot.fund_manager import (
     check_wallet_balances,
@@ -123,6 +127,7 @@ def main():
                     dry_run=config['execution_mode'] == 'dry_run',
                 )
                 if sell_amount >= position_size:
+                    risk_manager.cancel_stop_order(exchange)
                     open_side = None
                     entry_price = None
                     position_size = 0.0
@@ -130,6 +135,7 @@ def main():
                     highest_price = 0.0
                 else:
                     position_size -= sell_amount
+                    risk_manager.update_stop_order(position_size)
 
         if score < config['signal_threshold'] or direction == 'none':
             time.sleep(config['loop_interval_minutes'] * 60)
@@ -139,7 +145,22 @@ def main():
         size = balance * config['trade_size_pct']
 
         if env == 'onchain':
-            execute_swap('SOL', 'USDC', size, user['telegram_token'], user['telegram_chat_id'], dry_run=config['execution_mode'] == 'dry_run')
+            execute_swap(
+                'SOL',
+                'USDC',
+                size,
+                user['telegram_token'],
+                user['telegram_chat_id'],
+                dry_run=config['execution_mode'] == 'dry_run',
+            )
+            risk_manager.register_stop_order(
+                {
+                    'token_in': 'SOL',
+                    'token_out': 'USDC',
+                    'amount': size,
+                    'dry_run': config['execution_mode'] == 'dry_run',
+                }
+            )
         else:
             logger.info("Executing entry %s %.4f", direction, size)
             cex_trade(
@@ -152,6 +173,22 @@ def main():
                 user['telegram_chat_id'],
                 dry_run=config['execution_mode'] == 'dry_run',
             )
+            stop_price = current_price * (
+                1 - risk_manager.config.stop_loss_pct
+                if direction == 'buy'
+                else 1 + risk_manager.config.stop_loss_pct
+            )
+            stop_order = place_stop_order(
+                exchange,
+                config['symbol'],
+                'sell' if direction == 'buy' else 'buy',
+                size,
+                stop_price,
+                user['telegram_token'],
+                user['telegram_chat_id'],
+                dry_run=config['execution_mode'] == 'dry_run',
+            )
+            risk_manager.register_stop_order(stop_order)
             open_side = direction
             entry_price = current_price
             position_size = size
