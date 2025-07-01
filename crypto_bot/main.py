@@ -3,6 +3,7 @@ import asyncio
 import json
 import time
 from pathlib import Path
+from datetime import datetime
 
 import pandas as pd
 import yaml
@@ -33,6 +34,7 @@ from crypto_bot.fund_manager import (
     detect_non_trade_tokens,
     auto_convert_funds,
 )
+from crypto_bot.utils.performance_logger import log_performance
 
 
 def _strategy_name(regime: str, env: str) -> str:
@@ -93,6 +95,10 @@ async def main() -> None:
 
     open_side = None
     entry_price = None
+    entry_time = None
+    entry_regime = None
+    entry_strategy = None
+    realized_pnl = 0.0
     trailing_stop = 0.0
     position_size = 0.0
     highest_price = 0.0
@@ -249,10 +255,29 @@ async def main() -> None:
                     use_websocket=config.get("use_websocket", False),
                     config=config,
                 )
+                realized_pnl += (
+                    (current_price - entry_price)
+                    * sell_amount
+                    * (1 if open_side == "buy" else -1)
+                )
                 if sell_amount >= position_size:
                     risk_manager.cancel_stop_order(exchange)
+                    log_performance(
+                        {
+                            "symbol": config["symbol"],
+                            "regime": entry_regime,
+                            "strategy": entry_strategy,
+                            "pnl": realized_pnl,
+                            "entry_time": entry_time,
+                            "exit_time": datetime.utcnow().isoformat(),
+                        }
+                    )
                     open_side = None
                     entry_price = None
+                    entry_time = None
+                    entry_regime = None
+                    entry_strategy = None
+                    realized_pnl = 0.0
                     position_size = 0.0
                     trailing_stop = 0.0
                     highest_price = 0.0
@@ -325,6 +350,10 @@ async def main() -> None:
             open_side = direction
             entry_price = current_price
             position_size = size
+            realized_pnl = 0.0
+            entry_time = datetime.utcnow().isoformat()
+            entry_regime = regime
+            entry_strategy = _strategy_name(regime, env)
             highest_price = entry_price
             logger.info("Trade opened at %.4f", entry_price)
 
