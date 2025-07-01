@@ -212,7 +212,7 @@ def main() -> None:
             if name in params:
                 risk_manager.config.stop_loss_pct = params[name]["stop_loss_pct"]
                 risk_manager.config.take_profit_pct = params[name]["take_profit_pct"]
-        score, direction = await evaluate_async(strategy_fn, df)
+        score, direction = await evaluate_async(strategy_fn, df, config)
         logger.info("Signal score %.2f direction %s", score, direction)
         balance = (
             (await asyncio.to_thread(exchange.fetch_balance))["USDT"]["free"]
