@@ -2,6 +2,7 @@ import json
 import threading
 import os
 from typing import Optional
+from datetime import datetime, timedelta, timezone
 
 import ccxt
 from websocket import WebSocketApp
@@ -37,6 +38,9 @@ class KrakenWSClient:
             )
 
         self.token: Optional[str] = self.ws_token
+        self.token_created: Optional[datetime] = None
+        if self.token:
+            self.token_created = datetime.now(timezone.utc)
         self.public_ws: Optional[WebSocketApp] = None
         self.private_ws: Optional[WebSocketApp] = None
 
@@ -54,7 +58,14 @@ class KrakenWSClient:
 
         resp = self.exchange.privatePostGetWebSocketsToken(params)
         self.token = resp["token"]
+        self.token_created = datetime.now(timezone.utc)
         return self.token
+
+    def token_expired(self) -> bool:
+        """Return True if the authentication token is older than 14 minutes."""
+        if not self.token_created:
+            return False
+        return datetime.now(timezone.utc) - self.token_created > timedelta(minutes=14)
 
     def _start_ws(self, url: str, **kwargs) -> WebSocketApp:
         ws = WebSocketApp(url, **kwargs)
@@ -67,9 +78,11 @@ class KrakenWSClient:
             self.public_ws = self._start_ws(PUBLIC_URL)
 
     def connect_private(self) -> None:
+        if self.token_expired():
+            self.token = None
+        if not self.token:
+            self.get_token()
         if not self.private_ws:
-            if not self.token:
-                self.get_token()
             self.private_ws = self._start_ws(PRIVATE_URL)
 
     def subscribe_ticker(self, pair: str) -> None:
