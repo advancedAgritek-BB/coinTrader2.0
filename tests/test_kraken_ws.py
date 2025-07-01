@@ -13,7 +13,7 @@ def test_reconnect_and_resubscribe(monkeypatch):
     client = KrakenWSClient()
     created = []
 
-    def dummy_start_ws(url, conn_type):
+    def dummy_start_ws(url, conn_type=None, **_):
         ws = DummyWS()
         created.append((url, conn_type))
         ws.on_close = lambda *_: client.on_close(conn_type)
@@ -83,15 +83,37 @@ def test_start_ws_passes_callbacks(monkeypatch):
     monkeypatch.setattr(kraken_ws.threading, "Thread", DummyThread)
 
     client = KrakenWSClient()
-    on_msg = lambda *a: None
-    on_err = lambda *a: None
-    on_close = lambda *a: None
 
-    ws = client._start_ws("wss://test", on_message=on_msg, on_error=on_err, on_close=on_close)
+    called = {}
+
+    def on_msg(*a):
+        called['msg'] = True
+
+    def on_err(*a):
+        called['err'] = True
+
+    def on_close_cb(*a):
+        called['user_close'] = True
+
+    def client_on_close(ct):
+        called['client_close'] = ct
+
+    monkeypatch.setattr(client, "on_close", client_on_close)
+
+    ws = client._start_ws(
+        "wss://test",
+        conn_type="public",
+        on_message=on_msg,
+        on_error=on_err,
+        on_close=on_close_cb,
+    )
 
     assert created['ws'].on_message is on_msg
     assert created['ws'].on_error is on_err
-    assert created['ws'].on_close is on_close
+    # invoke close handler
+    created['ws'].on_close(None, 0, "bye")
+    assert called.get('user_close') is True
+    assert called.get('client_close') == "public"
     assert created['ws'].run_called
 
 
