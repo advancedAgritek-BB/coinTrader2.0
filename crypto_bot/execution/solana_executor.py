@@ -1,12 +1,13 @@
 """Solana DEX execution helpers."""
 
-from typing import Dict
+from typing import Dict, Optional
 import os
 import json
 import base64
 import aiohttp
 
 from crypto_bot.utils.telegram import send_message
+from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
 
 JUPITER_QUOTE_URL = "https://quote-api.jup.ag/v6/quote"
@@ -21,11 +22,29 @@ async def execute_swap(
     chat_id: str,
     slippage_bps: int = 50,
     dry_run: bool = True,
+    mempool_monitor: Optional[SolanaMempoolMonitor] = None,
+    mempool_cfg: Optional[Dict] = None,
 ) -> Dict:
     """Execute a swap on Solana using the Jupiter aggregator."""
 
     msg = f"Swapping {amount} {token_in} to {token_out}"
     send_message(telegram_token, chat_id, msg)
+
+    cfg = mempool_cfg or {}
+    if mempool_monitor and cfg.get("enabled"):
+        threshold = cfg.get("suspicious_fee_threshold", 0.0)
+        action = cfg.get("action", "pause")
+        if mempool_monitor.is_suspicious(threshold):
+            send_message(telegram_token, chat_id, "High priority fees detected")
+            if action == "pause":
+                return {
+                    "token_in": token_in,
+                    "token_out": token_out,
+                    "amount": amount,
+                    "paused": True,
+                }
+            if action == "reprice":
+                amount *= cfg.get("reprice_multiplier", 1.0)
 
     if dry_run:
         tx_hash = "DRYRUN"
