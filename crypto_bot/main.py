@@ -144,6 +144,8 @@ async def main() -> None:
                 amount,
                 dry_run=config["execution_mode"] == "dry_run",
                 slippage_bps=config.get("solana_slippage_bps", 50),
+                telegram_token=user.get("telegram_token", ""),
+                chat_id=config.get("telegram", {}).get("chat_id", ""),
             )
 
         if rotator.config.get("enabled"):
@@ -157,9 +159,17 @@ async def main() -> None:
                     exchange,
                     user.get('wallet_address', ''),
                     holdings,
+                    user.get("telegram_token", ""),
+                    config.get("telegram", {}).get("chat_id", ""),
                 )
                 holdings = {k: (v.get("total") if isinstance(v, dict) else v) for k, v in bal.items()}
-                rotator.rotate(exchange, user.get("wallet_address", ""), holdings)
+                rotator.rotate(
+                    exchange,
+                    user.get("wallet_address", ""),
+                    holdings,
+                    user.get("telegram_token", ""),
+                    config.get("telegram", {}).get("chat_id", ""),
+                )
                 last_rotation = time.time()
 
         if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):

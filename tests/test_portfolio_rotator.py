@@ -33,8 +33,9 @@ def test_rotate_calls_converter(monkeypatch):
 
     called = {}
 
-    async def fake_convert(wallet, from_t, to_t, amt, dry_run=True):
+    async def fake_convert(wallet, from_t, to_t, amt, dry_run=True, **kwargs):
         called["args"] = (wallet, from_t, to_t, amt, dry_run)
+        called["kwargs"] = kwargs
         return {}
 
     monkeypatch.setattr("crypto_bot.portfolio_rotator.auto_convert_funds", fake_convert)
@@ -47,4 +48,6 @@ def test_rotate_calls_converter(monkeypatch):
 
     assert called["args"][1] == "ETH"
     assert called["args"][2] == "BTC"
+    assert called["kwargs"].get("telegram_token", "") == ""
+    assert called["kwargs"].get("chat_id", "") == ""
     assert new_holdings["BTC"] == 10
