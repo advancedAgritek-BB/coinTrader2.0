@@ -12,12 +12,15 @@ Main features include:
 - Live trading or dry-run simulation
 - Optional backtesting per regime
 
-Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credentials.
+Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credentials. The
+script now asks for Coinbase and Kraken API keys (plus the Coinbase passphrase) and
+stores your chosen exchange in `user_config.yaml`.
 
 ## Exchange Setup for U.S. Users
 
 1. Create API keys on **Coinbase Advanced Trade** or **Kraken**.
-2. Fill out `crypto_bot/.env`:
+2. Run `python crypto_bot/wallet_manager.py` and enter the keys when prompted.
+3. Fill out `crypto_bot/.env`:
 
    ```env
    EXCHANGE=coinbase  # or kraken
@@ -26,6 +29,8 @@ Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credent
    API_PASSPHRASE=your_coinbase_passphrase_if_needed
    ```
 
+
+4. In `crypto_bot/config.yaml` set:
    For Kraken, optionally set tokens for the WebSocket API:
 
    ```env
