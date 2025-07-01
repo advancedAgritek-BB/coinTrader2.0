@@ -8,6 +8,7 @@ import aiohttp
 
 from crypto_bot.utils.telegram import send_message
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
+from crypto_bot import tax_logger
 
 
 JUPITER_QUOTE_URL = "https://quote-api.jup.ag/v6/quote"
@@ -24,6 +25,7 @@ async def execute_swap(
     dry_run: bool = True,
     mempool_monitor: Optional[SolanaMempoolMonitor] = None,
     mempool_cfg: Optional[Dict] = None,
+    config: Optional[Dict] = None,
 ) -> Dict:
     """Execute a swap on Solana using the Jupiter aggregator."""
 
@@ -55,6 +57,12 @@ async def execute_swap(
             "tx_hash": tx_hash,
         }
         send_message(telegram_token, chat_id, f"Swap executed: {result}")
+        if (config or {}).get("tax_tracking", {}).get("enabled"):
+            try:
+                tax_logger.record_exit({"symbol": token_in, "amount": amount, "side": "sell"})
+                tax_logger.record_entry({"symbol": token_out, "amount": amount, "side": "buy"})
+            except Exception:
+                pass
         return result
 
     from solana.rpc.api import Client
@@ -118,4 +126,10 @@ async def execute_swap(
         "tx_hash": tx_hash,
     }
     send_message(telegram_token, chat_id, f"Swap executed: {result}")
+    if (config or {}).get("tax_tracking", {}).get("enabled"):
+        try:
+            tax_logger.record_exit({"symbol": token_in, "amount": amount, "side": "sell"})
+            tax_logger.record_entry({"symbol": token_out, "amount": amount, "side": "buy"})
+        except Exception:
+            pass
     return result

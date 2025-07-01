@@ -18,6 +18,7 @@ from crypto_bot.utils.telegram import send_message
 from crypto_bot.execution.kraken_ws import KrakenWSClient
 import asyncio
 from crypto_bot.utils.trade_logger import log_trade
+from crypto_bot import tax_logger
 
 
 
@@ -132,6 +133,14 @@ def execute_trade(
             order = place(slice_amount)
             if order:
                 log_trade(order)
+                if (config or {}).get("tax_tracking", {}).get("enabled"):
+                    try:
+                        if order.get("side") == "buy":
+                            tax_logger.record_entry(order)
+                        else:
+                            tax_logger.record_exit(order)
+                    except Exception:
+                        pass
                 orders.append(order)
                 send_message(token, chat_id, f"TWAP slice {i+1}/{slices} executed: {order}")
             if i < slices - 1:
@@ -140,6 +149,14 @@ def execute_trade(
         order = place(amount)
         if order:
             log_trade(order)
+            if (config or {}).get("tax_tracking", {}).get("enabled"):
+                try:
+                    if order.get("side") == "buy":
+                        tax_logger.record_entry(order)
+                    else:
+                        tax_logger.record_exit(order)
+                except Exception:
+                    pass
             orders.append(order)
             send_message(token, chat_id, f"Order executed: {order}")
 
@@ -180,6 +197,14 @@ async def execute_trade_async(
             return {}
     send_message(token, chat_id, f"Order executed: {order}")
     log_trade(order)
+    if (config or {}).get("tax_tracking", {}).get("enabled"):
+        try:
+            if order.get("side") == "buy":
+                tax_logger.record_entry(order)
+            else:
+                tax_logger.record_exit(order)
+        except Exception:
+            pass
     return order
 
 
