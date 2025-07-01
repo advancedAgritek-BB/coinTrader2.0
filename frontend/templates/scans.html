@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="mb-4">Asset Scores</h1>
+{% if scans %}
+<table class="table table-bordered">
+  <thead><tr><th>Symbol</th><th>Score</th></tr></thead>
+  <tbody>
+  {% for sym, score in scans.items() %}
+    <tr><td>{{ sym }}</td><td>{{ '%.4f'|format(score) }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No scores available.</p>
+{% endif %}
+{% endblock %}

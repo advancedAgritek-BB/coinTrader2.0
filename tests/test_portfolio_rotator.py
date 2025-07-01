@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import pandas as pd
 import pytest
@@ -51,3 +52,23 @@ def test_rotate_calls_converter(monkeypatch):
     assert called["kwargs"].get("telegram_token", "") == ""
     assert called["kwargs"].get("chat_id", "") == ""
     assert new_holdings["BTC"] == 10
+
+
+def test_rotate_logs_scores(tmp_path, monkeypatch):
+    rotator = PortfolioRotator()
+    score_file = tmp_path / "scores.json"
+    monkeypatch.setattr("crypto_bot.portfolio_rotator.SCORE_FILE", score_file)
+    monkeypatch.setattr(
+        rotator,
+        "score_assets",
+        lambda *a, **k: {"BTC": 0.5, "ETH": 0.1},
+    )
+    monkeypatch.setattr(
+        "crypto_bot.portfolio_rotator.auto_convert_funds", lambda *a, **k: {}
+    )
+
+    holdings = {"ETH": 10}
+    asyncio.run(rotator.rotate(object(), "wallet", holdings))
+
+    data = json.loads(score_file.read_text())
+    assert data["BTC"] == 0.5

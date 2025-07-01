@@ -15,6 +15,7 @@ from crypto_bot.utils.logger import setup_logger
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 LOG_FILE = Path("crypto_bot/logs/rotations.json")
+SCORE_FILE = Path("crypto_bot/logs/asset_scores.json")
 
 
 class PortfolioRotator:
@@ -25,6 +26,7 @@ class PortfolioRotator:
             cfg = yaml.safe_load(f)
         self.config = cfg.get("portfolio_rotation", {})
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SCORE_FILE.parent.mkdir(parents=True, exist_ok=True)
         self.logger = setup_logger(__name__, "crypto_bot/logs/portfolio_rotation.log")
 
     def score_assets(
@@ -72,6 +74,7 @@ class PortfolioRotator:
         top_n = self.config.get("top_assets", len(current_holdings))
 
         scores = self.score_assets(exchange, current_holdings.keys(), lookback, method)
+        self._log_scores(scores)
         if not scores:
             return current_holdings
 
@@ -123,4 +126,8 @@ class PortfolioRotator:
             data = []
         data.append(allocation)
         LOG_FILE.write_text(json.dumps(data))
+
+    def _log_scores(self, scores: Dict[str, float]) -> None:
+        """Write the latest asset scores to file."""
+        SCORE_FILE.write_text(json.dumps(scores))
 
