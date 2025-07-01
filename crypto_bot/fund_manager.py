@@ -33,15 +33,36 @@ def detect_non_trade_tokens(balances: Dict[str, float]) -> List[str]:
             non_trade.append(token)
     return non_trade
 
-def auto_convert_funds(wallet: str, from_token: str, to_token: str, amount: float, dry_run: bool = True) -> Dict:
-    """Placeholder to convert funds using DEX aggregators.
+def auto_convert_funds(
+    wallet: str,
+    from_token: str,
+    to_token: str,
+    amount: float,
+    dry_run: bool = True,
+) -> Dict:
+    """Convert funds using the Solana Jupiter aggregator."""
 
-    The real implementation would use Jupiter for Solana and 1inch for
-    EVM compatible chains. Here we simply log the intent and return a
-    mock transaction dictionary.
-    """
     logger.info("Converting %s %s to %s", amount, from_token, to_token)
-    tx_hash = "DRYRUN" if dry_run else "TX_HASH_PLACEHOLDER"
-    result = {"wallet": wallet, "from": from_token, "to": to_token, "amount": amount, "tx_hash": tx_hash}
+
+    if dry_run:
+        tx_hash = "DRYRUN"
+    else:
+        from crypto_bot.execution.solana_executor import execute_swap
+
+        try:
+            result = execute_swap(from_token, to_token, amount, "", "", dry_run=False)
+            tx_hash = result["tx_hash"]
+        except Exception as e:
+            logger.error("Conversion failed: %s", e)
+            tx_hash = "ERROR"
+
+    result = {
+        "wallet": wallet,
+        "from": from_token,
+        "to": to_token,
+        "amount": amount,
+        "tx_hash": tx_hash,
+    }
+
     logger.info("Conversion result: %s", result)
     return result
