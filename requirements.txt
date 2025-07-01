@@ -13,4 +13,5 @@ pytest
 websocket-client
 requests
 solana
+aiohttp
 cryptography

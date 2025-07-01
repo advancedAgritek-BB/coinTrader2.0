@@ -34,7 +34,7 @@ def detect_non_trade_tokens(balances: Dict[str, float]) -> List[str]:
             non_trade.append(token)
     return non_trade
 
-def auto_convert_funds(
+async def auto_convert_funds(
     wallet: str,
     from_token: str,
     to_token: str,
@@ -49,7 +49,7 @@ def auto_convert_funds(
         tx_hash = "DRYRUN"
     else:
         try:
-            result = execute_swap(from_token, to_token, amount, "", "", dry_run=False)
+            result = await execute_swap(from_token, to_token, amount, "", "", dry_run=False)
             tx_hash = result["tx_hash"]
         except Exception as e:
             logger.error("Conversion failed: %s", e)

@@ -87,6 +87,14 @@ def main() -> None:
         for token in detect_non_trade_tokens(balances):
             amount = balances[token]
             logger.info("Converting %s %s to USDC", amount, token)
+            asyncio.run(
+                auto_convert_funds(
+                    user.get('wallet_address', ''),
+                    token,
+                    'USDC',
+                    amount,
+                    dry_run=config['execution_mode'] == 'dry_run',
+                )
             await asyncio.to_thread(
                 auto_convert_funds,
                 user.get('wallet_address', ''),
@@ -203,6 +211,15 @@ def main() -> None:
         size = balance * config['trade_size_pct']
 
         if env == 'onchain':
+            asyncio.run(
+                execute_swap(
+                    'SOL',
+                    'USDC',
+                    size,
+                    user['telegram_token'],
+                    user['telegram_chat_id'],
+                    dry_run=config['execution_mode'] == 'dry_run',
+                )
             await asyncio.to_thread(
                 execute_swap,
         balance = (
