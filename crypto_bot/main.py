@@ -150,16 +150,14 @@ async def main() -> None:
             if time.time() - last_rotation >= rotator.config.get("interval_days", 7) * 86400:
                 bal = await asyncio.to_thread(exchange.fetch_balance)
                 holdings = {
-                    k: (v.get('total') if isinstance(v, dict) else v)
+                    k: (v.get("total") if isinstance(v, dict) else v)
                     for k, v in bal.items()
                 }
                 await rotator.rotate(
                     exchange,
-                    user.get('wallet_address', ''),
+                    user.get("wallet_address", ""),
                     holdings,
                 )
-                holdings = {k: (v.get("total") if isinstance(v, dict) else v) for k, v in bal.items()}
-                rotator.rotate(exchange, user.get("wallet_address", ""), holdings)
                 last_rotation = time.time()
 
         if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):

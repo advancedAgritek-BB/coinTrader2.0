@@ -10,6 +10,7 @@ app = Flask(__name__)
 
 # Handle the async trading bot process
 bot_proc = None
+watch_thread = None
 LOG_FILE = Path('crypto_bot/logs/bot.log')
 STATS_FILE = Path('crypto_bot/logs/strategy_stats.json')
 
@@ -23,8 +24,6 @@ def watch_bot():
             bot_proc = subprocess.Popen(['python', '-m', 'crypto_bot.main'])
 
 
-watch_thread = threading.Thread(target=watch_bot, daemon=True)
-watch_thread.start()
 
 
 def is_running() -> bool:
@@ -78,4 +77,6 @@ def stats():
 
 
 if __name__ == '__main__':
+    watch_thread = threading.Thread(target=watch_bot, daemon=True)
+    watch_thread.start()
     app.run(debug=True)
