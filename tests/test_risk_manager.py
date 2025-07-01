@@ -32,3 +32,16 @@ def test_stop_order_management():
     ex = DummyEx()
     manager.cancel_stop_order(ex)
     assert manager.stop_order is None
+
+
+def test_position_size_uses_trade_size_pct():
+    manager = RiskManager(
+        RiskConfig(
+            max_drawdown=1,
+            stop_loss_pct=0.01,
+            take_profit_pct=0.01,
+            trade_size_pct=0.2,
+        )
+    )
+    size = manager.position_size(0.5, 1000)
+    assert size == 1000 * 0.2 * 0.5

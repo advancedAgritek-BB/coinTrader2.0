@@ -23,6 +23,7 @@ class RiskConfig:
     min_atr_pct: float = 0.0
     max_funding_rate: float = 1.0
     symbol: str = ""
+    trade_size_pct: float = 0.1
 
 
 class RiskManager:
@@ -62,7 +63,7 @@ class RiskManager:
 
     def position_size(self, confidence: float, balance: float) -> float:
         """Calculate position size based on signal confidence and balance."""
-        size = balance * confidence * 0.1
+        size = balance * confidence * self.config.trade_size_pct
         logger.info("Calculated position size: %.4f", size)
         return size
 

@@ -95,6 +95,7 @@ def main() -> None:
     risk_params.update(config.get('sentiment_filter', {}))
     risk_params.update(config.get('volatility_filter', {}))
     risk_params['symbol'] = config.get('symbol', '')
+    risk_params['trade_size_pct'] = config.get('trade_size_pct', 0.1)
     risk_config = RiskConfig(**risk_params)
     risk_manager = RiskManager(risk_config)
 
@@ -214,9 +215,6 @@ def main() -> None:
                 risk_manager.config.take_profit_pct = params[name]["take_profit_pct"]
         score, direction = await evaluate_async(strategy_fn, df, config)
         logger.info("Signal score %.2f direction %s", score, direction)
-        balance = (
-            (await asyncio.to_thread(exchange.fetch_balance))["USDT"]["free"]
-            if config["execution_mode"] != "dry_run"
         if config['execution_mode'] != 'dry_run':
             if asyncio.iscoroutinefunction(getattr(exchange, 'fetch_balance', None)):
                 balance = (await exchange.fetch_balance())['USDT']['free']
@@ -224,12 +222,6 @@ def main() -> None:
                 balance = (await asyncio.to_thread(exchange.fetch_balance))['USDT']['free']
         else:
             balance = 1000
-        balance = (
-            exchange.fetch_balance()['USDT']['free']
-            if config['execution_mode'] != 'dry_run'
-            else 1000
-        )
-        size = risk_manager.position_size(score, balance)
 
         current_price = df['close'].iloc[-1]
 
@@ -291,8 +283,6 @@ def main() -> None:
             await asyncio.sleep(config['loop_interval_minutes'] * 60)
             continue
 
-        balance = (
-            (await asyncio.to_thread(exchange.fetch_balance))["USDT"]["free"]
         if config['execution_mode'] != 'dry_run':
             if asyncio.iscoroutinefunction(getattr(exchange, 'fetch_balance', None)):
                 balance = (await exchange.fetch_balance())['USDT']['free']
@@ -300,37 +290,18 @@ def main() -> None:
                 balance = (await asyncio.to_thread(exchange.fetch_balance))['USDT']['free']
         else:
             balance = 1000
-        size = balance * config['trade_size_pct']
-
-        if env == 'onchain':
-            asyncio.run(
-                execute_swap(
-                    'SOL',
-                    'USDC',
-                    size,
-                    user['telegram_token'],
-                    user['telegram_chat_id'],
-                    dry_run=config['execution_mode'] == 'dry_run',
-                )
-            await asyncio.to_thread(
-                execute_swap,
-        balance = (
-            exchange.fetch_balance()['USDT']['free']
-            if config['execution_mode'] != 'dry_run'
-            else 1000
-        )
-        size = balance * config['trade_size_pct']
+        size = risk_manager.position_size(score, balance)
 
         if env == 'onchain':
             await asyncio.to_thread(
                 execute_swap,
-            execute_swap(
                 'SOL',
                 'USDC',
                 size,
                 user['telegram_token'],
                 user['telegram_chat_id'],
                 dry_run=config['execution_mode'] == 'dry_run',
+                slippage_bps=config.get('solana_slippage_bps', 50),
             )
             risk_manager.register_stop_order(
                 {
@@ -339,9 +310,6 @@ def main() -> None:
                     'amount': size,
                     'dry_run': config['execution_mode'] == 'dry_run',
                 }
-            )
-                slippage_bps=config.get('solana_slippage_bps', 50),
-                dry_run=config['execution_mode'] == 'dry_run',
             )
         else:
             logger.info("Executing entry %s %.4f", direction, size)
