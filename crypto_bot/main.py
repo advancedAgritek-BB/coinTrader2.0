@@ -97,8 +97,28 @@ def main() -> None:
     last_rotation = 0.0
 
     mode = user.get('mode', config['mode'])
+    state = {"running": True, "mode": mode}
+
+    telegram_bot = None
+    if user.get("telegram_token") and config.get("telegram", {}).get("chat_id"):
+        from crypto_bot.telegram_bot_ui import TelegramBotUI
+
+        telegram_bot = TelegramBotUI(
+            user["telegram_token"],
+            config["telegram"]["chat_id"],
+            state,
+            "crypto_bot/logs/bot.log",
+            rotator,
+            exchange,
+            user.get("wallet_address", ""),
+        )
+        telegram_bot.run_async()
 
     while True:
+        mode = state["mode"]
+        if not state.get("running"):
+            await asyncio.sleep(1)
+            continue
         # Detect deposits of BTC/ETH/XRP and convert to a tradeable token
         balances = await asyncio.to_thread(check_wallet_balances, user.get('wallet_address', ''))
         for token in detect_non_trade_tokens(balances):
