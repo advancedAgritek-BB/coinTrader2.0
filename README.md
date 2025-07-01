@@ -10,7 +10,7 @@ Main features include:
 - Telegram notifications and optional Google Sheets logging
 - Risk management with drawdown limits and volume/volatility filters
 - Live trading or dry-run simulation
-- Optional backtesting per regime
+- Backtesting with PnL, drawdown and Sharpe metrics
 On-chain DEX execution on Solana now uses the Jupiter aggregator to submit real
 transactions when not running in dry-run mode.
 
@@ -87,5 +87,23 @@ python -m frontend.app
 
 Navigate to `http://localhost:5000` to start or stop the bot, watch the logs
 refresh live and review the trade stats collected in
+`crypto_bot/logs/strategy_stats.json`.
+
+### Backtesting
+
+The `backtest` function in `crypto_bot.backtest.backtest_runner` can evaluate
+different stop‑loss and take‑profit percentages and reports the PnL,
+maximum drawdown and Sharpe ratio for each combination.
+
+```python
+from crypto_bot.backtest import backtest_runner
+
+results = backtest_runner.backtest(
+    'BTC/USDT', '1h', since=0,
+    stop_loss_range=[0.01, 0.02],
+    take_profit_range=[0.02, 0.04],
+)
+print(results.head())  # best combo appears first
+```
 `crypto_bot/logs/strategy_stats.json`. The home page indicates whether the bot
 is running so you can quickly see if it has stopped.
