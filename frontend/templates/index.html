@@ -2,8 +2,10 @@
 {% block content %}
 <h1 class="mb-4">Bot Control</h1>
 {% if running %}
+  <div class="alert alert-success">Bot is running.</div>
   <a class="btn btn-danger" href="{{ url_for('stop') }}">Stop Bot</a>
 {% else %}
+  <div class="alert alert-warning">Bot is not running.</div>
   <a class="btn btn-success" href="{{ url_for('start') }}">Start Bot</a>
 {% endif %}
 {% endblock %}

@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from crypto_bot.fund_manager import (
     detect_non_trade_tokens,
     auto_convert_funds,
@@ -14,7 +15,7 @@ def test_detect_non_trade_tokens():
 
 
 def test_auto_convert_funds_returns_dict():
-    tx = auto_convert_funds("wallet", "BTC", "USDC", 1)
+    tx = asyncio.run(auto_convert_funds("wallet", "BTC", "USDC", 1))
     assert tx["from"] == "BTC"
     assert tx["to"] == "USDC"
     assert tx["amount"] == 1
