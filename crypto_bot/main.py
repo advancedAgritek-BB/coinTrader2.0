@@ -58,9 +58,9 @@ def main() -> None:
 
     logger.info("Starting bot")
     config = load_config()
-    user = load_or_create()
     secrets = dotenv_values(ENV_PATH)
     os.environ.update(secrets)
+    user = load_or_create()
     exchange, ws_client = get_exchange(config)
     try:
         await asyncio.to_thread(exchange.fetch_balance)

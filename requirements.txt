@@ -13,6 +13,8 @@ pytest
 websocket-client
 requests
 solana
+boto3
+hvac
 psutil
 aiohttp
 cryptography

@@ -15,6 +15,16 @@ On-chain DEX execution on Solana now uses the Jupiter aggregator to submit real
 transactions when not running in dry-run mode.
 
 
+Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credentials. The
+script now asks for Coinbase and Kraken API keys (plus the Coinbase passphrase) and
+stores your chosen exchange in `user_config.yaml`. **Environment variables always
+override the values in this file**, so you can place secrets in `crypto_bot/.env` or
+export them before running the bot.
+
+To pull secrets from a provider such as AWS Secrets Manager or Hashicorp Vault,
+set the environment variables `SECRETS_PROVIDER` (`aws` or `vault`) and
+`SECRETS_PATH` to the secret name/path. When configured the credentials will be
+loaded automatically.
 Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your user preferences.
 API keys are read from environment variables when present. Place them in
 `crypto_bot/.env` or export them in your shell. Sensitive values will not be saved to
