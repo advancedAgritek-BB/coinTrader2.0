@@ -22,6 +22,13 @@ from crypto_bot.risk.exit_manager import (
 
 from crypto_bot.execution.cex_executor import execute_trade as cex_trade, get_exchange
 from crypto_bot.execution.solana_executor import execute_swap
+from crypto_bot.fund_manager import (
+    check_wallet_balances,
+    detect_non_trade_tokens,
+    auto_convert_funds,
+    SUPPORTED_FUNDING,
+    REQUIRED_TOKENS,
+)
 
 CONFIG_PATH = Path(__file__).resolve().parent / 'config.yaml'
 ENV_PATH = Path(__file__).resolve().parent / '.env'
@@ -62,6 +69,19 @@ def main():
     mode = user.get('mode', config['mode'])
 
     while True:
+        # Detect deposits of BTC/ETH/XRP and convert to a tradeable token
+        balances = check_wallet_balances(user.get('wallet_address', ''))
+        for token in detect_non_trade_tokens(balances):
+            amount = balances[token]
+            logger.info("Converting %s %s to USDC", amount, token)
+            auto_convert_funds(
+                user.get('wallet_address', ''),
+                token,
+                'USDC',
+                amount,
+                dry_run=config['execution_mode'] == 'dry_run',
+            )
+
         ohlcv = exchange.fetch_ohlcv(config['symbol'], timeframe=config['timeframe'], limit=100)
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
 

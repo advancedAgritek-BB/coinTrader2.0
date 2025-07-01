@@ -7,12 +7,14 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 from crypto_bot.utils.telegram import send_message
+from crypto_bot.execution.kraken_ws import KrakenWSClient
 
 
 
 def get_exchange(config):
     """Instantiate and return a ccxt exchange based on config."""
     exchange_name = config.get("exchange", "coinbase")
+    use_ws = config.get("use_websockets", False)
 
     if exchange_name == "coinbase":
         return ccxt.coinbase({
@@ -22,6 +24,8 @@ def get_exchange(config):
             "enableRateLimit": True,
         })
     elif exchange_name == "kraken":
+        if use_ws:
+            return KrakenWSClient(os.getenv("API_KEY"), os.getenv("API_SECRET"))
         return ccxt.kraken({
             "apiKey": os.getenv("API_KEY"),
             "secret": os.getenv("API_SECRET"),
@@ -38,7 +42,10 @@ def execute_trade(exchange: ccxt.Exchange, symbol: str, side: str, amount: float
         order = {'symbol': symbol, 'side': side, 'amount': amount, 'dry_run': True}
     else:
         try:
-            order = exchange.create_market_order(symbol, side, amount)
+            if hasattr(exchange, "add_order"):
+                order = exchange.add_order(symbol, side, amount)
+            else:
+                order = exchange.create_market_order(symbol, side, amount)
         except Exception as e:
             send_message(token, chat_id, f"Order failed: {e}")
             return {}

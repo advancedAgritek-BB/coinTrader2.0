@@ -29,11 +29,23 @@ stores your chosen exchange in `user_config.yaml`.
    API_PASSPHRASE=your_coinbase_passphrase_if_needed
    ```
 
+
 4. In `crypto_bot/config.yaml` set:
+   For Kraken, optionally set tokens for the WebSocket API:
+
+   ```env
+   KRAKEN_WS_TOKEN=your_ws_token
+   KRAKEN_API_TOKEN=your_api_token
+   ```
+
+   Generate `KRAKEN_WS_TOKEN` by calling Kraken's `GetWebSocketsToken` REST endpoint with your API credentials. The response contains a short-lived token used for authenticating WebSocket connections.
+
+3. In `crypto_bot/config.yaml` set:
 
    ```yaml
    exchange: coinbase  # Options: coinbase, kraken
    execution_mode: dry_run  # or live
+   use_websocket: true      # set only when trading on Kraken
    ```
 
 Binance.US is not recommended because of API limitations.
