@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="mb-4">ML Model</h1>
+{% if report %}
+  <ul class="list-group mb-3">
+    <li class="list-group-item">Accuracy: {{ '%.4f'|format(report.accuracy) }}</li>
+    <li class="list-group-item">AUC: {{ '%.4f'|format(report.auc) }}</li>
+    <li class="list-group-item">Trained At: {{ report.trained_at }}</li>
+  </ul>
+{% else %}
+  <p>No model metrics available.</p>
+{% endif %}
+<form method="post" action="{{ url_for('train_model_route') }}" enctype="multipart/form-data" class="mb-3">
+  <div class="mb-3">
+    <label for="csv" class="form-label">Training CSV</label>
+    <input type="file" class="form-control" name="csv" id="csv">
+  </div>
+  <button class="btn btn-primary" type="submit">Train Model</button>
+</form>
+<form method="post" action="{{ url_for('validate_model_route') }}" enctype="multipart/form-data">
+  <div class="mb-3">
+    <label for="valcsv" class="form-label">Validation CSV (optional)</label>
+    <input type="file" class="form-control" name="csv" id="valcsv">
+  </div>
+  <button class="btn btn-secondary" type="submit">Validate Model</button>
+</form>
+{% endblock %}
