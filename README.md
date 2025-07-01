@@ -104,6 +104,19 @@ resubscribes to any previously requested channels.
 
 Binance.US is not recommended because of API limitations.
 
+### Automatic Market Scanning
+
+When `scan_markets` is set to `true` and the `symbols` list is empty, the bot
+loads all active Kraken trading pairs at startup. Pairs listed under
+`excluded_symbols` are skipped. Disable this behaviour by setting
+`scan_markets` to `false`.
+
+```yaml
+scan_markets: true
+symbols: []            # automatically populated
+excluded_symbols: [ETH/USD]
+```
+
 ## Web UI
 
 A small Flask web dashboard is included for running the bot and inspecting logs.

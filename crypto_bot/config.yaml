@@ -13,6 +13,12 @@ preferred_chain: "solana"
 solana_slippage_bps: 50
 # market symbol to trade on the exchange
 symbol: "BTC/USDT"
+# list of symbols to scan (auto-filled if empty)
+symbols: []
+# symbols user wishes to skip
+excluded_symbols: []
+# query exchange for tradable markets when symbols list is empty
+scan_markets: true
 # timeframe of candles to fetch
 timeframe: "1h"
 # percent of available balance to allocate per trade

@@ -40,6 +40,7 @@ from crypto_bot.fund_manager import (
     auto_convert_funds,
 )
 from crypto_bot.utils.performance_logger import log_performance
+from crypto_bot.utils.market_loader import load_kraken_symbols
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
@@ -66,6 +67,11 @@ async def main() -> None:
 
     user = load_or_create()
     exchange, ws_client = get_exchange(config)
+
+    if config.get("scan_markets", False) and not config.get("symbols"):
+        config["symbols"] = load_kraken_symbols(
+            exchange, config.get("excluded_symbols", [])
+        )
 
     try:
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
@@ -176,51 +182,101 @@ async def main() -> None:
                 )
                 last_rotation = time.time()
 
-        if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
-            ohlcv = await exchange.watch_ohlcv(
-                config["symbol"], timeframe=config["timeframe"], limit=100
-            )
-        else:
-            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-                ohlcv = await exchange.fetch_ohlcv(
-                    config["symbol"], timeframe=config["timeframe"], limit=100
-                )
+        best = None
+        best_score = -1.0
+        df_current = None
+
+        for sym in config.get("symbols", [config.get("symbol")]):
+            if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
+                data = await exchange.watch_ohlcv(sym, timeframe=config["timeframe"], limit=100)
             else:
-                ohlcv = await asyncio.to_thread(
-                    exchange.fetch_ohlcv,
-                    config["symbol"],
-                    timeframe=config["timeframe"],
-                    limit=100,
-                )
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
+                    data = await exchange.fetch_ohlcv(sym, timeframe=config["timeframe"], limit=100)
+                else:
+                    data = await asyncio.to_thread(
+                        exchange.fetch_ohlcv,
+                        sym,
+                        timeframe=config["timeframe"],
+                        limit=100,
+                    )
 
-        df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+            df_sym = pd.DataFrame(
+                data,
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
 
-        if not risk_manager.allow_trade(df):
-            await asyncio.sleep(config["loop_interval_minutes"] * 60)
-            continue
+            if sym == config.get("symbol"):
+                df_current = df_sym
 
-        regime = classify_regime(df)
-        logger.info("Market regime classified as %s", regime)
-        env = mode if mode != "auto" else "cex"
-        strategy_fn = route(regime, env)
-        name = strategy_name(regime, env)
+            risk_manager.config.symbol = sym
+            if not risk_manager.allow_trade(df_sym):
+                continue
 
-        if open_side is None and in_cooldown(config["symbol"], name):
-            logger.info("Strategy %s on cooldown", name)
-            await asyncio.sleep(config["loop_interval_minutes"] * 60)
-            continue
+            regime_sym = classify_regime(df_sym)
+            env_sym = mode if mode != "auto" else "cex"
+            strategy_fn = route(regime_sym, env_sym)
+            name_sym = strategy_name(regime_sym, env_sym)
 
-        params_file = Path("crypto_bot/logs/optimized_params.json")
-        if params_file.exists():
-            params = json.loads(params_file.read_text())
-            if name in params:
-                risk_manager.config.stop_loss_pct = params[name]["stop_loss_pct"]
-                risk_manager.config.take_profit_pct = params[name]["take_profit_pct"]
+            if open_side is None and in_cooldown(sym, name_sym):
+                continue
 
-        score, direction = await evaluate_async(strategy_fn, df, config)
-        logger.info("Signal score %.2f direction %s", score, direction)
+            params_file = Path("crypto_bot/logs/optimized_params.json")
+            if params_file.exists():
+                params = json.loads(params_file.read_text())
+                if name_sym in params:
+                    risk_manager.config.stop_loss_pct = params[name_sym]["stop_loss_pct"]
+                    risk_manager.config.take_profit_pct = params[name_sym]["take_profit_pct"]
 
-        current_price = df["close"].iloc[-1]
+            score_sym, direction_sym = await evaluate_async(strategy_fn, df_sym, config)
+            logger.info("Signal %s %.2f %s", sym, score_sym, direction_sym)
+
+            if direction_sym != "none" and score_sym > best_score:
+                best_score = score_sym
+                best = {
+                    "symbol": sym,
+                    "df": df_sym,
+                    "regime": regime_sym,
+                    "env": env_sym,
+                    "name": name_sym,
+                    "direction": direction_sym,
+                    "score": score_sym,
+                }
+
+        if open_side and df_current is None:
+            # ensure current market data is loaded
+            if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
+                data = await exchange.watch_ohlcv(config["symbol"], timeframe=config["timeframe"], limit=100)
+            else:
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
+                    data = await exchange.fetch_ohlcv(config["symbol"], timeframe=config["timeframe"], limit=100)
+                else:
+                    data = await asyncio.to_thread(
+                        exchange.fetch_ohlcv,
+                        config["symbol"],
+                        timeframe=config["timeframe"],
+                        limit=100,
+                    )
+            df_current = pd.DataFrame(
+                data,
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
+
+        if open_side and df_current is not None:
+            current_price = df_current["close"].iloc[-1]
+        elif best:
+            current_price = best["df"]["close"].iloc[-1]
+        else:
+            current_price = None
+
+        if best:
+            score = best["score"]
+            direction = best["direction"]
+            env = best["env"]
+            regime = best["regime"]
+            name = best["name"]
+        else:
+            score = -1
+            direction = "none"
 
         if open_side:
             pnl_pct = ((current_price - entry_price) / entry_price) * (
@@ -236,7 +292,7 @@ async def main() -> None:
                     )
 
             exit_signal, trailing_stop = should_exit(
-                df, current_price, trailing_stop, config
+                df_current or best["df"], current_price, trailing_stop, config
             )
             if exit_signal:
                 pct = get_partial_exit_percent(pnl_pct * 100)
@@ -305,6 +361,8 @@ async def main() -> None:
             balance = bal["USDT"]["free"]
         else:
             balance = 1000
+        if best:
+            risk_manager.config.symbol = best["symbol"]
         size = risk_manager.position_size(score, balance)
         if not risk_manager.can_allocate(name, size, balance):
             logger.info("Capital cap reached for %s, skipping", name)
@@ -331,6 +389,7 @@ async def main() -> None:
             )
         else:
             logger.info("Executing entry %s %.4f", direction, size)
+            config["symbol"] = best["symbol"] if best else config["symbol"]
             await cex_trade_async(
                 exchange,
                 ws_client,
