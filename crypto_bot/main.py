@@ -78,7 +78,11 @@ def main() -> None:
             f"API error: {e}",
         )
         return
-    risk_config = RiskConfig(**config['risk'])
+    risk_params = {**config['risk']}
+    risk_params.update(config.get('sentiment_filter', {}))
+    risk_params.update(config.get('volatility_filter', {}))
+    risk_params['symbol'] = config.get('symbol', '')
+    risk_config = RiskConfig(**risk_params)
     risk_manager = RiskManager(risk_config)
 
     open_side = None

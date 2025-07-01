@@ -71,3 +71,13 @@ portfolio_rotation:
   scoring_method: sharpe
   top_assets: 5
   rebalance_threshold: 0.1
+
+sentiment_filter:
+  min_fng: 20
+  bull_fng: 70
+  min_sentiment: 40
+  bull_sentiment: 60
+
+volatility_filter:
+  min_atr_pct: 0.01
+  max_funding_rate: 0.05

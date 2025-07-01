@@ -129,25 +129,5 @@ def load_or_create() -> dict:
             if val is not None:
                 creds[key] = val
                 break
-            data = yaml.safe_load(f) or {}
-        for key in SENSITIVE_FIELDS:
-            if key in data:
-                data[key] = _decrypt(data[key])
-        return data
-
-    creds = prompt_user()
-    logger.info("Creating new user configuration at %s", CONFIG_FILE)
-
-    file_data = creds.copy()
-    if _fernet is None:
-        for key in SENSITIVE_FIELDS:
-            file_data.pop(key, None)
-    else:
-        for key in SENSITIVE_FIELDS:
-            if key in file_data:
-                file_data[key] = _encrypt(file_data[key])
-
-    with open(CONFIG_FILE, 'w') as f:
-        yaml.safe_dump(file_data, f)
 
     return creds
