@@ -2,7 +2,6 @@ import os
 import time
 import ccxt
 import asyncio
-from typing import Dict, Optional, Tuple
 from typing import Dict, Optional, Tuple, List
 import pandas as pd
 from dotenv import dotenv_values
@@ -12,11 +11,9 @@ try:
     import ccxt.pro as ccxtpro  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
     ccxtpro = None
-from typing import Dict, Optional, Tuple
 
 from crypto_bot.utils.telegram import send_message
 from crypto_bot.execution.kraken_ws import KrakenWSClient
-import asyncio
 from crypto_bot.utils.trade_logger import log_trade
 from crypto_bot import tax_logger
 
