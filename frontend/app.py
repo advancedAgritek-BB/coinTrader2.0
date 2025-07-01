@@ -58,6 +58,12 @@ def index():
     return render_template('index.html', running=is_running(), mode=mode)
 
 
+@app.route('/dashboard')
+def dashboard():
+    """Alias for the main dashboard route."""
+    return redirect(url_for('index'))
+
+
 @app.route('/start', methods=['POST'])
 def start():
     global bot_proc
