@@ -203,7 +203,6 @@ async def main() -> None:
         logger.info("Market regime classified as %s", regime)
         env = mode if mode != "auto" else "cex"
         strategy_fn = route(regime, env)
-        name = _strategy_name(regime, env)
         name = strategy_name(regime, env)
 
         if open_side is None and in_cooldown(config["symbol"], name):
@@ -367,7 +366,7 @@ async def main() -> None:
             realized_pnl = 0.0
             entry_time = datetime.utcnow().isoformat()
             entry_regime = regime
-            entry_strategy = _strategy_name(regime, env)
+            entry_strategy = strategy_name(regime, env)
             highest_price = entry_price
             current_strategy = name
             active_strategy = name
