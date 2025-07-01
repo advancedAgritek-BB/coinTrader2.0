@@ -3,10 +3,6 @@ import time
 import ccxt
 import asyncio
 from typing import Dict, Optional, Tuple, List
-import pandas as pd
-from dotenv import dotenv_values
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 
 try:
     import ccxt.pro as ccxtpro  # type: ignore
@@ -275,21 +271,3 @@ def place_stop_order(
     send_message(token, chat_id, f"Stop order submitted: {order}")
     log_trade(order)
     return order
-
-
-def log_trade(order: Dict) -> None:
-    df = pd.DataFrame([order])
-    df.to_csv("crypto_bot/logs/trades.csv", mode="a", header=False, index=False)
-    try:
-        creds_path = dotenv_values("crypto_bot/.env").get("GOOGLE_CRED_JSON")
-        if creds_path:
-            scope = [
-                "https://spreadsheets.google.com/feeds",
-                "https://www.googleapis.com/auth/drive",
-            ]
-            creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
-            client = gspread.authorize(creds)
-            sheet = client.open("trade_logs").sheet1
-            sheet.append_row(list(order.values()))
-    except Exception:
-        pass
