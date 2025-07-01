@@ -131,21 +131,30 @@ class KrakenWSClient:
 
     def subscribe_ticker(self, pair: str) -> None:
         self.connect_public()
-        msg = {"event": "subscribe", "pair": [pair], "subscription": {"name": "ticker"}}
+        msg = {
+            "method": "subscribe",
+            "params": {"channel": "ticker", "symbol": pair},
+        }
         data = json.dumps(msg)
         self._public_subs.append(data)
         self.public_ws.send(data)
 
     def subscribe_trades(self, pair: str) -> None:
         self.connect_public()
-        msg = {"event": "subscribe", "pair": [pair], "subscription": {"name": "trade"}}
+        msg = {
+            "method": "subscribe",
+            "params": {"channel": "trade", "symbol": pair},
+        }
         data = json.dumps(msg)
         self._public_subs.append(data)
         self.public_ws.send(data)
 
     def subscribe_orders(self) -> None:
         self.connect_private()
-        msg = {"event": "subscribe", "subscription": {"name": "openOrders", "token": self.token}}
+        msg = {
+            "method": "subscribe",
+            "params": {"channel": "openOrders", "token": self.token},
+        }
         data = json.dumps(msg)
         self._private_subs.append(data)
         self.private_ws.send(data)
@@ -153,12 +162,13 @@ class KrakenWSClient:
     def add_order(self, pair: str, side: str, volume: float, ordertype: str = "market") -> dict:
         self.connect_private()
         msg = {
-            "event": "addOrder",
-            "token": self.token,
-            "pair": pair,
-            "type": side,
-            "ordertype": ordertype,
-            "volume": str(volume),
+            "method": "add_order",
+            "params": {
+                "symbol": pair,
+                "side": side,
+                "ordertype": ordertype,
+                "volume": volume,
+            },
         }
         self.private_ws.send(json.dumps(msg))
         return msg
