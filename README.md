@@ -11,6 +11,9 @@ Main features include:
 - Risk management with drawdown limits and volume/volatility filters
 - Live trading or dry-run simulation
 - Optional backtesting per regime
+**Note:** On-chain DEX execution on Solana is currently a stub. The provided
+code only simulates swaps and does not submit real transactions.
+
 
 Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credentials. The
 script now asks for Coinbase and Kraken API keys (plus the Coinbase passphrase) and
