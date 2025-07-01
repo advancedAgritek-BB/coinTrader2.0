@@ -1,5 +1,6 @@
 import time
 import os
+import asyncio
 import pandas as pd
 import yaml
 from dotenv import dotenv_values
@@ -73,12 +74,14 @@ def main():
         for token in detect_non_trade_tokens(balances):
             amount = balances[token]
             logger.info("Converting %s %s to USDC", amount, token)
-            auto_convert_funds(
-                user.get('wallet_address', ''),
-                token,
-                'USDC',
-                amount,
-                dry_run=config['execution_mode'] == 'dry_run',
+            asyncio.run(
+                auto_convert_funds(
+                    user.get('wallet_address', ''),
+                    token,
+                    'USDC',
+                    amount,
+                    dry_run=config['execution_mode'] == 'dry_run',
+                )
             )
 
         ohlcv = exchange.fetch_ohlcv(config['symbol'], timeframe=config['timeframe'], limit=100)
@@ -139,7 +142,16 @@ def main():
         size = balance * config['trade_size_pct']
 
         if env == 'onchain':
-            execute_swap('SOL', 'USDC', size, user['telegram_token'], user['telegram_chat_id'], dry_run=config['execution_mode'] == 'dry_run')
+            asyncio.run(
+                execute_swap(
+                    'SOL',
+                    'USDC',
+                    size,
+                    user['telegram_token'],
+                    user['telegram_chat_id'],
+                    dry_run=config['execution_mode'] == 'dry_run',
+                )
+            )
         else:
             logger.info("Executing entry %s %.4f", direction, size)
             cex_trade(
