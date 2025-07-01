@@ -6,6 +6,7 @@ import threading
 import time
 import psutil
 import yaml
+from crypto_bot import ml_signal_model as ml
 
 app = Flask(__name__)
 
@@ -16,6 +17,7 @@ watch_thread = None
 LOG_FILE = Path('crypto_bot/logs/bot.log')
 STATS_FILE = Path('crypto_bot/logs/strategy_stats.json')
 SCAN_FILE = Path('crypto_bot/logs/asset_scores.json')
+MODEL_REPORT = Path('crypto_bot/ml_signal_model/models/model_report.json')
 TRADE_FILE = Path('crypto_bot/logs/trades.csv')
 ERROR_FILE = Path('crypto_bot/logs/errors.log')
 CONFIG_FILE = Path('crypto_bot/config.yaml')
@@ -166,6 +168,44 @@ def scans():
     return render_template('scans.html', scans=data)
 
 
+@app.route('/model')
+def model_page():
+    report = {}
+    if MODEL_REPORT.exists():
+        with open(MODEL_REPORT) as f:
+            report = json.load(f)
+    return render_template('model.html', report=report)
+
+
+@app.route('/train_model', methods=['POST'])
+def train_model_route():
+    file = request.files.get('csv')
+    if file:
+        tmp_path = Path('crypto_bot/logs/upload.csv')
+        file.save(tmp_path)
+        ml.train_from_csv(tmp_path)
+        tmp_path.unlink()
+    return redirect(url_for('model_page'))
+
+
+@app.route('/validate_model', methods=['POST'])
+def validate_model_route():
+    file = request.files.get('csv')
+    tmp_path = None
+    if file:
+        tmp_path = Path('crypto_bot/logs/validate.csv')
+        file.save(tmp_path)
+        metrics = ml.validate_from_csv(tmp_path)
+        tmp_path.unlink()
+    else:
+        default_csv = Path('crypto_bot/logs/trades.csv')
+        if default_csv.exists():
+            metrics = ml.validate_from_csv(default_csv)
+        else:
+            metrics = {}
+    if metrics:
+        MODEL_REPORT.write_text(json.dumps(metrics))
+    return redirect(url_for('model_page'))
 @app.route('/trades')
 def trades_page():
     return render_template('trades.html')
