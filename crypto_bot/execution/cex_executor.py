@@ -182,6 +182,12 @@ async def execute_trade_async(
     return order
 
 
+def place_stop_order(
+    exchange: ccxt.Exchange,
+    symbol: str,
+    side: str,
+    amount: float,
+    stop_price: float,
 async def execute_trade_async(
     exchange: ccxt.Exchange,
     ws_client: Optional[KrakenWSClient],
@@ -192,6 +198,34 @@ async def execute_trade_async(
     chat_id: str,
     dry_run: bool = True,
 ) -> Dict:
+    """Submit a stop-loss order on the exchange."""
+    msg = (
+        f"Placing stop {side} order for {amount} {symbol} at {stop_price:.2f}"
+    )
+    send_message(token, chat_id, msg)
+    if dry_run:
+        order = {
+            "symbol": symbol,
+            "side": side,
+            "amount": amount,
+            "stop": stop_price,
+            "dry_run": True,
+        }
+    else:
+        try:
+            order = exchange.create_order(
+                symbol,
+                "stop_market",
+                side,
+                amount,
+                params={"stopPrice": stop_price},
+            )
+        except Exception as e:
+            send_message(token, chat_id, f"Stop order failed: {e}")
+            return {}
+    send_message(token, chat_id, f"Stop order submitted: {order}")
+    log_trade(order)
+    return order
     """Asynchronous wrapper around ``execute_trade``."""
     return await asyncio.to_thread(
         execute_trade,
