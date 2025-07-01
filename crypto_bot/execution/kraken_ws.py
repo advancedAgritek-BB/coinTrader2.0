@@ -47,6 +47,8 @@ class KrakenWSClient:
             self.token_created = datetime.now(timezone.utc)
         self.public_ws: Optional[WebSocketApp] = None
         self.private_ws: Optional[WebSocketApp] = None
+        self._public_subs = []
+        self._private_subs = []
 
     def get_token(self) -> str:
         """Retrieve WebSocket authentication token via Kraken REST API."""
@@ -65,6 +67,13 @@ class KrakenWSClient:
         self.token_created = datetime.now(timezone.utc)
         return self.token
 
+    def _start_ws(self, url: str, conn_type: str) -> WebSocketApp:
+        """Start a ``WebSocketApp`` with an ``on_close`` handler."""
+
+        def _on_close(_ws, *_args) -> None:
+            self.on_close(conn_type)
+
+        ws = WebSocketApp(url, on_close=_on_close)
     def _start_ws(
         self,
         url: str,
@@ -109,7 +118,7 @@ class KrakenWSClient:
 
     def connect_public(self) -> None:
         if not self.public_ws:
-            self.public_ws = self._start_ws(PUBLIC_URL)
+            self.public_ws = self._start_ws(PUBLIC_URL, "public")
 
     def connect_private(self) -> None:
         if self.token_expired():
@@ -117,22 +126,31 @@ class KrakenWSClient:
         if not self.token:
             self.get_token()
         if not self.private_ws:
+            if not self.token:
+                self.get_token()
+            self.private_ws = self._start_ws(PRIVATE_URL, "private")
             self.private_ws = self._start_ws(PRIVATE_URL)
 
     def subscribe_ticker(self, pair: str) -> None:
         self.connect_public()
         msg = {"event": "subscribe", "pair": [pair], "subscription": {"name": "ticker"}}
-        self.public_ws.send(json.dumps(msg))
+        data = json.dumps(msg)
+        self._public_subs.append(data)
+        self.public_ws.send(data)
 
     def subscribe_trades(self, pair: str) -> None:
         self.connect_public()
         msg = {"event": "subscribe", "pair": [pair], "subscription": {"name": "trade"}}
-        self.public_ws.send(json.dumps(msg))
+        data = json.dumps(msg)
+        self._public_subs.append(data)
+        self.public_ws.send(data)
 
     def subscribe_orders(self) -> None:
         self.connect_private()
         msg = {"event": "subscribe", "subscription": {"name": "openOrders", "token": self.token}}
-        self.private_ws.send(json.dumps(msg))
+        data = json.dumps(msg)
+        self._private_subs.append(data)
+        self.private_ws.send(data)
 
     def add_order(self, pair: str, side: str, volume: float, ordertype: str = "market") -> dict:
         self.connect_private()
@@ -146,3 +164,17 @@ class KrakenWSClient:
         }
         self.private_ws.send(json.dumps(msg))
         return msg
+
+    def on_close(self, conn_type: str) -> None:
+        """Handle WebSocket closure by reconnecting and resubscribing."""
+
+        if conn_type == "public":
+            self.public_ws = self._start_ws(PUBLIC_URL, "public")
+            for sub in self._public_subs:
+                self.public_ws.send(sub)
+        else:
+            if not self.token:
+                self.get_token()
+            self.private_ws = self._start_ws(PRIVATE_URL, "private")
+            for sub in self._private_subs:
+                self.private_ws.send(sub)

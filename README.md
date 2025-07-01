@@ -99,6 +99,9 @@ When `use_websocket` is enabled the bot relies on `ccxt.pro` for realtime
 streaming data. Install it alongside the other requirements or disable
 websockets if you do not have access to `ccxt.pro`.
 
+The Kraken WebSocket client automatically reconnects if the connection drops and
+resubscribes to any previously requested channels.
+
 Binance.US is not recommended because of API limitations.
 
 ## Web UI
