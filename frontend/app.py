@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, request
+from flask import Flask, render_template, redirect, url_for, request, jsonify
 from pathlib import Path
 import subprocess
 import json
@@ -15,6 +15,8 @@ watch_thread = None
 LOG_FILE = Path('crypto_bot/logs/bot.log')
 STATS_FILE = Path('crypto_bot/logs/strategy_stats.json')
 SCAN_FILE = Path('crypto_bot/logs/asset_scores.json')
+TRADE_FILE = Path('crypto_bot/logs/trades.csv')
+ERROR_FILE = Path('crypto_bot/logs/errors.log')
 CONFIG_FILE = Path('crypto_bot/config.yaml')
 
 
@@ -108,6 +110,22 @@ def scans():
         with open(SCAN_FILE) as f:
             data = json.load(f)
     return render_template('scans.html', scans=data)
+
+
+@app.route('/trades')
+def trades_page():
+    return render_template('trades.html')
+
+
+@app.route('/trades_tail')
+def trades_tail():
+    trades = ''
+    if TRADE_FILE.exists():
+        trades = '\n'.join(TRADE_FILE.read_text().splitlines()[-100:])
+    errors = ''
+    if ERROR_FILE.exists():
+        errors = '\n'.join(ERROR_FILE.read_text().splitlines()[-100:])
+    return jsonify({'trades': trades, 'errors': errors})
 
 
 if __name__ == '__main__':
