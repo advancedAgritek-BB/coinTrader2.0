@@ -2,6 +2,7 @@ pandas
 numpy
 ta
 ccxt
+ccxtpro
 gspread
 oauth2client
 python-dotenv
@@ -14,3 +15,6 @@ requests
 solana
 boto3
 hvac
+psutil
+aiohttp
+cryptography
