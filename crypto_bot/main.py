@@ -134,10 +134,6 @@ def main():
         if score < config['signal_threshold'] or direction == 'none':
             time.sleep(config['loop_interval_minutes'] * 60)
             continue
-
-        balance = exchange.fetch_balance()['USDT']['free'] if config['execution_mode'] != 'dry_run' else 1000
-        size = balance * config['trade_size_pct']
-
         if env == 'onchain':
             execute_swap('SOL', 'USDC', size, user['telegram_token'], user['telegram_chat_id'], dry_run=config['execution_mode'] == 'dry_run')
         else:
