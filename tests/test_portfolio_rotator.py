@@ -41,7 +41,9 @@ def test_rotate_calls_converter(monkeypatch):
     monkeypatch.setattr(rotator, "score_assets", lambda *a, **k: {"BTC": 0.5, "ETH": 0.1})
 
     holdings = {"ETH": 10}
-    new_holdings = rotator.rotate(object(), "wallet", holdings)
+    new_holdings = asyncio.run(
+        rotator.rotate(object(), "wallet", holdings)
+    )
 
     assert called["args"][1] == "ETH"
     assert called["args"][2] == "BTC"

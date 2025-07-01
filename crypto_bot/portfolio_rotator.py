@@ -56,7 +56,7 @@ class PortfolioRotator:
 
         return scores
 
-    def rotate(
+    async def rotate(
         self,
         exchange,
         wallet: str,
@@ -97,14 +97,12 @@ class PortfolioRotator:
                 improvement,
             )
             # execute swap via fund manager helper
-            asyncio.run(
-                auto_convert_funds(
-                    wallet,
-                    token,
-                    target,
-                    amount,
-                    dry_run=True,
-                )
+            await auto_convert_funds(
+                wallet,
+                token,
+                target,
+                amount,
+                dry_run=True,
             )
             new_alloc.pop(token)
             new_alloc[target] = new_alloc.get(target, 0) + amount
