@@ -2,6 +2,7 @@ pandas
 numpy
 ta
 ccxt
+ccxtpro
 gspread
 oauth2client
 python-dotenv
@@ -13,3 +14,5 @@ websocket-client
 requests
 solana
 psutil
+aiohttp
+cryptography
