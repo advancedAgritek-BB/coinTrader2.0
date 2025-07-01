@@ -51,6 +51,10 @@ stores your chosen exchange in `user_config.yaml`.
    use_websocket: true      # enable when trading on Kraken via WebSocket
    ```
 
+When `use_websocket` is enabled the bot relies on `ccxt.pro` for realtime
+streaming data. Install it alongside the other requirements or disable
+websockets if you do not have access to `ccxt.pro`.
+
 Binance.US is not recommended because of API limitations.
 
 ## Web UI
