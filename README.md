@@ -75,7 +75,7 @@ before being written.
    KRAKEN_API_TOKEN=your_api_token
    ```
 
-Generate `KRAKEN_WS_TOKEN` by calling Kraken's `GetWebSocketsToken` REST endpoint with your API credentials. The response contains a short-lived token used for authenticating WebSocket connections. A helper is provided in `crypto_bot.utils`:
+Generate `KRAKEN_WS_TOKEN` by calling Kraken's `GetWebSocketsToken` REST endpoint with your API credentials. The response contains a short-lived token used for authenticating WebSocket connections. The WebSocket client connects to the `/v2` URLs (`wss://ws.kraken.com/v2` and `wss://ws-auth.kraken.com/v2`), so the token is required for trading. A helper is provided in `crypto_bot.utils`:
 
 ```python
 from crypto_bot.utils import get_ws_token
@@ -104,8 +104,12 @@ When `use_websocket` is enabled the bot relies on `ccxt.pro` for realtime
 streaming data. Install it alongside the other requirements or disable
 websockets if you do not have access to `ccxt.pro`.
 
+
 The Kraken WebSocket client automatically reconnects if the connection drops and
-resubscribes to any previously requested channels.
+resubscribes to any previously requested channels.  Trading commands use the new
+`/v2` naming scheme such as `add_order`, `cancel_order`, `cancel_all_orders` and
+`open_orders`.  Refer to Kraken's v2 WebSocket documentation for a full list:
+<https://docs.kraken.com/websockets-v2/#tag/Trading>.
 
 Binance.US is not recommended because of API limitations.
 
