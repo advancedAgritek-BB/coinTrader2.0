@@ -1,20 +1,36 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1 class="mb-4">Bot Control</h1>
-{% if running %}
-  <div class="alert alert-success">Bot is running.</div>
-  <a class="btn btn-danger" href="{{ url_for('stop') }}">Stop Bot</a>
-{% else %}
-  <div class="alert alert-warning">Bot is not running.</div>
-  <form method="post" action="{{ url_for('start') }}">
-    <div class="mb-3">
-      <label for="mode" class="form-label">Execution Mode</label>
-      <select id="mode" name="mode" class="form-select">
-        <option value="dry_run" {% if mode == 'dry_run' %}selected{% endif %}>Dry Run</option>
-        <option value="live" {% if mode == 'live' %}selected{% endif %}>Live</option>
-      </select>
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Trading Bot</div>
+      <div class="card-body">
+        <p class="mb-2">Status:
+          {% if running %}
+            <span class="badge bg-success">Running</span>
+          {% else %}
+            <span class="badge bg-secondary">Stopped</span>
+          {% endif %}
+        </p>
+        <p class="mb-2">Uptime: {{ uptime }}</p>
+        <p class="mb-2">Last Trade: {{ last_trade }}</p>
+        <p class="mb-3">Current Regime: {{ regime }}</p>
+        {% if running %}
+          <a class="btn btn-danger w-100" href="{{ url_for('stop') }}">Stop Bot</a>
+        {% else %}
+          <form method="post" action="{{ url_for('start') }}">
+            <div class="mb-3">
+              <label for="mode" class="form-label">Execution Mode</label>
+              <select id="mode" name="mode" class="form-select">
+                <option value="dry_run" {% if mode == 'dry_run' %}selected{% endif %}>Dry Run</option>
+                <option value="live" {% if mode == 'live' %}selected{% endif %}>Live</option>
+              </select>
+            </div>
+            <button class="btn btn-success w-100" type="submit">Start Bot</button>
+          </form>
+        {% endif %}
+      </div>
     </div>
-    <button class="btn btn-success" type="submit">Start Bot</button>
-  </form>
-{% endif %}
+  </div>
+</div>
 {% endblock %}

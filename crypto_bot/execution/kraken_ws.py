@@ -1,10 +1,15 @@
 import json
 import threading
 import os
+from typing import Optional, Callable
 from typing import Optional
+from datetime import datetime, timedelta, timezone
 
 import ccxt
 from websocket import WebSocketApp
+from crypto_bot.utils.logger import setup_logger
+
+logger = setup_logger(__name__, "crypto_bot/logs/execution.log")
 
 PUBLIC_URL = "wss://ws.kraken.com"
 PRIVATE_URL = "wss://ws-auth.kraken.com"
@@ -37,6 +42,9 @@ class KrakenWSClient:
             )
 
         self.token: Optional[str] = self.ws_token
+        self.token_created: Optional[datetime] = None
+        if self.token:
+            self.token_created = datetime.now(timezone.utc)
         self.public_ws: Optional[WebSocketApp] = None
         self.private_ws: Optional[WebSocketApp] = None
         self._public_subs = []
@@ -56,6 +64,7 @@ class KrakenWSClient:
 
         resp = self.exchange.privatePostGetWebSocketsToken(params)
         self.token = resp["token"]
+        self.token_created = datetime.now(timezone.utc)
         return self.token
 
     def _start_ws(self, url: str, conn_type: str) -> WebSocketApp:
@@ -65,6 +74,44 @@ class KrakenWSClient:
             self.on_close(conn_type)
 
         ws = WebSocketApp(url, on_close=_on_close)
+    def _start_ws(
+        self,
+        url: str,
+        on_message: Optional[Callable] = None,
+        on_error: Optional[Callable] = None,
+        on_close: Optional[Callable] = None,
+        **kwargs,
+    ) -> WebSocketApp:
+        """Start a WebSocket connection with basic logging callbacks."""
+
+        def default_on_message(ws, message):
+            logger.info("WS message: %s", message)
+
+        def default_on_error(ws, error):
+            logger.error("WS error: %s", error)
+
+        def default_on_close(ws, close_status_code, close_msg):
+            logger.info("WS closed: %s %s", close_status_code, close_msg)
+
+        on_message = on_message or default_on_message
+        on_error = on_error or default_on_error
+        on_close = on_close or default_on_close
+
+        ws = WebSocketApp(
+            url,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close,
+            **kwargs,
+        )
+    def token_expired(self) -> bool:
+        """Return True if the authentication token is older than 14 minutes."""
+        if not self.token_created:
+            return False
+        return datetime.now(timezone.utc) - self.token_created > timedelta(minutes=14)
+
+    def _start_ws(self, url: str, **kwargs) -> WebSocketApp:
+        ws = WebSocketApp(url, **kwargs)
         thread = threading.Thread(target=ws.run_forever, daemon=True)
         thread.start()
         return ws
@@ -74,10 +121,15 @@ class KrakenWSClient:
             self.public_ws = self._start_ws(PUBLIC_URL, "public")
 
     def connect_private(self) -> None:
+        if self.token_expired():
+            self.token = None
+        if not self.token:
+            self.get_token()
         if not self.private_ws:
             if not self.token:
                 self.get_token()
             self.private_ws = self._start_ws(PRIVATE_URL, "private")
+            self.private_ws = self._start_ws(PRIVATE_URL)
 
     def subscribe_ticker(self, pair: str) -> None:
         self.connect_public()

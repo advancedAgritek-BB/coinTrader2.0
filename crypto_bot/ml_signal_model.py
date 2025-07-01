@@ -4,6 +4,7 @@ from pathlib import Path
 import joblib
 from typing import Optional
 import json
+from datetime import datetime
 import hashlib
 from crypto_bot.regime.regime_classifier import classify_regime
 
@@ -85,6 +86,7 @@ def train_model(features: pd.DataFrame, targets: pd.Series) -> LogisticRegressio
         "accuracy": accuracy_score(targets, preds),
         "precision": precision_score(targets, preds, zero_division=0),
         "recall": recall_score(targets, preds, zero_division=0),
+        "trained_at": datetime.utcnow().isoformat(),
     }
 
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -130,6 +132,24 @@ def train_from_csv(csv_path: Path) -> LogisticRegression:
     features = extract_features(df)
     targets = df.loc[features.index, "label"]
     return train_model(features, targets)
+
+
+def validate_from_csv(csv_path: Path) -> dict:
+    """Validate the saved model on data from a CSV file."""
+    df = pd.read_csv(csv_path)
+    future_return = df["close"].shift(-5) / df["close"] - 1
+    df["label"] = (future_return > 0).astype(int)
+    features = extract_features(df)
+    targets = df.loc[features.index, "label"]
+    model = load_model()
+    preds = model.predict(features)
+    proba = model.predict_proba(features)[:, 1]
+    return {
+        "auc": roc_auc_score(targets, proba),
+        "accuracy": accuracy_score(targets, preds),
+        "precision": precision_score(targets, preds, zero_division=0),
+        "recall": recall_score(targets, preds, zero_division=0),
+    }
 
 
 if __name__ == "__main__":  # pragma: no cover - manual training
