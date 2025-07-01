@@ -121,6 +121,7 @@ def main():
                     secrets['TELEGRAM_TOKEN'],
                     config['telegram']['chat_id'],
                     dry_run=config['execution_mode'] == 'dry_run',
+                    use_websocket=config.get('use_websocket', False),
                 )
                 if sell_amount >= position_size:
                     open_side = None
@@ -151,6 +152,7 @@ def main():
                 user['telegram_token'],
                 user['telegram_chat_id'],
                 dry_run=config['execution_mode'] == 'dry_run',
+                use_websocket=config.get('use_websocket', False),
             )
             open_side = direction
             entry_price = current_price
