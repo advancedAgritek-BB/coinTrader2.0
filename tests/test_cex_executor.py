@@ -143,3 +143,28 @@ def test_get_exchange_websocket_missing_creds(monkeypatch):
 
     exchange, ws = cex_executor.get_exchange(config)
     assert ws is None
+
+
+class SlippageExchange:
+    def fetch_ticker(self, symbol):
+        return {"bid": 100, "ask": 110}
+
+    def create_market_order(self, symbol, side, amount):
+        raise AssertionError("should not execute")
+
+
+def test_execute_trade_skips_on_slippage(monkeypatch):
+    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+    order = cex_executor.execute_trade(
+        SlippageExchange(),
+        None,
+        "BTC/USDT",
+        "buy",
+        1.0,
+        "t",
+        "c",
+        dry_run=False,
+        config={"max_slippage_pct": 0.05},
+    )
+    assert order == {}
