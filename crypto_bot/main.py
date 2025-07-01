@@ -172,14 +172,6 @@ async def main() -> None:
                     user.get("telegram_token", ""),
                     config.get("telegram", {}).get("chat_id", ""),
                 )
-                holdings = {k: (v.get("total") if isinstance(v, dict) else v) for k, v in bal.items()}
-                rotator.rotate(
-                    exchange,
-                    user.get("wallet_address", ""),
-                    holdings,
-                    user.get("telegram_token", ""),
-                    config.get("telegram", {}).get("chat_id", ""),
-                )
                 last_rotation = time.time()
 
         best = None
