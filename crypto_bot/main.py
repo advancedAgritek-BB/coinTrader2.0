@@ -10,6 +10,19 @@ import time
 from crypto_bot.utils.telegram import send_message
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.portfolio_rotator import PortfolioRotator
+from crypto_bot.auto_optimizer import optimize_strategies
+
+
+def _strategy_name(regime: str, env: str) -> str:
+    if env == "cex":
+        return "trend" if regime == "trending" else "grid"
+    if env == "onchain":
+        return "sniper" if regime in {"breakout", "volatile"} else "dex_scalper"
+    if regime == "trending":
+        return "trend"
+    if regime in {"breakout", "volatile"}:
+        return "sniper"
+    return "grid"
 
 from crypto_bot.wallet_manager import load_or_create
 from crypto_bot.regime.regime_classifier import classify_regime
@@ -95,6 +108,7 @@ def main() -> None:
 
     rotator = PortfolioRotator()
     last_rotation = 0.0
+    last_optimize = 0.0
 
     mode = user.get('mode', config['mode'])
     state = {"running": True, "mode": mode}
@@ -116,6 +130,10 @@ def main() -> None:
 
     while True:
         mode = state["mode"]
+        if config.get("optimization", {}).get("enabled"):
+            if time.time() - last_optimize >= config["optimization"].get("interval_days", 7) * 86400:
+                optimize_strategies()
+                last_optimize = time.time()
         if not state.get("running"):
             await asyncio.sleep(1)
             continue
@@ -187,6 +205,13 @@ def main() -> None:
         logger.info("Market regime classified as %s", regime)
         env = mode if mode != 'auto' else 'cex'
         strategy_fn = route(regime, env)
+        params_file = Path("crypto_bot/logs/optimized_params.json")
+        if params_file.exists():
+            params = json.loads(params_file.read_text())
+            name = _strategy_name(regime, env)
+            if name in params:
+                risk_manager.config.stop_loss_pct = params[name]["stop_loss_pct"]
+                risk_manager.config.take_profit_pct = params[name]["take_profit_pct"]
         score, direction = await evaluate_async(strategy_fn, df)
         logger.info("Signal score %.2f direction %s", score, direction)
         balance = (

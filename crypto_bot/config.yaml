@@ -81,3 +81,11 @@ sentiment_filter:
 volatility_filter:
   min_atr_pct: 0.01
   max_funding_rate: 0.05
+
+optimization:
+  enabled: false
+  interval_days: 7
+  parameter_ranges:
+    trend:
+      stop_loss: [0.02]
+      take_profit: [0.04]
