@@ -65,7 +65,9 @@ Binance.US is not recommended because of API limitations.
 
 A small Flask web dashboard is included for running the bot and inspecting logs.
 It features a responsive layout built with [Bootswatch](https://bootswatch.com/)
-and provides separate pages for logs and trading statistics.
+and provides separate pages for logs and trading statistics. A background
+watchdog thread now monitors the trading bot and automatically restarts it if
+the process exits unexpectedly.
 
 Start the UI with:
 
@@ -75,4 +77,5 @@ python -m frontend.app
 
 Navigate to `http://localhost:5000` to start or stop the bot, watch the logs
 refresh live and review the trade stats collected in
-`crypto_bot/logs/strategy_stats.json`.
+`crypto_bot/logs/strategy_stats.json`. The home page indicates whether the bot
+is running so you can quickly see if it has stopped.
