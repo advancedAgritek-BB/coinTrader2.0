@@ -1,22 +1,34 @@
 import types
+import asyncio
 from crypto_bot.telegram_bot_ui import TelegramBotUI
 
-class DummyUpdater:
+class DummyApplication:
     def __init__(self, *a, **k):
-        self.dispatcher = types.SimpleNamespace(add_handler=lambda h: None)
+        self.handlers = []
 
-    def start_polling(self):
+    def add_handler(self, handler):
+        self.handlers.append(handler)
+
+    def run_polling(self, *a, **k):
         pass
 
     def stop(self):
         pass
 
 
+class DummyBuilder:
+    def token(self, *a, **k):
+        return self
+
+    def build(self):
+        return DummyApplication()
+
+
 class DummyMessage:
     def __init__(self):
         self.text = None
 
-    def reply_text(self, text):
+    async def reply_text(self, text):
         self.text = text
 
 
@@ -60,39 +72,43 @@ def make_ui(tmp_path, state, rotator=None, exchange=None):
 
 
 def test_start_stop_toggle(monkeypatch, tmp_path):
-    monkeypatch.setattr("crypto_bot.telegram_bot_ui.Updater", DummyUpdater)
+    monkeypatch.setattr(
+        "crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder
+    )
     state = {"running": False, "mode": "cex"}
     ui, _ = make_ui(tmp_path, state)
 
     update = DummyUpdate()
-    ui.start_cmd(update, DummyContext())
+    asyncio.run(ui.start_cmd(update, DummyContext()))
     assert state["running"] is True
     assert update.message.text == "Trading started"
 
-    ui.stop_cmd(update, DummyContext())
+    asyncio.run(ui.stop_cmd(update, DummyContext()))
     assert state["running"] is False
     assert update.message.text == "Trading stopped"
 
-    ui.toggle_mode_cmd(update, DummyContext())
+    asyncio.run(ui.toggle_mode_cmd(update, DummyContext()))
     assert state["mode"] == "onchain"
     assert update.message.text == "Mode set to onchain"
 
 
 def test_log_and_rotate(monkeypatch, tmp_path):
-    monkeypatch.setattr("crypto_bot.telegram_bot_ui.Updater", DummyUpdater)
+    monkeypatch.setattr(
+        "crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder
+    )
     rotator = DummyRotator()
     exchange = DummyExchange()
     state = {"running": True, "mode": "cex"}
     ui, log_file = make_ui(tmp_path, state, rotator=rotator, exchange=exchange)
 
     update = DummyUpdate()
-    ui.log_cmd(update, DummyContext())
+    asyncio.run(ui.log_cmd(update, DummyContext()))
     assert "line2" in update.message.text
 
-    ui.rotate_now_cmd(update, DummyContext())
+    asyncio.run(ui.rotate_now_cmd(update, DummyContext()))
     assert rotator.called is True
     assert update.message.text == "Portfolio rotated"
 
-    ui.status_cmd(update, DummyContext())
+    asyncio.run(ui.status_cmd(update, DummyContext()))
     assert "Running: True" in update.message.text
 

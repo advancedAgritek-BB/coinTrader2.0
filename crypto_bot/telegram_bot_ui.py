@@ -9,7 +9,11 @@ from typing import Dict
 import schedule
 
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+)
 
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.utils.logger import setup_logger
@@ -39,14 +43,13 @@ class TelegramBotUI:
         self.wallet = wallet
         self.logger = setup_logger(__name__, "crypto_bot/logs/telegram_ui.log")
 
-        self.updater = Updater(token=token, use_context=True)
-        dp = self.updater.dispatcher
-        dp.add_handler(CommandHandler("start", self.start_cmd))
-        dp.add_handler(CommandHandler("stop", self.stop_cmd))
-        dp.add_handler(CommandHandler("status", self.status_cmd))
-        dp.add_handler(CommandHandler("log", self.log_cmd))
-        dp.add_handler(CommandHandler("rotate_now", self.rotate_now_cmd))
-        dp.add_handler(CommandHandler("toggle_mode", self.toggle_mode_cmd))
+        self.app = ApplicationBuilder().token(token).build()
+        self.app.add_handler(CommandHandler("start", self.start_cmd))
+        self.app.add_handler(CommandHandler("stop", self.stop_cmd))
+        self.app.add_handler(CommandHandler("status", self.status_cmd))
+        self.app.add_handler(CommandHandler("log", self.log_cmd))
+        self.app.add_handler(CommandHandler("rotate_now", self.rotate_now_cmd))
+        self.app.add_handler(CommandHandler("toggle_mode", self.toggle_mode_cmd))
 
         self.thread: threading.Thread | None = None
         self.scheduler_thread: threading.Thread | None = None
@@ -59,7 +62,7 @@ class TelegramBotUI:
 
     def run_async(self) -> None:
         """Start polling in a background thread."""
-        self.thread = threading.Thread(target=self.updater.start_polling, daemon=True)
+        self.thread = threading.Thread(target=self.app.run_polling, daemon=True)
         self.thread.start()
 
     def _run_scheduler(self) -> None:
@@ -68,7 +71,7 @@ class TelegramBotUI:
             time.sleep(1)
 
     def stop(self) -> None:
-        self.updater.stop()
+        self.app.stop()
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=2)
         schedule.clear()
@@ -76,30 +79,30 @@ class TelegramBotUI:
             self.scheduler_thread.join(timeout=2)
 
     # Command handlers -------------------------------------------------
-    def start_cmd(self, update: Update, context: CallbackContext) -> None:
+    async def start_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         self.state["running"] = True
-        update.message.reply_text("Trading started")
+        await update.message.reply_text("Trading started")
 
-    def stop_cmd(self, update: Update, context: CallbackContext) -> None:
+    async def stop_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         self.state["running"] = False
-        update.message.reply_text("Trading stopped")
+        await update.message.reply_text("Trading stopped")
 
-    def status_cmd(self, update: Update, context: CallbackContext) -> None:
+    async def status_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         running = self.state.get("running", False)
         mode = self.state.get("mode")
-        update.message.reply_text(f"Running: {running}, mode: {mode}")
+        await update.message.reply_text(f"Running: {running}, mode: {mode}")
 
-    def log_cmd(self, update: Update, context: CallbackContext) -> None:
+    async def log_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if self.log_file.exists():
             lines = self.log_file.read_text().splitlines()[-20:]
             text = "\n".join(lines) if lines else "(no logs)"
         else:
             text = "Log file not found"
-        update.message.reply_text(text)
+        await update.message.reply_text(text)
 
-    def rotate_now_cmd(self, update: Update, context: CallbackContext) -> None:
+    async def rotate_now_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not (self.rotator and self.exchange and self.wallet):
-            update.message.reply_text("Rotation not configured")
+            await update.message.reply_text("Rotation not configured")
             return
         try:
             bal = self.exchange.fetch_balance()
@@ -107,17 +110,15 @@ class TelegramBotUI:
                 k: (v.get("total") if isinstance(v, dict) else v)
                 for k, v in bal.items()
             }
-            asyncio.run(
-                self.rotator.rotate(
-                    self.exchange,
-                    self.wallet,
-                    holdings,
-                )
+            await self.rotator.rotate(
+                self.exchange,
+                self.wallet,
+                holdings,
             )
-            update.message.reply_text("Portfolio rotated")
+            await update.message.reply_text("Portfolio rotated")
         except Exception as exc:  # pragma: no cover - network
             self.logger.error("Rotation failed: %s", exc)
-            update.message.reply_text("Rotation failed")
+            await update.message.reply_text("Rotation failed")
 
     def send_daily_summary(self) -> None:
         stats = log_reader.trade_summary("crypto_bot/logs/trades.csv")
@@ -132,8 +133,8 @@ class TelegramBotUI:
         if err:
             self.logger.error("Failed to send summary: %s", err)
 
-    def toggle_mode_cmd(self, update: Update, context: CallbackContext) -> None:
+    async def toggle_mode_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         mode = self.state.get("mode")
         mode = "onchain" if mode == "cex" else "cex"
         self.state["mode"] = mode
-        update.message.reply_text(f"Mode set to {mode}")
+        await update.message.reply_text(f"Mode set to {mode}")
