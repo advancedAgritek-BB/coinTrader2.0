@@ -44,6 +44,7 @@ telegram:
   chat_id: "YOUR_CHAT_ID"
 # minutes to wait between trading loops
 loop_interval_minutes: 5
+min_cooldown: 60
 exit_strategy:
   # trailing stop percent applied after trade moves in our favor
   trailing_stop_pct: 0.1
