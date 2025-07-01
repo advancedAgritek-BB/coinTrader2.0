@@ -7,6 +7,7 @@ import pandas as pd
 from dotenv import dotenv_values
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+
 try:
     import ccxt.pro as ccxtpro  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
@@ -16,7 +17,6 @@ from crypto_bot.utils.telegram import send_message
 from crypto_bot.execution.kraken_ws import KrakenWSClient
 from crypto_bot.utils.trade_logger import log_trade
 from crypto_bot import tax_logger
-
 
 
 def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
@@ -43,27 +43,29 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
         ccxt_mod = ccxt
 
     if exchange_name == "coinbase":
-        exchange = ccxt_mod.coinbase({
-            "apiKey": os.getenv("API_KEY"),
-            "secret": os.getenv("API_SECRET"),
-            "password": os.getenv("API_PASSPHRASE"),
-            "enableRateLimit": True,
-        })
+        exchange = ccxt_mod.coinbase(
+            {
+                "apiKey": os.getenv("API_KEY"),
+                "secret": os.getenv("API_SECRET"),
+                "password": os.getenv("API_PASSPHRASE"),
+                "enableRateLimit": True,
+            }
+        )
     elif exchange_name == "kraken":
-        exchange = ccxt.kraken({
-            "apiKey": api_key,
-            "secret": api_secret,
-            "enableRateLimit": True,
-        })
-        if use_ws and ((api_key and api_secret) or ws_token):
-            ws_client = KrakenWSClient(api_key, api_secret, ws_token, api_token)
-        exchange = ccxt_mod.kraken({
-            "apiKey": os.getenv("API_KEY"),
-            "secret": os.getenv("API_SECRET"),
-            "enableRateLimit": True,
-        })
-        if use_ws and not ccxtpro:
-            ws_client = KrakenWSClient(os.getenv("API_KEY"), os.getenv("API_SECRET"))
+        if use_ws:
+            if ccxtpro:
+                if (api_key and api_secret) or ws_token:
+                    ws_client = KrakenWSClient(api_key, api_secret, ws_token, api_token)
+            else:
+                ws_client = KrakenWSClient(api_key, api_secret)
+
+        exchange = ccxt_mod.kraken(
+            {
+                "apiKey": api_key,
+                "secret": api_secret,
+                "enableRateLimit": True,
+            }
+        )
     else:
         raise ValueError(f"Unsupported exchange: {exchange_name}")
 
@@ -114,7 +116,11 @@ def execute_trade(
 
     send_message(token, chat_id, f"Placing {side} order for {amount} {symbol}")
 
-    if config.get("liquidity_check", True) and hasattr(exchange, "fetch_order_book") and not has_liquidity(amount):
+    if (
+        config.get("liquidity_check", True)
+        and hasattr(exchange, "fetch_order_book")
+        and not has_liquidity(amount)
+    ):
         send_message(token, chat_id, "Insufficient liquidity for order size")
         return {}
 
@@ -124,8 +130,14 @@ def execute_trade(
         delay = config.get("twap_interval_seconds", 1)
         slice_amount = amount / slices
         for i in range(slices):
-            if config.get("liquidity_check", True) and hasattr(exchange, "fetch_order_book") and not has_liquidity(slice_amount):
-                send_message(token, chat_id, "Insufficient liquidity during TWAP execution")
+            if (
+                config.get("liquidity_check", True)
+                and hasattr(exchange, "fetch_order_book")
+                and not has_liquidity(slice_amount)
+            ):
+                send_message(
+                    token, chat_id, "Insufficient liquidity during TWAP execution"
+                )
                 break
             order = place(slice_amount)
             if order:
@@ -139,7 +151,9 @@ def execute_trade(
                     except Exception:
                         pass
                 orders.append(order)
-                send_message(token, chat_id, f"TWAP slice {i+1}/{slices} executed: {order}")
+                send_message(
+                    token, chat_id, f"TWAP slice {i+1}/{slices} executed: {order}"
+                )
             if i < slices - 1:
                 time.sleep(delay)
     else:
@@ -185,10 +199,14 @@ async def execute_trade_async(
         try:
             if use_websocket and ws_client is not None and not ccxtpro:
                 order = ws_client.add_order(symbol, side, amount)
-            elif asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
+            elif asyncio.iscoroutinefunction(
+                getattr(exchange, "create_market_order", None)
+            ):
                 order = await exchange.create_market_order(symbol, side, amount)
             else:
-                order = await asyncio.to_thread(exchange.create_market_order, symbol, side, amount)
+                order = await asyncio.to_thread(
+                    exchange.create_market_order, symbol, side, amount
+                )
         except Exception as e:  # pragma: no cover - network
             send_message(token, chat_id, f"Order failed: {e}")
             return {}
@@ -245,14 +263,17 @@ def place_stop_order(
 
 def log_trade(order: Dict) -> None:
     df = pd.DataFrame([order])
-    df.to_csv('crypto_bot/logs/trades.csv', mode='a', header=False, index=False)
+    df.to_csv("crypto_bot/logs/trades.csv", mode="a", header=False, index=False)
     try:
-        creds_path = dotenv_values('crypto_bot/.env').get('GOOGLE_CRED_JSON')
+        creds_path = dotenv_values("crypto_bot/.env").get("GOOGLE_CRED_JSON")
         if creds_path:
-            scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+            scope = [
+                "https://spreadsheets.google.com/feeds",
+                "https://www.googleapis.com/auth/drive",
+            ]
             creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
             client = gspread.authorize(creds)
-            sheet = client.open('trade_logs').sheet1
+            sheet = client.open("trade_logs").sheet1
             sheet.append_row(list(order.values()))
     except Exception:
         pass
