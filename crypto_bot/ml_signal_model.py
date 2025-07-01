@@ -3,55 +3,132 @@ import ta
 from pathlib import Path
 import joblib
 from typing import Optional
-from sklearn.ensemble import GradientBoostingRegressor
+import json
+import hashlib
+from crypto_bot.regime.regime_classifier import classify_regime
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import StratifiedKFold, GridSearchCV
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 
 MODEL_PATH = Path(__file__).resolve().parent / "models" / "signal_model.pkl"
+REPORT_PATH = MODEL_PATH.with_name("model_report.json")
 
 
 def extract_features(df: pd.DataFrame) -> pd.DataFrame:
     """Return ML features from OHLCV price data."""
     features = pd.DataFrame(index=df.index)
+
+    # Base timeframe indicators
     features["rsi"] = ta.momentum.rsi(df["close"], window=14)
     features["ema20"] = ta.trend.ema_indicator(df["close"], window=20)
     features["ema50"] = ta.trend.ema_indicator(df["close"], window=50)
     features["atr"] = ta.volatility.average_true_range(df["high"], df["low"], df["close"], window=14)
-    features["returns"] = df["close"].pct_change()
-    features["volume"] = df["volume"]
+
+    # Higher timeframe approximations (longer windows)
+    rsi_win = max(2, min(len(df) // 2, 56))
+    ema_win = max(2, min(len(df) // 2, 80))
+    features["rsi_4h"] = ta.momentum.rsi(df["close"], window=rsi_win)
+    features["ema20_4h"] = ta.trend.ema_indicator(df["close"], window=ema_win)
+    bb_4h = ta.volatility.BollingerBands(df["close"], window=ema_win)
+    features["bb_width_4h"] = bb_4h.bollinger_wband()
+
+    # Additional engineered features
+    features["volume_change_pct"] = df["volume"].pct_change()
+    ema50 = ta.trend.ema_indicator(df["close"], window=50)
+    features["price_above_ema"] = df["close"] / ema50
+    features["candle_body_ratio"] = (df["close"] - df["open"]).abs() / (df["high"] - df["low"])
+    features["upper_shadow"] = df["high"] - df[["close", "open"]].max(axis=1)
+    features["lower_shadow"] = df[["close", "open"]].min(axis=1) - df["low"]
+
+    # Market regime as categorical feature
+    regimes = []
+    for i in range(len(df)):
+        try:
+            regimes.append(classify_regime(df.iloc[: i + 1]))
+        except Exception:
+            regimes.append("unknown")
+    features["regime"] = regimes
+    features = pd.get_dummies(features, columns=["regime"])
+
     return features.dropna()
 
 
-def train_model(features: pd.DataFrame, targets: pd.Series) -> GradientBoostingRegressor:
-    """Train a gradient boosting model and save it."""
-    model = GradientBoostingRegressor()
-    model.fit(features, targets)
+def train_model(features: pd.DataFrame, targets: pd.Series) -> LogisticRegression:
+    """Train a classification model and save it along with a report."""
+    if len(features) < 2:
+        model = LogisticRegression(max_iter=200, solver="liblinear")
+        model.fit(features, targets)
+        preds = model.predict(features)
+        proba = model.predict_proba(features)[:, 1]
+    else:
+        n_splits = min(5, len(features))
+        cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=0)
+        grid = GridSearchCV(
+            LogisticRegression(max_iter=200, solver="liblinear"),
+            {"C": [0.1, 1.0]},
+            cv=cv,
+            scoring="roc_auc",
+        )
+        grid.fit(features, targets)
+        model = grid.best_estimator_
+        preds = model.predict(features)
+        proba = model.predict_proba(features)[:, 1]
+
+    report = {
+        "auc": roc_auc_score(targets, proba),
+        "accuracy": accuracy_score(targets, preds),
+        "precision": precision_score(targets, preds, zero_division=0),
+        "recall": recall_score(targets, preds, zero_division=0),
+    }
+
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, MODEL_PATH)
+    with open(REPORT_PATH, "w") as f:
+        json.dump(report, f)
     return model
 
 
-def load_model() -> GradientBoostingRegressor:
+def load_model() -> LogisticRegression:
     """Load the trained signal model."""
     if not MODEL_PATH.exists():
         raise FileNotFoundError(MODEL_PATH)
     return joblib.load(MODEL_PATH)
 
 
-def predict_signal(df: pd.DataFrame, model: Optional[GradientBoostingRegressor] = None) -> float:
+def predict_signal(df: pd.DataFrame, model: Optional[LogisticRegression] = None) -> float:
     """Predict signal strength for the latest row of df."""
     if model is None:
         model = load_model()
     feats = extract_features(df).iloc[[-1]]
-    score = float(model.predict(feats)[0])
-    return max(0.0, min(score, 1.0))
+    proba = float(model.predict_proba(feats)[0, 1])
+
+    model_hash = hashlib.md5(MODEL_PATH.read_bytes()).hexdigest()[:8]
+    log_path = Path(__file__).resolve().parent / "logs" / "ml_features.csv"
+    log_row = feats.copy()
+    log_row["prediction"] = proba
+    log_row["model_hash"] = model_hash
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    if log_path.exists():
+        log_row.to_csv(log_path, mode="a", header=False, index=False)
+    else:
+        log_row.to_csv(log_path, index=False)
+
+    return max(0.0, min(proba, 1.0))
 
 
-def train_from_csv(csv_path: Path) -> GradientBoostingRegressor:
-    """Train model from a CSV file of trades with ``signal_strength`` column."""
+def train_from_csv(csv_path: Path) -> LogisticRegression:
+    """Train model from a CSV file of trades based on realized returns."""
     df = pd.read_csv(csv_path)
-    if "signal_strength" not in df.columns:
-        raise ValueError("CSV must contain signal_strength column")
+    future_return = df["close"].shift(-5) / df["close"] - 1
+    df["label"] = (future_return > 0).astype(int)
     features = extract_features(df)
-    targets = df.loc[features.index, "signal_strength"]
+    targets = df.loc[features.index, "label"]
     return train_model(features, targets)
 
 
