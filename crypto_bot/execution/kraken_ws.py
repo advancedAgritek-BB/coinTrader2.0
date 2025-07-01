@@ -1,10 +1,13 @@
 import json
 import threading
 import os
-from typing import Optional
+from typing import Optional, Callable
 
 import ccxt
 from websocket import WebSocketApp
+from crypto_bot.utils.logger import setup_logger
+
+logger = setup_logger(__name__, "crypto_bot/logs/execution.log")
 
 PUBLIC_URL = "wss://ws.kraken.com"
 PRIVATE_URL = "wss://ws-auth.kraken.com"
@@ -56,8 +59,36 @@ class KrakenWSClient:
         self.token = resp["token"]
         return self.token
 
-    def _start_ws(self, url: str, **kwargs) -> WebSocketApp:
-        ws = WebSocketApp(url, **kwargs)
+    def _start_ws(
+        self,
+        url: str,
+        on_message: Optional[Callable] = None,
+        on_error: Optional[Callable] = None,
+        on_close: Optional[Callable] = None,
+        **kwargs,
+    ) -> WebSocketApp:
+        """Start a WebSocket connection with basic logging callbacks."""
+
+        def default_on_message(ws, message):
+            logger.info("WS message: %s", message)
+
+        def default_on_error(ws, error):
+            logger.error("WS error: %s", error)
+
+        def default_on_close(ws, close_status_code, close_msg):
+            logger.info("WS closed: %s %s", close_status_code, close_msg)
+
+        on_message = on_message or default_on_message
+        on_error = on_error or default_on_error
+        on_close = on_close or default_on_close
+
+        ws = WebSocketApp(
+            url,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close,
+            **kwargs,
+        )
         thread = threading.Thread(target=ws.run_forever, daemon=True)
         thread.start()
         return ws
