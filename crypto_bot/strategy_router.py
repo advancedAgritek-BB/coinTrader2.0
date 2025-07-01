@@ -1,15 +1,30 @@
-from typing import Callable
+from typing import Callable, Tuple
+
 import pandas as pd
 
 from crypto_bot.utils.logger import setup_logger
+from crypto_bot.strategy import trend_bot, grid_bot, sniper_bot, dex_scalper
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
-from crypto_bot.strategy import trend_bot, grid_bot, sniper_bot, dex_scalper
 
+def route(
+    regime: str, mode: str
+) -> Callable[[pd.DataFrame], Tuple[float, str]]:
+    """Select a strategy based on market regime and operating mode.
 
-def route(regime: str, mode: str) -> Callable[[pd.DataFrame], tuple]:
-    """Return strategy function based on regime and environment."""
+    Parameters
+    ----------
+    regime : str
+        Current market regime as classified by indicators.
+    mode : str
+        Trading environment, either ``cex``, ``onchain`` or ``auto``.
+
+    Returns
+    -------
+    Callable[[pd.DataFrame], Tuple[float, str]]
+        Strategy function returning a score and trade direction.
+    """
     if mode == 'cex':
         if regime == 'trending':
             logger.info("Routing to trend bot (cex)")
