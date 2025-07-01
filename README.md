@@ -45,7 +45,7 @@ stores your chosen exchange in `user_config.yaml`.
    ```yaml
    exchange: coinbase  # Options: coinbase, kraken
    execution_mode: dry_run  # or live
-   use_websocket: true      # set only when trading on Kraken
+   use_websocket: true      # enable when trading on Kraken via WebSocket
    ```
 
 Binance.US is not recommended because of API limitations.
