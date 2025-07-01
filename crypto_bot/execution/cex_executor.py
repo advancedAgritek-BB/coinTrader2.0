@@ -1,5 +1,11 @@
 import os
+import time
 import ccxt
+from typing import Dict, Optional, Tuple, List
+import pandas as pd
+from dotenv import dotenv_values
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 try:
     import ccxt.pro as ccxtpro  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
@@ -62,23 +68,67 @@ def execute_trade(
     token: str,
     chat_id: str,
     dry_run: bool = True,
+    config: Optional[Dict] = None,
 ) -> Dict:
-    msg = f"Placing {side} order for {amount} {symbol}"
-    send_message(token, chat_id, msg)
-    if dry_run:
-        order = {"symbol": symbol, "side": side, "amount": amount, "dry_run": True}
-    else:
+    """Execute a trade with optional liquidity checks and TWAP execution."""
+    config = config or {}
+
+    def has_liquidity(order_size: float) -> bool:
+        try:
+            depth = config.get("liquidity_depth", 10)
+            ob = exchange.fetch_order_book(symbol, limit=depth)
+            book = ob["asks" if side == "buy" else "bids"]
+            vol = 0.0
+            for _, qty in book:
+                vol += qty
+                if vol >= order_size:
+                    return True
+            return False
+        except Exception as err:
+            send_message(token, chat_id, f"Order book error: {err}")
+            return False
+
+    def place(size: float) -> Dict:
+        if dry_run:
+            return {"symbol": symbol, "side": side, "amount": size, "dry_run": True}
         try:
             if ws_client is not None:
-                order = ws_client.add_order(symbol, side, amount)
-            else:
-                order = exchange.create_market_order(symbol, side, amount)
-        except Exception as e:
-            send_message(token, chat_id, f"Order failed: {e}")
+                return ws_client.add_order(symbol, side, size)
+            return exchange.create_market_order(symbol, side, size)
+        except Exception as exc:
+            send_message(token, chat_id, f"Order failed: {exc}")
             return {}
-    send_message(token, chat_id, f"Order executed: {order}")
-    log_trade(order)
-    return order
+
+    send_message(token, chat_id, f"Placing {side} order for {amount} {symbol}")
+
+    if config.get("liquidity_check", True) and not has_liquidity(amount):
+        send_message(token, chat_id, "Insufficient liquidity for order size")
+        return {}
+
+    orders: List[Dict] = []
+    if config.get("twap_enabled", False) and config.get("twap_slices", 1) > 1:
+        slices = config.get("twap_slices", 1)
+        delay = config.get("twap_interval_seconds", 1)
+        slice_amount = amount / slices
+        for i in range(slices):
+            if config.get("liquidity_check", True) and not has_liquidity(slice_amount):
+                send_message(token, chat_id, "Insufficient liquidity during TWAP execution")
+                break
+            order = place(slice_amount)
+            if order:
+                log_trade(order)
+                orders.append(order)
+                send_message(token, chat_id, f"TWAP slice {i+1}/{slices} executed: {order}")
+            if i < slices - 1:
+                time.sleep(delay)
+    else:
+        order = place(amount)
+        if order:
+            log_trade(order)
+            orders.append(order)
+            send_message(token, chat_id, f"Order executed: {order}")
+
+    return {"orders": orders}
 
 
 async def execute_trade_async(
