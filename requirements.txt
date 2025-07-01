@@ -9,3 +9,4 @@ PyYAML
 python-telegram-bot
 Flask
 pytest
+websocket-client
