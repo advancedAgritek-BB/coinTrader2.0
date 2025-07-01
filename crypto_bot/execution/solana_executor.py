@@ -69,18 +69,6 @@ async def execute_swap(
     rpc_url = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
     client = Client(rpc_url)
 
-    quote_resp = requests.get(
-        JUPITER_QUOTE_URL,
-        params={
-            "inputMint": token_in,
-            "outputMint": token_out,
-            "amount": int(amount),
-            "slippageBps": slippage_bps,
-        },
-        timeout=10,
-    )
-    quote_resp.raise_for_status()
-    route = quote_resp.json()["data"][0]
     async with aiohttp.ClientSession() as session:
         async with session.get(
             JUPITER_QUOTE_URL,
@@ -88,7 +76,7 @@ async def execute_swap(
                 "inputMint": token_in,
                 "outputMint": token_out,
                 "amount": int(amount),
-                "slippageBps": 50,
+                "slippageBps": slippage_bps,
             },
             timeout=10,
         ) as quote_resp:
