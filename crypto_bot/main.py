@@ -152,12 +152,12 @@ async def main() -> None:
             if time.time() - last_rotation >= rotator.config.get("interval_days", 7) * 86400:
                 bal = await asyncio.to_thread(exchange.fetch_balance)
                 holdings = {
-                    k: (v.get('total') if isinstance(v, dict) else v)
+                    k: (v.get("total") if isinstance(v, dict) else v)
                     for k, v in bal.items()
                 }
                 await rotator.rotate(
                     exchange,
-                    user.get('wallet_address', ''),
+                    user.get("wallet_address", ""),
                     holdings,
                     user.get("telegram_token", ""),
                     config.get("telegram", {}).get("chat_id", ""),
