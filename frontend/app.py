@@ -15,11 +15,12 @@ STATS_FILE = Path('crypto_bot/logs/strategy_stats.json')
 
 
 def watch_bot():
-    global bot_process
+    """Restart the trading bot if the process exits."""
+    global bot_proc
     while True:
         time.sleep(10)
-        if bot_process and (bot_process.poll() is not None or not psutil.pid_exists(bot_process.pid)):
-            bot_process = subprocess.Popen(['python', '-m', 'crypto_bot.main'])
+        if bot_proc and (bot_proc.poll() is not None or not psutil.pid_exists(bot_proc.pid)):
+            bot_proc = subprocess.Popen(['python', '-m', 'crypto_bot.main'])
 
 
 watch_thread = threading.Thread(target=watch_bot, daemon=True)
