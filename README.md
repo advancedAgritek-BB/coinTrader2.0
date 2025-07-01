@@ -26,11 +26,21 @@ Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credent
    API_PASSPHRASE=your_coinbase_passphrase_if_needed
    ```
 
+   For Kraken, optionally set tokens for the WebSocket API:
+
+   ```env
+   KRAKEN_WS_TOKEN=your_ws_token
+   KRAKEN_API_TOKEN=your_api_token
+   ```
+
+   Generate `KRAKEN_WS_TOKEN` by calling Kraken's `GetWebSocketsToken` REST endpoint with your API credentials. The response contains a short-lived token used for authenticating WebSocket connections.
+
 3. In `crypto_bot/config.yaml` set:
 
    ```yaml
    exchange: coinbase  # Options: coinbase, kraken
    execution_mode: dry_run  # or live
+   use_websocket: true      # set only when trading on Kraken
    ```
 
 Binance.US is not recommended because of API limitations.

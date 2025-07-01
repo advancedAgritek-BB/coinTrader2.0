@@ -3,6 +3,8 @@
 mode: auto
 # exchange used for centralized trading (coinbase or kraken)
 exchange: coinbase
+# when using Kraken, enable WebSocket trading (requires KRAKEN_WS_TOKEN)
+use_websocket: false
 # enable Kraken WebSockets client when using Kraken
 use_websockets: false
 # wallet address for on-chain transactions
