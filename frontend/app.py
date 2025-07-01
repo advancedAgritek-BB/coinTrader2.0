@@ -193,6 +193,27 @@ def scans():
     return render_template('scans.html', scans=data)
 
 
+@app.route('/cli', methods=['GET', 'POST'])
+def cli():
+    """Run CLI commands and display output."""
+    output = None
+    if request.method == 'POST':
+        base = request.form.get('base', 'bot')
+        cmd_args = request.form.get('command', '')
+        if base == 'backtest':
+            cmd = f"python -m crypto_bot.backtest.backtest_runner {cmd_args}"
+        elif base == 'custom':
+            cmd = cmd_args
+        else:
+            cmd = f"python -m crypto_bot.main {cmd_args}"
+        try:
+            proc = subprocess.run(
+                cmd, shell=True, capture_output=True, text=True, check=False
+            )
+            output = proc.stdout + proc.stderr
+        except Exception as exc:  # pragma: no cover - subprocess
+            output = str(exc)
+    return render_template('cli.html', output=output)
 @app.route('/dashboard')
 def dashboard():
     summary = log_reader.trade_summary(TRADES_FILE)
