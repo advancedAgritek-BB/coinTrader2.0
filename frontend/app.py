@@ -1,10 +1,11 @@
-from flask import Flask, render_template, redirect, url_for
+from flask import Flask, render_template, redirect, url_for, request
 from pathlib import Path
 import subprocess
 import json
 import threading
 import time
 import psutil
+import yaml
 
 app = Flask(__name__)
 
@@ -13,6 +14,26 @@ bot_proc = None
 watch_thread = None
 LOG_FILE = Path('crypto_bot/logs/bot.log')
 STATS_FILE = Path('crypto_bot/logs/strategy_stats.json')
+CONFIG_FILE = Path('crypto_bot/config.yaml')
+
+
+def load_execution_mode() -> str:
+    """Return execution mode from the YAML config."""
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE) as f:
+            return yaml.safe_load(f).get('execution_mode', 'dry_run')
+    return 'dry_run'
+
+
+def set_execution_mode(mode: str) -> None:
+    """Update execution mode in the YAML config."""
+    config = {}
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE) as f:
+            config = yaml.safe_load(f) or {}
+    config['execution_mode'] = mode
+    with open(CONFIG_FILE, 'w') as f:
+        yaml.safe_dump(config, f)
 
 
 def watch_bot():
@@ -32,12 +53,15 @@ def is_running() -> bool:
 
 @app.route('/')
 def index():
-    return render_template('index.html', running=is_running())
+    mode = load_execution_mode()
+    return render_template('index.html', running=is_running(), mode=mode)
 
 
-@app.route('/start')
+@app.route('/start', methods=['POST'])
 def start():
     global bot_proc
+    mode = request.form.get('mode', 'dry_run')
+    set_execution_mode(mode)
     if not is_running():
         # Launch the asyncio-based trading bot
         bot_proc = subprocess.Popen(['python', '-m', 'crypto_bot.main'])

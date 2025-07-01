@@ -97,7 +97,8 @@ python -m frontend.app
 
 Navigate to `http://localhost:5000` to start or stop the bot, watch the logs
 refresh live and review the trade stats collected in
-`crypto_bot/logs/strategy_stats.json`.
+`crypto_bot/logs/strategy_stats.json`. When the bot is stopped a form
+lets you select the execution mode (dry run or live) before launching.
 
 ## Solana Mempool Monitoring
 
