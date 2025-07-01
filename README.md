@@ -45,11 +45,21 @@ stores your chosen exchange in `user_config.yaml`.
 
 3. In `crypto_bot/config.yaml` set:
 
-   ```yaml
-   exchange: coinbase  # Options: coinbase, kraken
-   execution_mode: dry_run  # or live
-   use_websocket: true      # enable when trading on Kraken via WebSocket
-   ```
+    ```yaml
+    exchange: coinbase  # Options: coinbase, kraken
+    execution_mode: dry_run  # or live
+    use_websocket: true      # enable when trading on Kraken via WebSocket
+    ```
+
+Additional execution flags:
+
+```yaml
+liquidity_check: true        # verify order book liquidity before placing orders
+liquidity_depth: 10          # order book depth levels to inspect
+twap_enabled: false          # split large orders into slices
+twap_slices: 4               # number of slices when TWAP is enabled
+twap_interval_seconds: 10    # delay between TWAP slices
+```
 
 Binance.US is not recommended because of API limitations.
 

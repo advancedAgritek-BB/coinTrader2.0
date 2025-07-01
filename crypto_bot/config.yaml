@@ -50,3 +50,10 @@ exit_strategy:
   scale_out: true
   # profit levels (%) at which partial exits occur
   partial_levels: [25, 50, 100]
+
+# execution settings
+liquidity_check: true
+liquidity_depth: 10
+twap_enabled: false
+twap_slices: 4
+twap_interval_seconds: 10
