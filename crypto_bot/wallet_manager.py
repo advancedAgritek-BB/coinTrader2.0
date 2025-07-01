@@ -1,11 +1,36 @@
+import os
 import yaml
 from pathlib import Path
+from typing import Dict
 
 from crypto_bot.utils.logger import setup_logger
 
 logger = setup_logger(__name__, "crypto_bot/logs/wallet.log")
 
 CONFIG_FILE = Path(__file__).resolve().parent / 'user_config.yaml'
+
+
+def load_external_secrets(provider: str, path: str) -> Dict[str, str]:
+    """Load secrets from an external provider."""
+    try:
+        if provider == "aws":
+            import boto3
+
+            client = boto3.client("secretsmanager")
+            resp = client.get_secret_value(SecretId=path)
+            secret = resp.get("SecretString") or resp.get("SecretBinary", "")
+            if isinstance(secret, bytes):
+                secret = secret.decode()
+            return yaml.safe_load(secret)
+        if provider == "vault":
+            import hvac
+
+            client = hvac.Client()
+            secret = client.secrets.kv.v2.read_secret_version(path=path)
+            return secret["data"]["data"]
+    except Exception as e:  # pragma: no cover - optional providers
+        logger.error("Failed to load secrets from %s: %s", provider, e)
+    return {}
 
 
 def prompt_user() -> dict:
@@ -38,13 +63,37 @@ def prompt_user() -> dict:
 
 
 def load_or_create() -> dict:
-    """Load credentials from file or prompt the user."""
+    """Load credentials prioritizing environment variables."""
+    creds: Dict[str, str] = {}
+
     if CONFIG_FILE.exists():
         logger.info("Loading user configuration from %s", CONFIG_FILE)
         with open(CONFIG_FILE) as f:
-            return yaml.safe_load(f)
-    creds = prompt_user()
-    logger.info("Creating new user configuration at %s", CONFIG_FILE)
-    with open(CONFIG_FILE, 'w') as f:
-        yaml.safe_dump(creds, f)
+            creds.update(yaml.safe_load(f))
+    else:
+        creds.update(prompt_user())
+        logger.info("Creating new user configuration at %s", CONFIG_FILE)
+        with open(CONFIG_FILE, "w") as f:
+            yaml.safe_dump(creds, f)
+
+    provider = os.getenv("SECRETS_PROVIDER")
+    if provider:
+        path = os.getenv("SECRETS_PATH", "")
+        if path:
+            creds.update(load_external_secrets(provider, path))
+
+    env_mapping = {key: [key.upper()] for key in creds.keys()}
+    env_mapping.setdefault("coinbase_api_key", []).append("API_KEY")
+    env_mapping.setdefault("coinbase_api_secret", []).append("API_SECRET")
+    env_mapping.setdefault("coinbase_passphrase", []).append("API_PASSPHRASE")
+    env_mapping.setdefault("kraken_api_key", []).append("API_KEY")
+    env_mapping.setdefault("kraken_api_secret", []).append("API_SECRET")
+
+    for key, env_keys in env_mapping.items():
+        for env_key in env_keys:
+            val = os.getenv(env_key)
+            if val is not None:
+                creds[key] = val
+                break
+
     return creds

@@ -44,9 +44,9 @@ def load_config() -> dict:
 def main():
     logger.info("Starting bot")
     config = load_config()
-    user = load_or_create()
     secrets = dotenv_values(ENV_PATH)
     os.environ.update(secrets)
+    user = load_or_create()
     exchange, ws_client = get_exchange(config)
     try:
         exchange.fetch_balance()

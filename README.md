@@ -17,7 +17,14 @@ transactions when not running in dry-run mode.
 
 Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credentials. The
 script now asks for Coinbase and Kraken API keys (plus the Coinbase passphrase) and
-stores your chosen exchange in `user_config.yaml`.
+stores your chosen exchange in `user_config.yaml`. **Environment variables always
+override the values in this file**, so you can place secrets in `crypto_bot/.env` or
+export them before running the bot.
+
+To pull secrets from a provider such as AWS Secrets Manager or Hashicorp Vault,
+set the environment variables `SECRETS_PROVIDER` (`aws` or `vault`) and
+`SECRETS_PATH` to the secret name/path. When configured the credentials will be
+loaded automatically.
 
 ## Exchange Setup for U.S. Users
 
