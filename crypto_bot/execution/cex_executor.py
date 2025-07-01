@@ -1,5 +1,6 @@
 import os
 import ccxt
+import asyncio
 from typing import Dict, Optional, Tuple
 import pandas as pd
 from dotenv import dotenv_values
@@ -65,6 +66,30 @@ def execute_trade(
     send_message(token, chat_id, f"Order executed: {order}")
     log_trade(order)
     return order
+
+
+async def execute_trade_async(
+    exchange: ccxt.Exchange,
+    ws_client: Optional[KrakenWSClient],
+    symbol: str,
+    side: str,
+    amount: float,
+    token: str,
+    chat_id: str,
+    dry_run: bool = True,
+) -> Dict:
+    """Asynchronous wrapper around ``execute_trade``."""
+    return await asyncio.to_thread(
+        execute_trade,
+        exchange,
+        ws_client,
+        symbol,
+        side,
+        amount,
+        token,
+        chat_id,
+        dry_run,
+    )
 
 
 def log_trade(order: Dict) -> None:
