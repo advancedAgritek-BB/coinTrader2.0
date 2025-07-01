@@ -19,6 +19,7 @@ async def execute_swap(
     amount: float,
     telegram_token: str,
     chat_id: str,
+    slippage_bps: int = 50,
     dry_run: bool = True,
 ) -> Dict:
     """Execute a swap on Solana using the Jupiter aggregator."""
@@ -49,6 +50,18 @@ async def execute_swap(
     rpc_url = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
     client = Client(rpc_url)
 
+    quote_resp = requests.get(
+        JUPITER_QUOTE_URL,
+        params={
+            "inputMint": token_in,
+            "outputMint": token_out,
+            "amount": int(amount),
+            "slippageBps": slippage_bps,
+        },
+        timeout=10,
+    )
+    quote_resp.raise_for_status()
+    route = quote_resp.json()["data"][0]
     async with aiohttp.ClientSession() as session:
         async with session.get(
             JUPITER_QUOTE_URL,

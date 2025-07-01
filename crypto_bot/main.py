@@ -102,6 +102,7 @@ def main() -> None:
                 'USDC',
                 amount,
                 dry_run=config['execution_mode'] == 'dry_run',
+                slippage_bps=config.get('solana_slippage_bps', 50),
             )
 
         if config.get('use_websocket', False) and hasattr(exchange, 'watch_ohlcv'):
@@ -236,6 +237,7 @@ def main() -> None:
                 size,
                 user['telegram_token'],
                 user['telegram_chat_id'],
+                slippage_bps=config.get('solana_slippage_bps', 50),
                 dry_run=config['execution_mode'] == 'dry_run',
             )
         else:

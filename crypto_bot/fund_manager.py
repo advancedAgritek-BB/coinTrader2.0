@@ -40,6 +40,7 @@ async def auto_convert_funds(
     to_token: str,
     amount: float,
     dry_run: bool = True,
+    slippage_bps: int = 50,
 ) -> Dict:
     """Convert funds using the Solana Jupiter aggregator."""
 
@@ -49,6 +50,15 @@ async def auto_convert_funds(
         tx_hash = "DRYRUN"
     else:
         try:
+            result = execute_swap(
+                from_token,
+                to_token,
+                amount,
+                "",
+                "",
+                slippage_bps=slippage_bps,
+                dry_run=False,
+            )
             result = await execute_swap(from_token, to_token, amount, "", "", dry_run=False)
             tx_hash = result["tx_hash"]
         except Exception as e:
