@@ -10,8 +10,8 @@ from crypto_bot.utils.logger import setup_logger
 
 logger = setup_logger(__name__, "crypto_bot/logs/execution.log")
 
-PUBLIC_URL = "wss://ws.kraken.com"
-PRIVATE_URL = "wss://ws-auth.kraken.com"
+PUBLIC_URL = "wss://ws.kraken.com/v2"
+PRIVATE_URL = "wss://ws-auth.kraken.com/v2"
 
 
 class KrakenWSClient:
@@ -129,38 +129,54 @@ class KrakenWSClient:
                 self.get_token()
             self.private_ws = self._start_ws(PRIVATE_URL, conn_type="private")
 
-    def subscribe_ticker(self, pair: str) -> None:
+    def subscribe_ticker(self, symbol: str) -> None:
         self.connect_public()
-        msg = {"event": "subscribe", "pair": [pair], "subscription": {"name": "ticker"}}
+        msg = {
+            "method": "subscribe",
+            "params": {"channel": "ticker", "symbol": [symbol]},
+        }
         data = json.dumps(msg)
         self._public_subs.append(data)
         self.public_ws.send(data)
 
-    def subscribe_trades(self, pair: str) -> None:
+    def subscribe_trades(self, symbol: str) -> None:
         self.connect_public()
-        msg = {"event": "subscribe", "pair": [pair], "subscription": {"name": "trade"}}
+        msg = {
+            "method": "subscribe",
+            "params": {"channel": "trade", "symbol": [symbol]},
+        }
         data = json.dumps(msg)
         self._public_subs.append(data)
         self.public_ws.send(data)
 
-    def subscribe_orders(self) -> None:
+    def subscribe_orders(self, symbol: str) -> None:
         self.connect_private()
-        msg = {"event": "subscribe", "subscription": {"name": "openOrders", "token": self.token}}
+        msg = {
+            "method": "subscribe",
+            "params": {
+                "channel": "open_orders",
+                "symbol": [symbol],
+                "token": self.token,
+            },
+        }
         data = json.dumps(msg)
         self._private_subs.append(data)
         self.private_ws.send(data)
 
-    def add_order(self, pair: str, side: str, volume: float, ordertype: str = "market") -> dict:
+    def add_order(self, symbol: str, side: str, volume: float, ordertype: str = "market") -> dict:
         self.connect_private()
         msg = {
-            "event": "addOrder",
-            "token": self.token,
-            "pair": pair,
-            "type": side,
-            "ordertype": ordertype,
-            "volume": str(volume),
+            "method": "add_order",
+            "params": {
+                "token": self.token,
+                "symbol": symbol,
+                "type": side,
+                "ordertype": ordertype,
+                "volume": str(volume),
+            },
         }
-        self.private_ws.send(json.dumps(msg))
+        data = json.dumps(msg)
+        self.private_ws.send(data)
         return msg
 
     def on_close(self, conn_type: str) -> None:
