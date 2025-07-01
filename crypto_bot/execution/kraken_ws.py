@@ -133,6 +133,7 @@ class KrakenWSClient:
         self.connect_public()
         msg = {
             "method": "subscribe",
+            "params": {"channel": "ticker", "symbol": pair},
             "params": {"channel": "ticker", "symbol": [symbol]},
         }
         data = json.dumps(msg)
@@ -143,6 +144,7 @@ class KrakenWSClient:
         self.connect_public()
         msg = {
             "method": "subscribe",
+            "params": {"channel": "trade", "symbol": pair},
             "params": {"channel": "trade", "symbol": [symbol]},
         }
         data = json.dumps(msg)
@@ -153,6 +155,7 @@ class KrakenWSClient:
         self.connect_private()
         msg = {
             "method": "subscribe",
+            "params": {"channel": "openOrders", "token": self.token},
             "params": {
                 "channel": "open_orders",
                 "symbol": [symbol],
@@ -168,6 +171,10 @@ class KrakenWSClient:
         msg = {
             "method": "add_order",
             "params": {
+                "symbol": pair,
+                "side": side,
+                "ordertype": ordertype,
+                "volume": volume,
                 "token": self.token,
                 "symbol": symbol,
                 "type": side,

@@ -45,9 +45,22 @@ class DummyExchange:
 class DummyWS:
     def __init__(self):
         self.called = False
+        self.msg = None
 
-    def add_order(self, symbol, side, amount, ordertype="market"):
+    def add_order(self, symbol, side=None, amount=None, ordertype="market"):
         self.called = True
+        if isinstance(symbol, dict):
+            self.msg = symbol
+        else:
+            self.msg = {
+                "method": "add_order",
+                "params": {
+                    "symbol": symbol,
+                    "side": side,
+                    "volume": amount,
+                    "ordertype": ordertype,
+                },
+            }
         return {"ws": True}
 
 
@@ -79,6 +92,10 @@ def test_execute_trade_ws_path(monkeypatch):
     )
     assert order == {"ws": True}
     assert ws.called
+    assert ws.msg["method"] == "add_order"
+    assert ws.msg["params"]["symbol"] == "BTC/USDT"
+    assert ws.msg["params"]["side"] == "buy"
+    assert ws.msg["params"]["volume"] == 1.0
 
 
 def test_execute_trade_ws_missing(monkeypatch):

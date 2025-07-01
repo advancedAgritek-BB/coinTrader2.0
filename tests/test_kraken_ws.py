@@ -1,3 +1,4 @@
+import json
 from crypto_bot.execution.kraken_ws import KrakenWSClient, PUBLIC_URL, PRIVATE_URL
 
 class DummyWS:
@@ -26,25 +27,36 @@ def test_reconnect_and_resubscribe(monkeypatch):
 
     client.subscribe_ticker("BTC/USD")
     assert created == [(PUBLIC_URL, "public")]
-    assert client.public_ws.sent == [client._public_subs[0]]
+    expected = json.dumps(
+        {"method": "subscribe", "params": {"channel": "ticker", "symbol": "BTC/USD"}}
+    )
+    assert client.public_ws.sent == [expected]
+    assert client._public_subs[0] == expected
 
     old_ws = client.public_ws
     old_ws.on_close(None, None)
 
     assert created == [(PUBLIC_URL, "public"), (PUBLIC_URL, "public")]
     assert client.public_ws is not old_ws
-    assert client.public_ws.sent == [client._public_subs[0]]
+    assert client.public_ws.sent == [expected]
 
     client.subscribe_orders("BTC/USD")
     assert created[-1] == (PRIVATE_URL, "private")
-    assert client.private_ws.sent == [client._private_subs[0]]
+    expected_private = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {"channel": "openOrders", "token": client.token},
+        }
+    )
+    assert client.private_ws.sent == [expected_private]
+    assert client._private_subs[0] == expected_private
 
     old_private = client.private_ws
     old_private.on_close(None, None)
 
     assert created[-1] == (PRIVATE_URL, "private")
     assert client.private_ws is not old_private
-    assert client.private_ws.sent == [client._private_subs[0]]
+    assert client.private_ws.sent == [expected_private]
 import crypto_bot.execution.kraken_ws as kraken_ws
 from crypto_bot.execution.kraken_ws import KrakenWSClient
 
