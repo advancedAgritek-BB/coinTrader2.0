@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 
+from crypto_bot.execution.solana_executor import execute_swap
 from crypto_bot.utils.logger import setup_logger
 
 logger = setup_logger(__name__, "crypto_bot/logs/fund_manager.log")
@@ -33,12 +34,13 @@ def detect_non_trade_tokens(balances: Dict[str, float]) -> List[str]:
             non_trade.append(token)
     return non_trade
 
-def auto_convert_funds(
+async def auto_convert_funds(
     wallet: str,
     from_token: str,
     to_token: str,
     amount: float,
     dry_run: bool = True,
+    slippage_bps: int = 50,
 ) -> Dict:
     """Convert funds using the Solana Jupiter aggregator."""
 
@@ -47,10 +49,17 @@ def auto_convert_funds(
     if dry_run:
         tx_hash = "DRYRUN"
     else:
-        from crypto_bot.execution.solana_executor import execute_swap
-
         try:
-            result = execute_swap(from_token, to_token, amount, "", "", dry_run=False)
+            result = execute_swap(
+                from_token,
+                to_token,
+                amount,
+                "",
+                "",
+                slippage_bps=slippage_bps,
+                dry_run=False,
+            )
+            result = await execute_swap(from_token, to_token, amount, "", "", dry_run=False)
             tx_hash = result["tx_hash"]
         except Exception as e:
             logger.error("Conversion failed: %s", e)

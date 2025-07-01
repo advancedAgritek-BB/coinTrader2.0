@@ -1,4 +1,5 @@
 import os
+import asyncio
 import pandas as pd
 import yaml
 import asyncio
@@ -22,6 +23,9 @@ from crypto_bot.risk.exit_manager import (
 from crypto_bot.execution.cex_executor import (
     execute_trade as cex_trade,
     execute_trade_async as cex_trade_async,
+from crypto_bot.execution.cex_executor import execute_trade_async as cex_trade_async, get_exchange
+from crypto_bot.execution.cex_executor import (
+    execute_trade as cex_trade,
     get_exchange,
 )
 from crypto_bot.execution.solana_executor import execute_swap
@@ -29,8 +33,6 @@ from crypto_bot.fund_manager import (
     check_wallet_balances,
     detect_non_trade_tokens,
     auto_convert_funds,
-    SUPPORTED_FUNDING,
-    REQUIRED_TOKENS,
 )
 
 CONFIG_PATH = Path(__file__).resolve().parent / 'config.yaml'
@@ -40,12 +42,18 @@ logger = setup_logger('bot', 'crypto_bot/logs/bot.log')
 
 
 def load_config() -> dict:
+    """Load YAML configuration for the bot."""
+
     with open(CONFIG_PATH) as f:
         logger.info("Loading config from %s", CONFIG_PATH)
         return yaml.safe_load(f)
 
 
 async def main() -> None:
+async def main():
+def main() -> None:
+    """Entry point for running the trading bot."""
+
     logger.info("Starting bot")
     config = load_config()
     user = load_or_create()
@@ -54,9 +62,17 @@ async def main() -> None:
     exchange, ws_client = get_exchange(config)
     try:
         await asyncio.to_thread(exchange.fetch_balance)
+        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+            await exchange.fetch_balance()
+        else:
+            await asyncio.to_thread(exchange.fetch_balance)
     except Exception as e:
         logger.error("Exchange API setup failed: %s", e)
-        send_message(secrets.get('TELEGRAM_TOKEN'), config['telegram']['chat_id'], f"API error: {e}")
+        send_message(
+            secrets.get('TELEGRAM_TOKEN'),
+            config['telegram']['chat_id'],
+            f"API error: {e}",
+        )
         return
     risk_config = RiskConfig(**config['risk'])
     risk_manager = RiskManager(risk_config)
@@ -77,6 +93,14 @@ async def main() -> None:
         for token in detect_non_trade_tokens(balances):
             amount = balances[token]
             logger.info("Converting %s %s to USDC", amount, token)
+            asyncio.run(
+                auto_convert_funds(
+                    user.get('wallet_address', ''),
+                    token,
+                    'USDC',
+                    amount,
+                    dry_run=config['execution_mode'] == 'dry_run',
+                )
             await asyncio.to_thread(
                 auto_convert_funds,
                 user.get('wallet_address', ''),
@@ -84,6 +108,7 @@ async def main() -> None:
                 'USDC',
                 amount,
                 dry_run=config['execution_mode'] == 'dry_run',
+                slippage_bps=config.get('solana_slippage_bps', 50),
             )
 
         ohlcv = await asyncio.to_thread(
@@ -92,7 +117,26 @@ async def main() -> None:
             timeframe=config['timeframe'],
             limit=100,
         )
+        if config.get('use_websocket', False) and hasattr(exchange, 'watch_ohlcv'):
+            ohlcv = await exchange.watch_ohlcv(config['symbol'], timeframe=config['timeframe'], limit=100)
+        else:
+            if asyncio.iscoroutinefunction(getattr(exchange, 'fetch_ohlcv', None)):
+                ohlcv = await exchange.fetch_ohlcv(config['symbol'], timeframe=config['timeframe'], limit=100)
+            else:
+                ohlcv = await asyncio.to_thread(
+                    exchange.fetch_ohlcv,
+                    config['symbol'],
+                    timeframe=config['timeframe'],
+                    limit=100,
+                )
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        ohlcv = exchange.fetch_ohlcv(
+            config['symbol'], timeframe=config['timeframe'], limit=100
+        )
+        df = pd.DataFrame(
+            ohlcv,
+            columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'],
+        )
 
         if not risk_manager.allow_trade(df):
             await asyncio.sleep(config['loop_interval_minutes'] * 60)
@@ -107,6 +151,16 @@ async def main() -> None:
         balance = (
             (await asyncio.to_thread(exchange.fetch_balance))["USDT"]["free"]
             if config["execution_mode"] != "dry_run"
+        if config['execution_mode'] != 'dry_run':
+            if asyncio.iscoroutinefunction(getattr(exchange, 'fetch_balance', None)):
+                balance = (await exchange.fetch_balance())['USDT']['free']
+            else:
+                balance = (await asyncio.to_thread(exchange.fetch_balance))['USDT']['free']
+        else:
+            balance = 1000
+        balance = (
+            exchange.fetch_balance()['USDT']['free']
+            if config['execution_mode'] != 'dry_run'
             else 1000
         )
         size = risk_manager.position_size(score, balance)
@@ -117,6 +171,9 @@ async def main() -> None:
             pnl_pct = ((current_price - entry_price) / entry_price) * (
                 1 if open_side == 'buy' else -1
             )
+            pnl_pct = (
+                (current_price - entry_price) / entry_price
+            ) * (1 if open_side == 'buy' else -1)
             if pnl_pct >= config['exit_strategy']['min_gain_to_trail']:
                 if current_price > highest_price:
                     highest_price = current_price
@@ -128,6 +185,10 @@ async def main() -> None:
 
             exit_signal, trailing_stop = should_exit(
                 df, current_price, trailing_stop, config
+                df,
+                current_price,
+                trailing_stop,
+                config,
             )
             if exit_signal:
                 pct = get_partial_exit_percent(pnl_pct * 100)
@@ -146,6 +207,8 @@ async def main() -> None:
                     secrets['TELEGRAM_TOKEN'],
                     config['telegram']['chat_id'],
                     dry_run=config['execution_mode'] == 'dry_run',
+                    use_websocket=config.get('use_websocket', False),
+                    config=config,
                 )
                 if sell_amount >= position_size:
                     open_side = None
@@ -162,6 +225,29 @@ async def main() -> None:
 
         balance = (
             (await asyncio.to_thread(exchange.fetch_balance))["USDT"]["free"]
+        if config['execution_mode'] != 'dry_run':
+            if asyncio.iscoroutinefunction(getattr(exchange, 'fetch_balance', None)):
+                balance = (await exchange.fetch_balance())['USDT']['free']
+            else:
+                balance = (await asyncio.to_thread(exchange.fetch_balance))['USDT']['free']
+        else:
+            balance = 1000
+        size = balance * config['trade_size_pct']
+
+        if env == 'onchain':
+            asyncio.run(
+                execute_swap(
+                    'SOL',
+                    'USDC',
+                    size,
+                    user['telegram_token'],
+                    user['telegram_chat_id'],
+                    dry_run=config['execution_mode'] == 'dry_run',
+                )
+            await asyncio.to_thread(
+                execute_swap,
+        balance = (
+            exchange.fetch_balance()['USDT']['free']
             if config['execution_mode'] != 'dry_run'
             else 1000
         )
@@ -170,11 +256,13 @@ async def main() -> None:
         if env == 'onchain':
             await asyncio.to_thread(
                 execute_swap,
+            execute_swap(
                 'SOL',
                 'USDC',
                 size,
                 user['telegram_token'],
                 user['telegram_chat_id'],
+                slippage_bps=config.get('solana_slippage_bps', 50),
                 dry_run=config['execution_mode'] == 'dry_run',
             )
         else:
@@ -188,6 +276,8 @@ async def main() -> None:
                 user['telegram_token'],
                 user['telegram_chat_id'],
                 dry_run=config['execution_mode'] == 'dry_run',
+                use_websocket=config.get('use_websocket', False),
+                config=config,
             )
             open_side = direction
             entry_price = current_price

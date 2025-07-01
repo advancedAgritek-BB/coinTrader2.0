@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import pandas as pd
 import ta
 
@@ -6,16 +8,43 @@ from crypto_bot.utils.logger import setup_logger
 logger = setup_logger(__name__, "crypto_bot/logs/exit.log")
 
 
-def calculate_trailing_stop(price_series: pd.Series, trail_pct: float = 0.1) -> float:
-    """Calculate trailing stop based on highest price in series."""
+def calculate_trailing_stop(
+    price_series: pd.Series, trail_pct: float = 0.1
+) -> float:
+    """Return a trailing stop from the high of ``price_series``.
+
+    Parameters
+    ----------
+    price_series : pd.Series
+        Series of closing prices.
+    trail_pct : float, optional
+        Percentage to trail below the maximum price.
+
+    Returns
+    -------
+    float
+        Calculated trailing stop value.
+    """
     highest = price_series.max()
     stop = highest * (1 - trail_pct)
     logger.info("Calculated trailing stop %.4f from high %.4f", stop, highest)
     return stop
 
 
-def momentum_timer(price_series: pd.Series) -> tuple:
-    """Return consecutive up closes count and stall flag for 3+ down closes."""
+def momentum_timer(price_series: pd.Series) -> Tuple[int, bool]:
+    """Measure momentum of consecutive closes.
+
+    Parameters
+    ----------
+    price_series : pd.Series
+        Series of closing prices.
+
+    Returns
+    -------
+    Tuple[int, bool]
+        Number of consecutive up closes and whether price has stalled
+        with three or more consecutive down closes.
+    """
     diffs = price_series.diff().dropna()
     up_streak = 0
     for change in reversed(diffs):
@@ -34,7 +63,18 @@ def momentum_timer(price_series: pd.Series) -> tuple:
 
 
 def momentum_healthy(df: pd.DataFrame) -> bool:
-    """Check RSI, MACD and volume to gauge trend health."""
+    """Check RSI, MACD and volume to gauge trend health.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Historical OHLCV data used to compute indicators.
+
+    Returns
+    -------
+    bool
+        ``True`` if the momentum indicators confirm strength.
+    """
     df = df.copy()
     df['rsi'] = ta.momentum.rsi(df['close'], window=14)
     df['macd'] = ta.trend.macd(df['close'])
@@ -49,25 +89,68 @@ def momentum_healthy(df: pd.DataFrame) -> bool:
     )
 
 
-def fib_extensions(last_swing_low: float, last_swing_high: float) -> tuple:
-    """Return 1.618 and 2.618 fib extension levels."""
+def fib_extensions(
+    last_swing_low: float, last_swing_high: float
+) -> Tuple[float, float]:
+    """Return 1.618 and 2.618 fib extension levels.
+
+    Parameters
+    ----------
+    last_swing_low : float
+        Most recent swing low in price.
+    last_swing_high : float
+        Most recent swing high in price.
+
+    Returns
+    -------
+    Tuple[float, float]
+        The 1.618 and 2.618 extension levels.
+    """
     diff = last_swing_high - last_swing_low
     ext_1618 = last_swing_low + diff * 1.618
     ext_2618 = last_swing_low + diff * 2.618
     return ext_1618, ext_2618
 
 
-def should_exit(df: pd.DataFrame, current_price: float, trailing_stop: float, config: dict) -> tuple:
-    """Determine exit decision and updated stop."""
+def should_exit(
+    df: pd.DataFrame,
+    current_price: float,
+    trailing_stop: float,
+    config: dict,
+) -> Tuple[bool, float]:
+    """Determine whether to exit a position and update trailing stop.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Recent market data.
+    current_price : float
+        Latest traded price.
+    trailing_stop : float
+        Current trailing stop value.
+    config : dict
+        Strategy configuration.
+
+    Returns
+    -------
+    Tuple[bool, float]
+        Flag indicating whether to exit and the updated stop price.
+    """
     exit_signal = False
     new_stop = trailing_stop
     if current_price < trailing_stop:
         if not momentum_healthy(df):
-            logger.info("Price %.4f hit trailing stop %.4f", current_price, trailing_stop)
+            logger.info(
+                "Price %.4f hit trailing stop %.4f",
+                current_price,
+                trailing_stop,
+            )
             exit_signal = True
     else:
-        highest = df['close'].max()
-        trailed = calculate_trailing_stop(df['close'], config['exit_strategy']['trailing_stop_pct'])
+        trailed = calculate_trailing_stop(
+            df['close'],
+            config['exit_strategy']['trailing_stop_pct'],
+        )
         if trailed > trailing_stop:
             new_stop = trailed
             logger.info("Trailing stop moved to %.4f", new_stop)
@@ -75,7 +158,18 @@ def should_exit(df: pd.DataFrame, current_price: float, trailing_stop: float, co
 
 
 def get_partial_exit_percent(pnl_pct: float) -> int:
-    """Return percent of position to close based on profit."""
+    """Return percent of position to close based on profit.
+
+    Parameters
+    ----------
+    pnl_pct : float
+        Unrealized profit or loss percentage.
+
+    Returns
+    -------
+    int
+        Portion of the position to close expressed as a percentage.
+    """
     if pnl_pct > 100:
         return 50
     if pnl_pct > 50:
