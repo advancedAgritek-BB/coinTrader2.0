@@ -64,3 +64,10 @@ liquidity_depth: 10
 twap_enabled: false
 twap_slices: 4
 twap_interval_seconds: 10
+
+portfolio_rotation:
+  enabled: false
+  interval_days: 7
+  scoring_method: sharpe
+  top_assets: 5
+  rebalance_threshold: 0.1

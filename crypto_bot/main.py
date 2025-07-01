@@ -6,8 +6,10 @@ import asyncio
 from dotenv import dotenv_values
 from pathlib import Path
 import json
+import time
 from crypto_bot.utils.telegram import send_message
 from crypto_bot.utils.logger import setup_logger
+from crypto_bot.portfolio_rotator import PortfolioRotator
 
 from crypto_bot.wallet_manager import load_or_create
 from crypto_bot.regime.regime_classifier import classify_regime
@@ -87,6 +89,9 @@ def main() -> None:
     stats_file = Path('crypto_bot/logs/strategy_stats.json')
     stats = json.loads(stats_file.read_text()) if stats_file.exists() else {}
 
+    rotator = PortfolioRotator()
+    last_rotation = 0.0
+
     mode = user.get('mode', config['mode'])
 
     while True:
@@ -112,6 +117,16 @@ def main() -> None:
                 dry_run=config['execution_mode'] == 'dry_run',
                 slippage_bps=config.get('solana_slippage_bps', 50),
             )
+
+        if rotator.config.get('enabled'):
+            if time.time() - last_rotation >= rotator.config.get('interval_days', 7) * 86400:
+                bal = await asyncio.to_thread(exchange.fetch_balance)
+                holdings = {
+                    k: (v.get('total') if isinstance(v, dict) else v)
+                    for k, v in bal.items()
+                }
+                rotator.rotate(exchange, user.get('wallet_address', ''), holdings)
+                last_rotation = time.time()
 
         ohlcv = await asyncio.to_thread(
             exchange.fetch_ohlcv,
