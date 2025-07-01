@@ -32,6 +32,10 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
     use_ws = config.get("use_websocket", False)
 
     ws_client: Optional[KrakenWSClient] = None
+    api_key = os.getenv("API_KEY")
+    api_secret = os.getenv("API_SECRET")
+    ws_token = os.getenv("KRAKEN_WS_TOKEN")
+    api_token = os.getenv("KRAKEN_API_TOKEN")
 
     if use_ws and ccxtpro:
         ccxt_mod = ccxtpro
@@ -46,6 +50,13 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
             "enableRateLimit": True,
         })
     elif exchange_name == "kraken":
+        exchange = ccxt.kraken({
+            "apiKey": api_key,
+            "secret": api_secret,
+            "enableRateLimit": True,
+        })
+        if use_ws and ((api_key and api_secret) or ws_token):
+            ws_client = KrakenWSClient(api_key, api_secret, ws_token, api_token)
         exchange = ccxt_mod.kraken({
             "apiKey": os.getenv("API_KEY"),
             "secret": os.getenv("API_SECRET"),
@@ -68,6 +79,10 @@ def execute_trade(
     token: str,
     chat_id: str,
     dry_run: bool = True,
+    use_websocket: bool = False,
+) -> Dict:
+    if use_websocket and ws_client is None and not dry_run:
+        raise ValueError("WebSocket trading enabled but ws_client is missing")
     config: Optional[Dict] = None,
 ) -> Dict:
     """Execute a trade with optional liquidity checks and TWAP execution."""
@@ -150,6 +165,7 @@ async def execute_trade_async(
         order = {"symbol": symbol, "side": side, "amount": amount, "dry_run": True}
     else:
         try:
+            if use_websocket:
             if ws_client is not None and not ccxtpro:
                 order = ws_client.add_order(symbol, side, amount)
             elif asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
