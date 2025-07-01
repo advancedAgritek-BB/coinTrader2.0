@@ -116,7 +116,7 @@ def execute_trade(
 
     send_message(token, chat_id, f"Placing {side} order for {amount} {symbol}")
 
-    if config.get("liquidity_check", True) and not has_liquidity(amount):
+    if config.get("liquidity_check", True) and hasattr(exchange, "fetch_order_book") and not has_liquidity(amount):
         send_message(token, chat_id, "Insufficient liquidity for order size")
         return {}
 
@@ -126,7 +126,7 @@ def execute_trade(
         delay = config.get("twap_interval_seconds", 1)
         slice_amount = amount / slices
         for i in range(slices):
-            if config.get("liquidity_check", True) and not has_liquidity(slice_amount):
+            if config.get("liquidity_check", True) and hasattr(exchange, "fetch_order_book") and not has_liquidity(slice_amount):
                 send_message(token, chat_id, "Insufficient liquidity during TWAP execution")
                 break
             order = place(slice_amount)
@@ -143,6 +143,8 @@ def execute_trade(
             orders.append(order)
             send_message(token, chat_id, f"Order executed: {order}")
 
+    if len(orders) == 1:
+        return orders[0]
     return {"orders": orders}
 
 
