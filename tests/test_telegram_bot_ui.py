@@ -39,7 +39,7 @@ class DummyRotator:
         self.called = False
         self.args = None
 
-    def rotate(self, *args):
+    async def rotate(self, *args):
         self.called = True
         self.args = args
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import threading
 from pathlib import Path
 from typing import Dict
@@ -82,8 +83,17 @@ class TelegramBotUI:
             return
         try:
             bal = self.exchange.fetch_balance()
-            holdings = {k: (v.get("total") if isinstance(v, dict) else v) for k, v in bal.items()}
-            self.rotator.rotate(self.exchange, self.wallet, holdings)
+            holdings = {
+                k: (v.get("total") if isinstance(v, dict) else v)
+                for k, v in bal.items()
+            }
+            asyncio.run(
+                self.rotator.rotate(
+                    self.exchange,
+                    self.wallet,
+                    holdings,
+                )
+            )
             update.message.reply_text("Portfolio rotated")
         except Exception as exc:  # pragma: no cover - network
             self.logger.error("Rotation failed: %s", exc)

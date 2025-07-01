@@ -167,7 +167,11 @@ def main() -> None:
                     k: (v.get('total') if isinstance(v, dict) else v)
                     for k, v in bal.items()
                 }
-                rotator.rotate(exchange, user.get('wallet_address', ''), holdings)
+                await rotator.rotate(
+                    exchange,
+                    user.get('wallet_address', ''),
+                    holdings,
+                )
                 last_rotation = time.time()
 
         ohlcv = await asyncio.to_thread(
