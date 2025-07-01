@@ -14,7 +14,7 @@ from crypto_bot.execution.kraken_ws import KrakenWSClient
 def get_exchange(config):
     """Instantiate and return a ccxt exchange based on config."""
     exchange_name = config.get("exchange", "coinbase")
-    use_ws = config.get("use_websockets", False)
+    use_ws = config.get("use_websocket", False)
 
     if exchange_name == "coinbase":
         return ccxt.coinbase({
