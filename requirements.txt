@@ -1,6 +1,7 @@
 pandas
 numpy
 ta
+scikit-learn
 ccxt
 ccxtpro
 gspread

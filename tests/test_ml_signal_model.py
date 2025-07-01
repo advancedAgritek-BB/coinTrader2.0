@@ -14,15 +14,17 @@ def _synthetic_df(n: int = 60) -> pd.DataFrame:
         "volume": rng.rand(n) * 100,
     }
     df = pd.DataFrame(data)
-    df["signal_strength"] = np.linspace(0, 1, n)
+    future_return = df["close"].shift(-5) / df["close"] - 1
+    df["label"] = (future_return > 0).astype(int)
     return df
 
 
 def test_training_and_prediction(tmp_path, monkeypatch):
     df = _synthetic_df()
     monkeypatch.setattr(ml, "MODEL_PATH", tmp_path / "model.pkl")
+    monkeypatch.setattr(ml, "REPORT_PATH", tmp_path / "report.json")
     features = ml.extract_features(df)
-    targets = df.loc[features.index, "signal_strength"]
+    targets = df.loc[features.index, "label"]
     model = ml.train_model(features, targets)
     assert ml.MODEL_PATH.exists()
     pred = ml.predict_signal(df, model=model)
@@ -34,6 +36,7 @@ def test_train_from_csv(tmp_path, monkeypatch):
     csv = tmp_path / "data.csv"
     df.to_csv(csv, index=False)
     monkeypatch.setattr(ml, "MODEL_PATH", tmp_path / "model.pkl")
+    monkeypatch.setattr(ml, "REPORT_PATH", tmp_path / "report.json")
     model = ml.train_from_csv(csv)
     assert ml.MODEL_PATH.exists()
     pred = ml.predict_signal(df, model=model)

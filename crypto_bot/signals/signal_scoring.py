@@ -15,7 +15,12 @@ def evaluate(
     if config and config.get("ml_signal_model", {}).get("enabled"):
         try:
             ml_score = predict_signal(df)
-            score = (score + ml_score) / 2
+            if ml_score > 0.7 and score > 0.5:
+                score = 0.9
+            elif ml_score < 0.5:
+                score = 0.0
+            else:
+                score = score
         except Exception:
             pass
     return score, direction
