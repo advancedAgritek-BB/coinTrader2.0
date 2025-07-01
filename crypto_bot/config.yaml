@@ -9,6 +9,8 @@ use_websocket: false
 wallet_address: "your_wallet"
 # preferred blockchain when using on-chain mode
 preferred_chain: "solana"
+# slippage bps used for Solana swaps
+solana_slippage_bps: 50
 # market symbol to trade on the exchange
 symbol: "BTC/USDT"
 # timeframe of candles to fetch
@@ -50,3 +52,10 @@ exit_strategy:
   scale_out: true
   # profit levels (%) at which partial exits occur
   partial_levels: [25, 50, 100]
+
+# execution settings
+liquidity_check: true
+liquidity_depth: 10
+twap_enabled: false
+twap_slices: 4
+twap_interval_seconds: 10
