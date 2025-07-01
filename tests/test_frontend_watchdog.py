@@ -16,3 +16,13 @@ def test_watchdog_thread_start(monkeypatch):
     app.bot_proc = None
     with pytest.raises(StopLoop):
         app.watch_bot()
+
+
+def test_scans_route(tmp_path, monkeypatch):
+    score_file = tmp_path / "scores.json"
+    score_file.write_text('{"BTC": 0.5}')
+    monkeypatch.setattr(app, "SCAN_FILE", score_file)
+    client = app.app.test_client()
+    resp = client.get("/scans")
+    assert resp.status_code == 200
+    assert b"BTC" in resp.data

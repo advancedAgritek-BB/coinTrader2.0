@@ -13,6 +13,7 @@ bot_proc = None
 watch_thread = None
 LOG_FILE = Path('crypto_bot/logs/bot.log')
 STATS_FILE = Path('crypto_bot/logs/strategy_stats.json')
+SCAN_FILE = Path('crypto_bot/logs/asset_scores.json')
 
 
 def watch_bot():
@@ -74,6 +75,15 @@ def stats():
         with open(STATS_FILE) as f:
             data = json.load(f)
     return render_template('stats.html', stats=data)
+
+
+@app.route('/scans')
+def scans():
+    data = {}
+    if SCAN_FILE.exists():
+        with open(SCAN_FILE) as f:
+            data = json.load(f)
+    return render_template('scans.html', scans=data)
 
 
 if __name__ == '__main__':
