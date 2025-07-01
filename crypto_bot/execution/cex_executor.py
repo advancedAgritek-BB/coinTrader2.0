@@ -82,12 +82,10 @@ def execute_trade(
     chat_id: str,
     dry_run: bool = True,
     use_websocket: bool = False,
+    config: Optional[Dict] = None,
 ) -> Dict:
     if use_websocket and ws_client is None and not dry_run:
         raise ValueError("WebSocket trading enabled but ws_client is missing")
-    config: Optional[Dict] = None,
-) -> Dict:
-    """Execute a trade with optional liquidity checks and TWAP execution."""
     config = config or {}
 
     def has_liquidity(order_size: float) -> bool:
@@ -157,6 +155,8 @@ async def execute_trade_async(
     token: str,
     chat_id: str,
     dry_run: bool = True,
+    use_websocket: bool = False,
+    config: Optional[Dict] = None,
 ) -> Dict:
     """Asynchronous version of :func:`execute_trade`. It supports both
     ``ccxt.pro`` exchanges and the threaded ``KrakenWSClient`` fallback."""
@@ -167,8 +167,7 @@ async def execute_trade_async(
         order = {"symbol": symbol, "side": side, "amount": amount, "dry_run": True}
     else:
         try:
-            if use_websocket:
-            if ws_client is not None and not ccxtpro:
+            if use_websocket and ws_client is not None and not ccxtpro:
                 order = ws_client.add_order(symbol, side, amount)
             elif asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
                 order = await exchange.create_market_order(symbol, side, amount)
@@ -188,20 +187,12 @@ def place_stop_order(
     side: str,
     amount: float,
     stop_price: float,
-async def execute_trade_async(
-    exchange: ccxt.Exchange,
-    ws_client: Optional[KrakenWSClient],
-    symbol: str,
-    side: str,
-    amount: float,
     token: str,
     chat_id: str,
     dry_run: bool = True,
 ) -> Dict:
     """Submit a stop-loss order on the exchange."""
-    msg = (
-        f"Placing stop {side} order for {amount} {symbol} at {stop_price:.2f}"
-    )
+    msg = f"Placing stop {side} order for {amount} {symbol} at {stop_price:.2f}"
     send_message(token, chat_id, msg)
     if dry_run:
         order = {
@@ -226,18 +217,6 @@ async def execute_trade_async(
     send_message(token, chat_id, f"Stop order submitted: {order}")
     log_trade(order)
     return order
-    """Asynchronous wrapper around ``execute_trade``."""
-    return await asyncio.to_thread(
-        execute_trade,
-        exchange,
-        ws_client,
-        symbol,
-        side,
-        amount,
-        token,
-        chat_id,
-        dry_run,
-    )
 
 
 def log_trade(order: Dict) -> None:
