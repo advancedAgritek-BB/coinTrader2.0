@@ -22,6 +22,7 @@ def execute_swap(
     amount: float,
     telegram_token: str,
     chat_id: str,
+    slippage_bps: int = 50,
     dry_run: bool = True,
 ) -> Dict:
     """Execute a swap on Solana using the Jupiter aggregator."""
@@ -54,7 +55,7 @@ def execute_swap(
             "inputMint": token_in,
             "outputMint": token_out,
             "amount": int(amount),
-            "slippageBps": 50,
+            "slippageBps": slippage_bps,
         },
         timeout=10,
     )

@@ -79,6 +79,7 @@ def main():
                 'USDC',
                 amount,
                 dry_run=config['execution_mode'] == 'dry_run',
+                slippage_bps=config.get('solana_slippage_bps', 50),
             )
 
         ohlcv = exchange.fetch_ohlcv(config['symbol'], timeframe=config['timeframe'], limit=100)
@@ -139,7 +140,15 @@ def main():
         size = balance * config['trade_size_pct']
 
         if env == 'onchain':
-            execute_swap('SOL', 'USDC', size, user['telegram_token'], user['telegram_chat_id'], dry_run=config['execution_mode'] == 'dry_run')
+            execute_swap(
+                'SOL',
+                'USDC',
+                size,
+                user['telegram_token'],
+                user['telegram_chat_id'],
+                slippage_bps=config.get('solana_slippage_bps', 50),
+                dry_run=config['execution_mode'] == 'dry_run',
+            )
         else:
             logger.info("Executing entry %s %.4f", direction, size)
             cex_trade(
