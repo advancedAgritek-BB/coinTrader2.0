@@ -17,6 +17,11 @@ symbol: "BTC/USDT"
 timeframe: "1h"
 # percent of available balance to allocate per trade
 trade_size_pct: 0.2
+# limit total capital per strategy
+strategy_allocation:
+  trend_bot: 0.4
+  grid_bot: 0.3
+  sniper_bot: 0.3
 # default stop loss percentage
 sl_pct: 0.03
 # default take profit percentage
