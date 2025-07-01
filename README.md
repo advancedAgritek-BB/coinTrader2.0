@@ -11,6 +11,7 @@ Main features include:
 - Risk management with drawdown limits and volume/volatility filters
 - Live trading or dry-run simulation
 - Optional backtesting per regime
+- Experimental Kraken WebSocket support for real-time data and order updates
 
 Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credentials.
 
@@ -32,6 +33,18 @@ Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credent
    exchange: coinbase  # Options: coinbase, kraken
    execution_mode: dry_run  # or live
    ```
+
+## Kraken WebSocket Usage
+
+When using the `kraken` exchange the bot can obtain a WebSocket token via the
+REST API and subscribe to real-time feeds. The optional module
+`crypto_bot.data.kraken_ws` exposes a small `KrakenWebsocketClient` that handles
+subscriptions to channels like `ohlc`, `book` and the private `executions`
+stream. Trailing stop orders can also be submitted through the WebSocket
+connection when enabled in your strategy.
+
+WebSocket connectivity requires the `websockets` package which can be installed
+with `pip install websockets`.
 
 Binance.US is not recommended because of API limitations.
 
