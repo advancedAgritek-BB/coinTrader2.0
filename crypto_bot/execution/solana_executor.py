@@ -4,10 +4,7 @@ from typing import Dict
 import os
 import json
 import base64
-import requests
-from solana.rpc.api import Client
-from solana.keypair import Keypair
-from solana.transaction import Transaction
+import aiohttp
 
 from crypto_bot.utils.telegram import send_message
 
@@ -16,7 +13,7 @@ JUPITER_QUOTE_URL = "https://quote-api.jup.ag/v6/quote"
 JUPITER_SWAP_URL = "https://quote-api.jup.ag/v6/swap"
 
 
-def execute_swap(
+async def execute_swap(
     token_in: str,
     token_out: str,
     amount: float,
@@ -41,6 +38,10 @@ def execute_swap(
         send_message(telegram_token, chat_id, f"Swap executed: {result}")
         return result
 
+    from solana.rpc.api import Client
+    from solana.keypair import Keypair
+    from solana.transaction import Transaction
+
     private_key = os.getenv("SOLANA_PRIVATE_KEY")
     if not private_key:
         raise ValueError("SOLANA_PRIVATE_KEY environment variable not set")
@@ -61,14 +62,29 @@ def execute_swap(
     )
     quote_resp.raise_for_status()
     route = quote_resp.json()["data"][0]
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            JUPITER_QUOTE_URL,
+            params={
+                "inputMint": token_in,
+                "outputMint": token_out,
+                "amount": int(amount),
+                "slippageBps": 50,
+            },
+            timeout=10,
+        ) as quote_resp:
+            quote_resp.raise_for_status()
+            quote_data = await quote_resp.json()
+        route = quote_data["data"][0]
 
-    swap_resp = requests.post(
-        JUPITER_SWAP_URL,
-        json={"route": route, "userPublicKey": str(keypair.public_key)},
-        timeout=10,
-    )
-    swap_resp.raise_for_status()
-    swap_tx = swap_resp.json()["swapTransaction"]
+        async with session.post(
+            JUPITER_SWAP_URL,
+            json={"route": route, "userPublicKey": str(keypair.public_key)},
+            timeout=10,
+        ) as swap_resp:
+            swap_resp.raise_for_status()
+            swap_data = await swap_resp.json()
+        swap_tx = swap_data["swapTransaction"]
 
     raw_tx = base64.b64decode(swap_tx)
     tx = Transaction.deserialize(raw_tx)
