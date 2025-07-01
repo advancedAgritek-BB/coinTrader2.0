@@ -83,16 +83,11 @@ async def main() -> None:
             f"API error: {exc}",
         )
         return
-    risk_params = {**config['risk']}
-    risk_params.update(config.get('sentiment_filter', {}))
-    risk_params.update(config.get('volatility_filter', {}))
-    risk_params['symbol'] = config.get('symbol', '')
-    risk_params['trade_size_pct'] = config.get('trade_size_pct', 0.1)
-
     risk_params = {**config.get("risk", {})}
     risk_params.update(config.get("sentiment_filter", {}))
     risk_params.update(config.get("volatility_filter", {}))
     risk_params["symbol"] = config.get("symbol", "")
+    risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
     risk_config = RiskConfig(**risk_params)
     risk_manager = RiskManager(risk_config)
 
@@ -205,18 +200,6 @@ async def main() -> None:
 
         score, direction = await evaluate_async(strategy_fn, df, config)
         logger.info("Signal score %.2f direction %s", score, direction)
-        if config['execution_mode'] != 'dry_run':
-            if asyncio.iscoroutinefunction(getattr(exchange, 'fetch_balance', None)):
-                balance = (await exchange.fetch_balance())['USDT']['free']
-
-        if config["execution_mode"] != "dry_run":
-            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-                balance = (await exchange.fetch_balance())["USDT"]["free"]
-            else:
-                balance = (await asyncio.to_thread(exchange.fetch_balance))["USDT"]["free"]
-        else:
-            balance = 1000
-        size = risk_manager.position_size(score, balance)
 
         current_price = df["close"].iloc[-1]
 
@@ -271,28 +254,16 @@ async def main() -> None:
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
 
-        if config['execution_mode'] != 'dry_run':
-            if asyncio.iscoroutinefunction(getattr(exchange, 'fetch_balance', None)):
-                balance = (await exchange.fetch_balance())['USDT']['free']
         if config["execution_mode"] != "dry_run":
             if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-                balance = (await exchange.fetch_balance())["USDT"]["free"]
+                bal = await exchange.fetch_balance()
             else:
-                balance = (await asyncio.to_thread(exchange.fetch_balance))["USDT"]["free"]
+                bal = await asyncio.to_thread(exchange.fetch_balance)
+            balance = bal["USDT"]["free"]
         else:
             balance = 1000
         size = risk_manager.position_size(score, balance)
 
-        if env == 'onchain':
-            await asyncio.to_thread(
-                execute_swap,
-                'SOL',
-                'USDC',
-                size,
-                user['telegram_token'],
-                user['telegram_chat_id'],
-                dry_run=config['execution_mode'] == 'dry_run',
-                slippage_bps=config.get('solana_slippage_bps', 50),
         if env == "onchain":
             await execute_swap(
                 "SOL",
