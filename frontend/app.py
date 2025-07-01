@@ -8,7 +8,8 @@ import psutil
 
 app = Flask(__name__)
 
-bot_process = None
+# Handle the async trading bot process
+bot_proc = None
 LOG_FILE = Path('crypto_bot/logs/bot.log')
 STATS_FILE = Path('crypto_bot/logs/strategy_stats.json')
 
@@ -26,7 +27,7 @@ watch_thread.start()
 
 
 def is_running() -> bool:
-    return bot_process is not None and bot_process.poll() is None
+    return bot_proc is not None and bot_proc.poll() is None
 
 
 @app.route('/')
@@ -36,19 +37,20 @@ def index():
 
 @app.route('/start')
 def start():
-    global bot_process
+    global bot_proc
     if not is_running():
-        bot_process = subprocess.Popen(['python', '-m', 'crypto_bot.main'])
+        # Launch the asyncio-based trading bot
+        bot_proc = subprocess.Popen(['python', '-m', 'crypto_bot.main'])
     return redirect(url_for('index'))
 
 
 @app.route('/stop')
 def stop():
-    global bot_process
+    global bot_proc
     if is_running():
-        bot_process.terminate()
-        bot_process.wait()
-    bot_process = None
+        bot_proc.terminate()
+        bot_proc.wait()
+    bot_proc = None
     return redirect(url_for('index'))
 
 

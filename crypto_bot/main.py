@@ -2,6 +2,7 @@ import os
 import asyncio
 import pandas as pd
 import yaml
+import asyncio
 from dotenv import dotenv_values
 from pathlib import Path
 import json
@@ -11,7 +12,7 @@ from crypto_bot.utils.logger import setup_logger
 from crypto_bot.wallet_manager import load_or_create
 from crypto_bot.regime.regime_classifier import classify_regime
 from crypto_bot.strategy_router import route
-from crypto_bot.signals.signal_scoring import evaluate
+from crypto_bot.signals.signal_scoring import evaluate, evaluate_async
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.risk.exit_manager import (
     calculate_trailing_stop,
@@ -19,6 +20,9 @@ from crypto_bot.risk.exit_manager import (
     get_partial_exit_percent,
 )
 
+from crypto_bot.execution.cex_executor import (
+    execute_trade as cex_trade,
+    execute_trade_async as cex_trade_async,
 from crypto_bot.execution.cex_executor import execute_trade_async as cex_trade_async, get_exchange
 from crypto_bot.execution.cex_executor import (
     execute_trade as cex_trade,
@@ -45,6 +49,7 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
+async def main() -> None:
 async def main():
 def main() -> None:
     """Entry point for running the trading bot."""
@@ -56,6 +61,7 @@ def main() -> None:
     os.environ.update(secrets)
     exchange, ws_client = get_exchange(config)
     try:
+        await asyncio.to_thread(exchange.fetch_balance)
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
             await exchange.fetch_balance()
         else:
@@ -105,6 +111,12 @@ def main() -> None:
                 slippage_bps=config.get('solana_slippage_bps', 50),
             )
 
+        ohlcv = await asyncio.to_thread(
+            exchange.fetch_ohlcv,
+            config['symbol'],
+            timeframe=config['timeframe'],
+            limit=100,
+        )
         if config.get('use_websocket', False) and hasattr(exchange, 'watch_ohlcv'):
             ohlcv = await exchange.watch_ohlcv(config['symbol'], timeframe=config['timeframe'], limit=100)
         else:
@@ -134,8 +146,11 @@ def main() -> None:
         logger.info("Market regime classified as %s", regime)
         env = mode if mode != 'auto' else 'cex'
         strategy_fn = route(regime, env)
-        score, direction = evaluate(strategy_fn, df)
+        score, direction = await evaluate_async(strategy_fn, df)
         logger.info("Signal score %.2f direction %s", score, direction)
+        balance = (
+            (await asyncio.to_thread(exchange.fetch_balance))["USDT"]["free"]
+            if config["execution_mode"] != "dry_run"
         if config['execution_mode'] != 'dry_run':
             if asyncio.iscoroutinefunction(getattr(exchange, 'fetch_balance', None)):
                 balance = (await exchange.fetch_balance())['USDT']['free']
@@ -153,6 +168,9 @@ def main() -> None:
         current_price = df['close'].iloc[-1]
 
         if open_side:
+            pnl_pct = ((current_price - entry_price) / entry_price) * (
+                1 if open_side == 'buy' else -1
+            )
             pnl_pct = (
                 (current_price - entry_price) / entry_price
             ) * (1 if open_side == 'buy' else -1)
@@ -166,6 +184,7 @@ def main() -> None:
                     )
 
             exit_signal, trailing_stop = should_exit(
+                df, current_price, trailing_stop, config
                 df,
                 current_price,
                 trailing_stop,
@@ -204,6 +223,8 @@ def main() -> None:
             await asyncio.sleep(config['loop_interval_minutes'] * 60)
             continue
 
+        balance = (
+            (await asyncio.to_thread(exchange.fetch_balance))["USDT"]["free"]
         if config['execution_mode'] != 'dry_run':
             if asyncio.iscoroutinefunction(getattr(exchange, 'fetch_balance', None)):
                 balance = (await exchange.fetch_balance())['USDT']['free']
@@ -233,6 +254,8 @@ def main() -> None:
         size = balance * config['trade_size_pct']
 
         if env == 'onchain':
+            await asyncio.to_thread(
+                execute_swap,
             execute_swap(
                 'SOL',
                 'USDC',
