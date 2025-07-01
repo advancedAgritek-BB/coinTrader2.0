@@ -15,21 +15,25 @@ On-chain DEX execution on Solana now uses the Jupiter aggregator to submit real
 transactions when not running in dry-run mode.
 
 
-Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credentials. The
-script now asks for Coinbase and Kraken API keys (plus the Coinbase passphrase) and
-stores your chosen exchange in `user_config.yaml`.
+Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your user preferences.
+API keys are read from environment variables when present. Place them in
+`crypto_bot/.env` or export them in your shell. Sensitive values will not be saved to
+`user_config.yaml` unless you set a `FERNET_KEY`, in which case they are encrypted
+before being written.
 
 ## Exchange Setup for U.S. Users
 
 1. Create API keys on **Coinbase Advanced Trade** or **Kraken**.
-2. Run `python crypto_bot/wallet_manager.py` and enter the keys when prompted.
-3. Fill out `crypto_bot/.env`:
+2. Run `python crypto_bot/wallet_manager.py` to generate `user_config.yaml`. Any
+   credentials found in the environment will be used automatically.
+3. Fill out `crypto_bot/.env` with your API keys and optional `FERNET_KEY`:
 
    ```env
    EXCHANGE=coinbase  # or kraken
    API_KEY=your_key
    API_SECRET=your_secret
    API_PASSPHRASE=your_coinbase_passphrase_if_needed
+   FERNET_KEY=optional_key_for_encryption
    ```
 
 
@@ -43,13 +47,17 @@ stores your chosen exchange in `user_config.yaml`.
 
    Generate `KRAKEN_WS_TOKEN` by calling Kraken's `GetWebSocketsToken` REST endpoint with your API credentials. The response contains a short-lived token used for authenticating WebSocket connections.
 
-3. In `crypto_bot/config.yaml` set:
+5. In `crypto_bot/config.yaml` set:
 
    ```yaml
    exchange: coinbase  # Options: coinbase, kraken
    execution_mode: dry_run  # or live
    use_websocket: true      # enable when trading on Kraken via WebSocket
    ```
+
+When `use_websocket` is enabled the bot relies on `ccxt.pro` for realtime
+streaming data. Install it alongside the other requirements or disable
+websockets if you do not have access to `ccxt.pro`.
 
 Binance.US is not recommended because of API limitations.
 

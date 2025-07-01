@@ -1,4 +1,3 @@
-import time
 import os
 import asyncio
 import pandas as pd
@@ -20,14 +19,16 @@ from crypto_bot.risk.exit_manager import (
     get_partial_exit_percent,
 )
 
-from crypto_bot.execution.cex_executor import execute_trade as cex_trade, get_exchange
+from crypto_bot.execution.cex_executor import execute_trade_async as cex_trade_async, get_exchange
+from crypto_bot.execution.cex_executor import (
+    execute_trade as cex_trade,
+    get_exchange,
+)
 from crypto_bot.execution.solana_executor import execute_swap
 from crypto_bot.fund_manager import (
     check_wallet_balances,
     detect_non_trade_tokens,
     auto_convert_funds,
-    SUPPORTED_FUNDING,
-    REQUIRED_TOKENS,
 )
 
 CONFIG_PATH = Path(__file__).resolve().parent / 'config.yaml'
@@ -37,12 +38,17 @@ logger = setup_logger('bot', 'crypto_bot/logs/bot.log')
 
 
 def load_config() -> dict:
+    """Load YAML configuration for the bot."""
+
     with open(CONFIG_PATH) as f:
         logger.info("Loading config from %s", CONFIG_PATH)
         return yaml.safe_load(f)
 
 
-def main():
+async def main():
+def main() -> None:
+    """Entry point for running the trading bot."""
+
     logger.info("Starting bot")
     config = load_config()
     user = load_or_create()
@@ -50,10 +56,17 @@ def main():
     os.environ.update(secrets)
     exchange, ws_client = get_exchange(config)
     try:
-        exchange.fetch_balance()
+        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+            await exchange.fetch_balance()
+        else:
+            await asyncio.to_thread(exchange.fetch_balance)
     except Exception as e:
         logger.error("Exchange API setup failed: %s", e)
-        send_message(secrets.get('TELEGRAM_TOKEN'), config['telegram']['chat_id'], f"API error: {e}")
+        send_message(
+            secrets.get('TELEGRAM_TOKEN'),
+            config['telegram']['chat_id'],
+            f"API error: {e}",
+        )
         return
     risk_config = RiskConfig(**config['risk'])
     risk_manager = RiskManager(risk_config)
@@ -70,7 +83,7 @@ def main():
 
     while True:
         # Detect deposits of BTC/ETH/XRP and convert to a tradeable token
-        balances = check_wallet_balances(user.get('wallet_address', ''))
+        balances = await asyncio.to_thread(check_wallet_balances, user.get('wallet_address', ''))
         for token in detect_non_trade_tokens(balances):
             amount = balances[token]
             logger.info("Converting %s %s to USDC", amount, token)
@@ -82,13 +95,38 @@ def main():
                     amount,
                     dry_run=config['execution_mode'] == 'dry_run',
                 )
+            await asyncio.to_thread(
+                auto_convert_funds,
+                user.get('wallet_address', ''),
+                token,
+                'USDC',
+                amount,
+                dry_run=config['execution_mode'] == 'dry_run',
             )
 
-        ohlcv = exchange.fetch_ohlcv(config['symbol'], timeframe=config['timeframe'], limit=100)
+        if config.get('use_websocket', False) and hasattr(exchange, 'watch_ohlcv'):
+            ohlcv = await exchange.watch_ohlcv(config['symbol'], timeframe=config['timeframe'], limit=100)
+        else:
+            if asyncio.iscoroutinefunction(getattr(exchange, 'fetch_ohlcv', None)):
+                ohlcv = await exchange.fetch_ohlcv(config['symbol'], timeframe=config['timeframe'], limit=100)
+            else:
+                ohlcv = await asyncio.to_thread(
+                    exchange.fetch_ohlcv,
+                    config['symbol'],
+                    timeframe=config['timeframe'],
+                    limit=100,
+                )
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        ohlcv = exchange.fetch_ohlcv(
+            config['symbol'], timeframe=config['timeframe'], limit=100
+        )
+        df = pd.DataFrame(
+            ohlcv,
+            columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'],
+        )
 
         if not risk_manager.allow_trade(df):
-            time.sleep(config['loop_interval_minutes'] * 60)
+            await asyncio.sleep(config['loop_interval_minutes'] * 60)
             continue
 
         regime = classify_regime(df)
@@ -97,25 +135,50 @@ def main():
         strategy_fn = route(regime, env)
         score, direction = evaluate(strategy_fn, df)
         logger.info("Signal score %.2f direction %s", score, direction)
-        balance = exchange.fetch_balance()['USDT']['free'] if config['execution_mode'] != 'dry_run' else 1000
+        if config['execution_mode'] != 'dry_run':
+            if asyncio.iscoroutinefunction(getattr(exchange, 'fetch_balance', None)):
+                balance = (await exchange.fetch_balance())['USDT']['free']
+            else:
+                balance = (await asyncio.to_thread(exchange.fetch_balance))['USDT']['free']
+        else:
+            balance = 1000
+        balance = (
+            exchange.fetch_balance()['USDT']['free']
+            if config['execution_mode'] != 'dry_run'
+            else 1000
+        )
         size = risk_manager.position_size(score, balance)
 
         current_price = df['close'].iloc[-1]
 
         if open_side:
-            pnl_pct = ((current_price - entry_price) / entry_price) * (1 if open_side == 'buy' else -1)
+            pnl_pct = (
+                (current_price - entry_price) / entry_price
+            ) * (1 if open_side == 'buy' else -1)
             if pnl_pct >= config['exit_strategy']['min_gain_to_trail']:
                 if current_price > highest_price:
                     highest_price = current_price
                 if highest_price:
-                    trailing_stop = calculate_trailing_stop(pd.Series([highest_price]), config['exit_strategy']['trailing_stop_pct'])
+                    trailing_stop = calculate_trailing_stop(
+                        pd.Series([highest_price]),
+                        config['exit_strategy']['trailing_stop_pct'],
+                    )
 
-            exit_signal, trailing_stop = should_exit(df, current_price, trailing_stop, config)
+            exit_signal, trailing_stop = should_exit(
+                df,
+                current_price,
+                trailing_stop,
+                config,
+            )
             if exit_signal:
                 pct = get_partial_exit_percent(pnl_pct * 100)
-                sell_amount = position_size * (pct / 100) if config['exit_strategy']['scale_out'] and pct > 0 else position_size
+                sell_amount = (
+                    position_size * (pct / 100)
+                    if config['exit_strategy']['scale_out'] and pct > 0
+                    else position_size
+                )
                 logger.info("Executing exit trade amount %.4f", sell_amount)
-                cex_trade(
+                await cex_trade_async(
                     exchange,
                     ws_client,
                     config['symbol'],
@@ -135,10 +198,16 @@ def main():
                     position_size -= sell_amount
 
         if score < config['signal_threshold'] or direction == 'none':
-            time.sleep(config['loop_interval_minutes'] * 60)
+            await asyncio.sleep(config['loop_interval_minutes'] * 60)
             continue
 
-        balance = exchange.fetch_balance()['USDT']['free'] if config['execution_mode'] != 'dry_run' else 1000
+        if config['execution_mode'] != 'dry_run':
+            if asyncio.iscoroutinefunction(getattr(exchange, 'fetch_balance', None)):
+                balance = (await exchange.fetch_balance())['USDT']['free']
+            else:
+                balance = (await asyncio.to_thread(exchange.fetch_balance))['USDT']['free']
+        else:
+            balance = 1000
         size = balance * config['trade_size_pct']
 
         if env == 'onchain':
@@ -151,10 +220,27 @@ def main():
                     user['telegram_chat_id'],
                     dry_run=config['execution_mode'] == 'dry_run',
                 )
+            await asyncio.to_thread(
+                execute_swap,
+        balance = (
+            exchange.fetch_balance()['USDT']['free']
+            if config['execution_mode'] != 'dry_run'
+            else 1000
+        )
+        size = balance * config['trade_size_pct']
+
+        if env == 'onchain':
+            execute_swap(
+                'SOL',
+                'USDC',
+                size,
+                user['telegram_token'],
+                user['telegram_chat_id'],
+                dry_run=config['execution_mode'] == 'dry_run',
             )
         else:
             logger.info("Executing entry %s %.4f", direction, size)
-            cex_trade(
+            await cex_trade_async(
                 exchange,
                 ws_client,
                 config['symbol'],
@@ -176,8 +262,8 @@ def main():
         stats_file.write_text(json.dumps(stats))
         logger.info("Updated trade stats %s", stats[key])
 
-        time.sleep(config['loop_interval_minutes'] * 60)
+        await asyncio.sleep(config['loop_interval_minutes'] * 60)
 
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())

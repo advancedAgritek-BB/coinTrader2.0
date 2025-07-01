@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 
+from crypto_bot.execution.solana_executor import execute_swap
 from crypto_bot.utils.logger import setup_logger
 
 logger = setup_logger(__name__, "crypto_bot/logs/fund_manager.log")
@@ -47,8 +48,6 @@ async def auto_convert_funds(
     if dry_run:
         tx_hash = "DRYRUN"
     else:
-        from crypto_bot.execution.solana_executor import execute_swap
-
         try:
             result = await execute_swap(from_token, to_token, amount, "", "", dry_run=False)
             tx_hash = result["tx_hash"]
