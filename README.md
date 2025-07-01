@@ -1,19 +1,39 @@
 # Crypto Trading Bot
 
-This project provides a modular hybrid cryptocurrency trading bot. It can trade on centralized exchanges like Coinbase Advanced Trade or Kraken as well as on-chain DEXes on Solana.
+This project provides a modular hybrid cryptocurrency trading bot capable of operating on centralized exchanges like Coinbase Advanced Trade or Kraken and on Solana DEXes via the Jupiter aggregator.
 
-Main features include:
+## Features
 
-- Regime detection using EMA, ADX, RSI and Bollinger Band width
-- Strategy routing for trending, sideways, breakout or volatile markets
-- Support for CEX strategies (trend and grid) and on-chain strategies (sniper and DEX scalper)
-- Telegram notifications and optional Google Sheets logging
-- Risk management with drawdown limits and volume/volatility filters
-- Live trading or dry-run simulation
-- Backtesting with PnL, drawdown and Sharpe metrics
-On-chain DEX execution on Solana now uses the Jupiter aggregator to submit real
-transactions when not running in dry-run mode.
+* Regime detection using EMA, ADX, RSI and Bollinger Band width
+* Strategy router that picks the best approach for trending, sideways, breakout or volatile markets
+* Trend and grid bots for CEXs plus sniper and DEX scalper strategies on Solana
+* Portfolio rotation and auto optimizer utilities
+* Risk management with drawdown limits, cooldown management and volume/volatility filters
+* Telegram notifications and optional Google Sheets logging
+* Capital tracker, sentiment filter and tax logger helpers
+* Solana mempool monitor to avoid swaps when fees spike
+* Live trading or dry-run simulation
+* Web dashboard with watchdog thread and realtime log view
+* Backtesting module with PnL, drawdown and Sharpe metrics
 
+On-chain DEX execution submits real transactions when not running in dry-run mode.
+
+## Quick Start
+
+1. Install the dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials.
+3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
+4. Start the trading bot:
+   ```bash
+   python -m crypto_bot.main
+   ```
+   Or launch the web dashboard with:
+   ```bash
+   python -m frontend.app
+   ```
 
 Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credentials. The
 script now asks for Coinbase and Kraken API keys (plus the Coinbase passphrase) and
