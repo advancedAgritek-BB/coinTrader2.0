@@ -3,6 +3,7 @@ import asyncio
 import json
 import time
 from pathlib import Path
+from datetime import datetime
 
 import pandas as pd
 import yaml
@@ -14,7 +15,12 @@ from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.wallet_manager import load_or_create
 from crypto_bot.regime.regime_classifier import classify_regime
-from crypto_bot.strategy_router import route
+from crypto_bot.strategy_router import route, strategy_name
+from crypto_bot.cooldown_manager import (
+    in_cooldown,
+    mark_cooldown,
+    configure as cooldown_configure,
+)
 from crypto_bot.signals.signal_scoring import evaluate_async
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.risk.exit_manager import (
@@ -33,18 +39,8 @@ from crypto_bot.fund_manager import (
     detect_non_trade_tokens,
     auto_convert_funds,
 )
+from crypto_bot.utils.performance_logger import log_performance
 
-
-def _strategy_name(regime: str, env: str) -> str:
-    if env == "cex":
-        return "trend" if regime == "trending" else "grid"
-    if env == "onchain":
-        return "sniper" if regime in {"breakout", "volatile"} else "dex_scalper"
-    if regime == "trending":
-        return "trend"
-    if regime in {"breakout", "volatile"}:
-        return "sniper"
-    return "grid"
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENV_PATH = Path(__file__).resolve().parent / ".env"
@@ -64,6 +60,7 @@ async def main() -> None:
 
     logger.info("Starting bot")
     config = load_config()
+    cooldown_configure(config.get("min_cooldown", 0))
     secrets = dotenv_values(ENV_PATH)
     os.environ.update(secrets)
 
@@ -94,10 +91,15 @@ async def main() -> None:
 
     open_side = None
     entry_price = None
+    entry_time = None
+    entry_regime = None
+    entry_strategy = None
+    realized_pnl = 0.0
     trailing_stop = 0.0
     position_size = 0.0
     highest_price = 0.0
     current_strategy = None
+    active_strategy = None
     stats_file = Path("crypto_bot/logs/strategy_stats.json")
     stats = json.loads(stats_file.read_text()) if stats_file.exists() else {}
 
@@ -202,11 +204,16 @@ async def main() -> None:
         env = mode if mode != "auto" else "cex"
         strategy_fn = route(regime, env)
         name = _strategy_name(regime, env)
+        name = strategy_name(regime, env)
+
+        if open_side is None and in_cooldown(config["symbol"], name):
+            logger.info("Strategy %s on cooldown", name)
+            await asyncio.sleep(config["loop_interval_minutes"] * 60)
+            continue
 
         params_file = Path("crypto_bot/logs/optimized_params.json")
         if params_file.exists():
             params = json.loads(params_file.read_text())
-            name = _strategy_name(regime, env)
             if name in params:
                 risk_manager.config.stop_loss_pct = params[name]["stop_loss_pct"]
                 risk_manager.config.take_profit_pct = params[name]["take_profit_pct"]
@@ -252,15 +259,36 @@ async def main() -> None:
                     use_websocket=config.get("use_websocket", False),
                     config=config,
                 )
+                realized_pnl += (
+                    (current_price - entry_price)
+                    * sell_amount
+                    * (1 if open_side == "buy" else -1)
+                )
                 if sell_amount >= position_size:
                     risk_manager.cancel_stop_order(exchange)
                     risk_manager.deallocate_capital(current_strategy, sell_amount)
+                    log_performance(
+                        {
+                            "symbol": config["symbol"],
+                            "regime": entry_regime,
+                            "strategy": entry_strategy,
+                            "pnl": realized_pnl,
+                            "entry_time": entry_time,
+                            "exit_time": datetime.utcnow().isoformat(),
+                        }
+                    )
                     open_side = None
                     entry_price = None
+                    entry_time = None
+                    entry_regime = None
+                    entry_strategy = None
+                    realized_pnl = 0.0
                     position_size = 0.0
                     trailing_stop = 0.0
                     highest_price = 0.0
                     current_strategy = None
+                    mark_cooldown(config["symbol"], active_strategy or name)
+                    active_strategy = None
                 else:
                     position_size -= sell_amount
                     risk_manager.deallocate_capital(current_strategy, sell_amount)
@@ -336,8 +364,13 @@ async def main() -> None:
             open_side = direction
             entry_price = current_price
             position_size = size
+            realized_pnl = 0.0
+            entry_time = datetime.utcnow().isoformat()
+            entry_regime = regime
+            entry_strategy = _strategy_name(regime, env)
             highest_price = entry_price
             current_strategy = name
+            active_strategy = name
             logger.info("Trade opened at %.4f", entry_price)
 
         key = f"{env}_{regime}"

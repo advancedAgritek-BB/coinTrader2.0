@@ -17,6 +17,9 @@ from crypto_bot.utils.telegram import send_message
 from crypto_bot.execution.kraken_ws import KrakenWSClient
 from crypto_bot.utils.trade_logger import log_trade
 from crypto_bot import tax_logger
+from crypto_bot.utils.logger import setup_logger
+
+logger = setup_logger(__name__, "crypto_bot/logs/execution.log")
 
 
 def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
@@ -115,6 +118,19 @@ def execute_trade(
             return {}
 
     send_message(token, chat_id, f"Placing {side} order for {amount} {symbol}")
+
+    try:
+        ticker = exchange.fetch_ticker(symbol)
+        bid = ticker.get("bid")
+        ask = ticker.get("ask")
+        if bid and ask:
+            slippage = (ask - bid) / ((ask + bid) / 2)
+            if slippage > config.get("max_slippage_pct", 1.0):
+                logger.warning("Trade skipped due to slippage.")
+                send_message(token, chat_id, "Trade skipped due to slippage.")
+                return {}
+    except Exception as err:  # pragma: no cover - network
+        logger.warning("Slippage check failed: %s", err)
 
     if (
         config.get("liquidity_check", True)

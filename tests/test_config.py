@@ -9,3 +9,4 @@ def test_load_config_returns_dict():
     assert isinstance(config, dict)
     assert 'mode' in config
     assert 'risk' in config
+    assert 'min_cooldown' in config

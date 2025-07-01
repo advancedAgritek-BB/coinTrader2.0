@@ -8,6 +8,19 @@ from crypto_bot.strategy import trend_bot, grid_bot, sniper_bot, dex_scalper
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
 
+def strategy_name(regime: str, mode: str) -> str:
+    """Return the name of the strategy for given regime and mode."""
+    if mode == "cex":
+        return "trend" if regime == "trending" else "grid"
+    if mode == "onchain":
+        return "sniper" if regime in {"breakout", "volatile"} else "dex_scalper"
+    if regime == "trending":
+        return "trend"
+    if regime in {"breakout", "volatile"}:
+        return "sniper"
+    return "grid"
+
+
 def route(
     regime: str, mode: str
 ) -> Callable[[pd.DataFrame], Tuple[float, str]]:

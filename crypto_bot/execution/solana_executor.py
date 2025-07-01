@@ -9,6 +9,9 @@ import aiohttp
 from crypto_bot.utils.telegram import send_message
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot import tax_logger
+from crypto_bot.utils.logger import setup_logger
+
+logger = setup_logger(__name__, "crypto_bot/logs/execution.log")
 
 
 JUPITER_QUOTE_URL = "https://quote-api.jup.ag/v6/quote"
@@ -31,6 +34,8 @@ async def execute_swap(
 
     msg = f"Swapping {amount} {token_in} to {token_out}"
     send_message(telegram_token, chat_id, msg)
+
+    config = config or {}
 
     cfg = mempool_cfg or {}
     if mempool_monitor and cfg.get("enabled"):
@@ -91,6 +96,30 @@ async def execute_swap(
             quote_resp.raise_for_status()
             quote_data = await quote_resp.json()
         route = quote_data["data"][0]
+
+        try:
+            async with session.get(
+                JUPITER_QUOTE_URL,
+                params={
+                    "inputMint": token_out,
+                    "outputMint": token_in,
+                    "amount": int(route["outAmount"]),
+                    "slippageBps": slippage_bps,
+                },
+                timeout=10,
+            ) as back_resp:
+                back_resp.raise_for_status()
+                back_data = await back_resp.json()
+            back_route = back_data["data"][0]
+            ask = float(route["outAmount"]) / float(route["inAmount"])
+            bid = float(back_route["inAmount"]) / float(back_route["outAmount"])
+            slippage = (ask - bid) / ((ask + bid) / 2)
+            if slippage > config.get("max_slippage_pct", 1.0):
+                logger.warning("Trade skipped due to slippage.")
+                send_message(telegram_token, chat_id, "Trade skipped due to slippage.")
+                return {}
+        except Exception as err:  # pragma: no cover - network
+            logger.warning("Slippage check failed: %s", err)
 
         async with session.post(
             JUPITER_SWAP_URL,
