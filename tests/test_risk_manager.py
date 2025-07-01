@@ -45,3 +45,16 @@ def test_position_size_uses_trade_size_pct():
     )
     size = manager.position_size(0.5, 1000)
     assert size == 1000 * 0.2 * 0.5
+
+
+def test_can_allocate_uses_tracker():
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        strategy_allocation={"trend_bot": 0.5},
+    )
+    manager = RiskManager(cfg)
+    assert manager.can_allocate("trend_bot", 40, 100)
+    manager.allocate_capital("trend_bot", 40)
+    assert not manager.can_allocate("trend_bot", 20, 100)

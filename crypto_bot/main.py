@@ -88,6 +88,7 @@ async def main() -> None:
     risk_params.update(config.get("volatility_filter", {}))
     risk_params["symbol"] = config.get("symbol", "")
     risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
+    risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
     risk_config = RiskConfig(**risk_params)
     risk_manager = RiskManager(risk_config)
 
@@ -96,6 +97,7 @@ async def main() -> None:
     trailing_stop = 0.0
     position_size = 0.0
     highest_price = 0.0
+    current_strategy = None
     stats_file = Path("crypto_bot/logs/strategy_stats.json")
     stats = json.loads(stats_file.read_text()) if stats_file.exists() else {}
 
@@ -199,6 +201,7 @@ async def main() -> None:
         logger.info("Market regime classified as %s", regime)
         env = mode if mode != "auto" else "cex"
         strategy_fn = route(regime, env)
+        name = _strategy_name(regime, env)
 
         params_file = Path("crypto_bot/logs/optimized_params.json")
         if params_file.exists():
@@ -251,13 +254,16 @@ async def main() -> None:
                 )
                 if sell_amount >= position_size:
                     risk_manager.cancel_stop_order(exchange)
+                    risk_manager.deallocate_capital(current_strategy, sell_amount)
                     open_side = None
                     entry_price = None
                     position_size = 0.0
                     trailing_stop = 0.0
                     highest_price = 0.0
+                    current_strategy = None
                 else:
                     position_size -= sell_amount
+                    risk_manager.deallocate_capital(current_strategy, sell_amount)
                     risk_manager.update_stop_order(position_size)
 
         if score < config["signal_threshold"] or direction == "none":
@@ -273,6 +279,10 @@ async def main() -> None:
         else:
             balance = 1000
         size = risk_manager.position_size(score, balance)
+        if not risk_manager.can_allocate(name, size, balance):
+            logger.info("Capital cap reached for %s, skipping", name)
+            await asyncio.sleep(config["loop_interval_minutes"] * 60)
+            continue
 
         if env == "onchain":
             await execute_swap(
@@ -322,10 +332,12 @@ async def main() -> None:
                 dry_run=config["execution_mode"] == "dry_run",
             )
             risk_manager.register_stop_order(stop_order)
+            risk_manager.allocate_capital(name, size)
             open_side = direction
             entry_price = current_price
             position_size = size
             highest_price = entry_price
+            current_strategy = name
             logger.info("Trade opened at %.4f", entry_price)
 
         key = f"{env}_{regime}"

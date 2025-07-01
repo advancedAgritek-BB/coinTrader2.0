@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from crypto_bot.capital_tracker import CapitalTracker
+
 from crypto_bot.sentiment_filter import boost_factor, too_bearish
 from crypto_bot.volatility_filter import too_flat, too_hot
 
@@ -24,6 +26,7 @@ class RiskConfig:
     max_funding_rate: float = 1.0
     symbol: str = ""
     trade_size_pct: float = 0.1
+    strategy_allocation: dict | None = None
 
 
 class RiskManager:
@@ -32,6 +35,7 @@ class RiskManager:
     def __init__(self, config: RiskConfig) -> None:
         """Create a new manager with the given risk configuration."""
         self.config = config
+        self.capital_tracker = CapitalTracker(config.strategy_allocation or {})
         self.equity = 1.0
         self.peak_equity = 1.0
         self.stop_order = None
@@ -135,3 +139,15 @@ class RiskManager:
             except Exception as e:
                 logger.error("Failed to cancel stop order: %s", e)
         self.stop_order = None
+
+    def can_allocate(self, strategy: str, amount: float, balance: float) -> bool:
+        """Check if ``strategy`` can use additional ``amount`` capital."""
+        return self.capital_tracker.can_allocate(strategy, amount, balance)
+
+    def allocate_capital(self, strategy: str, amount: float) -> None:
+        """Record capital allocation for a strategy."""
+        self.capital_tracker.allocate(strategy, amount)
+
+    def deallocate_capital(self, strategy: str, amount: float) -> None:
+        """Release previously allocated capital."""
+        self.capital_tracker.deallocate(strategy, amount)
