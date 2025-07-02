@@ -227,6 +227,8 @@ async def main() -> None:
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
             )
 
+            logger.info("Fetched %d candles for %s", len(df_sym), sym)
+
             if sym == config.get("symbol"):
                 df_current = df_sym
 
