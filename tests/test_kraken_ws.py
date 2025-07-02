@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 from crypto_bot.execution.kraken_ws import KrakenWSClient, PUBLIC_URL, PRIVATE_URL
 
 class DummyWS:
@@ -155,6 +156,43 @@ def test_default_callbacks_log(monkeypatch):
     assert any("oops" in m for m in logs["error"])
 
 
+def test_token_refresh_updates_private_subs(monkeypatch):
+    client = KrakenWSClient()
+    created = []
+
+    def dummy_start_ws(url, conn_type=None, **_):
+        ws = DummyWS()
+        created.append((url, conn_type))
+        ws.on_close = lambda *_: client.on_close(conn_type)
+        return ws
+
+    tokens = ["t1", "t2"]
+
+    def fake_get_token():
+        token = tokens.pop(0)
+        client.token = token
+        client.token_created = datetime.now(timezone.utc)
+        return token
+
+    monkeypatch.setattr(client, "_start_ws", dummy_start_ws)
+    monkeypatch.setattr(client, "get_token", fake_get_token)
+
+    # initial subscribe obtains first token
+    client.subscribe_orders("BTC/USD")
+    first_msg = json.dumps(
+        {"method": "subscribe", "params": {"channel": "openOrders", "token": "t1"}}
+    )
+    assert client._private_subs[0] == first_msg
+
+    # expire token and reconnect
+    client.token_created -= timedelta(minutes=15)
+    client.connect_private()
+    second_msg = json.dumps(
+        {"method": "subscribe", "params": {"channel": "openOrders", "token": "t2"}}
+    )
+
+    assert client._private_subs[0] == second_msg
+    assert client.private_ws.sent[-1] == second_msg
 def _setup_private_client(monkeypatch):
     client = KrakenWSClient()
     ws = DummyWS()
