@@ -263,10 +263,10 @@ async def main() -> None:
             score_sym, direction_sym = await evaluate_async(strategy_fn, df_sym, config)
             logger.info("Signal %s %.2f %s", sym, score_sym, direction_sym)
 
-            allowed = risk_manager.allow_trade(df_sym)
+            allowed, reason = risk_manager.allow_trade(df_sym)
             if not allowed:
                 logger.info(
-                    "Trade not allowed for %s \u2013 see bot.log for details", sym
+                    "Trade not allowed for %s \u2013 %s", sym, reason
                 )
                 continue
 
