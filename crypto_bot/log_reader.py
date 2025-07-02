@@ -13,7 +13,7 @@ def _read_trades(path: Path | str) -> pd.DataFrame:
     if not file.exists():
         return pd.DataFrame(columns=["symbol", "side", "amount", "price"])
     df = pd.read_csv(file, header=None)
-    cols = ["symbol", "side", "amount", "price"]
+    cols = ["symbol", "side", "amount", "price", "timestamp"]
     df = df.iloc[:, : len(cols)]
     df.columns = cols[: df.shape[1]]
     return df
