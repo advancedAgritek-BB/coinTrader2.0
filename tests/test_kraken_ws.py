@@ -153,3 +153,35 @@ def test_default_callbacks_log(monkeypatch):
 
     assert any("hello" in m for m in logs["info"])
     assert any("oops" in m for m in logs["error"])
+
+
+def _setup_private_client(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+    client.token = "token"
+    return client, ws
+
+
+def test_cancel_order(monkeypatch):
+    client, ws = _setup_private_client(monkeypatch)
+    msg = client.cancel_order("abc")
+    expected = {"method": "cancel_order", "params": {"txid": "abc", "token": "token"}}
+    assert msg == expected
+    assert ws.sent == [json.dumps(expected)]
+
+
+def test_cancel_all_orders(monkeypatch):
+    client, ws = _setup_private_client(monkeypatch)
+    msg = client.cancel_all_orders()
+    expected = {"method": "cancel_all_orders", "params": {"token": "token"}}
+    assert msg == expected
+    assert ws.sent == [json.dumps(expected)]
+
+
+def test_open_orders(monkeypatch):
+    client, ws = _setup_private_client(monkeypatch)
+    msg = client.open_orders()
+    expected = {"method": "open_orders", "params": {"token": "token"}}
+    assert msg == expected
+    assert ws.sent == [json.dumps(expected)]

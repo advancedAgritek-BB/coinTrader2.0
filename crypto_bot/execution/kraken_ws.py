@@ -157,6 +157,7 @@ class KrakenWSClient:
 
     def subscribe_orders(self) -> None:
         """Subscribe to private open order updates."""
+        """Subscribe to the authenticated ``openOrders`` channel."""
         self.connect_private()
         msg = {
             "method": "subscribe",
@@ -186,6 +187,36 @@ class KrakenWSClient:
                 "volume": str(volume),
                 "token": self.token,
             },
+        }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+        return msg
+
+    def cancel_order(self, txid: str) -> dict:
+        self.connect_private()
+        msg = {
+            "method": "cancel_order",
+            "params": {"txid": txid, "token": self.token},
+        }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+        return msg
+
+    def cancel_all_orders(self) -> dict:
+        self.connect_private()
+        msg = {
+            "method": "cancel_all_orders",
+            "params": {"token": self.token},
+        }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+        return msg
+
+    def open_orders(self) -> dict:
+        self.connect_private()
+        msg = {
+            "method": "open_orders",
+            "params": {"token": self.token},
         }
         data = json.dumps(msg)
         self.private_ws.send(data)
