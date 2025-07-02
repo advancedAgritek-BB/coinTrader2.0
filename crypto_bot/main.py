@@ -231,9 +231,16 @@ async def main() -> None:
                 continue
 
             regime_sym = classify_regime(df_sym)
+            logger.info("Market regime for %s classified as %s", sym, regime_sym)
             env_sym = mode if mode != "auto" else "cex"
             strategy_fn = route(regime_sym, env_sym)
             name_sym = strategy_name(regime_sym, env_sym)
+            logger.info(
+                "Using strategy %s for %s in %s mode",
+                name_sym,
+                sym,
+                env_sym,
+            )
 
             if open_side is None and in_cooldown(sym, name_sym):
                 continue
