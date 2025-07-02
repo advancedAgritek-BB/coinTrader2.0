@@ -74,7 +74,9 @@ def prompt_user() -> dict:
     """Prompt for API keys, wallet address and trading mode."""
     data: dict = {}
 
-    exchange = os.getenv("EXCHANGE") or input("Select exchange (coinbase/kraken): ").strip().lower()
+    default_ex = os.getenv("EXCHANGE", "coinbase")
+    resp = input(f"Select exchange (coinbase/kraken) [{default_ex}]: ").strip().lower()
+    exchange = resp or default_ex
     if exchange not in {"coinbase", "kraken"}:
         exchange = "coinbase"
     data["exchange"] = exchange
