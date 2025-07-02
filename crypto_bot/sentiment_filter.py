@@ -12,7 +12,9 @@ logger = setup_logger(__name__, "crypto_bot/logs/sentiment.log")
 
 
 FNG_URL = "https://api.alternative.me/fng/?limit=1"
-SENTIMENT_URL = "https://api.example.com/twitter-sentiment"
+SENTIMENT_URL = os.getenv(
+    "TWITTER_SENTIMENT_URL", "https://api.example.com/twitter-sentiment"
+)
 
 
 def fetch_fng_index() -> int:
