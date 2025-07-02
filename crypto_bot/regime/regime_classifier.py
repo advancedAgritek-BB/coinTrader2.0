@@ -1,10 +1,11 @@
 import pandas as pd
-import numpy as np
 import ta
 
 
 def classify_regime(df: pd.DataFrame) -> str:
     """Classify market regime based on technical indicators."""
+    if len(df) < 14:
+        return "unknown"
     df = df.copy()
     df['ema20'] = ta.trend.ema_indicator(df['close'], window=20)
     df['ema50'] = ta.trend.ema_indicator(df['close'], window=50)
