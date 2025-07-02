@@ -89,11 +89,11 @@ URL is supplied.
 For Kraken, set:
 
 ```env
-FUNDING_RATE_URL=https://api.kraken.com/0/public/Ticker
+FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
 ```
 
-`volatility_filter.py` will append `?pair=SYMBOL` to this URL when requesting
-funding information.
+`volatility_filter.py` will append the instrument symbol directly to this URL
+when requesting funding information.
 
 
 4. In `crypto_bot/config.yaml` set:

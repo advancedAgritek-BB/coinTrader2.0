@@ -24,10 +24,6 @@ def fetch_funding_rate(symbol: str) -> float:
             return 0.0
     try:
         base_url = os.getenv("FUNDING_RATE_URL", DEFAULT_FUNDING_URL)
-        if "?" in base_url:
-            url = f"{base_url}{symbol}"
-        else:
-            url = f"{base_url}?pair={symbol}"
         url = f"{base_url}{symbol}" if "?" in base_url else f"{base_url}?pair={symbol}"
         resp = requests.get(url, timeout=5)
         resp.raise_for_status()
@@ -40,6 +36,9 @@ def fetch_funding_rate(symbol: str) -> float:
                 first = data["rates"][0]
                 if isinstance(first, dict):
                     return float(first.get("relativeFundingRate", 0.0))
+                last = data["rates"][-1]
+                if isinstance(last, dict):
+                    return float(last.get("relativeFundingRate", 0.0))
             return float(data.get("rate", 0.0))
     except Exception as exc:
         logger.error("Failed to fetch funding rate: %s", exc)
