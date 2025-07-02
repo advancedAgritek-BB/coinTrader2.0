@@ -30,7 +30,6 @@ def test_funding_url_env(monkeypatch):
 
             def json(self):
                 return {"result": {"ETHUSD": {"fr": 0.01}}}
-                return {"rate": 0.01}
 
         return FakeResp()
 

@@ -28,6 +28,7 @@ def fetch_funding_rate(symbol: str) -> float:
             url = f"{base_url}{symbol}"
         else:
             url = f"{base_url}?pair={symbol}"
+        url = f"{base_url}{symbol}" if "?" in base_url else f"{base_url}?pair={symbol}"
         resp = requests.get(url, timeout=5)
         resp.raise_for_status()
         data = resp.json()
