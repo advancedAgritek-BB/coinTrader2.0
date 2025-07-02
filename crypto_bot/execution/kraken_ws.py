@@ -175,6 +175,36 @@ class KrakenWSClient:
         self.private_ws.send(data)
         return msg
 
+    def cancel_order(self, txid: str) -> dict:
+        self.connect_private()
+        msg = {
+            "method": "cancel_order",
+            "params": {"txid": txid, "token": self.token},
+        }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+        return msg
+
+    def cancel_all_orders(self) -> dict:
+        self.connect_private()
+        msg = {
+            "method": "cancel_all_orders",
+            "params": {"token": self.token},
+        }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+        return msg
+
+    def open_orders(self) -> dict:
+        self.connect_private()
+        msg = {
+            "method": "open_orders",
+            "params": {"token": self.token},
+        }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+        return msg
+
     def on_close(self, conn_type: str) -> None:
         """Handle WebSocket closure by reconnecting and resubscribing."""
 
