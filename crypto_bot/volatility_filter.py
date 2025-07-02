@@ -24,6 +24,10 @@ def fetch_funding_rate(symbol: str) -> float:
             return 0.0
     try:
         base_url = os.getenv("FUNDING_RATE_URL", DEFAULT_FUNDING_URL)
+        if "?" in base_url:
+            url = f"{base_url}{symbol}"
+        else:
+            url = f"{base_url}?pair={symbol}"
         url = f"{base_url}{symbol}" if "?" in base_url else f"{base_url}?pair={symbol}"
         resp = requests.get(url, timeout=5)
         resp.raise_for_status()
