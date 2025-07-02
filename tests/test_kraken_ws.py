@@ -28,7 +28,7 @@ def test_reconnect_and_resubscribe(monkeypatch):
     client.subscribe_ticker("BTC/USD")
     assert created == [(PUBLIC_URL, "public")]
     expected = json.dumps(
-        {"method": "subscribe", "params": {"channel": "ticker", "symbol": "BTC/USD"}}
+        {"method": "subscribe", "params": {"channel": "ticker", "symbol": ["BTC/USD"]}}
     )
     assert client.public_ws.sent == [expected]
     assert client._public_subs[0] == expected
@@ -45,7 +45,7 @@ def test_reconnect_and_resubscribe(monkeypatch):
     expected_private = json.dumps(
         {
             "method": "subscribe",
-            "params": {"channel": "openOrders", "token": client.token},
+            "params": {"channel": "open_orders", "token": client.token},
         }
     )
     assert client.private_ws.sent == [expected_private]
