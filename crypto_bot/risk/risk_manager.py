@@ -106,8 +106,12 @@ class RiskManager:
             return False, reason
 
         vol_mean = df['volume'].rolling(20).mean().iloc[-1]
-        if df['volume'].iloc[-1] < vol_mean * 0.5:
-            reason = f"Volume {df['volume'].iloc[-1]:.4f} below mean {vol_mean:.4f}"
+        current_volume = df['volume'].iloc[-1]
+        logger.info(
+            f"{self.config.symbol} | Raw Volume: {current_volume} | Mean Volume: {vol_mean}"
+        )
+        if current_volume < vol_mean * 0.5:
+            reason = f"Volume {current_volume:.4f} below mean {vol_mean:.4f}"
             logger.info(reason)
             return False, reason
         vol_std = df['close'].rolling(20).std().iloc[-1]
