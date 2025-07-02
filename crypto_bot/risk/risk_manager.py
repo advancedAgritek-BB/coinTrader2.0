@@ -8,7 +8,8 @@ from crypto_bot.volatility_filter import too_flat, too_hot
 
 from crypto_bot.utils.logger import setup_logger
 
-logger = setup_logger(__name__, "crypto_bot/logs/risk.log")
+# Log to the main bot file so risk messages are consolidated
+logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
 
 @dataclass
