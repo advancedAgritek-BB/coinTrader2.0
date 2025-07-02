@@ -30,12 +30,12 @@ def test_funding_url_env(monkeypatch):
 
             def json(self):
                 return {"result": {"ETHUSD": {"fr": 0.01}}}
-                return {"rate": 0.01}
 
         return FakeResp()
 
     monkeypatch.setattr("crypto_bot.volatility_filter.requests.get", fake_get)
     assert too_hot("ETHUSD", 0.1) is False
     assert called["url"] == "https://example.com/ETHUSD"
+    assert called["url"] == "https://example.com?pair=ETHUSD"
 
 

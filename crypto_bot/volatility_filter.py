@@ -23,16 +23,12 @@ def fetch_funding_rate(symbol: str) -> float:
         except ValueError:
             return 0.0
     try:
-        funding_url = os.getenv("FUNDING_RATE_URL", DEFAULT_FUNDING_URL)
-        resp = requests.get(f"{funding_url}/{symbol}", timeout=5)
-        base_url = os.getenv("FUNDING_RATE_URL", FUNDING_URL)
-        resp = requests.get(f"{base_url}/{symbol}", timeout=5)
-        funding_url = os.getenv("FUNDING_RATE_URL", DEFAULT_FUNDING_URL)
-        resp = requests.get(f"{funding_url}/{symbol}", timeout=5)
-        if "?" in FUNDING_URL:
-            url = f"{FUNDING_URL}{symbol}"
+        base_url = os.getenv("FUNDING_RATE_URL", DEFAULT_FUNDING_URL)
+        if "?" in base_url:
+            url = f"{base_url}{symbol}"
         else:
-            url = f"{FUNDING_URL}?pair={symbol}"
+            url = f"{base_url}?pair={symbol}"
+        url = f"{base_url}{symbol}" if "?" in base_url else f"{base_url}?pair={symbol}"
         resp = requests.get(url, timeout=5)
         resp.raise_for_status()
         data = resp.json()
