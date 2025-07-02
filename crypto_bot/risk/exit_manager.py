@@ -5,7 +5,8 @@ import ta
 
 from crypto_bot.utils.logger import setup_logger
 
-logger = setup_logger(__name__, "crypto_bot/logs/exit.log")
+# Use the main bot log for exit messages
+logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
 
 def calculate_trailing_stop(
