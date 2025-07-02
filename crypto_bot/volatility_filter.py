@@ -23,7 +23,8 @@ def fetch_funding_rate(symbol: str) -> float:
         except ValueError:
             return 0.0
     try:
-        resp = requests.get(f"{FUNDING_URL}/{symbol}", timeout=5)
+        base_url = os.getenv("FUNDING_RATE_URL", FUNDING_URL)
+        resp = requests.get(f"{base_url}/{symbol}", timeout=5)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, dict):

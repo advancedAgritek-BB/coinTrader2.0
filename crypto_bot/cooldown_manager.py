@@ -5,7 +5,8 @@ from typing import Dict
 
 from crypto_bot.utils.logger import setup_logger
 
-logger = setup_logger(__name__, "crypto_bot/logs/cooldown.log")
+# Consolidate cooldown logs with the main bot log
+logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
 cooldowns: Dict[str, datetime] = {}
 MIN_COOLDOWN = 0
