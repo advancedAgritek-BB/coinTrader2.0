@@ -85,6 +85,15 @@ fetching perpetual funding rates. Without this variable the bot falls back to
 the placeholder `https://funding.example.com` and will log errors until a real
 URL is supplied.
 
+For Kraken, set:
+
+```env
+FUNDING_RATE_URL=https://api.kraken.com/0/public/Ticker
+```
+
+`volatility_filter.py` will append `?pair=SYMBOL` to this URL when requesting
+funding information.
+
 
 4. In `crypto_bot/config.yaml` set:
    For Kraken, optionally set tokens for the WebSocket API:
