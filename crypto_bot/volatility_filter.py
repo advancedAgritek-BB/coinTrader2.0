@@ -36,6 +36,10 @@ def fetch_funding_rate(symbol: str) -> float:
             if "result" in data and isinstance(data["result"], dict):
                 first = next(iter(data["result"].values()), {})
                 return float(first.get("fr", 0.0))
+            if "rates" in data and isinstance(data["rates"], list) and data["rates"]:
+                first = data["rates"][0]
+                if isinstance(first, dict):
+                    return float(first.get("relativeFundingRate", 0.0))
             return float(data.get("rate", 0.0))
     except Exception as exc:
         logger.error("Failed to fetch funding rate: %s", exc)
