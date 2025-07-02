@@ -184,6 +184,9 @@ include:
   backtester.
 - `strategy_stats.json` – summary statistics of win rate, PnL and other metrics.
 
+Other helpers create logs like `execution.log` in the same directory when
+enabled. Risk details are consolidated in `bot.log`, letting you follow the
+router and risk manager actions in one place. Example snippet:
 Other helpers create logs like `execution.log` in the same
 directory when enabled. Since decision details now appear in `bot.log` you can
 follow the router and risk manager actions in one place. Example snippet:
