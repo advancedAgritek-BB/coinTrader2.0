@@ -1,4 +1,5 @@
 import os
+import base64
 import yaml
 from pathlib import Path
 from typing import Dict
@@ -40,6 +41,19 @@ def _decrypt(value: str) -> str:
         except Exception:
             pass
     return value
+
+
+def _sanitize_secret(secret: str) -> str:
+    """Return a base64 padded secret string."""
+    secret = secret.strip()
+    pad = len(secret) % 4
+    if pad:
+        secret += "=" * (4 - pad)
+    try:
+        base64.b64decode(secret)
+    except Exception:
+        logger.warning("API secret does not look base64 encoded")
+    return secret
 
 
 def _env_or_prompt(name: str, prompt: str) -> str:
@@ -147,6 +161,10 @@ def load_or_create() -> dict:
             if val is not None:
                 creds[key] = val
                 break
+
+    for sec in ("coinbase_api_secret", "kraken_api_secret"):
+        if sec in creds and creds[sec]:
+            creds[sec] = _sanitize_secret(str(creds[sec]))
 
     # expose selected exchange credentials via generic env vars for ccxt
     exch = creds.get("exchange")

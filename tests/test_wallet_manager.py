@@ -16,3 +16,9 @@ def test_environment_overrides_config(tmp_path, monkeypatch):
     creds = wallet_manager.load_or_create()
     assert creds["coinbase_api_key"] == "env_key"
 
+
+def test_sanitize_secret_adds_padding():
+    secret = "YWJjZA"
+    padded = wallet_manager._sanitize_secret(secret)
+    assert padded == "YWJjZA=="
+
