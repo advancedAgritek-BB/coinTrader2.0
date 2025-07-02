@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Dict
 
+
 import schedule
 
 from telegram import Update
@@ -51,7 +52,6 @@ class TelegramBotUI:
         self.app.add_handler(CommandHandler("rotate_now", self.rotate_now_cmd))
         self.app.add_handler(CommandHandler("toggle_mode", self.toggle_mode_cmd))
 
-        self.thread: threading.Thread | None = None
         self.scheduler_thread: threading.Thread | None = None
 
         schedule.every().day.at("00:00").do(self.send_daily_summary)
@@ -60,15 +60,17 @@ class TelegramBotUI:
         )
         self.scheduler_thread.start()
 
-    def run_async(self) -> None:
-        """Start polling in a background thread."""
-        def run() -> None:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            self.app.run_polling()
+        self.task: asyncio.Task | None = None
 
-        self.thread = threading.Thread(target=run, daemon=True)
-        self.thread.start()
+    def run_async(self) -> None:
+        """Start polling within the current event loop."""
+
+        async def run() -> None:
+            await self.app.initialize()
+            await self.app.start()
+            await self.app.updater.start_polling()
+
+        self.task = asyncio.create_task(run())
 
     def _run_scheduler(self) -> None:
         while True:
@@ -76,9 +78,8 @@ class TelegramBotUI:
             time.sleep(1)
 
     def stop(self) -> None:
-        self.app.stop()
-        if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=2)
+        if self.task:
+            self.task.cancel()
         schedule.clear()
         if self.scheduler_thread and self.scheduler_thread.is_alive():
             self.scheduler_thread.join(timeout=2)
