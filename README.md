@@ -139,6 +139,18 @@ resubscribes to any previously requested channels.  Trading commands use the new
 `open_orders`.  Refer to Kraken's v2 WebSocket documentation for a full list:
 <https://docs.kraken.com/websockets-v2/#tag/Trading>.
 
+Example usage:
+
+```python
+from crypto_bot.execution.kraken_ws import KrakenWSClient
+
+client = KrakenWSClient(ws_token="your_ws_token")
+client.add_order("BTC/USD", "buy", 0.1)
+client.cancel_order("TXID123")
+client.cancel_all_orders()
+client.open_orders()
+```
+
 Binance.US is not recommended because of API limitations.
 
 ### Automatic Market Scanning
