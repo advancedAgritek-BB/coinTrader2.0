@@ -201,22 +201,26 @@ async def main() -> None:
         df_current = None
 
         for sym in config.get("symbols", [config.get("symbol")]):
-            if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
-                data = await exchange.watch_ohlcv(
-                    sym, timeframe=config["timeframe"], limit=100
-                )
-            else:
-                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-                    data = await exchange.fetch_ohlcv(
+            try:
+                if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
+                    data = await exchange.watch_ohlcv(
                         sym, timeframe=config["timeframe"], limit=100
                     )
                 else:
-                    data = await asyncio.to_thread(
-                        exchange.fetch_ohlcv,
-                        sym,
-                        timeframe=config["timeframe"],
-                        limit=100,
-                    )
+                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
+                        data = await exchange.fetch_ohlcv(
+                            sym, timeframe=config["timeframe"], limit=100
+                        )
+                    else:
+                        data = await asyncio.to_thread(
+                            exchange.fetch_ohlcv,
+                            sym,
+                            timeframe=config["timeframe"],
+                            limit=100,
+                        )
+            except Exception as exc:  # pragma: no cover - network
+                logger.error("OHLCV fetch failed for %s: %s", sym, exc)
+                continue
 
             df_sym = pd.DataFrame(
                 data,
@@ -278,22 +282,27 @@ async def main() -> None:
 
         if open_side and df_current is None:
             # ensure current market data is loaded
-            if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
-                data = await exchange.watch_ohlcv(
-                    config["symbol"], timeframe=config["timeframe"], limit=100
-                )
-            else:
-                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-                    data = await exchange.fetch_ohlcv(
+            try:
+                if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
+                    data = await exchange.watch_ohlcv(
                         config["symbol"], timeframe=config["timeframe"], limit=100
                     )
                 else:
-                    data = await asyncio.to_thread(
-                        exchange.fetch_ohlcv,
-                        config["symbol"],
-                        timeframe=config["timeframe"],
-                        limit=100,
-                    )
+                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
+                        data = await exchange.fetch_ohlcv(
+                            config["symbol"], timeframe=config["timeframe"], limit=100
+                        )
+                    else:
+                        data = await asyncio.to_thread(
+                            exchange.fetch_ohlcv,
+                            config["symbol"],
+                            timeframe=config["timeframe"],
+                            limit=100,
+                        )
+            except Exception as exc:  # pragma: no cover - network
+                logger.error("OHLCV fetch failed for %s: %s", config["symbol"], exc)
+                continue
+
             df_current = pd.DataFrame(
                 data,
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
