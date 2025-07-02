@@ -50,6 +50,16 @@ ENV_PATH = Path(__file__).resolve().parent / ".env"
 logger = setup_logger("bot", "crypto_bot/logs/bot.log")
 
 
+def direction_to_side(direction: str) -> str:
+    """Translate strategy direction to trade side."""
+    return "buy" if direction == "long" else "sell"
+
+
+def opposite_side(side: str) -> str:
+    """Return the opposite trading side."""
+    return "sell" if side == "buy" else "buy"
+
+
 def load_config() -> dict:
     """Load YAML configuration for the bot."""
     with open(CONFIG_PATH) as f:
@@ -320,12 +330,14 @@ async def main() -> None:
         if best:
             score = best["score"]
             direction = best["direction"]
+            trade_side = direction_to_side(direction)
             env = best["env"]
             regime = best["regime"]
             name = best["name"]
         else:
             score = -1
             direction = "none"
+            trade_side = None
 
         if open_side:
             pnl_pct = ((current_price - entry_price) / entry_price) * (
@@ -362,7 +374,7 @@ async def main() -> None:
                     exchange,
                     ws_client,
                     config["symbol"],
-                    "sell" if open_side == "buy" else "buy",
+                    opposite_side(open_side),
                     sell_amount,
                     secrets["TELEGRAM_TOKEN"],
                     config["telegram"]["chat_id"],
@@ -464,7 +476,7 @@ async def main() -> None:
                 }
             )
             if paper_wallet:
-                paper_wallet.open(direction, size, current_price)
+                paper_wallet.open(trade_side, size, current_price)
         else:
             logger.info(
                 "Executing %s entry %s %.4f at %.4f",
@@ -478,7 +490,7 @@ async def main() -> None:
                 exchange,
                 ws_client,
                 config["symbol"],
-                direction,
+                trade_side,
                 size,
                 user["telegram_token"],
                 user["telegram_chat_id"],
@@ -488,13 +500,13 @@ async def main() -> None:
             )
             stop_price = current_price * (
                 1 - risk_manager.config.stop_loss_pct
-                if direction == "buy"
+                if trade_side == "buy"
                 else 1 + risk_manager.config.stop_loss_pct
             )
             stop_order = place_stop_order(
                 exchange,
                 config["symbol"],
-                "sell" if direction == "buy" else "buy",
+                "sell" if trade_side == "buy" else "buy",
                 size,
                 stop_price,
                 user["telegram_token"],
@@ -504,8 +516,8 @@ async def main() -> None:
             risk_manager.register_stop_order(stop_order)
             risk_manager.allocate_capital(name, size)
             if paper_wallet:
-                paper_wallet.open(direction, size, current_price)
-            open_side = direction
+                paper_wallet.open(trade_side, size, current_price)
+            open_side = trade_side
             entry_price = current_price
             position_size = size
             realized_pnl = 0.0
