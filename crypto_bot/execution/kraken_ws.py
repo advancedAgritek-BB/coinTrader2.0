@@ -1,7 +1,7 @@
 import json
 import threading
 import os
-from typing import Optional, Callable
+from typing import Optional, Callable, Union, List
 from datetime import datetime, timedelta, timezone
 
 import ccxt
@@ -147,8 +147,11 @@ class KrakenWSClient:
             for sub in self._private_subs:
                 self.private_ws.send(sub)
 
-    def subscribe_ticker(self, symbol: str) -> None:
+    def subscribe_ticker(self, symbol: Union[str, List[str]]) -> None:
+        """Subscribe to ticker updates for one or more symbols."""
         self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
         msg = {
             "method": "subscribe",
             "params": {"channel": "ticker", "symbol": symbol},
@@ -157,8 +160,11 @@ class KrakenWSClient:
         self._public_subs.append(data)
         self.public_ws.send(data)
 
-    def subscribe_trades(self, symbol: str) -> None:
+    def subscribe_trades(self, symbol: Union[str, List[str]]) -> None:
+        """Subscribe to trade updates for one or more symbols."""
         self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
         msg = {
             "method": "subscribe",
             "params": {"channel": "trade", "symbol": symbol},
@@ -167,18 +173,29 @@ class KrakenWSClient:
         self._public_subs.append(data)
         self.public_ws.send(data)
 
-    def subscribe_orders(self, symbol: str) -> None:
+    def subscribe_orders(self) -> None:
+        """Subscribe to private open order updates."""
+        """Subscribe to the authenticated ``openOrders`` channel."""
         self.connect_private()
         msg = {
             "method": "subscribe",
-            "params": {"channel": "openOrders", "token": self.token},
+            "params": {"channel": "open_orders", "token": self.token},
         }
         data = json.dumps(msg)
         self._private_subs.append(data)
         self.private_ws.send(data)
 
-    def add_order(self, symbol: str, side: str, volume: float, ordertype: str = "market") -> dict:
+    def add_order(
+        self,
+        symbol: Union[str, List[str]],
+        side: str,
+        volume: float,
+        ordertype: str = "market",
+    ) -> dict:
+        """Send an add_order request via the private websocket."""
         self.connect_private()
+        if isinstance(symbol, str):
+            symbol = [symbol]
         msg = {
             "method": "add_order",
             "params": {
@@ -188,6 +205,36 @@ class KrakenWSClient:
                 "volume": str(volume),
                 "token": self.token,
             },
+        }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+        return msg
+
+    def cancel_order(self, txid: str) -> dict:
+        self.connect_private()
+        msg = {
+            "method": "cancel_order",
+            "params": {"txid": txid, "token": self.token},
+        }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+        return msg
+
+    def cancel_all_orders(self) -> dict:
+        self.connect_private()
+        msg = {
+            "method": "cancel_all_orders",
+            "params": {"token": self.token},
+        }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+        return msg
+
+    def open_orders(self) -> dict:
+        self.connect_private()
+        msg = {
+            "method": "open_orders",
+            "params": {"token": self.token},
         }
         data = json.dumps(msg)
         self.private_ws.send(data)

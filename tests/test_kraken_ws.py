@@ -29,7 +29,7 @@ def test_reconnect_and_resubscribe(monkeypatch):
     client.subscribe_ticker("BTC/USD")
     assert created == [(PUBLIC_URL, "public")]
     expected = json.dumps(
-        {"method": "subscribe", "params": {"channel": "ticker", "symbol": "BTC/USD"}}
+        {"method": "subscribe", "params": {"channel": "ticker", "symbol": ["BTC/USD"]}}
     )
     assert client.public_ws.sent == [expected]
     assert client._public_subs[0] == expected
@@ -41,12 +41,12 @@ def test_reconnect_and_resubscribe(monkeypatch):
     assert client.public_ws is not old_ws
     assert client.public_ws.sent == [expected]
 
-    client.subscribe_orders("BTC/USD")
+    client.subscribe_orders()
     assert created[-1] == (PRIVATE_URL, "private")
     expected_private = json.dumps(
         {
             "method": "subscribe",
-            "params": {"channel": "openOrders", "token": client.token},
+            "params": {"channel": "open_orders", "token": client.token},
         }
     )
     assert client.private_ws.sent == [expected_private]
@@ -193,3 +193,33 @@ def test_token_refresh_updates_private_subs(monkeypatch):
 
     assert client._private_subs[0] == second_msg
     assert client.private_ws.sent[-1] == second_msg
+def _setup_private_client(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+    client.token = "token"
+    return client, ws
+
+
+def test_cancel_order(monkeypatch):
+    client, ws = _setup_private_client(monkeypatch)
+    msg = client.cancel_order("abc")
+    expected = {"method": "cancel_order", "params": {"txid": "abc", "token": "token"}}
+    assert msg == expected
+    assert ws.sent == [json.dumps(expected)]
+
+
+def test_cancel_all_orders(monkeypatch):
+    client, ws = _setup_private_client(monkeypatch)
+    msg = client.cancel_all_orders()
+    expected = {"method": "cancel_all_orders", "params": {"token": "token"}}
+    assert msg == expected
+    assert ws.sent == [json.dumps(expected)]
+
+
+def test_open_orders(monkeypatch):
+    client, ws = _setup_private_client(monkeypatch)
+    msg = client.open_orders()
+    expected = {"method": "open_orders", "params": {"token": "token"}}
+    assert msg == expected
+    assert ws.sent == [json.dumps(expected)]

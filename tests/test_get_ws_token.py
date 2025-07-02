@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import urllib.request
+import urllib.parse
 import time
 
 from crypto_bot.utils.kraken import get_ws_token, PATH
@@ -29,10 +30,11 @@ def test_get_ws_token(monkeypatch):
     token = get_ws_token('key', secret, otp='otp')
     assert token == 'abc'
     expected_nonce = '1000'
-    expected_body = json.dumps({'nonce': expected_nonce, 'otp': 'otp'})
+    expected_body = urllib.parse.urlencode({'nonce': expected_nonce, 'otp': 'otp'})
     message = PATH.encode() + hashlib.sha256((expected_nonce + expected_body).encode()).digest()
     expected_sig = base64.b64encode(hmac.new(base64.b64decode(secret), message, hashlib.sha512).digest()).decode()
     # urllib normalizes header keys to title case
     assert captured['headers']['Api-key'] == 'key'
     assert captured['headers']['Api-sign'] == expected_sig
-    assert json.loads(captured['body']) == {'nonce': expected_nonce, 'otp': 'otp'}
+    assert captured['headers']['Content-type'] == 'application/x-www-form-urlencoded'
+    assert captured['body'] == expected_body
