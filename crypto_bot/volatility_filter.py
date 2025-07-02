@@ -23,10 +23,17 @@ def fetch_funding_rate(symbol: str) -> float:
         except ValueError:
             return 0.0
     try:
-        resp = requests.get(f"{FUNDING_URL}/{symbol}", timeout=5)
+        if "?" in FUNDING_URL:
+            url = f"{FUNDING_URL}{symbol}"
+        else:
+            url = f"{FUNDING_URL}?pair={symbol}"
+        resp = requests.get(url, timeout=5)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, dict):
+            if "result" in data and isinstance(data["result"], dict):
+                first = next(iter(data["result"].values()), {})
+                return float(first.get("fr", 0.0))
             return float(data.get("rate", 0.0))
     except Exception as exc:
         logger.error("Failed to fetch funding rate: %s", exc)
