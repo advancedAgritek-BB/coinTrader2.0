@@ -71,6 +71,13 @@ before being written.
    # FERNET_KEY=optional_key_for_encryption
    ```
 
+### Twitter Sentiment API
+
+Set `TWITTER_SENTIMENT_URL` to the endpoint for the sentiment service used by
+`sentiment_filter.py`. If this variable is not provided, the bot defaults to the
+placeholder `https://api.example.com/twitter-sentiment`, so sentiment fetches
+will fail until a real URL is supplied.
+
 
 4. In `crypto_bot/config.yaml` set:
    For Kraken, optionally set tokens for the WebSocket API:
