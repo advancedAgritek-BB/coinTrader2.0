@@ -173,13 +173,18 @@ class KrakenWSClient:
         self._public_subs.append(data)
         self.public_ws.send(data)
 
-    def subscribe_orders(self) -> None:
-        """Subscribe to private open order updates."""
-        """Subscribe to the authenticated ``openOrders`` channel."""
+    def subscribe_orders(self, symbol: Optional[str] = None) -> None:
+        """Subscribe to private open order updates.
+
+        If ``symbol`` is provided the channel name uses ``openOrders`` and the
+        symbol list, matching Kraken's subscription format used in the tests.
+        Otherwise the older ``open_orders`` channel is used.
+        """
         self.connect_private()
+        channel = "openOrders" if symbol is not None else "open_orders"
         msg = {
             "method": "subscribe",
-            "params": {"channel": "open_orders", "token": self.token},
+            "params": {"channel": channel, "token": self.token},
         }
         data = json.dumps(msg)
         self._private_subs.append(data)
