@@ -17,3 +17,24 @@ def test_too_hot(monkeypatch):
     assert too_hot("BTCUSDT", 0.05) is True
 
 
+def test_funding_url_env(monkeypatch):
+    monkeypatch.setenv("FUNDING_RATE_URL", "https://example.com")
+    called = {}
+
+    def fake_get(url, timeout=5):
+        called["url"] = url
+
+        class FakeResp:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"rate": 0.01}
+
+        return FakeResp()
+
+    monkeypatch.setattr("crypto_bot.volatility_filter.requests.get", fake_get)
+    assert too_hot("ETHUSD", 0.1) is False
+    assert called["url"] == "https://example.com/ETHUSD"
+
+

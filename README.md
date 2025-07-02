@@ -78,6 +78,13 @@ Set `TWITTER_SENTIMENT_URL` to the endpoint for the sentiment service used by
 placeholder `https://api.example.com/twitter-sentiment`, so sentiment fetches
 will fail until a real URL is supplied.
 
+### Funding Rate API
+
+Set `FUNDING_RATE_URL` to the endpoint used by `volatility_filter.py` when
+fetching perpetual funding rates. Without this variable the bot falls back to
+the placeholder `https://funding.example.com` and will log errors until a real
+URL is supplied.
+
 
 4. In `crypto_bot/config.yaml` set:
    For Kraken, optionally set tokens for the WebSocket API:
