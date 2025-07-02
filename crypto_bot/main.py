@@ -149,7 +149,10 @@ async def main() -> None:
         mode = state["mode"]
 
         if config.get("optimization", {}).get("enabled"):
-            if time.time() - last_optimize >= config["optimization"].get("interval_days", 7) * 86400:
+            if (
+                time.time() - last_optimize
+                >= config["optimization"].get("interval_days", 7) * 86400
+            ):
                 optimize_strategies()
                 last_optimize = time.time()
 
@@ -157,7 +160,9 @@ async def main() -> None:
             await asyncio.sleep(1)
             continue
 
-        balances = await asyncio.to_thread(check_wallet_balances, user.get("wallet_address", ""))
+        balances = await asyncio.to_thread(
+            check_wallet_balances, user.get("wallet_address", "")
+        )
         for token in detect_non_trade_tokens(balances):
             amount = balances[token]
             logger.info("Converting %s %s to USDC", amount, token)
@@ -173,7 +178,10 @@ async def main() -> None:
             )
 
         if rotator.config.get("enabled"):
-            if time.time() - last_rotation >= rotator.config.get("interval_days", 7) * 86400:
+            if (
+                time.time() - last_rotation
+                >= rotator.config.get("interval_days", 7) * 86400
+            ):
                 bal = await asyncio.to_thread(exchange.fetch_balance)
                 holdings = {
                     k: (v.get("total") if isinstance(v, dict) else v)
@@ -194,10 +202,14 @@ async def main() -> None:
 
         for sym in config.get("symbols", [config.get("symbol")]):
             if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
-                data = await exchange.watch_ohlcv(sym, timeframe=config["timeframe"], limit=100)
+                data = await exchange.watch_ohlcv(
+                    sym, timeframe=config["timeframe"], limit=100
+                )
             else:
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-                    data = await exchange.fetch_ohlcv(sym, timeframe=config["timeframe"], limit=100)
+                    data = await exchange.fetch_ohlcv(
+                        sym, timeframe=config["timeframe"], limit=100
+                    )
                 else:
                     data = await asyncio.to_thread(
                         exchange.fetch_ohlcv,
@@ -230,8 +242,12 @@ async def main() -> None:
             if params_file.exists():
                 params = json.loads(params_file.read_text())
                 if name_sym in params:
-                    risk_manager.config.stop_loss_pct = params[name_sym]["stop_loss_pct"]
-                    risk_manager.config.take_profit_pct = params[name_sym]["take_profit_pct"]
+                    risk_manager.config.stop_loss_pct = params[name_sym][
+                        "stop_loss_pct"
+                    ]
+                    risk_manager.config.take_profit_pct = params[name_sym][
+                        "take_profit_pct"
+                    ]
 
             score_sym, direction_sym = await evaluate_async(strategy_fn, df_sym, config)
             logger.info("Signal %s %.2f %s", sym, score_sym, direction_sym)
@@ -251,10 +267,14 @@ async def main() -> None:
         if open_side and df_current is None:
             # ensure current market data is loaded
             if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
-                data = await exchange.watch_ohlcv(config["symbol"], timeframe=config["timeframe"], limit=100)
+                data = await exchange.watch_ohlcv(
+                    config["symbol"], timeframe=config["timeframe"], limit=100
+                )
             else:
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-                    data = await exchange.fetch_ohlcv(config["symbol"], timeframe=config["timeframe"], limit=100)
+                    data = await exchange.fetch_ohlcv(
+                        config["symbol"], timeframe=config["timeframe"], limit=100
+                    )
                 else:
                     data = await asyncio.to_thread(
                         exchange.fetch_ohlcv,
@@ -369,6 +389,11 @@ async def main() -> None:
                     risk_manager.update_stop_order(position_size)
 
         if score < config["signal_threshold"] or direction == "none":
+            logger.info(
+                "Skipping trade - score %.2f below threshold %.2f or no direction",
+                score,
+                config["signal_threshold"],
+            )
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
 
