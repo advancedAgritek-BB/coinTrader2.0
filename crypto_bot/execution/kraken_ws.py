@@ -49,6 +49,19 @@ class KrakenWSClient:
         self._public_subs = []
         self._private_subs = []
 
+    def _regenerate_private_subs(self) -> None:
+        """Update stored private subscription messages with the current token."""
+        updated = []
+        for sub in self._private_subs:
+            try:
+                msg = json.loads(sub)
+                if "params" in msg:
+                    msg["params"]["token"] = self.token
+                updated.append(json.dumps(msg))
+            except Exception:
+                updated.append(sub)
+        self._private_subs = updated
+
     def get_token(self) -> str:
         """Retrieve WebSocket authentication token via Kraken REST API."""
         if self.token:
@@ -120,14 +133,19 @@ class KrakenWSClient:
             self.public_ws = self._start_ws(PUBLIC_URL, conn_type="public")
 
     def connect_private(self) -> None:
+        prev_token = self.token
         if self.token_expired():
             self.token = None
         if not self.token:
             self.get_token()
+        token_changed = self.token != prev_token
         if not self.private_ws:
-            if not self.token:
-                self.get_token()
             self.private_ws = self._start_ws(PRIVATE_URL, conn_type="private")
+            token_changed = True
+        if token_changed:
+            self._regenerate_private_subs()
+            for sub in self._private_subs:
+                self.private_ws.send(sub)
 
     def subscribe_ticker(self, symbol: str) -> None:
         self.connect_public()
@@ -183,8 +201,11 @@ class KrakenWSClient:
             for sub in self._public_subs:
                 self.public_ws.send(sub)
         else:
+            if self.token_expired():
+                self.token = None
             if not self.token:
                 self.get_token()
+            self._regenerate_private_subs()
             self.private_ws = self._start_ws(PRIVATE_URL, conn_type="private")
             for sub in self._private_subs:
                 self.private_ws.send(sub)
