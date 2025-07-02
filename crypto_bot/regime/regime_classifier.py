@@ -1,9 +1,11 @@
 import pandas as pd
-import numpy as np
 import ta
 
 
 def classify_regime(df: pd.DataFrame) -> str:
+    """Classify market regime based on technical indicators."""
+    if len(df) < 14:
+        return "unknown"
     """Classify market regime based on technical indicators.
 
     The function requires at least 20 rows of data to reliably compute
