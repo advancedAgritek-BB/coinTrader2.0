@@ -27,6 +27,7 @@ class RiskConfig:
     max_funding_rate: float = 1.0
     symbol: str = ""
     trade_size_pct: float = 0.1
+    volume_threshold_ratio: float = 0.5
     strategy_allocation: dict | None = None
 
 
@@ -106,7 +107,7 @@ class RiskManager:
             return False, reason
 
         vol_mean = df['volume'].rolling(20).mean().iloc[-1]
-        if df['volume'].iloc[-1] < vol_mean * 0.5:
+        if df['volume'].iloc[-1] < vol_mean * self.config.volume_threshold_ratio:
             reason = f"Volume {df['volume'].iloc[-1]:.4f} below mean {vol_mean:.4f}"
             logger.info(reason)
             return False, reason
