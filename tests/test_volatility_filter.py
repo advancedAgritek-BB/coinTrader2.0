@@ -37,6 +37,5 @@ def test_funding_url_env(monkeypatch):
     monkeypatch.setattr("crypto_bot.volatility_filter.requests.get", fake_get)
     assert too_hot("ETHUSD", 0.1) is False
     assert called["url"] == "https://example.com?pair=ETHUSD"
-    assert called["url"] == "https://example.com/ETHUSD"
 
 
