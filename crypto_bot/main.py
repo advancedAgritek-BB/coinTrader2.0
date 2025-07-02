@@ -260,7 +260,7 @@ async def main() -> None:
             allowed = risk_manager.allow_trade(df_sym)
             if not allowed:
                 logger.info(
-                    "Trade not allowed for %s \u2013 see risk log for details", sym
+                    "Trade not allowed for %s \u2013 see bot.log for details", sym
                 )
                 continue
 
