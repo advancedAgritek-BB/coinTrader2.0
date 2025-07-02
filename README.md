@@ -132,6 +132,16 @@ When `use_websocket` is enabled the bot relies on `ccxt.pro` for realtime
 streaming data. Install it alongside the other requirements or disable
 websockets if you do not have access to `ccxt.pro`.
 
+Example usage for Kraken WebSockets:
+
+```python
+from crypto_bot.execution.kraken_ws import KrakenWSClient
+
+ws = KrakenWSClient()
+ws.subscribe_orders(["BTC/USD"])  # open_orders channel
+ws.add_order(["BTC/USD"], "buy", 0.01)
+ws.cancel_order("OABCDEF", ["BTC/USD"])
+```
 
 The Kraken WebSocket client automatically reconnects if the connection drops and
 resubscribes to any previously requested channels.  Trading commands use the new
