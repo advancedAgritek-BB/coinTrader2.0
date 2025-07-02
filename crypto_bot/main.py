@@ -158,6 +158,11 @@ async def main() -> None:
     while True:
         mode = state["mode"]
 
+        total_pairs = 0
+        signals_generated = 0
+        trades_executed = 0
+        trades_skipped = 0
+
         if config.get("optimization", {}).get("enabled"):
             if (
                 time.time() - last_optimize
@@ -211,6 +216,7 @@ async def main() -> None:
         df_current = None
 
         for sym in config.get("symbols", [config.get("symbol")]):
+            total_pairs += 1
             try:
                 if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
                     data = await exchange.watch_ohlcv(
@@ -272,12 +278,16 @@ async def main() -> None:
 
             score_sym, direction_sym = await evaluate_async(strategy_fn, df_sym, config)
             logger.info("Signal %s %.2f %s", sym, score_sym, direction_sym)
+            if direction_sym != "none":
+                signals_generated += 1
 
             allowed, reason = risk_manager.allow_trade(df_sym)
             if not allowed:
                 logger.info(
                     "Trade not allowed for %s \u2013 %s", sym, reason
                 )
+                if "Volume" in reason:
+                    trades_skipped += 1
                 continue
 
             if direction_sym != "none" and score_sym > best_score:
@@ -431,6 +441,9 @@ async def main() -> None:
                 score,
                 config["signal_threshold"],
             )
+            logger.info(
+                f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, {trades_executed} trades executed, {trades_skipped} skipped due to volume."
+            )
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
 
@@ -447,6 +460,9 @@ async def main() -> None:
         size = risk_manager.position_size(score, balance)
         if not risk_manager.can_allocate(name, size, balance):
             logger.info("Capital cap reached for %s, skipping", name)
+            logger.info(
+                f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, {trades_executed} trades executed, {trades_skipped} skipped due to volume."
+            )
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
 
@@ -528,6 +544,7 @@ async def main() -> None:
             current_strategy = name
             active_strategy = name
             logger.info("Trade opened at %.4f", entry_price)
+            trades_executed += 1
 
         key = f"{env}_{regime}"
         stats.setdefault(key, {"trades": 0})
@@ -535,6 +552,9 @@ async def main() -> None:
         stats_file.write_text(json.dumps(stats))
         logger.info("Updated trade stats %s", stats[key])
 
+        logger.info(
+            f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, {trades_executed} trades executed, {trades_skipped} skipped due to volume."
+        )
         await asyncio.sleep(config["loop_interval_minutes"] * 60)
 
 
