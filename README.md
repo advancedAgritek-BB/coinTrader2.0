@@ -12,6 +12,7 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 * Telegram notifications and optional Google Sheets logging
 * Capital tracker, sentiment filter and tax logger helpers
 * Solana mempool monitor to avoid swaps when fees spike
+* Paper trading wallet for dry-run simulation
 * Live trading or dry-run simulation
 * Web dashboard with watchdog thread and realtime log view
 * Backtesting module with PnL, drawdown and Sharpe metrics
@@ -30,6 +31,7 @@ On-chain DEX execution submits real transactions when not running in dry-run mod
    ```bash
    python -m crypto_bot.main
    ```
+   When dry-run mode is selected you will be prompted for the starting USDT balance.
    Or launch the web dashboard with:
    ```bash
    python -m frontend.app

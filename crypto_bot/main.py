@@ -39,6 +39,7 @@ from crypto_bot.fund_manager import (
     detect_non_trade_tokens,
     auto_convert_funds,
 )
+from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.utils.performance_logger import log_performance
 from crypto_bot.utils.market_loader import load_kraken_symbols
 
@@ -94,6 +95,14 @@ async def main() -> None:
     risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
     risk_config = RiskConfig(**risk_params)
     risk_manager = RiskManager(risk_config)
+
+    paper_wallet = None
+    if config.get("execution_mode") == "dry_run":
+        try:
+            start_bal = float(input("Enter paper trading balance in USDT: "))
+        except Exception:
+            start_bal = 1000.0
+        paper_wallet = PaperWallet(start_bal)
 
     open_side = None
     entry_price = None
@@ -274,6 +283,13 @@ async def main() -> None:
             pnl_pct = ((current_price - entry_price) / entry_price) * (
                 1 if open_side == "buy" else -1
             )
+            if paper_wallet:
+                unreal = paper_wallet.unrealized(current_price)
+                logger.info(
+                    "Paper balance %.2f USDT (Unrealized %.2f)",
+                    paper_wallet.balance + unreal,
+                    unreal,
+                )
             if pnl_pct >= config["exit_strategy"]["min_gain_to_trail"]:
                 if current_price > highest_price:
                     highest_price = current_price
@@ -306,6 +322,8 @@ async def main() -> None:
                     use_websocket=config.get("use_websocket", False),
                     config=config,
                 )
+                if paper_wallet:
+                    paper_wallet.close(sell_amount, current_price)
                 realized_pnl += (
                     (current_price - entry_price)
                     * sell_amount
@@ -324,6 +342,10 @@ async def main() -> None:
                             "exit_time": datetime.utcnow().isoformat(),
                         }
                     )
+                    if paper_wallet:
+                        logger.info(
+                            "Paper balance closed: %.2f USDT", paper_wallet.balance
+                        )
                     open_side = None
                     entry_price = None
                     entry_time = None
@@ -352,7 +374,7 @@ async def main() -> None:
                 bal = await asyncio.to_thread(exchange.fetch_balance)
             balance = bal["USDT"]["free"]
         else:
-            balance = 1000
+            balance = paper_wallet.balance if paper_wallet else 0.0
         if best:
             risk_manager.config.symbol = best["symbol"]
         size = risk_manager.position_size(score, balance)
@@ -379,6 +401,8 @@ async def main() -> None:
                     "dry_run": config["execution_mode"] == "dry_run",
                 }
             )
+            if paper_wallet:
+                paper_wallet.open(direction, size, current_price)
         else:
             logger.info("Executing entry %s %.4f", direction, size)
             config["symbol"] = best["symbol"] if best else config["symbol"]
@@ -411,6 +435,8 @@ async def main() -> None:
             )
             risk_manager.register_stop_order(stop_order)
             risk_manager.allocate_capital(name, size)
+            if paper_wallet:
+                paper_wallet.open(direction, size, current_price)
             open_side = direction
             entry_price = current_price
             position_size = size
