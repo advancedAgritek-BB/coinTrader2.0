@@ -15,6 +15,7 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 * Paper trading wallet for dry-run simulation
 * Live trading or dry-run simulation
 * Web dashboard with watchdog thread and realtime log view
+* Trade history page highlighting buys in green and sells in red
 * Backtesting module with PnL, drawdown and Sharpe metrics
 
 On-chain DEX execution submits real transactions when not running in dry-run mode.

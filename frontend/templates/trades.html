@@ -20,6 +20,11 @@ async function fetchTrades() {
   tbody.innerHTML = '';
   trades.slice(-100).forEach(t => {
     const row = document.createElement('tr');
+    if (t.side === 'buy') {
+      row.classList.add('table-success');
+    } else if (t.side === 'sell') {
+      row.classList.add('table-danger');
+    }
     row.innerHTML = `<td>${t.symbol || ''}</td><td>${t.side || ''}</td><td>${t.amount || ''}</td><td>${t.price || ''}</td><td>${t.timestamp || ''}</td>`;
     tbody.appendChild(row);
   });
