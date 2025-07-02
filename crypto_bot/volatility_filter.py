@@ -23,6 +23,8 @@ def fetch_funding_rate(symbol: str) -> float:
         except ValueError:
             return 0.0
     try:
+        funding_url = os.getenv("FUNDING_RATE_URL", DEFAULT_FUNDING_URL)
+        resp = requests.get(f"{funding_url}/{symbol}", timeout=5)
         base_url = os.getenv("FUNDING_RATE_URL", FUNDING_URL)
         resp = requests.get(f"{base_url}/{symbol}", timeout=5)
         funding_url = os.getenv("FUNDING_RATE_URL", DEFAULT_FUNDING_URL)
