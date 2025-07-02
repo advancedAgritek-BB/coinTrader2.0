@@ -11,7 +11,7 @@ from crypto_bot.utils.logger import setup_logger
 
 logger = setup_logger(__name__, "crypto_bot/logs/volatility.log")
 
-FUNDING_URL = "https://funding.example.com"
+FUNDING_URL = os.getenv("FUNDING_RATE_URL", "https://funding.example.com")
 
 
 def fetch_funding_rate(symbol: str) -> float:
