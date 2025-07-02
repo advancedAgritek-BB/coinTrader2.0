@@ -3,22 +3,27 @@ from pathlib import Path
 
 
 def setup_logger(name: str, log_file: str) -> logging.Logger:
-    """Return a logger configured to write to ``log_file``.
-
-    If the logger already has a ``FileHandler`` for the same file, no new
-    handler is added.
-    """
+    """Return a logger configured to write to ``log_file`` and stdout."""
 
     Path(log_file).parent.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
 
-    for handler in logger.handlers:
-        if isinstance(handler, logging.FileHandler) and Path(getattr(handler, "baseFilename", "")) == Path(log_file):
-            return logger
+    fmt = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
-    fh = logging.FileHandler(log_file)
-    fmt = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    fh.setFormatter(fmt)
-    logger.addHandler(fh)
+    file_handler_exists = any(
+        isinstance(h, logging.FileHandler)
+        and Path(getattr(h, "baseFilename", "")) == Path(log_file)
+        for h in logger.handlers
+    )
+    if not file_handler_exists:
+        fh = logging.FileHandler(log_file)
+        fh.setFormatter(fmt)
+        logger.addHandler(fh)
+
+    if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
+        ch = logging.StreamHandler()
+        ch.setFormatter(fmt)
+        logger.addHandler(ch)
+
     return logger
