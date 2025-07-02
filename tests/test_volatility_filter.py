@@ -1,5 +1,5 @@
 import pandas as pd
-from crypto_bot.volatility_filter import too_flat, too_hot
+from crypto_bot.volatility_filter import fetch_funding_rate, too_flat, too_hot
 
 
 def test_too_flat_returns_true():
@@ -18,7 +18,11 @@ def test_too_hot(monkeypatch):
 
 
 def test_funding_url_env(monkeypatch):
-    monkeypatch.setenv("FUNDING_RATE_URL", "https://example.com")
+    base = (
+        "https://futures.kraken.com/derivatives/api/v3/"
+        "historical-funding-rates?symbol="
+    )
+    monkeypatch.setenv("FUNDING_RATE_URL", base)
     called = {}
 
     def fake_get(url, timeout=5):
@@ -29,12 +33,13 @@ def test_funding_url_env(monkeypatch):
                 pass
 
             def json(self):
-                return {"result": {"ETHUSD": {"fr": 0.01}}}
+                return {"rates": [{"relativeFundingRate": 0.01}, {"relativeFundingRate": 0.02}]}
 
         return FakeResp()
 
     monkeypatch.setattr("crypto_bot.volatility_filter.requests.get", fake_get)
-    assert too_hot("ETHUSD", 0.1) is False
-    assert called["url"] == "https://example.com?pair=ETHUSD"
+    rate = fetch_funding_rate("ETHUSD")
+    assert rate == 0.02
+    assert called["url"] == base + "ETHUSD"
 
 
