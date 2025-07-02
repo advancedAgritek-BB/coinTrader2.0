@@ -11,7 +11,7 @@ from crypto_bot.utils.logger import setup_logger
 
 logger = setup_logger(__name__, "crypto_bot/logs/volatility.log")
 
-FUNDING_URL = os.getenv("FUNDING_RATE_URL", "https://funding.example.com")
+DEFAULT_FUNDING_URL = "https://funding.example.com"
 
 
 def fetch_funding_rate(symbol: str) -> float:
@@ -23,7 +23,8 @@ def fetch_funding_rate(symbol: str) -> float:
         except ValueError:
             return 0.0
     try:
-        resp = requests.get(f"{FUNDING_URL}/{symbol}", timeout=5)
+        funding_url = os.getenv("FUNDING_RATE_URL", DEFAULT_FUNDING_URL)
+        resp = requests.get(f"{funding_url}/{symbol}", timeout=5)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, dict):

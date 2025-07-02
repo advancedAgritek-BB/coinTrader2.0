@@ -164,6 +164,28 @@ refresh live and review the trade stats collected in
 `crypto_bot/logs/strategy_stats.json`. When the bot is stopped a form
 lets you select the execution mode (dry run or live) before launching.
 
+## Log Files
+
+All runtime information is written under `crypto_bot/logs`. Important files
+include:
+
+- `bot.log` – main log file containing startup events, strategy choices and all
+  decision messages.
+- `trades.csv` – CSV export of every executed trade used by the dashboard and
+  backtester.
+- `strategy_stats.json` – summary statistics of win rate, PnL and other metrics.
+
+Other helpers create logs like `execution.log` or `risk.log` in the same
+directory when enabled. Since decision details now appear in `bot.log` you can
+follow the router and risk manager actions in one place. Example snippet:
+
+```text
+2024-02-12 15:04:01 - INFO - Starting bot
+2024-02-12 15:04:02 - INFO - Strategy router selected grid_bot for BTC/USDT
+2024-02-12 15:04:10 - INFO - Placing buy order amount 0.1 price 22000
+2024-02-12 15:04:15 - INFO - Decision: take profit triggered at 22400
+```
+
 ## Solana Mempool Monitoring
 
 The bot can monitor Solana priority fees to avoid swaps when congestion
