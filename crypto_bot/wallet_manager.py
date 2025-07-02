@@ -79,12 +79,28 @@ def prompt_user() -> dict:
         exchange = "coinbase"
     data["exchange"] = exchange
 
-    # Collect API credentials for both exchanges using env vars when available
-    data["coinbase_api_key"] = _env_or_prompt("COINBASE_API_KEY", "Enter Coinbase API key: ")
-    data["coinbase_api_secret"] = _env_or_prompt("COINBASE_API_SECRET", "Enter Coinbase API secret: ")
-    data["coinbase_passphrase"] = _env_or_prompt("API_PASSPHRASE", "Enter Coinbase API passphrase: ")
-    data["kraken_api_key"] = _env_or_prompt("KRAKEN_API_KEY", "Enter Kraken API key: ")
-    data["kraken_api_secret"] = _env_or_prompt("KRAKEN_API_SECRET", "Enter Kraken API secret: ")
+    if exchange == "coinbase":
+        data["coinbase_api_key"] = _env_or_prompt(
+            "COINBASE_API_KEY", "Enter Coinbase API key: "
+        )
+        data["coinbase_api_secret"] = _env_or_prompt(
+            "COINBASE_API_SECRET", "Enter Coinbase API secret: "
+        )
+        data["coinbase_passphrase"] = _env_or_prompt(
+            "API_PASSPHRASE", "Enter Coinbase API passphrase: "
+        )
+        data["kraken_api_key"] = os.getenv("KRAKEN_API_KEY", "")
+        data["kraken_api_secret"] = os.getenv("KRAKEN_API_SECRET", "")
+    else:
+        data["kraken_api_key"] = _env_or_prompt(
+            "KRAKEN_API_KEY", "Enter Kraken API key: "
+        )
+        data["kraken_api_secret"] = _env_or_prompt(
+            "KRAKEN_API_SECRET", "Enter Kraken API secret: "
+        )
+        data["coinbase_api_key"] = os.getenv("COINBASE_API_KEY", "")
+        data["coinbase_api_secret"] = os.getenv("COINBASE_API_SECRET", "")
+        data["coinbase_passphrase"] = os.getenv("API_PASSPHRASE", "")
 
     data["telegram_token"] = _env_or_prompt("TELEGRAM_TOKEN", "Enter Telegram bot token: ")
     data["telegram_chat_id"] = _env_or_prompt("TELEGRAM_CHAT_ID", "Enter Telegram chat id: ")
@@ -129,5 +145,16 @@ def load_or_create() -> dict:
             if val is not None:
                 creds[key] = val
                 break
+
+    # expose selected exchange credentials via generic env vars for ccxt
+    exch = creds.get("exchange")
+    if exch == "coinbase":
+        os.environ["API_KEY"] = creds.get("coinbase_api_key", "")
+        os.environ["API_SECRET"] = creds.get("coinbase_api_secret", "")
+        os.environ["API_PASSPHRASE"] = creds.get("coinbase_passphrase", "")
+    elif exch == "kraken":
+        os.environ["API_KEY"] = creds.get("kraken_api_key", "")
+        os.environ["API_SECRET"] = creds.get("kraken_api_secret", "")
+        os.environ.pop("API_PASSPHRASE", None)
 
     return creds
