@@ -11,7 +11,9 @@ def test_allow_trade_rejects_low_volume():
     }
     df = pd.DataFrame(data)
     manager = RiskManager(RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01))
-    assert manager.allow_trade(df) is False
+    allowed, reason = manager.allow_trade(df)
+    assert not allowed
+    assert "Volume" in reason
 
 
 def test_stop_order_management():

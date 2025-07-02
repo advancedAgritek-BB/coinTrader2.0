@@ -72,7 +72,7 @@ class RiskManager:
         logger.info("Calculated position size: %.4f", size)
         return size
 
-    def allow_trade(self, df: Any) -> bool:
+    def allow_trade(self, df: Any) -> tuple[bool, str]:
         """Assess whether market conditions merit taking a trade.
 
         Parameters
@@ -82,40 +82,43 @@ class RiskManager:
 
         Returns
         -------
-        bool
-            ``True`` if volume and volatility meet minimum thresholds.
+        tuple[bool, str]
+            ``True``/``False`` along with the reason for the decision.
         """
         if len(df) < 20:
-            logger.info("Not enough data to trade")
-            return False
+            reason = "Not enough data to trade"
+            logger.info(reason)
+            return False, reason
 
         if too_bearish(self.config.min_fng, self.config.min_sentiment):
-            logger.info("Sentiment too bearish")
-            return False
+            reason = "Sentiment too bearish"
+            logger.info(reason)
+            return False, reason
 
         if too_flat(df, self.config.min_atr_pct):
-            logger.info("Market volatility too low")
-            return False
+            reason = "Market volatility too low"
+            logger.info(reason)
+            return False, reason
 
         if self.config.symbol and too_hot(self.config.symbol, self.config.max_funding_rate):
-            logger.info("Funding rate too high")
-            return False
+            reason = "Funding rate too high"
+            logger.info(reason)
+            return False, reason
 
         vol_mean = df['volume'].rolling(20).mean().iloc[-1]
         if df['volume'].iloc[-1] < vol_mean * 0.5:
-            logger.info(
-                "Volume %.4f below mean %.4f",
-                df['volume'].iloc[-1],
-                vol_mean,
-            )
-            return False
+            reason = f"Volume {df['volume'].iloc[-1]:.4f} below mean {vol_mean:.4f}"
+            logger.info(reason)
+            return False, reason
         vol_std = df['close'].rolling(20).std().iloc[-1]
         if vol_std < df['close'].iloc[-20:-1].std() * 0.5:
-            logger.info("Volatility too low")
-            return False
+            reason = "Volatility too low"
+            logger.info(reason)
+            return False, reason
         self.boost = boost_factor(self.config.bull_fng, self.config.bull_sentiment)
-        logger.info("Trade allowed (boost %.2f)", self.boost)
-        return True
+        reason = f"Trade allowed (boost {self.boost:.2f})"
+        logger.info(reason)
+        return True, reason
 
     def register_stop_order(self, order: dict) -> None:
         """Store the protective stop order."""
