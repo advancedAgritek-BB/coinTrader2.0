@@ -33,6 +33,9 @@ def fetch_funding_rate(symbol: str) -> float:
                 first = next(iter(data["result"].values()), {})
                 return float(first.get("fr", 0.0))
             if "rates" in data and isinstance(data["rates"], list) and data["rates"]:
+                first = data["rates"][0]
+                if isinstance(first, dict):
+                    return float(first.get("relativeFundingRate", 0.0))
                 last = data["rates"][-1]
                 if isinstance(last, dict):
                     return float(last.get("relativeFundingRate", 0.0))
