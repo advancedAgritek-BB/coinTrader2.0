@@ -62,7 +62,12 @@ class TelegramBotUI:
 
     def run_async(self) -> None:
         """Start polling in a background thread."""
-        self.thread = threading.Thread(target=self.app.run_polling, daemon=True)
+        def run() -> None:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            self.app.run_polling()
+
+        self.thread = threading.Thread(target=run, daemon=True)
         self.thread.start()
 
     def _run_scheduler(self) -> None:
