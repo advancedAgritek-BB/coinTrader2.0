@@ -227,13 +227,18 @@ async def main() -> None:
                 df_current = df_sym
 
             risk_manager.config.symbol = sym
-            if not risk_manager.allow_trade(df_sym):
-                continue
 
             regime_sym = classify_regime(df_sym)
+            logger.info("Market regime for %s classified as %s", sym, regime_sym)
             env_sym = mode if mode != "auto" else "cex"
             strategy_fn = route(regime_sym, env_sym)
             name_sym = strategy_name(regime_sym, env_sym)
+            logger.info(
+                "Using strategy %s for %s in %s mode",
+                name_sym,
+                sym,
+                env_sym,
+            )
 
             if open_side is None and in_cooldown(sym, name_sym):
                 continue
@@ -251,6 +256,13 @@ async def main() -> None:
 
             score_sym, direction_sym = await evaluate_async(strategy_fn, df_sym, config)
             logger.info("Signal %s %.2f %s", sym, score_sym, direction_sym)
+
+            allowed = risk_manager.allow_trade(df_sym)
+            if not allowed:
+                logger.info(
+                    "Trade not allowed for %s \u2013 see risk log for details", sym
+                )
+                continue
 
             if direction_sym != "none" and score_sym > best_score:
                 best_score = score_sym
@@ -389,8 +401,10 @@ async def main() -> None:
                     risk_manager.update_stop_order(position_size)
 
         if score < config["signal_threshold"] or direction == "none":
+            sym_to_log = best["symbol"] if best else config["symbol"]
             logger.info(
-                "Skipping trade - score %.2f below threshold %.2f or no direction",
+                "Skipping trade for %s \u2013 score %.2f below threshold %.2f or direction none",
+                sym_to_log,
                 score,
                 config["signal_threshold"],
             )
@@ -414,6 +428,13 @@ async def main() -> None:
             continue
 
         if env == "onchain":
+            logger.info(
+                "Executing %s entry %s %.4f at %.4f",
+                name,
+                direction,
+                size,
+                current_price,
+            )
             await execute_swap(
                 "SOL",
                 "USDC",
@@ -434,7 +455,13 @@ async def main() -> None:
             if paper_wallet:
                 paper_wallet.open(direction, size, current_price)
         else:
-            logger.info("Executing entry %s %.4f", direction, size)
+            logger.info(
+                "Executing %s entry %s %.4f at %.4f",
+                name,
+                direction,
+                size,
+                current_price,
+            )
             config["symbol"] = best["symbol"] if best else config["symbol"]
             await cex_trade_async(
                 exchange,
