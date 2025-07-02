@@ -67,6 +67,11 @@ async def main() -> None:
     os.environ.update(secrets)
 
     user = load_or_create()
+
+    # allow user-configured exchange to override YAML setting
+    if user.get("exchange"):
+        config["exchange"] = user["exchange"]
+
     exchange, ws_client = get_exchange(config)
 
     if config.get("scan_markets", False) and not config.get("symbols"):
