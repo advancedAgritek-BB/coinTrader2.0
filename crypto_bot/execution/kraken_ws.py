@@ -149,7 +149,8 @@ class KrakenWSClient:
         self._public_subs.append(data)
         self.public_ws.send(data)
 
-    def subscribe_orders(self, symbol: str) -> None:
+    def subscribe_orders(self) -> None:
+        """Subscribe to the authenticated ``openOrders`` channel."""
         self.connect_private()
         msg = {
             "method": "subscribe",
