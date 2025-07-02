@@ -39,7 +39,7 @@ def test_check_wallet_balances_rpc(monkeypatch):
         def __init__(self, url):
             self.url = url
 
-        def get_token_accounts_by_owner(self, owner, program_id=None, encoding=None):
+        def get_token_accounts_by_owner(self, owner, opts):
             return {
                 "result": {
                     "value": [
@@ -71,12 +71,27 @@ def test_check_wallet_balances_rpc(monkeypatch):
                 }
             }
 
+    class PublicKey(str):
+        pass
+
+    class TokenAccountOpts:
+        def __init__(self, program_id=None, encoding=None):
+            self.program_id = program_id
+            self.encoding = encoding
+
     import sys, types
 
     sys.modules.setdefault("solana.rpc.api", types.ModuleType("solana.rpc.api"))
     monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
+    sys.modules.setdefault("solana.publickey", types.ModuleType("solana.publickey"))
+    monkeypatch.setattr(sys.modules["solana.publickey"], "PublicKey", PublicKey, raising=False)
+    sys.modules.setdefault("solana.rpc.types", types.ModuleType("solana.rpc.types"))
+    monkeypatch.setattr(sys.modules["solana.rpc.types"], "TokenAccountOpts", TokenAccountOpts, raising=False)
+
     import crypto_bot.fund_manager as fm
     monkeypatch.setattr(fm, "Client", Client, raising=False)
+    monkeypatch.setattr(fm, "PublicKey", PublicKey, raising=False)
+    monkeypatch.setattr(fm, "TokenAccountOpts", TokenAccountOpts, raising=False)
     monkeypatch.delenv("FAKE_BALANCES", raising=False)
 
     balances = check_wallet_balances("addr")
