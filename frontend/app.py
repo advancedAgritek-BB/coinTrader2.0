@@ -284,6 +284,15 @@ def trades_tail():
     return jsonify({'trades': trades, 'errors': errors})
 
 
+@app.route('/trades_data')
+def trades_data():
+    """Return full trade history as JSON records."""
+    if TRADES_FILE.exists():
+        df = log_reader._read_trades(TRADES_FILE)
+        return jsonify(df.to_dict(orient='records'))
+    return jsonify([])
+
+
 if __name__ == '__main__':
     watch_thread = threading.Thread(target=watch_bot, daemon=True)
     watch_thread.start()
