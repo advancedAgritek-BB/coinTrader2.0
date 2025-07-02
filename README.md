@@ -58,14 +58,17 @@ before being written.
 1. Create API keys on **Coinbase Advanced Trade** or **Kraken**.
 2. Run `python crypto_bot/wallet_manager.py` to generate `user_config.yaml`. Any
    credentials found in the environment will be used automatically.
-3. Fill out `crypto_bot/.env` with your API keys and optional `FERNET_KEY`:
+3. Fill out `crypto_bot/.env` with your API keys and optional `FERNET_KEY`.
+   Environment variables take precedence over values stored in
+   `user_config.yaml`. If you prefer to enter credentials interactively,
+   leave the entries commented out.
 
    ```env
-   EXCHANGE=coinbase  # or kraken
-   API_KEY=your_key
-   API_SECRET=your_secret
-   API_PASSPHRASE=your_coinbase_passphrase_if_needed
-   FERNET_KEY=optional_key_for_encryption
+   # EXCHANGE=coinbase  # or kraken
+   # API_KEY=your_key
+   # API_SECRET=your_secret
+   # API_PASSPHRASE=your_coinbase_passphrase_if_needed
+   # FERNET_KEY=optional_key_for_encryption
    ```
 
 
