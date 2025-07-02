@@ -5,8 +5,12 @@ from pathlib import Path
 
 try:
     from solana.rpc.api import Client  # type: ignore
+    from solana.publickey import PublicKey  # type: ignore
+    from solana.rpc.types import TokenAccountOpts  # type: ignore
 except Exception:  # pragma: no cover - dependency optional
     Client = None  # type: ignore
+    PublicKey = None  # type: ignore
+    TokenAccountOpts = None  # type: ignore
 
 from crypto_bot.execution.solana_executor import execute_swap
 from crypto_bot.utils.logger import setup_logger
@@ -54,11 +58,12 @@ def check_wallet_balances(wallet_address: str) -> Dict[str, float]:
         rpc_url = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
         client = Client(rpc_url)
 
-        resp = client.get_token_accounts_by_owner(
-            wallet_address,
-            program_id="TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        owner = PublicKey(wallet_address)
+        opts = TokenAccountOpts(
+            program_id=PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
             encoding="jsonParsed",
         )
+        resp = client.get_token_accounts_by_owner(owner, opts)
         accounts = resp.get("result", {}).get("value", [])
         balances: Dict[str, float] = {}
         for acc in accounts:
