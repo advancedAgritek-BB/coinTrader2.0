@@ -36,8 +36,8 @@ On-chain DEX execution submits real transactions when not running in dry-run mod
    ```
 
 Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credentials. The
-script now asks for Coinbase and Kraken API keys (plus the Coinbase passphrase) and
-stores your chosen exchange in `user_config.yaml`. **Environment variables always
+script now prompts only for the API keys required by the exchange you select and
+stores your choice in `user_config.yaml`. **Environment variables always
 override the values in this file**, so you can place secrets in `crypto_bot/.env` or
 export them before running the bot.
 

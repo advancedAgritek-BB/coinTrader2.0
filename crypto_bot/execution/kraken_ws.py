@@ -133,8 +133,7 @@ class KrakenWSClient:
         self.connect_public()
         msg = {
             "method": "subscribe",
-            "params": {"channel": "ticker", "symbol": pair},
-            "params": {"channel": "ticker", "symbol": [symbol]},
+            "params": {"channel": "ticker", "symbol": symbol},
         }
         data = json.dumps(msg)
         self._public_subs.append(data)
@@ -144,8 +143,7 @@ class KrakenWSClient:
         self.connect_public()
         msg = {
             "method": "subscribe",
-            "params": {"channel": "trade", "symbol": pair},
-            "params": {"channel": "trade", "symbol": [symbol]},
+            "params": {"channel": "trade", "symbol": symbol},
         }
         data = json.dumps(msg)
         self._public_subs.append(data)
@@ -156,11 +154,6 @@ class KrakenWSClient:
         msg = {
             "method": "subscribe",
             "params": {"channel": "openOrders", "token": self.token},
-            "params": {
-                "channel": "open_orders",
-                "symbol": [symbol],
-                "token": self.token,
-            },
         }
         data = json.dumps(msg)
         self._private_subs.append(data)
@@ -171,15 +164,11 @@ class KrakenWSClient:
         msg = {
             "method": "add_order",
             "params": {
-                "symbol": pair,
-                "side": side,
-                "ordertype": ordertype,
-                "volume": volume,
-                "token": self.token,
                 "symbol": symbol,
                 "type": side,
                 "ordertype": ordertype,
                 "volume": str(volume),
+                "token": self.token,
             },
         }
         data = json.dumps(msg)
