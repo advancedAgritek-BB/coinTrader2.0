@@ -1,14 +1,20 @@
+from typing import Optional, Tuple
 import pandas as pd
-from typing import Tuple
 import ta
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 
-def generate_signal(df: pd.DataFrame) -> Tuple[float, str]:
+def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
     """Breakout strategy using MACD and volume."""
     macd = ta.trend.macd_diff(df['close'])
     vol_mean = df['volume'].rolling(20).mean()
     if macd.iloc[-1] > 0 and df['volume'].iloc[-1] > vol_mean.iloc[-1] * 2:
-        return 1.0, 'long'
+        score, direction = 1.0, 'long'
     elif macd.iloc[-1] < 0 and df['volume'].iloc[-1] > vol_mean.iloc[-1] * 2:
-        return 1.0, 'short'
-    return 0.0, 'none'
+        score, direction = 1.0, 'short'
+    else:
+        return 0.0, 'none'
+
+    if config is None or config.get('atr_normalization', True):
+        score = normalize_score_by_volatility(df, score)
+    return score, direction

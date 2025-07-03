@@ -1,9 +1,10 @@
+from typing import Optional, Tuple
 import pandas as pd
-from typing import Tuple
 import ta
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 
-def generate_signal(df: pd.DataFrame) -> Tuple[float, str]:
+def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
     """Simple trend following strategy using EMA and RSI."""
     df = df.copy()
     df['ema20'] = ta.trend.ema_indicator(df['close'], window=20)
@@ -20,5 +21,8 @@ def generate_signal(df: pd.DataFrame) -> Tuple[float, str]:
     elif latest['ema20'] < latest['ema50'] and latest['rsi'] < 45:
         score = min((50 - latest['rsi']) / 50, 1)
         direction = 'short'
+
+    if score > 0 and (config is None or config.get('atr_normalization', True)):
+        score = normalize_score_by_volatility(df, score)
 
     return score, direction
