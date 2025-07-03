@@ -72,6 +72,7 @@ async def main() -> None:
 
     logger.info("Starting bot")
     config = load_config()
+    volume_ratio = 0.01 if config.get("testing_mode") else 1.0
     cooldown_configure(config.get("min_cooldown", 0))
     secrets = dotenv_values(ENV_PATH)
     os.environ.update(secrets)
@@ -108,6 +109,7 @@ async def main() -> None:
     risk_params["symbol"] = config.get("symbol", "")
     risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
     risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
+    risk_params["volume_ratio"] = volume_ratio
     risk_config = RiskConfig(**risk_params)
     risk_manager = RiskManager(risk_config)
 

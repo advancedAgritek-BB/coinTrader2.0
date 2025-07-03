@@ -107,3 +107,6 @@ optimization:
     trend:
       stop_loss: [0.02]
       take_profit: [0.04]
+
+# run with reduced order sizes during automated tests
+testing_mode: true
