@@ -43,6 +43,14 @@ def filter_symbols(exchange, symbols: Iterable[str]) -> List[str]:
     data = _fetch_ticker(pairs).get("result", {})
     id_map = {}
     if hasattr(exchange, "markets_by_id"):
+        for k, v in exchange.markets_by_id.items():
+            if isinstance(v, dict):
+                id_map[k] = v.get("symbol", k)
+            elif isinstance(v, list) and v and isinstance(v[0], dict):
+                # some ccxt exchanges return a list with market info
+                id_map[k] = v[0].get("symbol", k)
+            else:
+                id_map[k] = k
         if not exchange.markets_by_id and hasattr(exchange, "load_markets"):
             try:
                 exchange.load_markets()

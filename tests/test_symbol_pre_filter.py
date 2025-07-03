@@ -44,6 +44,15 @@ def test_filter_symbols(monkeypatch):
     assert symbols == ["ETH/USD"]
 
 
+class DummyExchangeList:
+    # markets_by_id values may be lists of market dictionaries
+    markets_by_id = {"XETHZUSD": [{"symbol": "ETH/USD"}]}
+
+
+def test_filter_symbols_handles_list_values(monkeypatch):
+    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter.requests.get", fake_get)
+    symbols = filter_symbols(DummyExchangeList(), ["ETH/USD"])
+    assert symbols == ["ETH/USD"]
 class EmptyExchange:
     def __init__(self):
         self.markets_by_id = {}
