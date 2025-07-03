@@ -41,7 +41,7 @@ from crypto_bot.fund_manager import (
 )
 from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.utils.performance_logger import log_performance
-from crypto_bot.utils.position_logger import log_position
+from crypto_bot.utils.position_logger import log_position, log_balance
 from crypto_bot.utils.market_loader import load_kraken_symbols
 
 
@@ -93,9 +93,15 @@ async def main() -> None:
 
     try:
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-            await exchange.fetch_balance()
+            bal = await exchange.fetch_balance()
         else:
-            await asyncio.to_thread(exchange.fetch_balance)
+            bal = await asyncio.to_thread(exchange.fetch_balance)
+        init_bal = (
+            bal.get("USDT", {}).get("free", 0)
+            if isinstance(bal.get("USDT"), dict)
+            else bal.get("USDT", 0)
+        )
+        log_balance(float(init_bal))
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)
         send_message(

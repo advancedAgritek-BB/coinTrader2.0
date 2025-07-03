@@ -7,6 +7,11 @@ from .logger import setup_logger
 logger = setup_logger(__name__, "crypto_bot/logs/positions.log")
 
 
+def log_balance(balance: float) -> None:
+    """Write the current wallet balance to the log."""
+    logger.info("Wallet balance %.2f", balance)
+
+
 def log_position(
     symbol: str,
     side: str,
