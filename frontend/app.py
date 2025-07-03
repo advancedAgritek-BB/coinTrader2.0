@@ -28,6 +28,15 @@ TRADES_FILE = Path('crypto_bot/logs/trades.csv')
 REGIME_FILE = Path('crypto_bot/logs/regime_history.txt')
 
 
+def watch_bot() -> None:
+    """Monitor the trading bot and restart it if the process exits."""
+    global bot_proc, bot_start_time
+    while True:
+        time.sleep(5)
+        if bot_proc is not None and bot_proc.poll() is not None:
+            bot_proc = subprocess.Popen(['python', '-m', 'crypto_bot.main'])
+            bot_start_time = time.time()
+
 
 
 @app.route('/')
