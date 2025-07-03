@@ -18,6 +18,10 @@
   <li>No data</li>
   {% endfor %}
 </ul>
+<h2 class="mt-4">Live Signals</h2>
+<div id="signalsHeatmap"></div>
+<h2 class="mt-4">Regime Breakdown</h2>
+<div id="regimeBreakdown"></div>
 {% endblock %}
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -31,6 +35,37 @@ new Chart(document.getElementById('perfChart'), {
 new Chart(document.getElementById('allocChart'), {
     type: 'pie',
     data: {labels: Object.keys(allocData), datasets: [{data:Object.values(allocData), backgroundColor:['#ff6384','#36a2eb','#ffcd56','#4bc0c0','#9966ff','#c9cbcf']}]},
+});
+
+function color(val){
+  const g = Math.floor(255 * val);
+  const r = 255 - g;
+  return `rgb(${r},${g},0)`;
+}
+
+fetch('/api/live-signals').then(r=>r.json()).then(data=>{
+  const cont=document.getElementById('signalsHeatmap');
+  if(!Object.keys(data).length){cont.innerText='No data';return;}
+  let html='<table class="table table-bordered"><tbody><tr>';
+  for(const [sym,val] of Object.entries(data)){
+    html+=`<td style="background-color:${color(val)}">${sym}<br>${val.toFixed(2)}</td>`;
+  }
+  html+='</tr></tbody></table>';
+  cont.innerHTML=html;
+});
+
+fetch('/api/strategy-performance').then(r=>r.json()).then(data=>{
+  const cont=document.getElementById('regimeBreakdown');
+  if(!Object.keys(data).length){cont.innerText='No data';return;}
+  let html='';
+  for(const [regime,strategies] of Object.entries(data)){
+    html+=`<h5>${regime}</h5><ul>`;
+    for(const [s,recs] of Object.entries(strategies)){
+      html+=`<li>${s}: ${recs.length} trades</li>`;
+    }
+    html+='</ul>';
+  }
+  cont.innerHTML=html;
 });
 </script>
 {% endblock %}
