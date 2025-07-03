@@ -27,7 +27,7 @@ class RiskConfig:
     max_funding_rate: float = 1.0
     symbol: str = ""
     trade_size_pct: float = 0.1
-    volume_threshold_ratio: float = 0.5
+    volume_threshold_ratio: float = 0.1
     strategy_allocation: dict | None = None
     volume_ratio: float = 1.0
 
