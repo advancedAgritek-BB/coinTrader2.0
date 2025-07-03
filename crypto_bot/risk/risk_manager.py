@@ -28,6 +28,7 @@ class RiskConfig:
     symbol: str = ""
     trade_size_pct: float = 0.1
     strategy_allocation: dict | None = None
+    volume_threshold_ratio: float = 1.0
 
 
 class RiskManager:
@@ -106,8 +107,9 @@ class RiskManager:
             return False, reason
 
         vol_mean = df['volume'].rolling(20).mean().iloc[-1]
-        if df['volume'].iloc[-1] < vol_mean * 0.5:
-            reason = f"Volume {df['volume'].iloc[-1]:.4f} below mean {vol_mean:.4f}"
+        current_volume = df['volume'].iloc[-1]
+        if current_volume < vol_mean * self.config.volume_threshold_ratio:
+            reason = f"Volume {current_volume:.4f} below mean {vol_mean:.4f}"
             logger.info(reason)
             return False, reason
         vol_std = df['close'].rolling(20).std().iloc[-1]
@@ -116,6 +118,9 @@ class RiskManager:
             logger.info(reason)
             return False, reason
         self.boost = boost_factor(self.config.bull_fng, self.config.bull_sentiment)
+        logger.info(
+            f"Trade allowed for {self.config.symbol} – Volume {current_volume:.4f} >= {self.config.volume_threshold_ratio*100}% of mean {vol_mean:.4f}"
+        )
         reason = f"Trade allowed (boost {self.boost:.2f})"
         logger.info(reason)
         return True, reason

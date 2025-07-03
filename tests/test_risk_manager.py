@@ -16,6 +16,25 @@ def test_allow_trade_rejects_low_volume():
     assert "Volume" in reason
 
 
+def test_allow_trade_respects_volume_threshold():
+    data = {
+        'open': [1] * 20,
+        'high': [1] * 20,
+        'low': [1] * 20,
+        'close': [1] * 20,
+        'volume': [1] * 19 + [2],
+    }
+    df = pd.DataFrame(data)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        volume_threshold_ratio=0.5,
+    )
+    allowed, _ = RiskManager(cfg).allow_trade(df)
+    assert allowed
+
+
 def test_stop_order_management():
     manager = RiskManager(RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01))
     order = {"id": "1", "symbol": "BTC/USDT", "side": "sell", "amount": 1, "dry_run": True}
