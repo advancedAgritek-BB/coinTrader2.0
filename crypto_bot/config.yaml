@@ -1,7 +1,7 @@
 # Configuration for hybrid crypto bot
 # mode selects the trading environment: auto chooses based on regime, or use cex/onchain
 mode: auto
-# run in testing mode to disable network calls
+# run in testing mode to execute trades with smaller volumes
 testing_mode: false
 # exchange used for centralized trading (coinbase or kraken)
 exchange: coinbase
