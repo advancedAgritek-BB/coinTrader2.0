@@ -137,6 +137,7 @@ twap_enabled: false          # split large orders into slices
 twap_slices: 4               # number of slices when TWAP is enabled
 twap_interval_seconds: 10    # delay between TWAP slices
 loop_interval_minutes: 5     # wait time between trading cycles
+force_websocket_history: false  # set true to disable REST fallback
 ```
 
 `loop_interval_minutes` determines how long the bot sleeps between each

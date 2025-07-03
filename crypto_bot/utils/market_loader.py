@@ -38,12 +38,18 @@ async def fetch_ohlcv_async(
     timeframe: str = "1h",
     limit: int = 100,
     use_websocket: bool = False,
+    force_websocket_history: bool = False,
 ) -> list | Exception:
     """Return OHLCV data for ``symbol`` using async I/O."""
     try:
         if use_websocket and hasattr(exchange, "watch_ohlcv"):
             data = await exchange.watch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-            if limit and len(data) < limit and hasattr(exchange, "fetch_ohlcv"):
+            if (
+                limit
+                and len(data) < limit
+                and not force_websocket_history
+                and hasattr(exchange, "fetch_ohlcv")
+            ):
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
                     return await exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
                 return await asyncio.to_thread(
@@ -65,19 +71,21 @@ async def load_ohlcv_parallel(
     timeframe: str = "1h",
     limit: int = 100,
     use_websocket: bool = False,
+    force_websocket_history: bool = False,
 ) -> Dict[str, list]:
     """Fetch OHLCV data for multiple symbols concurrently."""
 
-    if use_websocket and hasattr(exchange, "watch_ohlcv"):
-        tasks = [
-            exchange.watch_ohlcv(s, timeframe=timeframe, limit=limit)
-            for s in symbols
-        ]
-    else:
-        tasks = [
-            fetch_ohlcv_async(exchange, s, timeframe, limit, use_websocket)
-            for s in symbols
-        ]
+    tasks = [
+        fetch_ohlcv_async(
+            exchange,
+            s,
+            timeframe,
+            limit,
+            use_websocket,
+            force_websocket_history,
+        )
+        for s in symbols
+    ]
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
