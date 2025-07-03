@@ -711,6 +711,17 @@ async def main() -> None:
             highest_price = entry_price
             current_strategy = name
             active_strategy = name
+            log_bal = (
+                paper_wallet.balance if config["execution_mode"] == "dry_run" else balance
+            )
+            log_position(
+                config.get("symbol", ""),
+                open_side,
+                position_size,
+                entry_price,
+                current_price,
+                log_bal,
+            )
             logger.info("Trade opened at %.4f", entry_price)
             trades_executed += 1
 
