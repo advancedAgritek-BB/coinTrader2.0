@@ -1,23 +1,31 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1 class="mb-4">Command Runner</h1>
-<form method="post">
-  <div class="mb-3">
-    <label for="base" class="form-label">Command</label>
-    <select id="base" name="base" class="form-select">
-      <option value="bot">Trading Bot</option>
-      <option value="backtest">Backtest</option>
-      <option value="custom">Custom</option>
-    </select>
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-header">Command Runner</div>
+      <div class="card-body">
+        <form method="post">
+          <div class="mb-3">
+            <label for="base" class="form-label">Command</label>
+            <select id="base" name="base" class="form-select">
+              <option value="bot">Trading Bot</option>
+              <option value="backtest">Backtest</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="command" class="form-label">Arguments / Command</label>
+            <input id="command" name="command" class="form-control" placeholder="--status">
+          </div>
+          <button class="btn btn-primary" type="submit">Run</button>
+        </form>
+        {% if output is not none %}
+        <h5 class="mt-4">Output</h5>
+        <pre class="bg-dark text-light p-3">{{ output }}</pre>
+        {% endif %}
+      </div>
+    </div>
   </div>
-  <div class="mb-3">
-    <label for="command" class="form-label">Arguments / Command</label>
-    <input id="command" name="command" class="form-control" placeholder="--status">
-  </div>
-  <button class="btn btn-primary" type="submit">Run</button>
-</form>
-{% if output is not none %}
-<h2 class="mt-4">Output</h2>
-<pre class="bg-dark text-light p-3">{{ output }}</pre>
-{% endif %}
+</div>
 {% endblock %}

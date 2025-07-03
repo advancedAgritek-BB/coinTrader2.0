@@ -5,6 +5,8 @@
   <title>{{ title or 'CoinTrader' }}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/lux/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootswatch@5.3.0/dist/flatly/bootstrap.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
@@ -17,6 +19,8 @@
         <li class="nav-item"><a class="nav-link" href="{{ url_for('stats') }}">Stats</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('trades_page') }}">Trades</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('scans') }}">Scans</a></li>
+      </ul>
+      <ul class="navbar-nav ms-auto">
         <li class="nav-item"><a class="nav-link" href="{{ url_for('cli') }}">CLI</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a></li>
         <li class="nav-item"><a class="nav-link" href="{{ url_for('model_page') }}">Model</a></li>

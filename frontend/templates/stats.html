@@ -1,16 +1,24 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1 class="mb-4">Trade Stats</h1>
-{% if stats %}
-<table class="table table-bordered">
-  <thead><tr><th>Strategy</th><th>Trades</th></tr></thead>
-  <tbody>
-  {% for key, val in stats.items() %}
-    <tr><td>{{ key }}</td><td>{{ val.trades }}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p>No stats available.</p>
-{% endif %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-header">Trade Stats</div>
+      <div class="card-body">
+        {% if stats %}
+        <table class="table table-bordered mb-0">
+          <thead><tr><th>Strategy</th><th>Trades</th></tr></thead>
+          <tbody>
+          {% for key, val in stats.items() %}
+            <tr><td>{{ key }}</td><td>{{ val.trades }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="mb-0">No stats available.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}

@@ -1,23 +1,35 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1 class="mb-4">Trade Dashboard</h1>
-<p><strong>Total PnL:</strong> {{ pnl }}</p>
-<div class="row">
-  <div class="col-md-6">
-    <canvas id="perfChart"></canvas>
-  </div>
-  <div class="col-md-6">
-    <canvas id="allocChart"></canvas>
+<div class="row mb-4">
+  <div class="col">
+    <div class="card">
+      <div class="card-header">Trade Dashboard</div>
+      <div class="card-body">
+        <p class="mb-3"><strong>Total PnL:</strong> {{ pnl }}</p>
+        <div class="row">
+          <div class="col-md-6"><canvas id="perfChart"></canvas></div>
+          <div class="col-md-6"><canvas id="allocChart"></canvas></div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
-<h2 class="mt-4">Recent Regimes</h2>
-<ul>
-  {% for r in regimes %}
-  <li>{{ r }}</li>
-  {% else %}
-  <li>No data</li>
-  {% endfor %}
-</ul>
+<div class="row">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Recent Regimes</div>
+      <div class="card-body p-2">
+        <ul class="mb-0">
+          {% for r in regimes %}
+          <li>{{ r }}</li>
+          {% else %}
+          <li>No data</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
