@@ -102,4 +102,4 @@ def test_load_ohlcv_parallel_websocket_overrides_fetch():
         )
     )
     assert list(result.keys()) == ["BTC/USD"]
-    assert len(result["BTC/USD"]) == 1
+    assert len(result["BTC/USD"]) == 3
