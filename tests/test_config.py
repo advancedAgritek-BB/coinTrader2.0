@@ -11,3 +11,4 @@ def test_load_config_returns_dict():
     assert 'testing_mode' in config
     assert 'risk' in config
     assert 'min_cooldown' in config
+    assert 'atr_normalization' in config

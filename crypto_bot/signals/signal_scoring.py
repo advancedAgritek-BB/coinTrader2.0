@@ -10,7 +10,13 @@ def evaluate(
     config: Optional[dict] = None,
 ) -> Tuple[float, str]:
     """Evaluate signal from a strategy callable."""
-    score, direction = strategy_fn(df)
+    if config is not None:
+        try:
+            score, direction = strategy_fn(df, config)
+        except TypeError:
+            score, direction = strategy_fn(df)
+    else:
+        score, direction = strategy_fn(df)
     score = max(0.0, min(score, 1.0))
     if config and config.get("ml_signal_model", {}).get("enabled"):
         try:

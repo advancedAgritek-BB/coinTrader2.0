@@ -85,6 +85,7 @@ twap_enabled: false
 twap_slices: 4
 twap_interval_seconds: 10
 max_slippage_pct: 0.05
+atr_normalization: true
 
 portfolio_rotation:
   enabled: false

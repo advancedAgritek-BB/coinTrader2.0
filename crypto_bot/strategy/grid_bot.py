@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import os
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 
 def _get_num_levels() -> int:
@@ -18,7 +19,7 @@ def _get_num_levels() -> int:
         return 5
 
 
-def generate_signal(df: pd.DataFrame, num_levels: int | None = None) -> Tuple[float, str]:
+def generate_signal(df: pd.DataFrame, num_levels: int | None = None, config: Optional[dict] = None) -> Tuple[float, str]:
     """Generate a grid based trading signal.
 
     The last 20 bars define a high/low range which is divided into grid levels.
@@ -52,10 +53,14 @@ def generate_signal(df: pd.DataFrame, num_levels: int | None = None) -> Tuple[fl
     if price <= lower_bound:
         distance = centre - price
         score = min(distance / half_range, 1.0)
+        if config is None or config.get('atr_normalization', True):
+            score = normalize_score_by_volatility(df, score)
         return score, "long"
     if price >= upper_bound:
         distance = price - centre
         score = min(distance / half_range, 1.0)
+        if config is None or config.get('atr_normalization', True):
+            score = normalize_score_by_volatility(df, score)
         return score, "short"
 
     return 0.0, "none"

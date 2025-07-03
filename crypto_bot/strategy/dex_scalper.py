@@ -1,6 +1,7 @@
 import pandas as pd
 from typing import Tuple, Optional
 import ta
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 
 def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
@@ -35,7 +36,11 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         return 0.0, "none"
 
     if momentum > 0:
+        if config is None or config.get("atr_normalization", True):
+            score = normalize_score_by_volatility(df, score)
         return score, "long"
     elif momentum < 0:
+        if config is None or config.get("atr_normalization", True):
+            score = normalize_score_by_volatility(df, score)
         return score, "short"
     return 0.0, "none"

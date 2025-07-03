@@ -1,5 +1,6 @@
 from typing import Dict, Optional, Tuple
 import pandas as pd
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 
 def generate_signal(
@@ -66,6 +67,8 @@ def generate_signal(
         price_score = min(price_change / breakout_pct, 1.0)
         vol_score = min(vol_ratio / volume_multiple, 1.0)
         score = (price_score + vol_score) / 2
+        if config is None or config.get("atr_normalization", True):
+            score = normalize_score_by_volatility(df, score)
         if direction not in {"auto", "long", "short"}:
             direction = "auto"
         trade_direction = direction if direction != "auto" else "long"
