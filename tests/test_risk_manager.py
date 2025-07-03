@@ -10,10 +10,15 @@ def test_allow_trade_rejects_low_volume():
         'volume':[2]*19 + [0]
     }
     df = pd.DataFrame(data)
-    manager = RiskManager(RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01))
-    allowed, reason = manager.allow_trade(df)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_volume=1,
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(df)
     assert not allowed
-    assert "Volume" in reason
+    assert "minimum" in reason
 
 
 def test_allow_trade_respects_volume_threshold():
@@ -33,6 +38,67 @@ def test_allow_trade_respects_volume_threshold():
     )
     allowed, _ = RiskManager(cfg).allow_trade(df)
     assert allowed
+
+
+def test_allow_trade_allows_when_only_ratio_fails():
+    data = {
+        'open': [1] * 20,
+        'high': [1] * 20,
+        'low': [1] * 20,
+        'close': [1] * 20,
+        'volume': [10] * 19 + [4],
+    }
+    df = pd.DataFrame(data)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_volume=3,
+        volume_threshold_ratio=0.5,
+    )
+    allowed, _ = RiskManager(cfg).allow_trade(df)
+    assert allowed
+
+
+def test_allow_trade_allows_when_only_min_volume_fails():
+    data = {
+        'open': [1] * 20,
+        'high': [1] * 20,
+        'low': [1] * 20,
+        'close': [1] * 20,
+        'volume': [10] * 19 + [9],
+    }
+    df = pd.DataFrame(data)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_volume=11,
+        volume_threshold_ratio=0.5,
+    )
+    allowed, _ = RiskManager(cfg).allow_trade(df)
+    assert allowed
+
+
+def test_allow_trade_logs_ratio_reason():
+    data = {
+        'open': [1] * 20,
+        'high': [1] * 20,
+        'low': [1] * 20,
+        'close': [1] * 20,
+        'volume': [20] * 19 + [0.5],
+    }
+    df = pd.DataFrame(data)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_volume=1,
+        volume_threshold_ratio=0.5,
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(df)
+    assert not allowed
+    assert "ratio threshold" in reason
 
 
 def test_stop_order_management():

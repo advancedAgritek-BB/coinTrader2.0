@@ -27,6 +27,8 @@ class RiskConfig:
     max_funding_rate: float = 1.0
     symbol: str = ""
     trade_size_pct: float = 0.1
+    volume_threshold_ratio: float = 0.5
+    min_volume: float = 0.0
     volume_threshold_ratio: float = 0.1
     strategy_allocation: dict | None = None
     volume_ratio: float = 1.0
@@ -112,8 +114,18 @@ class RiskManager:
         logger.info(
             f"{self.config.symbol} | Raw Volume: {current_volume} | Mean Volume: {vol_mean}"
         )
-        if current_volume < vol_mean * self.config.volume_threshold_ratio:
-            reason = f"Volume {current_volume:.4f} below mean {vol_mean:.4f}"
+        vol_threshold = vol_mean * self.config.volume_threshold_ratio
+        below_min = current_volume < self.config.min_volume
+        below_ratio = current_volume < vol_threshold
+        if below_min and below_ratio:
+            if self.config.min_volume >= vol_threshold:
+                reason = (
+                    f"Volume {current_volume:.4f} below minimum {self.config.min_volume:.4f}"
+                )
+            else:
+                reason = (
+                    f"Volume {current_volume:.4f} below ratio threshold {vol_threshold:.4f}"
+                )
             logger.info(reason)
             return False, reason
 
