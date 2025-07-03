@@ -166,6 +166,9 @@ async def main() -> None:
         total_pairs = 0
         signals_generated = 0
         trades_executed = 0
+        rejected_volume = 0
+        rejected_score = 0
+        rejected_regime = 0
         volume_rejections = 0
         score_rejections = 0
         regime_rejections = 0
@@ -266,6 +269,9 @@ async def main() -> None:
 
             regime_sym = classify_regime(df_sym)
             logger.info("Market regime for %s classified as %s", sym, regime_sym)
+            if regime_sym == "unknown":
+                rejected_regime += 1
+                continue
             env_sym = mode if mode != "auto" else "cex"
             strategy_fn = route(regime_sym, env_sym)
             name_sym = strategy_name(regime_sym, env_sym)
@@ -309,6 +315,7 @@ async def main() -> None:
                     regime_sym,
                 )
                 if "Volume" in reason:
+                    rejected_volume += 1
                     volume_rejections += 1
                 else:
                     regime_rejections += 1
@@ -469,6 +476,14 @@ async def main() -> None:
                 score,
                 config["signal_threshold"],
             )
+            rejected_score += 1
+            logger.info(
+                "Loop Summary: %s evaluated | %s trades | %s volume fails | %s score fails | %s unknown regime",
+                total_pairs,
+                trades_executed,
+                rejected_volume,
+                rejected_score,
+                rejected_regime,
             if direction == "none":
                 regime_rejections += 1
             else:
@@ -495,6 +510,12 @@ async def main() -> None:
         if not risk_manager.can_allocate(name, size, balance):
             logger.info("Capital cap reached for %s, skipping", name)
             logger.info(
+                "Loop Summary: %s evaluated | %s trades | %s volume fails | %s score fails | %s unknown regime",
+                total_pairs,
+                trades_executed,
+                rejected_volume,
+                rejected_score,
+                rejected_regime,
                 f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, "
                 f"{trades_executed} trades executed, {volume_rejections} rejected volume, "
                 f"{score_rejections} rejected score, {regime_rejections} rejected regime."
@@ -589,6 +610,12 @@ async def main() -> None:
         logger.info("Updated trade stats %s", stats[key])
 
         logger.info(
+            "Loop Summary: %s evaluated | %s trades | %s volume fails | %s score fails | %s unknown regime",
+            total_pairs,
+            trades_executed,
+            rejected_volume,
+            rejected_score,
+            rejected_regime,
             f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, "
             f"{trades_executed} trades executed, {volume_rejections} rejected volume, "
             f"{score_rejections} rejected score, {regime_rejections} rejected regime."
