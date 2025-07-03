@@ -45,11 +45,18 @@ def test_start_stop_bot_json(monkeypatch):
     app.bot_proc = None
     resp = client.post('/start_bot', json={'mode': 'dry_run'})
     assert resp.status_code == 200
-    assert resp.get_json()['status'] == 'started'
+    data = resp.get_json()
+    assert data['status'] == 'started'
+    assert data['running'] is True
+    assert 'uptime' in data
+    assert data['mode'] == 'dry_run'
     assert app.bot_proc is not None
 
     app.bot_proc = FakeProc()
     resp = client.post('/stop_bot')
     assert resp.status_code == 200
-    assert resp.get_json()['status'] == 'stopped'
+    data = resp.get_json()
+    assert data['status'] == 'stopped'
+    assert data['running'] is False
+    assert 'uptime' in data
     assert app.bot_proc is None
