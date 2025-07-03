@@ -3,11 +3,11 @@
 mode: auto
 # run in testing mode to execute trades with smaller volumes
 # testing_mode controls reduced trade size for automated tests
-testing_mode: false
+testing_mode: true
 # exchange used for centralized trading (coinbase or kraken)
-exchange: coinbase
+exchange: kraken
 # when using Kraken, enable WebSocket trading (requires KRAKEN_WS_TOKEN)
-use_websocket: false
+use_websocket: true
 # wallet address for on-chain transactions
 wallet_address: "your_wallet"
 # preferred blockchain when using on-chain mode
@@ -36,7 +36,7 @@ sl_pct: 0.03
 # default take profit percentage
 tp_pct: 0.07
 # minimum signal score required to open a position
-signal_threshold: 0.75
+signal_threshold: 0.3
 # run in dry_run to simulate trades or live for real trading
 execution_mode: dry_run
 # enable or disable telegram notifications
@@ -55,7 +55,7 @@ risk:
   take_profit_pct: 0.04
   # minimum raw volume required to consider a trade
   min_volume: 50
-  volume_threshold_ratio: 0.1
+  volume_threshold_ratio: 0.05
 telegram:
   # telegram chat id to receive alerts
   chat_id: "YOUR_CHAT_ID"
@@ -64,7 +64,7 @@ loop_interval_minutes: 5
 min_cooldown: 60
 exit_strategy:
   # trailing stop percent applied after trade moves in our favor
-  trailing_stop_pct: 0.1
+  trailing_stop_pct: 0.13
   # profit percent before trailing stop activates
   min_gain_to_trail: 0.2
   # use Fibonacci extensions for take profit targets
@@ -96,13 +96,13 @@ portfolio_rotation:
   rebalance_threshold: 0.1
 
 sentiment_filter:
-  min_fng: 20
+  min_fng: 0
   bull_fng: 70
-  min_sentiment: 40
+  min_sentiment: 0
   bull_sentiment: 60
 
 volatility_filter:
-  min_atr_pct: 0.01
+  min_atr_pct: 0.001
   max_funding_rate: 0.05
 
 ml_signal_model:
@@ -119,4 +119,3 @@ optimization:
 
 # number of candles to evaluate regime performance
 regime_return_period: 5
-
