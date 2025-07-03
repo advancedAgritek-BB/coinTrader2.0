@@ -166,7 +166,9 @@ async def main() -> None:
         total_pairs = 0
         signals_generated = 0
         trades_executed = 0
-        trades_skipped = 0
+        rejected_volume = 0
+        rejected_score = 0
+        rejected_regime = 0
 
         if config.get("optimization", {}).get("enabled"):
             if (
@@ -263,6 +265,9 @@ async def main() -> None:
 
             regime_sym = classify_regime(df_sym)
             logger.info("Market regime for %s classified as %s", sym, regime_sym)
+            if regime_sym == "unknown":
+                rejected_regime += 1
+                continue
             env_sym = mode if mode != "auto" else "cex"
             strategy_fn = route(regime_sym, env_sym)
             name_sym = strategy_name(regime_sym, env_sym)
@@ -298,7 +303,7 @@ async def main() -> None:
                     "Trade not allowed for %s \u2013 %s", sym, reason
                 )
                 if "Volume" in reason:
-                    trades_skipped += 1
+                    rejected_volume += 1
                 continue
 
             if direction_sym != "none" and score_sym > best_score:
@@ -456,8 +461,14 @@ async def main() -> None:
                 score,
                 config["signal_threshold"],
             )
+            rejected_score += 1
             logger.info(
-                f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, {trades_executed} trades executed, {trades_skipped} skipped due to volume."
+                "Loop Summary: %s evaluated | %s trades | %s volume fails | %s score fails | %s unknown regime",
+                total_pairs,
+                trades_executed,
+                rejected_volume,
+                rejected_score,
+                rejected_regime,
             )
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
@@ -476,7 +487,12 @@ async def main() -> None:
         if not risk_manager.can_allocate(name, size, balance):
             logger.info("Capital cap reached for %s, skipping", name)
             logger.info(
-                f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, {trades_executed} trades executed, {trades_skipped} skipped due to volume."
+                "Loop Summary: %s evaluated | %s trades | %s volume fails | %s score fails | %s unknown regime",
+                total_pairs,
+                trades_executed,
+                rejected_volume,
+                rejected_score,
+                rejected_regime,
             )
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
@@ -568,7 +584,12 @@ async def main() -> None:
         logger.info("Updated trade stats %s", stats[key])
 
         logger.info(
-            f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, {trades_executed} trades executed, {trades_skipped} skipped due to volume."
+            "Loop Summary: %s evaluated | %s trades | %s volume fails | %s score fails | %s unknown regime",
+            total_pairs,
+            trades_executed,
+            rejected_volume,
+            rejected_score,
+            rejected_regime,
         )
         await asyncio.sleep(config["loop_interval_minutes"] * 60)
 
