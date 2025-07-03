@@ -501,6 +501,15 @@ async def main() -> None:
                         logger.info(
                             "Paper balance closed: %.2f USDT", paper_wallet.balance
                         )
+                    if config["execution_mode"] != "dry_run":
+                        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                            bal = await exchange.fetch_balance()
+                        else:
+                            bal = await asyncio.to_thread(exchange.fetch_balance)
+                        latest_balance = bal["USDT"]["free"]
+                    else:
+                        latest_balance = paper_wallet.balance if paper_wallet else 0.0
+                    log_balance(float(latest_balance))
                     open_side = None
                     entry_price = None
                     entry_time = None
