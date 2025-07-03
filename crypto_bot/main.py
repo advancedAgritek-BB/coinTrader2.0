@@ -133,6 +133,7 @@ async def main() -> None:
         except Exception:
             start_bal = 1000.0
         paper_wallet = PaperWallet(start_bal)
+        log_balance(paper_wallet.balance)
 
     open_side = None
     entry_price = None
