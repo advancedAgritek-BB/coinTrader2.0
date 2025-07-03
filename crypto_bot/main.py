@@ -50,6 +50,7 @@ from crypto_bot.utils.market_loader import (
     load_ohlcv_parallel,
 )
 from crypto_bot.utils.symbol_pre_filter import filter_symbols
+from crypto_bot.utils.symbol_utils import get_filtered_symbols
 from crypto_bot.utils.pnl_logger import log_pnl
 
 
@@ -251,8 +252,7 @@ async def main() -> None:
         best_score = -1.0
         df_current = None
 
-        symbols = config.get("symbols", [config.get("symbol")])
-        symbols = await asyncio.to_thread(filter_symbols, exchange, symbols)
+        symbols = await get_filtered_symbols(exchange, config)
         ohlcv_map = await load_ohlcv_parallel(
             exchange,
             symbols,
