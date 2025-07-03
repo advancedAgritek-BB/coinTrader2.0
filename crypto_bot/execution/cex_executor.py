@@ -166,6 +166,21 @@ def execute_trade(
                 send_message(
                     token, chat_id, f"TWAP slice {i+1}/{slices} executed: {order}"
                 )
+                oid = (
+                    order.get("id")
+                    or order.get("order_id")
+                    or order.get("tx_hash")
+                    or order.get("txid")
+                )
+                logger.info(
+                    "TWAP slice %s/%s %s %s %.8f executed (id/tx: %s)",
+                    i + 1,
+                    slices,
+                    side,
+                    symbol,
+                    slice_amount,
+                    oid,
+                )
             if i < slices - 1:
                 time.sleep(delay)
     else:
@@ -182,6 +197,19 @@ def execute_trade(
                     pass
             orders.append(order)
             send_message(token, chat_id, f"Order executed: {order}")
+            oid = (
+                order.get("id")
+                or order.get("order_id")
+                or order.get("tx_hash")
+                or order.get("txid")
+            )
+            logger.info(
+                "Order executed %s %s %.8f (id/tx: %s)",
+                side,
+                symbol,
+                amount,
+                oid,
+            )
 
     if len(orders) == 1:
         return orders[0]
@@ -223,6 +251,19 @@ async def execute_trade_async(
             send_message(token, chat_id, f"Order failed: {e}")
             return {}
     send_message(token, chat_id, f"Order executed: {order}")
+    oid = (
+        order.get("id")
+        or order.get("order_id")
+        or order.get("tx_hash")
+        or order.get("txid")
+    )
+    logger.info(
+        "Order executed %s %s %.8f (id/tx: %s)",
+        side,
+        symbol,
+        amount,
+        oid,
+    )
     log_trade(order)
     logger.info(
         "Order executed - id=%s side=%s amount=%s price=%s dry_run=%s",
