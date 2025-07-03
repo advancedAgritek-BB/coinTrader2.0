@@ -1,15 +1,28 @@
 {% extends 'base.html' %}
 {% block content %}
-<h1 class="mb-4">Trades</h1>
-<h3>Trades</h3>
-<table class="table table-bordered" id="trades-table">
-  <thead>
-    <tr><th>Symbol</th><th>Side</th><th>Amount</th><th>Price</th><th>Timestamp</th></tr>
-  </thead>
-  <tbody id="trades-body"></tbody>
-</table>
-<h3 class="mt-4">Errors Log</h3>
-<pre id="errors-area" class="bg-dark text-light p-3" style="height:200px; overflow:auto;"></pre>
+<div class="row">
+  <div class="col-md-8">
+    <div class="card mb-4">
+      <div class="card-header">Trades</div>
+      <div class="card-body p-0">
+        <table class="table mb-0" id="trades-table">
+          <thead>
+            <tr><th>Symbol</th><th>Side</th><th>Amount</th><th>Price</th><th>Timestamp</th></tr>
+          </thead>
+          <tbody id="trades-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-header">Errors Log</div>
+      <div class="card-body">
+        <pre id="errors-area" class="bg-dark text-light p-3" style="height:200px; overflow:auto;"></pre>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
