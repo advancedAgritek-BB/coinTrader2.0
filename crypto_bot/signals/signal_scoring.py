@@ -12,17 +12,18 @@ def evaluate(
     """Evaluate signal from a strategy callable."""
     score, direction = strategy_fn(df)
     score = max(0.0, min(score, 1.0))
-    if config and config.get("ml_signal_model", {}).get("enabled"):
-        try:
-            ml_score = predict_signal(df)
-            if ml_score > 0.7 and score > 0.5:
-                score = 0.9
-            elif ml_score < 0.5:
-                score = 0.0
-            else:
-                score = score
-        except Exception:
-            pass
+
+    if config:
+        ml_cfg = config.get("ml_signal_model", {})
+        if ml_cfg.get("enabled"):
+            weight = ml_cfg.get("weight", 0.5)
+            try:
+                ml_score = predict_signal(df)
+                score = (score * (1 - weight)) + (ml_score * weight)
+                score = max(0.0, min(score, 1.0))
+            except Exception:
+                pass
+
     return score, direction
 
 
