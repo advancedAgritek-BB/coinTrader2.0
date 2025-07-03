@@ -18,7 +18,7 @@ def test_allow_trade_rejects_low_volume():
     )
     allowed, reason = RiskManager(cfg).allow_trade(df)
     assert not allowed
-    assert "minimum" in reason
+    assert "min absolute threshold" in reason
 
 
 def test_allow_trade_respects_volume_threshold():
@@ -98,7 +98,7 @@ def test_allow_trade_logs_ratio_reason():
     )
     allowed, reason = RiskManager(cfg).allow_trade(df)
     assert not allowed
-    assert "ratio threshold" in reason
+    assert "50% of mean volume" in reason
 
 
 def test_stop_order_management():
