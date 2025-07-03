@@ -79,3 +79,9 @@ def test_can_allocate_uses_tracker():
     assert manager.can_allocate("trend_bot", 40, 100)
     manager.allocate_capital("trend_bot", 40)
     assert not manager.can_allocate("trend_bot", 20, 100)
+
+
+def test_risk_config_has_volume_threshold_ratio_default():
+    cfg = RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
+    assert hasattr(cfg, "volume_threshold_ratio")
+    assert cfg.volume_threshold_ratio == 0.5

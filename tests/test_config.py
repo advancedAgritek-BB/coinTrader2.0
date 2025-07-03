@@ -8,5 +8,6 @@ def test_load_config_returns_dict():
         config = yaml.safe_load(f)
     assert isinstance(config, dict)
     assert 'mode' in config
+    assert 'testing_mode' in config
     assert 'risk' in config
     assert 'min_cooldown' in config
