@@ -44,6 +44,7 @@ from crypto_bot.utils.performance_logger import log_performance
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.utils.position_logger import log_position, log_balance
 from crypto_bot.utils.market_loader import load_kraken_symbols
+from crypto_bot.utils.pnl_logger import log_pnl
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
@@ -137,6 +138,7 @@ async def main() -> None:
     entry_time = None
     entry_regime = None
     entry_strategy = None
+    entry_confidence = 0.0
     realized_pnl = 0.0
     trailing_stop = 0.0
     position_size = 0.0
@@ -429,7 +431,11 @@ async def main() -> None:
                     )
 
             exit_signal, trailing_stop = should_exit(
-                df_current or best["df"], current_price, trailing_stop, config
+                df_current or best["df"],
+                current_price,
+                trailing_stop,
+                config,
+                risk_manager,
             )
             if exit_signal:
                 pct = get_partial_exit_percent(pnl_pct * 100)
@@ -471,6 +477,15 @@ async def main() -> None:
                             "exit_time": datetime.utcnow().isoformat(),
                         }
                     )
+                    log_pnl(
+                        entry_strategy or "",
+                        config["symbol"],
+                        entry_price or 0.0,
+                        current_price,
+                        realized_pnl,
+                        entry_confidence,
+                        open_side or "",
+                    )
                     if paper_wallet:
                         logger.info(
                             "Paper balance closed: %.2f USDT", paper_wallet.balance
@@ -480,6 +495,7 @@ async def main() -> None:
                     entry_time = None
                     entry_regime = None
                     entry_strategy = None
+                    entry_confidence = 0.0
                     realized_pnl = 0.0
                     position_size = 0.0
                     trailing_stop = 0.0
@@ -598,7 +614,12 @@ async def main() -> None:
                     "token_out": "USDC",
                     "amount": size,
                     "dry_run": config["execution_mode"] == "dry_run",
-                }
+                },
+                strategy=strategy_name(regime, env),
+                symbol="SOL/USDC",
+                entry_price=current_price,
+                confidence=score,
+                direction=trade_side,
             )
             if paper_wallet:
                 paper_wallet.open(trade_side, size, current_price)
@@ -647,7 +668,14 @@ async def main() -> None:
                 user["telegram_chat_id"],
                 dry_run=config["execution_mode"] == "dry_run",
             )
-            risk_manager.register_stop_order(stop_order)
+            risk_manager.register_stop_order(
+                stop_order,
+                strategy=strategy_name(regime, env),
+                symbol=config["symbol"],
+                entry_price=current_price,
+                confidence=score,
+                direction=trade_side,
+            )
             risk_manager.allocate_capital(name, size)
             if paper_wallet:
                 paper_wallet.open(trade_side, size, current_price)
@@ -658,6 +686,7 @@ async def main() -> None:
             entry_time = datetime.utcnow().isoformat()
             entry_regime = regime
             entry_strategy = strategy_name(regime, env)
+            entry_confidence = score
             highest_price = entry_price
             current_strategy = name
             active_strategy = name
