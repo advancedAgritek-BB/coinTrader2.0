@@ -1,0 +1,15 @@
+adx_trending_min: 25
+adx_sideways_max: 20
+bb_width_sideways_max: 5
+bb_width_breakout_max: 4
+breakout_volume_mult: 2
+rsi_mean_rev_min: 30
+rsi_mean_rev_max: 70
+ema_distance_mean_rev_max: 0.01
+atr_volatility_mult: 1.5
+
+ema_fast: 20
+ema_slow: 50
+indicator_window: 14
+bb_window: 20
+ma_window: 20
