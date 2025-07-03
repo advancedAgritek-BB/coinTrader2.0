@@ -145,6 +145,7 @@ evaluation cycle, giving the market time to evolve before scanning again.
 When `use_websocket` is enabled the bot relies on `ccxt.pro` for realtime
 streaming data. Install it alongside the other requirements or disable
 websockets if you do not have access to `ccxt.pro`.
+When OHLCV streaming returns fewer candles than requested the bot fills the gap using REST to ensure indicators have enough history. Disable this fallback by setting `force_websocket_history` to `true`.
 
 Example usage for Kraken WebSockets:
 
