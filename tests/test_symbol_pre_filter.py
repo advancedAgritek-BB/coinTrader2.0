@@ -78,3 +78,41 @@ def test_non_dict_market_entry(monkeypatch):
     monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter.requests.get", fake_get)
     symbols = filter_symbols(BadExchange(), ["ETH/USD"])
     assert symbols == ["XETHZUSD"]
+
+
+def test_multiple_batches(monkeypatch):
+    calls = []
+
+    def fake_get_multi(url, timeout=10):
+        calls.append(url)
+
+        class Resp:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                pair_str = url.split("pair=")[1]
+                pairs = pair_str.split(",")
+                ticker = {
+                    "a": ["101", "1", "1"],
+                    "b": ["100", "1", "1"],
+                    "c": ["101", "0.5"],
+                    "v": ["600", "600"],
+                    "p": ["100", "100"],
+                    "o": "99",
+                }
+                return {"result": {p: ticker for p in pairs}}
+
+        return Resp()
+
+    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter.requests.get", fake_get_multi)
+
+    pairs = [f"PAIR{i}" for i in range(25)]
+
+    class DummyEx:
+        markets_by_id = {p: {"symbol": p} for p in pairs}
+
+    symbols = filter_symbols(DummyEx(), pairs)
+
+    assert len(symbols) == 25
+    assert len(calls) == 2

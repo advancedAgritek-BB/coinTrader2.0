@@ -12,14 +12,25 @@ API_URL = "https://api.kraken.com/0/public"
 
 
 def _fetch_ticker(pairs: Iterable[str]) -> dict:
-    """Return ticker data for comma separated ``pairs``."""
+    """Return ticker data for ``pairs`` in batches of 20 symbols."""
+
     mock = os.getenv("MOCK_KRAKEN_TICKER")
     if mock:
         return json.loads(mock)
-    url = f"{API_URL}/Ticker?pair={','.join(pairs)}"
-    resp = requests.get(url, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+
+    pairs_list = list(pairs)
+    combined: dict = {"result": {}}
+    for i in range(0, len(pairs_list), 20):
+        chunk = pairs_list[i : i + 20]
+        url = f"{API_URL}/Ticker?pair={','.join(chunk)}"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        combined.setdefault("error", [])
+        combined["error"] += data.get("error", [])
+        combined["result"].update(data.get("result", {}))
+
+    return combined
 
 
 def _parse_metrics(ticker: dict) -> tuple[float, float, float]:
@@ -43,14 +54,6 @@ def filter_symbols(exchange, symbols: Iterable[str]) -> List[str]:
     data = _fetch_ticker(pairs).get("result", {})
     id_map = {}
     if hasattr(exchange, "markets_by_id"):
-        for k, v in exchange.markets_by_id.items():
-            if isinstance(v, dict):
-                id_map[k] = v.get("symbol", k)
-            elif isinstance(v, list) and v and isinstance(v[0], dict):
-                # some ccxt exchanges return a list with market info
-                id_map[k] = v[0].get("symbol", k)
-            else:
-                id_map[k] = k
         if not exchange.markets_by_id and hasattr(exchange, "load_markets"):
             try:
                 exchange.load_markets()
