@@ -111,5 +111,8 @@ optimization:
       stop_loss: [0.02]
       take_profit: [0.04]
 
+# number of candles to evaluate regime performance
+regime_return_period: 5
+
 # run with reduced order sizes during automated tests
 testing_mode: true
