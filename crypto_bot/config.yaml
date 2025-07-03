@@ -52,6 +52,8 @@ risk:
   stop_loss_pct: 0.02
   # take profit percent managed by the risk manager
   take_profit_pct: 0.04
+  # minimum raw volume required to consider a trade
+  min_volume: 100
 telegram:
   # telegram chat id to receive alerts
   chat_id: "YOUR_CHAT_ID"
