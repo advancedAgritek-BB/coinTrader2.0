@@ -147,6 +147,26 @@ def start():
     return redirect(url_for('index'))
 
 
+@app.route('/start_bot', methods=['POST'])
+def start_bot_route():
+    """Start the trading bot and return JSON status."""
+    global bot_proc, bot_start_time
+    mode = 'dry_run'
+    if request.is_json:
+        mode = request.json.get('mode', 'dry_run')
+    else:
+        mode = request.form.get('mode', 'dry_run')
+    set_execution_mode(mode)
+    if not is_running():
+        bot_proc = subprocess.Popen(['python', '-m', 'crypto_bot.main'])
+        bot_start_time = time.time()
+    return jsonify({
+        'running': is_running(),
+        'uptime': get_uptime(),
+        'mode': mode,
+    })
+
+
 @app.route('/stop')
 def stop():
     global bot_proc, bot_start_time
@@ -156,6 +176,18 @@ def stop():
     bot_proc = None
     bot_start_time = None
     return redirect(url_for('index'))
+
+
+@app.route('/stop_bot', methods=['POST'])
+def stop_bot_route():
+    """Stop the trading bot and return JSON status."""
+    global bot_proc, bot_start_time
+    if is_running():
+        bot_proc.terminate()
+        bot_proc.wait()
+    bot_proc = None
+    bot_start_time = None
+    return jsonify({'running': False, 'uptime': get_uptime(), 'mode': load_execution_mode()})
 
 
 @app.route('/logs')
