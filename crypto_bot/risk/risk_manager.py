@@ -29,7 +29,6 @@ class RiskConfig:
     trade_size_pct: float = 0.1
     volume_threshold_ratio: float = 0.5
     strategy_allocation: dict | None = None
-    volume_threshold_ratio: float = 1.0
     volume_ratio: float = 1.0
 
 
@@ -110,22 +109,20 @@ class RiskManager:
 
         vol_mean = df['volume'].rolling(20).mean().iloc[-1]
         current_volume = df['volume'].iloc[-1]
-        if current_volume < vol_mean * self.config.volume_threshold_ratio:
-        if df['volume'].iloc[-1] < vol_mean * self.config.volume_threshold_ratio:
-            reason = f"Volume {df['volume'].iloc[-1]:.4f} below mean {vol_mean:.4f}"
-        current_volume = df['volume'].iloc[-1]
         logger.info(
             f"{self.config.symbol} | Raw Volume: {current_volume} | Mean Volume: {vol_mean}"
         )
-        if current_volume < vol_mean * 0.5:
+        if current_volume < vol_mean * self.config.volume_threshold_ratio:
             reason = f"Volume {current_volume:.4f} below mean {vol_mean:.4f}"
             logger.info(reason)
             return False, reason
+
         vol_std = df['close'].rolling(20).std().iloc[-1]
         if vol_std < df['close'].iloc[-20:-1].std() * 0.5:
             reason = "Volatility too low"
             logger.info(reason)
             return False, reason
+
         self.boost = boost_factor(self.config.bull_fng, self.config.bull_sentiment)
         logger.info(
             f"Trade allowed for {self.config.symbol} – Volume {current_volume:.4f} >= {self.config.volume_threshold_ratio*100}% of mean {vol_mean:.4f}"
