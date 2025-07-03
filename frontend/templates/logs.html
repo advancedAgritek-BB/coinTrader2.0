@@ -1,5 +1,7 @@
 {% extends 'base.html' %}
 {% block content %}
+<h1 class="mb-4">Logs</h1>
+<pre class="bg-dark text-light p-3" style="height:400px; overflow:auto;"><code id="log-area" class="language-plaintext"></code></pre>
 <div class="row justify-content-center">
   <div class="col-md-10">
     <div class="card">
@@ -12,13 +14,5 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script>
-async function fetchLogs() {
-  const resp = await fetch('{{ url_for('logs_tail') }}');
-  const text = await resp.text();
-  document.getElementById('log-area').textContent = text;
-}
-fetchLogs();
-setInterval(fetchLogs, 3000);
-</script>
+<script type="module" src="{{ url_for('static', filename='logs.js') }}"></script>
 {% endblock %}
