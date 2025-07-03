@@ -91,28 +91,28 @@ class RiskManager:
         """
         if len(df) < 20:
             reason = "Not enough data to trade"
-            logger.info(reason)
+            logger.info("[EVAL] %s", reason)
             return False, reason
 
         if too_bearish(self.config.min_fng, self.config.min_sentiment):
             reason = "Sentiment too bearish"
-            logger.info(reason)
+            logger.info("[EVAL] %s", reason)
             return False, reason
 
         if too_flat(df, self.config.min_atr_pct):
             reason = "Market volatility too low"
-            logger.info(reason)
+            logger.info("[EVAL] %s", reason)
             return False, reason
 
         if self.config.symbol and too_hot(self.config.symbol, self.config.max_funding_rate):
             reason = "Funding rate too high"
-            logger.info(reason)
+            logger.info("[EVAL] %s", reason)
             return False, reason
 
         vol_mean = df['volume'].rolling(20).mean().iloc[-1]
         current_volume = df['volume'].iloc[-1]
         logger.info(
-            f"{self.config.symbol} | Raw Volume: {current_volume} | Mean Volume: {vol_mean}"
+            f"[EVAL] {self.config.symbol} | Raw Volume: {current_volume} | Mean Volume: {vol_mean}"
         )
         vol_threshold = vol_mean * self.config.volume_threshold_ratio
         below_min = current_volume < self.config.min_volume
@@ -126,21 +126,21 @@ class RiskManager:
                 reason = (
                     f"Volume {current_volume:.4f} below ratio threshold {vol_threshold:.4f}"
                 )
-            logger.info(reason)
+            logger.info("[EVAL] %s", reason)
             return False, reason
 
         vol_std = df['close'].rolling(20).std().iloc[-1]
         if vol_std < df['close'].iloc[-20:-1].std() * 0.5:
             reason = "Volatility too low"
-            logger.info(reason)
+            logger.info("[EVAL] %s", reason)
             return False, reason
 
         self.boost = boost_factor(self.config.bull_fng, self.config.bull_sentiment)
         logger.info(
-            f"Trade allowed for {self.config.symbol} – Volume {current_volume:.4f} >= {self.config.volume_threshold_ratio*100}% of mean {vol_mean:.4f}"
+            f"[EVAL] Trade allowed for {self.config.symbol} – Volume {current_volume:.4f} >= {self.config.volume_threshold_ratio*100}% of mean {vol_mean:.4f}"
         )
         reason = f"Trade allowed (boost {self.boost:.2f})"
-        logger.info(reason)
+        logger.info("[EVAL] %s", reason)
         return True, reason
 
     def register_stop_order(self, order: dict) -> None:

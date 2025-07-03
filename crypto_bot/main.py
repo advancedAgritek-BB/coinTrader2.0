@@ -456,6 +456,7 @@ async def main() -> None:
                 score,
                 config["signal_threshold"],
             )
+            logger.info("No trade executed")
             logger.info(
                 f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, {trades_executed} trades executed, {trades_skipped} skipped due to volume."
             )
