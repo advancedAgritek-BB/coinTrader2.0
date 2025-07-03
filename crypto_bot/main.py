@@ -485,6 +485,7 @@ async def main() -> None:
                 rejected_volume,
                 rejected_score,
                 rejected_regime,
+            )
             if direction == "none":
                 regime_rejections += 1
             else:
