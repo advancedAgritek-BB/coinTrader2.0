@@ -441,8 +441,9 @@ async def main() -> None:
                         config["exit_strategy"]["trailing_stop_pct"],
                     )
 
+            df_to_use = df_current if df_current is not None else best["df"]
             exit_signal, trailing_stop = should_exit(
-                df_current or best["df"],
+                df_to_use,
                 current_price,
                 trailing_stop,
                 config,
