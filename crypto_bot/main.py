@@ -41,6 +41,7 @@ from crypto_bot.fund_manager import (
 )
 from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.utils.performance_logger import log_performance
+from crypto_bot.utils.position_logger import log_position
 from crypto_bot.utils.market_loader import load_kraken_symbols
 
 
@@ -513,6 +514,23 @@ async def main() -> None:
             balance = bal["USDT"]["free"]
         else:
             balance = paper_wallet.balance if paper_wallet else 0.0
+
+        if open_side and current_price is not None:
+            pnl = (current_price - entry_price) * position_size
+            if open_side == "sell":
+                pnl = -pnl
+            if paper_wallet:
+                log_bal = paper_wallet.balance + pnl
+            else:
+                log_bal = balance + pnl
+            log_position(
+                config.get("symbol", ""),
+                open_side,
+                position_size,
+                entry_price,
+                current_price,
+                log_bal,
+            )
         if best:
             risk_manager.config.symbol = best["symbol"]
         size = risk_manager.position_size(score, balance)
