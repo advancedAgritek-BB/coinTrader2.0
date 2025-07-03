@@ -75,7 +75,14 @@ class RiskManager:
         return drawdown < self.config.max_drawdown
 
     def position_size(self, confidence: float, balance: float) -> float:
-        """Calculate position size based on signal confidence and balance."""
+        """Return the trade value for a signal.
+
+        The value is calculated in the account's quote currency by scaling the
+        available ``balance`` by the signal ``confidence`` and the configured
+        ``trade_size_pct``.  Callers must convert the resulting value to asset
+        units using the current price before submitting an order to an
+        exchange.
+        """
         size = balance * confidence * self.config.trade_size_pct
         logger.info("Calculated position size: %.4f", size)
         return size
