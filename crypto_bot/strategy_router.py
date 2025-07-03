@@ -1,11 +1,31 @@
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Dict
 
 import pandas as pd
 
 from crypto_bot.utils.logger import setup_logger
-from crypto_bot.strategy import trend_bot, grid_bot, sniper_bot, dex_scalper
+from crypto_bot.strategy import (
+    trend_bot,
+    grid_bot,
+    sniper_bot,
+    dex_scalper,
+    mean_bot,
+    breakout_bot,
+)
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+
+STRATEGY_MAP: Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]] = {
+    "trending": trend_bot.generate_signal,
+    "sideways": grid_bot.generate_signal,
+    "mean-reverting": mean_bot.generate_signal,
+    "breakout": breakout_bot.generate_signal,
+    "volatile": sniper_bot.generate_signal,
+}
+
+
+def strategy_for(regime: str) -> Callable[[pd.DataFrame], Tuple[float, str]]:
+    """Return strategy callable for a given regime."""
+    return STRATEGY_MAP.get(regime, grid_bot.generate_signal)
 
 
 def strategy_name(regime: str, mode: str) -> str:
@@ -38,24 +58,13 @@ def route(
     Callable[[pd.DataFrame], Tuple[float, str]]
         Strategy function returning a score and trade direction.
     """
-    if mode == 'cex':
-        if regime == 'trending':
-            logger.info("Routing to trend bot (cex)")
-            return trend_bot.generate_signal
-        logger.info("Routing to grid bot (cex)")
-        return grid_bot.generate_signal
-    if mode == 'onchain':
-        if regime in {'breakout', 'volatile'}:
+    if mode == "onchain":
+        if regime in {"breakout", "volatile"}:
             logger.info("Routing to sniper bot (onchain)")
             return sniper_bot.generate_signal
         logger.info("Routing to DEX scalper (onchain)")
         return dex_scalper.generate_signal
-    # auto mode defaults
-    if regime == 'trending':
-        logger.info("Routing to trend bot (auto)")
-        return trend_bot.generate_signal
-    if regime in {'breakout', 'volatile'}:
-        logger.info("Routing to sniper bot (auto)")
-        return sniper_bot.generate_signal
-    logger.info("Routing to grid bot (auto)")
-    return grid_bot.generate_signal
+
+    strategy_fn = strategy_for(regime)
+    logger.info("Routing to %s (%s)", strategy_fn.__name__, mode)
+    return strategy_fn
