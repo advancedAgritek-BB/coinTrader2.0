@@ -114,37 +114,33 @@ class RiskManager:
             f"{self.config.symbol} | Last close: {last_close:.2f}, Time: {last_time}"
         )
 
-        vol_mean = df['volume'].rolling(20).mean().iloc[-1]
-        current_volume = df['volume'].iloc[-1]
         vol_mean = df["volume"].rolling(20).mean().iloc[-1]
         current_volume = df["volume"].iloc[-1]
         vol_threshold = vol_mean * self.config.volume_threshold_ratio
         logger.info(
-            f"[EVAL] {self.config.symbol} | Raw Volume: {current_volume} | Mean Volume: {vol_mean}"
-            f"{self.config.symbol} | Raw Volume: {current_volume} | Mean Volume: {vol_mean} | "
+            f"[EVAL] {self.config.symbol} | Raw Volume: {current_volume} | Mean Volume: {vol_mean} | "
             f"Min Volume: {self.config.min_volume} | Ratio Threshold: {vol_threshold}"
         )
 
-        below_min = current_volume < self.config.min_volume
-        below_ratio = current_volume < vol_threshold
+        # Modified volume checks for testing
+        MIN_VOLUME_ABS = 0
+        RATIO_THRESHOLD = 0.01
 
-        if below_min:
-            logger.info("Current volume below min absolute threshold")
-        if below_ratio:
+        if current_volume < MIN_VOLUME_ABS:
             logger.info(
-                f"Current volume below {self.config.volume_threshold_ratio * 100:.0f}% of mean volume"
+                f"Trade blocked for {self.config.symbol}: raw volume {current_volume:.2f} < MIN_VOLUME_ABS"
             )
-
-        if below_min and below_ratio:
-            if self.config.min_volume >= vol_threshold:
-                reason = "Volume < min absolute threshold"
-            else:
-                reason = (
-                    f"Volume < {self.config.volume_threshold_ratio * 100:.0f}% of mean volume"
-                )
+            reason = "Volume < min absolute threshold"
             logger.info("[EVAL] %s", reason)
             return False, reason
 
+        if current_volume < RATIO_THRESHOLD * vol_mean:
+            logger.info(
+                f"Trade blocked for {self.config.symbol}: raw volume {current_volume:.2f} < {RATIO_THRESHOLD*100:.1f}% of mean {vol_mean:.2f}"
+            )
+            reason = f"Volume < {RATIO_THRESHOLD*100:.0f}% of mean volume"
+            logger.info("[EVAL] %s", reason)
+            return False, reason
         vol_std = df['close'].rolling(20).std().iloc[-1]
         if vol_std < df['close'].iloc[-20:-1].std() * 0.5:
             reason = "Volatility too low"

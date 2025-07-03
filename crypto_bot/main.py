@@ -247,6 +247,8 @@ async def main() -> None:
                             timeframe=config["timeframe"],
                             limit=100,
                         )
+                    if data:
+                        logger.debug("REST candle raw: %s", data[-1])
             except Exception as exc:  # pragma: no cover - network
                 logger.error("OHLCV fetch failed for %s: %s", sym, exc)
                 continue
@@ -303,6 +305,11 @@ async def main() -> None:
                 signals_generated += 1
 
             allowed, reason = risk_manager.allow_trade(df_sym)
+            mean_vol = df_sym["volume"].rolling(20).mean().iloc[-1]
+            last_vol = df_sym["volume"].iloc[-1]
+            logger.info(
+                f"[TRADE EVAL] {sym} | Signal: {score_sym:.2f} | Volume: {last_vol:.4f}/{mean_vol:.2f} | Allowed: {allowed}"
+            )
             if not allowed:
                 logger.info(
                     "Trade not allowed for %s \u2013 %s", sym, reason
