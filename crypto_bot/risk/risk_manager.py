@@ -109,6 +109,12 @@ class RiskManager:
             logger.info(reason)
             return False, reason
 
+        last_close = df["close"].iloc[-1]
+        last_time = str(df.index[-1])
+        logger.info(
+            f"{self.config.symbol} | Last close: {last_close:.2f}, Time: {last_time}"
+        )
+
         vol_mean = df['volume'].rolling(20).mean().iloc[-1]
         current_volume = df['volume'].iloc[-1]
         logger.info(
