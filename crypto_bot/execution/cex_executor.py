@@ -224,6 +224,14 @@ async def execute_trade_async(
             return {}
     send_message(token, chat_id, f"Order executed: {order}")
     log_trade(order)
+    logger.info(
+        "Order executed - id=%s side=%s amount=%s price=%s dry_run=%s",
+        order.get("id"),
+        order.get("side"),
+        order.get("amount"),
+        order.get("price") or order.get("average"),
+        dry_run,
+    )
     if (config or {}).get("tax_tracking", {}).get("enabled"):
         try:
             if order.get("side") == "buy":

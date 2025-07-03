@@ -489,7 +489,7 @@ async def main() -> None:
                 size,
                 current_price,
             )
-            await execute_swap(
+            swap_result = await execute_swap(
                 "SOL",
                 "USDC",
                 size,
@@ -498,6 +498,15 @@ async def main() -> None:
                 slippage_bps=config.get("solana_slippage_bps", 50),
                 dry_run=config["execution_mode"] == "dry_run",
             )
+            if swap_result:
+                logger.info(
+                    "On-chain swap tx=%s in=%s out=%s amount=%s dry_run=%s",
+                    swap_result.get("tx_hash"),
+                    swap_result.get("token_in"),
+                    swap_result.get("token_out"),
+                    swap_result.get("amount"),
+                    config["execution_mode"] == "dry_run",
+                )
             risk_manager.register_stop_order(
                 {
                     "token_in": "SOL",
@@ -517,7 +526,7 @@ async def main() -> None:
                 current_price,
             )
             config["symbol"] = best["symbol"] if best else config["symbol"]
-            await cex_trade_async(
+            order = await cex_trade_async(
                 exchange,
                 ws_client,
                 config["symbol"],
@@ -529,6 +538,15 @@ async def main() -> None:
                 use_websocket=config.get("use_websocket", False),
                 config=config,
             )
+            if order:
+                logger.info(
+                    "CEX trade result - id=%s side=%s amount=%s price=%s dry_run=%s",
+                    order.get("id"),
+                    order.get("side"),
+                    order.get("amount"),
+                    order.get("price") or order.get("average"),
+                    order.get("dry_run", config["execution_mode"] == "dry_run"),
+                )
             stop_price = current_price * (
                 1 - risk_manager.config.stop_loss_pct
                 if trade_side == "buy"

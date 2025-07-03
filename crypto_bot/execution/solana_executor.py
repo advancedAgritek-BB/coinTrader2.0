@@ -62,6 +62,14 @@ async def execute_swap(
             "tx_hash": tx_hash,
         }
         send_message(telegram_token, chat_id, f"Swap executed: {result}")
+        logger.info(
+            "Swap executed - tx=%s in=%s out=%s amount=%s dry_run=%s",
+            tx_hash,
+            token_in,
+            token_out,
+            amount,
+            True,
+        )
         if (config or {}).get("tax_tracking", {}).get("enabled"):
             try:
                 tax_logger.record_exit({"symbol": token_in, "amount": amount, "side": "sell"})
@@ -143,6 +151,14 @@ async def execute_swap(
         "tx_hash": tx_hash,
     }
     send_message(telegram_token, chat_id, f"Swap executed: {result}")
+    logger.info(
+        "Swap executed - tx=%s in=%s out=%s amount=%s dry_run=%s",
+        tx_hash,
+        token_in,
+        token_out,
+        amount,
+        False,
+    )
     if (config or {}).get("tax_tracking", {}).get("enabled"):
         try:
             tax_logger.record_exit({"symbol": token_in, "amount": amount, "side": "sell"})
