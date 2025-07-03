@@ -59,10 +59,14 @@ def filter_symbols(exchange, symbols: Iterable[str]) -> List[str]:
                 exchange.load_markets()
             except Exception as exc:  # pragma: no cover - best effort
                 logger.warning("load_markets failed: %s", exc)
-        id_map = {
-            k: v.get("symbol", k) if isinstance(v, dict) else k
-            for k, v in exchange.markets_by_id.items()
-        }
+        id_map = {}
+        for k, v in exchange.markets_by_id.items():
+            if isinstance(v, dict):
+                id_map[k] = v.get("symbol", k)
+            elif isinstance(v, list) and v and isinstance(v[0], dict):
+                id_map[k] = v[0].get("symbol", k)
+            else:
+                id_map[k] = k
     allowed: List[str] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)

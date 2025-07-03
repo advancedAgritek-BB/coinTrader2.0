@@ -30,10 +30,43 @@ class DummyAsyncExchange:
         return [[0, 1, 2, 3, 4, 5]]
 
 
+class DummyWSExchange:
+    def __init__(self):
+        self.fetch_called = False
+
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        return [[0] * 6]
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.fetch_called = True
+        return [[1] * 6 for _ in range(limit)]
+
+
+class DummyWSExchangeEnough(DummyWSExchange):
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        return [[2] * 6 for _ in range(limit)]
+
+
 def test_fetch_ohlcv_async():
     ex = DummyAsyncExchange()
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD"))
     assert data[0][0] == 0
+
+
+def test_watch_ohlcv_fallback_to_fetch():
+    ex = DummyWSExchange()
+    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
+    assert ex.fetch_called is True
+    assert len(data) == 2
+    assert data[0][0] == 1
+
+
+def test_watch_ohlcv_no_fallback_when_enough():
+    ex = DummyWSExchangeEnough()
+    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
+    assert ex.fetch_called is False
+    assert len(data) == 2
+    assert data[0][0] == 2
 
 
 class DummySyncExchange:

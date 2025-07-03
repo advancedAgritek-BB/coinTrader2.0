@@ -42,7 +42,14 @@ async def fetch_ohlcv_async(
     """Return OHLCV data for ``symbol`` using async I/O."""
     try:
         if use_websocket and hasattr(exchange, "watch_ohlcv"):
-            return await exchange.watch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+            data = await exchange.watch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+            if limit and len(data) < limit and hasattr(exchange, "fetch_ohlcv"):
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
+                    return await exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+                return await asyncio.to_thread(
+                    exchange.fetch_ohlcv, symbol, timeframe=timeframe, limit=limit
+                )
+            return data
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
             return await exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
         return await asyncio.to_thread(
