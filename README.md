@@ -136,7 +136,11 @@ liquidity_depth: 10          # order book depth levels to inspect
 twap_enabled: false          # split large orders into slices
 twap_slices: 4               # number of slices when TWAP is enabled
 twap_interval_seconds: 10    # delay between TWAP slices
+loop_interval_minutes: 5     # wait time between trading cycles
 ```
+
+`loop_interval_minutes` determines how long the bot sleeps between each
+evaluation cycle, giving the market time to evolve before scanning again.
 
 When `use_websocket` is enabled the bot relies on `ccxt.pro` for realtime
 streaming data. Install it alongside the other requirements or disable
