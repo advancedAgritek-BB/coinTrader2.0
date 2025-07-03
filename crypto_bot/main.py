@@ -469,7 +469,9 @@ async def main() -> None:
                 )
                 if sell_amount >= position_size:
                     risk_manager.cancel_stop_order(exchange)
-                    risk_manager.deallocate_capital(current_strategy, sell_amount)
+                    risk_manager.deallocate_capital(
+                        current_strategy, sell_amount * entry_price
+                    )
                     log_performance(
                         {
                             "symbol": config["symbol"],
@@ -526,7 +528,9 @@ async def main() -> None:
                     active_strategy = None
                 else:
                     position_size -= sell_amount
-                    risk_manager.deallocate_capital(current_strategy, sell_amount)
+                    risk_manager.deallocate_capital(
+                        current_strategy, sell_amount * entry_price
+                    )
                     risk_manager.update_stop_order(position_size)
 
         if score < config["signal_threshold"] or direction == "none":
@@ -592,6 +596,10 @@ async def main() -> None:
         if best:
             risk_manager.config.symbol = best["symbol"]
         size = risk_manager.position_size(score, balance)
+        if current_price and current_price > 0:
+            order_amount = size / current_price
+        else:
+            order_amount = 0.0
         if not risk_manager.can_allocate(name, size, balance):
             logger.info("Capital cap reached for %s, skipping", name)
             logger.info(
@@ -620,13 +628,13 @@ async def main() -> None:
                 "Executing %s entry %s %.4f at %.4f",
                 name,
                 direction,
-                size,
+                order_amount,
                 current_price,
             )
             swap_result = await execute_swap(
                 "SOL",
                 "USDC",
-                size,
+                order_amount,
                 user["telegram_token"],
                 user["telegram_chat_id"],
                 slippage_bps=config.get("solana_slippage_bps", 50),
@@ -645,7 +653,7 @@ async def main() -> None:
                 {
                     "token_in": "SOL",
                     "token_out": "USDC",
-                    "amount": size,
+                    "amount": order_amount,
                     "dry_run": config["execution_mode"] == "dry_run",
                 },
                 strategy=strategy_name(regime, env),
@@ -655,13 +663,13 @@ async def main() -> None:
                 direction=trade_side,
             )
             if paper_wallet:
-                paper_wallet.open(trade_side, size, current_price)
+                paper_wallet.open(trade_side, order_amount, current_price)
         else:
             logger.info(
                 "Executing %s entry %s %.4f at %.4f",
                 name,
                 direction,
-                size,
+                order_amount,
                 current_price,
             )
             config["symbol"] = best["symbol"] if best else config["symbol"]
@@ -670,7 +678,7 @@ async def main() -> None:
                 ws_client,
                 config["symbol"],
                 trade_side,
-                size,
+                order_amount,
                 user["telegram_token"],
                 user["telegram_chat_id"],
                 dry_run=config["execution_mode"] == "dry_run",
@@ -695,7 +703,7 @@ async def main() -> None:
                 exchange,
                 config["symbol"],
                 "sell" if trade_side == "buy" else "buy",
-                size,
+                order_amount,
                 stop_price,
                 user["telegram_token"],
                 user["telegram_chat_id"],
@@ -711,10 +719,10 @@ async def main() -> None:
             )
             risk_manager.allocate_capital(name, size)
             if paper_wallet:
-                paper_wallet.open(trade_side, size, current_price)
+                paper_wallet.open(trade_side, order_amount, current_price)
             open_side = trade_side
             entry_price = current_price
-            position_size = size
+            position_size = order_amount
             realized_pnl = 0.0
             entry_time = datetime.utcnow().isoformat()
             entry_regime = regime
