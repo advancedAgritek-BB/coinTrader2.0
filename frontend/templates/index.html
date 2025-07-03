@@ -42,7 +42,7 @@ async function startBot(event){
   if(event) event.preventDefault();
   const mode = document.getElementById('mode').value;
   try {
-    const resp = await fetch('{{ url_for('start_bot_route') }}', {
+    const resp = await fetch('{{ url_for('start_bot') }}', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({mode})
@@ -62,7 +62,7 @@ async function startBot(event){
 async function stopBot(event){
   if(event) event.preventDefault();
   try {
-    const resp = await fetch('{{ url_for('stop_bot_route') }}', {method:'POST'});
+    const resp = await fetch('{{ url_for('stop_bot') }}', {method:'POST'});
     const data = await resp.json();
     if(resp.ok){
       showAlert('Bot stopped', 'success');
@@ -77,7 +77,9 @@ async function stopBot(event){
 
 function updateStatus(data){
   const badge = document.getElementById('status-badge');
-  if(data.running){
+  const running =
+    data.running !== undefined ? data.running : (data.status === 'running' || data.status === 'started');
+  if(running){
     badge.className = 'badge bg-success';
     badge.textContent = 'Running';
     document.getElementById('stop-link').style.display = '';
@@ -88,7 +90,9 @@ function updateStatus(data){
     document.getElementById('stop-link').style.display = 'none';
     document.getElementById('start-form').style.display = '';
   }
-  document.getElementById('uptime').textContent = data.uptime;
+  if(data.uptime !== undefined){
+    document.getElementById('uptime').textContent = data.uptime;
+  }
 }
 
 function showAlert(msg, type){
