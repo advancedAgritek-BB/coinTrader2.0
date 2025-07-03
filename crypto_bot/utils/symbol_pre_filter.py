@@ -43,7 +43,15 @@ def filter_symbols(exchange, symbols: Iterable[str]) -> List[str]:
     data = _fetch_ticker(pairs).get("result", {})
     id_map = {}
     if hasattr(exchange, "markets_by_id"):
-        id_map = {k: v.get("symbol", k) for k, v in exchange.markets_by_id.items()}
+        if not exchange.markets_by_id and hasattr(exchange, "load_markets"):
+            try:
+                exchange.load_markets()
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.warning("load_markets failed: %s", exc)
+        id_map = {
+            k: v.get("symbol", k) if isinstance(v, dict) else k
+            for k, v in exchange.markets_by_id.items()
+        }
     allowed: List[str] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)

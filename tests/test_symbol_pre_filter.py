@@ -42,3 +42,30 @@ def test_filter_symbols(monkeypatch):
     monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter.requests.get", fake_get)
     symbols = filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"])
     assert symbols == ["ETH/USD"]
+
+
+class EmptyExchange:
+    def __init__(self):
+        self.markets_by_id = {}
+        self.called = False
+
+    def load_markets(self):
+        self.called = True
+        self.markets_by_id = {"XETHZUSD": {"symbol": "ETH/USD"}}
+
+
+def test_load_markets_when_missing(monkeypatch):
+    ex = EmptyExchange()
+    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter.requests.get", fake_get)
+    symbols = filter_symbols(ex, ["ETH/USD"])
+    assert ex.called is True
+    assert symbols == ["ETH/USD"]
+
+
+def test_non_dict_market_entry(monkeypatch):
+    class BadExchange:
+        markets_by_id = {"XETHZUSD": ["ETH/USD"]}
+
+    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter.requests.get", fake_get)
+    symbols = filter_symbols(BadExchange(), ["ETH/USD"])
+    assert symbols == ["XETHZUSD"]
