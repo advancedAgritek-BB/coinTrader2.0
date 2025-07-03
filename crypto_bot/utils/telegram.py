@@ -28,6 +28,8 @@ def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
                 thread.join()
                 if exc:
                     raise exc[0]
+            if loop is not None:
+                loop.create_task(bot.send_message(chat_id=chat_id, text=text))
             else:
                 asyncio.run(bot.send_message(chat_id=chat_id, text=text))
         else:

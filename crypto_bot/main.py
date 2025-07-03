@@ -133,6 +133,7 @@ async def main() -> None:
         except Exception:
             start_bal = 1000.0
         paper_wallet = PaperWallet(start_bal)
+        log_balance(paper_wallet.balance)
 
     open_side = None
     entry_price = None
@@ -541,9 +542,13 @@ async def main() -> None:
             else:
                 score_rejections += 1
             logger.info(
-                f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, "
-                f"{trades_executed} trades executed, {volume_rejections} rejected volume, "
-                f"{score_rejections} rejected score, {regime_rejections} rejected regime."
+                "Cycle Summary: %s pairs evaluated, %s signals, %s trades executed, %s rejected volume, %s rejected score, %s rejected regime.",
+                total_pairs,
+                signals_generated,
+                trades_executed,
+                volume_rejections,
+                score_rejections,
+                regime_rejections,
             )
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
@@ -585,9 +590,15 @@ async def main() -> None:
                 rejected_volume,
                 rejected_score,
                 rejected_regime,
-                f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, "
-                f"{trades_executed} trades executed, {volume_rejections} rejected volume, "
-                f"{score_rejections} rejected score, {regime_rejections} rejected regime."
+            )
+            logger.info(
+                "Cycle Summary: %s pairs evaluated, %s signals, %s trades executed, %s rejected volume, %s rejected score, %s rejected regime.",
+                total_pairs,
+                signals_generated,
+                trades_executed,
+                volume_rejections,
+                score_rejections,
+                regime_rejections,
             )
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
@@ -716,9 +727,15 @@ async def main() -> None:
             rejected_volume,
             rejected_score,
             rejected_regime,
-            f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, "
-            f"{trades_executed} trades executed, {volume_rejections} rejected volume, "
-            f"{score_rejections} rejected score, {regime_rejections} rejected regime."
+        )
+        logger.info(
+            "Cycle Summary: %s pairs evaluated, %s signals, %s trades executed, %s rejected volume, %s rejected score, %s rejected regime.",
+            total_pairs,
+            signals_generated,
+            trades_executed,
+            volume_rejections,
+            score_rejections,
+            regime_rejections,
         )
         await asyncio.sleep(config["loop_interval_minutes"] * 60)
 
