@@ -62,6 +62,13 @@ async def execute_swap(
             "tx_hash": tx_hash,
         }
         send_message(telegram_token, chat_id, f"Swap executed: {result}")
+        logger.info(
+            "Swap completed: %s -> %s amount=%s tx=%s",
+            token_in,
+            token_out,
+            amount,
+            tx_hash,
+        )
         if (config or {}).get("tax_tracking", {}).get("enabled"):
             try:
                 tax_logger.record_exit({"symbol": token_in, "amount": amount, "side": "sell"})
@@ -116,6 +123,12 @@ async def execute_swap(
             slippage = (ask - bid) / ((ask + bid) / 2)
             if slippage > config.get("max_slippage_pct", 1.0):
                 logger.warning("Trade skipped due to slippage.")
+                logger.info(
+                    "Swap skipped: %s -> %s amount=%s due to slippage",
+                    token_in,
+                    token_out,
+                    amount,
+                )
                 send_message(telegram_token, chat_id, "Trade skipped due to slippage.")
                 return {}
         except Exception as err:  # pragma: no cover - network
@@ -143,6 +156,13 @@ async def execute_swap(
         "tx_hash": tx_hash,
     }
     send_message(telegram_token, chat_id, f"Swap executed: {result}")
+    logger.info(
+        "Swap completed: %s -> %s amount=%s tx=%s",
+        token_in,
+        token_out,
+        amount,
+        tx_hash,
+    )
     if (config or {}).get("tax_tracking", {}).get("enabled"):
         try:
             tax_logger.record_exit({"symbol": token_in, "amount": amount, "side": "sell"})
