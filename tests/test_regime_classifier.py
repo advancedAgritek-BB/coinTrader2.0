@@ -13,3 +13,23 @@ def test_classify_regime_returns_unknown_for_short_df():
     }
     df = pd.DataFrame(data)
     assert classify_regime(df) == "unknown"
+
+
+def test_classify_regime_handles_index_error(monkeypatch):
+    data = {
+        "open": list(range(30)),
+        "high": list(range(1, 31)),
+        "low": list(range(30)),
+        "close": list(range(30)),
+        "volume": [100] * 30,
+    }
+    df = pd.DataFrame(data)
+
+    def raise_index(*args, **kwargs):
+        raise IndexError
+
+    monkeypatch.setattr(
+        __import__("ta").trend, "adx", raise_index
+    )
+
+    assert classify_regime(df) == "unknown"

@@ -30,11 +30,17 @@ def classify_regime(df: pd.DataFrame) -> str:
     )
 
     if len(df) >= 14:
-        df['adx'] = ta.trend.adx(df['high'], df['low'], df['close'], window=14)
-        df['rsi'] = ta.momentum.rsi(df['close'], window=14)
-        df['atr'] = ta.volatility.average_true_range(
-            df['high'], df['low'], df['close'], window=14
-        )
+        try:
+            df['adx'] = ta.trend.adx(df['high'], df['low'], df['close'], window=14)
+            df['rsi'] = ta.momentum.rsi(df['close'], window=14)
+            df['atr'] = ta.volatility.average_true_range(
+                df['high'], df['low'], df['close'], window=14
+            )
+        except IndexError:
+            df['adx'] = np.nan
+            df['rsi'] = np.nan
+            df['atr'] = np.nan
+            return "unknown"
     else:
         df['adx'] = np.nan
         df['rsi'] = np.nan
