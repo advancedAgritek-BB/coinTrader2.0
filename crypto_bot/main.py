@@ -95,7 +95,7 @@ async def main() -> None:
     exchange, ws_client = get_exchange(config)
 
     if config.get("scan_markets", False) and not config.get("symbols"):
-        config["symbols"] = load_kraken_symbols(
+        config["symbols"] = await load_kraken_symbols(
             exchange, config.get("excluded_symbols", [])
         )
 

@@ -16,12 +16,12 @@ class DummyExchange:
 
 def test_load_kraken_symbols_returns_active():
     ex = DummyExchange()
-    symbols = load_kraken_symbols(ex)
+    symbols = asyncio.run(load_kraken_symbols(ex))
     assert set(symbols) == {"BTC/USD", "ETH/USD"}
 
 def test_excluded_symbols_are_removed():
     ex = DummyExchange()
-    symbols = load_kraken_symbols(ex, exclude=["ETH/USD"])
+    symbols = asyncio.run(load_kraken_symbols(ex, exclude=["ETH/USD"]))
     assert set(symbols) == {"BTC/USD"}
 
 
