@@ -117,20 +117,30 @@ class RiskManager:
 
         vol_mean = df['volume'].rolling(20).mean().iloc[-1]
         current_volume = df['volume'].iloc[-1]
-        logger.info(
-            f"{self.config.symbol} | Raw Volume: {current_volume} | Mean Volume: {vol_mean}"
-        )
+        vol_mean = df["volume"].rolling(20).mean().iloc[-1]
+        current_volume = df["volume"].iloc[-1]
         vol_threshold = vol_mean * self.config.volume_threshold_ratio
+        logger.info(
+            f"{self.config.symbol} | Raw Volume: {current_volume} | Mean Volume: {vol_mean} | "
+            f"Min Volume: {self.config.min_volume} | Ratio Threshold: {vol_threshold}"
+        )
+
         below_min = current_volume < self.config.min_volume
         below_ratio = current_volume < vol_threshold
+
+        if below_min:
+            logger.info("Current volume below min absolute threshold")
+        if below_ratio:
+            logger.info(
+                f"Current volume below {self.config.volume_threshold_ratio * 100:.0f}% of mean volume"
+            )
+
         if below_min and below_ratio:
             if self.config.min_volume >= vol_threshold:
-                reason = (
-                    f"Volume {current_volume:.4f} below minimum {self.config.min_volume:.4f}"
-                )
+                reason = "Volume < min absolute threshold"
             else:
                 reason = (
-                    f"Volume {current_volume:.4f} below ratio threshold {vol_threshold:.4f}"
+                    f"Volume < {self.config.volume_threshold_ratio * 100:.0f}% of mean volume"
                 )
             logger.info(reason)
             return False, reason
