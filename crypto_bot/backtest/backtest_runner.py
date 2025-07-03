@@ -4,7 +4,7 @@ import numpy as np
 from typing import Dict, List, Iterable
 
 from crypto_bot.regime.regime_classifier import classify_regime
-from crypto_bot.strategy_router import route
+from crypto_bot.strategy_router import strategy_for
 from crypto_bot.signals.signal_scoring import evaluate
 
 
@@ -20,7 +20,7 @@ def _run_single(df: pd.DataFrame, stop_loss: float, take_profit: float, mode: st
     for i in range(60, len(df)):
         subset = df.iloc[: i + 1]
         regime = classify_regime(subset)
-        strategy_fn = route(regime, mode)
+        strategy_fn = strategy_for(regime)
         score, direction = evaluate(strategy_fn, subset, None)
         price = subset['close'].iloc[-1]
 

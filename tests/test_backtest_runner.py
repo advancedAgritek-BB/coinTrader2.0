@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import ccxt
 
 from crypto_bot.backtest import backtest_runner
@@ -18,7 +17,7 @@ class FakeExchange:
 def test_backtest_returns_metrics(monkeypatch):
     monkeypatch.setattr(ccxt, 'binance', lambda: FakeExchange())
     monkeypatch.setattr(backtest_runner, 'classify_regime', lambda df: 'trending')
-    monkeypatch.setattr(backtest_runner, 'route', lambda regime, mode: trend_bot.generate_signal)
+    monkeypatch.setattr(backtest_runner, 'strategy_for', lambda regime: trend_bot.generate_signal)
 
     result = backtest_runner.backtest(
         'BTC/USDT',

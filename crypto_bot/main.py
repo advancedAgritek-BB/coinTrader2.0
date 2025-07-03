@@ -15,7 +15,7 @@ from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.wallet_manager import load_or_create
 from crypto_bot.regime.regime_classifier import classify_regime
-from crypto_bot.strategy_router import route, strategy_name
+from crypto_bot.strategy_router import strategy_for, strategy_name
 from crypto_bot.cooldown_manager import (
     in_cooldown,
     mark_cooldown,
@@ -282,7 +282,7 @@ async def main() -> None:
                 rejected_regime += 1
                 continue
             env_sym = mode if mode != "auto" else "cex"
-            strategy_fn = route(regime_sym, env_sym)
+            strategy_fn = strategy_for(regime_sym)
             name_sym = strategy_name(regime_sym, env_sym)
             logger.info("Regime %s -> Strategy %s", regime_sym, name_sym)
             logger.info(
