@@ -77,7 +77,9 @@ async function stopBot(event){
 
 function updateStatus(data){
   const badge = document.getElementById('status-badge');
-  if(data.running){
+  const running =
+    data.running !== undefined ? data.running : (data.status === 'running' || data.status === 'started');
+  if(running){
     badge.className = 'badge bg-success';
     badge.textContent = 'Running';
     document.getElementById('stop-link').style.display = '';
@@ -91,6 +93,8 @@ function updateStatus(data){
   document.getElementById('uptime').textContent = data.uptime;
   if(data.mode){
     document.getElementById('mode').value = data.mode;
+  if(data.uptime !== undefined){
+    document.getElementById('uptime').textContent = data.uptime;
   }
 }
 

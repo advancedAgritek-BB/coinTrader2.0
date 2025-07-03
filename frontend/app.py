@@ -59,13 +59,6 @@ def get_uptime() -> str:
     return utils.get_uptime(bot_start_time)
 
 
-def watch_bot() -> None:
-    """Monitor the bot process and clear reference when it exits."""
-    global bot_proc
-    while True:
-        if bot_proc is not None and bot_proc.poll() is not None:
-            bot_proc = None
-        time.sleep(1)
 
 
 @app.route('/')
