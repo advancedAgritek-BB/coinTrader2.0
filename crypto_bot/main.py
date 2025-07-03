@@ -43,6 +43,7 @@ from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.utils.performance_logger import log_performance
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.utils.position_logger import log_position, log_balance
+from crypto_bot.utils.regime_logger import log_regime
 from crypto_bot.utils.market_loader import load_kraken_symbols
 from crypto_bot.utils.pnl_logger import log_pnl
 
@@ -290,6 +291,15 @@ async def main() -> None:
 
             regime_sym = classify_regime(df_sym)
             logger.info("Market regime for %s classified as %s", sym, regime_sym)
+
+            period = int(config.get("regime_return_period", 5))
+            future_return = 0.0
+            if len(df_sym) > period:
+                start = df_sym["close"].iloc[-period - 1]
+                end = df_sym["close"].iloc[-1]
+                future_return = (end - start) / start * 100
+            log_regime(sym, regime_sym, future_return)
+
             if regime_sym == "unknown":
                 rejected_regime += 1
                 continue
