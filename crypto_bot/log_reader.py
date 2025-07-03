@@ -11,11 +11,17 @@ import pandas as pd
 def _read_trades(path: Path | str) -> pd.DataFrame:
     file = Path(path)
     if not file.exists():
-        return pd.DataFrame(columns=["symbol", "side", "amount", "price"])
-    df = pd.read_csv(file, header=None)
+        return pd.DataFrame(columns=["symbol", "side", "amount", "price", "timestamp"])
+
     cols = ["symbol", "side", "amount", "price", "timestamp"]
+    df = pd.read_csv(
+        file,
+        header=None,
+        names=cols,
+        engine="python",
+        on_bad_lines=lambda row: row[: len(cols)],
+    )
     df = df.iloc[:, : len(cols)]
-    df.columns = cols[: df.shape[1]]
     return df
 
 
