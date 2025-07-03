@@ -90,6 +90,9 @@ function updateStatus(data){
     document.getElementById('stop-link').style.display = 'none';
     document.getElementById('start-form').style.display = '';
   }
+  document.getElementById('uptime').textContent = data.uptime;
+  if(data.mode){
+    document.getElementById('mode').value = data.mode;
   if(data.uptime !== undefined){
     document.getElementById('uptime').textContent = data.uptime;
   }

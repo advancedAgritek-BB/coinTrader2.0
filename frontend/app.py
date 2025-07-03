@@ -92,28 +92,18 @@ def start():
 def start_bot():
     """Start the trading bot and return JSON status."""
     global bot_proc, bot_start_time
-    mode = request.json.get('mode', 'dry_run') if request.is_json else request.form.get('mode', 'dry_run')
+    mode = (
+        request.json.get('mode', 'dry_run') if request.is_json else request.form.get('mode', 'dry_run')
+    )
     set_execution_mode(mode)
     status = 'running'
     if not is_running():
         bot_proc = subprocess.Popen(['python', '-m', 'crypto_bot.main'])
         bot_start_time = time.time()
         status = 'started'
-    return jsonify({'status': status})
-def start_bot_route():
-    """Start the trading bot and return JSON status."""
-    global bot_proc, bot_start_time
-    mode = 'dry_run'
-    if request.is_json:
-        mode = request.json.get('mode', 'dry_run')
-    else:
-        mode = request.form.get('mode', 'dry_run')
-    set_execution_mode(mode)
-    if not is_running():
-        bot_proc = subprocess.Popen(['python', '-m', 'crypto_bot.main'])
-        bot_start_time = time.time()
     return jsonify({
-        'running': is_running(),
+        'status': status,
+        'running': True,
         'uptime': get_uptime(),
         'mode': mode,
     })
@@ -141,16 +131,12 @@ def stop_bot():
         status = 'stopped'
     bot_proc = None
     bot_start_time = None
-    return jsonify({'status': status})
-def stop_bot_route():
-    """Stop the trading bot and return JSON status."""
-    global bot_proc, bot_start_time
-    if is_running():
-        bot_proc.terminate()
-        bot_proc.wait()
-    bot_proc = None
-    bot_start_time = None
-    return jsonify({'running': False, 'uptime': get_uptime(), 'mode': load_execution_mode()})
+    return jsonify({
+        'status': status,
+        'running': False,
+        'uptime': get_uptime(),
+        'mode': load_execution_mode(),
+    })
 
 
 @app.route('/logs')

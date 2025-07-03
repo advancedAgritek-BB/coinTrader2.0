@@ -46,9 +46,15 @@ def test_start_stop_bot_endpoints(monkeypatch):
     app.bot_proc = None
     resp = client.post('/start_bot')
     assert resp.status_code == 200
-    assert resp.get_json()['status'] == 'started'
+    data = resp.get_json()
+    assert data['status'] == 'started'
+    assert data['running'] is True
+    assert 'uptime' in data
 
     app.bot_proc = DummyProc()
     resp = client.post('/stop_bot')
     assert resp.status_code == 200
-    assert resp.get_json()['status'] == 'stopped'
+    data = resp.get_json()
+    assert data['status'] == 'stopped'
+    assert data['running'] is False
+    assert 'uptime' in data
