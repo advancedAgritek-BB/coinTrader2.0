@@ -4,14 +4,7 @@ import ta
 
 
 def classify_regime(df: pd.DataFrame) -> str:
-    """Classify market regime based on technical indicators."""
-    if len(df) < 14:
-        return "unknown"
-    """Classify market regime based on technical indicators.
-
-    The function requires at least 20 rows of data to reliably compute
-    all indicators. If fewer rows are supplied ``"unknown"`` is returned.
-    """
+    """Classify market regime. Requires at least 20 rows of data."""
 
     if df is None or df.empty or len(df) < 20:
         return "unknown"
@@ -30,11 +23,17 @@ def classify_regime(df: pd.DataFrame) -> str:
     )
 
     if len(df) >= 14:
-        df['adx'] = ta.trend.adx(df['high'], df['low'], df['close'], window=14)
-        df['rsi'] = ta.momentum.rsi(df['close'], window=14)
-        df['atr'] = ta.volatility.average_true_range(
-            df['high'], df['low'], df['close'], window=14
-        )
+        try:
+            df['adx'] = ta.trend.adx(df['high'], df['low'], df['close'], window=14)
+            df['rsi'] = ta.momentum.rsi(df['close'], window=14)
+            df['atr'] = ta.volatility.average_true_range(
+                df['high'], df['low'], df['close'], window=14
+            )
+        except IndexError:
+            df['adx'] = np.nan
+            df['rsi'] = np.nan
+            df['atr'] = np.nan
+            return "unknown"
     else:
         df['adx'] = np.nan
         df['rsi'] = np.nan
