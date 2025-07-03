@@ -1,124 +1,87 @@
-# Configuration for hybrid crypto bot
-# mode selects the trading environment: auto chooses based on regime, or use cex/onchain
-mode: auto
-# run in testing mode to execute trades with smaller volumes
-# testing_mode controls reduced trade size for automated tests
-testing_mode: true
-# exchange used for centralized trading (coinbase or kraken)
+atr_normalization: true
 exchange: kraken
-# when using Kraken, enable WebSocket trading (requires KRAKEN_WS_TOKEN)
-use_websocket: true
-# wallet address for on-chain transactions
-wallet_address: "your_wallet"
-# preferred blockchain when using on-chain mode
-preferred_chain: "solana"
-# slippage bps used for Solana swaps
-solana_slippage_bps: 50
-# market symbol to trade on the exchange
-symbol: "BTC/USDT"
-# list of symbols to scan (auto-filled if empty)
-symbols: []
-# symbols user wishes to skip
 excluded_symbols: []
-# query exchange for tradable markets when symbols list is empty
-scan_markets: true
-# timeframe of candles to fetch
-timeframe: "1h"
-# percent of available balance to allocate per trade
-trade_size_pct: 0.2
-# limit total capital per strategy
-strategy_allocation:
-  trend_bot: 0.4
-  grid_bot: 0.3
-  sniper_bot: 0.3
-# default stop loss percentage
-sl_pct: 0.03
-# default take profit percentage
-tp_pct: 0.07
-# minimum signal score required to open a position
-signal_threshold: 0.3
-# run in dry_run to simulate trades or live for real trading
 execution_mode: dry_run
-# enable or disable telegram notifications
-telegram_alerts: true
-# log trades to Google Sheets if credentials are provided
-log_to_google: true
-tax_tracking:
-  enabled: false
-  export_path: "crypto_bot/logs/tax_trades.csv"
-risk:
-  # maximum drawdown allowed before trading is halted
-  max_drawdown: 0.7
-  # stop loss percent managed by the risk manager
-  stop_loss_pct: 0.02
-  # take profit percent managed by the risk manager
-  take_profit_pct: 0.04
-  # minimum raw volume required to consider a trade
-  min_volume: 50
-  volume_threshold_ratio: 0.05
-telegram:
-  # telegram chat id to receive alerts
-  chat_id: "YOUR_CHAT_ID"
-# minutes to wait between trading loops
-loop_interval_minutes: 5
-min_cooldown: 60
 exit_strategy:
-  # trailing stop percent applied after trade moves in our favor
-  trailing_stop_pct: 0.13
-  # profit percent before trailing stop activates
-  min_gain_to_trail: 0.2
-  # use Fibonacci extensions for take profit targets
   fib_tp_enabled: true
-  # allow scaling out of positions
+  min_gain_to_trail: 0.2
+  partial_levels:
+  - 25
+  - 50
+  - 100
   scale_out: true
-  # profit levels (%) at which partial exits occur
-  partial_levels: [25, 50, 100]
-mempool_monitor:
-  enabled: false
-  suspicious_fee_threshold: 100
-  action: pause
-  reprice_multiplier: 1.05
-
-# execution settings
+  trailing_stop_pct: 0.13
 liquidity_check: true
 liquidity_depth: 10
-twap_enabled: false
-twap_slices: 4
-twap_interval_seconds: 10
+log_to_google: true
+loop_interval_minutes: 5
 max_slippage_pct: 0.05
-atr_normalization: true
-
-portfolio_rotation:
+mempool_monitor:
+  action: pause
   enabled: false
-  interval_days: 7
-  scoring_method: sharpe
-  top_assets: 5
-  rebalance_threshold: 0.1
-
-sentiment_filter:
-  min_fng: 0
-  bull_fng: 70
-  min_sentiment: 0
-  bull_sentiment: 60
-
-volatility_filter:
-  min_atr_pct: 0.001
-  max_funding_rate: 0.05
-
+  reprice_multiplier: 1.05
+  suspicious_fee_threshold: 100
+meta_selector:
+  enabled: false
+min_cooldown: 60
 ml_signal_model:
   enabled: false
   weight: 0.5
-
+mode: auto
 optimization:
   enabled: false
   interval_days: 7
   parameter_ranges:
     trend:
-      stop_loss: [0.02]
-      take_profit: [0.04]
-
-meta_selector:
+      stop_loss:
+      - 0.02
+      take_profit:
+      - 0.04
+portfolio_rotation:
   enabled: false
-
-# number of candles to evaluate regime performance
+  interval_days: 7
+  rebalance_threshold: 0.1
+  scoring_method: sharpe
+  top_assets: 5
+preferred_chain: solana
 regime_return_period: 5
+risk:
+  max_drawdown: 0.7
+  min_volume: 50
+  stop_loss_pct: 0.02
+  take_profit_pct: 0.04
+  volume_threshold_ratio: 0.05
+scan_markets: true
+sentiment_filter:
+  bull_fng: 70
+  bull_sentiment: 60
+  min_fng: 0
+  min_sentiment: 0
+signal_threshold: 0.3
+sl_pct: 0.03
+solana_slippage_bps: 50
+strategy_allocation:
+  grid_bot: 0.3
+  sniper_bot: 0.3
+  trend_bot: 0.4
+symbol: BTC/USDT
+symbols: []
+tax_tracking:
+  enabled: false
+  export_path: crypto_bot/logs/tax_trades.csv
+telegram:
+  chat_id: YOUR_CHAT_ID
+telegram_alerts: true
+testing_mode: true
+timeframe: 1h
+tp_pct: 0.07
+trade_size_pct: 0.2
+twap_enabled: false
+twap_interval_seconds: 10
+twap_slices: 4
+use_websocket: true
+force_websocket_history: false  # disable REST fallback when using websockets
+volatility_filter:
+  max_funding_rate: 0.05
+  min_atr_pct: 0.001
+wallet_address: your_wallet

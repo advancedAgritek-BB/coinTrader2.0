@@ -259,6 +259,7 @@ async def main() -> None:
             timeframe=config["timeframe"],
             limit=100,
             use_websocket=config.get("use_websocket", False),
+            force_websocket_history=config.get("force_websocket_history", False),
         )
 
         for sym in symbols:

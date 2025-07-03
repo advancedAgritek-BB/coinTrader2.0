@@ -103,3 +103,19 @@ def test_load_ohlcv_parallel_websocket_overrides_fetch():
     )
     assert list(result.keys()) == ["BTC/USD"]
     assert len(result["BTC/USD"]) == 3
+
+
+def test_load_ohlcv_parallel_websocket_force_history():
+    ex = DummyWSEchange()
+    result = asyncio.run(
+        load_ohlcv_parallel(
+            ex,
+            ["BTC/USD"],
+            timeframe="1h",
+            limit=3,
+            use_websocket=True,
+            force_websocket_history=True,
+        )
+    )
+    assert list(result.keys()) == ["BTC/USD"]
+    assert len(result["BTC/USD"]) == 1
