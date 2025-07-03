@@ -118,6 +118,7 @@ def should_exit(
     current_price: float,
     trailing_stop: float,
     config: dict,
+    risk_manager=None,
 ) -> Tuple[bool, float]:
     """Determine whether to exit a position and update trailing stop.
 
@@ -147,6 +148,28 @@ def should_exit(
                 trailing_stop,
             )
             exit_signal = True
+            if risk_manager and getattr(risk_manager, "stop_order", None):
+                order = risk_manager.stop_order
+                entry = order.get("entry_price")
+                direction = order.get("direction")
+                strategy = order.get("strategy", "")
+                symbol = order.get("symbol", config.get("symbol", ""))
+                confidence = order.get("confidence", 0.0)
+                if entry is not None and direction:
+                    pnl = (current_price - entry) * (
+                        1 if direction == "buy" else -1
+                    )
+                    from crypto_bot.utils.pnl_logger import log_pnl
+
+                    log_pnl(
+                        strategy,
+                        symbol,
+                        entry,
+                        current_price,
+                        pnl,
+                        confidence,
+                        direction,
+                    )
     else:
         trailed = calculate_trailing_stop(
             df['close'],
