@@ -186,6 +186,10 @@ symbols: []            # automatically populated
 excluded_symbols: [ETH/USD]
 ```
 
+OHLCV data for these symbols is now fetched concurrently using
+`load_ohlcv_parallel`, greatly reducing the time needed to evaluate
+large symbol lists.
+
 ## Web UI
 
 A small Flask web dashboard is included for running the bot and inspecting logs.

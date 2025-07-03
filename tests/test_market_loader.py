@@ -1,4 +1,10 @@
-from crypto_bot.utils.market_loader import load_kraken_symbols
+import asyncio
+
+from crypto_bot.utils.market_loader import (
+    load_kraken_symbols,
+    fetch_ohlcv_async,
+    load_ohlcv_parallel,
+)
 
 class DummyExchange:
     def load_markets(self):
@@ -17,3 +23,27 @@ def test_excluded_symbols_are_removed():
     ex = DummyExchange()
     symbols = load_kraken_symbols(ex, exclude=["ETH/USD"])
     assert set(symbols) == {"BTC/USD"}
+
+
+class DummyAsyncExchange:
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        return [[0, 1, 2, 3, 4, 5]]
+
+
+def test_fetch_ohlcv_async():
+    ex = DummyAsyncExchange()
+    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD"))
+    assert data[0][0] == 0
+
+
+class DummySyncExchange:
+    def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        return [[0, 1, 2, 3, 4, 5]]
+
+
+def test_load_ohlcv_parallel():
+    ex = DummySyncExchange()
+    result = asyncio.run(
+        load_ohlcv_parallel(ex, ["BTC/USD", "ETH/USD"], timeframe="1h", limit=1)
+    )
+    assert set(result.keys()) == {"BTC/USD", "ETH/USD"}
