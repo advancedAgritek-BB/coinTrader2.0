@@ -20,6 +20,15 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 
 On-chain DEX execution submits real transactions when not running in dry-run mode.
 
+## Regime Classifier
+
+The bot selects a strategy by first classifying the current market regime. The
+`classify_regime` function computes EMA, ADX, RSI and Bollinger Band width to
+label conditions as `trending`, `sideways`, `breakout`, `mean-reverting` or
+`volatile`. At least **20** OHLCV entries are required for these indicators to
+be calculated reliably. When fewer rows are available the function returns
+`"unknown"` so the router can avoid making a poor decision.
+
 ## Quick Start
 
 1. Install the dependencies:
