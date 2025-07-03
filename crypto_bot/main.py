@@ -560,6 +560,7 @@ async def main() -> None:
                 score_rejections,
                 regime_rejections,
             )
+            logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
 
@@ -610,6 +611,7 @@ async def main() -> None:
                 score_rejections,
                 regime_rejections,
             )
+            logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
 
@@ -767,6 +769,7 @@ async def main() -> None:
             score_rejections,
             regime_rejections,
         )
+        logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
         await asyncio.sleep(config["loop_interval_minutes"] * 60)
 
 
