@@ -41,6 +41,7 @@ from crypto_bot.fund_manager import (
 )
 from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.utils.performance_logger import log_performance
+from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.utils.position_logger import log_position, log_balance
 from crypto_bot.utils.market_loader import load_kraken_symbols
 
@@ -148,6 +149,7 @@ async def main() -> None:
     rotator = PortfolioRotator()
     last_rotation = 0.0
     last_optimize = 0.0
+    last_weight_update = 0.0
 
     mode = user.get("mode", config.get("mode", "auto"))
     state = {"running": True, "mode": mode}
@@ -179,6 +181,14 @@ async def main() -> None:
         volume_rejections = 0
         score_rejections = 0
         regime_rejections = 0
+
+        if time.time() - last_weight_update >= 86400:
+            weights = compute_strategy_weights()
+            if weights:
+                logger.info("Updating strategy allocation to %s", weights)
+                risk_manager.update_allocation(weights)
+                config["strategy_allocation"] = weights
+            last_weight_update = time.time()
 
         if config.get("optimization", {}).get("enabled"):
             if (

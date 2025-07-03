@@ -45,6 +45,11 @@ class RiskManager:
         self.stop_order = None
         self.boost = 1.0
 
+    def update_allocation(self, weights: dict) -> None:
+        """Update strategy allocation weights at runtime."""
+        self.config.strategy_allocation = weights
+        self.capital_tracker.update_allocation(weights)
+
     def update_equity(self, new_equity: float) -> bool:
         """Update current equity and evaluate drawdown limit.
 
