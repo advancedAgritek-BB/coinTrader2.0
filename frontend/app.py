@@ -30,14 +30,43 @@ REGIME_FILE = Path('crypto_bot/logs/regime_history.txt')
 
 
 
+def is_running() -> bool:
+    """Return True if the bot process is running."""
+    return utils.is_running(bot_proc)
+
+
+def set_execution_mode(mode: str) -> None:
+    """Set execution mode in config file."""
+    utils.set_execution_mode(mode, CONFIG_FILE)
+
+
+def load_execution_mode() -> str:
+    """Load execution mode from config file."""
+    return utils.load_execution_mode(CONFIG_FILE)
+
+
+def get_uptime() -> str:
+    """Return human readable uptime."""
+    return utils.get_uptime(bot_start_time)
+
+
+def watch_bot() -> None:
+    """Monitor the bot process and clear reference when it exits."""
+    global bot_proc
+    while True:
+        if bot_proc is not None and bot_proc.poll() is not None:
+            bot_proc = None
+        time.sleep(1)
+
+
 @app.route('/')
 def index():
-    mode = utils.load_execution_mode(CONFIG_FILE)
+    mode = load_execution_mode()
     return render_template(
         'index.html',
-        running=utils.is_running(bot_proc),
+        running=is_running(),
         mode=mode,
-        uptime=utils.get_uptime(bot_start_time),
+        uptime=get_uptime(),
         last_trade=utils.get_last_trade(TRADE_FILE),
         regime=utils.get_current_regime(LOG_FILE),
     )
@@ -49,8 +78,8 @@ def index():
 def start():
     global bot_proc, bot_start_time
     mode = request.form.get('mode', 'dry_run')
-    utils.set_execution_mode(mode, CONFIG_FILE)
-    if not utils.is_running(bot_proc):
+    set_execution_mode(mode)
+    if not is_running():
         # Launch the asyncio-based trading bot
         bot_proc = subprocess.Popen(['python', '-m', 'crypto_bot.main'])
         bot_start_time = time.time()
@@ -91,7 +120,7 @@ def start_bot_route():
 @app.route('/stop')
 def stop():
     global bot_proc, bot_start_time
-    if utils.is_running(bot_proc):
+    if is_running():
         bot_proc.terminate()
         bot_proc.wait()
     bot_proc = None
