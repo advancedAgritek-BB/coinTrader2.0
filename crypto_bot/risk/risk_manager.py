@@ -27,7 +27,6 @@ class RiskConfig:
     max_funding_rate: float = 1.0
     symbol: str = ""
     trade_size_pct: float = 0.1
-    volume_threshold_ratio: float = 0.5
     min_volume: float = 0.0
     volume_threshold_ratio: float = 0.1
     strategy_allocation: dict | None = None
@@ -109,22 +108,39 @@ class RiskManager:
             logger.info("[EVAL] %s", reason)
             return False, reason
 
+        last_close = df["close"].iloc[-1]
+        last_time = str(df.index[-1])
+        logger.info(
+            f"{self.config.symbol} | Last close: {last_close:.2f}, Time: {last_time}"
+        )
+
         vol_mean = df['volume'].rolling(20).mean().iloc[-1]
         current_volume = df['volume'].iloc[-1]
+        vol_mean = df["volume"].rolling(20).mean().iloc[-1]
+        current_volume = df["volume"].iloc[-1]
+        vol_threshold = vol_mean * self.config.volume_threshold_ratio
         logger.info(
             f"[EVAL] {self.config.symbol} | Raw Volume: {current_volume} | Mean Volume: {vol_mean}"
+            f"{self.config.symbol} | Raw Volume: {current_volume} | Mean Volume: {vol_mean} | "
+            f"Min Volume: {self.config.min_volume} | Ratio Threshold: {vol_threshold}"
         )
-        vol_threshold = vol_mean * self.config.volume_threshold_ratio
+
         below_min = current_volume < self.config.min_volume
         below_ratio = current_volume < vol_threshold
+
+        if below_min:
+            logger.info("Current volume below min absolute threshold")
+        if below_ratio:
+            logger.info(
+                f"Current volume below {self.config.volume_threshold_ratio * 100:.0f}% of mean volume"
+            )
+
         if below_min and below_ratio:
             if self.config.min_volume >= vol_threshold:
-                reason = (
-                    f"Volume {current_volume:.4f} below minimum {self.config.min_volume:.4f}"
-                )
+                reason = "Volume < min absolute threshold"
             else:
                 reason = (
-                    f"Volume {current_volume:.4f} below ratio threshold {vol_threshold:.4f}"
+                    f"Volume < {self.config.volume_threshold_ratio * 100:.0f}% of mean volume"
                 )
             logger.info("[EVAL] %s", reason)
             return False, reason

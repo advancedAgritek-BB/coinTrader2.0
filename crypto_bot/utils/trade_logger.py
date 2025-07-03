@@ -5,6 +5,9 @@ from datetime import datetime
 from dotenv import dotenv_values
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from crypto_bot.utils.logger import setup_logger
+
+logger = setup_logger(__name__, "crypto_bot/logs/execution.log")
 
 
 def log_trade(order: Dict) -> None:
@@ -13,7 +16,9 @@ def log_trade(order: Dict) -> None:
     order.setdefault("timestamp", datetime.utcnow().isoformat())
     df = pd.DataFrame([order])
     log_file = Path("crypto_bot/logs/trades.csv")
+    log_file.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(log_file, mode="a", header=False, index=False)
+    logger.info("Logged trade: %s", order)
     try:
         creds_path = dotenv_values('crypto_bot/.env').get('GOOGLE_CRED_JSON')
         if creds_path:
