@@ -68,16 +68,10 @@ async def load_ohlcv_parallel(
 ) -> Dict[str, list]:
     """Fetch OHLCV data for multiple symbols concurrently."""
 
-    if use_websocket and hasattr(exchange, "watch_ohlcv"):
-        tasks = [
-            exchange.watch_ohlcv(s, timeframe=timeframe, limit=limit)
-            for s in symbols
-        ]
-    else:
-        tasks = [
-            fetch_ohlcv_async(exchange, s, timeframe, limit, use_websocket)
-            for s in symbols
-        ]
+    tasks = [
+        fetch_ohlcv_async(exchange, s, timeframe, limit, use_websocket)
+        for s in symbols
+    ]
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
