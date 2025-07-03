@@ -223,3 +223,25 @@ def test_open_orders(monkeypatch):
     expected = {"method": "open_orders", "params": {"token": "token"}}
     assert msg == expected
     assert ws.sent == [json.dumps(expected)]
+
+
+def test_parse_ohlc_message_extracts_volume():
+    candle = [
+        "1712106000",
+        "30000.0",
+        "30100.0",
+        "29900.0",
+        "30050.0",
+        "30025.0",
+        "12.34",
+        42,
+    ]
+    msg = json.dumps([
+        1,
+        {"channel": "ohlc-1", "symbol": "XBT/USD"},
+        candle,
+        {"channel": "ohlc", "symbol": "XBT/USD"},
+    ])
+
+    result = kraken_ws.parse_ohlc_message(msg)
+    assert result == [1712106000000, 30000.0, 30100.0, 29900.0, 30050.0, 12.34]

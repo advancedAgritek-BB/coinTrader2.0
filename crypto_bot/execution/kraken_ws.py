@@ -1,7 +1,7 @@
 import json
 import threading
 import os
-from typing import Optional, Callable, Union, List
+from typing import Optional, Callable, Union, List, Any
 from datetime import datetime, timedelta, timezone
 
 import ccxt
@@ -12,6 +12,42 @@ logger = setup_logger(__name__, "crypto_bot/logs/execution.log")
 
 PUBLIC_URL = "wss://ws.kraken.com/v2"
 PRIVATE_URL = "wss://ws-auth.kraken.com/v2"
+
+
+def parse_ohlc_message(message: str) -> Optional[List[float]]:
+    """Parse a Kraken OHLC websocket message.
+
+    Parameters
+    ----------
+    message : str
+        Raw JSON message from the websocket.
+
+    Returns
+    -------
+    Optional[List[float]]
+        ``[timestamp, open, high, low, close, volume]`` if parsable.
+    """
+    try:
+        data: Any = json.loads(message)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, list) or len(data) < 3:
+        return None
+
+    chan = data[1] if len(data) > 1 else {}
+    candle = data[2] if len(data) > 2 else None
+    if not isinstance(chan, dict) or not isinstance(candle, list):
+        return None
+    if not str(chan.get("channel", "")).startswith("ohlc"):
+        return None
+    try:
+        ts = int(float(candle[0]) * 1000)
+        o, h, l, c = map(float, candle[1:5])
+        vol = float(candle[6])
+    except (IndexError, ValueError, TypeError):
+        return None
+    return [ts, o, h, l, c, vol]
 
 
 class KrakenWSClient:

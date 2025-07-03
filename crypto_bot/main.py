@@ -227,6 +227,8 @@ async def main() -> None:
                     data = await exchange.watch_ohlcv(
                         sym, timeframe=config["timeframe"], limit=100
                     )
+                    if data:
+                        logger.debug("WS candle raw: %s", data[-1])
                 else:
                     if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
                         data = await exchange.fetch_ohlcv(
@@ -243,6 +245,10 @@ async def main() -> None:
                 logger.error("OHLCV fetch failed for %s: %s", sym, exc)
                 continue
 
+            if data and len(data[0]) > 6:
+                data = [
+                    [c[0], c[1], c[2], c[3], c[4], c[6]] for c in data
+                ]
             df_sym = pd.DataFrame(
                 data,
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
@@ -330,6 +336,10 @@ async def main() -> None:
                 logger.error("OHLCV fetch failed for %s: %s", config["symbol"], exc)
                 continue
 
+            if data and len(data[0]) > 6:
+                data = [
+                    [c[0], c[1], c[2], c[3], c[4], c[6]] for c in data
+                ]
             df_current = pd.DataFrame(
                 data,
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
