@@ -8,7 +8,15 @@ def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
     try:
         bot = Bot(token)
         if inspect.iscoroutinefunction(bot.send_message):
-            asyncio.run(bot.send_message(chat_id=chat_id, text=text))
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop is not None:
+                loop.create_task(bot.send_message(chat_id=chat_id, text=text))
+            else:
+                asyncio.run(bot.send_message(chat_id=chat_id, text=text))
         else:
             bot.send_message(chat_id=chat_id, text=text)
         return None
