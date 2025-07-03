@@ -53,7 +53,8 @@ risk:
   # take profit percent managed by the risk manager
   take_profit_pct: 0.04
   # minimum raw volume required to consider a trade
-  min_volume: 100
+  min_volume: 50
+  volume_threshold_ratio: 0.1
 telegram:
   # telegram chat id to receive alerts
   chat_id: "YOUR_CHAT_ID"

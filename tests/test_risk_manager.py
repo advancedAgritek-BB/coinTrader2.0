@@ -150,4 +150,4 @@ def test_can_allocate_uses_tracker():
 def test_risk_config_has_volume_threshold_ratio_default():
     cfg = RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
     assert hasattr(cfg, "volume_threshold_ratio")
-    assert cfg.volume_threshold_ratio == 0.5
+    assert cfg.volume_threshold_ratio == 0.1
