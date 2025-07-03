@@ -2,8 +2,9 @@ from typing import Iterable, List, Dict
 import asyncio
 
 
-
-def load_kraken_symbols(exchange, exclude: Iterable[str] | None = None) -> List[str]:
+async def load_kraken_symbols(
+    exchange, exclude: Iterable[str] | None = None
+) -> List[str]:
     """Return a list of active trading pairs on Kraken.
 
     Parameters
@@ -13,8 +14,14 @@ def load_kraken_symbols(exchange, exclude: Iterable[str] | None = None) -> List[
     exclude : Iterable[str] | None
         Symbols to exclude from the result.
     """
+
     exclude_set = set(exclude or [])
-    markets = exchange.load_markets()
+
+    if asyncio.iscoroutinefunction(getattr(exchange, "load_markets", None)):
+        markets = await exchange.load_markets()
+    else:
+        markets = await asyncio.to_thread(exchange.load_markets)
+
     symbols: List[str] = []
     for symbol, data in markets.items():
         if not data.get("active", True):
