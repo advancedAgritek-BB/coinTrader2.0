@@ -1,4 +1,5 @@
 import pytest
+import subprocess
 
 from frontend import app
 
@@ -26,3 +27,28 @@ def test_scans_route(tmp_path, monkeypatch):
     resp = client.get("/scans")
     assert resp.status_code == 200
     assert b"BTC" in resp.data
+
+
+class DummyProc:
+    def poll(self):
+        return None
+
+    def terminate(self):
+        pass
+
+    def wait(self):
+        pass
+
+
+def test_start_stop_bot_endpoints(monkeypatch):
+    client = app.app.test_client()
+    monkeypatch.setattr(subprocess, 'Popen', lambda *a, **kw: DummyProc())
+    app.bot_proc = None
+    resp = client.post('/start_bot')
+    assert resp.status_code == 200
+    assert resp.get_json()['status'] == 'started'
+
+    app.bot_proc = DummyProc()
+    resp = client.post('/stop_bot')
+    assert resp.status_code == 200
+    assert resp.get_json()['status'] == 'stopped'

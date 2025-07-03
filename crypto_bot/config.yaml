@@ -117,5 +117,8 @@ optimization:
       stop_loss: [0.02]
       take_profit: [0.04]
 
+meta_selector:
+  enabled: false
+
 # number of candles to evaluate regime performance
 regime_return_period: 5

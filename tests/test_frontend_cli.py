@@ -22,3 +22,34 @@ def test_cli_post_runs_command(monkeypatch):
     resp = client.post('/cli', data={'base': 'custom', 'command': 'echo hi'})
     assert b'out' in resp.data
     assert b'err' in resp.data
+
+
+class FakeProc:
+    def __init__(self):
+        self.pid = 1
+
+    def poll(self):
+        return None
+
+    def terminate(self):
+        pass
+
+    def wait(self):
+        pass
+
+
+def test_start_stop_bot_json(monkeypatch):
+    client = app.app.test_client()
+
+    monkeypatch.setattr(subprocess, 'Popen', lambda *a, **kw: FakeProc())
+    app.bot_proc = None
+    resp = client.post('/start_bot', json={'mode': 'dry_run'})
+    assert resp.status_code == 200
+    assert resp.get_json()['status'] == 'started'
+    assert app.bot_proc is not None
+
+    app.bot_proc = FakeProc()
+    resp = client.post('/stop_bot')
+    assert resp.status_code == 200
+    assert resp.get_json()['status'] == 'stopped'
+    assert app.bot_proc is None
