@@ -15,3 +15,10 @@ def test_dashboard_route(tmp_path, monkeypatch):
     resp = client.get("/dashboard")
     assert resp.status_code == 200
     assert b"Total PnL" in resp.data
+
+
+def test_static_resources_load():
+    client = app.app.test_client()
+    resp = client.get('/static/styles.css')
+    assert resp.status_code == 200
+    assert b'font-family' in resp.data
