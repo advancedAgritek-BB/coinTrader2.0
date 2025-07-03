@@ -44,7 +44,10 @@ from crypto_bot.utils.performance_logger import log_performance
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.utils.position_logger import log_position, log_balance
 from crypto_bot.utils.regime_logger import log_regime
-from crypto_bot.utils.market_loader import load_kraken_symbols
+from crypto_bot.utils.market_loader import (
+    load_kraken_symbols,
+    load_ohlcv_parallel,
+)
 from crypto_bot.utils.pnl_logger import log_pnl
 
 
@@ -246,38 +249,23 @@ async def main() -> None:
         best_score = -1.0
         df_current = None
 
-        for sym in config.get("symbols", [config.get("symbol")]):
+        symbols = config.get("symbols", [config.get("symbol")])
+        ohlcv_map = await load_ohlcv_parallel(
+            exchange,
+            symbols,
+            timeframe=config["timeframe"],
+            limit=100,
+            use_websocket=config.get("use_websocket", False),
+        )
+
+        for sym in symbols:
             logger.info("🔹 Symbol: %s", sym)
             total_pairs += 1
-            try:
-                if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
-                    data = await exchange.watch_ohlcv(
-                        sym, timeframe=config["timeframe"], limit=100
-                    )
-                    if data:
-                        logger.debug("WS candle raw: %s", data[-1])
-                else:
-                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-                        data = await exchange.fetch_ohlcv(
-                            sym, timeframe=config["timeframe"], limit=100
-                        )
-                    else:
-                        data = await asyncio.to_thread(
-                            exchange.fetch_ohlcv,
-                            sym,
-                            timeframe=config["timeframe"],
-                            limit=100,
-                        )
-                    if data:
-                        logger.debug("REST candle raw: %s", data[-1])
-            except Exception as exc:  # pragma: no cover - network
-                logger.error("OHLCV fetch failed for %s: %s", sym, exc)
+            data = ohlcv_map.get(sym)
+            if not data:
+                logger.error("OHLCV fetch failed for %s", sym)
                 continue
 
-            if data and len(data[0]) > 6:
-                data = [
-                    [c[0], c[1], c[2], c[3], c[4], c[6]] for c in data
-                ]
             df_sym = pd.DataFrame(
                 data,
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
