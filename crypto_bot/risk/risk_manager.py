@@ -28,6 +28,7 @@ class RiskConfig:
     symbol: str = ""
     trade_size_pct: float = 0.1
     strategy_allocation: dict | None = None
+    volume_ratio: float = 1.0
 
 
 class RiskManager:
