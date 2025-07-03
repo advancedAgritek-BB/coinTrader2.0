@@ -42,7 +42,9 @@ def strategy_name(regime: str, mode: str) -> str:
 
 
 def route(
-    regime: str, mode: str
+    regime: str,
+    mode: str,
+    config: Dict | None = None,
 ) -> Callable[[pd.DataFrame], Tuple[float, str]]:
     """Select a strategy based on market regime and operating mode.
 
@@ -52,6 +54,9 @@ def route(
         Current market regime as classified by indicators.
     mode : str
         Trading environment, either ``cex``, ``onchain`` or ``auto``.
+    config : dict | None
+        Optional configuration dictionary. When ``meta_selector.enabled`` is
+        ``True`` the strategy choice is delegated to the meta selector.
 
     Returns
     -------
@@ -64,6 +69,13 @@ def route(
             return sniper_bot.generate_signal
         logger.info("Routing to DEX scalper (onchain)")
         return dex_scalper.generate_signal
+
+    if config and config.get("meta_selector", {}).get("enabled"):
+        from . import meta_selector
+
+        strategy_fn = meta_selector.choose_best(regime)
+        logger.info("Meta selector chose %s for %s", strategy_fn.__name__, regime)
+        return strategy_fn
 
     strategy_fn = strategy_for(regime)
     logger.info("Routing to %s (%s)", strategy_fn.__name__, mode)
