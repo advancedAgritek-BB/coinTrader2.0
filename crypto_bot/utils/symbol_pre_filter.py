@@ -51,6 +51,15 @@ def filter_symbols(exchange, symbols: Iterable[str]) -> List[str]:
                 id_map[k] = v[0].get("symbol", k)
             else:
                 id_map[k] = k
+        if not exchange.markets_by_id and hasattr(exchange, "load_markets"):
+            try:
+                exchange.load_markets()
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.warning("load_markets failed: %s", exc)
+        id_map = {
+            k: v.get("symbol", k) if isinstance(v, dict) else k
+            for k, v in exchange.markets_by_id.items()
+        }
     allowed: List[str] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)
