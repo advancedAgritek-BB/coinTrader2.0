@@ -476,6 +476,7 @@ async def main() -> None:
                 score,
                 config["signal_threshold"],
             )
+            logger.info("No trade executed")
             rejected_score += 1
             logger.info(
                 "Loop Summary: %s evaluated | %s trades | %s volume fails | %s score fails | %s unknown regime",
