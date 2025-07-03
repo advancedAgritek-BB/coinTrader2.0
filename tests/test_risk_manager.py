@@ -18,7 +18,7 @@ def test_allow_trade_rejects_low_volume():
     )
     allowed, reason = RiskManager(cfg).allow_trade(df)
     assert not allowed
-    assert "min absolute threshold" in reason
+    assert "1% of mean" in reason
 
 
 def test_allow_trade_respects_volume_threshold():
@@ -86,7 +86,7 @@ def test_allow_trade_logs_ratio_reason():
         'high': [1] * 20,
         'low': [1] * 20,
         'close': [1] * 20,
-        'volume': [20] * 19 + [0.5],
+        'volume': [20] * 19 + [0.001],
     }
     df = pd.DataFrame(data)
     cfg = RiskConfig(
@@ -98,7 +98,7 @@ def test_allow_trade_logs_ratio_reason():
     )
     allowed, reason = RiskManager(cfg).allow_trade(df)
     assert not allowed
-    assert "50% of mean volume" in reason
+    assert "1% of mean" in reason
 
 
 def test_stop_order_management():
