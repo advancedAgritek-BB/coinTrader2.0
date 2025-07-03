@@ -111,7 +111,7 @@ async def main() -> None:
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)
         send_message(
-            secrets.get("TELEGRAM_TOKEN"),
+            user.get("telegram_token"),
             config.get("telegram", {}).get("chat_id", ""),
             f"API error: {exc}",
         )
@@ -451,8 +451,8 @@ async def main() -> None:
                     config["symbol"],
                     opposite_side(open_side),
                     sell_amount,
-                    secrets["TELEGRAM_TOKEN"],
-                    config["telegram"]["chat_id"],
+                    user["telegram_token"],
+                    user["telegram_chat_id"],
                     dry_run=config["execution_mode"] == "dry_run",
                     use_websocket=config.get("use_websocket", False),
                     config=config,
