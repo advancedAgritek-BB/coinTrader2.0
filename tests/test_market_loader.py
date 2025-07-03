@@ -47,3 +47,26 @@ def test_load_ohlcv_parallel():
         load_ohlcv_parallel(ex, ["BTC/USD", "ETH/USD"], timeframe="1h", limit=1)
     )
     assert set(result.keys()) == {"BTC/USD", "ETH/USD"}
+
+
+class DummyWSEchange:
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        return [[0, 1, 2, 3, 4, 5]]
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        return [[i, i + 1, i + 2, i + 3, i + 4, i + 5] for i in range(limit)]
+
+
+def test_load_ohlcv_parallel_websocket_overrides_fetch():
+    ex = DummyWSEchange()
+    result = asyncio.run(
+        load_ohlcv_parallel(
+            ex,
+            ["BTC/USD"],
+            timeframe="1h",
+            limit=3,
+            use_websocket=True,
+        )
+    )
+    assert list(result.keys()) == ["BTC/USD"]
+    assert len(result["BTC/USD"]) == 1
