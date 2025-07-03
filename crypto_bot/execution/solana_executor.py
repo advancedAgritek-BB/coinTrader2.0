@@ -68,6 +68,12 @@ async def execute_swap(
             token_out,
             amount,
             tx_hash,
+            "Swap executed - tx=%s in=%s out=%s amount=%s dry_run=%s",
+            tx_hash,
+            token_in,
+            token_out,
+            amount,
+            True,
         )
         if (config or {}).get("tax_tracking", {}).get("enabled"):
             try:
@@ -162,6 +168,12 @@ async def execute_swap(
         token_out,
         amount,
         tx_hash,
+        "Swap executed - tx=%s in=%s out=%s amount=%s dry_run=%s",
+        tx_hash,
+        token_in,
+        token_out,
+        amount,
+        False,
     )
     if (config or {}).get("tax_tracking", {}).get("enabled"):
         try:
