@@ -5,20 +5,21 @@
     <div class="card">
       <div class="card-header">Trading Bot</div>
       <div class="card-body">
+        <div id="alert-container"></div>
         <p class="mb-2">Status:
           {% if running %}
-            <span class="badge bg-success">Running</span>
+            <span id="status-badge" class="badge bg-success">Running</span>
           {% else %}
-            <span class="badge bg-secondary">Stopped</span>
+            <span id="status-badge" class="badge bg-secondary">Stopped</span>
           {% endif %}
         </p>
-        <p class="mb-2">Uptime: {{ uptime }}</p>
+        <p class="mb-2">Uptime: <span id="uptime">{{ uptime }}</span></p>
         <p class="mb-2">Last Trade: {{ last_trade }}</p>
         <p class="mb-3">Current Regime: {{ regime }}</p>
         {% if running %}
-          <a class="btn btn-danger w-100" href="{{ url_for('stop') }}">Stop Bot</a>
+          <a id="stop-link" class="btn btn-danger w-100" href="{{ url_for('stop') }}">Stop Bot</a>
         {% else %}
-          <form method="post" action="{{ url_for('start') }}">
+          <form id="start-form" method="post" action="{{ url_for('start') }}">
             <div class="mb-3">
               <label for="mode" class="form-label">Execution Mode</label>
               <select id="mode" name="mode" class="form-select">
@@ -26,11 +27,76 @@
                 <option value="live" {% if mode == 'live' %}selected{% endif %}>Live</option>
               </select>
             </div>
-            <button class="btn btn-success w-100" type="submit">Start Bot</button>
+            <button id="start-btn" class="btn btn-success w-100" type="submit">Start Bot</button>
           </form>
         {% endif %}
       </div>
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function startBot(event){
+  if(event) event.preventDefault();
+  const mode = document.getElementById('mode').value;
+  try {
+    const resp = await fetch('{{ url_for('start_bot_route') }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({mode})
+    });
+    const data = await resp.json();
+    if(resp.ok){
+      showAlert('Bot started', 'success');
+      updateStatus(data);
+    } else {
+      showAlert('Failed to start bot', 'danger');
+    }
+  } catch(e){
+    showAlert('Failed to start bot', 'danger');
+  }
+}
+
+async function stopBot(event){
+  if(event) event.preventDefault();
+  try {
+    const resp = await fetch('{{ url_for('stop_bot_route') }}', {method:'POST'});
+    const data = await resp.json();
+    if(resp.ok){
+      showAlert('Bot stopped', 'success');
+      updateStatus(data);
+    } else {
+      showAlert('Failed to stop bot', 'danger');
+    }
+  } catch(e){
+    showAlert('Failed to stop bot', 'danger');
+  }
+}
+
+function updateStatus(data){
+  const badge = document.getElementById('status-badge');
+  if(data.running){
+    badge.className = 'badge bg-success';
+    badge.textContent = 'Running';
+    document.getElementById('stop-link').style.display = '';
+    document.getElementById('start-form').style.display = 'none';
+  } else {
+    badge.className = 'badge bg-secondary';
+    badge.textContent = 'Stopped';
+    document.getElementById('stop-link').style.display = 'none';
+    document.getElementById('start-form').style.display = '';
+  }
+  document.getElementById('uptime').textContent = data.uptime;
+}
+
+function showAlert(msg, type){
+  const container = document.getElementById('alert-container');
+  container.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+}
+
+document.getElementById('start-form')?.addEventListener('submit', startBot);
+document.getElementById('stop-link')?.addEventListener('click', stopBot);
+</script>
 {% endblock %}
