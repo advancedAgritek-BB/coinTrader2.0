@@ -84,7 +84,6 @@ async def load_ohlcv_parallel(
             use_websocket,
             force_websocket_history,
         )
-        fetch_ohlcv_async(exchange, s, timeframe, limit, use_websocket)
         for s in symbols
     ]
 
