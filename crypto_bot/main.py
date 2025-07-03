@@ -10,6 +10,7 @@ import yaml
 from dotenv import dotenv_values
 
 from crypto_bot.utils.telegram import send_message
+from crypto_bot.utils.trade_reporter import report_entry, report_exit
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.auto_optimizer import optimize_strategies
@@ -499,6 +500,15 @@ async def main() -> None:
                     else:
                         latest_balance = paper_wallet.balance if paper_wallet else 0.0
                     log_balance(float(latest_balance))
+                    if user.get("telegram_token") and user.get("telegram_chat_id"):
+                        report_exit(
+                            user["telegram_token"],
+                            user["telegram_chat_id"],
+                            config.get("symbol", ""),
+                            entry_strategy or "",
+                            realized_pnl,
+                            "long" if open_side == "buy" else "short",
+                        )
                     open_side = None
                     entry_price = None
                     entry_time = None
@@ -720,6 +730,15 @@ async def main() -> None:
                 current_price,
                 log_bal,
             )
+            if user.get("telegram_token") and user.get("telegram_chat_id"):
+                report_entry(
+                    user["telegram_token"],
+                    user["telegram_chat_id"],
+                    config.get("symbol", ""),
+                    strategy_name(regime, env),
+                    score,
+                    direction,
+                )
             logger.info("Trade opened at %.4f", entry_price)
             trades_executed += 1
 
