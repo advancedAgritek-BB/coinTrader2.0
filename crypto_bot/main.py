@@ -169,6 +169,9 @@ async def main() -> None:
         rejected_volume = 0
         rejected_score = 0
         rejected_regime = 0
+        volume_rejections = 0
+        score_rejections = 0
+        regime_rejections = 0
 
         if config.get("optimization", {}).get("enabled"):
             if (
@@ -223,6 +226,7 @@ async def main() -> None:
         df_current = None
 
         for sym in config.get("symbols", [config.get("symbol")]):
+            logger.info("🔹 Symbol: %s", sym)
             total_pairs += 1
             try:
                 if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
@@ -271,6 +275,7 @@ async def main() -> None:
             env_sym = mode if mode != "auto" else "cex"
             strategy_fn = route(regime_sym, env_sym)
             name_sym = strategy_name(regime_sym, env_sym)
+            logger.info("Regime %s -> Strategy %s", regime_sym, name_sym)
             logger.info(
                 "Using strategy %s for %s in %s mode",
                 name_sym,
@@ -302,8 +307,18 @@ async def main() -> None:
                 logger.info(
                     "Trade not allowed for %s \u2013 %s", sym, reason
                 )
+                logger.info(
+                    "Trade rejected for %s: %s, score=%.2f, regime=%s",
+                    sym,
+                    reason,
+                    score_sym,
+                    regime_sym,
+                )
                 if "Volume" in reason:
                     rejected_volume += 1
+                    volume_rejections += 1
+                else:
+                    regime_rejections += 1
                 continue
 
             if direction_sym != "none" and score_sym > best_score:
@@ -469,6 +484,14 @@ async def main() -> None:
                 rejected_volume,
                 rejected_score,
                 rejected_regime,
+            if direction == "none":
+                regime_rejections += 1
+            else:
+                score_rejections += 1
+            logger.info(
+                f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, "
+                f"{trades_executed} trades executed, {volume_rejections} rejected volume, "
+                f"{score_rejections} rejected score, {regime_rejections} rejected regime."
             )
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
@@ -493,6 +516,9 @@ async def main() -> None:
                 rejected_volume,
                 rejected_score,
                 rejected_regime,
+                f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, "
+                f"{trades_executed} trades executed, {volume_rejections} rejected volume, "
+                f"{score_rejections} rejected score, {regime_rejections} rejected regime."
             )
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
@@ -590,6 +616,9 @@ async def main() -> None:
             rejected_volume,
             rejected_score,
             rejected_regime,
+            f"Cycle Summary: {total_pairs} pairs evaluated, {signals_generated} signals, "
+            f"{trades_executed} trades executed, {volume_rejections} rejected volume, "
+            f"{score_rejections} rejected score, {regime_rejections} rejected regime."
         )
         await asyncio.sleep(config["loop_interval_minutes"] * 60)
 
