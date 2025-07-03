@@ -9,30 +9,8 @@
   <tbody id="trades-body"></tbody>
 </table>
 <h3 class="mt-4">Errors Log</h3>
-<pre id="errors-area" class="bg-dark text-light p-3" style="height:200px; overflow:auto;"></pre>
+<pre class="bg-dark text-light p-3" style="height:200px; overflow:auto;"><code id="errors-area" class="language-plaintext"></code></pre>
 {% endblock %}
 {% block scripts %}
-<script>
-async function fetchTrades() {
-  const resp = await fetch('{{ url_for('trades_data') }}');
-  const trades = await resp.json();
-  const tbody = document.getElementById('trades-body');
-  tbody.innerHTML = '';
-  trades.slice(-100).forEach(t => {
-    const row = document.createElement('tr');
-    if (t.side === 'buy') {
-      row.classList.add('table-success');
-    } else if (t.side === 'sell') {
-      row.classList.add('table-danger');
-    }
-    row.innerHTML = `<td>${t.symbol || ''}</td><td>${t.side || ''}</td><td>${t.amount || ''}</td><td>${t.price || ''}</td><td>${t.timestamp || ''}</td>`;
-    tbody.appendChild(row);
-  });
-  const logResp = await fetch('{{ url_for('trades_tail') }}');
-  const logs = await logResp.json();
-  document.getElementById('errors-area').textContent = logs.errors;
-}
-fetchTrades();
-setInterval(fetchTrades, 5000);
-</script>
+<script type="module" src="{{ url_for('static', filename='trades.js') }}"></script>
 {% endblock %}
