@@ -160,8 +160,27 @@ class RiskManager:
         logger.info("[EVAL] %s", reason)
         return True, reason
 
-    def register_stop_order(self, order: dict) -> None:
-        """Store the protective stop order."""
+    def register_stop_order(
+        self,
+        order: dict,
+        strategy: str | None = None,
+        symbol: str | None = None,
+        entry_price: float | None = None,
+        confidence: float | None = None,
+        direction: str | None = None,
+    ) -> None:
+        """Store the protective stop order and related trade info."""
+        order = dict(order)
+        if strategy is not None:
+            order["strategy"] = strategy
+        if symbol is not None:
+            order["symbol"] = symbol
+        if entry_price is not None:
+            order["entry_price"] = entry_price
+        if confidence is not None:
+            order["confidence"] = confidence
+        if direction is not None:
+            order["direction"] = direction
         self.stop_order = order
         logger.info("Registered stop order %s", order)
 
