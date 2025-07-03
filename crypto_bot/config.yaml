@@ -103,6 +103,10 @@ volatility_filter:
   min_atr_pct: 0.01
   max_funding_rate: 0.05
 
+ml_signal_model:
+  enabled: false
+  weight: 0.5
+
 optimization:
   enabled: false
   interval_days: 7

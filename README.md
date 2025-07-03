@@ -263,3 +263,17 @@ print(results.head())  # best combo appears first
 ```
 `crypto_bot/logs/strategy_stats.json`. The home page indicates whether the bot
 is running so you can quickly see if it has stopped.
+
+## ML Signal Model
+
+Strategy scores can be blended with predictions from an optional machine
+learning model. Configure the feature in `crypto_bot/config.yaml`:
+
+```yaml
+ml_signal_model:
+  enabled: false        # enable ML scoring
+  weight: 0.5           # blend ratio between strategy and ML scores
+```
+
+When enabled, `evaluate` computes `(score * (1 - weight)) + (ml_score * weight)`
+and caps the result between 0 and 1.
