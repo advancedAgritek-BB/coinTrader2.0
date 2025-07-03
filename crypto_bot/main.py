@@ -221,6 +221,7 @@ async def main() -> None:
         df_current = None
 
         for sym in config.get("symbols", [config.get("symbol")]):
+            logger.info("🔹 Symbol: %s", sym)
             total_pairs += 1
             try:
                 if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
@@ -266,6 +267,7 @@ async def main() -> None:
             env_sym = mode if mode != "auto" else "cex"
             strategy_fn = route(regime_sym, env_sym)
             name_sym = strategy_name(regime_sym, env_sym)
+            logger.info("Regime %s -> Strategy %s", regime_sym, name_sym)
             logger.info(
                 "Using strategy %s for %s in %s mode",
                 name_sym,
