@@ -20,3 +20,12 @@ class CapitalTracker:
     def deallocate(self, strategy: str, amount: float) -> None:
         """Remove allocation when a position is closed."""
         self._usage[strategy] = max(0.0, self._usage.get(strategy, 0.0) - amount)
+
+    def update_allocation(self, allocation: dict) -> None:
+        """Replace allocation limits with ``allocation`` and reset missing keys."""
+        self.allocation = allocation
+        for strat in allocation:
+            self._usage.setdefault(strat, 0.0)
+        for strat in list(self._usage):
+            if strat not in allocation:
+                self._usage.pop(strat)
