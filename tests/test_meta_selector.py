@@ -1,6 +1,6 @@
 import json
 from crypto_bot import meta_selector
-from crypto_bot.strategy import trend_bot
+from crypto_bot.strategy import trend_bot, micro_scalp_bot
 from crypto_bot.strategy_router import strategy_for
 
 
@@ -25,3 +25,10 @@ def test_choose_best_fallback(tmp_path, monkeypatch):
 
     fn = meta_selector.choose_best("sideways")
     assert fn is strategy_for("sideways")
+
+
+def test_strategy_map_contains_micro_scalp():
+    assert (
+        meta_selector._STRATEGY_FN_MAP.get("micro_scalp")
+        is micro_scalp_bot.generate_signal
+    )

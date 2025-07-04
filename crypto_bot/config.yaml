@@ -87,3 +87,9 @@ volatility_filter:
   max_funding_rate: 0.05
   min_atr_pct: 0.001
 wallet_address: your_wallet
+
+micro_scalp:
+  ema_fast: 3
+  ema_slow: 8
+  volume_window: 20
+  volume_threshold: 1.5
