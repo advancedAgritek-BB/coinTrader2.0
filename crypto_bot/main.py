@@ -120,11 +120,13 @@ async def main() -> None:
         log_balance(float(init_bal))
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)
-        send_message(
+        err = send_message(
             user.get("telegram_token"),
             config.get("telegram", {}).get("chat_id", ""),
             f"API error: {exc}",
         )
+        if err:
+            logger.error("Failed to notify user: %s", err)
         return
     risk_params = {**config.get("risk", {})}
     risk_params.update(config.get("sentiment_filter", {}))

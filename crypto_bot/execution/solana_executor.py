@@ -33,7 +33,9 @@ async def execute_swap(
     """Execute a swap on Solana using the Jupiter aggregator."""
 
     msg = f"Swapping {amount} {token_in} to {token_out}"
-    send_message(telegram_token, chat_id, msg)
+    err = send_message(telegram_token, chat_id, msg)
+    if err:
+        logger.error("Failed to send message: %s", err)
 
     config = config or {}
 
@@ -42,7 +44,9 @@ async def execute_swap(
         threshold = cfg.get("suspicious_fee_threshold", 0.0)
         action = cfg.get("action", "pause")
         if mempool_monitor.is_suspicious(threshold):
-            send_message(telegram_token, chat_id, "High priority fees detected")
+            err_msg = send_message(telegram_token, chat_id, "High priority fees detected")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
             if action == "pause":
                 return {
                     "token_in": token_in,
@@ -61,7 +65,9 @@ async def execute_swap(
             "amount": amount,
             "tx_hash": tx_hash,
         }
-        send_message(telegram_token, chat_id, f"Swap executed: {result}")
+        err_res = send_message(telegram_token, chat_id, f"Swap executed: {result}")
+        if err_res:
+            logger.error("Failed to send message: %s", err_res)
         logger.info(
             "Swap completed: %s -> %s amount=%s tx=%s",
             token_in,
@@ -137,7 +143,9 @@ async def execute_swap(
                     token_out,
                     amount,
                 )
-                send_message(telegram_token, chat_id, "Trade skipped due to slippage.")
+                err_skip = send_message(telegram_token, chat_id, "Trade skipped due to slippage.")
+                if err_skip:
+                    logger.error("Failed to send message: %s", err_skip)
                 return {}
         except Exception as err:  # pragma: no cover - network
             logger.warning("Slippage check failed: %s", err)
@@ -163,7 +171,9 @@ async def execute_swap(
         "amount": amount,
         "tx_hash": tx_hash,
     }
-    send_message(telegram_token, chat_id, f"Swap executed: {result}")
+    err = send_message(telegram_token, chat_id, f"Swap executed: {result}")
+    if err:
+        logger.error("Failed to send message: %s", err)
     logger.info(
         "Swap completed: %s -> %s amount=%s tx=%s",
         token_in,

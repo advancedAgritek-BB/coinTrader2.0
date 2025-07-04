@@ -4,6 +4,10 @@ import inspect
 import asyncio
 import threading
 
+from .logger import setup_logger
+
+logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+
 
 def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
     try:
@@ -36,4 +40,5 @@ def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
             bot.send_message(chat_id=chat_id, text=text)
         return None
     except Exception as e:
+        logger.error("Failed to send message: %s", e)
         return str(e)
