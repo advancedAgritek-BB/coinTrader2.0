@@ -9,11 +9,10 @@ class DummyExchange:
 
 def test_get_filtered_symbols_fallback(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
-    async def fake_to_thread(fn, *a):
-        return fn(*a)
+    async def fake_filter_symbols(ex, syms):
+        return []
 
-    monkeypatch.setattr(symbol_utils, "filter_symbols", lambda ex, syms: [])
-    monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
     config = {"symbol": "BTC/USD"}
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     assert result == ["BTC/USD"]
