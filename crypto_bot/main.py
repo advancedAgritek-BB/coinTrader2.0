@@ -52,6 +52,7 @@ from crypto_bot.utils.market_loader import (
 from crypto_bot.utils.symbol_pre_filter import filter_symbols
 from crypto_bot.utils.symbol_utils import get_filtered_symbols
 from crypto_bot.utils.pnl_logger import log_pnl
+from crypto_bot.utils.strategy_analytics import write_scores
 from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
 
 
@@ -156,6 +157,7 @@ async def main() -> None:
     active_strategy = None
     stats_file = Path("crypto_bot/logs/strategy_stats.json")
     stats = json.loads(stats_file.read_text()) if stats_file.exists() else {}
+    scores_file = Path("crypto_bot/logs/strategy_scores.json")
 
     rotator = PortfolioRotator()
     last_rotation = 0.0
@@ -765,6 +767,7 @@ async def main() -> None:
         stats.setdefault(key, {"trades": 0})
         stats[key]["trades"] += 1
         stats_file.write_text(json.dumps(stats))
+        write_scores(scores_file, stats_file)
         logger.info("Updated trade stats %s", stats[key])
 
         logger.info(

@@ -1,0 +1,22 @@
+import json
+import pytest
+from crypto_bot.utils import strategy_analytics as sa
+
+
+def test_compute_metrics(tmp_path):
+    data = {
+        "trend_bot": [{"pnl": 1.0}, {"pnl": -0.5}, {"pnl": 2.0}],
+        "grid_bot": [{"pnl": 0.1}, {"pnl": -0.2}],
+    }
+    f = tmp_path / "stats.json"
+    f.write_text(json.dumps(data))
+
+    metrics = sa.compute_metrics(f)
+    assert set(metrics.keys()) == {"trend_bot", "grid_bot"}
+    trend = metrics["trend_bot"]
+    assert pytest.approx(trend["win_rate"], rel=1e-2) == 2 / 3
+    assert pytest.approx(trend["ev"], rel=1e-2) == (1 - 0.5 + 2) / 3
+    assert pytest.approx(trend["drawdown"], rel=1e-2) == -0.5
+    assert trend["sharpe"] > 0
+
+
