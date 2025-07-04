@@ -31,9 +31,9 @@ def log_position(
     amount : float
         Position size.
     entry_price : float
-        Price when the position was opened.
+        Price when the position was opened. Logged with six decimal places.
     current_price : float
-        Latest market price.
+        Latest market price. Logged with six decimal places.
     balance : float
         Current wallet balance including unrealized PnL.
     """
@@ -43,6 +43,7 @@ def log_position(
     status = "positive" if pnl >= 0 else "negative"
     logger.info(
         "Active %s %s %.4f entry %.4f current %.4f pnl $%.2f (%s) balance $%.2f",
+        "Active %s %s %.4f entry %.6f current %.6f pnl %.2f (%s) balance %.2f",
         symbol,
         side,
         amount,

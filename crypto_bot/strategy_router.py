@@ -1,8 +1,9 @@
-from typing import Callable, Tuple, Dict
+from typing import Callable, Tuple, Dict, Iterable
 
 import pandas as pd
 
 from crypto_bot.utils.logger import setup_logger
+from crypto_bot.signals.signal_fusion import SignalFusionEngine
 from crypto_bot.strategy import (
     trend_bot,
     grid_bot,
@@ -70,12 +71,33 @@ def route(
         logger.info("Routing to DEX scalper (onchain)")
         return dex_scalper.generate_signal
 
+
     if config and config.get("meta_selector", {}).get("enabled"):
         from . import meta_selector
 
         strategy_fn = meta_selector.choose_best(regime)
         logger.info("Meta selector chose %s for %s", strategy_fn.__name__, regime)
         return strategy_fn
+
+    if config and config.get("signal_fusion", {}).get("enabled"):
+        from . import meta_selector
+
+        pairs_conf = config.get("signal_fusion", {}).get("strategies", [])
+        mapping = getattr(meta_selector, "_STRATEGY_FN_MAP", {})
+        strategies: list[tuple[Callable[[pd.DataFrame], Tuple[float, str]], float]] = []
+        for name, weight in pairs_conf:
+            fn = mapping.get(name)
+            if fn:
+                strategies.append((fn, float(weight)))
+        if not strategies:
+            strategies.append((strategy_for(regime), 1.0))
+        engine = SignalFusionEngine(strategies)
+
+        def fused(df: pd.DataFrame, cfg=None):
+            return engine.fuse(df, cfg)
+
+        logger.info("Routing to signal fusion engine")
+        return fused
 
     strategy_fn = strategy_for(regime)
     logger.info("Routing to %s (%s)", strategy_fn.__name__, mode)
