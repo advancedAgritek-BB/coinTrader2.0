@@ -20,6 +20,7 @@ async def monitor_loop(
     """
     log_path = Path(log_file)
     last_line = ""
+    prev_len = 0
     while True:
         await asyncio.sleep(5)
         balance = None
@@ -36,9 +37,15 @@ async def monitor_loop(
             pass
         if log_path.exists():
             lines = log_path.read_text().splitlines()
-            if lines:
-                last_line = lines[-1]
-        print(f"[Monitor] balance={balance} log='{last_line}'")
+            for line in reversed(lines):
+                if "Loading config" not in line:
+                    last_line = line
+                    break
+
+        message = f"[Monitor] balance={balance} log='{last_line}'"
+        print(" " * prev_len, end="\r")
+        print(message, end="\r", flush=True)
+        prev_len = len(message)
 """Simple console monitor for displaying trades."""
 
 from pathlib import Path
