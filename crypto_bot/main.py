@@ -805,6 +805,11 @@ async def main() -> None:
         await monitor_task
     except asyncio.CancelledError:
         pass
+    if hasattr(exchange, "close"):
+        if asyncio.iscoroutinefunction(getattr(exchange, "close")):
+            await exchange.close()
+        else:
+            await asyncio.to_thread(exchange.close)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution
