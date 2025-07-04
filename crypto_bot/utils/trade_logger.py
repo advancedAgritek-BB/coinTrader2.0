@@ -13,12 +13,20 @@ logger = setup_logger(__name__, "crypto_bot/logs/execution.log")
 def log_trade(order: Dict) -> None:
     """Append executed order details to a CSV and optionally Google Sheets."""
     order = dict(order)
-    order.setdefault("timestamp", datetime.utcnow().isoformat())
-    df = pd.DataFrame([order])
+    ts = order.get("timestamp") or datetime.utcnow().isoformat()
+    record = {
+        "symbol": order.get("symbol", ""),
+        "side": order.get("side", ""),
+        "amount": order.get("amount", 0.0),
+        "price": order.get("price") or order.get("average") or 0.0,
+        "timestamp": ts,
+    }
+    df = pd.DataFrame([record])
     log_file = Path("crypto_bot/logs/trades.csv")
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(log_file, mode="a", header=False, index=False)
-    logger.info("Logged trade: %s", order)
+    header = not log_file.exists()
+    df.to_csv(log_file, mode="a", header=header, index=False)
+    logger.info("Logged trade: %s", record)
     try:
         creds_path = dotenv_values('crypto_bot/.env').get('GOOGLE_CRED_JSON')
         if creds_path:
@@ -27,6 +35,6 @@ def log_trade(order: Dict) -> None:
             creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
             client = gspread.authorize(creds)
             sheet = client.open('trade_logs').sheet1
-            sheet.append_row(list(order.values()))
+            sheet.append_row([record[k] for k in ["symbol", "side", "amount", "price", "timestamp"]])
     except Exception:
         pass

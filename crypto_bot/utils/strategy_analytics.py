@@ -21,33 +21,47 @@ def _load(path: Path) -> Dict[str, Any]:
 def compute_metrics(path: Path = STATS_FILE) -> Dict[str, Dict[str, float]]:
     """Return Sharpe ratio, win rate, drawdown and EV for each strategy.
 
-    The statistics file must contain a mapping of strategy name to a list of
-    trade records with a ``pnl`` field::
+    ``strategy_performance.json`` may store trade records in two formats:
+
+    1. A direct mapping of strategy name to a list of trades::
 
         {
-            "trend_bot": [{"pnl": 1.0}, {"pnl": -0.5}],
-            "grid_bot": [{"pnl": 0.2}]
+            "trend_bot": [{"pnl": 1.0}, {"pnl": -0.5}]
         }
+
+    2. Nested by market regime and strategy::
+
+        {
+            "trending": {
+                "trend_bot": [{"pnl": 1.0}]
+            }
+        }
+
+    This function normalizes either layout into per-strategy metrics.
     """
 
     data = _load(path)
     metrics: Dict[str, Dict[str, float]] = {}
-    for strat, trades in data.items():
+
+    def _process(strategy: str, trades: Any) -> None:
         if not isinstance(trades, list):
             raise ValueError(
-                f"Expected list of trade records for strategy '{strat}', got {type(trades).__name__}"
+                f"Expected list of trade records for strategy '{strategy}', got {type(trades).__name__}"
             )
+
         pnls = []
-        for t in trades:
-            if not isinstance(t, dict) or "pnl" not in t:
+        for rec in trades:
+            if not isinstance(rec, dict) or "pnl" not in rec:
                 raise ValueError(
                     "Each trade must be a mapping with a 'pnl' key. "
-                    f"Got {t!r} for strategy '{strat}'."
+                    f"Got {rec!r} for strategy '{strategy}'."
                 )
-            pnls.append(float(t["pnl"]))
+            pnls.append(float(rec["pnl"]))
+
         if not pnls:
-            metrics[strat] = {"sharpe": 0.0, "win_rate": 0.0, "drawdown": 0.0, "ev": 0.0}
-            continue
+            metrics[strategy] = {"sharpe": 0.0, "win_rate": 0.0, "drawdown": 0.0, "ev": 0.0}
+            return
+
         series = pd.Series(pnls)
         mean = series.mean()
         std = series.std()
@@ -56,12 +70,24 @@ def compute_metrics(path: Path = STATS_FILE) -> Dict[str, Dict[str, float]]:
         cum = series.cumsum()
         running_max = cum.cummax()
         drawdown = float((cum - running_max).min())
-        metrics[strat] = {
+        metrics[strategy] = {
             "sharpe": sharpe,
             "win_rate": win_rate,
             "drawdown": drawdown,
             "ev": float(mean),
         }
+
+    for key, value in data.items():
+        if isinstance(value, list):
+            _process(key, value)
+        elif isinstance(value, dict):
+            for strat, trades in value.items():
+                _process(strat, trades)
+        else:
+            raise ValueError(
+                f"Expected list or dict for entry '{key}', got {type(value).__name__}"
+            )
+
     return metrics
 
 
