@@ -99,6 +99,7 @@ telegram:
 telegram_alerts: true
 testing_mode: true
 timeframe: 1h
+scalp_timeframe: 1m
 tp_pct: 0.07
 trade_size_pct: 0.2
 twap_enabled: false

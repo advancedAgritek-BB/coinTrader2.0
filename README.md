@@ -142,6 +142,8 @@ liquidity_depth: 10          # order book depth levels to inspect
 twap_enabled: false          # split large orders into slices
 twap_slices: 4               # number of slices when TWAP is enabled
 twap_interval_seconds: 10    # delay between TWAP slices
+timeframe: 1h                # candles for regime detection
+scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
 loop_interval_minutes: 5     # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
 max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
@@ -151,6 +153,8 @@ max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
 evaluation cycle, giving the market time to evolve before scanning again.
 `max_concurrent_ohlcv` caps how many OHLCV requests run in parallel when
 `update_ohlcv_cache` gathers new candles.
+`scalp_timeframe` sets the candle interval specifically for the micro_scalp
+and bounce_scalper strategies while `timeframe` covers all other analysis.
 
 When `use_websocket` is enabled the bot relies on `ccxt.pro` for realtime
 streaming data. Install it alongside the other requirements or disable
