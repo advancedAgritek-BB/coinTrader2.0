@@ -156,6 +156,8 @@ async def main() -> None:
     current_strategy = None
     active_strategy = None
     stats_file = Path("crypto_bot/logs/strategy_stats.json")
+    # File tracking individual trade performance used for analytics
+    perf_file = Path("crypto_bot/logs/strategy_performance.json")
     stats = json.loads(stats_file.read_text()) if stats_file.exists() else {}
     scores_file = Path("crypto_bot/logs/strategy_scores.json")
 
@@ -768,7 +770,7 @@ async def main() -> None:
         stats.setdefault(key, {"trades": 0})
         stats[key]["trades"] += 1
         stats_file.write_text(json.dumps(stats))
-        write_scores(scores_file, stats_file)
+        write_scores(scores_file, perf_file)
         logger.info("Updated trade stats %s", stats[key])
 
         logger.info(

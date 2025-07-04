@@ -3,7 +3,9 @@ from pathlib import Path
 from typing import Dict, Any
 import pandas as pd
 
-STATS_FILE = Path("crypto_bot/logs/strategy_stats.json")
+# Default location for recorded trade performance. Each trade closed
+# is appended to this JSON file via ``log_performance``.
+STATS_FILE = Path("crypto_bot/logs/strategy_performance.json")
 SCORES_FILE = Path("crypto_bot/logs/strategy_scores.json")
 
 
