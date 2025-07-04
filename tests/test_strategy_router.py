@@ -8,6 +8,7 @@ from crypto_bot.strategy import (
     breakout_bot,
     sniper_bot,
     micro_scalp_bot,
+    bounce_scalper,
 )
 
 
@@ -18,4 +19,5 @@ def test_strategy_for_mapping():
     assert strategy_for("breakout") is breakout_bot.generate_signal
     assert strategy_for("volatile") is sniper_bot.generate_signal
     assert strategy_for("scalp") is micro_scalp_bot.generate_signal
+    assert strategy_for("bounce") is bounce_scalper.generate_signal
     assert strategy_for("unknown") is grid_bot.generate_signal

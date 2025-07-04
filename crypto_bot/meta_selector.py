@@ -12,6 +12,7 @@ from crypto_bot.strategy import (
     mean_bot,
     breakout_bot,
     micro_scalp_bot,
+    bounce_scalper,
 )
 
 LOG_FILE = Path("crypto_bot/logs/strategy_performance.json")
@@ -30,6 +31,8 @@ _STRATEGY_FN_MAP = {
     "breakout_bot": breakout_bot.generate_signal,
     "micro_scalp": micro_scalp_bot.generate_signal,
     "micro_scalp_bot": micro_scalp_bot.generate_signal,
+    "bounce_scalper": bounce_scalper.generate_signal,
+    "bounce_scalper_bot": bounce_scalper.generate_signal,
 }
 
 

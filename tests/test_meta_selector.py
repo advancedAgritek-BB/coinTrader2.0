@@ -32,3 +32,12 @@ def test_strategy_map_contains_micro_scalp():
         meta_selector._STRATEGY_FN_MAP.get("micro_scalp")
         is micro_scalp_bot.generate_signal
     )
+
+
+def test_strategy_map_contains_bounce_scalper():
+    from crypto_bot.strategy import bounce_scalper
+
+    assert (
+        meta_selector._STRATEGY_FN_MAP.get("bounce_scalper")
+        is bounce_scalper.generate_signal
+    )
