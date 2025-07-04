@@ -105,6 +105,46 @@ def test_allow_trade_logs_ratio_reason():
     assert "1% of mean" in reason
 
 
+def test_allow_trade_rejects_tiny_volume():
+    data = {
+        "open": [1] * 20,
+        "high": [1] * 20,
+        "low": [1] * 20,
+        "close": [1] * 20,
+        "volume": [50] * 19 + [0.1],
+    }
+    df = pd.DataFrame(data)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_volume=5,
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(df)
+    assert not allowed
+    assert "1% of mean" in reason
+
+
+def test_allow_trade_rejects_when_volume_far_below_mean():
+    data = {
+        "open": [1] * 20,
+        "high": [1] * 20,
+        "low": [1] * 20,
+        "close": [1] * 20,
+        "volume": [100] * 19 + [0.2],
+    }
+    df = pd.DataFrame(data)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_volume=10,
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(df)
+    assert not allowed
+    assert "1% of mean" in reason
+
+
 def test_stop_order_management():
     manager = RiskManager(RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01))
     order = {"id": "1", "symbol": "BTC/USDT", "side": "sell", "amount": 1, "dry_run": True}

@@ -9,7 +9,7 @@ class DummyExchange:
 
 def test_get_filtered_symbols_fallback(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
-    async def fake_filter_symbols(ex, syms):
+    async def fake_filter_symbols(ex, syms, cfg):
         return []
 
     monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
@@ -25,7 +25,7 @@ def test_get_filtered_symbols_caching(monkeypatch):
     async def fake_to_thread(fn, *a):
         return fn(*a)
 
-    async def fake_filter_symbols(ex, syms):
+    async def fake_filter_symbols(ex, syms, cfg):
         calls.append(True)
         return ["ETH/USD"]
 

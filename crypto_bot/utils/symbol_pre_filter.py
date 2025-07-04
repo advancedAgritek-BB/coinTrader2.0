@@ -10,6 +10,7 @@ from .logger import setup_logger
 logger = setup_logger(__name__, "crypto_bot/logs/symbol_filter.log")
 
 API_URL = "https://api.kraken.com/0/public"
+DEFAULT_MIN_VOLUME_USD = 50000
 
 
 async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
@@ -53,8 +54,26 @@ def _parse_metrics(ticker: dict) -> tuple[float, float, float]:
     return volume_usd, change_pct, spread
 
 
-async def filter_symbols(exchange, symbols: Iterable[str]) -> List[str]:
-    """Return subset of ``symbols`` passing liquidity and volatility checks."""
+async def filter_symbols(
+    exchange, symbols: Iterable[str], config: dict | None = None
+) -> List[str]:
+    """Return subset of ``symbols`` passing liquidity and volatility checks.
+
+    Parameters
+    ----------
+    exchange: object
+        Exchange instance providing market metadata.
+    symbols: Iterable[str]
+        Pairs to evaluate.
+    config: dict | None
+        Optional configuration dictionary containing ``symbol_filter`` with
+        ``min_volume_usd`` setting.
+    """
+    min_volume = DEFAULT_MIN_VOLUME_USD
+    if config:
+        min_volume = config.get("symbol_filter", {}).get(
+            "min_volume_usd", DEFAULT_MIN_VOLUME_USD
+        )
     pairs = [s.replace("/", "") for s in symbols]
     data = (await _fetch_ticker_async(pairs)).get("result", {})
     id_map = {}
@@ -91,6 +110,6 @@ async def filter_symbols(exchange, symbols: Iterable[str]) -> List[str]:
             change_pct,
             spread,
         )
-        if vol_usd > 50000 and abs(change_pct) > 1:
+        if vol_usd > min_volume and abs(change_pct) > 1:
             allowed.append(symbol)
     return allowed
