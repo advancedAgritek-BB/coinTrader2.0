@@ -12,6 +12,7 @@ def test_log_position_writes_line(tmp_path, monkeypatch):
     assert log_file.exists()
     text = log_file.read_text()
     assert "BTC/USDT" in text
+    assert "$10.00" in text  # pnl in USD
     assert "positive" in text
     assert "100.000000" in text
     assert "110.000000" in text
@@ -26,4 +27,4 @@ def test_log_balance_writes_line(tmp_path, monkeypatch):
 
     assert log_file.exists()
     text = log_file.read_text()
-    assert "123.45" in text
+    assert "$123.45" in text
