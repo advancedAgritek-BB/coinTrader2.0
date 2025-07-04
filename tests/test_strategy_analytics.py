@@ -20,6 +20,23 @@ def test_compute_metrics(tmp_path):
     assert trend["sharpe"] > 0
 
 
+def test_compute_metrics_nested(tmp_path):
+    data = {
+        "trending": {
+            "trend_bot": [{"pnl": 1.0}, {"pnl": -0.5}],
+            "grid_bot": [{"pnl": 0.2}],
+        },
+        "sideways": {
+            "mean_bot": [{"pnl": -1.0}, {"pnl": 0.5}],
+        },
+    }
+    f = tmp_path / "stats.json"
+    f.write_text(json.dumps(data))
+
+    metrics = sa.compute_metrics(f)
+    assert set(metrics) == {"trend_bot", "grid_bot", "mean_bot"}
+
+
 def test_compute_metrics_invalid(tmp_path):
     data = {"trend_bot": [{"pnl": 1.0}, 2.0]}
     f = tmp_path / "stats.json"
