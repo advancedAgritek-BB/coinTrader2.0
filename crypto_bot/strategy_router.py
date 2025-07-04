@@ -11,6 +11,7 @@ from crypto_bot.strategy import (
     dex_scalper,
     mean_bot,
     breakout_bot,
+    micro_scalp_bot,
 )
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
@@ -21,6 +22,7 @@ STRATEGY_MAP: Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]] = {
     "mean-reverting": mean_bot.generate_signal,
     "breakout": breakout_bot.generate_signal,
     "volatile": sniper_bot.generate_signal,
+    "scalp": micro_scalp_bot.generate_signal,
 }
 
 
@@ -37,6 +39,8 @@ def strategy_name(regime: str, mode: str) -> str:
         return "sniper" if regime in {"breakout", "volatile"} else "dex_scalper"
     if regime == "trending":
         return "trend"
+    if regime == "scalp":
+        return "micro_scalp"
     if regime in {"breakout", "volatile"}:
         return "sniper"
     return "grid"

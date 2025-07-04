@@ -51,6 +51,7 @@ risk:
   atr_short_window: 14
   max_drawdown: 0.7
   max_volatility_factor: 1.5
+  min_expected_value: 0.0
   min_volume: 50
   stop_loss_pct: 0.02
   take_profit_pct: 0.04
@@ -64,6 +65,10 @@ sentiment_filter:
   min_fng: 0
   min_sentiment: 0
 signal_threshold: 0.3
+signal_weight_optimizer:
+  enabled: false
+  learning_rate: 0.1
+  min_weight: 0.05
 sl_pct: 0.03
 solana_slippage_bps: 50
 strategy_allocation:
@@ -90,3 +95,9 @@ volatility_filter:
   max_funding_rate: 0.05
   min_atr_pct: 0.001
 wallet_address: your_wallet
+
+micro_scalp:
+  ema_fast: 3
+  ema_slow: 8
+  volume_window: 20
+  volume_threshold: 1.5

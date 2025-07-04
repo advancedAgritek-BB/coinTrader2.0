@@ -10,6 +10,7 @@ app = FastAPI()
 SIGNALS_FILE = Path("crypto_bot/logs/asset_scores.json")
 POSITIONS_FILE = Path("crypto_bot/logs/positions.log")
 PERFORMANCE_FILE = Path("crypto_bot/logs/strategy_performance.json")
+SCORES_FILE = Path("crypto_bot/logs/strategy_scores.json")
 
 
 @app.get("/live-signals")
@@ -60,6 +61,17 @@ def strategy_performance() -> dict:
     if PERFORMANCE_FILE.exists():
         try:
             return json.loads(PERFORMANCE_FILE.read_text())
+        except Exception:
+            return {}
+    return {}
+
+
+@app.get("/strategy-scores")
+def strategy_scores() -> dict:
+    """Return computed strategy metrics."""
+    if SCORES_FILE.exists():
+        try:
+            return json.loads(SCORES_FILE.read_text())
         except Exception:
             return {}
     return {}

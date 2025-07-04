@@ -36,3 +36,14 @@ def test_strategy_performance_endpoint(tmp_path, monkeypatch):
     resp = client.get("/strategy-performance")
     assert resp.status_code == 200
     assert resp.json() == data
+
+
+def test_strategy_scores_endpoint(tmp_path, monkeypatch):
+    scores = {"trend_bot": {"sharpe": 1.0}}
+    f = tmp_path / "scores.json"
+    f.write_text(json.dumps(scores))
+    monkeypatch.setattr(api, "SCORES_FILE", f)
+    client = TestClient(api.app)
+    resp = client.get("/strategy-scores")
+    assert resp.status_code == 200
+    assert resp.json() == scores

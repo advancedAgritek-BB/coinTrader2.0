@@ -7,7 +7,7 @@ def test_normalized_score_lower_when_atr_low():
     close = list(range(60))
     high = [c + (1 if i < 46 else 0.05) for i, c in enumerate(close)]
     low = [c - (1 if i < 46 else 0.05) for i, c in enumerate(close)]
-    volume = [1] * 60
+    volume = [1] * 59 + [2]
     df = pd.DataFrame({"open": close, "high": high, "low": low, "close": close, "volume": volume})
 
     raw_score, _ = trend_bot.generate_signal(df, {"atr_normalization": False})
