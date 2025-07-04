@@ -24,8 +24,7 @@ def log_trade(order: Dict) -> None:
     df = pd.DataFrame([record])
     log_file = Path("crypto_bot/logs/trades.csv")
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    header = not log_file.exists()
-    df.to_csv(log_file, mode="a", header=header, index=False)
+    df.to_csv(log_file, mode="a", header=False, index=False)
     logger.info("Logged trade: %s", record)
     try:
         creds_path = dotenv_values('crypto_bot/.env').get('GOOGLE_CRED_JSON')
