@@ -170,6 +170,8 @@ async def execute_swap(
         token_out,
         amount,
         tx_hash,
+    )
+    logger.info(
         "Swap executed - tx=%s in=%s out=%s amount=%s dry_run=%s",
         tx_hash,
         token_in,
