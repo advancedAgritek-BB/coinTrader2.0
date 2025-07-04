@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 
-async def run(
+async def monitor_loop(
     exchange: object,
     paper_wallet: Optional[object] = None,
     log_file: str | Path = "crypto_bot/logs/bot.log",
