@@ -94,13 +94,7 @@ async def load_ohlcv_parallel(
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
 ) -> Dict[str, list]:
-    """Fetch OHLCV data for multiple symbols concurrently.
-
-    Parameters
-    ----------
-    max_concurrent : int | None, optional
-        Maximum number of concurrent OHLCV requests. ``None`` means no limit.
-    """
+    """Fetch OHLCV data for multiple symbols concurrently."""
 
     since_map = since_map or {}
 
