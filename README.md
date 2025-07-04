@@ -211,8 +211,9 @@ python -m frontend.app
 ```
 
 Navigate to `http://localhost:5000` to start or stop the bot, watch the logs
-refresh live and review the trade stats collected in
-`crypto_bot/logs/strategy_stats.json`. When the bot is stopped a form
+refresh live and review the trade statistics stored in
+`crypto_bot/logs/strategy_stats.json` and the detailed performance records in
+`crypto_bot/logs/strategy_performance.json`. When the bot is stopped a form
 lets you select the execution mode (dry run or live) before launching.
 
 ## Log Files
@@ -225,6 +226,42 @@ include:
 - `trades.csv` – CSV export of every executed trade used by the dashboard and
   backtester.
 - `strategy_stats.json` – summary statistics of win rate, PnL and other metrics.
+- `strategy_performance.json` – list of individual trades grouped by regime and
+  strategy with fields like `pnl` and timestamps.
+
+### Statistics File Structure
+
+`strategy_performance.json` stores raw trade records nested by market regime and
+strategy. Example snippet:
+
+```json
+{
+  "trending": {
+    "trend_bot": [
+      {
+        "symbol": "BTC/USDT",
+        "pnl": 1.2,
+        "entry_time": "2024-01-01T00:00:00Z",
+        "exit_time": "2024-01-01T02:00:00Z"
+      }
+    ]
+  }
+}
+```
+
+`strategy_stats.json` contains aggregated statistics per strategy such as win
+rate and average PnL:
+
+```json
+{
+  "trend_bot": {
+    "trades": 10,
+    "win_rate": 0.6,
+    "avg_win": 1.2,
+    "avg_loss": -0.8
+  }
+}
+```
 
 Other helpers create logs like `execution.log` in the same directory when
 enabled. Risk details are consolidated in `bot.log`, letting you follow the

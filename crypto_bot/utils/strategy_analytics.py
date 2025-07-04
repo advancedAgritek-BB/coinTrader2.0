@@ -17,6 +17,17 @@ def _load(path: Path) -> Dict[str, Any]:
 
 
 def compute_metrics(path: Path = STATS_FILE) -> Dict[str, Dict[str, float]]:
+    """Return Sharpe ratio, win rate, drawdown and EV for each strategy.
+
+    The statistics file must contain a mapping of strategy name to a list of
+    trade records with a ``pnl`` field::
+
+        {
+            "trend_bot": [{"pnl": 1.0}, {"pnl": -0.5}],
+            "grid_bot": [{"pnl": 0.2}]
+        }
+    """
+
     data = _load(path)
     metrics: Dict[str, Dict[str, float]] = {}
     for strat, trades in data.items():
@@ -44,6 +55,8 @@ def compute_metrics(path: Path = STATS_FILE) -> Dict[str, Dict[str, float]]:
 def write_scores(
     out_path: Path = SCORES_FILE, stats_path: Path = STATS_FILE
 ) -> Dict[str, Dict[str, float]]:
+    """Compute metrics from ``stats_path`` and write them to ``out_path``."""
+
     scores = compute_metrics(stats_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(scores))

@@ -6,7 +6,23 @@ LOG_FILE = Path("crypto_bot/logs/strategy_performance.json")
 
 
 def log_performance(record: Dict[str, Any]) -> None:
-    """Append trade performance record grouped by regime and strategy."""
+    """Append a trade result to ``strategy_performance.json``.
+
+    The JSON file groups records by market regime and strategy::
+
+        {
+            "trending": {
+                "trend_bot": [
+                    {
+                        "symbol": "BTC/USDT",
+                        "pnl": 1.2,
+                        "entry_time": "2024-01-01T00:00:00Z",
+                        "exit_time": "2024-01-01T02:00:00Z"
+                    }
+                ]
+            }
+        }
+    """
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     data: Dict[str, Any] = {}
     if LOG_FILE.exists():
