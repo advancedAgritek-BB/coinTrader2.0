@@ -287,3 +287,17 @@ ml_signal_model:
 
 When enabled, `evaluate` computes `(score * (1 - weight)) + (ml_score * weight)`
 and caps the result between 0 and 1.
+
+## Development Setup
+
+1. Install the Python dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+2. Run the test suite to verify your environment:
+
+```bash
+pytest -q
+```
