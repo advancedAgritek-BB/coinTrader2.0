@@ -61,7 +61,7 @@ from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENV_PATH = Path(__file__).resolve().parent / ".env"
 
-logger = setup_logger("bot", "crypto_bot/logs/bot.log")
+logger = setup_logger("bot", "crypto_bot/logs/bot.log", to_console=False)
 
 
 def direction_to_side(direction: str) -> str:
