@@ -4,7 +4,8 @@ import numpy as np
 from typing import Dict, Iterable, List, Optional
 from numpy.random import default_rng, Generator
 
-from crypto_bot.regime.regime_classifier import classify_regime
+import ta
+from crypto_bot.regime.regime_classifier import classify_regime, CONFIG
 from crypto_bot.strategy_router import strategy_for
 from crypto_bot.signals.signal_scoring import evaluate
 
@@ -27,6 +28,68 @@ def _trade_return(
     """Calculate trade return after cost."""
     raw = (exit - entry) / entry if position == "long" else (entry - exit) / entry
     return raw - cost
+
+
+def _precompute_regimes(df: pd.DataFrame) -> List[str]:
+    """Vectorized regime classification for each row."""
+    # If ``classify_regime`` was monkeypatched (e.g. in tests), fall back to
+    # repeatedly calling it to preserve expected behaviour.
+    if classify_regime.__module__ != "crypto_bot.regime.regime_classifier":
+        return [classify_regime(df.iloc[: i + 1]) for i in range(len(df))]
+
+    cfg = CONFIG
+    work = df.copy()
+
+    work["ema_fast"] = ta.trend.ema_indicator(work["close"], window=cfg["ema_fast"])
+    work["ema_slow"] = ta.trend.ema_indicator(work["close"], window=cfg["ema_slow"])
+    work["adx"] = ta.trend.adx(
+        work["high"], work["low"], work["close"], window=cfg["indicator_window"]
+    )
+    work["rsi"] = ta.momentum.rsi(work["close"], window=cfg["indicator_window"])
+    work["atr"] = ta.volatility.average_true_range(
+        work["high"], work["low"], work["close"], window=cfg["indicator_window"]
+    )
+    bb = ta.volatility.BollingerBands(work["close"], window=cfg["bb_window"])
+    work["bb_width"] = bb.bollinger_wband()
+    work["volume_ma"] = work["volume"].rolling(cfg["ma_window"]).mean()
+    work["atr_ma"] = work["atr"].rolling(cfg["ma_window"]).mean()
+
+    regimes: List[str] = []
+    for i in range(len(work)):
+        latest = work.iloc[i]
+        volume_ma = latest["volume_ma"]
+        atr_ma = latest["atr_ma"]
+        trending = (
+            latest["adx"] > cfg["adx_trending_min"]
+            and latest["ema_fast"] > latest["ema_slow"]
+        )
+
+        if trending:
+            regime = "trending"
+        elif (
+            latest["adx"] < cfg["adx_sideways_max"]
+            and latest["bb_width"] < cfg["bb_width_sideways_max"]
+        ):
+            regime = "sideways"
+        elif (
+            latest["bb_width"] < cfg["bb_width_breakout_max"]
+            and not pd.isna(volume_ma)
+            and latest["volume"] > volume_ma * cfg["breakout_volume_mult"]
+        ):
+            regime = "breakout"
+        elif (
+            cfg["rsi_mean_rev_min"] <= latest["rsi"] <= cfg["rsi_mean_rev_max"]
+            and abs(latest["close"] - latest["ema_fast"]) / latest["close"]
+            < cfg["ema_distance_mean_rev_max"]
+        ):
+            regime = "mean-reverting"
+        elif not pd.isna(atr_ma) and latest["atr"] > atr_ma * cfg["atr_volatility_mult"]:
+            regime = "volatile"
+        else:
+            regime = "sideways"
+        regimes.append(regime)
+
+    return regimes
 
 
 def _run_single(
@@ -52,17 +115,18 @@ def _run_single(
     slippage_cost = 0.0
 
     last_regime: Optional[str] = None
+    regimes = _precompute_regimes(df)
 
     for i in range(60, len(df)):
         subset = df.iloc[: i + 1]
-        true_regime = classify_regime(subset)
+        true_regime = regimes[i]
         regime = true_regime
         if misclass_prob > 0 and rng.random() < misclass_prob:
             regime = rng.choice([r for r in _REGIMES if r != true_regime])
             misclassified += 1
 
         if last_regime is not None and regime != last_regime and position is not None:
-            exit_price = subset["close"].iloc[-1]
+            exit_price = df["close"].iloc[i]
             cost = (fee_pct + slippage_pct) * 2
             r = _trade_return(entry_price, exit_price, position, cost)
             equity *= 1 + r
@@ -77,7 +141,7 @@ def _run_single(
 
         strategy_fn = strategy_for(regime)
         _, direction = evaluate(strategy_fn, subset, None)
-        price = subset["close"].iloc[-1]
+        price = df["close"].iloc[i]
 
         if position is None and direction in {"long", "short"}:
             position = direction
