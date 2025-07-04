@@ -96,14 +96,13 @@ async def load_ohlcv_parallel(
 ) -> Dict[str, list]:
     """Fetch OHLCV data for multiple symbols concurrently.
 
-    since_map = since_map or {}
-    tasks = [
-        fetch_ohlcv_async(
     Parameters
     ----------
     max_concurrent : int | None, optional
         Maximum number of concurrent OHLCV requests. ``None`` means no limit.
     """
+
+    since_map = since_map or {}
 
     sem = asyncio.Semaphore(max_concurrent) if max_concurrent else None
 
@@ -113,19 +112,20 @@ async def load_ohlcv_parallel(
                 return await fetch_ohlcv_async(
                     exchange,
                     sym,
-                    timeframe,
-                    limit,
-                    use_websocket,
-                    force_websocket_history,
+                    timeframe=timeframe,
+                    limit=limit,
+                    since=since_map.get(sym),
+                    use_websocket=use_websocket,
+                    force_websocket_history=force_websocket_history,
                 )
         return await fetch_ohlcv_async(
             exchange,
             sym,
-            timeframe,
-            limit,
-            since_map.get(s),
-            use_websocket,
-            force_websocket_history,
+            timeframe=timeframe,
+            limit=limit,
+            since=since_map.get(sym),
+            use_websocket=use_websocket,
+            force_websocket_history=force_websocket_history,
         )
 
     tasks = [asyncio.create_task(sem_fetch(s)) for s in symbols]
@@ -150,6 +150,7 @@ async def update_ohlcv_cache(
     limit: int = 100,
     use_websocket: bool = False,
     force_websocket_history: bool = False,
+    max_concurrent: int | None = None,
 ) -> Dict[str, pd.DataFrame]:
     """Update cached OHLCV DataFrames with new candles."""
 
@@ -167,6 +168,7 @@ async def update_ohlcv_cache(
         since_map,
         use_websocket,
         force_websocket_history,
+        max_concurrent,
     )
 
     for sym in symbols:
@@ -180,6 +182,7 @@ async def update_ohlcv_cache(
                 None,
                 use_websocket,
                 force_websocket_history,
+                max_concurrent,
             )
             data = full.get(sym)
         if data is None:

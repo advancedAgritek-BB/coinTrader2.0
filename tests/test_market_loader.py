@@ -79,7 +79,13 @@ class DummySyncExchange:
 def test_load_ohlcv_parallel():
     ex = DummySyncExchange()
     result = asyncio.run(
-        load_ohlcv_parallel(ex, ["BTC/USD", "ETH/USD"], timeframe="1h", limit=1)
+        load_ohlcv_parallel(
+            ex,
+            ["BTC/USD", "ETH/USD"],
+            timeframe="1h",
+            limit=1,
+            max_concurrent=2,
+        )
     )
     assert set(result.keys()) == {"BTC/USD", "ETH/USD"}
 
@@ -101,6 +107,7 @@ def test_load_ohlcv_parallel_websocket_overrides_fetch():
             timeframe="1h",
             limit=3,
             use_websocket=True,
+            max_concurrent=2,
         )
     )
     assert list(result.keys()) == ["BTC/USD"]
@@ -117,6 +124,7 @@ def test_load_ohlcv_parallel_websocket_force_history():
             limit=3,
             use_websocket=True,
             force_websocket_history=True,
+            max_concurrent=2,
         )
     )
     assert list(result.keys()) == ["BTC/USD"]
@@ -142,20 +150,20 @@ class DummyFailExchange(DummyIncExchange):
 def test_update_ohlcv_cache_appends():
     ex = DummyIncExchange()
     cache: dict[str, pd.DataFrame] = {}
-    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=2))
+    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=2, max_concurrent=2))
     assert len(cache["BTC/USD"]) == 2
     ex.data.append([4] * 6)
-    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4))
+    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2))
     assert len(cache["BTC/USD"]) == 4
 
 
 def test_update_ohlcv_cache_fallback_full_history():
     ex = DummyFailExchange()
     cache: dict[str, pd.DataFrame] = {}
-    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=3))
+    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=3, max_concurrent=2))
     assert len(cache["BTC/USD"]) == 3
     ex.data.append([4] * 6)
-    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4))
+    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2))
     assert len(cache["BTC/USD"]) == 4
 class CountingExchange:
     def __init__(self):
@@ -176,6 +184,22 @@ def test_load_ohlcv_parallel_respects_max_concurrent():
     asyncio.run(
         load_ohlcv_parallel(
             ex,
+            symbols,
+            limit=1,
+            max_concurrent=2,
+        )
+    )
+    assert ex.max_active <= 2
+
+
+def test_update_ohlcv_cache_respects_max_concurrent():
+    ex = CountingExchange()
+    symbols = ["A", "B", "C", "D", "E"]
+    cache: dict[str, pd.DataFrame] = {}
+    asyncio.run(
+        update_ohlcv_cache(
+            ex,
+            cache,
             symbols,
             limit=1,
             max_concurrent=2,
