@@ -26,7 +26,7 @@ def live_signals() -> dict:
 POS_PATTERN = re.compile(
     r"Active (?P<symbol>\S+) (?P<side>\w+) (?P<amount>[0-9.]+) "
     r"entry (?P<entry>[0-9.]+) current (?P<current>[0-9.]+) "
-    r"pnl (?P<pnl>[0-9.+-]+).*balance (?P<balance>[0-9.]+)"
+    r"pnl \$(?P<pnl>[0-9.+-]+).*balance \$(?P<balance>[0-9.]+)"
 )
 
 
