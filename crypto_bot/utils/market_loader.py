@@ -1,5 +1,7 @@
 from typing import Iterable, List, Dict
 import asyncio
+import inspect
+import pandas as pd
 
 
 async def load_kraken_symbols(
@@ -37,13 +39,18 @@ async def fetch_ohlcv_async(
     symbol: str,
     timeframe: str = "1h",
     limit: int = 100,
+    since: int | None = None,
     use_websocket: bool = False,
     force_websocket_history: bool = False,
 ) -> list | Exception:
     """Return OHLCV data for ``symbol`` using async I/O."""
     try:
         if use_websocket and hasattr(exchange, "watch_ohlcv"):
-            data = await exchange.watch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+            params = inspect.signature(exchange.watch_ohlcv).parameters
+            kwargs = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+            if since is not None and "since" in params:
+                kwargs["since"] = since
+            data = await exchange.watch_ohlcv(**kwargs)
             if (
                 limit
                 and len(data) < limit
@@ -51,16 +58,28 @@ async def fetch_ohlcv_async(
                 and hasattr(exchange, "fetch_ohlcv")
             ):
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-                    return await exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-                return await asyncio.to_thread(
-                    exchange.fetch_ohlcv, symbol, timeframe=timeframe, limit=limit
-                )
+                    params_f = inspect.signature(exchange.fetch_ohlcv).parameters
+                    kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                    if since is not None and "since" in params_f:
+                        kwargs_f["since"] = since
+                    return await exchange.fetch_ohlcv(**kwargs_f)
+                params_f = inspect.signature(exchange.fetch_ohlcv).parameters
+                kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                if since is not None and "since" in params_f:
+                    kwargs_f["since"] = since
+                return await asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f)
             return data
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-            return await exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-        return await asyncio.to_thread(
-            exchange.fetch_ohlcv, symbol, timeframe=timeframe, limit=limit
-        )
+            params_f = inspect.signature(exchange.fetch_ohlcv).parameters
+            kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+            if since is not None and "since" in params_f:
+                kwargs_f["since"] = since
+            return await exchange.fetch_ohlcv(**kwargs_f)
+        params_f = inspect.signature(exchange.fetch_ohlcv).parameters
+        kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+        if since is not None and "since" in params_f:
+            kwargs_f["since"] = since
+        return await asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f)
     except Exception as exc:  # pragma: no cover - network
         return exc
 
@@ -70,17 +89,20 @@ async def load_ohlcv_parallel(
     symbols: Iterable[str],
     timeframe: str = "1h",
     limit: int = 100,
+    since_map: Dict[str, int] | None = None,
     use_websocket: bool = False,
     force_websocket_history: bool = False,
 ) -> Dict[str, list]:
     """Fetch OHLCV data for multiple symbols concurrently."""
 
+    since_map = since_map or {}
     tasks = [
         fetch_ohlcv_async(
             exchange,
             s,
             timeframe,
             limit,
+            since_map.get(s),
             use_websocket,
             force_websocket_history,
         )
@@ -97,3 +119,59 @@ async def load_ohlcv_parallel(
             res = [[c[0], c[1], c[2], c[3], c[4], c[6]] for c in res]
         data[sym] = res
     return data
+
+
+async def update_ohlcv_cache(
+    exchange,
+    cache: Dict[str, pd.DataFrame],
+    symbols: Iterable[str],
+    timeframe: str = "1h",
+    limit: int = 100,
+    use_websocket: bool = False,
+    force_websocket_history: bool = False,
+) -> Dict[str, pd.DataFrame]:
+    """Update cached OHLCV DataFrames with new candles."""
+
+    since_map: Dict[str, int] = {}
+    for sym in symbols:
+        df = cache.get(sym)
+        if df is not None and not df.empty:
+            since_map[sym] = int(df["timestamp"].iloc[-1])
+
+    data_map = await load_ohlcv_parallel(
+        exchange,
+        symbols,
+        timeframe,
+        limit,
+        since_map,
+        use_websocket,
+        force_websocket_history,
+    )
+
+    for sym in symbols:
+        data = data_map.get(sym)
+        if not data:
+            full = await load_ohlcv_parallel(
+                exchange,
+                [sym],
+                timeframe,
+                limit,
+                None,
+                use_websocket,
+                force_websocket_history,
+            )
+            data = full.get(sym)
+        if data is None:
+            continue
+        df_new = pd.DataFrame(
+            data, columns=["timestamp", "open", "high", "low", "close", "volume"]
+        )
+        if sym in cache and not cache[sym].empty:
+            last_ts = cache[sym]["timestamp"].iloc[-1]
+            df_new = df_new[df_new["timestamp"] > last_ts]
+            if df_new.empty:
+                continue
+            cache[sym] = pd.concat([cache[sym], df_new], ignore_index=True)
+        else:
+            cache[sym] = df_new
+    return cache
