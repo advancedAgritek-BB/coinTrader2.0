@@ -70,6 +70,13 @@ def route(
         logger.info("Routing to DEX scalper (onchain)")
         return dex_scalper.generate_signal
 
+    if config and config.get("rl_selector", {}).get("enabled"):
+        from .rl import strategy_selector as rl_selector
+
+        strategy_fn = rl_selector.select_strategy(regime)
+        logger.info("RL selector chose %s for %s", strategy_fn.__name__, regime)
+        return strategy_fn
+
     if config and config.get("meta_selector", {}).get("enabled"):
         from . import meta_selector
 
