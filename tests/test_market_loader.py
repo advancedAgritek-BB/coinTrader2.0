@@ -119,3 +119,30 @@ def test_load_ohlcv_parallel_websocket_force_history():
     )
     assert list(result.keys()) == ["BTC/USD"]
     assert len(result["BTC/USD"]) == 1
+
+
+class CountingExchange:
+    def __init__(self):
+        self.active = 0
+        self.max_active = 0
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.active += 1
+        self.max_active = max(self.max_active, self.active)
+        await asyncio.sleep(0.01)
+        self.active -= 1
+        return [[0] * 6]
+
+
+def test_load_ohlcv_parallel_respects_max_concurrent():
+    ex = CountingExchange()
+    symbols = ["A", "B", "C", "D", "E"]
+    asyncio.run(
+        load_ohlcv_parallel(
+            ex,
+            symbols,
+            limit=1,
+            max_concurrent=2,
+        )
+    )
+    assert ex.max_active <= 2
