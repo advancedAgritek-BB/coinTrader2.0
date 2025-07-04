@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Optional
 
 from .telegram import send_message
+from .logger import setup_logger
+
+logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
 
 def entry_summary(symbol: str, strategy: str, score: float, direction: str) -> str:
@@ -32,7 +35,10 @@ def report_entry(
     direction: str,
 ) -> Optional[str]:
     """Send a Telegram message summarizing a trade entry."""
-    return send_message(token, chat_id, entry_summary(symbol, strategy, score, direction))
+    err = send_message(token, chat_id, entry_summary(symbol, strategy, score, direction))
+    if err:
+        logger.error("Failed to report entry: %s", err)
+    return err
 
 
 def report_exit(
@@ -44,4 +50,7 @@ def report_exit(
     direction: str,
 ) -> Optional[str]:
     """Send a Telegram message summarizing a trade exit."""
-    return send_message(token, chat_id, exit_summary(symbol, strategy, pnl, direction))
+    err = send_message(token, chat_id, exit_summary(symbol, strategy, pnl, direction))
+    if err:
+        logger.error("Failed to report exit: %s", err)
+    return err

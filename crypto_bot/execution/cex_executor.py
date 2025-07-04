@@ -99,7 +99,9 @@ def execute_trade(
                     return True
             return False
         except Exception as err:
-            send_message(token, chat_id, f"Order book error: {err}")
+            err_msg = send_message(token, chat_id, f"Order book error: {err}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
             return False
 
     def place(size: float) -> Dict:
@@ -110,10 +112,14 @@ def execute_trade(
                 return ws_client.add_order(symbol, side, size)
             return exchange.create_market_order(symbol, side, size)
         except Exception as exc:
-            send_message(token, chat_id, f"Order failed: {exc}")
+            err_msg = send_message(token, chat_id, f"Order failed: {exc}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
             return {}
 
-    send_message(token, chat_id, f"Placing {side} order for {amount} {symbol}")
+    err = send_message(token, chat_id, f"Placing {side} order for {amount} {symbol}")
+    if err:
+        logger.error("Failed to send message: %s", err)
 
     try:
         ticker = exchange.fetch_ticker(symbol)
@@ -123,7 +129,9 @@ def execute_trade(
             slippage = (ask - bid) / ((ask + bid) / 2)
             if slippage > config.get("max_slippage_pct", 1.0):
                 logger.warning("Trade skipped due to slippage.")
-                send_message(token, chat_id, "Trade skipped due to slippage.")
+                err_msg = send_message(token, chat_id, "Trade skipped due to slippage.")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
                 return {}
     except Exception as err:  # pragma: no cover - network
         logger.warning("Slippage check failed: %s", err)
@@ -133,7 +141,9 @@ def execute_trade(
         and hasattr(exchange, "fetch_order_book")
         and not has_liquidity(amount)
     ):
-        send_message(token, chat_id, "Insufficient liquidity for order size")
+        err = send_message(token, chat_id, "Insufficient liquidity for order size")
+        if err:
+            logger.error("Failed to send message: %s", err)
         return {}
 
     orders: List[Dict] = []
@@ -147,9 +157,11 @@ def execute_trade(
                 and hasattr(exchange, "fetch_order_book")
                 and not has_liquidity(slice_amount)
             ):
-                send_message(
+                err_liq = send_message(
                     token, chat_id, "Insufficient liquidity during TWAP execution"
                 )
+                if err_liq:
+                    logger.error("Failed to send message: %s", err_liq)
                 break
             order = place(slice_amount)
             if order:
@@ -163,9 +175,11 @@ def execute_trade(
                     except Exception:
                         pass
                 orders.append(order)
-                send_message(
+                err_slice = send_message(
                     token, chat_id, f"TWAP slice {i+1}/{slices} executed: {order}"
                 )
+                if err_slice:
+                    logger.error("Failed to send message: %s", err_slice)
                 oid = (
                     order.get("id")
                     or order.get("order_id")
@@ -196,7 +210,9 @@ def execute_trade(
                 except Exception:
                     pass
             orders.append(order)
-            send_message(token, chat_id, f"Order executed: {order}")
+            err_exec = send_message(token, chat_id, f"Order executed: {order}")
+            if err_exec:
+                logger.error("Failed to send message: %s", err_exec)
             oid = (
                 order.get("id")
                 or order.get("order_id")
@@ -232,7 +248,9 @@ async def execute_trade_async(
     ``ccxt.pro`` exchanges and the threaded ``KrakenWSClient`` fallback."""
 
     msg = f"Placing {side} order for {amount} {symbol}"
-    send_message(token, chat_id, msg)
+    err = send_message(token, chat_id, msg)
+    if err:
+        logger.error("Failed to send message: %s", err)
     if dry_run:
         order = {"symbol": symbol, "side": side, "amount": amount, "dry_run": True}
     else:
@@ -248,9 +266,13 @@ async def execute_trade_async(
                     exchange.create_market_order, symbol, side, amount
                 )
         except Exception as e:  # pragma: no cover - network
-            send_message(token, chat_id, f"Order failed: {e}")
+            err_msg = send_message(token, chat_id, f"Order failed: {e}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
             return {}
-    send_message(token, chat_id, f"Order executed: {order}")
+    err = send_message(token, chat_id, f"Order executed: {order}")
+    if err:
+        logger.error("Failed to send message: %s", err)
     oid = (
         order.get("id")
         or order.get("order_id")
@@ -296,7 +318,9 @@ def place_stop_order(
 ) -> Dict:
     """Submit a stop-loss order on the exchange."""
     msg = f"Placing stop {side} order for {amount} {symbol} at {stop_price:.2f}"
-    send_message(token, chat_id, msg)
+    err = send_message(token, chat_id, msg)
+    if err:
+        logger.error("Failed to send message: %s", err)
     if dry_run:
         order = {
             "symbol": symbol,
@@ -315,8 +339,12 @@ def place_stop_order(
                 params={"stopPrice": stop_price},
             )
         except Exception as e:
-            send_message(token, chat_id, f"Stop order failed: {e}")
+            err_msg = send_message(token, chat_id, f"Stop order failed: {e}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
             return {}
-    send_message(token, chat_id, f"Stop order submitted: {order}")
+    err = send_message(token, chat_id, f"Stop order submitted: {order}")
+    if err:
+        logger.error("Failed to send message: %s", err)
     log_trade(order, is_stop=True)
     return order

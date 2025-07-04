@@ -56,3 +56,26 @@ def test_send_message_async_no_warning(monkeypatch):
     assert calls["chat_id"] == "c"
     assert calls["text"] == "msg"
     assert w == []
+
+
+def test_send_message_exception_logged(monkeypatch, tmp_path, caplog):
+    class DummyBot:
+        def __init__(self, token):
+            pass
+
+        def send_message(self, chat_id, text):
+            raise RuntimeError("boom")
+
+    import crypto_bot.utils.telegram as telegram
+
+    monkeypatch.setattr(telegram, "Bot", DummyBot)
+
+    log_file = tmp_path / "bot.log"
+    logger = setup_logger("tel_test", str(log_file))
+    monkeypatch.setattr(telegram, "logger", logger)
+
+    with caplog.at_level(logging.ERROR):
+        err = telegram.send_message("t", "c", "msg")
+
+    assert err == "boom"
+    assert any("boom" in r.getMessage() for r in caplog.records)
