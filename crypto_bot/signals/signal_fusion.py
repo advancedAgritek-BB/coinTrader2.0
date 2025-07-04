@@ -1,21 +1,36 @@
 from __future__ import annotations
 
-from typing import Callable, Iterable, List, Tuple
+from typing import Callable, Iterable, List, Tuple, Dict
 
 import pandas as pd
 
 from .signal_scoring import evaluate
+from .weight_optimizer import OnlineWeightOptimizer, get_optimizer
 
 
 class SignalFusionEngine:
     """Combine signals from multiple strategies using weighted averaging."""
 
-    def __init__(self, strategies: Iterable[Tuple[Callable[[pd.DataFrame], Tuple[float, str]], float]]):
+    def __init__(
+        self,
+        strategies: Iterable[Tuple[Callable[[pd.DataFrame], Tuple[float, str]], float]],
+        weight_optimizer: OnlineWeightOptimizer | None = None,
+    ) -> None:
         self.strategies: List[Tuple[Callable[[pd.DataFrame], Tuple[float, str]], float]] = list(strategies)
+        self.weight_optimizer = weight_optimizer
 
     def fuse(self, df: pd.DataFrame, config: dict | None = None) -> Tuple[float, str]:
         if not self.strategies:
             return 0.0, "none"
+
+        opt_weights: Dict[str, float] = {}
+        if self.weight_optimizer and config:
+            cfg = config.get("signal_weight_optimizer", {})
+            if cfg.get("enabled"):
+                self.weight_optimizer.learning_rate = cfg.get("learning_rate", 0.1)
+                self.weight_optimizer.min_weight = cfg.get("min_weight", 0.0)
+                self.weight_optimizer.update()
+                opt_weights = self.weight_optimizer.get_weights()
 
         total_weight = 0.0
         weighted_score = 0.0
@@ -24,9 +39,10 @@ class SignalFusionEngine:
         signed_sum = 0.0
 
         for fn, weight in self.strategies:
+            w = opt_weights.get(fn.__name__, weight)
             score, direction = evaluate(fn, df, config)
-            weighted_score += score * weight
-            total_weight += weight
+            weighted_score += score * w
+            total_weight += w
 
             if direction == "long":
                 long_votes += 1
