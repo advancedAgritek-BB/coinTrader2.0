@@ -327,7 +327,7 @@ async def main() -> None:
             if direction_sym != "none":
                 signals_generated += 1
 
-            allowed, reason = risk_manager.allow_trade(df_sym)
+            allowed, reason = risk_manager.allow_trade(df_sym, name_sym)
             mean_vol = df_sym["volume"].rolling(20).mean().iloc[-1]
             last_vol = df_sym["volume"].iloc[-1]
             logger.info(

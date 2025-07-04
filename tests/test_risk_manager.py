@@ -1,6 +1,8 @@
+import json
 import pandas as pd
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.utils import trade_memory
+from crypto_bot.utils import ev_tracker
 
 def test_allow_trade_rejects_low_volume():
     data = {
@@ -203,3 +205,47 @@ def test_allow_trade_blocks_when_memory_hits_threshold(tmp_path, monkeypatch):
     allowed, reason = RiskManager(cfg).allow_trade(df)
     assert not allowed
     assert "trade memory" in reason
+
+
+def _df() -> pd.DataFrame:
+    data = {
+        "open": [1] * 20,
+        "high": [1] * 20,
+        "low": [1] * 20,
+        "close": [1] * 20,
+        "volume": [10] * 20,
+    }
+    return pd.DataFrame(data)
+
+
+def test_allow_trade_rejects_on_negative_ev(tmp_path, monkeypatch):
+    stats = {"trend_bot": {"win_rate": 0.4, "avg_win": 0.01, "avg_loss": -0.02}}
+    file = tmp_path / "stats.json"
+    file.write_text(json.dumps(stats))
+    monkeypatch.setattr(ev_tracker, "STATS_FILE", file)
+
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_expected_value=0.0,
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(_df(), "trend_bot")
+    assert not allowed
+    assert "expected value" in reason.lower()
+
+
+def test_allow_trade_allows_on_positive_ev(tmp_path, monkeypatch):
+    stats = {"trend_bot": {"win_rate": 0.7, "avg_win": 0.02, "avg_loss": -0.01}}
+    file = tmp_path / "stats.json"
+    file.write_text(json.dumps(stats))
+    monkeypatch.setattr(ev_tracker, "STATS_FILE", file)
+
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_expected_value=0.0,
+    )
+    allowed, _ = RiskManager(cfg).allow_trade(_df(), "trend_bot")
+    assert allowed
