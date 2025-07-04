@@ -81,9 +81,21 @@ def momentum_healthy(df: pd.DataFrame) -> bool:
     df['macd'] = ta.trend.macd(df['close'])
     df['macd_signal'] = ta.trend.macd_signal(df['close'])
     vol_avg = df['volume'].rolling(3).mean()
+    # Ensure at least two non-null volume averages exist before comparing
+    if vol_avg.dropna().shape[0] < 2:
+        return False
     vol_rising = vol_avg.iloc[-1] > vol_avg.iloc[-2]
+
     latest = df.iloc[-1]
-    return (
+    # Verify momentum indicators have valid values
+    if (
+        pd.isna(latest.get('rsi'))
+        or pd.isna(latest.get('macd'))
+        or pd.isna(latest.get('macd_signal'))
+    ):
+        return False
+
+    return bool(
         latest['rsi'] > 55
         and latest['macd'] > latest['macd_signal']
         and vol_rising

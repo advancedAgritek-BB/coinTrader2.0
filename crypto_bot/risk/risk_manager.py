@@ -89,14 +89,14 @@ class RiskManager:
         confidence: float,
         balance: float,
         df: Optional[pd.DataFrame] = None,
+        stop_distance: float | None = None,
+        atr: float | None = None,
     ) -> float:
         """Return the trade value for a signal.
 
-        The value is calculated in the account's quote currency by scaling the
-        available ``balance`` by ``confidence`` and the configured
-        ``trade_size_pct``.  The result is further adjusted by a volatility
-        multiplier based on the short/long ATR ratio and a capital risk factor
-        derived from current drawdown.
+        When ``stop_distance`` or ``atr`` is provided the size is calculated
+        using ``risk_pct`` relative to that distance.  Otherwise the fixed
+        ``trade_size_pct`` is scaled by volatility and current drawdown.
         """
 
         volatility_factor = 1.0
@@ -119,38 +119,28 @@ class RiskManager:
         else:
             capital_risk_factor = 1.0
 
-        size = (
-            balance
-            * self.config.trade_size_pct
-            * confidence
-            * volatility_factor
-            * capital_risk_factor
-        )
+        if stop_distance is not None or atr is not None:
+            risk_value = balance * self.config.risk_pct * confidence
+            stop_loss_distance = atr if atr and atr > 0 else stop_distance
+            if stop_loss_distance and stop_loss_distance > 0:
+                size = risk_value / stop_loss_distance
+            else:
+                size = balance * confidence * self.config.trade_size_pct
+        else:
+            size = (
+                balance
+                * self.config.trade_size_pct
+                * confidence
+                * volatility_factor
+                * capital_risk_factor
+            )
+
         logger.info(
             "Calculated position size: %.4f (vol %.2f risk %.2f)",
             size,
             volatility_factor,
             capital_risk_factor,
         )
-        stop_distance: float | None = None,
-        atr: float | None = None,
-    ) -> float:
-        """Return the trade value for a signal based on risk.
-
-        ``risk_pct`` determines the capital risked per trade. The size is
-        calculated by dividing that risk amount by the stop distance. When an
-        ``atr`` value is provided it is used as the distance to incorporate
-        volatility.  If no distance information is supplied the function falls
-        back to ``trade_size_pct`` behaviour.
-        """
-
-        risk_value = balance * self.config.risk_pct * confidence
-        stop_loss_distance = atr if atr and atr > 0 else stop_distance
-        if stop_loss_distance and stop_loss_distance > 0:
-            size = risk_value / stop_loss_distance
-        else:
-            size = balance * confidence * self.config.trade_size_pct
-        logger.info("Calculated position size: %.4f", size)
         return size
 
     def allow_trade(self, df: Any, strategy: str | None = None) -> tuple[bool, str]:
