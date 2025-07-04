@@ -8,6 +8,7 @@ from crypto_bot.volatility_filter import too_flat, too_hot
 
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils import trade_memory
+from crypto_bot.utils import ev_tracker
 
 # Log to the main bot file so risk messages are consolidated
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
@@ -28,10 +29,12 @@ class RiskConfig:
     max_funding_rate: float = 1.0
     symbol: str = ""
     trade_size_pct: float = 0.1
+    risk_pct: float = 0.01
     min_volume: float = 0.0
     volume_threshold_ratio: float = 0.1
     strategy_allocation: dict | None = None
     volume_ratio: float = 1.0
+    min_expected_value: float = 0.0
 
 
 class RiskManager:
@@ -75,20 +78,32 @@ class RiskManager:
         )
         return drawdown < self.config.max_drawdown
 
-    def position_size(self, confidence: float, balance: float) -> float:
-        """Return the trade value for a signal.
+    def position_size(
+        self,
+        confidence: float,
+        balance: float,
+        stop_distance: float | None = None,
+        atr: float | None = None,
+    ) -> float:
+        """Return the trade value for a signal based on risk.
 
-        The value is calculated in the account's quote currency by scaling the
-        available ``balance`` by the signal ``confidence`` and the configured
-        ``trade_size_pct``.  Callers must convert the resulting value to asset
-        units using the current price before submitting an order to an
-        exchange.
+        ``risk_pct`` determines the capital risked per trade. The size is
+        calculated by dividing that risk amount by the stop distance. When an
+        ``atr`` value is provided it is used as the distance to incorporate
+        volatility.  If no distance information is supplied the function falls
+        back to ``trade_size_pct`` behaviour.
         """
-        size = balance * confidence * self.config.trade_size_pct
+
+        risk_value = balance * self.config.risk_pct * confidence
+        stop_loss_distance = atr if atr and atr > 0 else stop_distance
+        if stop_loss_distance and stop_loss_distance > 0:
+            size = risk_value / stop_loss_distance
+        else:
+            size = balance * confidence * self.config.trade_size_pct
         logger.info("Calculated position size: %.4f", size)
         return size
 
-    def allow_trade(self, df: Any) -> tuple[bool, str]:
+    def allow_trade(self, df: Any, strategy: str | None = None) -> tuple[bool, str]:
         """Assess whether market conditions merit taking a trade.
 
         Parameters
@@ -164,6 +179,15 @@ class RiskManager:
             reason = "Volatility too low"
             logger.info("[EVAL] %s", reason)
             return False, reason
+
+        if strategy is not None:
+            ev = ev_tracker.get_expected_value(strategy)
+            if ev < self.config.min_expected_value:
+                reason = (
+                    f"Expected value {ev:.4f} below {self.config.min_expected_value}"
+                )
+                logger.info("[EVAL] %s", reason)
+                return False, reason
 
         self.boost = boost_factor(self.config.bull_fng, self.config.bull_sentiment)
         logger.info(

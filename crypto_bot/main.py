@@ -53,6 +53,7 @@ from crypto_bot.utils.symbol_pre_filter import filter_symbols
 from crypto_bot.utils.symbol_utils import get_filtered_symbols
 from crypto_bot.utils.pnl_logger import log_pnl
 from crypto_bot.utils.strategy_analytics import write_scores
+from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
@@ -328,7 +329,7 @@ async def main() -> None:
             if direction_sym != "none":
                 signals_generated += 1
 
-            allowed, reason = risk_manager.allow_trade(df_sym)
+            allowed, reason = risk_manager.allow_trade(df_sym, name_sym)
             mean_vol = df_sym["volume"].rolling(20).mean().iloc[-1]
             last_vol = df_sym["volume"].iloc[-1]
             logger.info(
@@ -493,6 +494,11 @@ async def main() -> None:
                         realized_pnl,
                         entry_confidence,
                         open_side or "",
+                    )
+                    log_regime_pnl(
+                        entry_regime or "unknown",
+                        entry_strategy or "",
+                        realized_pnl,
                     )
                     if paper_wallet:
                         logger.info(
