@@ -83,9 +83,18 @@ before being written.
    # EXCHANGE=coinbase  # or kraken
    # API_KEY=your_key
    # API_SECRET=your_secret
-   # API_PASSPHRASE=your_coinbase_passphrase_if_needed
-   # FERNET_KEY=optional_key_for_encryption
-   ```
+  # API_PASSPHRASE=your_coinbase_passphrase_if_needed
+  # FERNET_KEY=optional_key_for_encryption
+  ```
+
+### Telegram Setup
+
+1. Run `python crypto_bot/wallet_manager.py` and enter your Telegram bot token
+   and chat ID when prompted.
+2. The chat ID is stored in `user_config.yaml`.
+3. Send `/start` to your bot so it can message you.
+4. Once Issue 1 is fixed you no longer need a `telegram.chat_id` entry in
+   `crypto_bot/config.yaml`.
 
 ### Twitter Sentiment API
 
