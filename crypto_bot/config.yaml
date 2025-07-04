@@ -61,6 +61,10 @@ sentiment_filter:
   min_fng: 0
   min_sentiment: 0
 signal_threshold: 0.3
+signal_weight_optimizer:
+  enabled: false
+  learning_rate: 0.1
+  min_weight: 0.05
 sl_pct: 0.03
 solana_slippage_bps: 50
 strategy_allocation:
