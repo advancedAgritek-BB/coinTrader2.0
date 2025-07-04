@@ -2,6 +2,8 @@ import asyncio
 import json
 from crypto_bot.utils.symbol_pre_filter import filter_symbols
 
+CONFIG = {"symbol_filter": {"min_volume_usd": 50000}}
+
 class DummyExchange:
     markets_by_id = {
         "XETHZUSD": {"symbol": "ETH/USD"},
@@ -36,7 +38,7 @@ def test_filter_symbols(monkeypatch):
     monkeypatch.setattr(
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
     )
-    symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"]))
+    symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG))
     assert symbols == ["ETH/USD"]
 
 
@@ -49,7 +51,7 @@ def test_filter_symbols_handles_list_values(monkeypatch):
     monkeypatch.setattr(
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
     )
-    symbols = asyncio.run(filter_symbols(DummyExchangeList(), ["ETH/USD"]))
+    symbols = asyncio.run(filter_symbols(DummyExchangeList(), ["ETH/USD"], CONFIG))
     assert symbols == ["ETH/USD"]
 class EmptyExchange:
     def __init__(self):
@@ -66,7 +68,7 @@ def test_load_markets_when_missing(monkeypatch):
     monkeypatch.setattr(
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
     )
-    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"]))
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], CONFIG))
     assert ex.called is True
     assert symbols == ["ETH/USD"]
 
@@ -78,7 +80,7 @@ def test_non_dict_market_entry(monkeypatch):
     monkeypatch.setattr(
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
     )
-    symbols = asyncio.run(filter_symbols(BadExchange(), ["ETH/USD"]))
+    symbols = asyncio.run(filter_symbols(BadExchange(), ["ETH/USD"], CONFIG))
     assert symbols == ["XETHZUSD"]
 
 
@@ -111,7 +113,7 @@ def test_multiple_batches(monkeypatch):
     class DummyEx:
         markets_by_id = {p: {"symbol": p} for p in pairs}
 
-    symbols = asyncio.run(filter_symbols(DummyEx(), pairs))
+    symbols = asyncio.run(filter_symbols(DummyEx(), pairs, CONFIG))
 
     assert len(symbols) == 25
     assert len(calls) == 2
