@@ -53,3 +53,23 @@ def test_momentum_healthy_normal_df():
     )
     assert momentum_healthy(df) is True
 
+
+def test_should_exit_ignores_historical_high_when_trailing_stop_zero():
+    df = pd.DataFrame(
+        {
+            "open": [10, 20, 30],
+            "high": [10, 20, 30],
+            "low": [10, 20, 30],
+            "close": [20, 10, 5],
+            "volume": [10, 10, 10],
+        }
+    )
+    current_price = df["close"].iloc[-1]
+    trailing_stop = 0.0
+    config = {"exit_strategy": {"trailing_stop_pct": 0.1}, "symbol": "TEST"}
+
+    exit_signal, new_stop = should_exit(df, current_price, trailing_stop, config)
+
+    assert exit_signal is False
+    assert new_stop == 0.0
+
