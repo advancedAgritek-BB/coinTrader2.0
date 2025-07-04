@@ -14,7 +14,14 @@ class DummyExchange:
         }
 
 
-def test_place_stop_order_dry_run():
+def test_place_stop_order_dry_run(monkeypatch):
+    called = {}
+
+    def fake_log(order, is_stop=False):
+        called["flag"] = is_stop
+
+    monkeypatch.setattr("crypto_bot.execution.cex_executor.log_trade", fake_log)
+
     order = place_stop_order(
         DummyExchange(),
         "BTC/USDT",
@@ -27,6 +34,7 @@ def test_place_stop_order_dry_run():
     )
     assert order["dry_run"] is True
     assert order["stop"] == 9000
+    assert called.get("flag") is True
 
 
 import pytest
