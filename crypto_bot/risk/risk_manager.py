@@ -7,6 +7,7 @@ from crypto_bot.sentiment_filter import boost_factor, too_bearish
 from crypto_bot.volatility_filter import too_flat, too_hot
 
 from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils import trade_memory
 
 # Log to the main bot file so risk messages are consolidated
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
@@ -102,6 +103,11 @@ class RiskManager:
         """
         if len(df) < 20:
             reason = "Not enough data to trade"
+            logger.info("[EVAL] %s", reason)
+            return False, reason
+
+        if self.config.symbol and trade_memory.should_avoid(self.config.symbol):
+            reason = "Symbol blocked by trade memory"
             logger.info("[EVAL] %s", reason)
             return False, reason
 

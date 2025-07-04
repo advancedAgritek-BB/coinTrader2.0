@@ -1,5 +1,6 @@
 import pandas as pd
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
+from crypto_bot.utils import trade_memory
 
 def test_allow_trade_rejects_low_volume():
     data = {
@@ -151,3 +152,28 @@ def test_risk_config_has_volume_threshold_ratio_default():
     cfg = RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
     assert hasattr(cfg, "volume_threshold_ratio")
     assert cfg.volume_threshold_ratio == 0.1
+
+def test_allow_trade_blocks_when_memory_hits_threshold(tmp_path, monkeypatch):
+    data = {
+        'open': [1] * 20,
+        'high': [1] * 20,
+        'low': [1] * 20,
+        'close': [1] * 20,
+        'volume': [10] * 20,
+    }
+    df = pd.DataFrame(data)
+    mem = tmp_path / "mem.json"
+    monkeypatch.setattr(trade_memory, "LOG_FILE", mem)
+    trade_memory.configure(max_losses=1, slippage_threshold=0.5, lookback_seconds=3600)
+    trade_memory.clear()
+    trade_memory.record_loss("BTC/USDT", 0.01)
+
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        symbol="BTC/USDT",
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(df)
+    assert not allowed
+    assert "trade memory" in reason
