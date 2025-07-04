@@ -52,7 +52,9 @@ from . import log_reader
 TRADE_FILE = Path("crypto_bot/logs/trades.csv")
 
 
-def run(exchange: Any | None = None, wallet: Any | None = None, trade_file: Path = TRADE_FILE) -> str:
+def display_trades(
+    exchange: Any | None = None, wallet: Any | None = None, trade_file: Path = TRADE_FILE
+) -> str:
     """Read trades from ``trade_file`` and print them as a table.
 
     Returns the rendered table as text so tests can verify the output.
