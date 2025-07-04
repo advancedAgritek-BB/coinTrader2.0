@@ -58,6 +58,7 @@ from crypto_bot.utils.pnl_logger import log_pnl
 from crypto_bot.utils.strategy_analytics import write_scores
 from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
 from crypto_bot.utils.trend_confirmation import confirm_multi_tf_trend
+from crypto_bot.regime.regime_classifier import CONFIG
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
