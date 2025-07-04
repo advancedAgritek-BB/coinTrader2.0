@@ -229,7 +229,8 @@ include:
 - `bot.log` – main log file containing startup events, strategy choices and all
   decision messages.
 - `trades.csv` – CSV export of every executed trade used by the dashboard and
-  backtester.
+  backtester. Stop orders are logged here as well with an `is_stop` flag so they
+  can be filtered out from performance calculations.
 - `strategy_stats.json` – summary statistics of win rate, PnL and other metrics.
 - `strategy_performance.json` – list of individual trades grouped by regime and
   strategy with fields like `pnl` and timestamps.
