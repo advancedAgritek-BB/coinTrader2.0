@@ -1,9 +1,11 @@
 import asyncio
+import pandas as pd
 
 from crypto_bot.utils.market_loader import (
     load_kraken_symbols,
     fetch_ohlcv_async,
     load_ohlcv_parallel,
+    update_ohlcv_cache,
 )
 
 class DummyExchange:
@@ -121,6 +123,40 @@ def test_load_ohlcv_parallel_websocket_force_history():
     assert len(result["BTC/USD"]) == 1
 
 
+class DummyIncExchange:
+    def __init__(self):
+        self.data = [[i] * 6 for i in range(1, 4)]
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
+        rows = [r for r in self.data if since is None or r[0] > since]
+        return rows[:limit]
+
+
+class DummyFailExchange(DummyIncExchange):
+    async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
+        if since is not None:
+            return []
+        return await super().fetch_ohlcv(symbol, timeframe, since, limit)
+
+
+def test_update_ohlcv_cache_appends():
+    ex = DummyIncExchange()
+    cache: dict[str, pd.DataFrame] = {}
+    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=2))
+    assert len(cache["BTC/USD"]) == 2
+    ex.data.append([4] * 6)
+    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4))
+    assert len(cache["BTC/USD"]) == 4
+
+
+def test_update_ohlcv_cache_fallback_full_history():
+    ex = DummyFailExchange()
+    cache: dict[str, pd.DataFrame] = {}
+    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=3))
+    assert len(cache["BTC/USD"]) == 3
+    ex.data.append([4] * 6)
+    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4))
+    assert len(cache["BTC/USD"]) == 4
 class CountingExchange:
     def __init__(self):
         self.active = 0

@@ -49,6 +49,7 @@ from crypto_bot.utils.regime_logger import log_regime
 from crypto_bot.utils.market_loader import (
     load_kraken_symbols,
     load_ohlcv_parallel,
+    update_ohlcv_cache,
 )
 from crypto_bot.utils.symbol_pre_filter import filter_symbols
 from crypto_bot.utils.symbol_utils import get_filtered_symbols
@@ -175,6 +176,7 @@ async def main() -> None:
 
     mode = user.get("mode", config.get("mode", "auto"))
     state = {"running": True, "mode": mode}
+    df_cache: dict[str, pd.DataFrame] = {}
 
     telegram_bot = None
     if user.get("telegram_token") and config.get("telegram", {}).get("chat_id"):
@@ -265,8 +267,9 @@ async def main() -> None:
         df_current = None
 
         symbols = await get_filtered_symbols(exchange, config)
-        ohlcv_map = await load_ohlcv_parallel(
+        df_cache = await update_ohlcv_cache(
             exchange,
+            df_cache,
             symbols,
             timeframe=config["timeframe"],
             limit=100,
@@ -279,10 +282,11 @@ async def main() -> None:
         for sym in symbols:
             logger.info("🔹 Symbol: %s", sym)
             total_pairs += 1
-            data = ohlcv_map.get(sym)
-            if not data:
+            df_sym = df_cache.get(sym)
+            if df_sym is None or df_sym.empty:
                 logger.error("OHLCV fetch failed for %s", sym)
                 continue
+
             df_sym = pd.DataFrame(
                 data,
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
