@@ -52,6 +52,7 @@ from crypto_bot.utils.market_loader import (
 from crypto_bot.utils.symbol_pre_filter import filter_symbols
 from crypto_bot.utils.symbol_utils import get_filtered_symbols
 from crypto_bot.utils.pnl_logger import log_pnl
+from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
@@ -491,6 +492,11 @@ async def main() -> None:
                         realized_pnl,
                         entry_confidence,
                         open_side or "",
+                    )
+                    log_regime_pnl(
+                        entry_regime or "unknown",
+                        entry_strategy or "",
+                        realized_pnl,
                     )
                     if paper_wallet:
                         logger.info(
