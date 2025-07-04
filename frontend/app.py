@@ -1,3 +1,9 @@
+"""Start the web dashboard and expose REST endpoints for the trading bot.
+
+This module launches the Flask web server, manages the background trading
+process and provides REST API routes used by the UI and tests.
+"""
+
 from flask import Flask, render_template, redirect, url_for, request, jsonify
 from pathlib import Path
 import subprocess
