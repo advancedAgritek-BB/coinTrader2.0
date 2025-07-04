@@ -157,3 +157,28 @@ def test_update_ohlcv_cache_fallback_full_history():
     ex.data.append([4] * 6)
     cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4))
     assert len(cache["BTC/USD"]) == 4
+class CountingExchange:
+    def __init__(self):
+        self.active = 0
+        self.max_active = 0
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.active += 1
+        self.max_active = max(self.max_active, self.active)
+        await asyncio.sleep(0.01)
+        self.active -= 1
+        return [[0] * 6]
+
+
+def test_load_ohlcv_parallel_respects_max_concurrent():
+    ex = CountingExchange()
+    symbols = ["A", "B", "C", "D", "E"]
+    asyncio.run(
+        load_ohlcv_parallel(
+            ex,
+            symbols,
+            limit=1,
+            max_concurrent=2,
+        )
+    )
+    assert ex.max_active <= 2

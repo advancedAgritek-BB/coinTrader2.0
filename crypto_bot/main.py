@@ -15,7 +15,7 @@ from crypto_bot.utils.logger import setup_logger
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.wallet_manager import load_or_create
-from crypto_bot.regime.regime_classifier import classify_regime
+from crypto_bot.utils.market_analyzer import analyze_symbol
 from crypto_bot.strategy_router import strategy_for, strategy_name
 from crypto_bot.cooldown_manager import (
     in_cooldown,
@@ -275,8 +275,10 @@ async def main() -> None:
             limit=100,
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
+            max_concurrent=config.get("max_concurrent_ohlcv"),
         )
 
+        tasks = []
         for sym in symbols:
             logger.info("🔹 Symbol: %s", sym)
             total_pairs += 1
@@ -285,30 +287,32 @@ async def main() -> None:
                 logger.error("OHLCV fetch failed for %s", sym)
                 continue
 
+            df_sym = pd.DataFrame(
+                data,
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
             logger.info("Fetched %d candles for %s", len(df_sym), sym)
-
             if sym == config.get("symbol"):
                 df_current = df_sym
+            tasks.append(analyze_symbol(sym, df_sym, mode, config))
 
-            risk_manager.config.symbol = sym
+        results = await asyncio.gather(*tasks)
 
-            regime_sym = classify_regime(df_sym)
-            logger.info("Market regime for %s classified as %s", sym, regime_sym)
-
-            period = int(config.get("regime_return_period", 5))
-            future_return = 0.0
-            if len(df_sym) > period:
-                start = df_sym["close"].iloc[-period - 1]
-                end = df_sym["close"].iloc[-1]
-                future_return = (end - start) / start * 100
-            log_regime(sym, regime_sym, future_return)
+        for res in results:
+            sym = res["symbol"]
+            df_sym = res["df"]
+            regime_sym = res["regime"]
+            log_regime(sym, regime_sym, res["future_return"])
 
             if regime_sym == "unknown":
                 rejected_regime += 1
                 continue
-            env_sym = mode if mode != "auto" else "cex"
-            strategy_fn = strategy_for(regime_sym)
-            name_sym = strategy_name(regime_sym, env_sym)
+
+            env_sym = res["env"]
+            name_sym = res["name"]
+            score_sym = res["score"]
+            direction_sym = res["direction"]
+
             logger.info("Regime %s -> Strategy %s", regime_sym, name_sym)
             logger.info(
                 "Using strategy %s for %s in %s mode",
@@ -331,8 +335,6 @@ async def main() -> None:
                         "take_profit_pct"
                     ]
 
-            score_sym, direction_sym = await evaluate_async(strategy_fn, df_sym, config)
-            logger.info("Signal %s %.2f %s", sym, score_sym, direction_sym)
             if direction_sym != "none":
                 signals_generated += 1
 
@@ -343,9 +345,7 @@ async def main() -> None:
                 f"[TRADE EVAL] {sym} | Signal: {score_sym:.2f} | Volume: {last_vol:.4f}/{mean_vol:.2f} | Allowed: {allowed}"
             )
             if not allowed:
-                logger.info(
-                    "Trade not allowed for %s \u2013 %s", sym, reason
-                )
+                logger.info("Trade not allowed for %s \u2013 %s", sym, reason)
                 logger.info(
                     "Trade rejected for %s: %s, score=%.2f, regime=%s",
                     sym,

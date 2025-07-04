@@ -92,22 +92,43 @@ async def load_ohlcv_parallel(
     since_map: Dict[str, int] | None = None,
     use_websocket: bool = False,
     force_websocket_history: bool = False,
+    max_concurrent: int | None = None,
 ) -> Dict[str, list]:
-    """Fetch OHLCV data for multiple symbols concurrently."""
+    """Fetch OHLCV data for multiple symbols concurrently.
 
     since_map = since_map or {}
     tasks = [
         fetch_ohlcv_async(
+    Parameters
+    ----------
+    max_concurrent : int | None, optional
+        Maximum number of concurrent OHLCV requests. ``None`` means no limit.
+    """
+
+    sem = asyncio.Semaphore(max_concurrent) if max_concurrent else None
+
+    async def sem_fetch(sym: str):
+        if sem:
+            async with sem:
+                return await fetch_ohlcv_async(
+                    exchange,
+                    sym,
+                    timeframe,
+                    limit,
+                    use_websocket,
+                    force_websocket_history,
+                )
+        return await fetch_ohlcv_async(
             exchange,
-            s,
+            sym,
             timeframe,
             limit,
             since_map.get(s),
             use_websocket,
             force_websocket_history,
         )
-        for s in symbols
-    ]
+
+    tasks = [asyncio.create_task(sem_fetch(s)) for s in symbols]
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
