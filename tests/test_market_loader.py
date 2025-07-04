@@ -1,5 +1,6 @@
 import asyncio
 import pandas as pd
+import pytest
 
 from crypto_bot.utils.market_loader import (
     load_kraken_symbols,
@@ -206,3 +207,23 @@ def test_update_ohlcv_cache_respects_max_concurrent():
         )
     )
     assert ex.max_active <= 2
+
+
+def test_load_ohlcv_parallel_invalid_max_concurrent():
+    ex = DummySyncExchange()
+    with pytest.raises(ValueError):
+        asyncio.run(
+            load_ohlcv_parallel(
+                ex,
+                ["BTC/USD"],
+                max_concurrent=0,
+            )
+        )
+    with pytest.raises(ValueError):
+        asyncio.run(
+            load_ohlcv_parallel(
+                ex,
+                ["BTC/USD"],
+                max_concurrent=-1,
+            )
+        )
