@@ -20,7 +20,18 @@ def compute_metrics(path: Path = STATS_FILE) -> Dict[str, Dict[str, float]]:
     data = _load(path)
     metrics: Dict[str, Dict[str, float]] = {}
     for strat, trades in data.items():
-        pnls = [float(t.get("pnl", 0.0)) for t in trades]
+        if not isinstance(trades, list):
+            raise ValueError(
+                f"Expected list of trade records for strategy '{strat}', got {type(trades).__name__}"
+            )
+        pnls = []
+        for t in trades:
+            if not isinstance(t, dict) or "pnl" not in t:
+                raise ValueError(
+                    "Each trade must be a mapping with a 'pnl' key. "
+                    f"Got {t!r} for strategy '{strat}'."
+                )
+            pnls.append(float(t["pnl"]))
         if not pnls:
             metrics[strat] = {"sharpe": 0.0, "win_rate": 0.0, "drawdown": 0.0, "ev": 0.0}
             continue

@@ -20,3 +20,12 @@ def test_compute_metrics(tmp_path):
     assert trend["sharpe"] > 0
 
 
+def test_compute_metrics_invalid(tmp_path):
+    data = {"trend_bot": [{"pnl": 1.0}, 2.0]}
+    f = tmp_path / "stats.json"
+    f.write_text(json.dumps(data))
+
+    with pytest.raises(ValueError):
+        sa.compute_metrics(f)
+
+
