@@ -432,7 +432,7 @@ async def main() -> None:
             if pnl_pct >= config["exit_strategy"]["min_gain_to_trail"]:
                 if current_price > highest_price:
                     highest_price = current_price
-                if highest_price:
+                if trailing_stop == 0 and highest_price:
                     trailing_stop = calculate_trailing_stop(
                         pd.Series([highest_price]),
                         config["exit_strategy"]["trailing_stop_pct"],

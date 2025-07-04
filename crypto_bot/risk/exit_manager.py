@@ -183,13 +183,14 @@ def should_exit(
                         direction,
                     )
     else:
-        trailed = calculate_trailing_stop(
-            df['close'],
-            config['exit_strategy']['trailing_stop_pct'],
-        )
-        if trailed > trailing_stop:
-            new_stop = trailed
-            logger.info("Trailing stop moved to %.4f", new_stop)
+        if trailing_stop > 0:
+            trailed = calculate_trailing_stop(
+                df['close'],
+                config['exit_strategy']['trailing_stop_pct'],
+            )
+            if trailed > trailing_stop:
+                new_stop = trailed
+                logger.info("Trailing stop moved to %.4f", new_stop)
     return exit_signal, new_stop
 
 
