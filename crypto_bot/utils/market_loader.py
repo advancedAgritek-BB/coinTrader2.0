@@ -150,8 +150,15 @@ async def update_ohlcv_cache(
     limit: int = 100,
     use_websocket: bool = False,
     force_websocket_history: bool = False,
+    max_concurrent: int | None = None,
 ) -> Dict[str, pd.DataFrame]:
-    """Update cached OHLCV DataFrames with new candles."""
+    """Update cached OHLCV DataFrames with new candles.
+
+    Parameters
+    ----------
+    max_concurrent : int | None, optional
+        Maximum number of concurrent OHLCV requests. ``None`` means no limit.
+    """
 
     since_map: Dict[str, int] = {}
     for sym in symbols:
@@ -167,6 +174,7 @@ async def update_ohlcv_cache(
         since_map,
         use_websocket,
         force_websocket_history,
+        max_concurrent,
     )
 
     for sym in symbols:
@@ -180,6 +188,7 @@ async def update_ohlcv_cache(
                 None,
                 use_websocket,
                 force_websocket_history,
+                max_concurrent,
             )
             data = full.get(sym)
         if data is None:
