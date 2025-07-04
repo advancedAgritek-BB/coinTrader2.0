@@ -25,7 +25,7 @@ def test_get_filtered_symbols_caching(monkeypatch):
     async def fake_to_thread(fn, *a):
         return fn(*a)
 
-    def fake_filter_symbols(ex, syms):
+    async def fake_filter_symbols(ex, syms):
         calls.append(True)
         return ["ETH/USD"]
 
