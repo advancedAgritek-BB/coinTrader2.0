@@ -145,7 +145,9 @@ async def main() -> None:
         log_balance(paper_wallet.balance)
 
     monitor_task = asyncio.create_task(
-        console_monitor.run(exchange, paper_wallet, "crypto_bot/logs/bot.log")
+        console_monitor.monitor_loop(
+            exchange, paper_wallet, "crypto_bot/logs/bot.log"
+        )
     )
 
     open_side = None
