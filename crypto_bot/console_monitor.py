@@ -22,6 +22,8 @@ async def monitor_loop(
     last_line = ""
     prev_first = 0
     prev_second = 0
+    fh = None
+    offset = 0
     while True:
         await asyncio.sleep(5)
         balance = None
@@ -36,12 +38,14 @@ async def monitor_loop(
                 balance = bal.get("USDT", {}).get("free", 0) if isinstance(bal.get("USDT"), dict) else bal.get("USDT", 0)
         except Exception:
             pass
-        if log_path.exists():
-            lines = log_path.read_text().splitlines()
-            for line in reversed(lines):
+        if fh is None and log_path.exists():
+            fh = log_path.open("r", encoding="utf-8")
+        if fh is not None:
+            fh.seek(offset)
+            for line in fh:
                 if "Loading config" not in line:
-                    last_line = line
-                    break
+                    last_line = line.rstrip("\n")
+            offset = fh.tell()
 
         message = f"[Monitor] balance={balance} log='{last_line}'"
         stats = await trade_stats_line(exchange)
