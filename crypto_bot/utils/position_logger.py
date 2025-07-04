@@ -8,8 +8,8 @@ logger = setup_logger(__name__, "crypto_bot/logs/positions.log")
 
 
 def log_balance(balance: float) -> None:
-    """Write the current wallet balance to the log."""
-    logger.info("Wallet balance %.2f", balance)
+    """Write the current wallet balance to the log in USD."""
+    logger.info("Wallet balance $%.2f", balance)
 
 
 def log_position(
@@ -42,7 +42,7 @@ def log_position(
         pnl = -pnl
     status = "positive" if pnl >= 0 else "negative"
     logger.info(
-        "Active %s %s %.4f entry %.4f current %.4f pnl %.2f (%s) balance %.2f",
+        "Active %s %s %.4f entry %.4f current %.4f pnl $%.2f (%s) balance $%.2f",
         symbol,
         side,
         amount,
