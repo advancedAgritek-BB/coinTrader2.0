@@ -98,3 +98,89 @@ ma_window: 20
 
     # ADX threshold is too high so regime should no longer be trending
     assert classify_regime(df, config_path=str(custom_cfg)) != "trending"
+
+
+def _make_trending_df(rows: int = 50) -> pd.DataFrame:
+    close = np.linspace(1, 2, rows)
+    high = close + 0.1
+    low = close - 0.1
+    volume = np.arange(rows) + 100
+    return pd.DataFrame({
+        "open": close,
+        "high": high,
+        "low": low,
+        "close": close,
+        "volume": volume,
+    })
+
+
+def test_trend_confirmed_by_higher_timeframe(tmp_path):
+    df_low = _make_trending_df()
+    df_high = _make_trending_df()
+
+    cfg = tmp_path / "regime.yaml"
+    cfg.write_text(
+        """\
+adx_trending_min: 25
+adx_sideways_max: 20
+bb_width_sideways_max: 5
+bb_width_breakout_max: 4
+breakout_volume_mult: 2
+rsi_mean_rev_min: 30
+rsi_mean_rev_max: 70
+ema_distance_mean_rev_max: 0.01
+atr_volatility_mult: 1.5
+ema_fast: 20
+ema_slow: 50
+indicator_window: 14
+bb_window: 20
+ma_window: 20
+higher_timeframe: '4h'
+confirm_trend_with_higher_tf: true
+"""
+    )
+
+    assert (
+        classify_regime(df_low, df_high, config_path=str(cfg))
+        == "trending"
+    )
+
+
+def test_trend_not_confirmed_when_higher_timeframe_disagrees(tmp_path):
+    df_low = _make_trending_df()
+    rows = 50
+    const = np.ones(rows)
+    df_high = pd.DataFrame({
+        "open": const,
+        "high": const + 0.1,
+        "low": const - 0.1,
+        "close": const,
+        "volume": np.arange(rows) + 100,
+    })
+
+    cfg = tmp_path / "regime.yaml"
+    cfg.write_text(
+        """\
+adx_trending_min: 25
+adx_sideways_max: 20
+bb_width_sideways_max: 5
+bb_width_breakout_max: 4
+breakout_volume_mult: 2
+rsi_mean_rev_min: 30
+rsi_mean_rev_max: 70
+ema_distance_mean_rev_max: 0.01
+atr_volatility_mult: 1.5
+ema_fast: 20
+ema_slow: 50
+indicator_window: 14
+bb_window: 20
+ma_window: 20
+higher_timeframe: '4h'
+confirm_trend_with_higher_tf: true
+"""
+    )
+
+    assert (
+        classify_regime(df_low, df_high, config_path=str(cfg))
+        != "trending"
+    )
