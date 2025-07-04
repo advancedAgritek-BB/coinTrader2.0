@@ -1,5 +1,7 @@
 from pathlib import Path
 import asyncio
+import io
+import sys
 import pytest
 
 
@@ -84,4 +86,38 @@ def test_monitor_loop_reads_incremental(monkeypatch, tmp_path):
     assert outputs[0].splitlines()[0].endswith("first'")
     assert outputs[1].splitlines()[0].endswith("second'")
     assert outputs[0].splitlines()[1:] == ["stat1", "stat2"]
+
+
+def test_monitor_loop_stringio_no_extra_newlines(monkeypatch, tmp_path):
+    log_file = tmp_path / "bot.log"
+    log_file.write_text("start\n")
+
+    async def fake_stats(*_a, **_kw):
+        return ""
+
+    call_count = 0
+
+    class StopLoop(Exception):
+        pass
+
+    async def fake_sleep(_):
+        nonlocal call_count
+        call_count += 1
+        if call_count >= 3:
+            raise StopLoop
+
+    monkeypatch.setattr(console_monitor, "trade_stats_line", fake_stats)
+    monkeypatch.setattr(console_monitor.asyncio, "sleep", fake_sleep)
+
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+
+    ex = type("Ex", (), {"fetch_balance": lambda self: {"USDT": {"free": 0}}})()
+
+    with pytest.raises(StopLoop):
+        asyncio.run(console_monitor.monitor_loop(ex, None, log_file))
+
+    # monitor_loop stops before printing on the final iteration
+    printed_lines = buf.getvalue().count("\n")
+    assert printed_lines == call_count - 1
 
