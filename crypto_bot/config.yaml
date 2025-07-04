@@ -47,7 +47,10 @@ portfolio_rotation:
 preferred_chain: solana
 regime_return_period: 5
 risk:
+  atr_long_window: 50
+  atr_short_window: 14
   max_drawdown: 0.7
+  max_volatility_factor: 1.5
   min_expected_value: 0.0
   min_volume: 50
   stop_loss_pct: 0.02

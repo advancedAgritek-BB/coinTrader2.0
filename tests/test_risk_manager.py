@@ -1,6 +1,7 @@
 import json
 import pandas as pd
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
+from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.utils import trade_memory
 from crypto_bot.utils import ev_tracker
 
@@ -137,6 +138,50 @@ def test_position_size_uses_trade_size_pct_when_no_stop():
     assert size == 1000 * 0.2 * 0.5
 
 
+def make_vol_df(long_diff: float, short_diff: float) -> pd.DataFrame:
+    length = 60
+    short_len = 14
+    highs, lows, closes = [], [], []
+    for i in range(length):
+        diff = short_diff if i >= length - short_len else long_diff
+        base = float(i)
+        highs.append(base + diff)
+        lows.append(base)
+        closes.append(base + diff / 2)
+    volume = [1] * length
+    return pd.DataFrame({
+        "open": closes,
+        "high": highs,
+        "low": lows,
+        "close": closes,
+        "volume": volume,
+    })
+
+
+def test_position_size_scales_with_volatility_and_drawdown():
+    cfg = RiskConfig(max_drawdown=0.5, stop_loss_pct=0.01, take_profit_pct=0.01)
+    manager = RiskManager(cfg)
+    df = make_vol_df(1.0, 2.0)
+    manager.peak_equity = 1.0
+    manager.equity = 0.75
+    short_atr = calc_atr(df, window=cfg.atr_short_window)
+    long_atr = calc_atr(df, window=cfg.atr_long_window)
+    vol_factor = min(short_atr / long_atr, cfg.max_volatility_factor)
+    drawdown = 1 - manager.equity / manager.peak_equity
+    risk_factor = 1 - drawdown / cfg.max_drawdown
+    expected = 1000 * cfg.trade_size_pct * vol_factor * risk_factor
+    size = manager.position_size(1.0, 1000, df)
+    assert abs(size - expected) < 1e-6
+
+
+def test_position_size_reduces_when_drawdown_high():
+    cfg = RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
+    manager = RiskManager(cfg)
+    manager.peak_equity = 1.0
+    manager.equity = 0.5
+    df = make_vol_df(1.0, 1.0)
+    size = manager.position_size(1.0, 1000, df)
+    assert size == 1000 * cfg.trade_size_pct * 0.5
 def test_position_size_risk_based():
     manager = RiskManager(
         RiskConfig(

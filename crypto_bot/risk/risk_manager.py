@@ -1,10 +1,13 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
+
+import pandas as pd
+from math import isnan
 
 from crypto_bot.capital_tracker import CapitalTracker
 
 from crypto_bot.sentiment_filter import boost_factor, too_bearish
-from crypto_bot.volatility_filter import too_flat, too_hot
+from crypto_bot.volatility_filter import too_flat, too_hot, calc_atr
 
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils import trade_memory
@@ -34,6 +37,9 @@ class RiskConfig:
     volume_threshold_ratio: float = 0.1
     strategy_allocation: dict | None = None
     volume_ratio: float = 1.0
+    atr_short_window: int = 14
+    atr_long_window: int = 50
+    max_volatility_factor: float = 1.5
     min_expected_value: float = 0.0
 
 
@@ -82,6 +88,50 @@ class RiskManager:
         self,
         confidence: float,
         balance: float,
+        df: Optional[pd.DataFrame] = None,
+    ) -> float:
+        """Return the trade value for a signal.
+
+        The value is calculated in the account's quote currency by scaling the
+        available ``balance`` by ``confidence`` and the configured
+        ``trade_size_pct``.  The result is further adjusted by a volatility
+        multiplier based on the short/long ATR ratio and a capital risk factor
+        derived from current drawdown.
+        """
+
+        volatility_factor = 1.0
+        if df is not None and not df.empty:
+            short_atr = calc_atr(df, window=self.config.atr_short_window)
+            long_atr = calc_atr(df, window=self.config.atr_long_window)
+            if long_atr > 0 and not isnan(short_atr) and not isnan(long_atr):
+                volatility_factor = min(
+                    short_atr / long_atr,
+                    self.config.max_volatility_factor,
+                )
+
+        drawdown = 0.0
+        if self.peak_equity > 0:
+            drawdown = 1 - self.equity / self.peak_equity
+        if self.config.max_drawdown > 0:
+            capital_risk_factor = max(
+                0.0, 1 - drawdown / self.config.max_drawdown
+            )
+        else:
+            capital_risk_factor = 1.0
+
+        size = (
+            balance
+            * self.config.trade_size_pct
+            * confidence
+            * volatility_factor
+            * capital_risk_factor
+        )
+        logger.info(
+            "Calculated position size: %.4f (vol %.2f risk %.2f)",
+            size,
+            volatility_factor,
+            capital_risk_factor,
+        )
         stop_distance: float | None = None,
         atr: float | None = None,
     ) -> float:
