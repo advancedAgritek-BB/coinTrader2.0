@@ -112,6 +112,11 @@ async def load_ohlcv_parallel(
                 return await fetch_ohlcv_async(
                     exchange,
                     sym,
+                    timeframe=timeframe,
+                    limit=limit,
+                    since=since_map.get(sym),
+                    use_websocket=use_websocket,
+                    force_websocket_history=force_websocket_history,
                     timeframe,
                     limit,
                     since_map.get(sym),
@@ -121,6 +126,11 @@ async def load_ohlcv_parallel(
         return await fetch_ohlcv_async(
             exchange,
             sym,
+            timeframe=timeframe,
+            limit=limit,
+            since=since_map.get(sym),
+            use_websocket=use_websocket,
+            force_websocket_history=force_websocket_history,
             timeframe,
             limit,
             since_map.get(sym),
