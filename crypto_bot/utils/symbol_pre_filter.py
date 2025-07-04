@@ -1,8 +1,9 @@
 import os
 import json
+import asyncio
 from typing import Iterable, List
 
-import requests
+import aiohttp
 
 from .logger import setup_logger
 
@@ -11,24 +12,28 @@ logger = setup_logger(__name__, "crypto_bot/logs/symbol_filter.log")
 API_URL = "https://api.kraken.com/0/public"
 
 
-def _fetch_ticker(pairs: Iterable[str]) -> dict:
-    """Return ticker data for ``pairs`` in batches of 20 symbols."""
+async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
+    """Return ticker data for ``pairs`` in batches of 20 symbols using aiohttp."""
 
     mock = os.getenv("MOCK_KRAKEN_TICKER")
     if mock:
         return json.loads(mock)
 
     pairs_list = list(pairs)
-    combined: dict = {"result": {}}
-    for i in range(0, len(pairs_list), 20):
-        chunk = pairs_list[i : i + 20]
-        url = f"{API_URL}/Ticker?pair={','.join(chunk)}"
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        combined.setdefault("error", [])
-        combined["error"] += data.get("error", [])
-        combined["result"].update(data.get("result", {}))
+    combined: dict = {"result": {}, "error": []}
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for i in range(0, len(pairs_list), 20):
+            chunk = pairs_list[i : i + 20]
+            url = f"{API_URL}/Ticker?pair={','.join(chunk)}"
+            tasks.append(session.get(url, timeout=10))
+
+        responses = await asyncio.gather(*tasks)
+        for resp in responses:
+            resp.raise_for_status()
+            data = await resp.json()
+            combined["error"] += data.get("error", [])
+            combined["result"].update(data.get("result", {}))
 
     return combined
 
@@ -48,10 +53,10 @@ def _parse_metrics(ticker: dict) -> tuple[float, float, float]:
     return volume_usd, change_pct, spread
 
 
-def filter_symbols(exchange, symbols: Iterable[str]) -> List[str]:
+async def filter_symbols(exchange, symbols: Iterable[str]) -> List[str]:
     """Return subset of ``symbols`` passing liquidity and volatility checks."""
     pairs = [s.replace("/", "") for s in symbols]
-    data = _fetch_ticker(pairs).get("result", {})
+    data = (await _fetch_ticker_async(pairs)).get("result", {})
     id_map = {}
     if hasattr(exchange, "markets_by_id"):
         if not exchange.markets_by_id and hasattr(exchange, "load_markets"):
