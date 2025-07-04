@@ -41,6 +41,9 @@ def test_trade_stats_line(tmp_path):
     assert "BTC/USDT" in line
     assert "+10.00" in line
 
+    lines = asyncio.run(console_monitor.trade_stats_lines(ex, trade_file))
+    assert lines == ["BTC/USDT +10.00"]
+
 
 class StopLoop(Exception):
     pass
@@ -58,7 +61,7 @@ def test_monitor_loop_reads_incremental(monkeypatch, tmp_path):
             outputs.append(text)
 
     async def fake_stats(*_a, **_kw):
-        return ""
+        return ["stat1", "stat2"]
 
     call_count = 0
 
@@ -71,7 +74,7 @@ def test_monitor_loop_reads_incremental(monkeypatch, tmp_path):
         if call_count >= 3:
             raise StopLoop
 
-    monkeypatch.setattr(console_monitor, "trade_stats_line", fake_stats)
+    monkeypatch.setattr(console_monitor, "trade_stats_lines", fake_stats)
     monkeypatch.setattr(console_monitor.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr("builtins.print", fake_print)
 
@@ -80,8 +83,9 @@ def test_monitor_loop_reads_incremental(monkeypatch, tmp_path):
     with pytest.raises(StopLoop):
         asyncio.run(console_monitor.monitor_loop(ex, None, log_file))
 
-    assert outputs[0].endswith("first'")
-    assert outputs[1].endswith("second'")
+    assert outputs[0].splitlines()[0].endswith("first'")
+    assert outputs[1].splitlines()[0].endswith("second'")
+    assert outputs[0].splitlines()[1:] == ["stat1", "stat2"]
 
 
 def test_monitor_loop_stringio_no_extra_newlines(monkeypatch, tmp_path):
