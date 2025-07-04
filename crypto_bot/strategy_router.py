@@ -12,6 +12,7 @@ from crypto_bot.strategy import (
     mean_bot,
     breakout_bot,
     micro_scalp_bot,
+    bounce_scalper,
 )
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
@@ -23,6 +24,7 @@ STRATEGY_MAP: Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]] = {
     "breakout": breakout_bot.generate_signal,
     "volatile": sniper_bot.generate_signal,
     "scalp": micro_scalp_bot.generate_signal,
+    "bounce": bounce_scalper.generate_signal,
 }
 
 
