@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 
 async def monitor_loop(
@@ -20,7 +20,8 @@ async def monitor_loop(
     """
     log_path = Path(log_file)
     last_line = ""
-    prev_len = 0
+    prev_first = 0
+    prev_second = 0
     while True:
         await asyncio.sleep(5)
         balance = None
@@ -43,9 +44,18 @@ async def monitor_loop(
                     break
 
         message = f"[Monitor] balance={balance} log='{last_line}'"
-        print(" " * prev_len, end="\r")
-        print(message, end="\r", flush=True)
-        prev_len = len(message)
+        stats = await trade_stats_line(exchange)
+
+        print(" " * prev_second, end="\r")
+        print("\033[F" + " " * prev_first, end="\r")
+
+        output = message
+        if stats:
+            output += "\n" + stats
+        print(output, end="\r", flush=True)
+
+        prev_first = len(message)
+        prev_second = len(stats) if stats else 0
 """Simple console monitor for displaying trades."""
 
 from pathlib import Path
@@ -53,6 +63,8 @@ from typing import Any
 
 from rich.console import Console
 from rich.table import Table
+
+from .utils.open_trades import get_open_trades
 
 from . import log_reader
 
@@ -84,3 +96,31 @@ def display_trades(
 
     console.print(table)
     return console.export_text()
+
+
+async def trade_stats_line(exchange: Any, trade_file: Path = TRADE_FILE) -> str:
+    """Return a single line summarizing PnL for each open trade."""
+    open_trades = get_open_trades(trade_file)
+    if not open_trades:
+        return ""
+
+    symbols = {t["symbol"] for t in open_trades}
+    prices: dict[str, float] = {}
+    for sym in symbols:
+        try:
+            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
+                ticker = await exchange.fetch_ticker(sym)
+            else:
+                ticker = await asyncio.to_thread(exchange.fetch_ticker, sym)
+            prices[sym] = float(ticker.get("last") or ticker.get("close") or 0.0)
+        except Exception:
+            prices[sym] = 0.0
+
+    parts = []
+    for trade in open_trades:
+        sym = trade.get("symbol")
+        entry = float(trade.get("price", 0))
+        amount = float(trade.get("amount", 0))
+        pnl = (prices.get(sym, 0.0) - entry) * amount
+        parts.append(f"{sym} {pnl:+.2f}")
+    return " | ".join(parts)

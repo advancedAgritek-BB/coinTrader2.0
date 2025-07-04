@@ -46,7 +46,8 @@ be calculated reliably. When fewer rows are available the function returns
    When dry-run mode is selected you will be prompted for the starting USDT balance.
    The console now refreshes with your wallet balance and any active
    trades in real time. Profitable positions are shown in green while
-   losing ones appear in red.
+   losing ones appear in red. A second line now lists each open trade with
+   its running profit or loss.
    Or launch the web dashboard with:
    ```bash
    python -m frontend.app
