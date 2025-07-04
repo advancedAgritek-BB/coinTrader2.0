@@ -1,5 +1,6 @@
 from pathlib import Path
 import asyncio
+import pytest
 
 
 from crypto_bot import console_monitor
@@ -37,4 +38,46 @@ def test_trade_stats_line(tmp_path):
     line = asyncio.run(console_monitor.trade_stats_line(ex, trade_file))
     assert "BTC/USDT" in line
     assert "+10.00" in line
+
+
+class StopLoop(Exception):
+    pass
+
+
+def test_monitor_loop_reads_incremental(monkeypatch, tmp_path):
+    log_file = tmp_path / "bot.log"
+    log_file.write_text("first\n")
+
+    outputs = []
+
+    def fake_print(*args, **kwargs):
+        text = " ".join(str(a) for a in args)
+        if "[Monitor]" in text:
+            outputs.append(text)
+
+    async def fake_stats(*_a, **_kw):
+        return ""
+
+    call_count = 0
+
+    async def fake_sleep(_):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            with open(log_file, "a") as fh:
+                fh.write("second\n")
+        if call_count >= 3:
+            raise StopLoop
+
+    monkeypatch.setattr(console_monitor, "trade_stats_line", fake_stats)
+    monkeypatch.setattr(console_monitor.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr("builtins.print", fake_print)
+
+    ex = type("Ex", (), {"fetch_balance": lambda self: {"USDT": {"free": 0}}})()
+
+    with pytest.raises(StopLoop):
+        asyncio.run(console_monitor.monitor_loop(ex, None, log_file))
+
+    assert outputs[0].endswith("first'")
+    assert outputs[1].endswith("second'")
 
