@@ -287,10 +287,12 @@ async def main() -> None:
                 logger.error("OHLCV fetch failed for %s", sym)
                 continue
 
-            df_sym = pd.DataFrame(
-                data,
-                columns=["timestamp", "open", "high", "low", "close", "volume"],
-            )
+            # ensure we have a proper DataFrame with the expected columns
+            expected_cols = ["timestamp", "open", "high", "low", "close", "volume"]
+            if not isinstance(df_sym, pd.DataFrame):
+                df_sym = pd.DataFrame(df_sym, columns=expected_cols)
+            elif not set(expected_cols).issubset(df_sym.columns):
+                df_sym = pd.DataFrame(df_sym.to_numpy(), columns=expected_cols)
             logger.info("Fetched %d candles for %s", len(df_sym), sym)
             if sym == config.get("symbol"):
                 df_current = df_sym
