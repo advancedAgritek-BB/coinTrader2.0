@@ -13,6 +13,8 @@ def test_log_position_writes_line(tmp_path, monkeypatch):
     text = log_file.read_text()
     assert "BTC/USDT" in text
     assert "positive" in text
+    assert "100.000000" in text
+    assert "110.000000" in text
 
 
 def test_log_balance_writes_line(tmp_path, monkeypatch):
