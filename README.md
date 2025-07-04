@@ -35,6 +35,8 @@ be calculated reliably. When fewer rows are available the function returns
    ```bash
    pip install -r requirements.txt
    ```
+   The optional `rich` package is included and provides colorized
+   console output when viewing live positions.
 2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:
@@ -42,6 +44,9 @@ be calculated reliably. When fewer rows are available the function returns
    python -m crypto_bot.main
    ```
    When dry-run mode is selected you will be prompted for the starting USDT balance.
+   The console now refreshes with your wallet balance and any active
+   trades in real time. Profitable positions are shown in green while
+   losing ones appear in red.
    Or launch the web dashboard with:
    ```bash
    python -m frontend.app
