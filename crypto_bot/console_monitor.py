@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from typing import Optional, Any
+import sys
 
 
 async def monitor_loop(
@@ -20,8 +21,7 @@ async def monitor_loop(
     """
     log_path = Path(log_file)
     last_line = ""
-    prev_first = 0
-    prev_second = 0
+    prev_lines = 0
     fh = None
     offset = 0
     while True:
@@ -50,16 +50,21 @@ async def monitor_loop(
         message = f"[Monitor] balance={balance} log='{last_line}'"
         stats = await trade_stats_line(exchange)
 
-        print(" " * prev_second, end="\r")
-        print("\033[F" + " " * prev_first, end="\r")
-
         output = message
         if stats:
             output += "\n" + stats
-        print(output, end="\r", flush=True)
 
-        prev_first = len(message)
-        prev_second = len(stats) if stats else 0
+        if sys.stdout.isatty():
+            # Clear previously printed lines
+            if prev_lines:
+                print("\033[2K", end="")
+                for _ in range(prev_lines - 1):
+                    print("\033[F\033[2K", end="")
+            print(output, end="\r", flush=True)
+        else:
+            print(output)
+
+        prev_lines = output.count("\n") + 1
 """Simple console monitor for displaying trades."""
 
 from pathlib import Path
