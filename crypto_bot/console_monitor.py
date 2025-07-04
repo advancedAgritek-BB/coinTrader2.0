@@ -48,7 +48,8 @@ async def monitor_loop(
             offset = fh.tell()
 
         message = f"[Monitor] balance={balance} log='{last_line}'"
-        stats = await trade_stats_line(exchange)
+        stats_lines = await trade_stats_lines(exchange)
+        stats = "\n".join(stats_lines)
 
         print(" " * prev_second, end="\r")
         print("\033[F" + " " * prev_first, end="\r")
@@ -59,7 +60,7 @@ async def monitor_loop(
         print(output, end="\r", flush=True)
 
         prev_first = len(message)
-        prev_second = len(stats) if stats else 0
+        prev_second = max(len(l) for l in stats_lines) if stats_lines else 0
 """Simple console monitor for displaying trades."""
 
 from pathlib import Path
@@ -102,11 +103,11 @@ def display_trades(
     return console.export_text()
 
 
-async def trade_stats_line(exchange: Any, trade_file: Path = TRADE_FILE) -> str:
-    """Return a single line summarizing PnL for each open trade."""
+async def trade_stats_lines(exchange: Any, trade_file: Path = TRADE_FILE) -> list[str]:
+    """Return a list of lines summarizing PnL for each open trade."""
     open_trades = get_open_trades(trade_file)
     if not open_trades:
-        return ""
+        return []
 
     symbols = {t["symbol"] for t in open_trades}
     prices: dict[str, float] = {}
@@ -120,11 +121,17 @@ async def trade_stats_line(exchange: Any, trade_file: Path = TRADE_FILE) -> str:
         except Exception:
             prices[sym] = 0.0
 
-    parts = []
+    lines = []
     for trade in open_trades:
         sym = trade.get("symbol")
         entry = float(trade.get("price", 0))
         amount = float(trade.get("amount", 0))
         pnl = (prices.get(sym, 0.0) - entry) * amount
-        parts.append(f"{sym} {pnl:+.2f}")
-    return " | ".join(parts)
+        lines.append(f"{sym} {pnl:+.2f}")
+    return lines
+
+
+async def trade_stats_line(exchange: Any, trade_file: Path = TRADE_FILE) -> str:
+    """Return a single line summarizing PnL for each open trade."""
+    lines = await trade_stats_lines(exchange, trade_file)
+    return " | ".join(lines)
