@@ -30,7 +30,6 @@ def test_get_filtered_symbols_caching(monkeypatch):
         return ["ETH/USD"]
 
     monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
-    monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
 
     config = {
         "symbol": "ETH/USD",
