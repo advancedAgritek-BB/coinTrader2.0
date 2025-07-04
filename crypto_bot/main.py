@@ -300,6 +300,32 @@ async def main() -> None:
 
         results = await asyncio.gather(*tasks)
 
+        scalpers = [
+            r["symbol"]
+            for r in results
+            if r.get("name") in {"micro_scalp", "bounce_scalper"}
+        ]
+        if scalpers:
+            df_cache = await update_ohlcv_cache(
+                exchange,
+                df_cache,
+                scalpers,
+                timeframe=config.get("scalp_timeframe", "1m"),
+                limit=100,
+                use_websocket=config.get("use_websocket", False),
+                force_websocket_history=config.get("force_websocket_history", False),
+                max_concurrent=config.get("max_concurrent_ohlcv"),
+            )
+            tasks = [
+                analyze_symbol(sym, df_cache.get(sym), mode, config)
+                for sym in scalpers
+            ]
+            scalper_results = await asyncio.gather(*tasks)
+            mapping = {r["symbol"]: r for r in scalper_results}
+            results = [mapping.get(r["symbol"], r) for r in results]
+            if config.get("symbol") in mapping:
+                df_current = df_cache.get(config["symbol"])
+
         for res in results:
             sym = res["symbol"]
             df_sym = res["df"]
