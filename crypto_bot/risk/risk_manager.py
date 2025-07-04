@@ -27,6 +27,7 @@ class RiskConfig:
     max_funding_rate: float = 1.0
     symbol: str = ""
     trade_size_pct: float = 0.1
+    risk_pct: float = 0.01
     min_volume: float = 0.0
     volume_threshold_ratio: float = 0.1
     strategy_allocation: dict | None = None
@@ -74,16 +75,28 @@ class RiskManager:
         )
         return drawdown < self.config.max_drawdown
 
-    def position_size(self, confidence: float, balance: float) -> float:
-        """Return the trade value for a signal.
+    def position_size(
+        self,
+        confidence: float,
+        balance: float,
+        stop_distance: float | None = None,
+        atr: float | None = None,
+    ) -> float:
+        """Return the trade value for a signal based on risk.
 
-        The value is calculated in the account's quote currency by scaling the
-        available ``balance`` by the signal ``confidence`` and the configured
-        ``trade_size_pct``.  Callers must convert the resulting value to asset
-        units using the current price before submitting an order to an
-        exchange.
+        ``risk_pct`` determines the capital risked per trade. The size is
+        calculated by dividing that risk amount by the stop distance. When an
+        ``atr`` value is provided it is used as the distance to incorporate
+        volatility.  If no distance information is supplied the function falls
+        back to ``trade_size_pct`` behaviour.
         """
-        size = balance * confidence * self.config.trade_size_pct
+
+        risk_value = balance * self.config.risk_pct * confidence
+        stop_loss_distance = atr if atr and atr > 0 else stop_distance
+        if stop_loss_distance and stop_loss_distance > 0:
+            size = risk_value / stop_loss_distance
+        else:
+            size = balance * confidence * self.config.trade_size_pct
         logger.info("Calculated position size: %.4f", size)
         return size
 

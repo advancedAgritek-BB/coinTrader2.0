@@ -121,7 +121,7 @@ def test_stop_order_management():
     assert manager.stop_order is None
 
 
-def test_position_size_uses_trade_size_pct():
+def test_position_size_uses_trade_size_pct_when_no_stop():
     manager = RiskManager(
         RiskConfig(
             max_drawdown=1,
@@ -132,6 +132,32 @@ def test_position_size_uses_trade_size_pct():
     )
     size = manager.position_size(0.5, 1000)
     assert size == 1000 * 0.2 * 0.5
+
+
+def test_position_size_risk_based():
+    manager = RiskManager(
+        RiskConfig(
+            max_drawdown=1,
+            stop_loss_pct=0.01,
+            take_profit_pct=0.01,
+            risk_pct=0.02,
+        )
+    )
+    size = manager.position_size(0.5, 1000, stop_distance=10)
+    assert size == 1.0
+
+
+def test_position_size_uses_atr():
+    manager = RiskManager(
+        RiskConfig(
+            max_drawdown=1,
+            stop_loss_pct=0.01,
+            take_profit_pct=0.01,
+            risk_pct=0.02,
+        )
+    )
+    size = manager.position_size(1.0, 1000, stop_distance=5, atr=8)
+    assert abs(size - 2.5) < 1e-6
 
 
 def test_can_allocate_uses_tracker():
