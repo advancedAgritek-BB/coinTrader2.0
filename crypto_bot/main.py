@@ -122,7 +122,7 @@ async def main() -> None:
         logger.error("Exchange API setup failed: %s", exc)
         send_message(
             user.get("telegram_token"),
-            config.get("telegram", {}).get("chat_id", ""),
+            user.get("telegram_chat_id", ""),
             f"API error: {exc}",
         )
         return
@@ -182,12 +182,12 @@ async def main() -> None:
     df_cache: dict[str, pd.DataFrame] = {}
 
     telegram_bot = None
-    if user.get("telegram_token") and config.get("telegram", {}).get("chat_id"):
+    if user.get("telegram_token") and user.get("telegram_chat_id"):
         from crypto_bot.telegram_bot_ui import TelegramBotUI
 
         telegram_bot = TelegramBotUI(
             user["telegram_token"],
-            config["telegram"]["chat_id"],
+            user["telegram_chat_id"],
             state,
             "crypto_bot/logs/bot.log",
             rotator,
@@ -243,7 +243,7 @@ async def main() -> None:
                 dry_run=config["execution_mode"] == "dry_run",
                 slippage_bps=config.get("solana_slippage_bps", 50),
                 telegram_token=user.get("telegram_token", ""),
-                chat_id=config.get("telegram", {}).get("chat_id", ""),
+                chat_id=user.get("telegram_chat_id", ""),
             )
 
         if rotator.config.get("enabled"):
@@ -261,7 +261,7 @@ async def main() -> None:
                     user.get("wallet_address", ""),
                     holdings,
                     user.get("telegram_token", ""),
-                    config.get("telegram", {}).get("chat_id", ""),
+                    user.get("telegram_chat_id", ""),
                 )
                 last_rotation = time.time()
 
