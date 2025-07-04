@@ -2,8 +2,8 @@ import logging
 from pathlib import Path
 
 
-def setup_logger(name: str, log_file: str) -> logging.Logger:
-    """Return a logger configured to write to ``log_file`` and stdout."""
+def setup_logger(name: str, log_file: str, to_console: bool = True) -> logging.Logger:
+    """Return a logger configured to write to ``log_file`` and optionally stdout."""
 
     Path(log_file).parent.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger(name)
@@ -21,7 +21,7 @@ def setup_logger(name: str, log_file: str) -> logging.Logger:
         fh.setFormatter(fmt)
         logger.addHandler(fh)
 
-    if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
+    if to_console and not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
         ch = logging.StreamHandler()
         ch.setFormatter(fmt)
         logger.addHandler(ch)
