@@ -318,5 +318,5 @@ def place_stop_order(
             send_message(token, chat_id, f"Stop order failed: {e}")
             return {}
     send_message(token, chat_id, f"Stop order submitted: {order}")
-    log_trade(order)
+    log_trade(order, is_stop=True)
     return order
