@@ -144,10 +144,13 @@ twap_slices: 4               # number of slices when TWAP is enabled
 twap_interval_seconds: 10    # delay between TWAP slices
 loop_interval_minutes: 5     # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
+max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
 ```
 
 `loop_interval_minutes` determines how long the bot sleeps between each
 evaluation cycle, giving the market time to evolve before scanning again.
+`max_concurrent_ohlcv` caps how many OHLCV requests run in parallel when
+`update_ohlcv_cache` gathers new candles.
 
 When `use_websocket` is enabled the bot relies on `ccxt.pro` for realtime
 streaming data. Install it alongside the other requirements or disable

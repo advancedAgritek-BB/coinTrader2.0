@@ -117,6 +117,11 @@ async def load_ohlcv_parallel(
                     since=since_map.get(sym),
                     use_websocket=use_websocket,
                     force_websocket_history=force_websocket_history,
+                    timeframe,
+                    limit,
+                    since_map.get(sym),
+                    use_websocket,
+                    force_websocket_history,
                 )
         return await fetch_ohlcv_async(
             exchange,
@@ -126,6 +131,11 @@ async def load_ohlcv_parallel(
             since=since_map.get(sym),
             use_websocket=use_websocket,
             force_websocket_history=force_websocket_history,
+            timeframe,
+            limit,
+            since_map.get(sym),
+            use_websocket,
+            force_websocket_history,
         )
 
     tasks = [asyncio.create_task(sem_fetch(s)) for s in symbols]
@@ -152,7 +162,13 @@ async def update_ohlcv_cache(
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
 ) -> Dict[str, pd.DataFrame]:
-    """Update cached OHLCV DataFrames with new candles."""
+    """Update cached OHLCV DataFrames with new candles.
+
+    Parameters
+    ----------
+    max_concurrent : int | None, optional
+        Maximum number of concurrent OHLCV requests. ``None`` means no limit.
+    """
 
     since_map: Dict[str, int] = {}
     for sym in symbols:
