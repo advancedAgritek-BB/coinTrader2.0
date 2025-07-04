@@ -98,7 +98,12 @@ async def load_ohlcv_parallel(
 
     since_map = since_map or {}
 
-    sem = asyncio.Semaphore(max_concurrent) if max_concurrent else None
+    if max_concurrent is not None:
+        if not isinstance(max_concurrent, int) or max_concurrent < 1:
+            raise ValueError("max_concurrent must be a positive integer or None")
+        sem = asyncio.Semaphore(max_concurrent)
+    else:
+        sem = None
 
     async def sem_fetch(sym: str):
         if sem:
@@ -153,6 +158,10 @@ async def update_ohlcv_cache(
     max_concurrent : int | None, optional
         Maximum number of concurrent OHLCV requests. ``None`` means no limit.
     """
+
+    if max_concurrent is not None:
+        if not isinstance(max_concurrent, int) or max_concurrent < 1:
+            raise ValueError("max_concurrent must be a positive integer or None")
 
     since_map: Dict[str, int] = {}
     for sym in symbols:
