@@ -596,7 +596,8 @@ async def main() -> None:
             )
         if best:
             risk_manager.config.symbol = best["symbol"]
-        size = risk_manager.position_size(score, balance)
+        df_for_size = best["df"] if best else None
+        size = risk_manager.position_size(score, balance, df_for_size)
         if current_price and current_price > 0:
             order_amount = size / current_price
         else:
