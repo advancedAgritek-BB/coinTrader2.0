@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Optional
+import asyncio
 
 import pandas as pd
 import numpy as np
@@ -136,3 +137,17 @@ def classify_regime(
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
 
     return _classify_core(df, cfg, higher_df)
+
+
+async def classify_regime_async(
+    df: pd.DataFrame,
+    higher_df: Optional[pd.DataFrame] = None,
+    *,
+    config_path: Optional[str] = None,
+) -> str:
+    """Asynchronous wrapper around :func:`classify_regime`."""
+    return await asyncio.to_thread(
+        classify_regime, df, higher_df, config_path=config_path
+    )
+
+

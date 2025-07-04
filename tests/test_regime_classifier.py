@@ -1,7 +1,11 @@
 import pandas as pd
 import numpy as np
+import asyncio
 
-from crypto_bot.regime.regime_classifier import classify_regime
+from crypto_bot.regime.regime_classifier import classify_regime, classify_regime_async
+from crypto_bot.utils.market_analyzer import analyze_symbol
+from crypto_bot.strategy_router import strategy_for
+from crypto_bot.signals.signal_scoring import evaluate_async
 
 
 def test_classify_regime_returns_unknown_for_short_df():
@@ -184,3 +188,29 @@ confirm_trend_with_higher_tf: true
         classify_regime(df_low, df_high, config_path=str(cfg))
         != "trending"
     )
+
+
+def test_classify_regime_async_matches_sync():
+    df = _make_trending_df()
+    sync_res = classify_regime(df)
+
+    async def run():
+        return await classify_regime_async(df)
+
+    async_res = asyncio.run(run())
+    assert async_res == sync_res
+
+
+def test_analyze_symbol_async_consistent():
+    df = _make_trending_df()
+    regime = classify_regime(df)
+    strategy = strategy_for(regime)
+    sync_score, sync_dir = asyncio.run(evaluate_async(strategy, df, {}))
+
+    async def run():
+        return await analyze_symbol("AAA", df, "cex", {})
+
+    res = asyncio.run(run())
+    assert res["regime"] == regime
+    assert res["score"] == sync_score
+    assert res["direction"] == sync_dir
