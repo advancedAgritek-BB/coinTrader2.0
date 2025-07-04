@@ -41,6 +41,7 @@ from crypto_bot.fund_manager import (
     auto_convert_funds,
 )
 from crypto_bot.paper_wallet import PaperWallet
+from crypto_bot import console_monitor
 from crypto_bot.utils.performance_logger import log_performance
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.utils.position_logger import log_position, log_balance
@@ -142,6 +143,10 @@ async def main() -> None:
             start_bal = 1000.0
         paper_wallet = PaperWallet(start_bal)
         log_balance(paper_wallet.balance)
+
+    monitor_task = asyncio.create_task(
+        console_monitor.run(exchange, paper_wallet, "crypto_bot/logs/bot.log")
+    )
 
     open_side = None
     entry_price = None
@@ -432,7 +437,7 @@ async def main() -> None:
             if pnl_pct >= config["exit_strategy"]["min_gain_to_trail"]:
                 if current_price > highest_price:
                     highest_price = current_price
-                if trailing_stop == 0 and highest_price:
+                if highest_price:
                     trailing_stop = calculate_trailing_stop(
                         pd.Series([highest_price]),
                         config["exit_strategy"]["trailing_stop_pct"],
@@ -792,6 +797,14 @@ async def main() -> None:
         )
         logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
         await asyncio.sleep(config["loop_interval_minutes"] * 60)
+
+    monitor_task.cancel()
+    if telegram_bot:
+        telegram_bot.stop()
+    try:
+        await monitor_task
+    except asyncio.CancelledError:
+        pass
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution
