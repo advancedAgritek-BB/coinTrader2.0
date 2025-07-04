@@ -2,6 +2,7 @@ from typing import Tuple, Callable, Optional
 import pandas as pd
 import asyncio
 from crypto_bot.ml_signal_model import predict_signal
+from crypto_bot.indicators.cycle_bias import get_cycle_bias
 
 
 def evaluate(
@@ -26,6 +27,15 @@ def evaluate(
             try:
                 ml_score = predict_signal(df)
                 score = (score * (1 - weight)) + (ml_score * weight)
+                score = max(0.0, min(score, 1.0))
+            except Exception:
+                pass
+
+        bias_cfg = config.get("cycle_bias", {})
+        if bias_cfg.get("enabled"):
+            try:
+                bias = get_cycle_bias(bias_cfg)
+                score *= bias
                 score = max(0.0, min(score, 1.0))
             except Exception:
                 pass

@@ -1,4 +1,9 @@
 atr_normalization: true
+cycle_bias:
+  enabled: false
+  mvrv_url: https://api.example.com/mvrv
+  nupl_url: https://api.example.com/nupl
+  sopr_url: https://api.example.com/sopr
 exchange: kraken
 excluded_symbols: []
 execution_mode: dry_run
