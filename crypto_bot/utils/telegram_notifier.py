@@ -29,7 +29,7 @@ class TelegramNotifier:
         return send_message(self.token, self.chat_id, text)
 
     @classmethod
-    def notify(cls, token: str, chat_id: str, text: str) -> Optional[str]:
+    def send(cls, token: str, chat_id: str, text: str) -> Optional[str]:
         """Backwards compatible helper to send a single message."""
         if not cls.enabled or not token or not chat_id:
             return None

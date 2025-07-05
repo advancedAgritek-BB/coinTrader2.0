@@ -26,28 +26,26 @@ def exit_summary(symbol: str, strategy: str, pnl: float, direction: str) -> str:
     )
 
 
-def report_entry(
-    notifier: TelegramNotifier,
-    symbol: str,
-    strategy: str,
-    score: float,
-    direction: str,
-) -> Optional[str]:
+def report_entry(*args) -> Optional[str]:
     """Send a Telegram message summarizing a trade entry."""
+    if isinstance(args[0], TelegramNotifier):
+        notifier, symbol, strategy, score, direction = args
+    else:
+        token, chat_id, symbol, strategy, score, direction = args
+        notifier = TelegramNotifier(token=token, chat_id=chat_id)
     err = notifier.notify(entry_summary(symbol, strategy, score, direction))
     if err:
         logger.error("Failed to report entry: %s", err)
     return err
 
 
-def report_exit(
-    notifier: TelegramNotifier,
-    symbol: str,
-    strategy: str,
-    pnl: float,
-    direction: str,
-) -> Optional[str]:
+def report_exit(*args) -> Optional[str]:
     """Send a Telegram message summarizing a trade exit."""
+    if isinstance(args[0], TelegramNotifier):
+        notifier, symbol, strategy, pnl, direction = args
+    else:
+        token, chat_id, symbol, strategy, pnl, direction = args
+        notifier = TelegramNotifier(token=token, chat_id=chat_id)
     err = notifier.notify(exit_summary(symbol, strategy, pnl, direction))
     if err:
         logger.error("Failed to report exit: %s", err)

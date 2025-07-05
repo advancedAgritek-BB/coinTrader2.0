@@ -55,7 +55,7 @@ class TelegramNotifier:
     token: str = ""
     chat_id: str = ""
     enabled: bool = True
-    def __init__(self, token: str = "", chat_id: str = "", enabled: bool = True) -> None:
+    def __init__(self, enabled: bool = True, token: str = "", chat_id: str = "") -> None:
         self.enabled = enabled
         self.token = token
         self.chat_id = chat_id
