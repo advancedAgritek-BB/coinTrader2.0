@@ -7,6 +7,7 @@ from crypto_bot.utils.market_loader import (
     fetch_ohlcv_async,
     load_ohlcv_parallel,
     update_ohlcv_cache,
+    update_multi_tf_ohlcv_cache,
 )
 
 class DummyExchange:
@@ -177,7 +178,7 @@ def test_watch_ohlcv_exception_falls_back_to_fetch():
 
 class DummyIncExchange:
     def __init__(self):
-        self.data = [[i] * 6 for i in range(1, 4)]
+        self.data = [[i] * 6 for i in range(100, 400, 100)]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
         rows = [r for r in self.data if since is None or r[0] > since]
@@ -196,7 +197,7 @@ def test_update_ohlcv_cache_appends():
     cache: dict[str, pd.DataFrame] = {}
     cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=2, max_concurrent=2))
     assert len(cache["BTC/USD"]) == 2
-    ex.data.append([4] * 6)
+    ex.data.append([400] * 6)
     cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2))
     assert len(cache["BTC/USD"]) == 4
 
@@ -206,7 +207,7 @@ def test_update_ohlcv_cache_fallback_full_history():
     cache: dict[str, pd.DataFrame] = {}
     cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=3, max_concurrent=2))
     assert len(cache["BTC/USD"]) == 3
-    ex.data.append([4] * 6)
+    ex.data.append([400] * 6)
     cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2))
     assert len(cache["BTC/USD"]) == 4
 class CountingExchange:
@@ -272,6 +273,33 @@ def test_load_ohlcv_parallel_invalid_max_concurrent():
         )
 
 
+class DummyMultiTFExchange:
+    def __init__(self):
+        self.calls: list[str] = []
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.calls.append(timeframe)
+        return [[0, 1, 2, 3, 4, 5]]
+
+
+def test_update_multi_tf_ohlcv_cache():
+    ex = DummyMultiTFExchange()
+    cache: dict[str, dict[str, pd.DataFrame]] = {}
+    config = {"timeframes": ["1h", "4h", "1d"]}
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            config,
+            limit=1,
+            max_concurrent=2,
+        )
+    )
+    assert set(cache.keys()) == {"1h", "4h", "1d"}
+    for tf in config["timeframes"]:
+        assert "BTC/USD" in cache[tf]
+    assert set(ex.calls) == {"1h", "4h", "1d"}
 class FailOnceExchange:
     def __init__(self):
         self.calls = 0

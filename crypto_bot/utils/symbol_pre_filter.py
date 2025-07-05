@@ -1,13 +1,20 @@
-import os
-import json
+"""Utility for filtering trading pairs based on liquidity and volatility."""
+
+from __future__ import annotations
+
 import asyncio
-import time
+import json
+import os
 from typing import Iterable, List
+
+import numpy as np
 
 import aiohttp
 
 from .logger import setup_logger
 from .market_loader import fetch_ohlcv_async
+from .symbol_scoring import score_symbol
+
 
 logger = setup_logger(__name__, "crypto_bot/logs/symbol_filter.log")
 
@@ -15,8 +22,23 @@ API_URL = "https://api.kraken.com/0/public"
 DEFAULT_MIN_VOLUME_USD = 50000
 
 
+async def has_enough_history(
+    exchange, symbol: str, days: int = 30, timeframe: str = "1d"
+) -> bool:
+    """Return ``True`` when ``symbol`` has at least ``days`` days of history."""
+    data = await fetch_ohlcv_async(
+        exchange, symbol, timeframe=timeframe, limit=days
+    )
+    if not data:
+        return False
+    first_ts = data[0][0] / 1000
+    last_ts = data[-1][0] / 1000
+    return (last_ts - first_ts) / 86400 + 1 >= days
+
+
+
 async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
-    """Return ticker data for ``pairs`` in batches of 20 symbols using aiohttp."""
+    """Return ticker data for ``pairs`` in batches of 20 using aiohttp."""
 
     mock = os.getenv("MOCK_KRAKEN_TICKER")
     if mock:
@@ -42,7 +64,8 @@ async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
 
 
 def _parse_metrics(ticker: dict) -> tuple[float, float, float]:
-    """Return volume in USD, percent change and bid/ask spread from ``ticker``."""
+    """Return volume USD, percent change and spread percentage."""
+
     last = float(ticker["c"][0])
     open_price = float(ticker.get("o", last))
     volume = float(ticker["v"][1])
@@ -52,12 +75,11 @@ def _parse_metrics(ticker: dict) -> tuple[float, float, float]:
 
     volume_usd = volume * vwap
     change_pct = ((last - open_price) / open_price) * 100 if open_price else 0.0
-    spread = abs(ask - bid) / last * 100 if last else 0.0
-    return volume_usd, change_pct, spread
+    spread_pct = abs(ask - bid) / last * 100 if last else 0.0
+    return volume_usd, change_pct, spread_pct
 
 
 def _timeframe_seconds(exchange, timeframe: str) -> int:
-    """Return timeframe duration in seconds."""
     if hasattr(exchange, "parse_timeframe"):
         try:
             return exchange.parse_timeframe(timeframe)
@@ -82,6 +104,10 @@ async def has_enough_history(
     exchange, symbol: str, days: int, timeframe: str = "1h"
 ) -> bool:
     """Return True if ``symbol`` has at least ``days`` of OHLCV history."""
+async def _has_enough_history(
+    exchange, symbol: str, min_days: int, timeframe: str = "1h"
+) -> bool:
+    """Return ``True`` if ``symbol`` has at least ``min_days`` of OHLCV."""
 
     seconds = _timeframe_seconds(exchange, timeframe)
     candles_needed = int((days * 86400) / seconds) + 1
@@ -108,6 +134,15 @@ async def has_enough_history(
 async def filter_symbols(
     exchange, symbols: Iterable[str], config: dict | None = None
 ) -> List[str]:
+    """Return subset of ``symbols`` passing liquidity checks sorted by score."""
+
+    cfg = config or {}
+    min_volume = cfg.get("symbol_filter", {}).get(
+        "min_volume_usd", DEFAULT_MIN_VOLUME_USD
+    )
+    min_age = cfg.get("min_symbol_age_days", 0)
+    min_score = cfg.get("min_symbol_score", 0.4)
+
     """Return subset of ``symbols`` passing liquidity and volatility checks.
 
     Parameters
@@ -124,16 +159,21 @@ async def filter_symbols(
     min_volume = DEFAULT_MIN_VOLUME_USD
     max_spread = 1.0
     min_age = 0
+    pct = 80
     if config:
         filter_cfg = config.get("symbol_filter", {})
         min_volume = filter_cfg.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
         max_spread = filter_cfg.get("max_spread_pct", 1.0)
+        sf = config.get("symbol_filter", {})
+        min_volume = sf.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
+        pct = sf.get("change_pct_percentile", 80)
         min_age = config.get("min_symbol_age_days", 0)
 
     pairs = [s.replace("/", "") for s in symbols]
     data = (await _fetch_ticker_async(pairs)).get("result", {})
 
     id_map = {}
+    id_map: dict[str, str] = {}
     if hasattr(exchange, "markets_by_id"):
         if not exchange.markets_by_id and hasattr(exchange, "load_markets"):
             try:
@@ -146,14 +186,17 @@ async def filter_symbols(
             elif isinstance(v, list) and v and isinstance(v[0], dict):
                 id_map[k] = v[0].get("symbol", k)
             else:
+                id_map[k] = v if isinstance(v, str) else k
+
+    scored: List[tuple[str, float]] = []
                 id_map[k] = k
 
     allowed: List[tuple[str, float]] = []
 
+    metrics: List[tuple[str, float, float, float]] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)
         if not symbol:
-            # fallback match by stripped pair
             for sym in symbols:
                 if pair_id.upper() == sym.replace("/", "").upper():
                     symbol = sym
@@ -162,12 +205,13 @@ async def filter_symbols(
             continue
 
         vol_usd, change_pct, spread = _parse_metrics(ticker)
+        vol_usd, change_pct, spread_pct = _parse_metrics(ticker)
         logger.info(
             "Ticker %s volume %.2f USD change %.2f%% spread %.2f%%",
             symbol,
             vol_usd,
             change_pct,
-            spread,
+            spread_pct,
         )
 
         if vol_usd <= min_volume or abs(change_pct) <= 1:
@@ -186,6 +230,43 @@ async def filter_symbols(
                 logger.info("Skipping %s due to insufficient history", symbol)
                 continue
         allowed.append((symbol, vol_usd))
+
+
+        if vol_usd < min_volume or abs(change_pct) <= 1:
+            continue
+
+        if min_age > 0:
+            enough = await has_enough_history(exchange, symbol, min_age)
+            if not enough:
+                logger.info("Skipping %s due to insufficient history", symbol)
+                continue
+
+        score = score_symbol(symbol, vol_usd, change_pct, spread_pct, cfg)
+        if score < min_score:
+            logger.info("Skipping %s score %.3f below %.3f", symbol, score, min_score)
+            continue
+
+        scored.append((symbol, score))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [sym for sym, _ in scored]
+
+        metrics.append((symbol, vol_usd, change_pct, spread))
+
+    if not metrics:
+        return []
+
+    threshold = np.percentile([abs(c[2]) for c in metrics], pct)
+
+    allowed: List[tuple[str, float]] = []
+    for symbol, vol_usd, change_pct, _ in metrics:
+        if vol_usd > min_volume and abs(change_pct) >= threshold:
+            if min_age > 0:
+                enough = await _has_enough_history(exchange, symbol, min_age)
+                if not enough:
+                    logger.info("Skipping %s due to insufficient history", symbol)
+                    continue
+            allowed.append((symbol, vol_usd))
 
     allowed.sort(key=lambda x: x[1], reverse=True)
     return [sym for sym, _ in allowed]
