@@ -29,6 +29,13 @@ label conditions as `trending`, `sideways`, `breakout`, `mean-reverting` or
 be calculated reliably. When fewer rows are available the function returns
 `"unknown"` so the router can avoid making a poor decision.
 
+### Optional ML Fallback
+
+Set `use_ml_regime_classifier` to `true` in `crypto_bot/config.yaml` to fall
+back to a machine learning model whenever the indicator rules return
+`"unknown"`.  The model file should be stored at
+`crypto_bot/regime/models/regime_model.pkl`.
+
 ## Quick Start
 
 1. Install the dependencies:
