@@ -177,7 +177,7 @@ def test_watch_ohlcv_exception_falls_back_to_fetch():
 
 class DummyIncExchange:
     def __init__(self):
-        self.data = [[i] * 6 for i in range(1, 4)]
+        self.data = [[i] * 6 for i in range(100, 400, 100)]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
         rows = [r for r in self.data if since is None or r[0] > since]
@@ -196,7 +196,7 @@ def test_update_ohlcv_cache_appends():
     cache: dict[str, pd.DataFrame] = {}
     cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=2, max_concurrent=2))
     assert len(cache["BTC/USD"]) == 2
-    ex.data.append([4] * 6)
+    ex.data.append([400] * 6)
     cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2))
     assert len(cache["BTC/USD"]) == 4
 
@@ -206,7 +206,7 @@ def test_update_ohlcv_cache_fallback_full_history():
     cache: dict[str, pd.DataFrame] = {}
     cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=3, max_concurrent=2))
     assert len(cache["BTC/USD"]) == 3
-    ex.data.append([4] * 6)
+    ex.data.append([400] * 6)
     cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2))
     assert len(cache["BTC/USD"]) == 4
 class CountingExchange:
