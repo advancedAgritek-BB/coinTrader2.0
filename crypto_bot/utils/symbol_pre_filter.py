@@ -140,7 +140,7 @@ async def filter_symbols(
                 id_map[k] = v[0].get("symbol", k)
             else:
                 id_map[k] = k
-    allowed: List[str] = []
+    allowed: List[tuple[str, float]] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)
         if not symbol:
@@ -160,6 +160,10 @@ async def filter_symbols(
             spread,
         )
         if vol_usd > min_volume and abs(change_pct) > 1:
+            allowed.append((symbol, vol_usd))
+
+    allowed.sort(key=lambda x: x[1], reverse=True)
+    return [sym for sym, _ in allowed]
             if min_age > 0:
                 enough = await has_enough_history(exchange, symbol, min_age)
                 if not enough:

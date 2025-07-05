@@ -119,6 +119,36 @@ def test_multiple_batches(monkeypatch):
     assert len(calls) == 2
 
 
+def test_filter_symbols_sorted_by_volume(monkeypatch):
+    async def fake_fetch_sorted(_):
+        return {
+            "result": {
+                "XETHZUSD": {
+                    "a": ["101", "1", "1"],
+                    "b": ["100", "1", "1"],
+                    "c": ["101", "0.5"],
+                    "v": ["600", "600"],
+                    "p": ["100", "100"],
+                    "o": "99",
+                },
+                "XXBTZUSD": {
+                    "a": ["51", "1", "1"],
+                    "b": ["50", "1", "1"],
+                    "c": ["51", "1"],
+                    "v": ["800", "800"],
+                    "p": ["100", "100"],
+                    "o": "49",
+                },
+            }
+        }
+
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch_sorted
+    )
+
+    symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG))
+
+    assert symbols == ["BTC/USD", "ETH/USD"]
 class HistoryExchange:
     def __init__(self, candles: int):
         self.markets_by_id = {"XETHZUSD": {"symbol": "ETH/USD"}}
