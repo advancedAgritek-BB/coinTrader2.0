@@ -34,7 +34,6 @@ def log_trade(order: Dict, is_stop: bool = False) -> None:
     log_file.parent.mkdir(parents=True, exist_ok=True)
     # Append rows without a header so repeated logs don't duplicate columns
     df.to_csv(log_file, mode="a", header=False, index=False)
-    logger.info("Logged trade: %s", record)
     msg = "Stop order placed: %s" if is_stop else "Logged trade: %s"
     logger.info(msg, record)
     try:
