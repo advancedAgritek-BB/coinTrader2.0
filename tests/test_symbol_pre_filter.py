@@ -1,8 +1,14 @@
 import asyncio
 import json
+
 from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_history
 
-CONFIG = {"symbol_filter": {"min_volume_usd": 50000}}
+CONFIG = {
+    "symbol_filter": {"min_volume_usd": 50000},
+    "symbol_score_weights": {"volume": 1, "change": 0, "spread": 0, "age": 0, "latency": 0},
+    "max_vol": 100000,
+    "min_symbol_score": 0.0,
+}
 
 class DummyExchange:
     markets_by_id = {
@@ -143,7 +149,7 @@ def test_has_enough_history_false(monkeypatch):
         mock_fetch_history_short,
     )
     assert not asyncio.run(has_enough_history(None, "BTC/USD", days=10))
-def test_filter_symbols_sorted_by_volume(monkeypatch):
+def test_filter_symbols_sorted_by_score(monkeypatch):
     async def fake_fetch_sorted(_):
         return {
             "result": {
@@ -170,9 +176,21 @@ def test_filter_symbols_sorted_by_volume(monkeypatch):
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch_sorted
     )
 
-    symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG))
+    symbols = asyncio.run(
+        filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG)
+    )
 
     assert symbols == ["BTC/USD", "ETH/USD"]
+
+
+def test_filter_symbols_min_score(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
+
+    cfg = {**CONFIG, "min_symbol_score": 0.7}
+    symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg))
+    assert symbols == ["ETH/USD"]
 class HistoryExchange:
     def __init__(self, candles: int):
         self.markets_by_id = {"XETHZUSD": {"symbol": "ETH/USD"}}

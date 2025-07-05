@@ -230,6 +230,13 @@ OHLCV data for these symbols is now fetched concurrently using
 `load_ohlcv_parallel`, greatly reducing the time needed to evaluate
 large symbol lists.
 
+Each candidate pair is also assigned a score based on volume, recent price
+change, bid/ask spread, age and API latency. The weights and limits for this
+calculation can be tuned via `symbol_score_weights`, `max_vol`,
+`max_change_pct`, `max_spread_pct`, `max_age_days` and `max_latency_ms` in
+`config.yaml`. Only symbols with a score above `min_symbol_score` are included
+in trading rotations.
+
 ## Web UI
 
 A small Flask web dashboard is included for running the bot and inspecting logs.
