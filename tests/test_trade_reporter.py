@@ -1,4 +1,5 @@
 from crypto_bot.utils import trade_reporter
+from crypto_bot.utils.telegram import TelegramNotifier
 
 
 def test_report_entry_formats_and_sends(monkeypatch):
@@ -9,9 +10,10 @@ def test_report_entry_formats_and_sends(monkeypatch):
         calls['chat_id'] = chat_id
         calls['text'] = text
 
-    monkeypatch.setattr(trade_reporter, 'send_message', fake_send)
+    monkeypatch.setattr('crypto_bot.utils.telegram.send_message', fake_send)
 
-    trade_reporter.report_entry('t', 'c', 'BTC/USDT', 'trend_bot', 0.876, 'long')
+    notifier = TelegramNotifier('t', 'c')
+    trade_reporter.report_entry(notifier, 'BTC/USDT', 'trend_bot', 0.876, 'long')
 
     assert calls['token'] == 't'
     assert calls['chat_id'] == 'c'
@@ -26,8 +28,9 @@ def test_report_exit_formats_and_sends(monkeypatch):
         calls['chat_id'] = chat_id
         calls['text'] = text
 
-    monkeypatch.setattr(trade_reporter, 'send_message', fake_send)
+    monkeypatch.setattr('crypto_bot.utils.telegram.send_message', fake_send)
 
-    trade_reporter.report_exit('t', 'c', 'BTC/USDT', 'trend_bot', 10.123, 'short')
+    notifier = TelegramNotifier('t', 'c')
+    trade_reporter.report_exit(notifier, 'BTC/USDT', 'trend_bot', 10.123, 'short')
 
     assert calls['text'] == 'Exiting SHORT on BTC/USDT from trend_bot. PnL: 10.12'
