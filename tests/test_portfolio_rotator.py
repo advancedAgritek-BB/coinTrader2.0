@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 
 import pandas as pd
 import pytest
@@ -113,3 +114,40 @@ def test_rotate_ignores_tokens_without_pair(monkeypatch, caplog):
     assert result == holdings
     assert not called
     assert any("OHLCV fetch failed for BAD" in r.message for r in caplog.records)
+def test_rotate_translates_assets_to_pairs(monkeypatch):
+    rotator = PortfolioRotator()
+    captured = {}
+
+    def fake_score_assets(ex, symbols, lookback, method):
+        captured["symbols"] = list(symbols)
+        return {}
+
+    monkeypatch.setattr(rotator, "score_assets", fake_score_assets)
+    monkeypatch.setattr(
+        "crypto_bot.portfolio_rotator.auto_convert_funds", lambda *a, **k: {}
+    )
+
+    exchange = type(
+        "Ex",
+        (),
+        {
+            "markets": {"BTC/USD": {}},
+            "market": lambda self, s: {"BTC/USD": {}}.get(s),
+        },
+    )()
+
+    asyncio.run(rotator.rotate(exchange, "wallet", {"BTC": 1}))
+
+    assert captured.get("symbols") == ["BTC/USD"]
+def test_score_assets_handles_invalid_data(caplog):
+    class BadExchange:
+        def fetch_ohlcv(self, symbol, timeframe="1d", limit=30):
+            return None
+
+    rotator = PortfolioRotator()
+    caplog.set_level(logging.ERROR)
+
+    scores = rotator.score_assets(BadExchange(), ["BTC"], 5, "momentum")
+
+    assert scores == {}
+    assert any("Invalid OHLCV" in r.getMessage() for r in caplog.records)
