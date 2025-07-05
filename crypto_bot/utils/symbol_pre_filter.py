@@ -107,35 +107,6 @@ def _timeframe_seconds(exchange, timeframe: str) -> int:
     raise ValueError(f"Unknown timeframe {timeframe}")
 
 
-async def has_enough_history(
-    exchange, symbol: str, days: int, timeframe: str = "1h"
-) -> bool:
-    """Return True if ``symbol`` has at least ``days`` of OHLCV history."""
-async def _has_enough_history(
-    exchange, symbol: str, min_days: int, timeframe: str = "1h"
-) -> bool:
-    """Return ``True`` if ``symbol`` has at least ``min_days`` of OHLCV."""
-
-    seconds = _timeframe_seconds(exchange, timeframe)
-    candles_needed = int((days * 86400) / seconds) + 1
-
-    try:
-        data = await fetch_ohlcv_async(
-            exchange, symbol, timeframe=timeframe, limit=candles_needed
-        )
-    except Exception as exc:  # pragma: no cover - network
-        logger.warning("fetch_ohlcv failed for %s: %s", symbol, exc)
-        return False
-
-    if not data or len(data) < 2:
-        return False
-
-    first_ts = data[0][0]
-    last_ts = data[-1][0]
-    if last_ts > days * 86400 * 10:
-        first_ts /= 1000
-        last_ts /= 1000
-    return last_ts - first_ts >= days * 86400 - seconds
 
 
 async def filter_symbols(
