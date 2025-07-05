@@ -9,9 +9,7 @@ import pandas as pd
 import yaml
 from dotenv import dotenv_values
 
-from crypto_bot.utils.telegram import TelegramNotifier
-from crypto_bot.utils.telegram import send_message, TelegramNotifier
-from crypto_bot.utils.telegram import send_message, send_test_message
+from crypto_bot.utils.telegram import TelegramNotifier, send_test_message
 from crypto_bot.utils.trade_reporter import report_entry, report_exit
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.portfolio_rotator import PortfolioRotator
@@ -91,24 +89,24 @@ async def main() -> None:
 
     logger.info("Starting bot")
     config = load_config()
-    notifier = TelegramNotifier.from_config(config.get("telegram", {}))
-    notifier.notify("🤖 CoinTrader2.0 started")
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
     cooldown_configure(config.get("min_cooldown", 0))
     secrets = dotenv_values(ENV_PATH)
     os.environ.update(secrets)
 
     user = load_or_create()
-    notifier: TelegramNotifier | None = None
-    if user.get("telegram_token") and user.get("telegram_chat_id"):
-        notifier = TelegramNotifier(user["telegram_token"], user["telegram_chat_id"])
 
-    if user.get("telegram_token") and user.get("telegram_chat_id"):
-        if not send_test_message(
-            user["telegram_token"],
-            user["telegram_chat_id"],
-            "Bot started",
-        ):
+    tg_cfg = {**config.get("telegram", {})}
+    if user.get("telegram_token"):
+        tg_cfg["token"] = user["telegram_token"]
+    if user.get("telegram_chat_id"):
+        tg_cfg["chat_id"] = user["telegram_chat_id"]
+
+    notifier = TelegramNotifier.from_config({"telegram": tg_cfg})
+    notifier.notify("🤖 CoinTrader2.0 started")
+
+    if notifier.token and notifier.chat_id:
+        if not send_test_message(notifier.token, notifier.chat_id, "Bot started"):
             logger.warning(
                 "Telegram test message failed; check your token and chat ID"
             )
@@ -198,8 +196,6 @@ async def main() -> None:
 
     telegram_bot = None
     if notifier.enabled:
-    notifier = None
-    if user.get("telegram_token") and user.get("telegram_chat_id"):
         from crypto_bot.telegram_bot_ui import TelegramBotUI
 
         telegram_bot = TelegramBotUI(
@@ -211,7 +207,6 @@ async def main() -> None:
             user.get("wallet_address", ""),
         )
         telegram_bot.run_async()
-        notifier = TelegramNotifier(user["telegram_token"], user["telegram_chat_id"])
 
     while True:
         mode = state["mode"]
