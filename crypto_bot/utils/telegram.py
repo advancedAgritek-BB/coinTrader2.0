@@ -59,12 +59,19 @@ class TelegramNotifier:
         self.enabled = enabled
         self.token = token
         self.chat_id = chat_id
+        # internal flag set to True after a failed send
+        self._disabled = False
 
     def notify(self, text: str) -> Optional[str]:
         """Send ``text`` if notifications are enabled and credentials exist."""
-        if not self.enabled or not self.token or not self.chat_id:
+        if self._disabled or not self.enabled or not self.token or not self.chat_id:
             return None
-        return send_message(self.token, self.chat_id, text)
+
+        err = send_message(self.token, self.chat_id, text)
+        if err is not None:
+            self._disabled = True
+            logger.error("Disabling Telegram notifications due to send failure: %s", err)
+        return err
 
     @classmethod
     def from_config(cls, config: dict) -> "TelegramNotifier":
