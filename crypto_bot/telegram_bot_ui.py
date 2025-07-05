@@ -244,15 +244,34 @@ class TelegramBotUI:
             ]
         )
         if update.message:
-            await update.message.reply_text("Menu", reply_markup=markup)
+            cmds = [
+                "/start",
+                "/stop",
+                "/status",
+                "/log",
+                "/rotate_now",
+                "/toggle_mode",
+                "/signals",
+                "/balance",
+                "/trades",
+            ]
+            await update.message.reply_text(
+                "Available commands:\n" + "\n".join(cmds)
+            )
+            return
         elif update.callback_query:
             await update.callback_query.answer()
-            await update.callback_query.message.edit_text("Menu", reply_markup=markup)
+            try:
+                await update.callback_query.message.edit_text(
+                    "Menu", reply_markup=markup
+                )
+            except TypeError:
+                await update.callback_query.message.edit_text("Menu")
 
     async def show_signals(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        query = update.callback_query
+        query = getattr(update, "callback_query", None)
         if query:
             await query.answer()
         if ASSET_SCORES_FILE.exists():
@@ -270,12 +289,15 @@ class TelegramBotUI:
         markup = InlineKeyboardMarkup(
             [[InlineKeyboardButton("Back", callback_data=MENU)]]
         )
-        await query.message.edit_text(text, reply_markup=markup)
+        if query:
+            await query.message.edit_text(text, reply_markup=markup)
+        else:
+            await update.message.reply_text(text)
 
     async def show_balance(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        query = update.callback_query
+        query = getattr(update, "callback_query", None)
         if query:
             await query.answer()
         text: str
@@ -284,23 +306,33 @@ class TelegramBotUI:
         else:
             try:
                 bal = self.exchange.fetch_balance()
-                usdt = bal.get("USDT")
-                amount = float(
-                    usdt.get("free", usdt) if isinstance(usdt, dict) else usdt or 0.0
-                )
-                text = f"Free USDT: {amount:.2f}"
+                if query:
+                    usdt = bal.get("USDT")
+                    amount = float(
+                        usdt.get("free", usdt) if isinstance(usdt, dict) else usdt or 0.0
+                    )
+                    text = f"Free USDT: {amount:.2f}"
+                else:
+                    lines = [
+                        f"{k}: {v.get('total') if isinstance(v, dict) else v}"
+                        for k, v in bal.items()
+                    ]
+                    text = "\n".join(lines) if lines else "(no balance)"
             except Exception as exc:  # pragma: no cover - network
                 self.logger.error("Balance fetch failed: %s", exc)
                 text = "Failed to fetch balance"
         markup = InlineKeyboardMarkup(
             [[InlineKeyboardButton("Back", callback_data=MENU)]]
         )
-        await query.message.edit_text(text, reply_markup=markup)
+        if query:
+            await query.message.edit_text(text, reply_markup=markup)
+        else:
+            await update.message.reply_text(text)
 
     async def show_trades(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        query = update.callback_query
+        query = getattr(update, "callback_query", None)
         if query:
             await query.answer()
         trades = get_open_trades(TRADES_FILE)
@@ -334,4 +366,7 @@ class TelegramBotUI:
         markup = InlineKeyboardMarkup(
             [[InlineKeyboardButton("Back", callback_data=MENU)]]
         )
-        await query.message.edit_text(text, reply_markup=markup)
+        if query:
+            await query.message.edit_text(text, reply_markup=markup)
+        else:
+            await update.message.reply_text(text)

@@ -122,7 +122,9 @@ async def main() -> None:
 
     if config.get("scan_markets", False) and not config.get("symbols"):
         config["symbols"] = await load_kraken_symbols(
-            exchange, config.get("excluded_symbols", [])
+            exchange,
+            config.get("excluded_symbols", []),
+            config,
         )
 
     try:
