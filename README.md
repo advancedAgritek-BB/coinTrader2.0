@@ -168,12 +168,17 @@ scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
 loop_interval_minutes: 5     # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
 max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
+metrics:
+  enabled: true              # write cycle statistics to metrics.csv
+  file: crypto_bot/logs/metrics.csv
 ```
 
 `loop_interval_minutes` determines how long the bot sleeps between each
 evaluation cycle, giving the market time to evolve before scanning again.
 `max_concurrent_ohlcv` caps how many OHLCV requests run in parallel when
 `update_ohlcv_cache` gathers new candles.
+The `metrics` section enables recording of cycle summaries to the specified CSV
+file for later analysis.
 `scalp_timeframe` sets the candle interval specifically for the micro_scalp
 and bounce_scalper strategies while `timeframe` covers all other analysis.
 
@@ -232,7 +237,10 @@ max_spread_pct: 1.0              # skip pairs with wider spreads
 
 `exchange_market_types` filters the discovered pairs by market class. The bot
 also skips newly listed pairs using `min_symbol_age_days` and processes symbols
-in batches controlled by `symbol_batch_size`.
+in batches controlled by `symbol_batch_size`. Candidates are stored in a
+priority queue sorted by their score so the highest quality markets are scanned
+first. Each cycle pulls the next `symbol_batch_size` symbols from this queue and
+refills it when empty.
 
 OHLCV data for these symbols is now fetched concurrently using
 `load_ohlcv_parallel`, greatly reducing the time needed to evaluate
@@ -296,6 +304,8 @@ include:
 - `strategy_stats.json` – summary statistics of win rate, PnL and other metrics.
 - `strategy_performance.json` – list of individual trades grouped by regime and
   strategy with fields like `pnl` and timestamps.
+- `metrics.csv` – per cycle summary showing how many pairs were scanned,
+  how many signals fired and how many trades executed.
 
 ### Statistics File Structure
 
