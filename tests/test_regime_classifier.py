@@ -210,11 +210,14 @@ def test_analyze_symbol_async_consistent():
     sync_score, sync_dir = asyncio.run(evaluate_async(strategy, df, {}))
 
     async def run():
-        return await analyze_symbol("AAA", {"1h": df}, "cex", {"timeframe": "1h"}, None)
+        cfg = {"timeframe": "1h", "regime_timeframes": ["5m", "15m", "1h"], "min_consistent_agreement": 2}
+        df_map = {"5m": df, "15m": df, "1h": df}
+        return await analyze_symbol("AAA", df_map, "cex", cfg, None)
 
     res = asyncio.run(run())
     assert res["regime"] == regime
     assert isinstance(res.get("patterns"), set)
+    assert res["confidence"] == 1.0
     assert res["score"] == sync_score
     assert res["direction"] == sync_dir
 
@@ -236,8 +239,15 @@ def test_analyze_symbol_best_mode(monkeypatch):
     monkeypatch.setattr(ma, "evaluate_strategies", eval_stub)
 
     async def run():
-        cfg = {"timeframe": "1h", "strategy_evaluation_mode": "best", "scoring_weights": {"strategy_score": 1.0}}
-        return await analyze_symbol("AAA", {"1h": df}, "cex", cfg, None)
+        cfg = {
+            "timeframe": "1h",
+            "strategy_evaluation_mode": "best",
+            "scoring_weights": {"strategy_score": 1.0},
+            "regime_timeframes": ["5m", "15m", "1h"],
+            "min_consistent_agreement": 2,
+        }
+        df_map = {"5m": df, "15m": df, "1h": df}
+        return await analyze_symbol("AAA", df_map, "cex", cfg, None)
 
     res = asyncio.run(run())
     assert res["name"] == "strat_b"

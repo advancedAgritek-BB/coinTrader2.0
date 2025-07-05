@@ -38,6 +38,26 @@ async def analyze_symbol(
     higher_df = df_map.get("1d")
     regime, patterns = await classify_regime_async(df, higher_df)
 
+    regime_counts: Dict[str, int] = {}
+    regime_tfs = config.get("regime_timeframes", [base_tf])
+    min_agree = config.get("min_consistent_agreement", 1)
+
+    for tf in regime_tfs:
+        tf_df = df_map.get(tf)
+        if tf_df is None:
+            continue
+        higher_df = df_map.get("1d") if tf != "1d" else None
+        r = await classify_regime_async(tf_df, higher_df)
+        regime_counts[r] = regime_counts.get(r, 0) + 1
+
+    if regime_counts:
+        regime, votes = max(regime_counts.items(), key=lambda kv: kv[1])
+    else:
+        regime, votes = "unknown", 0
+    confidence = votes / max(len(regime_tfs), 1)
+    if votes < min_agree:
+        regime = "unknown"
+
     period = int(config.get("regime_return_period", 5))
     future_return = 0.0
     if len(df) > period:
@@ -51,6 +71,7 @@ async def analyze_symbol(
         "regime": regime,
         "patterns": patterns,
         "future_return": future_return,
+        "confidence": confidence,
     }
 
     if regime != "unknown":
@@ -72,7 +93,7 @@ async def analyze_symbol(
         weights = config.get("scoring_weights", {})
         final = (
             weights.get("strategy_score", 1.0) * score
-            + weights.get("regime_confidence", 0.0) * 1.0
+            + weights.get("regime_confidence", 0.0) * confidence
             + weights.get("volume_score", 0.0) * 1.0
             + weights.get("symbol_score", 0.0) * 1.0
             + weights.get("spread_penalty", 0.0) * 0.0

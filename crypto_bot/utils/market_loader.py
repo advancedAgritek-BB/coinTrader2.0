@@ -396,3 +396,28 @@ async def update_multi_tf_ohlcv_cache(
         )
 
     return cache
+
+
+async def update_regime_tf_cache(
+    exchange,
+    cache: Dict[str, Dict[str, pd.DataFrame]],
+    symbols: Iterable[str],
+    config: Dict,
+    limit: int = 100,
+    use_websocket: bool = False,
+    force_websocket_history: bool = False,
+    max_concurrent: int | None = None,
+) -> Dict[str, Dict[str, pd.DataFrame]]:
+    """Update OHLCV caches for regime detection timeframes."""
+
+    regime_cfg = {**config, "timeframes": config.get("regime_timeframes", [])}
+    return await update_multi_tf_ohlcv_cache(
+        exchange,
+        cache,
+        symbols,
+        regime_cfg,
+        limit=limit,
+        use_websocket=use_websocket,
+        force_websocket_history=force_websocket_history,
+        max_concurrent=max_concurrent,
+    )

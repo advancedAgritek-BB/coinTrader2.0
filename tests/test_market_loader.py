@@ -8,6 +8,7 @@ from crypto_bot.utils.market_loader import (
     load_ohlcv_parallel,
     update_ohlcv_cache,
     update_multi_tf_ohlcv_cache,
+    update_regime_tf_cache,
 )
 
 class DummyExchange:
@@ -300,6 +301,26 @@ def test_update_multi_tf_ohlcv_cache():
     for tf in config["timeframes"]:
         assert "BTC/USD" in cache[tf]
     assert set(ex.calls) == {"1h", "4h", "1d"}
+
+
+def test_update_regime_tf_cache():
+    ex = DummyMultiTFExchange()
+    cache: dict[str, dict[str, pd.DataFrame]] = {}
+    config = {"regime_timeframes": ["5m", "15m", "1h"]}
+    cache = asyncio.run(
+        update_regime_tf_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            config,
+            limit=1,
+            max_concurrent=2,
+        )
+    )
+    assert set(cache.keys()) == {"5m", "15m", "1h"}
+    for tf in config["regime_timeframes"]:
+        assert "BTC/USD" in cache[tf]
+    assert set(ex.calls) == {"5m", "15m", "1h"}
 class FailOnceExchange:
     def __init__(self):
         self.calls = 0
