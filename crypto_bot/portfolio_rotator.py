@@ -47,7 +47,21 @@ class PortfolioRotator:
                 self.logger.error("OHLCV fetch failed for %s: %s", sym, exc)
                 continue
 
-            df = pd.DataFrame(ohlcv, columns=["ts", "open", "high", "low", "close", "volume"])
+            if (
+                not ohlcv
+                or not isinstance(ohlcv, (list, tuple))
+                or any(
+                    not isinstance(row, (list, tuple)) or len(row) != 6
+                    for row in ohlcv
+                )
+            ):
+                self.logger.error("Invalid OHLCV for %s: %r", sym, ohlcv)
+                continue
+
+            df = pd.DataFrame(
+                ohlcv,
+                columns=["ts", "open", "high", "low", "close", "volume"],
+            )
             if method == "sharpe":
                 rets = df["close"].pct_change().dropna()
                 std = rets.std()
