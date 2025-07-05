@@ -300,3 +300,66 @@ def test_update_multi_tf_ohlcv_cache():
     for tf in config["timeframes"]:
         assert "BTC/USD" in cache[tf]
     assert set(ex.calls) == {"1h", "4h", "1d"}
+class FailOnceExchange:
+    def __init__(self):
+        self.calls = 0
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("fail")
+        return [[0] * 6]
+
+
+def test_failed_symbol_skipped_until_delay(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    ex = FailOnceExchange()
+    cache: dict[str, pd.DataFrame] = {}
+    market_loader.failed_symbols.clear()
+    monkeypatch.setattr(market_loader, "retry_delay", 10)
+
+    t = 0
+
+    def fake_time():
+        return t
+
+    monkeypatch.setattr(market_loader.time, "time", fake_time)
+
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert "BTC/USD" not in cache
+    assert "BTC/USD" in market_loader.failed_symbols
+    assert ex.calls == 1
+
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert ex.calls == 1  # skipped due to retry delay
+
+    t += 11
+
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert ex.calls == 2
+    assert "BTC/USD" in cache

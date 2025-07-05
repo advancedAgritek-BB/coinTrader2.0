@@ -1,7 +1,15 @@
 from typing import Iterable, List, Dict
 import asyncio
 import inspect
+import time
 import pandas as pd
+
+from .logger import setup_logger
+
+logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+
+failed_symbols: Dict[str, float] = {}
+retry_delay = 300
 
 
 def is_symbol_type(pair_info: dict, allowed: List[str]) -> bool:
@@ -189,6 +197,16 @@ async def load_ohlcv_parallel(
 
     since_map = since_map or {}
 
+    now = time.time()
+    symbols = [
+        s
+        for s in symbols
+        if failed_symbols.get(s, 0) <= 0 or now - failed_symbols[s] >= retry_delay
+    ]
+
+    if not symbols:
+        return {}
+
     if max_concurrent is not None:
         if not isinstance(max_concurrent, int) or max_concurrent < 1:
             raise ValueError("max_concurrent must be a positive integer or None")
@@ -224,11 +242,14 @@ async def load_ohlcv_parallel(
 
     data: Dict[str, list] = {}
     for sym, res in zip(symbols, results):
-        if isinstance(res, Exception):
+        if isinstance(res, Exception) or not res:
+            logger.error("Failed to load OHLCV for %s: %s", sym, res)
+            failed_symbols[sym] = time.time()
             continue
         if res and len(res[0]) > 6:
             res = [[c[0], c[1], c[2], c[3], c[4], c[6]] for c in res]
         data[sym] = res
+        failed_symbols.pop(sym, None)
     return data
 
 
@@ -254,6 +275,15 @@ async def update_ohlcv_cache(
         if not isinstance(max_concurrent, int) or max_concurrent < 1:
             raise ValueError("max_concurrent must be a positive integer or None")
 
+    now = time.time()
+    symbols = [
+        s
+        for s in symbols
+        if s not in failed_symbols or now - failed_symbols[s] >= retry_delay
+    ]
+    if not symbols:
+        return cache
+
     since_map: Dict[str, int] = {}
     for sym in symbols:
         df = cache.get(sym)
@@ -274,6 +304,8 @@ async def update_ohlcv_cache(
     for sym in symbols:
         data = data_map.get(sym)
         if not data:
+            if sym in failed_symbols and time.time() - failed_symbols[sym] < retry_delay:
+                continue
             full = await load_ohlcv_parallel(
                 exchange,
                 [sym],
