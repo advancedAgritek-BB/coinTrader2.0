@@ -99,6 +99,18 @@ class DummyWSEchange:
         return [[i, i + 1, i + 2, i + 3, i + 4, i + 5] for i in range(limit)]
 
 
+class DummyWSExceptionExchange:
+    def __init__(self):
+        self.fetch_called = False
+
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        raise RuntimeError("ws failed")
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.fetch_called = True
+        return [[9] * 6 for _ in range(limit)]
+
+
 def test_load_ohlcv_parallel_websocket_overrides_fetch():
     ex = DummyWSEchange()
     result = asyncio.run(
@@ -130,6 +142,14 @@ def test_load_ohlcv_parallel_websocket_force_history():
     )
     assert list(result.keys()) == ["BTC/USD"]
     assert len(result["BTC/USD"]) == 1
+
+
+def test_watch_ohlcv_exception_falls_back_to_fetch():
+    ex = DummyWSExceptionExchange()
+    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
+    assert ex.fetch_called is True
+    assert len(data) == 2
+    assert data[0][0] == 9
 
 
 class DummyIncExchange:
