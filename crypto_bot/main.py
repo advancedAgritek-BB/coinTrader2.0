@@ -47,6 +47,7 @@ from crypto_bot.utils.performance_logger import log_performance
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.utils.position_logger import log_position, log_balance
 from crypto_bot.utils.regime_logger import log_regime
+from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
 from crypto_bot.utils.market_loader import (
     load_kraken_symbols,
     load_ohlcv_parallel,
@@ -62,7 +63,9 @@ from crypto_bot.utils.pnl_logger import log_pnl
 from crypto_bot.utils.strategy_analytics import write_scores
 from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
 from crypto_bot.utils.trend_confirmation import confirm_multi_tf_trend
+from crypto_bot.utils.correlation import compute_correlation_matrix
 from crypto_bot.regime.regime_classifier import CONFIG
+from crypto_bot.utils.metrics_logger import log_metrics_to_csv
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
@@ -84,6 +87,20 @@ def opposite_side(side: str) -> str:
     return "sell" if side == "buy" else "buy"
 
 
+def _emit_timing(symbol_t: float, ohlcv_t: float, analyze_t: float,
+                 total_t: float, metrics_path: Path | None = None) -> None:
+    """Log timing information and optionally append to metrics CSV."""
+    logger.info(
+        "\u23f1\ufe0f Cycle timing - Symbols: %.2fs, OHLCV: %.2fs, Analyze: %.2fs, Total: %.2fs",
+        symbol_t,
+        ohlcv_t,
+        analyze_t,
+        total_t,
+    )
+    if metrics_path:
+        log_cycle_metrics(symbol_t, ohlcv_t, analyze_t, total_t, metrics_path)
+
+
 def load_config() -> dict:
     """Load YAML configuration for the bot."""
     with open(CONFIG_PATH) as f:
@@ -96,6 +113,7 @@ async def main() -> None:
 
     logger.info("Starting bot")
     config = load_config()
+    metrics_path = Path(config.get("metrics_csv")) if config.get("metrics_csv") else None
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
     cooldown_configure(config.get("min_cooldown", 0))
     secrets = dotenv_values(ENV_PATH)
@@ -228,6 +246,9 @@ async def main() -> None:
     while True:
         mode = state["mode"]
 
+        cycle_start = time.perf_counter()
+        symbol_time = ohlcv_time = analyze_time = 0.0
+
         total_pairs = 0
         signals_generated = 0
         trades_executed = 0
@@ -292,16 +313,27 @@ async def main() -> None:
                 )
                 last_rotation = time.time()
 
-        best = None
-        best_score = -1.0
+        allowed_results: list[dict] = []
         df_current = None
 
+        t0 = time.perf_counter()
+        symbols = await get_filtered_symbols(exchange, config)
+        symbol_time = time.perf_counter() - t0
+        start_filter = time.perf_counter()
         symbols = await get_filtered_symbols(exchange, config)
         global symbol_priority_queue
         if not symbol_priority_queue:
             symbol_priority_queue = build_priority_queue(
                 [(s, i) for i, s in enumerate(symbols)]
             )
+        ticker_fetch_time = time.perf_counter() - start_filter
+        total_available = len(config.get("symbols") or [config.get("symbol")])
+        symbol_filter_ratio = (
+            len(symbols) / total_available if total_available else 1.0
+        )
+        global SYMBOL_EVAL_QUEUE
+        if not SYMBOL_EVAL_QUEUE:
+            SYMBOL_EVAL_QUEUE.extend(symbols)
         batch_size = config.get("symbol_batch_size", 10)
         if len(symbol_priority_queue) < batch_size:
             symbol_priority_queue.extend(
@@ -312,6 +344,8 @@ async def main() -> None:
             for _ in range(min(batch_size, len(symbol_priority_queue)))
         ]
 
+        t0 = time.perf_counter()
+        start_ohlcv = time.perf_counter()
         df_cache = await update_multi_tf_ohlcv_cache(
             exchange,
             df_cache,
@@ -334,8 +368,11 @@ async def main() -> None:
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
         )
+        ohlcv_time = time.perf_counter() - t0
+        ohlcv_fetch_latency = time.perf_counter() - start_ohlcv
 
         tasks = []
+        analyze_start = time.perf_counter()
         for sym in current_batch:
             logger.info("🔹 Symbol: %s", sym)
             total_pairs += 1
@@ -367,6 +404,7 @@ async def main() -> None:
         ]
         if scalpers:
             scalp_tf = config.get("scalp_timeframe", "1m")
+            t_sc = time.perf_counter()
             df_cache[scalp_tf] = await update_ohlcv_cache(
                 exchange,
                 df_cache.get(scalp_tf, {}),
@@ -378,6 +416,7 @@ async def main() -> None:
                 config=config,
                 max_concurrent=config.get("max_concurrent_ohlcv"),
             )
+            ohlcv_time += time.perf_counter() - t_sc
             tasks = [
                 analyze_symbol(
                     sym,
@@ -396,6 +435,8 @@ async def main() -> None:
             results = [mapping.get(r["symbol"], r) for r in results]
             if config.get("symbol") in mapping:
                 df_current = df_cache.get(config["timeframe"], {}).get(config["symbol"])
+
+        analyze_time = time.perf_counter() - analyze_start
 
         for res in results:
             sym = res["symbol"]
@@ -459,17 +500,37 @@ async def main() -> None:
                     regime_rejections += 1
                 continue
 
-            if direction_sym != "none" and score_sym > best_score:
-                best_score = score_sym
-                best = {
-                    "symbol": sym,
-                    "df": df_sym,
-                    "regime": regime_sym,
-                    "env": env_sym,
-                    "name": name_sym,
-                    "direction": direction_sym,
-                    "score": score_sym,
-                }
+            min_score = config.get("min_confidence_score", config.get("signal_threshold", 0.3))
+            if direction_sym != "none" and score_sym >= min_score:
+                allowed_results.append(
+                    {
+                        "symbol": sym,
+                        "df": df_sym,
+                        "regime": regime_sym,
+                        "env": env_sym,
+                        "name": name_sym,
+                        "direction": direction_sym,
+                        "score": score_sym,
+                    }
+                )
+
+        allowed_results.sort(key=lambda x: x["score"], reverse=True)
+        top_n = config.get("top_n_symbols", 3)
+        allowed_results = allowed_results[:top_n]
+        corr_matrix = compute_correlation_matrix({r["symbol"]: r["df"] for r in allowed_results})
+        filtered_results: list[dict] = []
+        for r in allowed_results:
+            keep = True
+            for kept in filtered_results:
+                if not corr_matrix.empty:
+                    corr = corr_matrix.at[r["symbol"], kept["symbol"]]
+                    if abs(corr) > 0.95:
+                        keep = False
+                        break
+            if keep:
+                filtered_results.append(r)
+
+        best = filtered_results[0] if filtered_results else None
 
         if open_side and df_current is None:
             # ensure current market data is loaded
@@ -646,27 +707,19 @@ async def main() -> None:
                     )
                     risk_manager.update_stop_order(position_size)
 
-        if score < config["signal_threshold"] or direction == "none":
-            sym_to_log = best["symbol"] if best else config["symbol"]
-            logger.info(
-                "Skipping trade for %s \u2013 score %.2f below threshold %.2f or direction none",
-                sym_to_log,
-                score,
-                config["signal_threshold"],
-            )
-            logger.info("No trade executed")
-            rejected_score += 1
-            logger.info(
-                "Loop Summary: %s evaluated | %s trades | %s volume fails | %s score fails | %s unknown regime",
-                total_pairs,
-                trades_executed,
-                rejected_volume,
-                rejected_score,
-                rejected_regime,
-            )
-            if direction == "none":
-                regime_rejections += 1
-            else:
+        for candidate in filtered_results:
+            score = candidate["score"]
+            direction = candidate["direction"]
+            trade_side = direction_to_side(direction)
+            env = candidate["env"]
+            regime = candidate["regime"]
+            name = candidate["name"]
+            current_price = candidate["df"]["close"].iloc[-1]
+            risk_manager.config.symbol = candidate["symbol"]
+            df_for_size = candidate["df"]
+
+            if score < config["signal_threshold"]:
+                rejected_score += 1
                 score_rejections += 1
             logger.info(
                 "Cycle Summary: %s pairs evaluated, %s signals, %s trades executed, %s rejected volume, %s rejected score, %s rejected regime.",
@@ -677,70 +730,34 @@ async def main() -> None:
                 score_rejections,
                 regime_rejections,
             )
+            if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
+                metrics = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "ticker_fetch_time": ticker_fetch_time,
+                    "symbol_filter_ratio": symbol_filter_ratio,
+                    "ohlcv_fetch_latency": ohlcv_fetch_latency,
+                    "unknown_regimes": rejected_regime,
+                }
+                log_metrics_to_csv(
+                    metrics,
+                    config.get("metrics_output_file", "crypto_bot/logs/metrics.csv"),
+                )
             logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
-
-        if config["execution_mode"] != "dry_run":
-            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-                bal = await exchange.fetch_balance()
-            else:
-                bal = await asyncio.to_thread(exchange.fetch_balance)
-            balance = bal["USDT"]["free"]
-        else:
-            balance = paper_wallet.balance if paper_wallet else 0.0
-
-        if open_side and current_price is not None:
-            pnl = (current_price - entry_price) * position_size
-            if open_side == "sell":
-                pnl = -pnl
-            if paper_wallet:
-                log_bal = paper_wallet.balance + pnl
-            else:
-                log_bal = balance + pnl
-            log_position(
-                config.get("symbol", ""),
-                open_side,
-                position_size,
-                entry_price,
-                current_price,
-                log_bal,
-            )
-        if best:
-            risk_manager.config.symbol = best["symbol"]
-        df_for_size = best["df"] if best else None
-        size = risk_manager.position_size(score, balance, df_for_size)
-        if current_price and current_price > 0:
-            order_amount = size / current_price
-        else:
-            order_amount = 0.0
-        if open_side and trade_side == open_side:
-            higher_tf = CONFIG.get("higher_timeframe", "4h")
-            try:
-                data_high = await fetch_ohlcv_async(
-                    exchange,
-                    config["symbol"],
-                    timeframe=higher_tf,
-                    limit=100,
-                    use_websocket=config.get("use_websocket", False),
-                    force_websocket_history=config.get("force_websocket_history", False),
-                )
-            except Exception:
-                data_high = []
-            if isinstance(data_high, Exception) or not data_high:
-                logger.info("Skipping scale-in due to missing higher timeframe data")
-                await asyncio.sleep(config["loop_interval_minutes"] * 60)
                 continue
-            if len(data_high[0]) > 6:
-                data_high = [[c[0], c[1], c[2], c[3], c[4], c[6]] for c in data_high]
-            df_high = pd.DataFrame(
-                data_high,
-                columns=["timestamp", "open", "high", "low", "close", "volume"],
-            )
-            low_df = df_for_size if df_for_size is not None else df_current
-            if not confirm_multi_tf_trend(low_df, df_high):
-                logger.info("Scale-in blocked: trend not confirmed across timeframes")
-                await asyncio.sleep(config["loop_interval_minutes"] * 60)
+
+            if config["execution_mode"] != "dry_run":
+                bal = await (exchange.fetch_balance() if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)) else asyncio.to_thread(exchange.fetch_balance))
+                balance = bal["USDT"]["free"]
+            else:
+                balance = paper_wallet.balance if paper_wallet else 0.0
+
+            size = risk_manager.position_size(score, balance, df_for_size)
+            order_amount = size / current_price if current_price > 0 else 0.0
+
+            if not risk_manager.can_allocate(name, size, balance):
+                logger.info("Capital cap reached for %s, skipping", name)
                 continue
         if not risk_manager.can_allocate(name, size, balance):
             logger.info("Capital cap reached for %s, skipping", name)
@@ -761,63 +778,26 @@ async def main() -> None:
                 score_rejections,
                 regime_rejections,
             )
+            if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
+                metrics = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "ticker_fetch_time": ticker_fetch_time,
+                    "symbol_filter_ratio": symbol_filter_ratio,
+                    "ohlcv_fetch_latency": ohlcv_fetch_latency,
+                    "unknown_regimes": rejected_regime,
+                }
+                log_metrics_to_csv(
+                    metrics,
+                    config.get("metrics_output_file", "crypto_bot/logs/metrics.csv"),
+                )
             logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
             continue
 
-        if env == "onchain":
-            logger.info(
-                "Executing %s entry %s %.4f at %.4f",
-                name,
-                direction,
-                order_amount,
-                current_price,
-            )
-            swap_result = await execute_swap(
-                "SOL",
-                "USDC",
-                order_amount,
-                notifier=notifier,
-                slippage_bps=config.get("solana_slippage_bps", 50),
-                dry_run=config["execution_mode"] == "dry_run",
-            )
-            if swap_result:
-                logger.info(
-                    "On-chain swap tx=%s in=%s out=%s amount=%s dry_run=%s",
-                    swap_result.get("tx_hash"),
-                    swap_result.get("token_in"),
-                    swap_result.get("token_out"),
-                    swap_result.get("amount"),
-                    config["execution_mode"] == "dry_run",
-                )
-            risk_manager.register_stop_order(
-                {
-                    "token_in": "SOL",
-                    "token_out": "USDC",
-                    "amount": order_amount,
-                    "dry_run": config["execution_mode"] == "dry_run",
-                },
-                strategy=strategy_name(regime, env),
-                symbol="SOL/USDC",
-                entry_price=current_price,
-                confidence=score,
-                direction=trade_side,
-            )
-            if paper_wallet:
-                paper_wallet.open(trade_side, order_amount, current_price)
-        else:
-            logger.info(
-                "Executing %s entry %s %.4f at %.4f",
-                name,
-                direction,
-                order_amount,
-                current_price,
-            )
-            config["symbol"] = best["symbol"] if best else config["symbol"]
             order = await cex_trade_async(
                 exchange,
                 ws_client,
-                config["symbol"],
+                candidate["symbol"],
                 trade_side,
                 order_amount,
                 notifier,
@@ -825,23 +805,12 @@ async def main() -> None:
                 use_websocket=config.get("use_websocket", False),
                 config=config,
             )
-            if order:
-                logger.info(
-                    "CEX trade result - id=%s side=%s amount=%s price=%s dry_run=%s",
-                    order.get("id"),
-                    order.get("side"),
-                    order.get("amount"),
-                    order.get("price") or order.get("average"),
-                    order.get("dry_run", config["execution_mode"] == "dry_run"),
-                )
             stop_price = current_price * (
-                1 - risk_manager.config.stop_loss_pct
-                if trade_side == "buy"
-                else 1 + risk_manager.config.stop_loss_pct
+                1 - risk_manager.config.stop_loss_pct if trade_side == "buy" else 1 + risk_manager.config.stop_loss_pct
             )
             stop_order = place_stop_order(
                 exchange,
-                config["symbol"],
+                candidate["symbol"],
                 "sell" if trade_side == "buy" else "buy",
                 order_amount,
                 stop_price,
@@ -851,14 +820,12 @@ async def main() -> None:
             risk_manager.register_stop_order(
                 stop_order,
                 strategy=strategy_name(regime, env),
-                symbol=config["symbol"],
+                symbol=candidate["symbol"],
                 entry_price=current_price,
                 confidence=score,
                 direction=trade_side,
             )
             risk_manager.allocate_capital(name, size)
-            if paper_wallet:
-                paper_wallet.open(trade_side, order_amount, current_price)
             open_side = trade_side
             entry_price = current_price
             position_size = order_amount
@@ -870,27 +837,17 @@ async def main() -> None:
             highest_price = entry_price
             current_strategy = name
             active_strategy = name
-            log_bal = (
-                paper_wallet.balance if config["execution_mode"] == "dry_run" else balance
-            )
-            log_position(
-                config.get("symbol", ""),
-                open_side,
-                position_size,
-                entry_price,
-                current_price,
-                log_bal,
-            )
             if notifier and trade_updates:
                 report_entry(
                     notifier,
-                    config.get("symbol", ""),
+                    candidate["symbol"],
                     strategy_name(regime, env),
                     score,
                     direction,
                 )
             logger.info("Trade opened at %.4f", entry_price)
             trades_executed += 1
+            break
 
         key = f"{env}_{regime}"
         stats.setdefault(key, {"trades": 0})
@@ -916,6 +873,20 @@ async def main() -> None:
             score_rejections,
             regime_rejections,
         )
+        total_time = time.perf_counter() - cycle_start
+        _emit_timing(symbol_time, ohlcv_time, analyze_time, total_time, metrics_path)
+        if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
+            metrics = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "ticker_fetch_time": ticker_fetch_time,
+                "symbol_filter_ratio": symbol_filter_ratio,
+                "ohlcv_fetch_latency": ohlcv_fetch_latency,
+                "unknown_regimes": rejected_regime,
+            }
+            log_metrics_to_csv(
+                metrics,
+                config.get("metrics_output_file", "crypto_bot/logs/metrics.csv"),
+            )
         logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
         await asyncio.sleep(config["loop_interval_minutes"] * 60)
 

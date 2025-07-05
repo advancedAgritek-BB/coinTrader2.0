@@ -155,3 +155,11 @@ voting_strategies:
 - momentum
 - mean_reversion
 wallet_address: your_wallet
+  - trend
+  - momentum
+  - mean_reversion
+min_agreeing_votes: 2
+
+metrics_enabled: true
+metrics_backend: "csv"       # or "prometheus"
+metrics_output_file: "crypto_bot/logs/metrics.csv"
