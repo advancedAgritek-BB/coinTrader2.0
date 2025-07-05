@@ -123,7 +123,6 @@ async def filter_symbols(
     max_spread = sf.get("max_spread_pct", 1.0)
     pct = sf.get("change_pct_percentile", 80)
     min_age = cfg.get("min_symbol_age_days", 0)
-    min_score = cfg.get("min_symbol_score", 0.4)
 
     pairs = [s.replace("/", "") for s in symbols]
     data = (await _fetch_ticker_async(pairs)).get("result", {})
@@ -144,6 +143,7 @@ async def filter_symbols(
                 id_map[k] = v if isinstance(v, str) else k
 
     metrics: List[tuple[str, float, float, float]] = []
+    allowed: List[tuple[str, float]] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)
         if not symbol:
