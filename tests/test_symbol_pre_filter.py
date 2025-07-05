@@ -2,7 +2,7 @@ import asyncio
 import json
 from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_history
 
-CONFIG = {"symbol_filter": {"min_volume_usd": 50000}}
+CONFIG = {"symbol_filter": {"min_volume_usd": 50000, "max_spread_pct": 2.0}}
 
 class DummyExchange:
     markets_by_id = {
@@ -200,3 +200,28 @@ def test_filter_symbols_min_age_allows(monkeypatch):
     ex = HistoryExchange(48)
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], cfg))
     assert symbols == ["ETH/USD"]
+
+
+async def fake_fetch_wide_spread(_):
+    return {
+        "result": {
+            "XETHZUSD": {
+                "a": ["102", "1", "1"],
+                "b": ["98", "1", "1"],
+                "c": ["100", "0.5"],
+                "v": ["800", "800"],
+                "p": ["100", "100"],
+                "o": "98",
+            }
+        }
+    }
+
+
+def test_filter_symbols_spread(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async",
+        fake_fetch_wide_spread,
+    )
+    cfg = {"symbol_filter": {"min_volume_usd": 50000, "max_spread_pct": 1.0}}
+    symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD"], cfg))
+    assert symbols == []

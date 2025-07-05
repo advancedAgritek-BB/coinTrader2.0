@@ -220,6 +220,7 @@ excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 10          # skip pairs with less history
 symbol_batch_size: 10            # symbols processed per cycle
+max_spread_pct: 1.0              # skip pairs with wider spreads
 ```
 
 `exchange_market_types` filters the discovered pairs by market class. The bot
