@@ -35,7 +35,7 @@ def _precompute_regimes(df: pd.DataFrame) -> List[str]:
     # If ``classify_regime`` was monkeypatched (e.g. in tests), fall back to
     # repeatedly calling it to preserve expected behaviour.
     if classify_regime.__module__ != "crypto_bot.regime.regime_classifier":
-        return [classify_regime(df.iloc[: i + 1]) for i in range(len(df))]
+        return [classify_regime(df.iloc[: i + 1])[0] for i in range(len(df))]
 
     cfg = CONFIG
     work = df.copy()
@@ -273,7 +273,7 @@ def walk_forward_optimize(
     while start + window * 2 <= len(df):
         train = df.iloc[start : start + window]
         test = df.iloc[start + window : start + window * 2]
-        regime = classify_regime(train)
+        regime, _ = classify_regime(train)
         best_sl = stop_loss_range[0]
         best_tp = take_profit_range[0]
         best_sharpe = -np.inf

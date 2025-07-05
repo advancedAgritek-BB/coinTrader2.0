@@ -2,7 +2,10 @@ import pandas as pd
 import numpy as np
 import asyncio
 
-from crypto_bot.regime.regime_classifier import classify_regime, classify_regime_async
+from crypto_bot.regime.regime_classifier import (
+    classify_regime,
+    classify_regime_async,
+)
 from crypto_bot.utils.market_analyzer import analyze_symbol
 from crypto_bot.strategy_router import strategy_for
 import crypto_bot.strategy_router as strategy_router
@@ -19,7 +22,8 @@ def test_classify_regime_returns_unknown_for_short_df():
         "volume": [100] * 10,
     }
     df = pd.DataFrame(data)
-    assert classify_regime(df) == "unknown"
+    regime, patterns = classify_regime(df)
+    assert regime == "unknown"
 
 
 def test_classify_regime_returns_unknown_for_14_rows():
@@ -31,7 +35,7 @@ def test_classify_regime_returns_unknown_for_14_rows():
         "volume": [100] * 14,
     }
     df = pd.DataFrame(data)
-    assert classify_regime(df) == "unknown"
+    assert classify_regime(df)[0] == "unknown"
 
 
 def test_classify_regime_returns_unknown_between_15_and_19_rows():
@@ -44,7 +48,7 @@ def test_classify_regime_returns_unknown_between_15_and_19_rows():
             "volume": [100] * rows,
         }
         df = pd.DataFrame(data)
-        assert classify_regime(df) == "unknown"
+        assert classify_regime(df)[0] == "unknown"
 def test_classify_regime_handles_index_error(monkeypatch):
     data = {
         "open": list(range(30)),
@@ -62,7 +66,7 @@ def test_classify_regime_handles_index_error(monkeypatch):
         __import__("ta").trend, "adx", raise_index
     )
 
-    assert classify_regime(df) == "unknown"
+    assert classify_regime(df)[0] == "unknown"
 
 
 def test_classify_regime_uses_custom_thresholds(tmp_path):
@@ -80,7 +84,7 @@ def test_classify_regime_uses_custom_thresholds(tmp_path):
     })
 
     # With default config this should be trending
-    assert classify_regime(df) == "trending"
+    assert classify_regime(df)[0] == "trending"
 
     custom_cfg = tmp_path / "regime.yaml"
     custom_cfg.write_text(
@@ -103,7 +107,7 @@ ma_window: 20
     )
 
     # ADX threshold is too high so regime should no longer be trending
-    assert classify_regime(df, config_path=str(custom_cfg)) != "trending"
+    assert classify_regime(df, config_path=str(custom_cfg))[0] != "trending"
 
 
 def _make_trending_df(rows: int = 50) -> pd.DataFrame:
@@ -146,10 +150,8 @@ confirm_trend_with_higher_tf: true
 """
     )
 
-    assert (
-        classify_regime(df_low, df_high, config_path=str(cfg))
-        == "trending"
-    )
+    regime, _ = classify_regime(df_low, df_high, config_path=str(cfg))
+    assert regime == "trending"
 
 
 def test_trend_not_confirmed_when_higher_timeframe_disagrees(tmp_path):
@@ -186,10 +188,8 @@ confirm_trend_with_higher_tf: true
 """
     )
 
-    assert (
-        classify_regime(df_low, df_high, config_path=str(cfg))
-        != "trending"
-    )
+    regime, _ = classify_regime(df_low, df_high, config_path=str(cfg))
+    assert regime != "trending"
 
 
 def test_classify_regime_async_matches_sync():
@@ -205,7 +205,7 @@ def test_classify_regime_async_matches_sync():
 
 def test_analyze_symbol_async_consistent():
     df = _make_trending_df()
-    regime = classify_regime(df)
+    regime, _ = classify_regime(df)
     strategy = strategy_for(regime)
     sync_score, sync_dir = asyncio.run(evaluate_async(strategy, df, {}))
 
@@ -214,6 +214,7 @@ def test_analyze_symbol_async_consistent():
 
     res = asyncio.run(run())
     assert res["regime"] == regime
+    assert isinstance(res.get("patterns"), set)
     assert res["score"] == sync_score
     assert res["direction"] == sync_dir
 
@@ -228,7 +229,11 @@ def test_analyze_symbol_best_mode(monkeypatch):
         return 0.7, "short"
 
     monkeypatch.setattr(strategy_router, "get_strategies_for_regime", lambda r: [strat_a, strat_b])
-    monkeypatch.setattr(sc, "evaluate_strategies", lambda strats, df_, cfg_: {"score": 0.7, "direction": "short", "name": "strat_b"})
+    eval_stub = lambda strats, df_, cfg_: {"score": 0.7, "direction": "short", "name": "strat_b"}
+    monkeypatch.setattr(sc, "evaluate_strategies", eval_stub)
+    monkeypatch.setattr(strategy_router, "evaluate_strategies", eval_stub, raising=False)
+    import crypto_bot.utils.market_analyzer as ma
+    monkeypatch.setattr(ma, "evaluate_strategies", eval_stub)
 
     async def run():
         cfg = {"timeframe": "1h", "strategy_evaluation_mode": "best", "scoring_weights": {"strategy_score": 1.0}}

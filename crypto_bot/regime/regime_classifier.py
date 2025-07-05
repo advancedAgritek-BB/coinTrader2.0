@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional
 import asyncio
+from .pattern_detector import detect_patterns
 
 import pandas as pd
 import numpy as np
@@ -122,7 +123,7 @@ def classify_regime(
     higher_df: Optional[pd.DataFrame] = None,
     *,
     config_path: Optional[str] = None,
-) -> str:
+) -> tuple[str, set[str]]:
     """Classify market regime.
 
     Parameters
@@ -136,7 +137,12 @@ def classify_regime(
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
 
-    return _classify_core(df, cfg, higher_df)
+    regime = _classify_core(df, cfg, higher_df)
+    patterns = detect_patterns(df)
+    if "breakout" in patterns:
+        regime = "breakout"
+
+    return regime, patterns
 
 
 async def classify_regime_async(
@@ -144,7 +150,7 @@ async def classify_regime_async(
     higher_df: Optional[pd.DataFrame] = None,
     *,
     config_path: Optional[str] = None,
-) -> str:
+) -> tuple[str, set[str]]:
     """Asynchronous wrapper around :func:`classify_regime`."""
     return await asyncio.to_thread(
         classify_regime, df, higher_df, config_path=config_path

@@ -36,7 +36,7 @@ async def analyze_symbol(
     base_tf = config.get("timeframe", "1h")
     df = df_map.get(base_tf)
     higher_df = df_map.get("1d")
-    regime = await classify_regime_async(df, higher_df)
+    regime, patterns = await classify_regime_async(df, higher_df)
 
     period = int(config.get("regime_return_period", 5))
     future_return = 0.0
@@ -49,6 +49,7 @@ async def analyze_symbol(
         "symbol": symbol,
         "df": df,
         "regime": regime,
+        "patterns": patterns,
         "future_return": future_return,
     }
 

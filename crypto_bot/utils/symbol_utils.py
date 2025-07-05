@@ -1,8 +1,8 @@
 import asyncio
+import asyncio
 import time
 
 from .logger import setup_logger
-from .symbol_pre_filter import filter_symbols
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
@@ -27,6 +27,8 @@ async def get_filtered_symbols(exchange, config) -> list:
         and now - _last_refresh < refresh_m * 60
     ):
         return _cached_symbols
+
+    from .symbol_pre_filter import filter_symbols
 
     symbols = config.get("symbols", [config.get("symbol")])
     if asyncio.iscoroutinefunction(filter_symbols):
