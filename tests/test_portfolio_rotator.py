@@ -24,7 +24,7 @@ def test_score_assets_returns_scores():
     }
     ex = DummyExchange(data)
     rotator = PortfolioRotator()
-    scores = rotator.score_assets(ex, ["BTC", "ETH"], 5, "momentum")
+    scores = asyncio.run(rotator.score_assets(ex, ["BTC", "ETH"], 5, "momentum"))
     assert set(scores.keys()) == {"BTC", "ETH"}
     assert scores["BTC"] > scores["ETH"]
 
@@ -41,7 +41,11 @@ def test_rotate_calls_converter(monkeypatch):
         return {}
 
     monkeypatch.setattr("crypto_bot.portfolio_rotator.auto_convert_funds", fake_convert)
-    monkeypatch.setattr(rotator, "score_assets", lambda *a, **k: {"BTC": 0.5, "ETH": 0.1})
+
+    async def fake_score_assets(*_a, **_k):
+        return {"BTC": 0.5, "ETH": 0.1}
+
+    monkeypatch.setattr(rotator, "score_assets", fake_score_assets)
 
     holdings = {"ETH": 10}
     new_holdings = asyncio.run(
@@ -59,11 +63,10 @@ def test_rotate_logs_scores(tmp_path, monkeypatch):
     rotator = PortfolioRotator()
     score_file = tmp_path / "scores.json"
     monkeypatch.setattr("crypto_bot.portfolio_rotator.SCORE_FILE", score_file)
-    monkeypatch.setattr(
-        rotator,
-        "score_assets",
-        lambda *a, **k: {"BTC": 0.5, "ETH": 0.1},
-    )
+    async def fake_score_assets(*_a, **_k):
+        return {"BTC": 0.5, "ETH": 0.1}
+
+    monkeypatch.setattr(rotator, "score_assets", fake_score_assets)
     monkeypatch.setattr(
         "crypto_bot.portfolio_rotator.auto_convert_funds", lambda *a, **k: {}
     )
@@ -88,7 +91,7 @@ def test_score_assets_skips_invalid_ohlcv(caplog):
     rotator = PortfolioRotator()
 
     with caplog.at_level("ERROR"):
-        scores = rotator.score_assets(ex, ["BTC", "BAD"], 3, "momentum")
+        scores = asyncio.run(rotator.score_assets(ex, ["BTC", "BAD"], 3, "momentum"))
 
     assert set(scores.keys()) == {"BTC"}
     assert any("OHLCV fetch failed for BAD" in r.message for r in caplog.records)
@@ -118,7 +121,7 @@ def test_rotate_translates_assets_to_pairs(monkeypatch):
     rotator = PortfolioRotator()
     captured = {}
 
-    def fake_score_assets(ex, symbols, lookback, method):
+    async def fake_score_assets(ex, symbols, lookback, method):
         captured["symbols"] = list(symbols)
         return {}
 
@@ -147,7 +150,7 @@ def test_score_assets_handles_invalid_data(caplog):
     rotator = PortfolioRotator()
     caplog.set_level(logging.ERROR)
 
-    scores = rotator.score_assets(BadExchange(), ["BTC"], 5, "momentum")
+    scores = asyncio.run(rotator.score_assets(BadExchange(), ["BTC"], 5, "momentum"))
 
     assert scores == {}
     assert any("Invalid OHLCV" in r.getMessage() for r in caplog.records)
