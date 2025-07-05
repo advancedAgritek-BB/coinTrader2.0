@@ -712,6 +712,9 @@ async def main() -> None:
                     )
                     risk_manager.update_stop_order(position_size)
 
+        if not filtered_results:
+            continue
+
         for candidate in filtered_results:
             score = candidate["score"]
             direction = candidate["direction"]
