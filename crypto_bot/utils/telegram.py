@@ -62,3 +62,13 @@ class TelegramNotifier:
         token = section.get("token", "")
         chat_id = section.get("chat_id", "")
         return cls(enabled, token, chat_id)
+def send_test_message(token: str, chat_id: str, text: str = "Test message") -> bool:
+    """Send a short test message to verify Telegram configuration.
+
+    Returns ``True`` if the message was sent successfully, otherwise ``False``.
+    """
+
+    if not token or not chat_id:
+        return False
+    err = send_message(token, chat_id, text)
+    return err is None
