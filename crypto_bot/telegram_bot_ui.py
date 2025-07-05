@@ -256,6 +256,29 @@ class TelegramBotUI:
         ]
         text = "Available commands:\n" + "\n".join(cmds)
         if update.message:
+            cmds = [
+                "/start",
+                "/stop",
+                "/status",
+                "/log",
+                "/rotate_now",
+                "/toggle_mode",
+                "/signals",
+                "/balance",
+                "/trades",
+            ]
+            await update.message.reply_text(
+                "Available commands:\n" + "\n".join(cmds)
+            )
+            return
+        elif update.callback_query:
+            await update.callback_query.answer()
+            try:
+                await update.callback_query.message.edit_text(
+                    "Menu", reply_markup=markup
+                )
+            except TypeError:
+                await update.callback_query.message.edit_text("Menu")
             try:
                 await update.message.reply_text(text, reply_markup=markup)
             except TypeError:
@@ -288,6 +311,8 @@ class TelegramBotUI:
         )
         if query:
             await query.message.edit_text(text, reply_markup=markup)
+        else:
+            await update.message.reply_text(text)
         elif message:
             try:
                 await message.reply_text(text, reply_markup=markup)
@@ -327,6 +352,8 @@ class TelegramBotUI:
         )
         if query:
             await query.message.edit_text(text, reply_markup=markup)
+        else:
+            await update.message.reply_text(text)
         elif message:
             try:
                 await message.reply_text(text, reply_markup=markup)
@@ -373,6 +400,8 @@ class TelegramBotUI:
         )
         if query:
             await query.message.edit_text(text, reply_markup=markup)
+        else:
+            await update.message.reply_text(text)
         elif message:
             try:
                 await message.reply_text(text, reply_markup=markup)
