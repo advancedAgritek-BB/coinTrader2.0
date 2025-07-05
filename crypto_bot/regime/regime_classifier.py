@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 import asyncio
 from .pattern_detector import detect_patterns
 
@@ -18,6 +18,30 @@ def _load_config(path: Path) -> dict:
 
 
 CONFIG = _load_config(CONFIG_PATH)
+
+
+def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
+    """Return regime label and confidence using ML prediction.
+
+    This is a lightweight heuristic mapping of the signal model probability to a
+    market regime. If the ML model is unavailable or fails, ``("unknown", 0.0)``
+    is returned.
+    """
+    try:
+        from crypto_bot.ml_signal_model import predict_signal
+        prob = float(predict_signal(df))
+    except Exception:
+        return "unknown", 0.0
+
+    if prob > 0.55:
+        label = "trending"
+    elif prob < 0.45:
+        label = "mean-reverting"
+    else:
+        label = "sideways"
+
+    confidence = abs(prob - 0.5) * 2
+    return label, confidence
 
 
 def _classify_core(
@@ -123,7 +147,7 @@ def classify_regime(
     higher_df: Optional[pd.DataFrame] = None,
     *,
     config_path: Optional[str] = None,
-) -> tuple[str, set[str]]:
+) -> Tuple[str, object]:
     """Classify market regime.
 
     Parameters
@@ -133,6 +157,14 @@ def classify_regime(
     config_path : Optional[str], default None
         Optional path to override the default configuration. Primarily used for
         testing.
+
+    Returns
+    -------
+    Tuple[str, object]
+        When sufficient history is available the function returns ``(label,
+        patterns)`` where ``patterns`` is a ``set`` of detected formations. If
+        insufficient history triggers the ML fallback the return value is
+        ``(label, confidence)`` where ``confidence`` is a float between 0 and 1.
     """
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
@@ -142,6 +174,10 @@ def classify_regime(
     if "breakout" in patterns:
         regime = "breakout"
 
+    if regime == "unknown":
+        label, confidence = _ml_fallback(df)
+        return label, confidence
+
     return regime, patterns
 
 
@@ -150,7 +186,7 @@ async def classify_regime_async(
     higher_df: Optional[pd.DataFrame] = None,
     *,
     config_path: Optional[str] = None,
-) -> tuple[str, set[str]]:
+) -> Tuple[str, object]:
     """Asynchronous wrapper around :func:`classify_regime`."""
     return await asyncio.to_thread(
         classify_regime, df, higher_df, config_path=config_path

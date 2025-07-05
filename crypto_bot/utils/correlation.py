@@ -36,6 +36,19 @@ def compute_pairwise_correlation(df_cache: dict[str, pd.DataFrame]) -> dict[tupl
 
 
 def compute_correlation_matrix(df_cache: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Return correlation matrix of closing prices for each symbol."""
+
+    closes: dict[str, pd.Series] = {}
+    for sym, df in df_cache.items():
+        if df is None or df.empty or "close" not in df.columns:
+            continue
+        closes[sym] = df["close"].reset_index(drop=True)
+
+    if not closes:
+        return pd.DataFrame()
+
+    combined = pd.DataFrame(closes)
+    return combined.corr(method="pearson")
     """Return a symmetric correlation matrix for the given OHLCV cache.
 
     Parameters
