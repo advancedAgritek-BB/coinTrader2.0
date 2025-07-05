@@ -15,3 +15,4 @@ bb_window: 20
 ma_window: 20
 higher_timeframe: '4h'
 confirm_trend_with_higher_tf: false
+use_ml_regime_classifier: false

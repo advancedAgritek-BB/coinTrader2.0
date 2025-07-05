@@ -170,6 +170,15 @@ def classify_regime(
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
 
     regime = _classify_core(df, cfg, higher_df)
+
+    if regime == "unknown" and cfg.get("use_ml_regime_classifier", False):
+        try:  # pragma: no cover - safety net
+            from .ml_regime_model import predict_regime
+
+            regime = predict_regime(df)
+        except Exception:
+            pass
+
     patterns = detect_patterns(df)
     if "breakout" in patterns:
         regime = "breakout"

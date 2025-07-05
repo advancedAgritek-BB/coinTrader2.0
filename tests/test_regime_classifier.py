@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import asyncio
+import pytest
 
 from crypto_bot.regime.regime_classifier import (
     classify_regime,
@@ -123,6 +124,26 @@ def _make_trending_df(rows: int = 50) -> pd.DataFrame:
         "close": close,
         "volume": volume,
     })
+
+
+def _make_sideways_df(rows: int = 50) -> pd.DataFrame:
+    const = np.ones(rows)
+    return pd.DataFrame({
+        "open": const,
+        "high": const + 0.1,
+        "low": const - 0.1,
+        "close": const,
+        "volume": np.arange(rows) + 100,
+    })
+
+
+def _make_breakout_df(rows: int = 30) -> pd.DataFrame:
+    df = _make_trending_df(rows)
+    df.loc[df.index[-1], "close"] = df["high"].max() + 0.5
+    df.loc[df.index[-1], "high"] = df.loc[df.index[-1], "close"] + 0.1
+    df.loc[df.index[-1], "low"] = df.loc[df.index[-1], "close"] - 0.1
+    df.loc[df.index[-1], "volume"] = df["volume"].mean() * 2
+    return df
 
 
 def test_trend_confirmed_by_higher_timeframe(tmp_path):
@@ -329,3 +350,67 @@ def test_voting_no_consensus(monkeypatch):
 
     res = asyncio.run(run())
     assert res["direction"] == "none"
+
+
+def test_regime_voting_disagreement_unknown():
+    df_trend = _make_trending_df()
+    df_side = _make_sideways_df()
+    df_break = _make_breakout_df()
+
+    async def run():
+        cfg = {
+            "timeframe": "1h",
+            "regime_timeframes": ["5m", "15m", "1h"],
+            "min_consistent_agreement": 2,
+        }
+        df_map = {"5m": df_trend, "15m": df_side, "1h": df_break}
+        return await analyze_symbol("AAA", df_map, "cex", cfg, None)
+
+    res = asyncio.run(run())
+    assert res["regime"] == "unknown"
+    assert res["confidence"] == pytest.approx(1 / 3)
+
+
+def test_breakout_pattern_sets_regime():
+    df = _make_breakout_df()
+    regime, patterns = classify_regime(df)
+    assert regime == "breakout"
+    assert "breakout" in patterns
+
+
+def test_ml_fallback_used_when_unknown(monkeypatch, tmp_path):
+    data = {"open": list(range(10)), "high": list(range(10)), "low": list(range(10)), "close": list(range(10)), "volume": [100] * 10}
+    df = pd.DataFrame(data)
+
+    assert classify_regime(df)[0] == "unknown"
+
+    monkeypatch.setattr(
+        "crypto_bot.regime.ml_regime_model.predict_regime", lambda _df: "trending"
+    )
+
+    cfg = tmp_path / "regime.yaml"
+    cfg.write_text(
+        """\
+adx_trending_min: 25
+adx_sideways_max: 20
+bb_width_sideways_max: 5
+bb_width_breakout_max: 4
+breakout_volume_mult: 2
+rsi_mean_rev_min: 30
+rsi_mean_rev_max: 70
+ema_distance_mean_rev_max: 0.01
+atr_volatility_mult: 1.5
+ema_fast: 20
+ema_slow: 50
+indicator_window: 14
+bb_window: 20
+ma_window: 20
+higher_timeframe: '4h'
+confirm_trend_with_higher_tf: false
+use_ml_regime_classifier: true
+"""
+    )
+
+    regime, patterns = classify_regime(df, config_path=str(cfg))
+    assert regime == "trending"
+    assert patterns == set()
