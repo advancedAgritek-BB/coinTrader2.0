@@ -70,6 +70,52 @@ def _parse_metrics(ticker: dict) -> tuple[float, float, float]:
     return volume_usd, change_pct, spread
 
 
+def _timeframe_seconds(exchange, timeframe: str) -> int:
+    """Return timeframe duration in seconds."""
+    if hasattr(exchange, "parse_timeframe"):
+        try:
+            return exchange.parse_timeframe(timeframe)
+        except Exception:
+            pass
+    unit = timeframe[-1]
+    value = int(timeframe[:-1])
+    if unit == "m":
+        return value * 60
+    if unit == "h":
+        return value * 3600
+    if unit == "d":
+        return value * 86400
+    if unit == "w":
+        return value * 604800
+    if unit == "M":
+        return value * 2592000
+    raise ValueError(f"Unknown timeframe {timeframe}")
+
+
+async def has_enough_history(
+    exchange, symbol: str, min_days: int, timeframe: str = "1h"
+) -> bool:
+    """Return True if ``symbol`` has at least ``min_days`` of OHLCV history."""
+
+    seconds = _timeframe_seconds(exchange, timeframe)
+    candles_needed = int((min_days * 86400) / seconds) + 1
+
+    try:
+        data = await fetch_ohlcv_async(
+            exchange, symbol, timeframe=timeframe, limit=candles_needed
+        )
+    except Exception as exc:  # pragma: no cover - network
+        logger.warning("fetch_ohlcv failed for %s: %s", symbol, exc)
+        return False
+
+    if not data or len(data) < 2:
+        return False
+
+    first_ts = data[0][0]
+    last_ts = data[-1][0]
+    return last_ts - first_ts >= min_days * 86400 - seconds
+
+
 async def filter_symbols(
     exchange, symbols: Iterable[str], config: dict | None = None
 ) -> List[str]:
@@ -86,10 +132,12 @@ async def filter_symbols(
         ``min_volume_usd`` setting.
     """
     min_volume = DEFAULT_MIN_VOLUME_USD
+    min_age = 0
     if config:
         min_volume = config.get("symbol_filter", {}).get(
             "min_volume_usd", DEFAULT_MIN_VOLUME_USD
         )
+        min_age = config.get("min_symbol_age_days", 0)
     pairs = [s.replace("/", "") for s in symbols]
     data = (await _fetch_ticker_async(pairs)).get("result", {})
     id_map = {}
@@ -130,3 +178,13 @@ async def filter_symbols(
             allowed.append((symbol, vol_usd))
     allowed.sort(key=lambda x: x[1], reverse=True)
     return [sym for sym, _ in allowed]
+
+    allowed.sort(key=lambda x: x[1], reverse=True)
+    return [sym for sym, _ in allowed]
+            if min_age > 0:
+                enough = await has_enough_history(exchange, symbol, min_age)
+                if not enough:
+                    logger.info("Skipping %s due to insufficient history", symbol)
+                    continue
+            allowed.append(symbol)
+    return allowed

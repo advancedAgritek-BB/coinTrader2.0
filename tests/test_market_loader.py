@@ -36,6 +36,19 @@ def test_load_kraken_symbols_market_type_filter():
     ex.exchange_market_types = {"margin", "futures"}
     symbols = asyncio.run(load_kraken_symbols(ex))
     assert set(symbols) == {"ETH/USD", "XBT/USD-PERP"}
+class DummyTypeExchange:
+    def load_markets(self):
+        return {
+            "BTC/USD": {"active": True, "type": "spot"},
+            "ETH/USD": {"active": True, "type": "future"},
+        }
+
+
+def test_market_type_filter():
+    ex = DummyTypeExchange()
+    config = {"exchange_market_types": ["future"]}
+    symbols = asyncio.run(load_kraken_symbols(ex, config=config))
+    assert symbols == ["ETH/USD"]
 
 
 class DummyAsyncExchange:

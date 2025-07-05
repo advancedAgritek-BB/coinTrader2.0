@@ -143,3 +143,60 @@ def test_has_enough_history_false(monkeypatch):
         mock_fetch_history_short,
     )
     assert not asyncio.run(has_enough_history(None, "BTC/USD", days=10))
+def test_filter_symbols_sorted_by_volume(monkeypatch):
+    async def fake_fetch_sorted(_):
+        return {
+            "result": {
+                "XETHZUSD": {
+                    "a": ["101", "1", "1"],
+                    "b": ["100", "1", "1"],
+                    "c": ["101", "0.5"],
+                    "v": ["600", "600"],
+                    "p": ["100", "100"],
+                    "o": "99",
+                },
+                "XXBTZUSD": {
+                    "a": ["51", "1", "1"],
+                    "b": ["50", "1", "1"],
+                    "c": ["51", "1"],
+                    "v": ["800", "800"],
+                    "p": ["100", "100"],
+                    "o": "49",
+                },
+            }
+        }
+
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch_sorted
+    )
+
+    symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG))
+
+    assert symbols == ["BTC/USD", "ETH/USD"]
+class HistoryExchange:
+    def __init__(self, candles: int):
+        self.markets_by_id = {"XETHZUSD": {"symbol": "ETH/USD"}}
+        self.candles = candles
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        return [[i * 3600, 0, 0, 0, 0, 0] for i in range(min(self.candles, limit))]
+
+
+def test_filter_symbols_min_age_skips(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
+    cfg = {**CONFIG, "min_symbol_age_days": 2}
+    ex = HistoryExchange(24)
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], cfg))
+    assert symbols == []
+
+
+def test_filter_symbols_min_age_allows(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
+    cfg = {**CONFIG, "min_symbol_age_days": 2}
+    ex = HistoryExchange(48)
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], cfg))
+    assert symbols == ["ETH/USD"]

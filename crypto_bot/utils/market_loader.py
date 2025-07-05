@@ -4,9 +4,63 @@ import inspect
 import pandas as pd
 
 
+def is_symbol_type(pair_info: dict, allowed: List[str]) -> bool:
+    """Return ``True`` if ``pair_info`` matches one of the ``allowed`` types.
+
+    The heuristic checks common CCXT fields like ``type`` and boolean flags
+    (``spot``, ``future``, ``swap``) along with nested ``info`` metadata.  If no
+    explicit type can be determined, a pair is treated as ``spot`` by default.
+    """
+
+    allowed_set = {t.lower() for t in allowed}
+
+    market_type = str(pair_info.get("type", "")).lower()
+    if market_type:
+        return market_type in allowed_set
+
+    for key in ("spot", "future", "swap", "option"):
+        if pair_info.get(key) and key in allowed_set:
+            return True
+
+    info = pair_info.get("info", {}) or {}
+    asset_class = str(info.get("assetClass", "")).lower()
+    if asset_class:
+        if asset_class in allowed_set:
+            return True
+        if asset_class in ("perpetual", "swap") and "swap" in allowed_set:
+            return True
+        if asset_class in ("future", "futures") and "future" in allowed_set:
+            return True
+
+    contract_type = str(info.get("contractType", "")).lower()
+    if contract_type:
+        if contract_type in allowed_set:
+            return True
+        if "perp" in contract_type and "swap" in allowed_set:
+            return True
+
+    # default to spot if no derivative hints are present
+    if "spot" in allowed_set:
+        derivative_keys = (
+            "future",
+            "swap",
+            "option",
+            "expiry",
+            "contract",
+            "settlement",
+        )
+        if not any(k in pair_info for k in derivative_keys) and not any(
+            k in info for k in derivative_keys
+        ):
+            return True
+
+    return False
+
+
 async def load_kraken_symbols(
     exchange,
     exclude: Iterable[str] | None = None,
+    config: Dict | None = None,
 ) -> List[str]:
     """Return a list of active trading pairs on Kraken.
 
@@ -20,6 +74,9 @@ async def load_kraken_symbols(
 
     exclude_set = set(exclude or [])
     allowed_types = set(getattr(exchange, "exchange_market_types", []))
+    allowed_types = ["spot"]
+    if config is not None:
+        allowed_types = config.get("exchange_market_types", ["spot"])
 
     if asyncio.iscoroutinefunction(getattr(exchange, "load_markets", None)):
         markets = await exchange.load_markets()
@@ -29,6 +86,8 @@ async def load_kraken_symbols(
     symbols: List[str] = []
     for symbol, data in markets.items():
         if not data.get("active", True):
+            continue
+        if not is_symbol_type(data, allowed_types):
             continue
         if symbol in exclude_set:
             continue
