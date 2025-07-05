@@ -94,6 +94,7 @@ symbol: BTC/USDT
 symbol_batch_size: 10
 symbol_filter:
   min_volume_usd: 50000
+  change_pct_percentile: 80
 symbol_refresh_minutes: 30
 symbols: []
 tax_tracking:

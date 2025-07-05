@@ -4,6 +4,8 @@ import asyncio
 import time
 from typing import Iterable, List
 
+import numpy as np
+
 import aiohttp
 
 from .logger import setup_logger
@@ -27,6 +29,7 @@ async def has_enough_history(
     first_ts = data[0][0] / 1000
     last_ts = data[-1][0] / 1000
     return (last_ts - first_ts) / 86400 + 1 >= days
+
 
 
 async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
@@ -92,7 +95,7 @@ def _timeframe_seconds(exchange, timeframe: str) -> int:
     raise ValueError(f"Unknown timeframe {timeframe}")
 
 
-async def has_enough_history(
+async def _has_enough_history(
     exchange, symbol: str, min_days: int, timeframe: str = "1h"
 ) -> bool:
     """Return True if ``symbol`` has at least ``min_days`` of OHLCV history."""
@@ -133,10 +136,11 @@ async def filter_symbols(
     """
     min_volume = DEFAULT_MIN_VOLUME_USD
     min_age = 0
+    pct = 80
     if config:
-        min_volume = config.get("symbol_filter", {}).get(
-            "min_volume_usd", DEFAULT_MIN_VOLUME_USD
-        )
+        sf = config.get("symbol_filter", {})
+        min_volume = sf.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
+        pct = sf.get("change_pct_percentile", 80)
         min_age = config.get("min_symbol_age_days", 0)
     pairs = [s.replace("/", "") for s in symbols]
     data = (await _fetch_ticker_async(pairs)).get("result", {})
@@ -155,7 +159,7 @@ async def filter_symbols(
                 id_map[k] = v[0].get("symbol", k)
             else:
                 id_map[k] = k
-    allowed: List[tuple[str, float]] = []
+    metrics: List[tuple[str, float, float, float]] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)
         if not symbol:
@@ -174,17 +178,22 @@ async def filter_symbols(
             change_pct,
             spread,
         )
-        if vol_usd > min_volume and abs(change_pct) > 1:
-            allowed.append((symbol, vol_usd))
-    allowed.sort(key=lambda x: x[1], reverse=True)
-    return [sym for sym, _ in allowed]
+        metrics.append((symbol, vol_usd, change_pct, spread))
 
-    allowed.sort(key=lambda x: x[1], reverse=True)
-    return [sym for sym, _ in allowed]
+    if not metrics:
+        return []
+
+    threshold = np.percentile([abs(c[2]) for c in metrics], pct)
+
+    allowed: List[tuple[str, float]] = []
+    for symbol, vol_usd, change_pct, _ in metrics:
+        if vol_usd > min_volume and abs(change_pct) >= threshold:
             if min_age > 0:
-                enough = await has_enough_history(exchange, symbol, min_age)
+                enough = await _has_enough_history(exchange, symbol, min_age)
                 if not enough:
                     logger.info("Skipping %s due to insufficient history", symbol)
                     continue
-            allowed.append(symbol)
-    return allowed
+            allowed.append((symbol, vol_usd))
+
+    allowed.sort(key=lambda x: x[1], reverse=True)
+    return [sym for sym, _ in allowed]
