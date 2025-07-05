@@ -300,7 +300,10 @@ async def main() -> None:
                 time.time() - last_rotation
                 >= rotator.config.get("interval_days", 7) * 86400
             ):
-                bal = await asyncio.to_thread(exchange.fetch_balance)
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                    bal = await exchange.fetch_balance()
+                else:
+                    bal = await asyncio.to_thread(exchange.fetch_balance)
                 holdings = {
                     k: (v.get("total") if isinstance(v, dict) else v)
                     for k, v in bal.items()
