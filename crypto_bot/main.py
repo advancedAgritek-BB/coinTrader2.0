@@ -66,6 +66,9 @@ ENV_PATH = Path(__file__).resolve().parent / ".env"
 
 logger = setup_logger("bot", "crypto_bot/logs/bot.log", to_console=False)
 
+# Queue of symbols awaiting evaluation across loops
+SYMBOL_EVAL_QUEUE: list[str] = []
+
 
 def direction_to_side(direction: str) -> str:
     """Translate strategy direction to trade side."""
@@ -287,10 +290,19 @@ async def main() -> None:
         df_current = None
 
         symbols = await get_filtered_symbols(exchange, config)
+        global SYMBOL_EVAL_QUEUE
+        if not SYMBOL_EVAL_QUEUE:
+            SYMBOL_EVAL_QUEUE.extend(symbols)
+        batch_size = config.get("symbol_batch_size", 10)
+        current_batch = SYMBOL_EVAL_QUEUE[:batch_size]
+        SYMBOL_EVAL_QUEUE = SYMBOL_EVAL_QUEUE[batch_size:]
+        if not SYMBOL_EVAL_QUEUE:
+            SYMBOL_EVAL_QUEUE.extend(symbols)
+
         df_cache = await update_ohlcv_cache(
             exchange,
             df_cache,
-            symbols,
+            current_batch,
             timeframe=config["timeframe"],
             limit=100,
             use_websocket=config.get("use_websocket", False),
@@ -299,7 +311,7 @@ async def main() -> None:
         )
 
         tasks = []
-        for sym in symbols:
+        for sym in current_batch:
             logger.info("🔹 Symbol: %s", sym)
             total_pairs += 1
             df_sym = df_cache.get(sym)
