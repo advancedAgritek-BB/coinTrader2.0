@@ -18,7 +18,7 @@ from telegram.ext import (
 
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.utils.logger import setup_logger
-from crypto_bot.utils.telegram import send_message
+from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot import log_reader
 
 
@@ -27,16 +27,16 @@ class TelegramBotUI:
 
     def __init__(
         self,
-        token: str,
-        chat_id: str,
+        notifier: TelegramNotifier,
         state: Dict[str, object],
         log_file: Path | str,
         rotator: PortfolioRotator | None = None,
         exchange: object | None = None,
         wallet: str | None = None,
     ) -> None:
-        self.token = token
-        self.chat_id = chat_id
+        self.notifier = notifier
+        self.token = notifier.token
+        self.chat_id = notifier.chat_id
         self.state = state
         self.log_file = Path(log_file)
         self.rotator = rotator
@@ -44,7 +44,7 @@ class TelegramBotUI:
         self.wallet = wallet
         self.logger = setup_logger(__name__, "crypto_bot/logs/telegram_ui.log")
 
-        self.app = ApplicationBuilder().token(token).build()
+        self.app = ApplicationBuilder().token(self.token).build()
         self.app.add_handler(CommandHandler("start", self.start_cmd))
         self.app.add_handler(CommandHandler("stop", self.stop_cmd))
         self.app.add_handler(CommandHandler("status", self.status_cmd))
@@ -135,7 +135,7 @@ class TelegramBotUI:
             f"Win rate: {stats['win_rate']*100:.1f}%\n"
             f"Active positions: {stats['active_positions']}"
         )
-        err = send_message(self.token, self.chat_id, msg)
+        err = self.notifier.notify(msg)
         if err:
             self.logger.error("Failed to send summary: %s", err)
 

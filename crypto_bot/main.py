@@ -9,7 +9,7 @@ import pandas as pd
 import yaml
 from dotenv import dotenv_values
 
-from crypto_bot.utils.telegram import send_message
+from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.trade_reporter import report_entry, report_exit
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.portfolio_rotator import PortfolioRotator
@@ -89,6 +89,8 @@ async def main() -> None:
 
     logger.info("Starting bot")
     config = load_config()
+    notifier = TelegramNotifier.from_config(config.get("telegram", {}))
+    notifier.notify("🤖 CoinTrader2.0 started")
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
     cooldown_configure(config.get("min_cooldown", 0))
     secrets = dotenv_values(ENV_PATH)
@@ -120,11 +122,7 @@ async def main() -> None:
         log_balance(float(init_bal))
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)
-        err = send_message(
-            user.get("telegram_token"),
-            user.get("telegram_chat_id", ""),
-            f"API error: {exc}",
-        )
+        err = notifier.notify(f"API error: {exc}")
         if err:
             logger.error("Failed to notify user: %s", err)
         return
@@ -184,12 +182,11 @@ async def main() -> None:
     df_cache: dict[str, pd.DataFrame] = {}
 
     telegram_bot = None
-    if user.get("telegram_token") and user.get("telegram_chat_id"):
+    if notifier.enabled:
         from crypto_bot.telegram_bot_ui import TelegramBotUI
 
         telegram_bot = TelegramBotUI(
-            user["telegram_token"],
-            user["telegram_chat_id"],
+            notifier,
             state,
             "crypto_bot/logs/bot.log",
             rotator,
@@ -244,8 +241,7 @@ async def main() -> None:
                 amount,
                 dry_run=config["execution_mode"] == "dry_run",
                 slippage_bps=config.get("solana_slippage_bps", 50),
-                telegram_token=user.get("telegram_token", ""),
-                chat_id=user.get("telegram_chat_id", ""),
+                notifier=notifier,
             )
 
         if rotator.config.get("enabled"):
@@ -262,8 +258,7 @@ async def main() -> None:
                     exchange,
                     user.get("wallet_address", ""),
                     holdings,
-                    user.get("telegram_token", ""),
-                    user.get("telegram_chat_id", ""),
+                    notifier,
                 )
                 last_rotation = time.time()
 
@@ -498,8 +493,7 @@ async def main() -> None:
                     config["symbol"],
                     opposite_side(open_side),
                     sell_amount,
-                    user["telegram_token"],
-                    user["telegram_chat_id"],
+                    notifier,
                     dry_run=config["execution_mode"] == "dry_run",
                     use_websocket=config.get("use_websocket", False),
                     config=config,
@@ -553,10 +547,9 @@ async def main() -> None:
                     else:
                         latest_balance = paper_wallet.balance if paper_wallet else 0.0
                     log_balance(float(latest_balance))
-                    if user.get("telegram_token") and user.get("telegram_chat_id"):
+                    if notifier.enabled:
                         report_exit(
-                            user["telegram_token"],
-                            user["telegram_chat_id"],
+                            notifier,
                             config.get("symbol", ""),
                             entry_strategy or "",
                             realized_pnl,
@@ -713,8 +706,7 @@ async def main() -> None:
                 "SOL",
                 "USDC",
                 order_amount,
-                user["telegram_token"],
-                user["telegram_chat_id"],
+                notifier,
                 slippage_bps=config.get("solana_slippage_bps", 50),
                 dry_run=config["execution_mode"] == "dry_run",
             )
@@ -757,8 +749,7 @@ async def main() -> None:
                 config["symbol"],
                 trade_side,
                 order_amount,
-                user["telegram_token"],
-                user["telegram_chat_id"],
+                notifier,
                 dry_run=config["execution_mode"] == "dry_run",
                 use_websocket=config.get("use_websocket", False),
                 config=config,
@@ -783,8 +774,7 @@ async def main() -> None:
                 "sell" if trade_side == "buy" else "buy",
                 order_amount,
                 stop_price,
-                user["telegram_token"],
-                user["telegram_chat_id"],
+                notifier,
                 dry_run=config["execution_mode"] == "dry_run",
             )
             risk_manager.register_stop_order(
@@ -820,10 +810,9 @@ async def main() -> None:
                 current_price,
                 log_bal,
             )
-            if user.get("telegram_token") and user.get("telegram_chat_id"):
+            if notifier.enabled:
                 report_entry(
-                    user["telegram_token"],
-                    user["telegram_chat_id"],
+                    notifier,
                     config.get("symbol", ""),
                     strategy_name(regime, env),
                     score,

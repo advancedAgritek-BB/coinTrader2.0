@@ -49,8 +49,8 @@ def test_rotate_calls_converter(monkeypatch):
 
     assert called["args"][1] == "ETH"
     assert called["args"][2] == "BTC"
-    assert called["kwargs"].get("telegram_token", "") == ""
-    assert called["kwargs"].get("chat_id", "") == ""
+    assert "notifier" in called["kwargs"]
+    assert called["kwargs"]["notifier"] is None
     assert new_holdings["BTC"] == 10
 
 

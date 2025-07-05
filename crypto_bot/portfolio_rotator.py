@@ -11,6 +11,7 @@ import yaml
 
 from crypto_bot.fund_manager import auto_convert_funds
 from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.telegram import TelegramNotifier
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
@@ -63,8 +64,7 @@ class PortfolioRotator:
         exchange,
         wallet: str,
         current_holdings: Dict[str, float],
-        telegram_token: str = "",
-        chat_id: str = "",
+        notifier: TelegramNotifier | None = None,
     ) -> Dict[str, float]:
         """Rebalance holdings toward the highest scored assets."""
 
@@ -108,8 +108,7 @@ class PortfolioRotator:
                 target,
                 amount,
                 dry_run=True,
-                telegram_token=telegram_token,
-                chat_id=chat_id,
+                notifier=notifier,
             )
             new_alloc.pop(token)
             new_alloc[target] = new_alloc.get(target, 0) + amount

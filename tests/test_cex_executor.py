@@ -2,6 +2,7 @@ import ccxt
 import asyncio
 from crypto_bot.execution.cex_executor import place_stop_order
 from crypto_bot.utils import trade_logger
+from crypto_bot.utils.telegram import TelegramNotifier
 
 
 class DummyExchange:
@@ -23,6 +24,7 @@ def test_place_stop_order_dry_run(monkeypatch):
         called["flag"] = is_stop
 
     monkeypatch.setattr("crypto_bot.execution.cex_executor.log_trade", fake_log)
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
 
     order = place_stop_order(
         DummyExchange(),
@@ -30,8 +32,7 @@ def test_place_stop_order_dry_run(monkeypatch):
         "sell",
         1,
         9000,
-        "token",
-        "chat",
+        TelegramNotifier("t", "c"),
         dry_run=True,
     )
     assert order["dry_run"] is True
@@ -75,18 +76,18 @@ class DummyWS:
 
 
 def test_execute_trade_rest_path(monkeypatch):
-    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     ex = DummyExchange()
     order = cex_executor.execute_trade(
-        ex, None, "BTC/USDT", "buy", 1.0, "t", "c", dry_run=False
+        ex, None, "BTC/USDT", "buy", 1.0, TelegramNotifier("t", "c"), dry_run=False
     )
     assert order == {"exchange": True}
     assert ex.called
 
 
 def test_execute_trade_ws_path(monkeypatch):
-    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     ws = DummyWS()
     order = cex_executor.execute_trade(
@@ -95,8 +96,7 @@ def test_execute_trade_ws_path(monkeypatch):
         "BTC/USDT",
         "buy",
         1.0,
-        "t",
-        "c",
+        TelegramNotifier("t", "c"),
         dry_run=False,
         use_websocket=True,
     )
@@ -109,7 +109,7 @@ def test_execute_trade_ws_path(monkeypatch):
 
 
 def test_execute_trade_ws_missing(monkeypatch):
-    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     with pytest.raises(ValueError):
         cex_executor.execute_trade(
@@ -118,8 +118,7 @@ def test_execute_trade_ws_missing(monkeypatch):
             "BTC/USDT",
             "buy",
             1.0,
-            "t",
-            "c",
+            TelegramNotifier("t", "c"),
             dry_run=False,
             use_websocket=True,
         )
@@ -181,7 +180,7 @@ class SlippageExchange:
 
 
 def test_execute_trade_skips_on_slippage(monkeypatch):
-    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     order = cex_executor.execute_trade(
         SlippageExchange(),
@@ -189,8 +188,7 @@ def test_execute_trade_skips_on_slippage(monkeypatch):
         "BTC/USDT",
         "buy",
         1.0,
-        "t",
-        "c",
+        TelegramNotifier("t", "c"),
         dry_run=False,
         config={"max_slippage_pct": 0.05},
     )
@@ -236,9 +234,9 @@ def test_execute_trade_dry_run_logs_price(tmp_path, monkeypatch):
         def fetch_ticker(self, symbol):
             return {"last": 123}
 
-    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
 
-    cex_executor.execute_trade(DummyEx(), None, "BTC/USDT", "buy", 1.0, "t", "c", dry_run=True)
+    cex_executor.execute_trade(DummyEx(), None, "BTC/USDT", "buy", 1.0, TelegramNotifier("t", "c"), dry_run=True)
 
     row = trades.read_text().strip()
     assert row
@@ -262,11 +260,11 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
         async def fetch_ticker(self, symbol):
             return {"last": 321}
 
-    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
 
     asyncio.run(
         cex_executor.execute_trade_async(
-            DummyEx(), None, "BTC/USDT", "buy", 1.0, "t", "c", dry_run=True
+            DummyEx(), None, "BTC/USDT", "buy", 1.0, TelegramNotifier("t", "c"), dry_run=True
         )
     )
 
