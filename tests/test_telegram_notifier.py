@@ -1,4 +1,4 @@
-from crypto_bot.utils.telegram_notifier import TelegramNotifier
+from crypto_bot.utils.telegram_notifier import TelegramNotifier as TNNotifier
 
 
 def test_notify_uses_send_message(monkeypatch):
@@ -12,7 +12,7 @@ def test_notify_uses_send_message(monkeypatch):
 
     monkeypatch.setattr('crypto_bot.utils.telegram_notifier.send_message', fake_send)
 
-    notifier = TelegramNotifier('t', 'c')
+    notifier = TNNotifier('t', 'c')
     err = notifier.notify('msg')
 
     assert err == 'err'

@@ -95,12 +95,12 @@ def test_execute_trade_rest_path(monkeypatch):
     ex = DummyExchange()
     notifier = DummyNotifier()
     order = cex_executor.execute_trade(
-        ex, None, "BTC/USDT", "buy", 1.0, TelegramNotifier("t", "c"), dry_run=False
         ex,
         None,
         "BTC/USDT",
         "buy",
         1.0,
+        TelegramNotifier("t", "c"),
         notifier=notifier,
         dry_run=False,
     )
@@ -311,6 +311,8 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
     asyncio.run(
         cex_executor.execute_trade_async(
             DummyEx(), None, "BTC/USDT", "buy", 1.0, TelegramNotifier("t", "c"), dry_run=True
+        )
+    )
     monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     notifier = DummyNotifier()
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)

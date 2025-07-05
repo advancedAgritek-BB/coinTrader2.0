@@ -55,6 +55,10 @@ class TelegramNotifier:
     token: str = ""
     chat_id: str = ""
     enabled: bool = True
+    def __init__(self, token: str = "", chat_id: str = "", enabled: bool = True) -> None:
+        self.enabled = enabled
+        self.token = token
+        self.chat_id = chat_id
 
     def notify(self, text: str) -> Optional[str]:
         """Send ``text`` if notifications are enabled and credentials exist."""
