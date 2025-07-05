@@ -96,6 +96,8 @@ async def main() -> None:
 
     user = load_or_create()
 
+    trade_updates = config.get("telegram", {}).get("trade_updates", True)
+
     tg_cfg = {**config.get("telegram", {})}
     if user.get("telegram_token"):
         tg_cfg["token"] = user["telegram_token"]
