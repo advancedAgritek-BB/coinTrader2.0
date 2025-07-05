@@ -48,6 +48,17 @@ def get_strategies_for_regime(regime: str) -> list[Callable[[pd.DataFrame], Tupl
     return REGIME_STRATEGIES.get(regime, [grid_bot.generate_signal])
 
 
+def get_strategy_by_name(name: str) -> Callable[[pd.DataFrame], Tuple[float, str]] | None:
+    """Return strategy callable for ``name`` if available."""
+    from . import meta_selector
+    from .rl import strategy_selector as rl_selector
+
+    mapping: Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]] = {}
+    mapping.update(getattr(meta_selector, "_STRATEGY_FN_MAP", {}))
+    mapping.update(getattr(rl_selector, "_STRATEGY_FN_MAP", {}))
+    return mapping.get(name)
+
+
 def strategy_name(regime: str, mode: str) -> str:
     """Return the name of the strategy for given regime and mode."""
     if mode == "cex":

@@ -6,6 +6,7 @@ from crypto_bot.strategy_router import (
     route,
     strategy_name,
     get_strategies_for_regime,
+    get_strategy_by_name,
 )
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.signals.signal_scoring import evaluate_async, evaluate_strategies
@@ -47,7 +48,7 @@ async def analyze_symbol(
         if tf_df is None:
             continue
         higher_df = df_map.get("1d") if tf != "1d" else None
-        r = await classify_regime_async(tf_df, higher_df)
+        r, _ = await classify_regime_async(tf_df, higher_df)
         regime_counts[r] = regime_counts.get(r, 0) + 1
 
     if regime_counts:
@@ -106,5 +107,29 @@ async def analyze_symbol(
             "score": final,
             "direction": direction,
         })
+
+        votes = []
+        voting = config.get("voting_strategies", [])
+        if isinstance(voting, list):
+            for strat_name in voting:
+                fn = get_strategy_by_name(strat_name)
+                if fn is None:
+                    continue
+                try:
+                    _, dir_vote = await evaluate_async(fn, df, cfg)
+                except Exception:  # pragma: no cover - safety
+                    continue
+                votes.append(dir_vote)
+
+        if votes:
+            counts = {}
+            for d in votes:
+                counts[d] = counts.get(d, 0) + 1
+            best_dir, n = max(counts.items(), key=lambda kv: kv[1])
+            min_votes = int(config.get("min_agreeing_votes", 1))
+            if n >= min_votes:
+                result["direction"] = best_dir
+            else:
+                result["direction"] = "none"
     return result
 
