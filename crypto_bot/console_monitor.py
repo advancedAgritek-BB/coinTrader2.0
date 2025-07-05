@@ -22,6 +22,7 @@ async def monitor_loop(
     log_path = Path(log_file)
     last_line = ""
     prev_lines = 0
+    prev_output = ""
     fh = None
     offset = 0
     while True:
@@ -62,10 +63,12 @@ async def monitor_loop(
                 for _ in range(prev_lines - 1):
                     print("\033[F\033[2K", end="")
             print(output, end="\r", flush=True)
+            prev_lines = output.count("\n") + 1
+            prev_output = output
         else:
-            print(output)
-
-        prev_lines = output.count("\n") + 1
+            if output != prev_output:
+                print(output)
+                prev_output = output
 """Simple console monitor for displaying trades."""
 
 from pathlib import Path
