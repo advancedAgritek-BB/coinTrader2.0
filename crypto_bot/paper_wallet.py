@@ -9,6 +9,8 @@ class PaperWallet:
         self.realized_pnl = 0.0
 
     def open(self, side: str, amount: float, price: float) -> None:
+        if self.position_size:
+            raise RuntimeError("Position already open")
         if side == "buy":
             cost = amount * price
             if cost > self.balance:
