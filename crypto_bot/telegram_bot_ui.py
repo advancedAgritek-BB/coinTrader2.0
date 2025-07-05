@@ -3,23 +3,34 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
+import json
 from pathlib import Path
 from typing import Dict
 
 
 import schedule
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     ContextTypes,
+    CallbackQueryHandler,
 )
 
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot import log_reader
+from crypto_bot.utils.open_trades import get_open_trades
+
+MENU = "MENU"
+SIGNALS = "SIGNALS"
+BALANCE = "BALANCE"
+TRADES = "TRADES"
+
+ASSET_SCORES_FILE = Path("crypto_bot/logs/asset_scores.json")
+TRADES_FILE = Path("crypto_bot/logs/trades.csv")
 
 
 class TelegramBotUI:
@@ -51,6 +62,17 @@ class TelegramBotUI:
         self.app.add_handler(CommandHandler("log", self.log_cmd))
         self.app.add_handler(CommandHandler("rotate_now", self.rotate_now_cmd))
         self.app.add_handler(CommandHandler("toggle_mode", self.toggle_mode_cmd))
+        self.app.add_handler(CommandHandler("menu", self.menu_cmd))
+        self.app.add_handler(CallbackQueryHandler(self.menu_cmd, pattern=f"^{MENU}$"))
+        self.app.add_handler(
+            CallbackQueryHandler(self.show_signals, pattern=f"^{SIGNALS}$")
+        )
+        self.app.add_handler(
+            CallbackQueryHandler(self.show_balance, pattern=f"^{BALANCE}$")
+        )
+        self.app.add_handler(
+            CallbackQueryHandler(self.show_trades, pattern=f"^{TRADES}$")
+        )
 
         self.scheduler_thread: threading.Thread | None = None
 
@@ -85,15 +107,21 @@ class TelegramBotUI:
             self.scheduler_thread.join(timeout=2)
 
     # Command handlers -------------------------------------------------
-    async def start_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def start_cmd(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         self.state["running"] = True
         await update.message.reply_text("Trading started")
 
-    async def stop_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def stop_cmd(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         self.state["running"] = False
         await update.message.reply_text("Trading stopped")
 
-    async def status_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def status_cmd(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         running = self.state.get("running", False)
         mode = self.state.get("mode")
         await update.message.reply_text(f"Running: {running}, mode: {mode}")
@@ -106,7 +134,9 @@ class TelegramBotUI:
             text = "Log file not found"
         await update.message.reply_text(text)
 
-    async def rotate_now_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def rotate_now_cmd(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         if not (self.rotator and self.exchange and self.wallet):
             await update.message.reply_text("Rotation not configured")
             return
@@ -139,8 +169,113 @@ class TelegramBotUI:
         if err:
             self.logger.error("Failed to send summary: %s", err)
 
-    async def toggle_mode_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def toggle_mode_cmd(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         mode = self.state.get("mode")
         mode = "onchain" if mode == "cex" else "cex"
         self.state["mode"] = mode
         await update.message.reply_text(f"Mode set to {mode}")
+
+    async def menu_cmd(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        markup = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("Signals", callback_data=SIGNALS)],
+                [InlineKeyboardButton("Wallet Balance", callback_data=BALANCE)],
+                [InlineKeyboardButton("Open Trades", callback_data=TRADES)],
+            ]
+        )
+        if update.message:
+            await update.message.reply_text("Menu", reply_markup=markup)
+        elif update.callback_query:
+            await update.callback_query.answer()
+            await update.callback_query.message.edit_text("Menu", reply_markup=markup)
+
+    async def show_signals(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        query = update.callback_query
+        if query:
+            await query.answer()
+        if ASSET_SCORES_FILE.exists():
+            try:
+                data = json.loads(ASSET_SCORES_FILE.read_text())
+            except Exception:
+                data = {}
+        else:
+            data = {}
+        if data:
+            lines = [f"{s} {v:+.4f}" for s, v in data.items()]
+            text = "\n".join(lines)
+        else:
+            text = "No signals"
+        markup = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("Back", callback_data=MENU)]]
+        )
+        await query.message.edit_text(text, reply_markup=markup)
+
+    async def show_balance(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        query = update.callback_query
+        if query:
+            await query.answer()
+        text: str
+        if not self.exchange:
+            text = "Exchange not configured"
+        else:
+            try:
+                bal = self.exchange.fetch_balance()
+                usdt = bal.get("USDT")
+                amount = float(
+                    usdt.get("free", usdt) if isinstance(usdt, dict) else usdt or 0.0
+                )
+                text = f"Free USDT: {amount:.2f}"
+            except Exception as exc:  # pragma: no cover - network
+                self.logger.error("Balance fetch failed: %s", exc)
+                text = "Failed to fetch balance"
+        markup = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("Back", callback_data=MENU)]]
+        )
+        await query.message.edit_text(text, reply_markup=markup)
+
+    async def show_trades(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        query = update.callback_query
+        if query:
+            await query.answer()
+        trades = get_open_trades(TRADES_FILE)
+        if not trades:
+            text = "No open trades"
+        else:
+            symbols = {t["symbol"] for t in trades}
+            prices: dict[str, float] = {}
+            for sym in symbols:
+                try:
+                    if asyncio.iscoroutinefunction(
+                        getattr(self.exchange, "fetch_ticker", None)
+                    ):
+                        ticker = await self.exchange.fetch_ticker(sym)
+                    else:
+                        ticker = await asyncio.to_thread(
+                            self.exchange.fetch_ticker, sym
+                        )
+                    price = ticker.get("last") or ticker.get("close") or 0.0
+                    prices[sym] = float(price)
+                except Exception:
+                    prices[sym] = 0.0
+            lines = []
+            for t in trades:
+                sym = t.get("symbol")
+                entry = float(t.get("price", 0))
+                amt = float(t.get("amount", 0))
+                pnl = (prices.get(sym, 0.0) - entry) * amt
+                lines.append(f"{sym} {pnl:+.2f}")
+            text = "\n".join(lines)
+        markup = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("Back", callback_data=MENU)]]
+        )
+        await query.message.edit_text(text, reply_markup=markup)

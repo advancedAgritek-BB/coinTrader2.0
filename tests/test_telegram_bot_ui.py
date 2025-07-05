@@ -1,7 +1,13 @@
 import types
 import asyncio
-from crypto_bot.telegram_bot_ui import TelegramBotUI
+from crypto_bot.telegram_bot_ui import (
+    TelegramBotUI,
+    SIGNALS,
+    BALANCE,
+    TRADES,
+)
 from crypto_bot.utils.telegram import TelegramNotifier
+
 
 class DummyApplication:
     def __init__(self, *a, **k):
@@ -32,10 +38,25 @@ class DummyMessage:
     async def reply_text(self, text):
         self.text = text
 
+    async def edit_text(self, text, reply_markup=None):
+        self.text = text
+
 
 class DummyUpdate:
     def __init__(self):
         self.message = DummyMessage()
+
+
+class DummyCallbackUpdate:
+    def __init__(self, data=""):
+        async def answer():
+            return None
+
+        self.callback_query = types.SimpleNamespace(
+            data=data,
+            message=DummyMessage(),
+            answer=answer,
+        )
 
 
 class DummyContext:
@@ -45,6 +66,9 @@ class DummyContext:
 class DummyExchange:
     def fetch_balance(self):
         return {"BTC": {"total": 1}}
+
+    def fetch_ticker(self, symbol):
+        return {"last": 105}
 
 
 class DummyRotator:
@@ -73,9 +97,7 @@ def make_ui(tmp_path, state, rotator=None, exchange=None):
 
 
 def test_start_stop_toggle(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        "crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder
-    )
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
     state = {"running": False, "mode": "cex"}
     ui, _ = make_ui(tmp_path, state)
 
@@ -94,9 +116,7 @@ def test_start_stop_toggle(monkeypatch, tmp_path):
 
 
 def test_log_and_rotate(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        "crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder
-    )
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
     rotator = DummyRotator()
     exchange = DummyExchange()
     state = {"running": True, "mode": "cex"}
@@ -113,3 +133,37 @@ def test_log_and_rotate(monkeypatch, tmp_path):
     asyncio.run(ui.status_cmd(update, DummyContext()))
     assert "Running: True" in update.message.text
 
+
+def test_menu_callbacks(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "crypto_bot.telegram_bot_ui.ApplicationBuilder",
+        DummyBuilder,
+    )
+    asset_file = tmp_path / "scores.json"
+    asset_file.write_text('{"BTC/USDT": 0.5}')
+    trades_file = tmp_path / "trades.csv"
+    trades_file.write_text("BTC/USDT,buy,1,100,t1\n")
+
+    state = {"running": True, "mode": "cex"}
+    ui, _ = make_ui(tmp_path, state, exchange=DummyExchange())
+
+    monkeypatch.setattr(
+        "crypto_bot.telegram_bot_ui.ASSET_SCORES_FILE",
+        asset_file,
+    )
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.TRADES_FILE", trades_file)
+
+    update = DummyCallbackUpdate()
+    update.callback_query.data = SIGNALS
+    asyncio.run(ui.show_signals(update, DummyContext()))
+    assert "BTC/USDT" in update.callback_query.message.text
+
+    update = DummyCallbackUpdate()
+    update.callback_query.data = BALANCE
+    asyncio.run(ui.show_balance(update, DummyContext()))
+    assert "Free USDT" in update.callback_query.message.text
+
+    update = DummyCallbackUpdate()
+    update.callback_query.data = TRADES
+    asyncio.run(ui.show_trades(update, DummyContext()))
+    assert "+5.00" in update.callback_query.message.text
