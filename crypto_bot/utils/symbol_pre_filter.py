@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import time
 from typing import Iterable, List
 
 import aiohttp
@@ -12,6 +13,20 @@ logger = setup_logger(__name__, "crypto_bot/logs/symbol_filter.log")
 
 API_URL = "https://api.kraken.com/0/public"
 DEFAULT_MIN_VOLUME_USD = 50000
+
+
+async def has_enough_history(
+    exchange, symbol: str, days: int = 30, timeframe: str = "1d"
+) -> bool:
+    """Return ``True`` when ``symbol`` has at least ``days`` days of history."""
+    data = await fetch_ohlcv_async(
+        exchange, symbol, timeframe=timeframe, limit=days
+    )
+    if not data:
+        return False
+    first_ts = data[0][0] / 1000
+    last_ts = data[-1][0] / 1000
+    return (last_ts - first_ts) / 86400 + 1 >= days
 
 
 async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
@@ -161,6 +176,8 @@ async def filter_symbols(
         )
         if vol_usd > min_volume and abs(change_pct) > 1:
             allowed.append((symbol, vol_usd))
+    allowed.sort(key=lambda x: x[1], reverse=True)
+    return [sym for sym, _ in allowed]
 
     allowed.sort(key=lambda x: x[1], reverse=True)
     return [sym for sym, _ in allowed]
