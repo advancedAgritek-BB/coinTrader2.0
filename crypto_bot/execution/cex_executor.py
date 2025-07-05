@@ -165,6 +165,12 @@ def execute_trade(
                 break
             order = place(slice_amount)
             if order:
+                if dry_run:
+                    try:
+                        t = exchange.fetch_ticker(symbol)
+                        order["price"] = t.get("last") or t.get("bid") or t.get("ask") or 0.0
+                    except Exception:
+                        order["price"] = 0.0
                 log_trade(order)
                 if (config or {}).get("tax_tracking", {}).get("enabled"):
                     try:
@@ -200,6 +206,12 @@ def execute_trade(
     else:
         order = place(amount)
         if order:
+            if dry_run:
+                try:
+                    t = exchange.fetch_ticker(symbol)
+                    order["price"] = t.get("last") or t.get("bid") or t.get("ask") or 0.0
+                except Exception:
+                    order["price"] = 0.0
             log_trade(order)
             if (config or {}).get("tax_tracking", {}).get("enabled"):
                 try:
@@ -286,6 +298,15 @@ async def execute_trade_async(
         amount,
         oid,
     )
+    if dry_run:
+        try:
+            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
+                t = await exchange.fetch_ticker(symbol)
+            else:
+                t = await asyncio.to_thread(exchange.fetch_ticker, symbol)
+            order["price"] = t.get("last") or t.get("bid") or t.get("ask") or 0.0
+        except Exception:
+            order["price"] = 0.0
     log_trade(order)
     logger.info(
         "Order executed - id=%s side=%s amount=%s price=%s dry_run=%s",

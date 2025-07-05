@@ -1,5 +1,7 @@
 import ccxt
+import asyncio
 from crypto_bot.execution.cex_executor import place_stop_order
+from crypto_bot.utils import trade_logger
 
 
 class DummyExchange:
@@ -215,3 +217,59 @@ def test_ws_client_refreshes_expired_token(monkeypatch):
 
     ws.connect_private()
     assert refreshed.get("called") is True
+
+
+def test_execute_trade_dry_run_logs_price(tmp_path, monkeypatch):
+    trades = tmp_path / "trades.csv"
+
+    orig_path = trade_logger.Path
+    monkeypatch.setattr(trade_logger, "dotenv_values", lambda _: {})
+
+    def fake_path(p):
+        if p == "crypto_bot/logs/trades.csv":
+            return trades
+        return orig_path(p)
+
+    monkeypatch.setattr(trade_logger, "Path", fake_path)
+
+    class DummyEx:
+        def fetch_ticker(self, symbol):
+            return {"last": 123}
+
+    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
+
+    cex_executor.execute_trade(DummyEx(), None, "BTC/USDT", "buy", 1.0, "t", "c", dry_run=True)
+
+    row = trades.read_text().strip()
+    assert row
+    assert float(row.split(",")[3]) > 0
+
+
+def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
+    trades = tmp_path / "trades.csv"
+
+    orig_path = trade_logger.Path
+    monkeypatch.setattr(trade_logger, "dotenv_values", lambda _: {})
+
+    def fake_path(p):
+        if p == "crypto_bot/logs/trades.csv":
+            return trades
+        return orig_path(p)
+
+    monkeypatch.setattr(trade_logger, "Path", fake_path)
+
+    class DummyEx:
+        async def fetch_ticker(self, symbol):
+            return {"last": 321}
+
+    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
+
+    asyncio.run(
+        cex_executor.execute_trade_async(
+            DummyEx(), None, "BTC/USDT", "buy", 1.0, "t", "c", dry_run=True
+        )
+    )
+
+    row = trades.read_text().strip()
+    assert row
+    assert float(row.split(",")[3]) > 0
