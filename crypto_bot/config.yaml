@@ -95,6 +95,8 @@ tax_tracking:
   enabled: false
   export_path: crypto_bot/logs/tax_trades.csv
 telegram:
+  token: your_telegram_token
+  chat_id: your_chat_id
   enabled: true
   token: "8126215032:AAEhQZLiXpssauKf0ktQsq1XqXl94QriCdE"
   chat_id: "827777274"
