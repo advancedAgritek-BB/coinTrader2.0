@@ -230,6 +230,25 @@ OHLCV data for these symbols is now fetched concurrently using
 `load_ohlcv_parallel`, greatly reducing the time needed to evaluate
 large symbol lists.
 
+## Symbol Filtering
+
+The bot evaluates each candidate pair using Kraken ticker data. By
+setting options under `symbol_filter` you can weed out illiquid or
+undesirable markets before strategies run:
+
+```yaml
+symbol_filter:
+  min_volume_usd: 50000         # minimum 24h volume in USD
+  change_pct_percentile: 70     # require 24h change in the top 30%
+  max_spread_pct: 0.5           # skip pairs with wide spreads
+  correlation_window: 30        # days of history for correlation
+  max_correlation: 0.9          # drop pairs above this threshold
+```
+
+Pairs passing these checks are then scored with `analyze_symbol` which
+computes a strategy confidence score. Only the highest scoring symbols
+are traded each cycle.
+
 ## Web UI
 
 A small Flask web dashboard is included for running the bot and inspecting logs.
