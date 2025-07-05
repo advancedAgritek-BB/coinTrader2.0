@@ -40,7 +40,7 @@ class PortfolioRotator:
         """Return a score for each symbol using Sharpe ratio or momentum."""
 
         scores: Dict[str, float] = {}
-        fetch_fn = getattr(exchange, "fetch_ohlcv")
+        fetch_fn = getattr(exchange, "fetch_ohlcv", None)
         for sym in symbols:
             try:
                 if asyncio.iscoroutinefunction(fetch_fn):
