@@ -102,7 +102,7 @@ async def main() -> None:
     if user.get("telegram_chat_id"):
         tg_cfg["chat_id"] = user["telegram_chat_id"]
 
-    notifier = TelegramNotifier.from_config({"telegram": tg_cfg})
+    notifier = TelegramNotifier.from_config(tg_cfg)
     notifier.notify("🤖 CoinTrader2.0 started")
 
     if notifier.token and notifier.chat_id:
@@ -196,15 +196,6 @@ async def main() -> None:
 
     telegram_bot = None
     if notifier.enabled:
-    notifier = None
-    telegram_bot = None
-    if user.get("telegram_token") and user.get("telegram_chat_id"):
-        notifier = TelegramNotifier(
-            user["telegram_token"],
-            user["telegram_chat_id"],
-        )
-
-    if notifier is not None and notifier.enabled:
         from crypto_bot.telegram_bot_ui import TelegramBotUI
 
         telegram_bot = TelegramBotUI(

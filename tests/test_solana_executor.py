@@ -12,10 +12,6 @@ def test_execute_swap_dry_run(monkeypatch):
             "SOL",
             "USDC",
             1,
-            notifier=TelegramNotifier("t", "c"),
-            dry_run=True,
-        )
-    )
             TelegramNotifier("t", "c"),
             dry_run=True,
         )
@@ -129,6 +125,7 @@ def test_execute_swap_skips_on_slippage(monkeypatch):
             "SOL",
             "USDC",
             100,
+            TelegramNotifier("t", "c"),
             notifier=notifier,
             dry_run=False,
             config={"max_slippage_pct": 0.05},
