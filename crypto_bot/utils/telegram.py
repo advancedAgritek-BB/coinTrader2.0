@@ -1,11 +1,25 @@
-from telegram import Bot
+from dataclasses import dataclass
 from typing import Optional
+
+from telegram import Bot
 import inspect
 import asyncio
 
 from .logger import setup_logger
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+
+
+@dataclass
+class TelegramNotifier:
+    """Lightweight notifier for sending Telegram messages."""
+
+    token: str
+    chat_id: str
+
+    def notify(self, text: str) -> Optional[str]:
+        """Send ``text`` as a Telegram message."""
+        return send_message(self.token, self.chat_id, text)
 
 
 def send_message(token: str, chat_id: str, text: str) -> Optional[str]:

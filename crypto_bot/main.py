@@ -9,7 +9,7 @@ import pandas as pd
 import yaml
 from dotenv import dotenv_values
 
-from crypto_bot.utils.telegram import send_message
+from crypto_bot.utils.telegram import send_message, TelegramNotifier
 from crypto_bot.utils.trade_reporter import report_entry, report_exit
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.portfolio_rotator import PortfolioRotator
@@ -184,6 +184,7 @@ async def main() -> None:
     df_cache: dict[str, pd.DataFrame] = {}
 
     telegram_bot = None
+    notifier = None
     if user.get("telegram_token") and user.get("telegram_chat_id"):
         from crypto_bot.telegram_bot_ui import TelegramBotUI
 
@@ -197,6 +198,7 @@ async def main() -> None:
             user.get("wallet_address", ""),
         )
         telegram_bot.run_async()
+        notifier = TelegramNotifier(user["telegram_token"], user["telegram_chat_id"])
 
     while True:
         mode = state["mode"]
@@ -301,7 +303,7 @@ async def main() -> None:
             logger.info("Fetched %d candles for %s", len(df_sym), sym)
             if sym == config.get("symbol"):
                 df_current = df_sym
-            tasks.append(analyze_symbol(sym, df_sym, mode, config))
+            tasks.append(analyze_symbol(sym, df_sym, mode, config, notifier))
 
         results = await asyncio.gather(*tasks)
 
@@ -322,7 +324,7 @@ async def main() -> None:
                 max_concurrent=config.get("max_concurrent_ohlcv"),
             )
             tasks = [
-                analyze_symbol(sym, df_cache.get(sym), mode, config)
+                analyze_symbol(sym, df_cache.get(sym), mode, config, notifier)
                 for sym in scalpers
             ]
             scalper_results = await asyncio.gather(*tasks)

@@ -3,6 +3,7 @@ from typing import Callable, Tuple, Dict, Iterable
 import pandas as pd
 
 from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.signals.signal_fusion import SignalFusionEngine
 from crypto_bot.strategy import (
     trend_bot,
@@ -52,6 +53,7 @@ def route(
     regime: str,
     mode: str,
     config: Dict | None = None,
+    notifier: TelegramNotifier | None = None,
 ) -> Callable[[pd.DataFrame], Tuple[float, str]]:
     """Select a strategy based on market regime and operating mode.
 
@@ -64,32 +66,54 @@ def route(
     config : dict | None
         Optional configuration dictionary. When ``meta_selector.enabled`` is
         ``True`` the strategy choice is delegated to the meta selector.
+    notifier : TelegramNotifier | None
+        Optional notifier used to send a message when the strategy is called.
 
     Returns
     -------
     Callable[[pd.DataFrame], Tuple[float, str]]
         Strategy function returning a score and trade direction.
     """
+    def _wrap(fn: Callable[[pd.DataFrame], Tuple[float, str]]):
+        if notifier is None:
+            return fn
+
+        def wrapped(df: pd.DataFrame, cfg=None):
+            try:
+                score, direction = fn(df, cfg)
+            except TypeError:
+                score, direction = fn(df)
+            symbol = ""
+            if isinstance(cfg, dict):
+                symbol = cfg.get("symbol", "")
+            notifier.notify(
+                f"\U0001F4C8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
+            )
+            return score, direction
+
+        wrapped.__name__ = fn.__name__
+        return wrapped
+
     if mode == "onchain":
         if regime in {"breakout", "volatile"}:
             logger.info("Routing to sniper bot (onchain)")
-            return sniper_bot.generate_signal
+            return _wrap(sniper_bot.generate_signal)
         logger.info("Routing to DEX scalper (onchain)")
-        return dex_scalper.generate_signal
+        return _wrap(dex_scalper.generate_signal)
 
     if config and config.get("rl_selector", {}).get("enabled"):
         from .rl import strategy_selector as rl_selector
 
         strategy_fn = rl_selector.select_strategy(regime)
         logger.info("RL selector chose %s for %s", strategy_fn.__name__, regime)
-        return strategy_fn
+        return _wrap(strategy_fn)
 
     if config and config.get("meta_selector", {}).get("enabled"):
         from . import meta_selector
 
         strategy_fn = meta_selector.choose_best(regime)
         logger.info("Meta selector chose %s for %s", strategy_fn.__name__, regime)
-        return strategy_fn
+        return _wrap(strategy_fn)
 
     if config and config.get("signal_fusion", {}).get("enabled"):
         from . import meta_selector
@@ -109,8 +133,9 @@ def route(
             return engine.fuse(df, cfg)
 
         logger.info("Routing to signal fusion engine")
-        return fused
+        return _wrap(fused)
 
     strategy_fn = strategy_for(regime)
     logger.info("Routing to %s (%s)", strategy_fn.__name__, mode)
-    return strategy_fn
+
+    return _wrap(strategy_fn)
