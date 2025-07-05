@@ -51,6 +51,7 @@ from crypto_bot.utils.market_loader import (
     load_ohlcv_parallel,
     update_ohlcv_cache,
     update_multi_tf_ohlcv_cache,
+    update_regime_tf_cache,
     fetch_ohlcv_async,
 )
 from crypto_bot.utils.symbol_pre_filter import filter_symbols
@@ -202,6 +203,7 @@ async def main() -> None:
     mode = user.get("mode", config.get("mode", "auto"))
     state = {"running": True, "mode": mode}
     df_cache: dict[str, dict[str, pd.DataFrame]] = {}
+    regime_cache: dict[str, dict[str, pd.DataFrame]] = {}
 
     from crypto_bot.telegram_bot_ui import TelegramBotUI
 
@@ -314,11 +316,24 @@ async def main() -> None:
             max_concurrent=config.get("max_concurrent_ohlcv"),
         )
 
+        regime_cache = await update_regime_tf_cache(
+            exchange,
+            regime_cache,
+            current_batch,
+            config,
+            limit=100,
+            use_websocket=config.get("use_websocket", False),
+            force_websocket_history=config.get("force_websocket_history", False),
+            max_concurrent=config.get("max_concurrent_ohlcv"),
+        )
+
         tasks = []
         for sym in current_batch:
             logger.info("🔹 Symbol: %s", sym)
             total_pairs += 1
             df_map = {tf: c.get(sym) for tf, c in df_cache.items()}
+            for tf, cache_tf in regime_cache.items():
+                df_map[tf] = cache_tf.get(sym)
             df_sym = df_map.get(config["timeframe"])
             if df_sym is None or df_sym.empty:
                 logger.error("OHLCV fetch failed for %s", sym)
@@ -358,7 +373,10 @@ async def main() -> None:
             tasks = [
                 analyze_symbol(
                     sym,
-                    {tf: c.get(sym) for tf, c in df_cache.items()},
+                    {
+                        **{tf: c.get(sym) for tf, c in df_cache.items()},
+                        **{tf: c.get(sym) for tf, c in regime_cache.items()},
+                    },
                     mode,
                     config,
                     notifier,
