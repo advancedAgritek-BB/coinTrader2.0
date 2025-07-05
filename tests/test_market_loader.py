@@ -7,6 +7,7 @@ from crypto_bot.utils.market_loader import (
     fetch_ohlcv_async,
     load_ohlcv_parallel,
     update_ohlcv_cache,
+    update_multi_tf_ohlcv_cache,
 )
 
 class DummyExchange:
@@ -272,6 +273,33 @@ def test_load_ohlcv_parallel_invalid_max_concurrent():
         )
 
 
+class DummyMultiTFExchange:
+    def __init__(self):
+        self.calls: list[str] = []
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.calls.append(timeframe)
+        return [[0, 1, 2, 3, 4, 5]]
+
+
+def test_update_multi_tf_ohlcv_cache():
+    ex = DummyMultiTFExchange()
+    cache: dict[str, dict[str, pd.DataFrame]] = {}
+    config = {"timeframes": ["1h", "4h", "1d"]}
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            config,
+            limit=1,
+            max_concurrent=2,
+        )
+    )
+    assert set(cache.keys()) == {"1h", "4h", "1d"}
+    for tf in config["timeframes"]:
+        assert "BTC/USD" in cache[tf]
+    assert set(ex.calls) == {"1h", "4h", "1d"}
 class FailOnceExchange:
     def __init__(self):
         self.calls = 0
