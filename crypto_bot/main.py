@@ -50,6 +50,7 @@ from crypto_bot.utils.market_loader import (
     load_kraken_symbols,
     load_ohlcv_parallel,
     update_ohlcv_cache,
+    update_multi_tf_ohlcv_cache,
     fetch_ohlcv_async,
 )
 from crypto_bot.utils.symbol_pre_filter import filter_symbols
@@ -200,7 +201,7 @@ async def main() -> None:
 
     mode = user.get("mode", config.get("mode", "auto"))
     state = {"running": True, "mode": mode}
-    df_cache: dict[str, pd.DataFrame] = {}
+    df_cache: dict[str, dict[str, pd.DataFrame]] = {}
 
     from crypto_bot.telegram_bot_ui import TelegramBotUI
 
@@ -301,11 +302,11 @@ async def main() -> None:
         if not SYMBOL_EVAL_QUEUE:
             SYMBOL_EVAL_QUEUE.extend(symbols)
 
-        df_cache = await update_ohlcv_cache(
+        df_cache = await update_multi_tf_ohlcv_cache(
             exchange,
             df_cache,
             current_batch,
-            timeframe=config["timeframe"],
+            config,
             limit=100,
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
@@ -317,21 +318,22 @@ async def main() -> None:
         for sym in current_batch:
             logger.info("🔹 Symbol: %s", sym)
             total_pairs += 1
-            df_sym = df_cache.get(sym)
+            df_map = {tf: c.get(sym) for tf, c in df_cache.items()}
+            df_sym = df_map.get(config["timeframe"])
             if df_sym is None or df_sym.empty:
                 logger.error("OHLCV fetch failed for %s", sym)
                 continue
 
-            # ensure we have a proper DataFrame with the expected columns
             expected_cols = ["timestamp", "open", "high", "low", "close", "volume"]
             if not isinstance(df_sym, pd.DataFrame):
                 df_sym = pd.DataFrame(df_sym, columns=expected_cols)
             elif not set(expected_cols).issubset(df_sym.columns):
                 df_sym = pd.DataFrame(df_sym.to_numpy(), columns=expected_cols)
             logger.info("Fetched %d candles for %s", len(df_sym), sym)
+            df_map[config["timeframe"]] = df_sym
             if sym == config.get("symbol"):
                 df_current = df_sym
-            tasks.append(analyze_symbol(sym, df_sym, mode, config, notifier))
+            tasks.append(analyze_symbol(sym, df_map, mode, config, notifier))
 
         results = await asyncio.gather(*tasks)
 
@@ -341,11 +343,12 @@ async def main() -> None:
             if r.get("name") in {"micro_scalp", "bounce_scalper"}
         ]
         if scalpers:
-            df_cache = await update_ohlcv_cache(
+            scalp_tf = config.get("scalp_timeframe", "1m")
+            df_cache[scalp_tf] = await update_ohlcv_cache(
                 exchange,
-                df_cache,
+                df_cache.get(scalp_tf, {}),
                 scalpers,
-                timeframe=config.get("scalp_timeframe", "1m"),
+                timeframe=scalp_tf,
                 limit=100,
                 use_websocket=config.get("use_websocket", False),
                 force_websocket_history=config.get("force_websocket_history", False),
@@ -353,14 +356,20 @@ async def main() -> None:
                 max_concurrent=config.get("max_concurrent_ohlcv"),
             )
             tasks = [
-                analyze_symbol(sym, df_cache.get(sym), mode, config, notifier)
+                analyze_symbol(
+                    sym,
+                    {tf: c.get(sym) for tf, c in df_cache.items()},
+                    mode,
+                    config,
+                    notifier,
+                )
                 for sym in scalpers
             ]
             scalper_results = await asyncio.gather(*tasks)
             mapping = {r["symbol"]: r for r in scalper_results}
             results = [mapping.get(r["symbol"], r) for r in results]
             if config.get("symbol") in mapping:
-                df_current = df_cache.get(config["symbol"])
+                df_current = df_cache.get(config["timeframe"], {}).get(config["symbol"])
 
         for res in results:
             sym = res["symbol"]
