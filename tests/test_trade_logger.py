@@ -55,6 +55,11 @@ def test_execute_trade_async_logs(tmp_path, monkeypatch):
     monkeypatch.setattr(cex_executor, "logger", logger)
     notifier = DummyNotifier(logger)
 
+    def fake_send(token, chat_id, text):
+        logger.info(text)
+
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", fake_send)
+
     order = asyncio.run(
         cex_executor.execute_trade_async(
             object(),

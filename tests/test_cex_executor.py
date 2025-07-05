@@ -85,6 +85,7 @@ class DummyWS:
 
 
 def test_execute_trade_rest_path(monkeypatch):
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     ex = DummyExchange()
     notifier = DummyNotifier()
@@ -102,6 +103,7 @@ def test_execute_trade_rest_path(monkeypatch):
 
 
 def test_execute_trade_ws_path(monkeypatch):
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     ws = DummyWS()
     notifier = DummyNotifier()
@@ -124,6 +126,7 @@ def test_execute_trade_ws_path(monkeypatch):
 
 
 def test_execute_trade_ws_missing(monkeypatch):
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     with pytest.raises(ValueError):
         cex_executor.execute_trade(
@@ -194,6 +197,7 @@ class SlippageExchange:
 
 
 def test_execute_trade_skips_on_slippage(monkeypatch):
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     notifier = DummyNotifier()
     order = cex_executor.execute_trade(
@@ -249,6 +253,7 @@ def test_execute_trade_dry_run_logs_price(tmp_path, monkeypatch):
             return {"last": 123}
 
     notifier = DummyNotifier()
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
 
     cex_executor.execute_trade(
         DummyEx(),
@@ -283,6 +288,7 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
             return {"last": 321}
 
     notifier = DummyNotifier()
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
 
     asyncio.run(
         cex_executor.execute_trade_async(
@@ -293,3 +299,25 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
     row = trades.read_text().strip()
     assert row
     assert float(row.split(",")[3]) > 0
+
+
+def test_execute_trade_no_message_when_disabled(monkeypatch):
+    calls = {"count": 0}
+
+    import crypto_bot.utils.telegram_notifier as notifier
+
+    monkeypatch.setattr(notifier, "send_message", lambda *a, **k: calls.__setitem__("count", calls["count"] + 1))
+    notifier.TelegramNotifier.configure(False)
+    try:
+        class DummyExchange:
+            def create_market_order(self, symbol, side, amount):
+                return {}
+
+        monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+        cex_executor.execute_trade(
+            DummyExchange(), None, "BTC/USDT", "buy", 1.0, "t", "c", dry_run=True
+        )
+    finally:
+        notifier.TelegramNotifier.configure(True)
+
+    assert calls["count"] == 0
