@@ -7,6 +7,8 @@ from .market_loader import (
     load_ohlcv_parallel,
     update_ohlcv_cache,
 )
-from .symbol_pre_filter import filter_symbols, has_enough_history
+# Symbol filtering utilities import is optional because the module has
+# heavy async dependencies and some environments may not need it during
+# initialization. Import it lazily where required.
 from .symbol_utils import get_filtered_symbols
 from .strategy_analytics import compute_metrics, write_scores

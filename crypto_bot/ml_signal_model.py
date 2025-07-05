@@ -51,7 +51,8 @@ def extract_features(df: pd.DataFrame) -> pd.DataFrame:
     regimes = []
     for i in range(len(df)):
         try:
-            regimes.append(classify_regime(df.iloc[: i + 1]))
+            regime, _ = classify_regime(df.iloc[: i + 1])
+            regimes.append(regime)
         except Exception:
             regimes.append("unknown")
     features["regime"] = regimes
