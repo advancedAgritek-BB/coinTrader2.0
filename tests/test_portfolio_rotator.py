@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 
 import pandas as pd
 import pytest
@@ -99,3 +100,15 @@ def test_rotate_translates_assets_to_pairs(monkeypatch):
     asyncio.run(rotator.rotate(exchange, "wallet", {"BTC": 1}))
 
     assert captured.get("symbols") == ["BTC/USD"]
+def test_score_assets_handles_invalid_data(caplog):
+    class BadExchange:
+        def fetch_ohlcv(self, symbol, timeframe="1d", limit=30):
+            return None
+
+    rotator = PortfolioRotator()
+    caplog.set_level(logging.ERROR)
+
+    scores = rotator.score_assets(BadExchange(), ["BTC"], 5, "momentum")
+
+    assert scores == {}
+    assert any("Invalid OHLCV" in r.getMessage() for r in caplog.records)
