@@ -12,3 +12,7 @@ def test_load_config_returns_dict():
     assert 'risk' in config
     assert 'min_cooldown' in config
     assert 'atr_normalization' in config
+    assert 'top_n_symbols' in config
+    assert 'min_confidence_score' in config
+    assert 'voting_strategies' in config
+    assert 'min_agreeing_votes' in config
