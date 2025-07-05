@@ -60,25 +60,62 @@ back to a machine learning model whenever the indicator rules return
    python -m frontend.app
    ```
 
-Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to configure credentials. The script prompts only for the keys required by your chosen exchange and saves them in `user_config.yaml`. **Environment variables override** these entries, so you may keep secrets in `crypto_bot/.env` or export them before launching the bot. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
+Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
+
+## Configuration Files
+
+The bot looks in two locations for settings:
+
+1. **`crypto_bot/.env`** – store API keys and other environment variables here. These values override entries loaded by `wallet_manager.py`.
+2. **`crypto_bot/config.yaml`** – general runtime options controlling strategy behaviour and notifications.
+
+### Environment Variables
+
+Create `crypto_bot/.env` and fill in your secrets. Example:
+
+```env
+EXCHANGE=coinbase              # or kraken
+API_KEY=your_key
+API_SECRET=your_secret
+API_PASSPHRASE=your_coinbase_passphrase_if_needed
+FERNET_KEY=optional_key_for_encryption
+KRAKEN_WS_TOKEN=your_ws_token          # optional for Kraken
+KRAKEN_API_TOKEN=your_api_token        # optional for Kraken
+TELEGRAM_TOKEN=your_telegram_token
+GOOGLE_CRED_JSON=path_to_google_credentials.json
+TWITTER_SENTIMENT_URL=https://api.example.com/twitter-sentiment
+FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
+SECRETS_PROVIDER=aws                     # optional
+SECRETS_PATH=/path/to/secret
+```
+
+### YAML Configuration
+
+Edit `crypto_bot/config.yaml` to adjust trading behaviour. Key settings include:
+
+```yaml
+exchange: coinbase       # coinbase or kraken
+execution_mode: dry_run  # or live
+use_websocket: true
+telegram:
+  token: your_telegram_token
+  chat_id: your_chat_id
+  trade_updates: true
+mempool_monitor:
+  enabled: false
+  suspicious_fee_threshold: 100
+  action: pause
+  reprice_multiplier: 1.05
+```
 
 ## Exchange Setup for U.S. Users
 
 1. Create API keys on **Coinbase Advanced Trade** or **Kraken**.
 2. Run `python crypto_bot/wallet_manager.py` to generate `user_config.yaml`. Any
    credentials found in the environment will be used automatically.
-3. Fill out `crypto_bot/.env` with your API keys and optional `FERNET_KEY`.
-   Environment variables take precedence over values stored in
-   `user_config.yaml`. If you prefer to enter credentials interactively,
-   leave the entries commented out.
-
-   ```env
-   # EXCHANGE=coinbase  # or kraken
-   # API_KEY=your_key
-   # API_SECRET=your_secret
-  # API_PASSPHRASE=your_coinbase_passphrase_if_needed
-  # FERNET_KEY=optional_key_for_encryption
-  ```
+3. Place your API keys in `crypto_bot/.env` as shown in the configuration
+   section above. Environment variables take precedence over values stored in
+   `user_config.yaml`.
 
 ### Telegram Setup
 
@@ -110,19 +147,19 @@ Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to configure credentia
 
 ### Twitter Sentiment API
 
-Set `TWITTER_SENTIMENT_URL` to the endpoint for the sentiment service used by
-`sentiment_filter.py`. If this variable is not provided, the bot defaults to the
-placeholder `https://api.example.com/twitter-sentiment`, so sentiment fetches
-will fail until a real URL is supplied.
+Add `TWITTER_SENTIMENT_URL` to `crypto_bot/.env` to point at the sentiment
+service used by `sentiment_filter.py`. If this variable is not provided, the bot
+defaults to the placeholder `https://api.example.com/twitter-sentiment`, so
+sentiment fetches will fail until a real URL is supplied.
 
 ### Funding Rate API
 
-Set `FUNDING_RATE_URL` to the endpoint used by `volatility_filter.py` when
-fetching perpetual funding rates. Without this variable the bot falls back to
-the placeholder `https://funding.example.com` and will log errors until a real
-URL is supplied.
+Add `FUNDING_RATE_URL` to `crypto_bot/.env` to specify the endpoint used by
+`volatility_filter.py` when fetching perpetual funding rates. Without this
+variable the bot falls back to the placeholder `https://funding.example.com`
+and will log errors until a real URL is supplied.
 
-For Kraken, set:
+For Kraken, add the following line to `crypto_bot/.env`:
 
 ```env
 FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
@@ -133,7 +170,14 @@ when requesting funding information.
 
 
 4. In `crypto_bot/config.yaml` set:
-   For Kraken, optionally set tokens for the WebSocket API:
+
+   ```yaml
+   exchange: coinbase  # Options: coinbase, kraken
+   execution_mode: dry_run  # or live
+   use_websocket: true      # enable when trading on Kraken via WebSocket
+   ```
+
+   For Kraken, optionally place WebSocket tokens in `crypto_bot/.env`:
 
    ```env
    KRAKEN_WS_TOKEN=your_ws_token
