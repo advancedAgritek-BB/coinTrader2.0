@@ -36,6 +36,13 @@ _STRATEGY_FN_MAP = {
 }
 
 
+def get_strategy_by_name(
+    name: str,
+) -> Callable[[pd.DataFrame], tuple[float, str]] | None:
+    """Return the strategy function mapped to ``name`` if present."""
+    return _STRATEGY_FN_MAP.get(name)
+
+
 def _load() -> Dict[str, Dict[str, List[dict]]]:
     """Return parsed performance log data."""
     if not LOG_FILE.exists():
