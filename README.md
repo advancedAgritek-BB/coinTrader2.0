@@ -35,7 +35,9 @@ Set `use_ml_regime_classifier` to `true` in `crypto_bot/config.yaml` to fall
 back to a machine learning model whenever the indicator rules return
 `"unknown"`.  A small fallback model is bundled directly in
 `crypto_bot.regime.model_data` as a base64 string and loaded automatically.
-You can replace that module with your own encoded model if desired.
+By default the ML model only runs when at least **20** candles are available
+(tunable via `ml_min_bars`).  You can replace that module with your own
+encoded model if desired.
 
 ## Quick Start
 
