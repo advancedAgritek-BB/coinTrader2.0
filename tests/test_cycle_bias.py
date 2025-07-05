@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from crypto_bot.indicators import cycle_bias
-from crypto_bot.signals import signal_scoring as sc
+import crypto_bot.signals.signal_scoring as sc
 
 
 def test_get_cycle_bias_fetches_values(monkeypatch):

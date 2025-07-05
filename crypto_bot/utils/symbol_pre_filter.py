@@ -189,10 +189,7 @@ async def filter_symbols(
                 id_map[k] = v if isinstance(v, str) else k
 
     scored: List[tuple[str, float]] = []
-                id_map[k] = k
-
     allowed: List[tuple[str, float]] = []
-
     metrics: List[tuple[str, float, float, float]] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)
@@ -250,23 +247,3 @@ async def filter_symbols(
 
     scored.sort(key=lambda x: x[1], reverse=True)
     return [sym for sym, _ in scored]
-
-        metrics.append((symbol, vol_usd, change_pct, spread))
-
-    if not metrics:
-        return []
-
-    threshold = np.percentile([abs(c[2]) for c in metrics], pct)
-
-    allowed: List[tuple[str, float]] = []
-    for symbol, vol_usd, change_pct, _ in metrics:
-        if vol_usd > min_volume and abs(change_pct) >= threshold:
-            if min_age > 0:
-                enough = await _has_enough_history(exchange, symbol, min_age)
-                if not enough:
-                    logger.info("Skipping %s due to insufficient history", symbol)
-                    continue
-            allowed.append((symbol, vol_usd))
-
-    allowed.sort(key=lambda x: x[1], reverse=True)
-    return [sym for sym, _ in allowed]

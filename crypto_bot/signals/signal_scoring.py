@@ -1,8 +1,12 @@
-from typing import Tuple, Callable, Optional
+from typing import Tuple, Callable, Optional, Iterable, Dict
 import pandas as pd
 import asyncio
 from crypto_bot.ml_signal_model import predict_signal
 from crypto_bot.indicators.cycle_bias import get_cycle_bias
+from crypto_bot.utils.strategy_utils import compute_drawdown
+from crypto_bot.utils.logger import setup_logger
+
+logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
 
 def evaluate(
@@ -50,3 +54,37 @@ async def evaluate_async(
 ) -> Tuple[float, str]:
     """Asynchronous wrapper around ``evaluate``."""
     return await asyncio.to_thread(evaluate, strategy_fn, df, config)
+
+
+def evaluate_strategies(
+    strategies: Iterable[Callable[[pd.DataFrame], Tuple[float, str]]],
+    df: pd.DataFrame,
+    config: Optional[Dict] = None,
+) -> Dict[str, object]:
+    """Return best scoring strategy evaluation.
+
+    Each strategy is evaluated and combined with simple sharpe-like metrics and
+    drawdown. Any strategy raising an exception is skipped and logged.
+    """
+
+    best_score = float("-inf")
+    best_res: Dict[str, object] = {"score": 0.0, "direction": "none", "name": ""}
+    rets = df["close"].pct_change().dropna()
+    sharpe = 0.0
+    if len(rets) > 1 and rets.std() != 0:
+        sharpe = float(rets.mean() / rets.std() * (len(rets) ** 0.5))
+    drawdown = compute_drawdown(df)
+
+    for strat in strategies:
+        try:
+            score, direction = evaluate(strat, df, config)
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.warning("Strategy %s failed: %s", getattr(strat, "__name__", str(strat)), exc)
+            continue
+
+        metric = score + sharpe + drawdown
+        if metric > best_score:
+            best_score = metric
+            best_res = {"score": score, "direction": direction, "name": getattr(strat, "__name__", "")}
+
+    return best_res

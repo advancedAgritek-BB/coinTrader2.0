@@ -32,3 +32,15 @@ def compute_strategy_weights(path: str = "crypto_bot/logs/strategy_pnl.csv") -> 
         return {s: 1 / len(scores) for s in scores} if scores else {}
 
     return {s: sc / total_score for s, sc in scores.items()}
+
+
+def compute_drawdown(df: pd.DataFrame, lookback: int = 20) -> float:
+    """Return maximum drawdown of ``close`` prices over ``lookback`` bars."""
+    if df.empty or "close" not in df.columns:
+        return 0.0
+    series = df["close"].tail(lookback)
+    if series.empty:
+        return 0.0
+    running_max = series.cummax()
+    drawdowns = series - running_max
+    return float(drawdowns.min())

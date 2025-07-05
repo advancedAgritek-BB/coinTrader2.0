@@ -4,7 +4,6 @@ import pandas as pd
 
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
-from crypto_bot.signals.signal_fusion import SignalFusionEngine
 from crypto_bot.strategy import (
     trend_bot,
     grid_bot,
@@ -28,10 +27,25 @@ STRATEGY_MAP: Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]] = {
     "bounce": bounce_scalper.generate_signal,
 }
 
+REGIME_STRATEGIES: Dict[str, list[Callable[[pd.DataFrame], Tuple[float, str]]]] = {
+    "trending": [trend_bot.generate_signal],
+    "sideways": [grid_bot.generate_signal],
+    "mean-reverting": [mean_bot.generate_signal],
+    "breakout": [breakout_bot.generate_signal],
+    "volatile": [sniper_bot.generate_signal],
+    "scalp": [micro_scalp_bot.generate_signal],
+    "bounce": [bounce_scalper.generate_signal],
+}
+
 
 def strategy_for(regime: str) -> Callable[[pd.DataFrame], Tuple[float, str]]:
     """Return strategy callable for a given regime."""
     return STRATEGY_MAP.get(regime, grid_bot.generate_signal)
+
+
+def get_strategies_for_regime(regime: str) -> list[Callable[[pd.DataFrame], Tuple[float, str]]]:
+    """Return list of strategies mapped to ``regime``."""
+    return REGIME_STRATEGIES.get(regime, [grid_bot.generate_signal])
 
 
 def strategy_name(regime: str, mode: str) -> str:
@@ -117,6 +131,7 @@ def route(
 
     if config and config.get("signal_fusion", {}).get("enabled"):
         from . import meta_selector
+        from crypto_bot.signals.signal_fusion import SignalFusionEngine
 
         pairs_conf = config.get("signal_fusion", {}).get("strategies", [])
         mapping = getattr(meta_selector, "_STRATEGY_FN_MAP", {})
