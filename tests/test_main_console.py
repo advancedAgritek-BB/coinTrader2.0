@@ -168,3 +168,28 @@ def test_monitor_loop_skips_duplicate_lines(monkeypatch, tmp_path):
     assert outputs[0].splitlines()[0].endswith("same'")
     assert outputs[1].splitlines()[0].endswith("other'")
 
+
+def test_monitor_loop_async_balance(monkeypatch, tmp_path):
+    log_file = tmp_path / "bot.log"
+    log_file.write_text("start\n")
+
+    async def fake_stats(*_a, **_kw):
+        return []
+
+    class AsyncEx:
+        async def fetch_balance(self):
+            return {"USDT": {"free": 0}}
+
+    class StopLoop(Exception):
+        pass
+
+    async def fake_sleep(_):
+        raise StopLoop
+
+    monkeypatch.setattr(console_monitor, "trade_stats_lines", fake_stats)
+    monkeypatch.setattr(console_monitor.asyncio, "sleep", fake_sleep)
+
+    ex = AsyncEx()
+    with pytest.raises(StopLoop):
+        asyncio.run(console_monitor.monitor_loop(ex, None, log_file))
+
