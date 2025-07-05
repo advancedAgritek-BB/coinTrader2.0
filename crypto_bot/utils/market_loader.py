@@ -82,15 +82,12 @@ async def load_kraken_symbols(
     """
 
     exclude_set = set(exclude or [])
-    allowed_types = set(getattr(exchange, "exchange_market_types", []))
-    if config is not None:
-        allowed_types = set(config.get("exchange_market_types", ["spot"]))
-    elif not allowed_types:
-        allowed_types = {"spot"}
-    if config is not None:
-        allowed_types = config.get("exchange_market_types", ["spot"])
+    if config and "exchange_market_types" in config:
+        allowed_types = set(config["exchange_market_types"])
     else:
-        allowed_types = list(getattr(exchange, "exchange_market_types", ["spot"]))
+        allowed_types = set(getattr(exchange, "exchange_market_types", []))
+        if not allowed_types:
+            allowed_types = {"spot"}
 
     if asyncio.iscoroutinefunction(getattr(exchange, "load_markets", None)):
         markets = await exchange.load_markets()
