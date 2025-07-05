@@ -5,6 +5,8 @@ cycle_bias:
   nupl_url: https://api.example.com/nupl
   sopr_url: https://api.example.com/sopr
 exchange: kraken
+exchange_market_types:
+- spot
 excluded_symbols: []
 execution_mode: dry_run
 exit_strategy:
@@ -36,6 +38,7 @@ micro_scalp:
   volume_threshold: 1.5
   volume_window: 20
 min_cooldown: 60
+min_symbol_age_days: 10
 ml_signal_model:
   enabled: false
   weight: 0.5
@@ -88,6 +91,7 @@ strategy_allocation:
   sniper_bot: 0.3
   trend_bot: 0.4
 symbol: BTC/USDT
+symbol_batch_size: 10
 symbol_filter:
   min_volume_usd: 50000
 symbol_refresh_minutes: 30
