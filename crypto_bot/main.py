@@ -10,6 +10,7 @@ import yaml
 from dotenv import dotenv_values
 
 from crypto_bot.utils.telegram import send_message, TelegramNotifier
+from crypto_bot.utils.telegram import send_message, send_test_message
 from crypto_bot.utils.trade_reporter import report_entry, report_exit
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.portfolio_rotator import PortfolioRotator
@@ -98,6 +99,16 @@ async def main() -> None:
     notifier: TelegramNotifier | None = None
     if user.get("telegram_token") and user.get("telegram_chat_id"):
         notifier = TelegramNotifier(user["telegram_token"], user["telegram_chat_id"])
+
+    if user.get("telegram_token") and user.get("telegram_chat_id"):
+        if not send_test_message(
+            user["telegram_token"],
+            user["telegram_chat_id"],
+            "Bot started",
+        ):
+            logger.warning(
+                "Telegram test message failed; check your token and chat ID"
+            )
 
     # allow user-configured exchange to override YAML setting
     if user.get("exchange"):
