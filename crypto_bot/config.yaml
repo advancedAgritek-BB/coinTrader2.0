@@ -149,3 +149,12 @@ scoring_weights:
   symbol_score: 0.1
   spread_penalty: -0.1
   strategy_regime_strength: 0.2
+
+# symbol selection and voting
+top_n_symbols: 3
+min_confidence_score: 0.6
+voting_strategies:
+  - trend
+  - momentum
+  - mean_reversion
+min_agreeing_votes: 2
