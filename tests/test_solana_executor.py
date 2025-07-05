@@ -16,6 +16,11 @@ def test_execute_swap_dry_run(monkeypatch):
             dry_run=True,
         )
     )
+            TelegramNotifier("t", "c"),
+            dry_run=True,
+        )
+    )
+
 class DummyNotifier:
     def __init__(self):
         self.messages = []
