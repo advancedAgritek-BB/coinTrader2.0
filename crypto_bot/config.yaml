@@ -69,6 +69,7 @@ risk:
   volume_threshold_ratio: 0.05
 rl_selector:
   enabled: false
+scalp_timeframe: 1m
 scan_markets: true
 sentiment_filter:
   bull_fng: 70
@@ -87,20 +88,20 @@ strategy_allocation:
   sniper_bot: 0.3
   trend_bot: 0.4
 symbol: BTC/USDT
-symbols: []
-symbol_refresh_minutes: 30
 symbol_filter:
   min_volume_usd: 50000
+symbol_refresh_minutes: 30
+symbols: []
 tax_tracking:
   enabled: false
   export_path: crypto_bot/logs/tax_trades.csv
 telegram:
-  token: your_telegram_token
   chat_id: your_chat_id
   enabled: true
+  token: your_telegram_token
+  trade_updates: true
 testing_mode: true
 timeframe: 1h
-scalp_timeframe: 1m
 tp_pct: 0.07
 trade_size_pct: 0.2
 twap_enabled: false

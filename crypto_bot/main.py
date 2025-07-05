@@ -96,6 +96,8 @@ async def main() -> None:
 
     user = load_or_create()
 
+    trade_updates = config.get("telegram", {}).get("trade_updates", True)
+
     tg_cfg = {**config.get("telegram", {})}
     if user.get("telegram_token"):
         tg_cfg["token"] = user["telegram_token"]
@@ -564,7 +566,7 @@ async def main() -> None:
                     else:
                         latest_balance = paper_wallet.balance if paper_wallet else 0.0
                     log_balance(float(latest_balance))
-                    if notifier:
+                    if notifier and trade_updates:
                         report_exit(
                             notifier,
                             config.get("symbol", ""),
@@ -827,7 +829,7 @@ async def main() -> None:
                 current_price,
                 log_bal,
             )
-            if notifier:
+            if notifier and trade_updates:
                 report_entry(
                     notifier,
                     config.get("symbol", ""),

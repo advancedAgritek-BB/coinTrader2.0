@@ -81,10 +81,12 @@ Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to configure credentia
    telegram:
      token: your_telegram_token
      chat_id: your_chat_id
+    trade_updates: true
    ```
 
    The bot reads the chat ID and token from `config.yaml` (not
-   `user_config.yaml`).
+   `user_config.yaml`). Set `trade_updates` to `false` to disable trade
+   entry and exit messages.
 2. Send `/start` to your bot so it can message you.
 3. If you see `Failed to send message: Not Found` in the logs, the chat ID or
    token is likely incorrect or the bot lacks permission to message the chat.
