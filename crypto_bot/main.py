@@ -10,6 +10,8 @@ import yaml
 from dotenv import dotenv_values
 
 from crypto_bot.utils.telegram import TelegramNotifier
+from crypto_bot.utils.telegram import send_message, TelegramNotifier
+from crypto_bot.utils.telegram import send_message, send_test_message
 from crypto_bot.utils.trade_reporter import report_entry, report_exit
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.portfolio_rotator import PortfolioRotator
@@ -97,6 +99,19 @@ async def main() -> None:
     os.environ.update(secrets)
 
     user = load_or_create()
+    notifier: TelegramNotifier | None = None
+    if user.get("telegram_token") and user.get("telegram_chat_id"):
+        notifier = TelegramNotifier(user["telegram_token"], user["telegram_chat_id"])
+
+    if user.get("telegram_token") and user.get("telegram_chat_id"):
+        if not send_test_message(
+            user["telegram_token"],
+            user["telegram_chat_id"],
+            "Bot started",
+        ):
+            logger.warning(
+                "Telegram test message failed; check your token and chat ID"
+            )
 
     # allow user-configured exchange to override YAML setting
     if user.get("exchange"):
@@ -183,6 +198,8 @@ async def main() -> None:
 
     telegram_bot = None
     if notifier.enabled:
+    notifier = None
+    if user.get("telegram_token") and user.get("telegram_chat_id"):
         from crypto_bot.telegram_bot_ui import TelegramBotUI
 
         telegram_bot = TelegramBotUI(
@@ -194,6 +211,7 @@ async def main() -> None:
             user.get("wallet_address", ""),
         )
         telegram_bot.run_async()
+        notifier = TelegramNotifier(user["telegram_token"], user["telegram_chat_id"])
 
     while True:
         mode = state["mode"]
@@ -296,7 +314,7 @@ async def main() -> None:
             logger.info("Fetched %d candles for %s", len(df_sym), sym)
             if sym == config.get("symbol"):
                 df_current = df_sym
-            tasks.append(analyze_symbol(sym, df_sym, mode, config))
+            tasks.append(analyze_symbol(sym, df_sym, mode, config, notifier))
 
         results = await asyncio.gather(*tasks)
 
@@ -317,7 +335,7 @@ async def main() -> None:
                 max_concurrent=config.get("max_concurrent_ohlcv"),
             )
             tasks = [
-                analyze_symbol(sym, df_cache.get(sym), mode, config)
+                analyze_symbol(sym, df_cache.get(sym), mode, config, notifier)
                 for sym in scalpers
             ]
             scalper_results = await asyncio.gather(*tasks)
@@ -548,6 +566,7 @@ async def main() -> None:
                         latest_balance = paper_wallet.balance if paper_wallet else 0.0
                     log_balance(float(latest_balance))
                     if notifier.enabled:
+                    if notifier:
                         report_exit(
                             notifier,
                             config.get("symbol", ""),
@@ -811,6 +830,7 @@ async def main() -> None:
                 log_bal,
             )
             if notifier.enabled:
+            if notifier:
                 report_entry(
                     notifier,
                     config.get("symbol", ""),
