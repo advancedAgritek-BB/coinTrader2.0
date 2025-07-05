@@ -6,6 +6,7 @@ import json
 import base64
 import aiohttp
 
+from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.telegram_notifier import TelegramNotifier
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot import tax_logger
@@ -22,8 +23,9 @@ async def execute_swap(
     token_in: str,
     token_out: str,
     amount: float,
-    telegram_token: str,
-    chat_id: str,
+    telegram_token: Optional[str] = None,
+    chat_id: Optional[str] = None,
+    notifier: Optional[TelegramNotifier] = None,
     slippage_bps: int = 50,
     dry_run: bool = True,
     mempool_monitor: Optional[SolanaMempoolMonitor] = None,
@@ -32,7 +34,13 @@ async def execute_swap(
 ) -> Dict:
     """Execute a swap on Solana using the Jupiter aggregator."""
 
+    if notifier is None:
+        if telegram_token is None or chat_id is None:
+            raise ValueError("telegram_token/chat_id or notifier must be provided")
+        notifier = TelegramNotifier(telegram_token, chat_id)
+
     msg = f"Swapping {amount} {token_in} to {token_out}"
+    err = notifier.notify(msg)
     err = TelegramNotifier.notify(telegram_token, chat_id, msg)
     if err:
         logger.error("Failed to send message: %s", err)
@@ -44,6 +52,7 @@ async def execute_swap(
         threshold = cfg.get("suspicious_fee_threshold", 0.0)
         action = cfg.get("action", "pause")
         if mempool_monitor.is_suspicious(threshold):
+            err_msg = notifier.notify("High priority fees detected")
             err_msg = TelegramNotifier.notify(telegram_token, chat_id, "High priority fees detected")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
@@ -65,6 +74,7 @@ async def execute_swap(
             "amount": amount,
             "tx_hash": tx_hash,
         }
+        err_res = notifier.notify(f"Swap executed: {result}")
         err_res = TelegramNotifier.notify(telegram_token, chat_id, f"Swap executed: {result}")
         if err_res:
             logger.error("Failed to send message: %s", err_res)
@@ -143,6 +153,7 @@ async def execute_swap(
                     token_out,
                     amount,
                 )
+                err_skip = notifier.notify("Trade skipped due to slippage.")
                 err_skip = TelegramNotifier.notify(telegram_token, chat_id, "Trade skipped due to slippage.")
                 if err_skip:
                     logger.error("Failed to send message: %s", err_skip)
@@ -171,6 +182,7 @@ async def execute_swap(
         "amount": amount,
         "tx_hash": tx_hash,
     }
+    err = notifier.notify(f"Swap executed: {result}")
     err = TelegramNotifier.notify(telegram_token, chat_id, f"Swap executed: {result}")
     if err:
         logger.error("Failed to send message: %s", err)

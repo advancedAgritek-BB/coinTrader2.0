@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from telegram import Bot
 from typing import Optional
-
+from dataclasses import dataclass
 from telegram import Bot
 import inspect
 import asyncio
@@ -20,6 +20,7 @@ class TelegramNotifier:
     chat_id: str
 
     def notify(self, text: str) -> Optional[str]:
+        """Send a Telegram message using the stored credentials."""
         """Send ``text`` as a Telegram message."""
     def send(self, text: str) -> Optional[str]:
         """Send ``text`` via Telegram."""

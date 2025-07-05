@@ -2,11 +2,24 @@ import asyncio
 from crypto_bot.execution import solana_executor
 
 
+class DummyNotifier:
+    def __init__(self):
+        self.messages = []
+
+    def notify(self, text: str):
+        self.messages.append(text)
+        return None
+
+
 def test_execute_swap_dry_run(monkeypatch):
+    notifier = DummyNotifier()
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     res = asyncio.run(
-        solana_executor.execute_swap("SOL", "USDC", 1, "token", "chat", dry_run=True)
+        solana_executor.execute_swap(
+            "SOL", "USDC", 1, notifier=notifier, dry_run=True
+        )
     )
+    assert notifier.messages
     assert res == {
         "token_in": "SOL",
         "token_out": "USDC",
@@ -88,13 +101,13 @@ def test_execute_swap_skips_on_slippage(monkeypatch):
     monkeypatch.setattr(sys.modules["solana.transaction"], "Transaction", Tx, raising=False)
     monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
 
+    notifier = DummyNotifier()
     res = asyncio.run(
         solana_executor.execute_swap(
             "SOL",
             "USDC",
             100,
-            "t",
-            "c",
+            notifier=notifier,
             dry_run=False,
             config={"max_slippage_pct": 0.05},
         )
