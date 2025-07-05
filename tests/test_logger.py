@@ -108,3 +108,26 @@ def test_send_message_async_exception_logged(monkeypatch, tmp_path, caplog):
 
     assert err is None
     assert any("boom" in r.getMessage() for r in caplog.records)
+
+
+def test_send_test_message_success(monkeypatch):
+    calls = {}
+
+    def fake_send(token, chat_id, text):
+        calls["args"] = (token, chat_id, text)
+        return None
+
+    import crypto_bot.utils.telegram as telegram
+
+    monkeypatch.setattr(telegram, "send_message", fake_send)
+
+    assert telegram.send_test_message("t", "c", "hello") is True
+    assert calls["args"] == ("t", "c", "hello")
+
+
+def test_send_test_message_failure(monkeypatch):
+    import crypto_bot.utils.telegram as telegram
+
+    monkeypatch.setattr(telegram, "send_message", lambda *a, **k: "err")
+
+    assert telegram.send_test_message("t", "c") is False

@@ -97,6 +97,9 @@ tax_tracking:
 telegram:
   token: your_telegram_token
   chat_id: your_chat_id
+  enabled: true
+  token: "8126215032:AAEhQZLiXpssauKf0ktQsq1XqXl94QriCdE"
+  chat_id: "827777274"
 testing_mode: true
 timeframe: 1h
 scalp_timeframe: 1m
