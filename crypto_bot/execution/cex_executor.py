@@ -81,7 +81,6 @@ def execute_trade(
     symbol: str,
     side: str,
     amount: float,
-    notifier: TelegramNotifier,
     token: Optional[str] = None,
     chat_id: Optional[str] = None,
     notifier: Optional[TelegramNotifier] = None,
@@ -112,7 +111,6 @@ def execute_trade(
         except Exception as err:
             err_msg = notifier.notify(f"Order book error: {err}")
             err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order book error: {err}")
-            err_msg = notifier.notify(f"Order book error: {err}")
             err_msg = TelegramNotifier.notify(token, chat_id, f"Order book error: {err}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
@@ -128,7 +126,6 @@ def execute_trade(
         except Exception as exc:
             err_msg = notifier.notify(f"Order failed: {exc}")
             err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {exc}")
-            err_msg = notifier.notify(f"Order failed: {exc}")
             err_msg = TelegramNotifier.notify(token, chat_id, f"Order failed: {exc}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
@@ -149,7 +146,6 @@ def execute_trade(
                 logger.warning("Trade skipped due to slippage.")
                 err_msg = notifier.notify("Trade skipped due to slippage.")
                 err_msg = notifier.notify("\u26a0\ufe0f Error: Trade skipped due to slippage.")
-                err_msg = notifier.notify("Trade skipped due to slippage.")
                 err_msg = TelegramNotifier.notify(token, chat_id, "Trade skipped due to slippage.")
                 if err_msg:
                     logger.error("Failed to send message: %s", err_msg)
@@ -162,12 +158,7 @@ def execute_trade(
         and hasattr(exchange, "fetch_order_book")
         and not has_liquidity(amount)
     ):
-        err = notifier.notify("Insufficient liquidity for order size")
-        err = notifier.notify("\u26a0\ufe0f Error: Insufficient liquidity for order size")
-        err = notifier.notify("Insufficient liquidity for order size")
-        err = TelegramNotifier.notify(token, chat_id, "Insufficient liquidity for order size")
-        if err:
-            logger.error("Failed to send message: %s", err)
+        notifier.notify("Insufficient liquidity for order size")
         return {}
 
     orders: List[Dict] = []
@@ -181,12 +172,11 @@ def execute_trade(
                 and hasattr(exchange, "fetch_order_book")
                 and not has_liquidity(slice_amount)
             ):
-                err_liq = notifier.notify(
-                    "Insufficient liquidity during TWAP execution"
-                    "\u26a0\ufe0f Error: Insufficient liquidity during TWAP execution"
                 err_liq = notifier.notify("Insufficient liquidity during TWAP execution")
                 err_liq = TelegramNotifier.notify(
-                    token, chat_id, "Insufficient liquidity during TWAP execution"
+                    token,
+                    chat_id,
+                    "Insufficient liquidity during TWAP execution",
                 )
                 if err_liq:
                     logger.error("Failed to send message: %s", err_liq)
@@ -211,8 +201,11 @@ def execute_trade(
                 orders.append(order)
                 err_slice = notifier.notify(
                     f"TWAP slice {i+1}/{slices} executed: {order}"
+                )
                 err_slice = TelegramNotifier.notify(
-                    token, chat_id, f"TWAP slice {i+1}/{slices} executed: {order}"
+                    token,
+                    chat_id,
+                    f"TWAP slice {i+1}/{slices} executed: {order}",
                 )
                 if err_slice:
                     logger.error("Failed to send message: %s", err_slice)
@@ -281,7 +274,6 @@ async def execute_trade_async(
     symbol: str,
     side: str,
     amount: float,
-    notifier: TelegramNotifier,
     token: Optional[str] = None,
     chat_id: Optional[str] = None,
     notifier: Optional[TelegramNotifier] = None,
@@ -323,16 +315,6 @@ async def execute_trade_async(
                 logger.error("Failed to send message: %s", err_msg)
             return {}
     err = notifier.notify(f"Order executed: {order}")
-            err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
-            err_msg = notifier.notify(f"Order failed: {e}")
-            if err_msg:
-                logger.error("Failed to send message: %s", err_msg)
-            return {}
-    err = notifier.notify(f"Order executed: {order}")
-            err_msg = TelegramNotifier.notify(token, chat_id, f"Order failed: {e}")
-            if err_msg:
-                logger.error("Failed to send message: %s", err_msg)
-            return {}
     err = TelegramNotifier.notify(token, chat_id, f"Order executed: {order}")
     if err:
         logger.error("Failed to send message: %s", err)
@@ -384,7 +366,6 @@ def place_stop_order(
     side: str,
     amount: float,
     stop_price: float,
-    notifier: TelegramNotifier,
     token: Optional[str] = None,
     chat_id: Optional[str] = None,
     notifier: Optional[TelegramNotifier] = None,
@@ -425,16 +406,6 @@ def place_stop_order(
                 logger.error("Failed to send message: %s", err_msg)
             return {}
     err = notifier.notify(f"Stop order submitted: {order}")
-            err_msg = notifier.notify(f"\u26a0\ufe0f Error: Stop order failed: {e}")
-            err_msg = notifier.notify(f"Stop order failed: {e}")
-            if err_msg:
-                logger.error("Failed to send message: %s", err_msg)
-            return {}
-    err = notifier.notify(f"Stop order submitted: {order}")
-            err_msg = TelegramNotifier.notify(token, chat_id, f"Stop order failed: {e}")
-            if err_msg:
-                logger.error("Failed to send message: %s", err_msg)
-            return {}
     err = TelegramNotifier.notify(token, chat_id, f"Stop order submitted: {order}")
     if err:
         logger.error("Failed to send message: %s", err)
