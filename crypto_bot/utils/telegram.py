@@ -16,7 +16,11 @@ def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
             try:
                 await bot.send_message(chat_id=chat_id, text=text)
             except Exception as exc:
-                logger.error("Failed to send message: %s", exc)
+                logger.error(
+                    "Failed to send message: %s. Verify your Telegram token "
+                    "and chat ID and ensure the bot has started a chat.",
+                    exc,
+                )
 
         if inspect.iscoroutinefunction(bot.send_message):
             try:
