@@ -43,12 +43,6 @@ class PortfolioRotator:
         fetch_fn = getattr(exchange, "fetch_ohlcv")
         for sym in symbols:
             try:
-                fetch = getattr(exchange, "fetch_ohlcv", None)
-                if asyncio.iscoroutinefunction(fetch):
-                    ohlcv = await fetch(sym, timeframe="1d", limit=lookback_days)
-                else:
-                    ohlcv = await asyncio.to_thread(
-                        fetch, sym, timeframe="1d", limit=lookback_days
                 if asyncio.iscoroutinefunction(fetch_fn):
                     ohlcv = await fetch_fn(sym, timeframe="1d", limit=lookback_days)
                 else:
