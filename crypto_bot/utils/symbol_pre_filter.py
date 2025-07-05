@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Iterable, List, Dict
 import json
 import os
 from typing import Iterable, List
@@ -10,9 +11,11 @@ from typing import Iterable, List
 import numpy as np
 
 import aiohttp
+import pandas as pd
 
 from .logger import setup_logger
 from .market_loader import fetch_ohlcv_async
+from .correlation import compute_pairwise_correlation
 from .symbol_scoring import score_symbol
 
 
@@ -26,14 +29,18 @@ async def has_enough_history(
     exchange, symbol: str, days: int = 30, timeframe: str = "1d"
 ) -> bool:
     """Return ``True`` when ``symbol`` has at least ``days`` days of history."""
-    data = await fetch_ohlcv_async(
-        exchange, symbol, timeframe=timeframe, limit=days
-    )
-    if not data:
+    seconds = _timeframe_seconds(exchange, timeframe)
+    candles_needed = int((days * 86400) / seconds)
+    try:
+        data = await fetch_ohlcv_async(
+            exchange, symbol, timeframe=timeframe, limit=candles_needed
+        )
+    except Exception as exc:  # pragma: no cover - network
+        logger.warning("fetch_ohlcv failed for %s: %s", symbol, exc)
         return False
-    first_ts = data[0][0] / 1000
-    last_ts = data[-1][0] / 1000
-    return (last_ts - first_ts) / 86400 + 1 >= days
+    if not data or len(data) < candles_needed:
+        return False
+    return True
 
 
 
@@ -132,8 +139,9 @@ async def _has_enough_history(
 
 
 async def filter_symbols(
-    exchange, symbols: Iterable[str], config: dict | None = None
+    exchange, symbols: Iterable[str], config: dict | None = None, df_cache: Dict[str, pd.DataFrame] | None = None
 ) -> List[str]:
+    """Return subset of ``symbols`` passing liquidity and volatility checks."""
     """Return subset of ``symbols`` passing liquidity checks sorted by score."""
 
     cfg = config or {}
@@ -171,6 +179,7 @@ async def filter_symbols(
 
     pairs = [s.replace("/", "") for s in symbols]
     data = (await _fetch_ticker_async(pairs)).get("result", {})
+    id_map: Dict[str, str] = {}
 
     id_map = {}
     id_map: dict[str, str] = {}
@@ -213,6 +222,33 @@ async def filter_symbols(
             change_pct,
             spread_pct,
         )
+        if vol_usd > min_volume and abs(change_pct) > 1:
+            allowed.append((symbol, vol_usd))
+    allowed.sort(key=lambda x: x[1], reverse=True)
+    sorted_symbols = [sym for sym, _ in allowed]
+
+    corr_map: Dict[tuple[str, str], float] = {}
+    if df_cache:
+        subset = {s: df_cache.get(s) for s in sorted_symbols}
+        corr_map = compute_pairwise_correlation(subset)
+
+    result: List[str] = []
+    for sym in sorted_symbols:
+        if min_age > 0:
+            enough = await has_enough_history(exchange, sym, min_age, timeframe="1h")
+            if not enough:
+                logger.info("Skipping %s due to insufficient history", sym)
+                continue
+        keep = True
+        if df_cache:
+            for kept in result:
+                corr = corr_map.get((sym, kept)) or corr_map.get((kept, sym))
+                if corr is not None and corr >= 0.95:
+                    keep = False
+                    break
+        if keep:
+            result.append(sym)
+    return result
 
         if vol_usd <= min_volume or abs(change_pct) <= 1:
             continue

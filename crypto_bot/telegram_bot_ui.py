@@ -311,13 +311,13 @@ class TelegramBotUI:
         )
         if query:
             await query.message.edit_text(text, reply_markup=markup)
-        else:
-            await update.message.reply_text(text)
         elif message:
             try:
                 await message.reply_text(text, reply_markup=markup)
             except TypeError:
                 await message.reply_text(text)
+        else:
+            await update.message.reply_text(text)
 
     async def show_balance(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -352,13 +352,13 @@ class TelegramBotUI:
         )
         if query:
             await query.message.edit_text(text, reply_markup=markup)
-        else:
-            await update.message.reply_text(text)
         elif message:
             try:
                 await message.reply_text(text, reply_markup=markup)
             except TypeError:
                 await message.reply_text(text)
+        else:
+            await update.message.reply_text(text)
 
     async def show_trades(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -400,10 +400,10 @@ class TelegramBotUI:
         )
         if query:
             await query.message.edit_text(text, reply_markup=markup)
-        else:
-            await update.message.reply_text(text)
         elif message:
             try:
                 await message.reply_text(text, reply_markup=markup)
             except TypeError:
                 await message.reply_text(text)
+        else:
+            await update.message.reply_text(text)

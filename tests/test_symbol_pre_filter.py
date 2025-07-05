@@ -1,5 +1,6 @@
 import asyncio
 import json
+import pandas as pd
 
 from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_history
 
@@ -222,6 +223,20 @@ def test_filter_symbols_min_age_allows(monkeypatch):
     assert symbols == ["ETH/USD"]
 
 
+def test_filter_symbols_correlation(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async",
+        fake_fetch,
+    )
+    df1 = pd.DataFrame({"close": [1, 2, 3, 4, 5]})
+    df2 = pd.DataFrame({"close": [2, 4, 6, 8, 10]})
+    cache = {"ETH/USD": df1, "BTC/USD": df2}
+
+    symbols = asyncio.run(
+        filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG, df_cache=cache)
+    )
+
+    assert symbols == ["ETH/USD"]
 async def fake_fetch_wide_spread(_):
     return {
         "result": {
