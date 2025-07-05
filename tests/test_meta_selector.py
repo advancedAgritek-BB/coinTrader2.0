@@ -41,3 +41,11 @@ def test_strategy_map_contains_bounce_scalper():
         meta_selector._STRATEGY_FN_MAP.get("bounce_scalper")
         is bounce_scalper.generate_signal
     )
+
+
+def test_get_strategy_by_name_returns_callable():
+    for name, fn in meta_selector._STRATEGY_FN_MAP.items():
+        returned = meta_selector.get_strategy_by_name(name)
+        assert returned is fn
+        assert callable(returned)
+
