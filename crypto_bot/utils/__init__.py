@@ -9,5 +9,4 @@ from .market_loader import (
 )
 from .symbol_pre_filter import filter_symbols, has_enough_history
 from .symbol_utils import get_filtered_symbols
-from .market_analyzer import analyze_symbol
 from .strategy_analytics import compute_metrics, write_scores

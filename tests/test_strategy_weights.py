@@ -1,5 +1,5 @@
 import pandas as pd
-from crypto_bot.utils.strategy_utils import compute_strategy_weights
+from crypto_bot.utils.strategy_utils import compute_strategy_weights, compute_drawdown
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 
 
@@ -24,3 +24,9 @@ def test_risk_manager_updates_tracker():
     rm = RiskManager(cfg)
     rm.update_allocation({"trend": 0.6, "grid": 0.4})
     assert rm.capital_tracker.allocation == {"trend": 0.6, "grid": 0.4}
+
+
+def test_compute_drawdown_basic():
+    df = pd.DataFrame({"close": [10, 12, 11, 15, 14]})
+    dd = compute_drawdown(df, lookback=5)
+    assert dd == -1

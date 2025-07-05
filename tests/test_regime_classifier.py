@@ -5,7 +5,9 @@ import asyncio
 from crypto_bot.regime.regime_classifier import classify_regime, classify_regime_async
 from crypto_bot.utils.market_analyzer import analyze_symbol
 from crypto_bot.strategy_router import strategy_for
+import crypto_bot.strategy_router as strategy_router
 from crypto_bot.signals.signal_scoring import evaluate_async
+import crypto_bot.signals.signal_scoring as sc
 
 
 def test_classify_regime_returns_unknown_for_short_df():
@@ -214,3 +216,25 @@ def test_analyze_symbol_async_consistent():
     assert res["regime"] == regime
     assert res["score"] == sync_score
     assert res["direction"] == sync_dir
+
+
+def test_analyze_symbol_best_mode(monkeypatch):
+    df = _make_trending_df()
+
+    def strat_a(df, cfg=None):
+        return 0.2, "long"
+
+    def strat_b(df, cfg=None):
+        return 0.7, "short"
+
+    monkeypatch.setattr(strategy_router, "get_strategies_for_regime", lambda r: [strat_a, strat_b])
+    monkeypatch.setattr(sc, "evaluate_strategies", lambda strats, df_, cfg_: {"score": 0.7, "direction": "short", "name": "strat_b"})
+
+    async def run():
+        cfg = {"timeframe": "1h", "strategy_evaluation_mode": "best", "scoring_weights": {"strategy_score": 1.0}}
+        return await analyze_symbol("AAA", {"1h": df}, "cex", cfg, None)
+
+    res = asyncio.run(run())
+    assert res["name"] == "strat_b"
+    assert res["direction"] == "short"
+    assert res["score"] == 0.7

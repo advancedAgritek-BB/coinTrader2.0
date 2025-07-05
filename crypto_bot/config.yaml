@@ -136,3 +136,11 @@ volatility_filter:
 wallet_address: your_wallet
 ohlcv_snapshot_frequency_minutes: 1440   # frequency of full refresh
 ohlcv_snapshot_limit: 500                # number of candles for snapshot
+strategy_evaluation_mode: "best"  # mapped|best|vote
+scoring_weights:
+  strategy_score: 0.4
+  regime_confidence: 0.2
+  volume_score: 0.1
+  symbol_score: 0.1
+  spread_penalty: -0.1
+  strategy_regime_strength: 0.2
