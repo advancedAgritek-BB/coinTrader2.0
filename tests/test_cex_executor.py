@@ -85,6 +85,7 @@ class DummyWS:
 
 
 def test_execute_trade_rest_path(monkeypatch):
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     ex = DummyExchange()
@@ -103,6 +104,7 @@ def test_execute_trade_rest_path(monkeypatch):
 
 
 def test_execute_trade_ws_path(monkeypatch):
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     ws = DummyWS()
@@ -126,6 +128,7 @@ def test_execute_trade_ws_path(monkeypatch):
 
 
 def test_execute_trade_ws_missing(monkeypatch):
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     with pytest.raises(ValueError):
@@ -197,6 +200,7 @@ class SlippageExchange:
 
 
 def test_execute_trade_skips_on_slippage(monkeypatch):
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     notifier = DummyNotifier()
@@ -252,6 +256,7 @@ def test_execute_trade_dry_run_logs_price(tmp_path, monkeypatch):
         def fetch_ticker(self, symbol):
             return {"last": 123}
 
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     notifier = DummyNotifier()
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
 
@@ -287,6 +292,7 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
         async def fetch_ticker(self, symbol):
             return {"last": 321}
 
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     notifier = DummyNotifier()
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
 

@@ -12,6 +12,7 @@ class DummyNotifier:
 
 
 def test_execute_swap_dry_run(monkeypatch):
+    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     notifier = DummyNotifier()
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     res = asyncio.run(
@@ -64,6 +65,7 @@ class DummySession:
 
 
 def test_execute_swap_skips_on_slippage(monkeypatch):
+    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: DummySession())
     monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")

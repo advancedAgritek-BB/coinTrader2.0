@@ -6,6 +6,8 @@ import json
 import base64
 import aiohttp
 
+from crypto_bot.utils.telegram import send_message
+from crypto_bot.utils.notifier import Notifier
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.telegram_notifier import TelegramNotifier
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
@@ -34,6 +36,7 @@ async def execute_swap(
 ) -> Dict:
     """Execute a swap on Solana using the Jupiter aggregator."""
 
+    notifier = Notifier(telegram_token, chat_id)
     if notifier is None:
         if telegram_token is None or chat_id is None:
             raise ValueError("telegram_token/chat_id or notifier must be provided")
@@ -52,6 +55,7 @@ async def execute_swap(
         threshold = cfg.get("suspicious_fee_threshold", 0.0)
         action = cfg.get("action", "pause")
         if mempool_monitor.is_suspicious(threshold):
+            err_msg = notifier.notify("\u26a0\ufe0f Error: High priority fees detected")
             err_msg = notifier.notify("High priority fees detected")
             err_msg = TelegramNotifier.notify(telegram_token, chat_id, "High priority fees detected")
             if err_msg:
@@ -153,6 +157,7 @@ async def execute_swap(
                     token_out,
                     amount,
                 )
+                err_skip = notifier.notify("\u26a0\ufe0f Error: Trade skipped due to slippage.")
                 err_skip = notifier.notify("Trade skipped due to slippage.")
                 err_skip = TelegramNotifier.notify(telegram_token, chat_id, "Trade skipped due to slippage.")
                 if err_skip:
