@@ -82,9 +82,10 @@ async def load_kraken_symbols(
 
     exclude_set = set(exclude or [])
     allowed_types = set(getattr(exchange, "exchange_market_types", []))
-    allowed_types = ["spot"]
     if config is not None:
-        allowed_types = config.get("exchange_market_types", ["spot"])
+        allowed_types = set(config.get("exchange_market_types", ["spot"]))
+    elif not allowed_types:
+        allowed_types = {"spot"}
 
     if asyncio.iscoroutinefunction(getattr(exchange, "load_markets", None)):
         markets = await exchange.load_markets()
@@ -304,8 +305,14 @@ async def update_ohlcv_cache(
     for sym in symbols:
         data = data_map.get(sym)
         if not data:
-            if sym in failed_symbols and time.time() - failed_symbols[sym] < retry_delay:
+            skip_retry = (
+                sym in failed_symbols
+                and time.time() - failed_symbols[sym] < retry_delay
+                and since_map.get(sym) is None
+            )
+            if skip_retry:
                 continue
+            failed_symbols.pop(sym, None)
             full = await load_ohlcv_parallel(
                 exchange,
                 [sym],
@@ -317,6 +324,8 @@ async def update_ohlcv_cache(
                 max_concurrent,
             )
             data = full.get(sym)
+            if data:
+                failed_symbols.pop(sym, None)
         if data is None:
             continue
         df_new = pd.DataFrame(

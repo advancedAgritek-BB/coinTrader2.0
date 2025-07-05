@@ -1,13 +1,14 @@
 import os
 import json
 import asyncio
-import time
-from typing import Iterable, List
+from typing import Iterable, List, Dict
 
 import aiohttp
+import pandas as pd
 
 from .logger import setup_logger
 from .market_loader import fetch_ohlcv_async
+from .correlation import compute_pairwise_correlation
 
 logger = setup_logger(__name__, "crypto_bot/logs/symbol_filter.log")
 
@@ -19,14 +20,18 @@ async def has_enough_history(
     exchange, symbol: str, days: int = 30, timeframe: str = "1d"
 ) -> bool:
     """Return ``True`` when ``symbol`` has at least ``days`` days of history."""
-    data = await fetch_ohlcv_async(
-        exchange, symbol, timeframe=timeframe, limit=days
-    )
-    if not data:
+    seconds = _timeframe_seconds(exchange, timeframe)
+    candles_needed = int((days * 86400) / seconds)
+    try:
+        data = await fetch_ohlcv_async(
+            exchange, symbol, timeframe=timeframe, limit=candles_needed
+        )
+    except Exception as exc:  # pragma: no cover - network
+        logger.warning("fetch_ohlcv failed for %s: %s", symbol, exc)
         return False
-    first_ts = data[0][0] / 1000
-    last_ts = data[-1][0] / 1000
-    return (last_ts - first_ts) / 86400 + 1 >= days
+    if not data or len(data) < candles_needed:
+        return False
+    return True
 
 
 async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
@@ -92,45 +97,11 @@ def _timeframe_seconds(exchange, timeframe: str) -> int:
     raise ValueError(f"Unknown timeframe {timeframe}")
 
 
-async def has_enough_history(
-    exchange, symbol: str, min_days: int, timeframe: str = "1h"
-) -> bool:
-    """Return True if ``symbol`` has at least ``min_days`` of OHLCV history."""
-
-    seconds = _timeframe_seconds(exchange, timeframe)
-    candles_needed = int((min_days * 86400) / seconds) + 1
-
-    try:
-        data = await fetch_ohlcv_async(
-            exchange, symbol, timeframe=timeframe, limit=candles_needed
-        )
-    except Exception as exc:  # pragma: no cover - network
-        logger.warning("fetch_ohlcv failed for %s: %s", symbol, exc)
-        return False
-
-    if not data or len(data) < 2:
-        return False
-
-    first_ts = data[0][0]
-    last_ts = data[-1][0]
-    return last_ts - first_ts >= min_days * 86400 - seconds
-
-
 async def filter_symbols(
-    exchange, symbols: Iterable[str], config: dict | None = None
+    exchange, symbols: Iterable[str], config: dict | None = None, df_cache: Dict[str, pd.DataFrame] | None = None
 ) -> List[str]:
-    """Return subset of ``symbols`` passing liquidity and volatility checks.
+    """Return subset of ``symbols`` passing liquidity and volatility checks."""
 
-    Parameters
-    ----------
-    exchange: object
-        Exchange instance providing market metadata.
-    symbols: Iterable[str]
-        Pairs to evaluate.
-    config: dict | None
-        Optional configuration dictionary containing ``symbol_filter`` with
-        ``min_volume_usd`` setting.
-    """
     min_volume = DEFAULT_MIN_VOLUME_USD
     min_age = 0
     if config:
@@ -140,14 +111,13 @@ async def filter_symbols(
         min_age = config.get("min_symbol_age_days", 0)
     pairs = [s.replace("/", "") for s in symbols]
     data = (await _fetch_ticker_async(pairs)).get("result", {})
-    id_map = {}
+    id_map: Dict[str, str] = {}
     if hasattr(exchange, "markets_by_id"):
         if not exchange.markets_by_id and hasattr(exchange, "load_markets"):
             try:
                 exchange.load_markets()
             except Exception as exc:  # pragma: no cover - best effort
                 logger.warning("load_markets failed: %s", exc)
-        id_map = {}
         for k, v in exchange.markets_by_id.items():
             if isinstance(v, dict):
                 id_map[k] = v.get("symbol", k)
@@ -159,7 +129,6 @@ async def filter_symbols(
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)
         if not symbol:
-            # fallback match by stripped pair
             for sym in symbols:
                 if pair_id.upper() == sym.replace("/", "").upper():
                     symbol = sym
@@ -177,14 +146,27 @@ async def filter_symbols(
         if vol_usd > min_volume and abs(change_pct) > 1:
             allowed.append((symbol, vol_usd))
     allowed.sort(key=lambda x: x[1], reverse=True)
-    return [sym for sym, _ in allowed]
+    sorted_symbols = [sym for sym, _ in allowed]
 
-    allowed.sort(key=lambda x: x[1], reverse=True)
-    return [sym for sym, _ in allowed]
-            if min_age > 0:
-                enough = await has_enough_history(exchange, symbol, min_age)
-                if not enough:
-                    logger.info("Skipping %s due to insufficient history", symbol)
-                    continue
-            allowed.append(symbol)
-    return allowed
+    corr_map: Dict[tuple[str, str], float] = {}
+    if df_cache:
+        subset = {s: df_cache.get(s) for s in sorted_symbols}
+        corr_map = compute_pairwise_correlation(subset)
+
+    result: List[str] = []
+    for sym in sorted_symbols:
+        if min_age > 0:
+            enough = await has_enough_history(exchange, sym, min_age, timeframe="1h")
+            if not enough:
+                logger.info("Skipping %s due to insufficient history", sym)
+                continue
+        keep = True
+        if df_cache:
+            for kept in result:
+                corr = corr_map.get((sym, kept)) or corr_map.get((kept, sym))
+                if corr is not None and corr >= 0.95:
+                    keep = False
+                    break
+        if keep:
+            result.append(sym)
+    return result
