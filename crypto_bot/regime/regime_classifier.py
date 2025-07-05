@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import ta
 import yaml
+from crypto_bot.utils.logger import setup_logger
 
 
 CONFIG_PATH = Path(__file__).with_name("regime_config.yaml")
@@ -18,6 +19,8 @@ def _load_config(path: Path) -> dict:
 
 
 CONFIG = _load_config(CONFIG_PATH)
+
+logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
 
 def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
@@ -155,24 +158,33 @@ def classify_regime(
     """
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
+    ml_min_bars = cfg.get("ml_min_bars", 20)
 
     regime = _classify_core(df, cfg, higher_df)
 
     if regime == "unknown" and cfg.get("use_ml_regime_classifier", False):
-        try:  # pragma: no cover - safety net
-            from .ml_regime_model import predict_regime
+        if len(df) >= ml_min_bars:
+            try:  # pragma: no cover - safety net
+                from .ml_regime_model import predict_regime
 
-            regime = predict_regime(df)
-        except Exception:
-            pass
+                regime = predict_regime(df)
+            except Exception:
+                pass
+        else:
+            logger.info(
+                "Skipping ML fallback \u2014 insufficient data (%d rows)", len(df)
+            )
 
     patterns = detect_patterns(df)
     if "breakout" in patterns:
         regime = "breakout"
 
     if regime == "unknown":
-        label, confidence = _ml_fallback(df)
-        return label, confidence
+        if len(df) >= ml_min_bars:
+            label, confidence = _ml_fallback(df)
+            return label, confidence
+        logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
+        return regime, patterns
 
     return regime, patterns
 

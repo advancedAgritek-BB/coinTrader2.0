@@ -378,10 +378,51 @@ def test_breakout_pattern_sets_regime():
     assert "breakout" in patterns
 
 
-def test_ml_fallback_used_when_unknown(monkeypatch, tmp_path):
-    data = {"open": list(range(10)), "high": list(range(10)), "low": list(range(10)), "close": list(range(10)), "volume": [100] * 10}
-    df = pd.DataFrame(data)
+def test_ml_fallback_does_not_trigger_on_short_data(monkeypatch, tmp_path):
+    df = _make_trending_df(10)
+    called = False
 
+    def fake(_df):
+        nonlocal called
+        called = True
+        return "trending"
+
+    monkeypatch.setattr("crypto_bot.regime.ml_regime_model.predict_regime", fake)
+
+    cfg = tmp_path / "regime.yaml"
+    cfg.write_text(
+        """\
+adx_trending_min: 25
+adx_sideways_max: 20
+bb_width_sideways_max: 5
+bb_width_breakout_max: 4
+breakout_volume_mult: 2
+rsi_mean_rev_min: 30
+rsi_mean_rev_max: 70
+ema_distance_mean_rev_max: 0.01
+atr_volatility_mult: 1.5
+ema_fast: 20
+ema_slow: 50
+indicator_window: 14
+bb_window: 20
+ma_window: 20
+higher_timeframe: '4h'
+confirm_trend_with_higher_tf: false
+use_ml_regime_classifier: true
+ml_min_bars: 20
+"""
+    )
+
+    regime, _ = classify_regime(df, config_path=str(cfg))
+    assert regime == "unknown"
+    assert not called
+
+
+def test_ml_fallback_used_when_unknown(monkeypatch, tmp_path):
+    df = _make_trending_df(30)
+    monkeypatch.setattr(
+        "crypto_bot.regime.regime_classifier._classify_core", lambda *_a, **_k: "unknown"
+    )
     assert classify_regime(df)[0] == "unknown"
 
     monkeypatch.setattr(
@@ -408,6 +449,7 @@ ma_window: 20
 higher_timeframe: '4h'
 confirm_trend_with_higher_tf: false
 use_ml_regime_classifier: true
+ml_min_bars: 20
 """
     )
 
