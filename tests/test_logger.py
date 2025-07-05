@@ -1,6 +1,7 @@
 
 import logging
 import warnings
+import asyncio
 
 from crypto_bot.utils.telegram import send_message
 
@@ -78,4 +79,32 @@ def test_send_message_exception_logged(monkeypatch, tmp_path, caplog):
         err = telegram.send_message("t", "c", "msg")
 
     assert err == "boom"
+    assert any("boom" in r.getMessage() for r in caplog.records)
+
+
+def test_send_message_async_exception_logged(monkeypatch, tmp_path, caplog):
+    class DummyBot:
+        def __init__(self, token):
+            pass
+
+        async def send_message(self, chat_id, text):
+            raise RuntimeError("boom")
+
+    import crypto_bot.utils.telegram as telegram
+
+    monkeypatch.setattr(telegram, "Bot", DummyBot)
+
+    log_file = tmp_path / "bot.log"
+    logger = setup_logger("tel_test_async", str(log_file))
+    monkeypatch.setattr(telegram, "logger", logger)
+
+    async def runner():
+        err = telegram.send_message("t", "c", "msg")
+        await asyncio.sleep(0)
+        return err
+
+    with caplog.at_level(logging.ERROR):
+        err = asyncio.run(runner())
+
+    assert err is None
     assert any("boom" in r.getMessage() for r in caplog.records)
