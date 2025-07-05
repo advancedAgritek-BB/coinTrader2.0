@@ -723,7 +723,7 @@ async def main() -> None:
                 "SOL",
                 "USDC",
                 order_amount,
-                notifier,
+                notifier=notifier,
                 slippage_bps=config.get("solana_slippage_bps", 50),
                 dry_run=config["execution_mode"] == "dry_run",
             )
@@ -791,7 +791,7 @@ async def main() -> None:
                 "sell" if trade_side == "buy" else "buy",
                 order_amount,
                 stop_price,
-                notifier,
+                notifier=notifier,
                 dry_run=config["execution_mode"] == "dry_run",
             )
             risk_manager.register_stop_order(

@@ -138,7 +138,7 @@ async def auto_convert_funds(
                 from_mint,
                 to_mint,
                 amount,
-                notifier if notifier else TelegramNotifier(),
+                notifier=notifier if notifier else TelegramNotifier(),
                 slippage_bps=slippage_bps,
                 dry_run=False,
             )
