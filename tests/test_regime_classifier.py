@@ -22,8 +22,9 @@ def test_classify_regime_returns_unknown_for_short_df():
         "volume": [100] * 10,
     }
     df = pd.DataFrame(data)
-    regime, patterns = classify_regime(df)
+    regime, conf = classify_regime(df)
     assert regime == "unknown"
+    assert isinstance(conf, float)
 
 
 def test_classify_regime_returns_unknown_for_14_rows():
@@ -253,3 +254,78 @@ def test_analyze_symbol_best_mode(monkeypatch):
     assert res["name"] == "strat_b"
     assert res["direction"] == "short"
     assert res["score"] == 0.7
+
+
+def test_voting_direction_override(monkeypatch):
+    df = _make_trending_df()
+
+    def base(df, cfg=None):
+        return 0.4, "short"
+
+    def v1(df, cfg=None):
+        return 0.2, "long"
+
+    def v2(df, cfg=None):
+        return 0.3, "long"
+
+    def v3(df, cfg=None):
+        return 0.1, "short"
+
+    import crypto_bot.utils.market_analyzer as ma
+    monkeypatch.setattr(ma, "route", lambda *a, **k: base)
+    monkeypatch.setattr(strategy_router, "route", lambda *a, **k: base)
+    monkeypatch.setattr(ma, "get_strategy_by_name", lambda n: {"a": v1, "b": v2, "c": v3}.get(n))
+    monkeypatch.setattr(
+        strategy_router,
+        "get_strategy_by_name",
+        lambda name: {"a": v1, "b": v2, "c": v3}.get(name),
+    )
+
+    async def run():
+        cfg = {
+            "timeframe": "1h",
+            "regime_timeframes": ["1h"],
+            "voting_strategies": ["a", "b", "c"],
+            "min_agreeing_votes": 2,
+        }
+        df_map = {"1h": df}
+        return await analyze_symbol("AAA", df_map, "cex", cfg, None)
+
+    res = asyncio.run(run())
+    assert res["direction"] == "long"
+
+
+def test_voting_no_consensus(monkeypatch):
+    df = _make_trending_df()
+
+    def base(df, cfg=None):
+        return 0.6, "long"
+
+    def v1(df, cfg=None):
+        return 0.2, "long"
+
+    def v2(df, cfg=None):
+        return 0.3, "short"
+
+    import crypto_bot.utils.market_analyzer as ma
+    monkeypatch.setattr(ma, "route", lambda *a, **k: base)
+    monkeypatch.setattr(strategy_router, "route", lambda *a, **k: base)
+    monkeypatch.setattr(ma, "get_strategy_by_name", lambda n: {"a": v1, "b": v2}.get(n))
+    monkeypatch.setattr(
+        strategy_router,
+        "get_strategy_by_name",
+        lambda name: {"a": v1, "b": v2}.get(name),
+    )
+
+    async def run():
+        cfg = {
+            "timeframe": "1h",
+            "regime_timeframes": ["1h"],
+            "voting_strategies": ["a", "b"],
+            "min_agreeing_votes": 2,
+        }
+        df_map = {"1h": df}
+        return await analyze_symbol("AAA", df_map, "cex", cfg, None)
+
+    res = asyncio.run(run())
+    assert res["direction"] == "none"
