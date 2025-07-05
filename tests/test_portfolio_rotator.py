@@ -42,6 +42,10 @@ def test_rotate_calls_converter(monkeypatch):
 
     monkeypatch.setattr("crypto_bot.portfolio_rotator.auto_convert_funds", fake_convert)
 
+    async def fake_scores(*a, **k):
+        return {"BTC": 0.5, "ETH": 0.1}
+
+    monkeypatch.setattr(rotator, "score_assets", fake_scores)
     async def fake_score_assets(*_a, **_k):
         return {"BTC": 0.5, "ETH": 0.1}
 
@@ -63,6 +67,10 @@ def test_rotate_logs_scores(tmp_path, monkeypatch):
     rotator = PortfolioRotator()
     score_file = tmp_path / "scores.json"
     monkeypatch.setattr("crypto_bot.portfolio_rotator.SCORE_FILE", score_file)
+    async def fake_scores(*a, **k):
+        return {"BTC": 0.5, "ETH": 0.1}
+
+    monkeypatch.setattr(rotator, "score_assets", fake_scores)
     async def fake_score_assets(*_a, **_k):
         return {"BTC": 0.5, "ETH": 0.1}
 
