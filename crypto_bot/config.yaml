@@ -94,6 +94,7 @@ symbol: BTC/USDT
 symbol_batch_size: 10
 symbol_filter:
   min_volume_usd: 50000
+  max_spread_pct: 1.0
 min_symbol_score: 0.4
 symbol_score_weights:
   volume: 0.4

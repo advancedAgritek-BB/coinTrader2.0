@@ -100,13 +100,17 @@ def _timeframe_seconds(exchange, timeframe: str) -> int:
     raise ValueError(f"Unknown timeframe {timeframe}")
 
 
+async def has_enough_history(
+    exchange, symbol: str, days: int, timeframe: str = "1h"
+) -> bool:
+    """Return True if ``symbol`` has at least ``days`` of OHLCV history."""
 async def _has_enough_history(
     exchange, symbol: str, min_days: int, timeframe: str = "1h"
 ) -> bool:
     """Return ``True`` if ``symbol`` has at least ``min_days`` of OHLCV."""
 
     seconds = _timeframe_seconds(exchange, timeframe)
-    candles_needed = int((min_days * 86400) / seconds) + 1
+    candles_needed = int((days * 86400) / seconds) + 1
 
     try:
         data = await fetch_ohlcv_async(
@@ -121,7 +125,10 @@ async def _has_enough_history(
 
     first_ts = data[0][0]
     last_ts = data[-1][0]
-    return last_ts - first_ts >= min_days * 86400 - seconds
+    if last_ts > days * 86400 * 10:
+        first_ts /= 1000
+        last_ts /= 1000
+    return last_ts - first_ts >= days * 86400 - seconds
 
 
 async def filter_symbols(
@@ -146,19 +153,26 @@ async def filter_symbols(
         Pairs to evaluate.
     config: dict | None
         Optional configuration dictionary containing ``symbol_filter`` with
-        ``min_volume_usd`` setting.
+        ``min_volume_usd`` and ``max_spread_pct`` settings.
     """
+
     min_volume = DEFAULT_MIN_VOLUME_USD
+    max_spread = 1.0
     min_age = 0
     pct = 80
     if config:
+        filter_cfg = config.get("symbol_filter", {})
+        min_volume = filter_cfg.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
+        max_spread = filter_cfg.get("max_spread_pct", 1.0)
         sf = config.get("symbol_filter", {})
         min_volume = sf.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
         pct = sf.get("change_pct_percentile", 80)
         min_age = config.get("min_symbol_age_days", 0)
+
     pairs = [s.replace("/", "") for s in symbols]
     data = (await _fetch_ticker_async(pairs)).get("result", {})
 
+    id_map = {}
     id_map: dict[str, str] = {}
     if hasattr(exchange, "markets_by_id"):
         if not exchange.markets_by_id and hasattr(exchange, "load_markets"):
@@ -176,6 +190,9 @@ async def filter_symbols(
 
     scored: List[tuple[str, float]] = []
                 id_map[k] = k
+
+    allowed: List[tuple[str, float]] = []
+
     metrics: List[tuple[str, float, float, float]] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)
@@ -187,6 +204,7 @@ async def filter_symbols(
         if not symbol:
             continue
 
+        vol_usd, change_pct, spread = _parse_metrics(ticker)
         vol_usd, change_pct, spread_pct = _parse_metrics(ticker)
         logger.info(
             "Ticker %s volume %.2f USD change %.2f%% spread %.2f%%",
@@ -195,6 +213,24 @@ async def filter_symbols(
             change_pct,
             spread_pct,
         )
+
+        if vol_usd <= min_volume or abs(change_pct) <= 1:
+            continue
+        if spread > max_spread:
+            logger.info(
+                "Skipping %s due to high spread %.2f%% > %.2f%%",
+                symbol,
+                spread,
+                max_spread,
+            )
+            continue
+        if min_age > 0:
+            enough = await has_enough_history(exchange, symbol, min_age)
+            if not enough:
+                logger.info("Skipping %s due to insufficient history", symbol)
+                continue
+        allowed.append((symbol, vol_usd))
+
 
         if vol_usd < min_volume or abs(change_pct) <= 1:
             continue
