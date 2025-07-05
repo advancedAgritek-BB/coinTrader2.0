@@ -83,7 +83,7 @@ Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to configure credentia
    token is likely incorrect or the bot lacks permission to message the chat.
    Double‑check the values saved by `wallet_manager.py` and ensure you've
    started a conversation with your bot.
-5. Once Issue 1 is fixed you no longer need a `telegram.chat_id` entry in
+5. Set your bot token and chat ID under the `telegram` section in
    `crypto_bot/config.yaml`.
 
 ### Twitter Sentiment API
