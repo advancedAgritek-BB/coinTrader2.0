@@ -106,6 +106,7 @@ max_change_pct: 10
 max_spread_pct: 2
 max_age_days: 180
 max_latency_ms: 1000
+  change_pct_percentile: 80
 symbol_refresh_minutes: 30
 symbols: []
 tax_tracking:
@@ -118,6 +119,10 @@ telegram:
   trade_updates: true
 testing_mode: true
 timeframe: 1h
+timeframes:
+  - "1h"
+  - "4h"
+  - "1d"
 tp_pct: 0.07
 trade_size_pct: 0.2
 twap_enabled: false
@@ -128,3 +133,5 @@ volatility_filter:
   max_funding_rate: 0.05
   min_atr_pct: 0.001
 wallet_address: your_wallet
+ohlcv_snapshot_frequency_minutes: 1440   # frequency of full refresh
+ohlcv_snapshot_limit: 500                # number of candles for snapshot

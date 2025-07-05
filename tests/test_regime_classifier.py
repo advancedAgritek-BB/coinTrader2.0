@@ -208,7 +208,7 @@ def test_analyze_symbol_async_consistent():
     sync_score, sync_dir = asyncio.run(evaluate_async(strategy, df, {}))
 
     async def run():
-        return await analyze_symbol("AAA", df, "cex", {}, None)
+        return await analyze_symbol("AAA", {"1h": df}, "cex", {"timeframe": "1h"}, None)
 
     res = asyncio.run(run())
     assert res["regime"] == regime

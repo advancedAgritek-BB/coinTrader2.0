@@ -7,6 +7,8 @@ import json
 import os
 from typing import Iterable, List
 
+import numpy as np
+
 import aiohttp
 
 from .logger import setup_logger
@@ -18,6 +20,21 @@ logger = setup_logger(__name__, "crypto_bot/logs/symbol_filter.log")
 
 API_URL = "https://api.kraken.com/0/public"
 DEFAULT_MIN_VOLUME_USD = 50000
+
+
+async def has_enough_history(
+    exchange, symbol: str, days: int = 30, timeframe: str = "1d"
+) -> bool:
+    """Return ``True`` when ``symbol`` has at least ``days`` days of history."""
+    data = await fetch_ohlcv_async(
+        exchange, symbol, timeframe=timeframe, limit=days
+    )
+    if not data:
+        return False
+    first_ts = data[0][0] / 1000
+    last_ts = data[-1][0] / 1000
+    return (last_ts - first_ts) / 86400 + 1 >= days
+
 
 
 async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
@@ -83,7 +100,7 @@ def _timeframe_seconds(exchange, timeframe: str) -> int:
     raise ValueError(f"Unknown timeframe {timeframe}")
 
 
-async def has_enough_history(
+async def _has_enough_history(
     exchange, symbol: str, min_days: int, timeframe: str = "1h"
 ) -> bool:
     """Return ``True`` if ``symbol`` has at least ``min_days`` of OHLCV."""
@@ -119,6 +136,26 @@ async def filter_symbols(
     min_age = cfg.get("min_symbol_age_days", 0)
     min_score = cfg.get("min_symbol_score", 0.4)
 
+    """Return subset of ``symbols`` passing liquidity and volatility checks.
+
+    Parameters
+    ----------
+    exchange: object
+        Exchange instance providing market metadata.
+    symbols: Iterable[str]
+        Pairs to evaluate.
+    config: dict | None
+        Optional configuration dictionary containing ``symbol_filter`` with
+        ``min_volume_usd`` setting.
+    """
+    min_volume = DEFAULT_MIN_VOLUME_USD
+    min_age = 0
+    pct = 80
+    if config:
+        sf = config.get("symbol_filter", {})
+        min_volume = sf.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
+        pct = sf.get("change_pct_percentile", 80)
+        min_age = config.get("min_symbol_age_days", 0)
     pairs = [s.replace("/", "") for s in symbols]
     data = (await _fetch_ticker_async(pairs)).get("result", {})
 
@@ -138,6 +175,8 @@ async def filter_symbols(
                 id_map[k] = v if isinstance(v, str) else k
 
     scored: List[tuple[str, float]] = []
+                id_map[k] = k
+    metrics: List[tuple[str, float, float, float]] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)
         if not symbol:
@@ -176,3 +215,22 @@ async def filter_symbols(
     scored.sort(key=lambda x: x[1], reverse=True)
     return [sym for sym, _ in scored]
 
+        metrics.append((symbol, vol_usd, change_pct, spread))
+
+    if not metrics:
+        return []
+
+    threshold = np.percentile([abs(c[2]) for c in metrics], pct)
+
+    allowed: List[tuple[str, float]] = []
+    for symbol, vol_usd, change_pct, _ in metrics:
+        if vol_usd > min_volume and abs(change_pct) >= threshold:
+            if min_age > 0:
+                enough = await _has_enough_history(exchange, symbol, min_age)
+                if not enough:
+                    logger.info("Skipping %s due to insufficient history", symbol)
+                    continue
+            allowed.append((symbol, vol_usd))
+
+    allowed.sort(key=lambda x: x[1], reverse=True)
+    return [sym for sym, _ in allowed]

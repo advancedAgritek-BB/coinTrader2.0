@@ -47,7 +47,7 @@ def test_filter_symbols(monkeypatch):
     symbols = asyncio.run(
         filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG)
     )
-    assert symbols == ["ETH/USD", "BTC/USD"]
+    assert symbols == ["BTC/USD"]
 
 
 class DummyExchangeList:
@@ -191,6 +191,7 @@ def test_filter_symbols_min_score(monkeypatch):
     cfg = {**CONFIG, "min_symbol_score": 0.7}
     symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg))
     assert symbols == ["ETH/USD"]
+    assert symbols == ["BTC/USD"]
 class HistoryExchange:
     def __init__(self, candles: int):
         self.markets_by_id = {"XETHZUSD": {"symbol": "ETH/USD"}}
@@ -218,3 +219,32 @@ def test_filter_symbols_min_age_allows(monkeypatch):
     ex = HistoryExchange(48)
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], cfg))
     assert symbols == ["ETH/USD"]
+
+
+def test_percentile_selects_top_movers(monkeypatch):
+    async def fake_fetch_pct(_):
+        result = {}
+        for i in range(1, 11):
+            price = 100 + i
+            result[f"PAIR{i}"] = {
+                "a": [str(price + 1), "1", "1"],
+                "b": [str(price - 1), "1", "1"],
+                "c": [str(price), "1"],
+                "v": ["1000", "1000"],
+                "p": [str(price), str(price)],
+                "o": "100",
+            }
+        return {"result": result}
+
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch_pct
+    )
+
+    pairs = [f"PAIR{i}" for i in range(1, 11)]
+
+    class DummyEx:
+        markets_by_id = {p: {"symbol": p} for p in pairs}
+
+    symbols = asyncio.run(filter_symbols(DummyEx(), pairs, CONFIG))
+
+    assert set(symbols) == {"PAIR9", "PAIR10"}
