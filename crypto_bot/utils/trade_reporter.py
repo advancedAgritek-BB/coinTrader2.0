@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from .telegram_notifier import TelegramNotifier
 from .telegram import TelegramNotifier
 from .logger import setup_logger
 
@@ -34,6 +35,7 @@ def report_entry(
     direction: str,
 ) -> Optional[str]:
     """Send a Telegram message summarizing a trade entry."""
+    err = TelegramNotifier.notify(token, chat_id, entry_summary(symbol, strategy, score, direction))
     err = notifier.send(entry_summary(symbol, strategy, score, direction))
     if err:
         logger.error("Failed to report entry: %s", err)
@@ -48,6 +50,7 @@ def report_exit(
     direction: str,
 ) -> Optional[str]:
     """Send a Telegram message summarizing a trade exit."""
+    err = TelegramNotifier.notify(token, chat_id, exit_summary(symbol, strategy, pnl, direction))
     err = notifier.send(exit_summary(symbol, strategy, pnl, direction))
     if err:
         logger.error("Failed to report exit: %s", err)
