@@ -30,7 +30,7 @@ class PortfolioRotator:
         SCORE_FILE.parent.mkdir(parents=True, exist_ok=True)
         self.logger = setup_logger(__name__, "crypto_bot/logs/portfolio_rotation.log")
 
-    def score_assets(
+    async def score_assets(
         self,
         exchange,
         symbols: Iterable[str],
@@ -42,7 +42,13 @@ class PortfolioRotator:
         scores: Dict[str, float] = {}
         for sym in symbols:
             try:
-                ohlcv = exchange.fetch_ohlcv(sym, timeframe="1d", limit=lookback_days)
+                fetch = getattr(exchange, "fetch_ohlcv", None)
+                if asyncio.iscoroutinefunction(fetch):
+                    ohlcv = await fetch(sym, timeframe="1d", limit=lookback_days)
+                else:
+                    ohlcv = await asyncio.to_thread(
+                        fetch, sym, timeframe="1d", limit=lookback_days
+                    )
             except Exception as exc:  # pragma: no cover - network
                 self.logger.error("OHLCV fetch failed for %s: %s", sym, exc)
                 continue
@@ -118,7 +124,7 @@ class PortfolioRotator:
             else:
                 pair_map[pair_found] = asset
 
-        scores_pairs = self.score_assets(exchange, pair_map.keys(), lookback, method)
+        scores_pairs = await self.score_assets(exchange, pair_map.keys(), lookback, method)
         scores = {pair_map.get(p, p): s for p, s in scores_pairs.items()}
         self._log_scores(scores)
         if not scores:
