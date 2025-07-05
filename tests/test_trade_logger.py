@@ -3,6 +3,17 @@ from pathlib import Path
 
 from crypto_bot.utils import trade_logger
 from crypto_bot.execution import cex_executor
+
+
+class DummyNotifier:
+    def __init__(self, logger):
+        self.logger = logger
+        self.messages = []
+
+    def notify(self, text: str):
+        self.messages.append(text)
+        self.logger.info(text)
+        return None
 from crypto_bot.utils.logger import setup_logger
 
 
@@ -42,12 +53,14 @@ def test_execute_trade_async_logs(tmp_path, monkeypatch):
 
     logger = setup_logger("exec_test", str(exec_log))
     monkeypatch.setattr(cex_executor, "logger", logger)
+    notifier = DummyNotifier(logger)
 
     def fake_send(self, text):
         logger.info(text)
 
     monkeypatch.setattr(cex_executor.Notifier, "notify", fake_send)
     monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: logger.info(a[2]))
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", fake_send)
 
     order = asyncio.run(
         cex_executor.execute_trade_async(
@@ -56,8 +69,7 @@ def test_execute_trade_async_logs(tmp_path, monkeypatch):
             "BTC/USDT",
             "buy",
             1.0,
-            "t",
-            "c",
+            notifier=notifier,
             dry_run=True,
         )
     )
