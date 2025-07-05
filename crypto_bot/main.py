@@ -76,6 +76,9 @@ logger = setup_logger("bot", "crypto_bot/logs/bot.log", to_console=False)
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
 
+# Queue tracking symbols evaluated across cycles
+SYMBOL_EVAL_QUEUE: deque[str] = deque()
+
 
 def direction_to_side(direction: str) -> str:
     """Translate strategy direction to trade side."""
