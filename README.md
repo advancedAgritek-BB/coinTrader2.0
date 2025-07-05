@@ -83,17 +83,13 @@ Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to configure credentia
      chat_id: your_chat_id
    ```
 
-   The bot reads the chat ID and token from `config.yaml`, not from
-   `user_config.yaml`.
+   The bot reads the chat ID and token from `config.yaml` (not
+   `user_config.yaml`).
 2. Send `/start` to your bot so it can message you.
 3. If you see `Failed to send message: Not Found` in the logs, the chat ID or
    token is likely incorrect or the bot lacks permission to message the chat.
    Double-check the values in `config.yaml` and ensure you've started a
    conversation with your bot.
-   Double‑check the values saved by `wallet_manager.py` and ensure you've
-   started a conversation with your bot.
-5. Set your bot token and chat ID under the `telegram` section in
-   `crypto_bot/config.yaml`.
 
 ### Twitter Sentiment API
 
