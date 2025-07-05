@@ -7,6 +7,7 @@ import base64
 import aiohttp
 
 from crypto_bot.utils.telegram import send_message
+from crypto_bot.utils.notifier import Notifier
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot import tax_logger
 from crypto_bot.utils.logger import setup_logger
@@ -32,6 +33,7 @@ async def execute_swap(
 ) -> Dict:
     """Execute a swap on Solana using the Jupiter aggregator."""
 
+    notifier = Notifier(telegram_token, chat_id)
     msg = f"Swapping {amount} {token_in} to {token_out}"
     err = send_message(telegram_token, chat_id, msg)
     if err:
@@ -44,7 +46,7 @@ async def execute_swap(
         threshold = cfg.get("suspicious_fee_threshold", 0.0)
         action = cfg.get("action", "pause")
         if mempool_monitor.is_suspicious(threshold):
-            err_msg = send_message(telegram_token, chat_id, "High priority fees detected")
+            err_msg = notifier.notify("\u26a0\ufe0f Error: High priority fees detected")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
             if action == "pause":
@@ -143,7 +145,7 @@ async def execute_swap(
                     token_out,
                     amount,
                 )
-                err_skip = send_message(telegram_token, chat_id, "Trade skipped due to slippage.")
+                err_skip = notifier.notify("\u26a0\ufe0f Error: Trade skipped due to slippage.")
                 if err_skip:
                     logger.error("Failed to send message: %s", err_skip)
                 return {}

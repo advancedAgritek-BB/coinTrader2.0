@@ -3,7 +3,7 @@ from crypto_bot.execution import solana_executor
 
 
 def test_execute_swap_dry_run(monkeypatch):
-    monkeypatch.setattr(solana_executor, "send_message", lambda *a, **k: None)
+    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     res = asyncio.run(
         solana_executor.execute_swap("SOL", "USDC", 1, "token", "chat", dry_run=True)
     )
@@ -51,7 +51,7 @@ class DummySession:
 
 
 def test_execute_swap_skips_on_slippage(monkeypatch):
-    monkeypatch.setattr(solana_executor, "send_message", lambda *a, **k: None)
+    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: DummySession())
     monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")
 
