@@ -36,7 +36,18 @@ def compute_pairwise_correlation(df_cache: dict[str, pd.DataFrame]) -> dict[tupl
 
 
 def compute_correlation_matrix(df_cache: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """Return correlation matrix of closing prices for each symbol."""
+    """Return a symmetric correlation matrix of closing prices.
+
+    Parameters
+    ----------
+    df_cache : dict[str, pd.DataFrame]
+        Mapping of symbol to OHLCV DataFrame. ``close`` column must be present.
+
+    Notes
+    -----
+    Only pairs with matching lengths are considered. Pairs with mismatched
+    lengths are left as ``NaN`` in the resulting matrix.
+    """
 
     closes: dict[str, pd.Series] = {}
     for sym, df in df_cache.items():
@@ -47,39 +58,23 @@ def compute_correlation_matrix(df_cache: dict[str, pd.DataFrame]) -> pd.DataFram
     if not closes:
         return pd.DataFrame()
 
-    combined = pd.DataFrame(closes)
-    return combined.corr(method="pearson")
-    """Return a symmetric correlation matrix for the given OHLCV cache.
-
-    Parameters
-    ----------
-    df_cache : dict[str, pd.DataFrame]
-        Mapping of symbol to OHLCV DataFrame. ``close`` column must be present.
-
-    Notes
-    -----
-    Only pairs with matching lengths are considered.  Pairs with mismatched
-    lengths are left as ``NaN`` in the resulting matrix.
-    """
-
-    # Keep only valid symbols
-    symbols = [s for s, df in df_cache.items() if df is not None and not df.empty and "close" in df.columns]
+    symbols = list(closes.keys())
     matrix = pd.DataFrame(np.nan, index=symbols, columns=symbols, dtype=float)
 
     for i, sym1 in enumerate(symbols):
-        df1 = df_cache[sym1]
+        s1 = closes[sym1]
         matrix.loc[sym1, sym1] = 1.0
         for sym2 in symbols[i + 1 :]:
-            df2 = df_cache[sym2]
-            if len(df1) != len(df2) or len(df1) < 2:
+            s2 = closes[sym2]
+            if len(s1) != len(s2) or len(s1) < 2:
                 # skip mismatched or insufficient lengths
                 continue
-            s1 = df1["close"].to_numpy()
-            s2 = df2["close"].to_numpy()
-            if np.std(s1) == 0 or np.std(s2) == 0:
+            arr1 = s1.to_numpy()
+            arr2 = s2.to_numpy()
+            if np.std(arr1) == 0 or np.std(arr2) == 0:
                 corr = 1.0
             else:
-                corr, _ = pearsonr(s1, s2)
+                corr, _ = pearsonr(arr1, arr2)
             matrix.loc[sym1, sym2] = corr
             matrix.loc[sym2, sym1] = corr
 
