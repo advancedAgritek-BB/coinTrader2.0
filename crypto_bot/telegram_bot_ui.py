@@ -243,6 +243,18 @@ class TelegramBotUI:
                 [InlineKeyboardButton("Open Trades", callback_data=TRADES)],
             ]
         )
+        cmds = [
+            "/start",
+            "/stop",
+            "/status",
+            "/log",
+            "/rotate_now",
+            "/toggle_mode",
+            "/signals",
+            "/balance",
+            "/trades",
+        ]
+        text = "Available commands:\n" + "\n".join(cmds)
         if update.message:
             cmds = [
                 "/start",
@@ -267,6 +279,13 @@ class TelegramBotUI:
                 )
             except TypeError:
                 await update.callback_query.message.edit_text("Menu")
+            try:
+                await update.message.reply_text(text, reply_markup=markup)
+            except TypeError:
+                await update.message.reply_text(text)
+        elif update.callback_query:
+            await update.callback_query.answer()
+            await update.callback_query.message.edit_text(text, reply_markup=markup)
 
     async def show_signals(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -274,6 +293,7 @@ class TelegramBotUI:
         query = getattr(update, "callback_query", None)
         if query:
             await query.answer()
+        message = getattr(update, "message", None)
         if ASSET_SCORES_FILE.exists():
             try:
                 data = json.loads(ASSET_SCORES_FILE.read_text())
@@ -293,6 +313,11 @@ class TelegramBotUI:
             await query.message.edit_text(text, reply_markup=markup)
         else:
             await update.message.reply_text(text)
+        elif message:
+            try:
+                await message.reply_text(text, reply_markup=markup)
+            except TypeError:
+                await message.reply_text(text)
 
     async def show_balance(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -300,6 +325,7 @@ class TelegramBotUI:
         query = getattr(update, "callback_query", None)
         if query:
             await query.answer()
+        message = getattr(update, "message", None)
         text: str
         if not self.exchange:
             text = "Exchange not configured"
@@ -328,6 +354,11 @@ class TelegramBotUI:
             await query.message.edit_text(text, reply_markup=markup)
         else:
             await update.message.reply_text(text)
+        elif message:
+            try:
+                await message.reply_text(text, reply_markup=markup)
+            except TypeError:
+                await message.reply_text(text)
 
     async def show_trades(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -335,6 +366,7 @@ class TelegramBotUI:
         query = getattr(update, "callback_query", None)
         if query:
             await query.answer()
+        message = getattr(update, "message", None)
         trades = get_open_trades(TRADES_FILE)
         if not trades:
             text = "No open trades"
@@ -370,3 +402,8 @@ class TelegramBotUI:
             await query.message.edit_text(text, reply_markup=markup)
         else:
             await update.message.reply_text(text)
+        elif message:
+            try:
+                await message.reply_text(text, reply_markup=markup)
+            except TypeError:
+                await message.reply_text(text)
