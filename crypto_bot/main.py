@@ -103,6 +103,7 @@ async def main() -> None:
         tg_cfg["token"] = user["telegram_token"]
     if user.get("telegram_chat_id"):
         tg_cfg["chat_id"] = user["telegram_chat_id"]
+    trade_updates = tg_cfg.get("trade_updates", True)
 
     notifier = TelegramNotifier.from_config(tg_cfg)
     notifier.notify("🤖 CoinTrader2.0 started")

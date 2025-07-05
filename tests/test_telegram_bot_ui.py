@@ -1,5 +1,8 @@
 import types
 import asyncio
+import json
+import crypto_bot.telegram_bot_ui as telegram_bot_ui
+from crypto_bot.telegram_bot_ui import TelegramBotUI
 from crypto_bot.telegram_bot_ui import (
     TelegramBotUI,
     SIGNALS,
@@ -133,6 +136,39 @@ def test_log_and_rotate(monkeypatch, tmp_path):
     asyncio.run(ui.status_cmd(update, DummyContext()))
     assert "Running: True" in update.message.text
 
+
+def test_menu_signals_balance_trades(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder
+    )
+    exchange = DummyExchange()
+    state = {"running": True, "mode": "cex"}
+    ui, _ = make_ui(tmp_path, state, exchange=exchange)
+
+    scores = {"BTC": 0.5, "ETH": 0.1}
+    sig_file = tmp_path / "scores.json"
+    sig_file.write_text(json.dumps(scores))
+    monkeypatch.setattr(telegram_bot_ui, "SIGNALS_FILE", sig_file)
+
+    trades_file = tmp_path / "trades.csv"
+    trades_file.write_text("BTC/USDT,buy,1,100\n")
+    monkeypatch.setattr(telegram_bot_ui, "TRADES_FILE", trades_file)
+
+    update = DummyUpdate()
+    asyncio.run(ui.menu_cmd(update, DummyContext()))
+    assert "rotate_now" in update.message.text
+
+    update = DummyUpdate()
+    asyncio.run(ui.show_signals(update, DummyContext()))
+    assert "BTC" in update.message.text
+
+    update = DummyUpdate()
+    asyncio.run(ui.show_balance(update, DummyContext()))
+    assert "BTC" in update.message.text
+
+    update = DummyUpdate()
+    asyncio.run(ui.show_trades(update, DummyContext()))
+    assert "BTC/USDT" in update.message.text
 
 def test_menu_callbacks(monkeypatch, tmp_path):
     monkeypatch.setattr(
