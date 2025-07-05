@@ -196,10 +196,15 @@ async def main() -> None:
     state = {"running": True, "mode": mode}
     df_cache: dict[str, pd.DataFrame] = {}
 
-    telegram_bot = None
-    if notifier.enabled:
     notifier = None
+    telegram_bot = None
     if user.get("telegram_token") and user.get("telegram_chat_id"):
+        notifier = TelegramNotifier(
+            user["telegram_token"],
+            user["telegram_chat_id"],
+        )
+
+    if notifier is not None and notifier.enabled:
         from crypto_bot.telegram_bot_ui import TelegramBotUI
 
         telegram_bot = TelegramBotUI(
@@ -211,7 +216,6 @@ async def main() -> None:
             user.get("wallet_address", ""),
         )
         telegram_bot.run_async()
-        notifier = TelegramNotifier(user["telegram_token"], user["telegram_chat_id"])
 
     while True:
         mode = state["mode"]
@@ -565,7 +569,6 @@ async def main() -> None:
                     else:
                         latest_balance = paper_wallet.balance if paper_wallet else 0.0
                     log_balance(float(latest_balance))
-                    if notifier.enabled:
                     if notifier:
                         report_exit(
                             notifier,
@@ -829,7 +832,6 @@ async def main() -> None:
                 current_price,
                 log_bal,
             )
-            if notifier.enabled:
             if notifier:
                 report_entry(
                     notifier,
