@@ -123,6 +123,7 @@ async def filter_symbols(
     max_spread = sf.get("max_spread_pct", 1.0)
     pct = sf.get("change_pct_percentile", 80)
     min_age = cfg.get("min_symbol_age_days", 0)
+    min_score = float(cfg.get("min_symbol_score", 0.0))
 
     pairs = [s.replace("/", "") for s in symbols]
     data = (await _fetch_ticker_async(pairs)).get("result", {})
