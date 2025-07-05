@@ -217,7 +217,14 @@ loads all active Kraken trading pairs at startup. Pairs listed under
 scan_markets: true
 symbols: []            # automatically populated
 excluded_symbols: [ETH/USD]
+exchange_market_types: ["spot"]  # options: spot, margin, futures
+min_symbol_age_days: 10          # skip pairs with less history
+symbol_batch_size: 10            # symbols processed per cycle
 ```
+
+`exchange_market_types` filters the discovered pairs by market class. The bot
+also skips newly listed pairs using `min_symbol_age_days` and processes symbols
+in batches controlled by `symbol_batch_size`.
 
 OHLCV data for these symbols is now fetched concurrently using
 `load_ohlcv_parallel`, greatly reducing the time needed to evaluate
