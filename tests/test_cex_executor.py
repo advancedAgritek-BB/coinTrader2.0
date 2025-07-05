@@ -13,7 +13,16 @@ class DummyExchange:
             "amount": amount,
             "type": type_,
             "params": params,
-        }
+        } 
+
+
+class DummyNotifier:
+    def __init__(self):
+        self.messages = []
+
+    def notify(self, text: str):
+        self.messages.append(text)
+        return None
 
 
 def test_place_stop_order_dry_run(monkeypatch):
@@ -24,16 +33,17 @@ def test_place_stop_order_dry_run(monkeypatch):
 
     monkeypatch.setattr("crypto_bot.execution.cex_executor.log_trade", fake_log)
 
+    notifier = DummyNotifier()
     order = place_stop_order(
         DummyExchange(),
         "BTC/USDT",
         "sell",
         1,
         9000,
-        "token",
-        "chat",
+        notifier=notifier,
         dry_run=True,
     )
+    assert notifier.messages
     assert order["dry_run"] is True
     assert order["stop"] == 9000
     assert called.get("flag") is True
@@ -75,28 +85,33 @@ class DummyWS:
 
 
 def test_execute_trade_rest_path(monkeypatch):
-    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     ex = DummyExchange()
+    notifier = DummyNotifier()
     order = cex_executor.execute_trade(
-        ex, None, "BTC/USDT", "buy", 1.0, "t", "c", dry_run=False
+        ex,
+        None,
+        "BTC/USDT",
+        "buy",
+        1.0,
+        notifier=notifier,
+        dry_run=False,
     )
     assert order == {"exchange": True}
     assert ex.called
 
 
 def test_execute_trade_ws_path(monkeypatch):
-    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     ws = DummyWS()
+    notifier = DummyNotifier()
     order = cex_executor.execute_trade(
         object(),
         ws,
         "BTC/USDT",
         "buy",
         1.0,
-        "t",
-        "c",
+        notifier=notifier,
         dry_run=False,
         use_websocket=True,
     )
@@ -109,7 +124,6 @@ def test_execute_trade_ws_path(monkeypatch):
 
 
 def test_execute_trade_ws_missing(monkeypatch):
-    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     with pytest.raises(ValueError):
         cex_executor.execute_trade(
@@ -118,8 +132,7 @@ def test_execute_trade_ws_missing(monkeypatch):
             "BTC/USDT",
             "buy",
             1.0,
-            "t",
-            "c",
+            notifier=DummyNotifier(),
             dry_run=False,
             use_websocket=True,
         )
@@ -181,16 +194,15 @@ class SlippageExchange:
 
 
 def test_execute_trade_skips_on_slippage(monkeypatch):
-    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+    notifier = DummyNotifier()
     order = cex_executor.execute_trade(
         SlippageExchange(),
         None,
         "BTC/USDT",
         "buy",
         1.0,
-        "t",
-        "c",
+        notifier=notifier,
         dry_run=False,
         config={"max_slippage_pct": 0.05},
     )
@@ -236,9 +248,17 @@ def test_execute_trade_dry_run_logs_price(tmp_path, monkeypatch):
         def fetch_ticker(self, symbol):
             return {"last": 123}
 
-    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
+    notifier = DummyNotifier()
 
-    cex_executor.execute_trade(DummyEx(), None, "BTC/USDT", "buy", 1.0, "t", "c", dry_run=True)
+    cex_executor.execute_trade(
+        DummyEx(),
+        None,
+        "BTC/USDT",
+        "buy",
+        1.0,
+        notifier=notifier,
+        dry_run=True,
+    )
 
     row = trades.read_text().strip()
     assert row
@@ -262,11 +282,11 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
         async def fetch_ticker(self, symbol):
             return {"last": 321}
 
-    monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: None)
+    notifier = DummyNotifier()
 
     asyncio.run(
         cex_executor.execute_trade_async(
-            DummyEx(), None, "BTC/USDT", "buy", 1.0, "t", "c", dry_run=True
+            DummyEx(), None, "BTC/USDT", "buy", 1.0, notifier=notifier, dry_run=True
         )
     )
 

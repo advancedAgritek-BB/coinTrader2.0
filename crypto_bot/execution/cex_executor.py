@@ -9,7 +9,7 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     ccxtpro = None
 
-from crypto_bot.utils.telegram import send_message
+from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.execution.kraken_ws import KrakenWSClient
 from crypto_bot.utils.trade_logger import log_trade
 from crypto_bot import tax_logger
@@ -77,12 +77,17 @@ def execute_trade(
     symbol: str,
     side: str,
     amount: float,
-    token: str,
-    chat_id: str,
+    token: Optional[str] = None,
+    chat_id: Optional[str] = None,
+    notifier: Optional[TelegramNotifier] = None,
     dry_run: bool = True,
     use_websocket: bool = False,
     config: Optional[Dict] = None,
 ) -> Dict:
+    if notifier is None:
+        if token is None or chat_id is None:
+            raise ValueError("token/chat_id or notifier must be provided")
+        notifier = TelegramNotifier(token, chat_id)
     if use_websocket and ws_client is None and not dry_run:
         raise ValueError("WebSocket trading enabled but ws_client is missing")
     config = config or {}
@@ -99,7 +104,7 @@ def execute_trade(
                     return True
             return False
         except Exception as err:
-            err_msg = send_message(token, chat_id, f"Order book error: {err}")
+            err_msg = notifier.notify(f"Order book error: {err}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
             return False
@@ -112,12 +117,12 @@ def execute_trade(
                 return ws_client.add_order(symbol, side, size)
             return exchange.create_market_order(symbol, side, size)
         except Exception as exc:
-            err_msg = send_message(token, chat_id, f"Order failed: {exc}")
+            err_msg = notifier.notify(f"Order failed: {exc}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
             return {}
 
-    err = send_message(token, chat_id, f"Placing {side} order for {amount} {symbol}")
+    err = notifier.notify(f"Placing {side} order for {amount} {symbol}")
     if err:
         logger.error("Failed to send message: %s", err)
 
@@ -129,7 +134,7 @@ def execute_trade(
             slippage = (ask - bid) / ((ask + bid) / 2)
             if slippage > config.get("max_slippage_pct", 1.0):
                 logger.warning("Trade skipped due to slippage.")
-                err_msg = send_message(token, chat_id, "Trade skipped due to slippage.")
+                err_msg = notifier.notify("Trade skipped due to slippage.")
                 if err_msg:
                     logger.error("Failed to send message: %s", err_msg)
                 return {}
@@ -141,7 +146,7 @@ def execute_trade(
         and hasattr(exchange, "fetch_order_book")
         and not has_liquidity(amount)
     ):
-        err = send_message(token, chat_id, "Insufficient liquidity for order size")
+        err = notifier.notify("Insufficient liquidity for order size")
         if err:
             logger.error("Failed to send message: %s", err)
         return {}
@@ -157,9 +162,7 @@ def execute_trade(
                 and hasattr(exchange, "fetch_order_book")
                 and not has_liquidity(slice_amount)
             ):
-                err_liq = send_message(
-                    token, chat_id, "Insufficient liquidity during TWAP execution"
-                )
+                err_liq = notifier.notify("Insufficient liquidity during TWAP execution")
                 if err_liq:
                     logger.error("Failed to send message: %s", err_liq)
                 break
@@ -181,8 +184,8 @@ def execute_trade(
                     except Exception:
                         pass
                 orders.append(order)
-                err_slice = send_message(
-                    token, chat_id, f"TWAP slice {i+1}/{slices} executed: {order}"
+                err_slice = notifier.notify(
+                    f"TWAP slice {i+1}/{slices} executed: {order}"
                 )
                 if err_slice:
                     logger.error("Failed to send message: %s", err_slice)
@@ -222,7 +225,7 @@ def execute_trade(
                 except Exception:
                     pass
             orders.append(order)
-            err_exec = send_message(token, chat_id, f"Order executed: {order}")
+            err_exec = notifier.notify(f"Order executed: {order}")
             if err_exec:
                 logger.error("Failed to send message: %s", err_exec)
             oid = (
@@ -250,8 +253,9 @@ async def execute_trade_async(
     symbol: str,
     side: str,
     amount: float,
-    token: str,
-    chat_id: str,
+    token: Optional[str] = None,
+    chat_id: Optional[str] = None,
+    notifier: Optional[TelegramNotifier] = None,
     dry_run: bool = True,
     use_websocket: bool = False,
     config: Optional[Dict] = None,
@@ -259,8 +263,13 @@ async def execute_trade_async(
     """Asynchronous version of :func:`execute_trade`. It supports both
     ``ccxt.pro`` exchanges and the threaded ``KrakenWSClient`` fallback."""
 
+    if notifier is None:
+        if token is None or chat_id is None:
+            raise ValueError("token/chat_id or notifier must be provided")
+        notifier = TelegramNotifier(token, chat_id)
+
     msg = f"Placing {side} order for {amount} {symbol}"
-    err = send_message(token, chat_id, msg)
+    err = notifier.notify(msg)
     if err:
         logger.error("Failed to send message: %s", err)
     if dry_run:
@@ -278,11 +287,11 @@ async def execute_trade_async(
                     exchange.create_market_order, symbol, side, amount
                 )
         except Exception as e:  # pragma: no cover - network
-            err_msg = send_message(token, chat_id, f"Order failed: {e}")
+            err_msg = notifier.notify(f"Order failed: {e}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
             return {}
-    err = send_message(token, chat_id, f"Order executed: {order}")
+    err = notifier.notify(f"Order executed: {order}")
     if err:
         logger.error("Failed to send message: %s", err)
     oid = (
@@ -333,13 +342,19 @@ def place_stop_order(
     side: str,
     amount: float,
     stop_price: float,
-    token: str,
-    chat_id: str,
+    token: Optional[str] = None,
+    chat_id: Optional[str] = None,
+    notifier: Optional[TelegramNotifier] = None,
     dry_run: bool = True,
 ) -> Dict:
     """Submit a stop-loss order on the exchange."""
+    if notifier is None:
+        if token is None or chat_id is None:
+            raise ValueError("token/chat_id or notifier must be provided")
+        notifier = TelegramNotifier(token, chat_id)
+
     msg = f"Placing stop {side} order for {amount} {symbol} at {stop_price:.2f}"
-    err = send_message(token, chat_id, msg)
+    err = notifier.notify(msg)
     if err:
         logger.error("Failed to send message: %s", err)
     if dry_run:
@@ -360,11 +375,11 @@ def place_stop_order(
                 params={"stopPrice": stop_price},
             )
         except Exception as e:
-            err_msg = send_message(token, chat_id, f"Stop order failed: {e}")
+            err_msg = notifier.notify(f"Stop order failed: {e}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
             return {}
-    err = send_message(token, chat_id, f"Stop order submitted: {order}")
+    err = notifier.notify(f"Stop order submitted: {order}")
     if err:
         logger.error("Failed to send message: %s", err)
     log_trade(order, is_stop=True)
