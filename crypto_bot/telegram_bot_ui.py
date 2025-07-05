@@ -8,6 +8,7 @@ from typing import Dict
 
 
 import schedule
+import json
 
 from telegram import Update
 from telegram.ext import (
@@ -20,6 +21,9 @@ from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot import log_reader
+
+SIGNALS_FILE = Path("crypto_bot/logs/asset_scores.json")
+TRADES_FILE = Path("crypto_bot/logs/trades.csv")
 
 
 class TelegramBotUI:
@@ -51,6 +55,10 @@ class TelegramBotUI:
         self.app.add_handler(CommandHandler("log", self.log_cmd))
         self.app.add_handler(CommandHandler("rotate_now", self.rotate_now_cmd))
         self.app.add_handler(CommandHandler("toggle_mode", self.toggle_mode_cmd))
+        self.app.add_handler(CommandHandler("menu", self.menu_cmd))
+        self.app.add_handler(CommandHandler("signals", self.show_signals))
+        self.app.add_handler(CommandHandler("balance", self.show_balance))
+        self.app.add_handler(CommandHandler("trades", self.show_trades))
 
         self.scheduler_thread: threading.Thread | None = None
 
@@ -144,3 +152,53 @@ class TelegramBotUI:
         mode = "onchain" if mode == "cex" else "cex"
         self.state["mode"] = mode
         await update.message.reply_text(f"Mode set to {mode}")
+
+    async def menu_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        cmds = [
+            "/start",
+            "/stop",
+            "/status",
+            "/log",
+            "/rotate_now",
+            "/toggle_mode",
+            "/signals",
+            "/balance",
+            "/trades",
+        ]
+        await update.message.reply_text("Available commands:\n" + "\n".join(cmds))
+
+    async def show_signals(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if SIGNALS_FILE.exists():
+            try:
+                data = json.loads(SIGNALS_FILE.read_text())
+                lines = [f"{k}: {v:.2f}" for k, v in data.items()]
+                text = "\n".join(lines) if lines else "(no signals)"
+            except Exception:
+                text = "Invalid signals file"
+        else:
+            text = "No signals found"
+        await update.message.reply_text(text)
+
+    async def show_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self.exchange:
+            await update.message.reply_text("Exchange not configured")
+            return
+        try:
+            bal = self.exchange.fetch_balance()
+            lines = [
+                f"{k}: {v.get('total') if isinstance(v, dict) else v}"
+                for k, v in bal.items()
+            ]
+            text = "\n".join(lines) if lines else "(no balance)"
+        except Exception as exc:  # pragma: no cover - network
+            self.logger.error("Balance fetch failed: %s", exc)
+            text = "Balance fetch failed"
+        await update.message.reply_text(text)
+
+    async def show_trades(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if TRADES_FILE.exists():
+            lines = TRADES_FILE.read_text().splitlines()[-20:]
+            text = "\n".join(lines) if lines else "(no trades)"
+        else:
+            text = "No trades found"
+        await update.message.reply_text(text)

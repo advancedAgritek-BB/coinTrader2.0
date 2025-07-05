@@ -101,6 +101,7 @@ async def main() -> None:
         tg_cfg["token"] = user["telegram_token"]
     if user.get("telegram_chat_id"):
         tg_cfg["chat_id"] = user["telegram_chat_id"]
+    trade_updates = tg_cfg.get("trade_updates", True)
 
     notifier = TelegramNotifier.from_config(tg_cfg)
     notifier.notify("🤖 CoinTrader2.0 started")
@@ -564,7 +565,7 @@ async def main() -> None:
                     else:
                         latest_balance = paper_wallet.balance if paper_wallet else 0.0
                     log_balance(float(latest_balance))
-                    if notifier:
+                    if notifier and trade_updates:
                         report_exit(
                             notifier,
                             config.get("symbol", ""),
@@ -827,7 +828,7 @@ async def main() -> None:
                 current_price,
                 log_bal,
             )
-            if notifier:
+            if notifier and trade_updates:
                 report_entry(
                     notifier,
                     config.get("symbol", ""),
