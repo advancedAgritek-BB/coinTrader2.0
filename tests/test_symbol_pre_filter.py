@@ -1,6 +1,6 @@
 import asyncio
 import json
-from crypto_bot.utils.symbol_pre_filter import filter_symbols
+from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_history
 
 CONFIG = {"symbol_filter": {"min_volume_usd": 50000}}
 
@@ -18,7 +18,7 @@ async def fake_fetch(_):
                 "a": ["101", "1", "1"],
                 "b": ["100", "1", "1"],
                 "c": ["101", "0.5"],
-                "v": ["600", "600"],
+                "v": ["800", "800"],
                 "p": ["100", "100"],
                 "o": "99",
             },
@@ -26,9 +26,9 @@ async def fake_fetch(_):
                 "a": ["51", "1", "1"],
                 "b": ["50", "1", "1"],
                 "c": ["51", "1"],
-                "v": ["400", "400"],
+                "v": ["600", "600"],
                 "p": ["100", "100"],
-                "o": "51",
+                "o": "49",
             },
         }
     }
@@ -38,8 +38,10 @@ def test_filter_symbols(monkeypatch):
     monkeypatch.setattr(
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
     )
-    symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG))
-    assert symbols == ["ETH/USD"]
+    symbols = asyncio.run(
+        filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG)
+    )
+    assert symbols == ["ETH/USD", "BTC/USD"]
 
 
 class DummyExchangeList:
@@ -117,3 +119,27 @@ def test_multiple_batches(monkeypatch):
 
     assert len(symbols) == 25
     assert len(calls) == 2
+
+
+async def mock_fetch_history(exchange, symbol, timeframe="1d", limit=30, **_):
+    return [[i * 86400000, 0, 0, 0, 0, 0] for i in range(limit)]
+
+
+def test_has_enough_history_true(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter.fetch_ohlcv_async",
+        mock_fetch_history,
+    )
+    assert asyncio.run(has_enough_history(None, "BTC/USD", days=10))
+
+
+async def mock_fetch_history_short(exchange, symbol, timeframe="1d", limit=30, **_):
+    return [[i * 86400000, 0, 0, 0, 0, 0] for i in range(5)]
+
+
+def test_has_enough_history_false(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter.fetch_ohlcv_async",
+        mock_fetch_history_short,
+    )
+    assert not asyncio.run(has_enough_history(None, "BTC/USD", days=10))

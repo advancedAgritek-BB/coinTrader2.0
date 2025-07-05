@@ -5,7 +5,8 @@ import pandas as pd
 
 
 async def load_kraken_symbols(
-    exchange, exclude: Iterable[str] | None = None
+    exchange,
+    exclude: Iterable[str] | None = None,
 ) -> List[str]:
     """Return a list of active trading pairs on Kraken.
 
@@ -18,6 +19,7 @@ async def load_kraken_symbols(
     """
 
     exclude_set = set(exclude or [])
+    allowed_types = set(getattr(exchange, "exchange_market_types", []))
 
     if asyncio.iscoroutinefunction(getattr(exchange, "load_markets", None)):
         markets = await exchange.load_markets()
@@ -30,6 +32,17 @@ async def load_kraken_symbols(
             continue
         if symbol in exclude_set:
             continue
+        if allowed_types:
+            m_type = data.get("type")
+            if m_type is None:
+                if data.get("spot"):
+                    m_type = "spot"
+                elif data.get("margin"):
+                    m_type = "margin"
+                elif data.get("future") or data.get("futures"):
+                    m_type = "futures"
+            if m_type not in allowed_types:
+                continue
         symbols.append(symbol)
     return symbols
 

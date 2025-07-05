@@ -10,22 +10,32 @@ from crypto_bot.utils.market_loader import (
 )
 
 class DummyExchange:
+    exchange_market_types = {"spot"}
+
     def load_markets(self):
         return {
-            "BTC/USD": {"active": True},
-            "ETH/USD": {"active": True},
-            "XRP/USD": {"active": False},
+            "BTC/USD": {"active": True, "type": "spot"},
+            "ETH/USD": {"active": True, "type": "margin"},
+            "XBT/USD-PERP": {"active": True, "type": "futures"},
+            "XRP/USD": {"active": False, "type": "spot"},
         }
 
 def test_load_kraken_symbols_returns_active():
     ex = DummyExchange()
     symbols = asyncio.run(load_kraken_symbols(ex))
-    assert set(symbols) == {"BTC/USD", "ETH/USD"}
+    assert set(symbols) == {"BTC/USD"}
 
 def test_excluded_symbols_are_removed():
     ex = DummyExchange()
     symbols = asyncio.run(load_kraken_symbols(ex, exclude=["ETH/USD"]))
     assert set(symbols) == {"BTC/USD"}
+
+
+def test_load_kraken_symbols_market_type_filter():
+    ex = DummyExchange()
+    ex.exchange_market_types = {"margin", "futures"}
+    symbols = asyncio.run(load_kraken_symbols(ex))
+    assert set(symbols) == {"ETH/USD", "XBT/USD-PERP"}
 
 
 class DummyAsyncExchange:
