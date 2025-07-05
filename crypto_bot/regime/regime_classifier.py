@@ -21,27 +21,14 @@ CONFIG = _load_config(CONFIG_PATH)
 
 
 def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
-    """Return regime label and confidence using ML prediction.
-
-    This is a lightweight heuristic mapping of the signal model probability to a
-    market regime. If the ML model is unavailable or fails, ``("unknown", 0.0)``
-    is returned.
-    """
+    """Return regime label and confidence using the bundled ML model."""
     try:
-        from crypto_bot.ml_signal_model import predict_signal
-        prob = float(predict_signal(df))
+        from .ml_fallback import predict_regime
+
+        label, confidence = predict_regime(df)
+        return label, confidence
     except Exception:
         return "unknown", 0.0
-
-    if prob > 0.55:
-        label = "trending"
-    elif prob < 0.45:
-        label = "mean-reverting"
-    else:
-        label = "sideways"
-
-    confidence = abs(prob - 0.5) * 2
-    return label, confidence
 
 
 def _classify_core(
