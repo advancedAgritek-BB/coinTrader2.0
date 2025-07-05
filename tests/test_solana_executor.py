@@ -2,6 +2,13 @@ import asyncio
 from crypto_bot.execution import solana_executor
 
 
+from crypto_bot.utils.telegram import TelegramNotifier
+
+
+def test_execute_swap_dry_run(monkeypatch):
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
+    res = asyncio.run(
+        solana_executor.execute_swap("SOL", "USDC", 1, TelegramNotifier("t", "c"), dry_run=True)
 class DummyNotifier:
     def __init__(self):
         self.messages = []
@@ -65,6 +72,7 @@ class DummySession:
 
 
 def test_execute_swap_skips_on_slippage(monkeypatch):
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: DummySession())
@@ -109,6 +117,7 @@ def test_execute_swap_skips_on_slippage(monkeypatch):
             "SOL",
             "USDC",
             100,
+            TelegramNotifier("t", "c"),
             notifier=notifier,
             dry_run=False,
             config={"max_slippage_pct": 0.05},

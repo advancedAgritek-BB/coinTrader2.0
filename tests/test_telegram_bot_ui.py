@@ -1,6 +1,7 @@
 import types
 import asyncio
 from crypto_bot.telegram_bot_ui import TelegramBotUI
+from crypto_bot.utils.telegram import TelegramNotifier
 
 class DummyApplication:
     def __init__(self, *a, **k):
@@ -59,9 +60,9 @@ class DummyRotator:
 def make_ui(tmp_path, state, rotator=None, exchange=None):
     log_file = tmp_path / "bot.log"
     log_file.write_text("line1\nline2\n")
+    notifier = TelegramNotifier("token", "chat")
     ui = TelegramBotUI(
-        "token",
-        "chat",
+        notifier,
         state,
         log_file,
         rotator=rotator,

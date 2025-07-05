@@ -35,6 +35,7 @@ def report_entry(
     direction: str,
 ) -> Optional[str]:
     """Send a Telegram message summarizing a trade entry."""
+    err = notifier.notify(entry_summary(symbol, strategy, score, direction))
     err = TelegramNotifier.notify(token, chat_id, entry_summary(symbol, strategy, score, direction))
     err = notifier.send(entry_summary(symbol, strategy, score, direction))
     if err:
@@ -50,6 +51,7 @@ def report_exit(
     direction: str,
 ) -> Optional[str]:
     """Send a Telegram message summarizing a trade exit."""
+    err = notifier.notify(exit_summary(symbol, strategy, pnl, direction))
     err = TelegramNotifier.notify(token, chat_id, exit_summary(symbol, strategy, pnl, direction))
     err = notifier.send(exit_summary(symbol, strategy, pnl, direction))
     if err:

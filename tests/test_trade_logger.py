@@ -15,6 +15,7 @@ class DummyNotifier:
         self.logger.info(text)
         return None
 from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.telegram import TelegramNotifier
 
 
 def test_log_trade_appends_row(tmp_path, monkeypatch):
@@ -58,6 +59,7 @@ def test_execute_trade_async_logs(tmp_path, monkeypatch):
     def fake_send(self, text):
         logger.info(text)
 
+    monkeypatch.setattr(TelegramNotifier, "notify", fake_send)
     monkeypatch.setattr(cex_executor.Notifier, "notify", fake_send)
     monkeypatch.setattr(cex_executor, "send_message", lambda *a, **k: logger.info(a[2]))
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", fake_send)
@@ -69,6 +71,7 @@ def test_execute_trade_async_logs(tmp_path, monkeypatch):
             "BTC/USDT",
             "buy",
             1.0,
+            TelegramNotifier("t", "c"),
             notifier=notifier,
             dry_run=True,
         )

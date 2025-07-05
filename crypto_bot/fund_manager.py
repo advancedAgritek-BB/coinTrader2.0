@@ -14,6 +14,7 @@ except Exception:  # pragma: no cover - dependency optional
 
 from crypto_bot.execution.solana_executor import execute_swap
 from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.telegram import TelegramNotifier
 
 logger = setup_logger(__name__, "crypto_bot/logs/fund_manager.log")
 
@@ -108,8 +109,7 @@ async def auto_convert_funds(
     amount: float,
     dry_run: bool = True,
     slippage_bps: int = 50,
-    telegram_token: str = "",
-    chat_id: str = "",
+    notifier: TelegramNotifier | None = None,
 ) -> Dict:
     """Convert funds using the Solana Jupiter aggregator."""
 
@@ -138,8 +138,7 @@ async def auto_convert_funds(
                 from_mint,
                 to_mint,
                 amount,
-                telegram_token,
-                chat_id,
+                notifier if notifier else TelegramNotifier(),
                 slippage_bps=slippage_bps,
                 dry_run=False,
             )

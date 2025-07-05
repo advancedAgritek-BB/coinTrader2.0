@@ -5,33 +5,32 @@ from crypto_bot.utils.telegram import TelegramNotifier
 def test_report_entry_formats_and_sends(monkeypatch):
     calls = {}
 
-    def fake_send(token, chat_id, text):
-        calls['token'] = token
-        calls['chat_id'] = chat_id
+    def fake_send(self, text):
+        calls['self'] = self
         calls['text'] = text
 
+    monkeypatch.setattr(TelegramNotifier, 'notify', fake_send)
     monkeypatch.setattr(trade_reporter.TelegramNotifier, 'notify', fake_send)
     monkeypatch.setattr('crypto_bot.utils.telegram.send_message', fake_send)
 
     notifier = TelegramNotifier('t', 'c')
     trade_reporter.report_entry(notifier, 'BTC/USDT', 'trend_bot', 0.876, 'long')
 
-    assert calls['token'] == 't'
-    assert calls['chat_id'] == 'c'
+    assert isinstance(calls['self'], TelegramNotifier)
     assert calls['text'] == 'Entering LONG on BTC/USDT using trend_bot. Score: 0.88'
 
 
 def test_report_exit_formats_and_sends(monkeypatch):
     calls = {}
 
-    def fake_send(token, chat_id, text):
-        calls['token'] = token
-        calls['chat_id'] = chat_id
+    def fake_send(self, text):
+        calls['self'] = self
         calls['text'] = text
 
+    monkeypatch.setattr(TelegramNotifier, 'notify', fake_send)
     monkeypatch.setattr(trade_reporter.TelegramNotifier, 'notify', fake_send)
     monkeypatch.setattr('crypto_bot.utils.telegram.send_message', fake_send)
-
+ 
     notifier = TelegramNotifier('t', 'c')
     trade_reporter.report_exit(notifier, 'BTC/USDT', 'trend_bot', 10.123, 'short')
 

@@ -6,6 +6,7 @@ import json
 import base64
 import aiohttp
 
+from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.telegram import send_message
 from crypto_bot.utils.notifier import Notifier
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -25,6 +26,7 @@ async def execute_swap(
     token_in: str,
     token_out: str,
     amount: float,
+    notifier: TelegramNotifier,
     telegram_token: Optional[str] = None,
     chat_id: Optional[str] = None,
     notifier: Optional[TelegramNotifier] = None,
@@ -55,6 +57,7 @@ async def execute_swap(
         threshold = cfg.get("suspicious_fee_threshold", 0.0)
         action = cfg.get("action", "pause")
         if mempool_monitor.is_suspicious(threshold):
+            err_msg = notifier.notify("High priority fees detected")
             err_msg = notifier.notify("\u26a0\ufe0f Error: High priority fees detected")
             err_msg = notifier.notify("High priority fees detected")
             err_msg = TelegramNotifier.notify(telegram_token, chat_id, "High priority fees detected")
@@ -157,6 +160,7 @@ async def execute_swap(
                     token_out,
                     amount,
                 )
+                err_skip = notifier.notify("Trade skipped due to slippage.")
                 err_skip = notifier.notify("\u26a0\ufe0f Error: Trade skipped due to slippage.")
                 err_skip = notifier.notify("Trade skipped due to slippage.")
                 err_skip = TelegramNotifier.notify(telegram_token, chat_id, "Trade skipped due to slippage.")

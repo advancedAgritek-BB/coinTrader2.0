@@ -9,6 +9,7 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     ccxtpro = None
 
+from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.telegram import send_message
 from crypto_bot.utils.notifier import Notifier
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -80,6 +81,7 @@ def execute_trade(
     symbol: str,
     side: str,
     amount: float,
+    notifier: TelegramNotifier,
     token: Optional[str] = None,
     chat_id: Optional[str] = None,
     notifier: Optional[TelegramNotifier] = None,
@@ -108,6 +110,7 @@ def execute_trade(
                     return True
             return False
         except Exception as err:
+            err_msg = notifier.notify(f"Order book error: {err}")
             err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order book error: {err}")
             err_msg = notifier.notify(f"Order book error: {err}")
             err_msg = TelegramNotifier.notify(token, chat_id, f"Order book error: {err}")
@@ -123,6 +126,7 @@ def execute_trade(
                 return ws_client.add_order(symbol, side, size)
             return exchange.create_market_order(symbol, side, size)
         except Exception as exc:
+            err_msg = notifier.notify(f"Order failed: {exc}")
             err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {exc}")
             err_msg = notifier.notify(f"Order failed: {exc}")
             err_msg = TelegramNotifier.notify(token, chat_id, f"Order failed: {exc}")
@@ -143,6 +147,7 @@ def execute_trade(
             slippage = (ask - bid) / ((ask + bid) / 2)
             if slippage > config.get("max_slippage_pct", 1.0):
                 logger.warning("Trade skipped due to slippage.")
+                err_msg = notifier.notify("Trade skipped due to slippage.")
                 err_msg = notifier.notify("\u26a0\ufe0f Error: Trade skipped due to slippage.")
                 err_msg = notifier.notify("Trade skipped due to slippage.")
                 err_msg = TelegramNotifier.notify(token, chat_id, "Trade skipped due to slippage.")
@@ -157,6 +162,7 @@ def execute_trade(
         and hasattr(exchange, "fetch_order_book")
         and not has_liquidity(amount)
     ):
+        err = notifier.notify("Insufficient liquidity for order size")
         err = notifier.notify("\u26a0\ufe0f Error: Insufficient liquidity for order size")
         err = notifier.notify("Insufficient liquidity for order size")
         err = TelegramNotifier.notify(token, chat_id, "Insufficient liquidity for order size")
@@ -176,6 +182,7 @@ def execute_trade(
                 and not has_liquidity(slice_amount)
             ):
                 err_liq = notifier.notify(
+                    "Insufficient liquidity during TWAP execution"
                     "\u26a0\ufe0f Error: Insufficient liquidity during TWAP execution"
                 err_liq = notifier.notify("Insufficient liquidity during TWAP execution")
                 err_liq = TelegramNotifier.notify(
@@ -274,6 +281,7 @@ async def execute_trade_async(
     symbol: str,
     side: str,
     amount: float,
+    notifier: TelegramNotifier,
     token: Optional[str] = None,
     chat_id: Optional[str] = None,
     notifier: Optional[TelegramNotifier] = None,
@@ -310,6 +318,11 @@ async def execute_trade_async(
                     exchange.create_market_order, symbol, side, amount
                 )
         except Exception as e:  # pragma: no cover - network
+            err_msg = notifier.notify(f"Order failed: {e}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
+            return {}
+    err = notifier.notify(f"Order executed: {order}")
             err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
             err_msg = notifier.notify(f"Order failed: {e}")
             if err_msg:
@@ -371,6 +384,7 @@ def place_stop_order(
     side: str,
     amount: float,
     stop_price: float,
+    notifier: TelegramNotifier,
     token: Optional[str] = None,
     chat_id: Optional[str] = None,
     notifier: Optional[TelegramNotifier] = None,
@@ -406,6 +420,11 @@ def place_stop_order(
                 params={"stopPrice": stop_price},
             )
         except Exception as e:
+            err_msg = notifier.notify(f"Stop order failed: {e}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
+            return {}
+    err = notifier.notify(f"Stop order submitted: {order}")
             err_msg = notifier.notify(f"\u26a0\ufe0f Error: Stop order failed: {e}")
             err_msg = notifier.notify(f"Stop order failed: {e}")
             if err_msg:
