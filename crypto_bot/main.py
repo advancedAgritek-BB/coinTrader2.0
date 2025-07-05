@@ -46,6 +46,7 @@ from crypto_bot.utils.performance_logger import log_performance
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.utils.position_logger import log_position, log_balance
 from crypto_bot.utils.regime_logger import log_regime
+from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
 from crypto_bot.utils.market_loader import (
     load_kraken_symbols,
     load_ohlcv_parallel,
@@ -84,6 +85,20 @@ def opposite_side(side: str) -> str:
     return "sell" if side == "buy" else "buy"
 
 
+def _emit_timing(symbol_t: float, ohlcv_t: float, analyze_t: float,
+                 total_t: float, metrics_path: Path | None = None) -> None:
+    """Log timing information and optionally append to metrics CSV."""
+    logger.info(
+        "\u23f1\ufe0f Cycle timing - Symbols: %.2fs, OHLCV: %.2fs, Analyze: %.2fs, Total: %.2fs",
+        symbol_t,
+        ohlcv_t,
+        analyze_t,
+        total_t,
+    )
+    if metrics_path:
+        log_cycle_metrics(symbol_t, ohlcv_t, analyze_t, total_t, metrics_path)
+
+
 def load_config() -> dict:
     """Load YAML configuration for the bot."""
     with open(CONFIG_PATH) as f:
@@ -96,6 +111,7 @@ async def main() -> None:
 
     logger.info("Starting bot")
     config = load_config()
+    metrics_path = Path(config.get("metrics_csv")) if config.get("metrics_csv") else None
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
     cooldown_configure(config.get("min_cooldown", 0))
     secrets = dotenv_values(ENV_PATH)
@@ -228,6 +244,9 @@ async def main() -> None:
     while True:
         mode = state["mode"]
 
+        cycle_start = time.perf_counter()
+        symbol_time = ohlcv_time = analyze_time = 0.0
+
         total_pairs = 0
         signals_generated = 0
         trades_executed = 0
@@ -295,6 +314,9 @@ async def main() -> None:
         allowed_results: list[dict] = []
         df_current = None
 
+        t0 = time.perf_counter()
+        symbols = await get_filtered_symbols(exchange, config)
+        symbol_time = time.perf_counter() - t0
         start_filter = time.perf_counter()
         symbols = await get_filtered_symbols(exchange, config)
         ticker_fetch_time = time.perf_counter() - start_filter
@@ -311,6 +333,7 @@ async def main() -> None:
         if not SYMBOL_EVAL_QUEUE:
             SYMBOL_EVAL_QUEUE.extend(symbols)
 
+        t0 = time.perf_counter()
         start_ohlcv = time.perf_counter()
         df_cache = await update_multi_tf_ohlcv_cache(
             exchange,
@@ -334,9 +357,11 @@ async def main() -> None:
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
         )
+        ohlcv_time = time.perf_counter() - t0
         ohlcv_fetch_latency = time.perf_counter() - start_ohlcv
 
         tasks = []
+        analyze_start = time.perf_counter()
         for sym in current_batch:
             logger.info("🔹 Symbol: %s", sym)
             total_pairs += 1
@@ -368,6 +393,7 @@ async def main() -> None:
         ]
         if scalpers:
             scalp_tf = config.get("scalp_timeframe", "1m")
+            t_sc = time.perf_counter()
             df_cache[scalp_tf] = await update_ohlcv_cache(
                 exchange,
                 df_cache.get(scalp_tf, {}),
@@ -379,6 +405,7 @@ async def main() -> None:
                 config=config,
                 max_concurrent=config.get("max_concurrent_ohlcv"),
             )
+            ohlcv_time += time.perf_counter() - t_sc
             tasks = [
                 analyze_symbol(
                     sym,
@@ -397,6 +424,8 @@ async def main() -> None:
             results = [mapping.get(r["symbol"], r) for r in results]
             if config.get("symbol") in mapping:
                 df_current = df_cache.get(config["timeframe"], {}).get(config["symbol"])
+
+        analyze_time = time.perf_counter() - analyze_start
 
         for res in results:
             sym = res["symbol"]
@@ -833,6 +862,8 @@ async def main() -> None:
             score_rejections,
             regime_rejections,
         )
+        total_time = time.perf_counter() - cycle_start
+        _emit_timing(symbol_time, ohlcv_time, analyze_time, total_time, metrics_path)
         if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
             metrics = {
                 "timestamp": datetime.utcnow().isoformat(),
