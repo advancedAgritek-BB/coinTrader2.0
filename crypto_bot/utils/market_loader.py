@@ -81,6 +81,25 @@ async def fetch_ohlcv_async(
             kwargs_f["since"] = since
         return await asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f)
     except Exception as exc:  # pragma: no cover - network
+        if (
+            use_websocket
+            and hasattr(exchange, "fetch_ohlcv")
+            and not force_websocket_history
+        ):
+            try:
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
+                    params_f = inspect.signature(exchange.fetch_ohlcv).parameters
+                    kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                    if since is not None and "since" in params_f:
+                        kwargs_f["since"] = since
+                    return await exchange.fetch_ohlcv(**kwargs_f)
+                params_f = inspect.signature(exchange.fetch_ohlcv).parameters
+                kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                if since is not None and "since" in params_f:
+                    kwargs_f["since"] = since
+                return await asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f)
+            except Exception:
+                pass
         return exc
 
 
