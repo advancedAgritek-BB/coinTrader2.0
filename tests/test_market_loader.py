@@ -28,6 +28,21 @@ def test_excluded_symbols_are_removed():
     assert set(symbols) == {"BTC/USD"}
 
 
+class DummyTypeExchange:
+    def load_markets(self):
+        return {
+            "BTC/USD": {"active": True, "type": "spot"},
+            "ETH/USD": {"active": True, "type": "future"},
+        }
+
+
+def test_market_type_filter():
+    ex = DummyTypeExchange()
+    config = {"exchange_market_types": ["future"]}
+    symbols = asyncio.run(load_kraken_symbols(ex, config=config))
+    assert symbols == ["ETH/USD"]
+
+
 class DummyAsyncExchange:
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         return [[0, 1, 2, 3, 4, 5]]
