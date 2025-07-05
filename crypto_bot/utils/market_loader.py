@@ -299,3 +299,37 @@ async def update_ohlcv_cache(
         else:
             cache[sym] = df_new
     return cache
+
+
+async def update_multi_tf_ohlcv_cache(
+    exchange,
+    cache: Dict[str, Dict[str, pd.DataFrame]],
+    symbols: Iterable[str],
+    config: Dict,
+    limit: int = 100,
+    use_websocket: bool = False,
+    force_websocket_history: bool = False,
+    max_concurrent: int | None = None,
+) -> Dict[str, Dict[str, pd.DataFrame]]:
+    """Update OHLCV caches for multiple timeframes.
+
+    Parameters
+    ----------
+    config : Dict
+        Configuration containing a ``timeframes`` list.
+    """
+
+    for tf in config.get("timeframes", ["1h"]):
+        tf_cache = cache.get(tf, {})
+        cache[tf] = await update_ohlcv_cache(
+            exchange,
+            tf_cache,
+            symbols,
+            timeframe=tf,
+            limit=limit,
+            use_websocket=use_websocket,
+            force_websocket_history=force_websocket_history,
+            max_concurrent=max_concurrent,
+        )
+
+    return cache

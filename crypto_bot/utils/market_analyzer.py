@@ -9,7 +9,7 @@ from crypto_bot.signals.signal_scoring import evaluate_async
 
 async def analyze_symbol(
     symbol: str,
-    df: pd.DataFrame,
+    df_map: Dict[str, pd.DataFrame],
     mode: str,
     config: Dict,
     notifier: TelegramNotifier | None = None,
@@ -20,8 +20,8 @@ async def analyze_symbol(
     ----------
     symbol : str
         Trading pair to analyze.
-    df : pd.DataFrame
-        OHLCV data for the pair.
+    df_map : Dict[str, pd.DataFrame]
+        Mapping of timeframe to OHLCV data.
     mode : str
         Execution mode of the bot ("cex", "onchain" or "auto").
     config : Dict
@@ -29,7 +29,10 @@ async def analyze_symbol(
     notifier : TelegramNotifier | None
         Optional notifier used to send a message when the strategy is invoked.
     """
-    regime = await classify_regime_async(df)
+    base_tf = config.get("timeframe", "1h")
+    df = df_map.get(base_tf)
+    higher_df = df_map.get("1d")
+    regime = await classify_regime_async(df, higher_df)
 
     period = int(config.get("regime_return_period", 5))
     future_return = 0.0
