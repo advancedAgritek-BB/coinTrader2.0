@@ -114,11 +114,12 @@ class PortfolioRotator:
                         pass
             if not pair_found:
                 self.logger.warning("No matching pair for %s", asset)
-                continue
-            pair_map[pair_found] = asset
+                pair_map[asset] = asset
+            else:
+                pair_map[pair_found] = asset
 
         scores_pairs = self.score_assets(exchange, pair_map.keys(), lookback, method)
-        scores = {pair_map[p]: s for p, s in scores_pairs.items()}
+        scores = {pair_map.get(p, p): s for p, s in scores_pairs.items()}
         self._log_scores(scores)
         if not scores:
             return current_holdings
