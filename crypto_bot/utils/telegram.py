@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from telegram import Bot
 from typing import Optional
 import inspect
@@ -6,6 +7,18 @@ import asyncio
 from .logger import setup_logger
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+
+
+@dataclass
+class TelegramNotifier:
+    """Simple notifier for sending Telegram messages."""
+
+    token: str
+    chat_id: str
+
+    def send(self, text: str) -> Optional[str]:
+        """Send ``text`` via Telegram."""
+        return send_message(self.token, self.chat_id, text)
 
 
 def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
@@ -38,3 +51,37 @@ def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
     except Exception as e:
         logger.error("Failed to send message: %s", e)
         return str(e)
+
+
+class TelegramNotifier:
+    """Helper class for sending Telegram notifications."""
+
+    def __init__(self, enabled: bool, token: str, chat_id: str) -> None:
+        self.enabled = enabled
+        self.token = token
+        self.chat_id = chat_id
+
+    def notify(self, text: str) -> Optional[str]:
+        """Send a message if enabled."""
+        if not self.enabled:
+            return None
+        return send_message(self.token, self.chat_id, text)
+
+    @classmethod
+    def from_config(cls, cfg: dict) -> "TelegramNotifier":
+        """Create notifier from config dict."""
+        section = cfg.get("telegram", {}) if isinstance(cfg, dict) else {}
+        enabled = bool(section.get("enabled", False))
+        token = section.get("token", "")
+        chat_id = section.get("chat_id", "")
+        return cls(enabled, token, chat_id)
+def send_test_message(token: str, chat_id: str, text: str = "Test message") -> bool:
+    """Send a short test message to verify Telegram configuration.
+
+    Returns ``True`` if the message was sent successfully, otherwise ``False``.
+    """
+
+    if not token or not chat_id:
+        return False
+    err = send_message(token, chat_id, text)
+    return err is None
