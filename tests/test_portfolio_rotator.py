@@ -75,6 +75,45 @@ def test_rotate_logs_scores(tmp_path, monkeypatch):
     assert data["BTC"] == 0.5
 
 
+class BadDataExchange(DummyExchange):
+    def fetch_ohlcv(self, symbol, timeframe="1d", limit=30):
+        if symbol == "BAD":
+            raise ValueError("bad data")
+        return super().fetch_ohlcv(symbol, timeframe, limit)
+
+
+def test_score_assets_skips_invalid_ohlcv(caplog):
+    data = {"BTC": [1, 2, 3], "BAD": [1, 2, 3]}
+    ex = BadDataExchange(data)
+    rotator = PortfolioRotator()
+
+    with caplog.at_level("ERROR"):
+        scores = rotator.score_assets(ex, ["BTC", "BAD"], 3, "momentum")
+
+    assert set(scores.keys()) == {"BTC"}
+    assert any("OHLCV fetch failed for BAD" in r.message for r in caplog.records)
+
+
+def test_rotate_ignores_tokens_without_pair(monkeypatch, caplog):
+    ex = BadDataExchange({"GOOD": [1, 2, 3], "BAD": [1, 2, 3]})
+    rotator = PortfolioRotator()
+    rotator.config.update({"scoring_method": "momentum", "lookback_days": 3})
+
+    called = {}
+
+    async def fake_convert(*args, **kwargs):
+        called["called"] = True
+        return {}
+
+    monkeypatch.setattr("crypto_bot.portfolio_rotator.auto_convert_funds", fake_convert)
+
+    with caplog.at_level("ERROR"):
+        holdings = {"BAD": 5}
+        result = asyncio.run(rotator.rotate(ex, "wallet", holdings))
+
+    assert result == holdings
+    assert not called
+    assert any("OHLCV fetch failed for BAD" in r.message for r in caplog.records)
 def test_rotate_translates_assets_to_pairs(monkeypatch):
     rotator = PortfolioRotator()
     captured = {}
