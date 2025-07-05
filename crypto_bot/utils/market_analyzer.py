@@ -36,7 +36,13 @@ async def analyze_symbol(
     base_tf = config.get("timeframe", "1h")
     df = df_map.get(base_tf)
     higher_df = df_map.get("1d")
-    regime, patterns = await classify_regime_async(df, higher_df)
+    regime, info = await classify_regime_async(df, higher_df)
+    patterns: set[str] = set()
+    base_conf = 1.0
+    if isinstance(info, set):
+        patterns = info
+    else:
+        base_conf = float(info)
 
     regime_counts: Dict[str, int] = {}
     regime_tfs = config.get("regime_timeframes", [base_tf])
@@ -47,7 +53,7 @@ async def analyze_symbol(
         if tf_df is None:
             continue
         higher_df = df_map.get("1d") if tf != "1d" else None
-        r = await classify_regime_async(tf_df, higher_df)
+        r, _ = await classify_regime_async(tf_df, higher_df)
         regime_counts[r] = regime_counts.get(r, 0) + 1
 
     if regime_counts:
@@ -55,6 +61,7 @@ async def analyze_symbol(
     else:
         regime, votes = "unknown", 0
     confidence = votes / max(len(regime_tfs), 1)
+    confidence *= base_conf
     if votes < min_agree:
         regime = "unknown"
 

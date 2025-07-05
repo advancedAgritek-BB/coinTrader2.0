@@ -22,8 +22,9 @@ def test_classify_regime_returns_unknown_for_short_df():
         "volume": [100] * 10,
     }
     df = pd.DataFrame(data)
-    regime, patterns = classify_regime(df)
+    regime, conf = classify_regime(df)
     assert regime == "unknown"
+    assert isinstance(conf, float)
 
 
 def test_classify_regime_returns_unknown_for_14_rows():
