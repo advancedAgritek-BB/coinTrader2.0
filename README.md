@@ -116,6 +116,18 @@ mempool_monitor:
 3. Place your API keys in `crypto_bot/.env` as shown in the configuration
    section above. Environment variables take precedence over values stored in
    `user_config.yaml`.
+3. Fill out `crypto_bot/.env` with your API keys and optional `FERNET_KEY`.
+   Environment variables take precedence over values stored in
+   `user_config.yaml`. If you prefer to enter credentials interactively,
+   leave the entries commented out.
+
+   ```env
+   # EXCHANGE=coinbase  # or kraken
+   # API_KEY=your_key
+   # API_SECRET=your_secret
+   # API_PASSPHRASE=your_coinbase_passphrase_if_needed
+   # FERNET_KEY=optional_key_for_encryption
+   ```
 
 ### Telegram Setup
 
@@ -125,18 +137,17 @@ mempool_monitor:
    telegram:
      token: your_telegram_token
      chat_id: your_chat_id
-    trade_updates: true
+     trade_updates: true
    ```
 
    The bot reads the chat ID and token from `config.yaml` (not
-   `user_config.yaml`). Set `trade_updates` to `false` to disable trade
-   entry and exit messages.
-2. Send `/start` to your bot so it can message you.
+   `user_config.yaml`). Set `trade_updates` to `false` to disable trade entry
+   and exit messages.
      trade_updates: true  # set false to disable trade notifications
    ```
 
-   The bot reads the chat ID and token from `config.yaml` (not
-   `user_config.yaml`).
+   The bot reads these values only from `config.yaml`. Disable
+   `trade_updates` if you don't want trade entry and exit messages.
 2. Send `/start` to your bot so it can message you. Use `/menu` at any time to
    open a list of buttons—**Start**, **Stop**, **Status**, **Log**, **Rotate
    Now** and **Toggle Mode**—for quick interaction.
@@ -284,11 +295,9 @@ also skips newly listed pairs using `min_symbol_age_days`.
 Symbols are queued by score using a priority deque and processed in
 batches controlled by `symbol_batch_size`. When the queue drops below this
 size it is automatically refilled with the highest scoring symbols.
-also skips newly listed pairs using `min_symbol_age_days` and processes symbols
-in batches controlled by `symbol_batch_size`. Candidates are stored in a
-priority queue sorted by their score so the highest quality markets are scanned
-first. Each cycle pulls the next `symbol_batch_size` symbols from this queue and
-refills it when empty.
+Candidates are stored in a priority queue sorted by their score so the highest
+quality markets are scanned first. Each cycle pulls the next `symbol_batch_size`
+symbols from this queue and refills it when empty.
 
 OHLCV data for these symbols is now fetched concurrently using
 `load_ohlcv_parallel`, greatly reducing the time needed to evaluate
