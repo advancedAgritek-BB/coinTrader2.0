@@ -53,21 +53,7 @@ be calculated reliably. When fewer rows are available the function returns
    python -m frontend.app
    ```
 
-Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your credentials. The
-script now prompts only for the API keys required by the exchange you select and
-stores your choice in `user_config.yaml`. **Environment variables always
-override the values in this file**, so you can place secrets in `crypto_bot/.env` or
-export them before running the bot.
-
-To pull secrets from a provider such as AWS Secrets Manager or Hashicorp Vault,
-set the environment variables `SECRETS_PROVIDER` (`aws` or `vault`) and
-`SECRETS_PATH` to the secret name/path. When configured the credentials will be
-loaded automatically.
-Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to set up your user preferences.
-API keys are read from environment variables when present. Place them in
-`crypto_bot/.env` or export them in your shell. Sensitive values will not be saved to
-`user_config.yaml` unless you set a `FERNET_KEY`, in which case they are encrypted
-before being written.
+Edit `crypto_bot/config.yaml` and run `wallet_manager.py` to configure credentials. The script prompts only for the keys required by your chosen exchange and saves them in `user_config.yaml`. **Environment variables override** these entries, so you may keep secrets in `crypto_bot/.env` or export them before launching the bot. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
 
 ## Exchange Setup for U.S. Users
 
@@ -286,12 +272,7 @@ rate and average PnL:
 }
 ```
 
-Other helpers create logs like `execution.log` in the same directory when
-enabled. Risk details are consolidated in `bot.log`, letting you follow the
-router and risk manager actions in one place. Example snippet:
-Other helpers create logs like `execution.log` in the same
-directory when enabled. Since decision details now appear in `bot.log` you can
-follow the router and risk manager actions in one place. Example snippet:
+Other helpers create logs like `execution.log` in the same directory when enabled. Decision details are consolidated in `bot.log`, letting you follow the router and risk manager actions in one place. Example snippet:
 
 ```text
 2024-02-12 15:04:01 - INFO - Starting bot
