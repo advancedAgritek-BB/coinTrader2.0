@@ -194,11 +194,10 @@ async def main() -> None:
     state = {"running": True, "mode": mode}
     df_cache: dict[str, pd.DataFrame] = {}
 
-    telegram_bot = None
-    if notifier.enabled:
-        from crypto_bot.telegram_bot_ui import TelegramBotUI
+    from crypto_bot.telegram_bot_ui import TelegramBotUI
 
-        telegram_bot = TelegramBotUI(
+    telegram_bot = (
+        TelegramBotUI(
             notifier,
             state,
             "crypto_bot/logs/bot.log",
@@ -206,6 +205,11 @@ async def main() -> None:
             exchange,
             user.get("wallet_address", ""),
         )
+        if notifier.enabled
+        else None
+    )
+
+    if telegram_bot:
         telegram_bot.run_async()
 
     while True:
