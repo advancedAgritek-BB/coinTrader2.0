@@ -149,7 +149,6 @@ async def filter_symbols(
         "min_volume_usd", DEFAULT_MIN_VOLUME_USD
     )
     min_age = cfg.get("min_symbol_age_days", 0)
-    min_score = cfg.get("min_symbol_score", 0.4)
 
     """Return subset of ``symbols`` passing liquidity and volatility checks.
 
@@ -197,9 +196,7 @@ async def filter_symbols(
             else:
                 id_map[k] = v if isinstance(v, str) else k
 
-    scored: List[tuple[str, float]] = []
     allowed: List[tuple[str, float]] = []
-    metrics: List[tuple[str, float, float, float]] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)
         if not symbol:
@@ -210,7 +207,6 @@ async def filter_symbols(
         if not symbol:
             continue
 
-        vol_usd, change_pct, spread = _parse_metrics(ticker)
         vol_usd, change_pct, spread_pct = _parse_metrics(ticker)
         logger.info(
             "Ticker %s volume %.2f USD change %.2f%% spread %.2f%%",
