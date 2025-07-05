@@ -74,6 +74,14 @@ class DummyExchange:
         return {"last": 105}
 
 
+class DummyAsyncExchange:
+    async def fetch_balance(self):
+        return {"BTC": {"total": 2}}
+
+    async def fetch_ticker(self, symbol):
+        return {"last": 110}
+
+
 class DummyRotator:
     def __init__(self):
         self.called = False
@@ -149,6 +157,7 @@ def test_menu_signals_balance_trades(monkeypatch, tmp_path):
     sig_file = tmp_path / "scores.json"
     sig_file.write_text(json.dumps(scores))
     monkeypatch.setattr(telegram_bot_ui, "SIGNALS_FILE", sig_file)
+    monkeypatch.setattr(telegram_bot_ui, "ASSET_SCORES_FILE", sig_file)
 
     trades_file = tmp_path / "trades.csv"
     trades_file.write_text("BTC/USDT,buy,1,100\n")
@@ -203,3 +212,22 @@ def test_menu_callbacks(monkeypatch, tmp_path):
     update.callback_query.data = TRADES
     asyncio.run(ui.show_trades(update, DummyContext()))
     assert "+5.00" in update.callback_query.message.text
+
+
+def test_async_exchange_balance_and_rotate(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "crypto_bot.telegram_bot_ui.ApplicationBuilder",
+        DummyBuilder,
+    )
+    rotator = DummyRotator()
+    exchange = DummyAsyncExchange()
+    state = {"running": True, "mode": "cex"}
+    ui, _ = make_ui(tmp_path, state, rotator=rotator, exchange=exchange)
+
+    update = DummyUpdate()
+    asyncio.run(ui.rotate_now_cmd(update, DummyContext()))
+    assert update.message.text == "Portfolio rotated"
+
+    update = DummyUpdate()
+    asyncio.run(ui.show_balance(update, DummyContext()))
+    assert "BTC" in update.message.text

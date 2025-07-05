@@ -148,7 +148,10 @@ class TelegramBotUI:
             await update.message.reply_text("Rotation not configured")
             return
         try:
-            bal = self.exchange.fetch_balance()
+            if asyncio.iscoroutinefunction(getattr(self.exchange, "fetch_balance", None)):
+                bal = await self.exchange.fetch_balance()
+            else:
+                bal = await asyncio.to_thread(self.exchange.fetch_balance)
             holdings = {
                 k: (v.get("total") if isinstance(v, dict) else v)
                 for k, v in bal.items()
@@ -215,7 +218,10 @@ class TelegramBotUI:
             await update.message.reply_text("Exchange not configured")
             return
         try:
-            bal = self.exchange.fetch_balance()
+            if asyncio.iscoroutinefunction(getattr(self.exchange, "fetch_balance", None)):
+                bal = await self.exchange.fetch_balance()
+            else:
+                bal = await asyncio.to_thread(self.exchange.fetch_balance)
             lines = [
                 f"{k}: {v.get('total') if isinstance(v, dict) else v}"
                 for k, v in bal.items()
@@ -331,7 +337,10 @@ class TelegramBotUI:
             text = "Exchange not configured"
         else:
             try:
-                bal = self.exchange.fetch_balance()
+                if asyncio.iscoroutinefunction(getattr(self.exchange, "fetch_balance", None)):
+                    bal = await self.exchange.fetch_balance()
+                else:
+                    bal = await asyncio.to_thread(self.exchange.fetch_balance)
                 if query:
                     usdt = bal.get("USDT")
                     amount = float(
