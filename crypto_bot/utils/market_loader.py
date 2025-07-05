@@ -4,6 +4,7 @@ import inspect
 import time
 import pandas as pd
 
+_last_snapshot_time = 0
 from .logger import setup_logger
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
@@ -81,10 +82,10 @@ async def load_kraken_symbols(
     """
 
     exclude_set = set(exclude or [])
-    allowed_types = set(getattr(exchange, "exchange_market_types", []))
-    allowed_types = ["spot"]
     if config is not None:
         allowed_types = config.get("exchange_market_types", ["spot"])
+    else:
+        allowed_types = list(getattr(exchange, "exchange_market_types", ["spot"]))
 
     if asyncio.iscoroutinefunction(getattr(exchange, "load_markets", None)):
         markets = await exchange.load_markets()
@@ -261,6 +262,7 @@ async def update_ohlcv_cache(
     limit: int = 100,
     use_websocket: bool = False,
     force_websocket_history: bool = False,
+    config: Dict | None = None,
     max_concurrent: int | None = None,
 ) -> Dict[str, pd.DataFrame]:
     """Update cached OHLCV DataFrames with new candles.
@@ -275,6 +277,22 @@ async def update_ohlcv_cache(
         if not isinstance(max_concurrent, int) or max_concurrent < 1:
             raise ValueError("max_concurrent must be a positive integer or None")
 
+    global _last_snapshot_time
+    config = config or {}
+    snapshot_interval = config.get("ohlcv_snapshot_frequency_minutes", 1440) * 60
+    now = time.time()
+    snapshot_due = now - _last_snapshot_time >= snapshot_interval
+
+    since_map: Dict[str, int | None] = {}
+    if snapshot_due:
+        _last_snapshot_time = now
+        limit = config.get("ohlcv_snapshot_limit", limit)
+        since_map = {sym: None for sym in symbols}
+    else:
+        for sym in symbols:
+            df = cache.get(sym)
+            if df is not None and not df.empty:
+                since_map[sym] = int(df["timestamp"].iloc[-1]) + 1
     now = time.time()
     symbols = [
         s

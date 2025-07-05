@@ -310,6 +310,7 @@ async def main() -> None:
             limit=100,
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
+            config=config,
             max_concurrent=config.get("max_concurrent_ohlcv"),
         )
 
@@ -351,6 +352,7 @@ async def main() -> None:
                 limit=100,
                 use_websocket=config.get("use_websocket", False),
                 force_websocket_history=config.get("force_websocket_history", False),
+                config=config,
                 max_concurrent=config.get("max_concurrent_ohlcv"),
             )
             tasks = [
