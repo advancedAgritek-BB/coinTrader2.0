@@ -304,12 +304,6 @@ async def update_ohlcv_cache(
     if not symbols:
         return cache
 
-    since_map: Dict[str, int] = {}
-    for sym in symbols:
-        df = cache.get(sym)
-        if df is not None and not df.empty:
-            since_map[sym] = int(df["timestamp"].iloc[-1])
-
     data_map = await load_ohlcv_parallel(
         exchange,
         symbols,
