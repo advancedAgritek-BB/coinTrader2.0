@@ -66,8 +66,6 @@ async def monitor_loop(
             print(output)
 
         prev_lines = output.count("\n") + 1
-        prev_first = len(message)
-        prev_second = max(len(l) for l in stats_lines) if stats_lines else 0
 """Simple console monitor for displaying trades."""
 
 from pathlib import Path
