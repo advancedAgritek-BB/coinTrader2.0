@@ -75,6 +75,31 @@ def test_rotate_logs_scores(tmp_path, monkeypatch):
     assert data["BTC"] == 0.5
 
 
+def test_rotate_translates_assets_to_pairs(monkeypatch):
+    rotator = PortfolioRotator()
+    captured = {}
+
+    def fake_score_assets(ex, symbols, lookback, method):
+        captured["symbols"] = list(symbols)
+        return {}
+
+    monkeypatch.setattr(rotator, "score_assets", fake_score_assets)
+    monkeypatch.setattr(
+        "crypto_bot.portfolio_rotator.auto_convert_funds", lambda *a, **k: {}
+    )
+
+    exchange = type(
+        "Ex",
+        (),
+        {
+            "markets": {"BTC/USD": {}},
+            "market": lambda self, s: {"BTC/USD": {}}.get(s),
+        },
+    )()
+
+    asyncio.run(rotator.rotate(exchange, "wallet", {"BTC": 1}))
+
+    assert captured.get("symbols") == ["BTC/USD"]
 def test_score_assets_handles_invalid_data(caplog):
     class BadExchange:
         def fetch_ohlcv(self, symbol, timeframe="1d", limit=30):

@@ -87,7 +87,38 @@ class PortfolioRotator:
         threshold = self.config.get("rebalance_threshold", 0.0)
         top_n = self.config.get("top_assets", len(current_holdings))
 
-        scores = self.score_assets(exchange, current_holdings.keys(), lookback, method)
+        # convert holdings like {"BTC": 1} to trading pairs
+        markets = getattr(exchange, "markets", {}) or {}
+        quote_pref = self.config.get("quote_currency")
+        quote_candidates = [quote_pref] if quote_pref else ["USD", "USDT"]
+        pair_map: Dict[str, str] = {}
+        for asset in current_holdings:
+            if "/" in asset:
+                pair_map[asset] = asset.split("/")[0]
+                continue
+
+            pair_found = None
+            for quote in quote_candidates:
+                if not quote:
+                    continue
+                pair = f"{asset}/{quote}"
+                if pair in markets:
+                    pair_found = pair
+                    break
+                if hasattr(exchange, "market"):
+                    try:
+                        if exchange.market(pair):
+                            pair_found = pair
+                            break
+                    except Exception:  # pragma: no cover - best effort
+                        pass
+            if not pair_found:
+                self.logger.warning("No matching pair for %s", asset)
+                continue
+            pair_map[pair_found] = asset
+
+        scores_pairs = self.score_assets(exchange, pair_map.keys(), lookback, method)
+        scores = {pair_map[p]: s for p, s in scores_pairs.items()}
         self._log_scores(scores)
         if not scores:
             return current_holdings
