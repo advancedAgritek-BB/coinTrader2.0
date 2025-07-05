@@ -108,7 +108,70 @@ mempool_monitor:
   reprice_multiplier: 1.05
 ```
 
+## Configuration Options
+
+The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below is a high level summary of what each option controls.
+
+### Exchange and Execution
+* **exchange** – target CEX (`coinbase` or `kraken`).
+* **execution_mode** – choose `dry_run` for simulation or `live` for real orders.
+* **use_websocket** – enable WebSocket data via `ccxt.pro`.
+* **force_websocket_history** – disable REST fallbacks when streaming.
+* **exchange_market_types** – market types to trade (spot, margin, futures).
+* **preferred_chain** – chain used for on-chain swaps (e.g. `solana`).
+* **wallet_address** – destination wallet for DEX trades.
+* **symbol**/**symbols** – pairs to trade when not scanning automatically.
+* **scan_markets** – load all exchange pairs when `symbols` is empty.
+* **excluded_symbols** – markets to skip during scanning.
+
+### Market Scanning
+* **symbol_batch_size** – number of symbols processed each cycle.
+* **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
+* **symbol_filter** – volume and spread limits for candidate pairs.
+* **symbol_score_weights** – weights for volume, spread, change and age.
+* **min_symbol_age_days** – skip newly listed pairs.
+* **min_symbol_score** – minimum score required for trading.
+* **top_n_symbols** – maximum number of active markets.
+* **max_age_days**, **max_change_pct**, **max_spread_pct**, **max_latency_ms**, **max_vol** – additional scanning limits.
+
+### Risk Parameters
+* **risk** – default stop loss, take profit and drawdown limits.
+* **trade_size_pct** – percent of capital used per trade.
+* **max_slippage_pct** – slippage tolerance for orders.
+* **liquidity_check**/**liquidity_depth** – verify order book depth.
+* **volatility_filter** – ATR and funding rate thresholds.
+* **sentiment_filter** – fear & greed plus sentiment checks.
+* **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
+* **mempool_monitor** – pause or reprice when Solana fees spike.
+* **min_cooldown** – minimum minutes between trades.
+* **cycle_bias** – optional on-chain metrics to bias trades.
+
+### Strategy and Signals
+* **strategy_allocation** – capital split across strategies.
+* **strategy_evaluation_mode** – how the router chooses a strategy.
+* **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
+* **exit_strategy** – partial profit taking and trailing stop logic.
+* **micro_scalp** – EMA and volume settings for the scalp bot.
+* **ml_signal_model**/**signal_weight_optimizer** – blend strategy scores with machine-learning predictions.
+* **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade.
+* **regime_timeframes**/**regime_return_period** – windows used for regime detection.
+* **twap_enabled**, **twap_slices**, **twap_interval_seconds** – settings for time-weighted order execution.
+* **optimization** – periodic parameter optimisation.
+* **portfolio_rotation** – rotate holdings based on scoring metrics.
+* **meta_selector**/**rl_selector** – experimental strategy routers.
+* **mode** – `auto` or `manual` evaluation of strategies.
+
+### Data and Logging
+* **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
+* **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options.
+* **loop_interval_minutes** – delay between trading cycles.
+* **log_to_google** – export trades to Google Sheets.
+* **telegram** – bot token, chat ID and trade notifications.
+* **tax_tracking** – CSV export of executed trades.
+* **metrics_enabled**, **metrics_backend**, **metrics_output_file** – cycle metrics output.
+* **testing_mode** – indicates a sandbox environment.
 ## Exchange Setup for U.S. Users
+
 
 1. Create API keys on **Coinbase Advanced Trade** or **Kraken**.
 2. Run `python crypto_bot/wallet_manager.py` to generate `user_config.yaml`. Any
