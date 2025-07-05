@@ -131,3 +131,27 @@ def test_send_test_message_failure(monkeypatch):
     monkeypatch.setattr(telegram, "send_message", lambda *a, **k: "err")
 
     assert telegram.send_test_message("t", "c") is False
+
+
+def test_notifier_stops_after_failure(monkeypatch, caplog):
+    import crypto_bot.utils.telegram as telegram
+
+    calls = {"count": 0}
+
+    def fake_send(token, chat_id, text):
+        calls["count"] += 1
+        return "boom"
+
+    monkeypatch.setattr(telegram, "send_message", fake_send)
+    monkeypatch.setattr(telegram, "logger", logging.getLogger("test_notifier"))
+
+    notifier = telegram.TelegramNotifier(True, "t", "c")
+
+    with caplog.at_level(logging.ERROR):
+        err1 = notifier.notify("msg1")
+        err2 = notifier.notify("msg2")
+
+    assert err1 == "boom"
+    assert err2 is None
+    assert calls["count"] == 1
+    assert any("disabling telegram notifications" in r.getMessage().lower() for r in caplog.records)
