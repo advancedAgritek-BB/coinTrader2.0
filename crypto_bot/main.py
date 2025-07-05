@@ -4,6 +4,7 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime
+from collections import deque
 
 import pandas as pd
 import yaml
@@ -55,6 +56,7 @@ from crypto_bot.utils.market_loader import (
     update_regime_tf_cache,
     fetch_ohlcv_async,
 )
+from crypto_bot.utils.eval_queue import build_priority_queue
 from crypto_bot.utils.symbol_pre_filter import filter_symbols
 from crypto_bot.utils.symbol_utils import get_filtered_symbols
 from crypto_bot.utils.pnl_logger import log_pnl
@@ -72,7 +74,7 @@ ENV_PATH = Path(__file__).resolve().parent / ".env"
 logger = setup_logger("bot", "crypto_bot/logs/bot.log", to_console=False)
 
 # Queue of symbols awaiting evaluation across loops
-SYMBOL_EVAL_QUEUE: list[str] = []
+symbol_priority_queue: deque[str] = deque()
 
 
 def direction_to_side(direction: str) -> str:
@@ -319,6 +321,11 @@ async def main() -> None:
         symbol_time = time.perf_counter() - t0
         start_filter = time.perf_counter()
         symbols = await get_filtered_symbols(exchange, config)
+        global symbol_priority_queue
+        if not symbol_priority_queue:
+            symbol_priority_queue = build_priority_queue(
+                [(s, i) for i, s in enumerate(symbols)]
+            )
         ticker_fetch_time = time.perf_counter() - start_filter
         total_available = len(config.get("symbols") or [config.get("symbol")])
         symbol_filter_ratio = (
@@ -328,10 +335,14 @@ async def main() -> None:
         if not SYMBOL_EVAL_QUEUE:
             SYMBOL_EVAL_QUEUE.extend(symbols)
         batch_size = config.get("symbol_batch_size", 10)
-        current_batch = SYMBOL_EVAL_QUEUE[:batch_size]
-        SYMBOL_EVAL_QUEUE = SYMBOL_EVAL_QUEUE[batch_size:]
-        if not SYMBOL_EVAL_QUEUE:
-            SYMBOL_EVAL_QUEUE.extend(symbols)
+        if len(symbol_priority_queue) < batch_size:
+            symbol_priority_queue.extend(
+                build_priority_queue([(s, i) for i, s in enumerate(symbols)])
+            )
+        current_batch = [
+            symbol_priority_queue.popleft()
+            for _ in range(min(batch_size, len(symbol_priority_queue)))
+        ]
 
         t0 = time.perf_counter()
         start_ohlcv = time.perf_counter()

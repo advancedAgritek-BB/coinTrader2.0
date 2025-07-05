@@ -236,6 +236,10 @@ max_spread_pct: 1.0              # skip pairs with wider spreads
 ```
 
 `exchange_market_types` filters the discovered pairs by market class. The bot
+also skips newly listed pairs using `min_symbol_age_days`.
+Symbols are queued by score using a priority deque and processed in
+batches controlled by `symbol_batch_size`. When the queue drops below this
+size it is automatically refilled with the highest scoring symbols.
 also skips newly listed pairs using `min_symbol_age_days` and processes symbols
 in batches controlled by `symbol_batch_size`. Candidates are stored in a
 priority queue sorted by their score so the highest quality markets are scanned
