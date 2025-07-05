@@ -38,3 +38,27 @@ def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
     except Exception as e:
         logger.error("Failed to send message: %s", e)
         return str(e)
+
+
+class TelegramNotifier:
+    """Helper class for sending Telegram notifications."""
+
+    def __init__(self, enabled: bool, token: str, chat_id: str) -> None:
+        self.enabled = enabled
+        self.token = token
+        self.chat_id = chat_id
+
+    def notify(self, text: str) -> Optional[str]:
+        """Send a message if enabled."""
+        if not self.enabled:
+            return None
+        return send_message(self.token, self.chat_id, text)
+
+    @classmethod
+    def from_config(cls, cfg: dict) -> "TelegramNotifier":
+        """Create notifier from config dict."""
+        section = cfg.get("telegram", {}) if isinstance(cfg, dict) else {}
+        enabled = bool(section.get("enabled", False))
+        token = section.get("token", "")
+        chat_id = section.get("chat_id", "")
+        return cls(enabled, token, chat_id)
