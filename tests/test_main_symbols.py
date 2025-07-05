@@ -15,7 +15,7 @@ def test_get_filtered_symbols_fallback(monkeypatch, caplog):
     monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
     config = {"symbol": "BTC/USD"}
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
-    assert result == ["BTC/USD"]
+    assert result == [("BTC/USD", 0.0)]
     assert any("falling back" in r.getMessage() for r in caplog.records)
 
 
@@ -27,7 +27,7 @@ def test_get_filtered_symbols_caching(monkeypatch):
 
     async def fake_filter_symbols(ex, syms, cfg):
         calls.append(True)
-        return ["ETH/USD"]
+        return [("ETH/USD", 1.0)]
 
     monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
 
@@ -43,12 +43,12 @@ def test_get_filtered_symbols_caching(monkeypatch):
     result1 = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     result2 = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
 
-    assert result1 == ["ETH/USD"]
-    assert result2 == ["ETH/USD"]
+    assert result1 == [("ETH/USD", 1.0)]
+    assert result2 == [("ETH/USD", 1.0)]
     assert len(calls) == 1
 
     symbol_utils._last_refresh -= 61
 
     result3 = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
-    assert result3 == ["ETH/USD"]
+    assert result3 == [("ETH/USD", 1.0)]
     assert len(calls) == 2

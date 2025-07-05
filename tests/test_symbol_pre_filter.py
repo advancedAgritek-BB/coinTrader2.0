@@ -4,9 +4,8 @@ import pandas as pd
 
 from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_history
 
-CONFIG = {"symbol_filter": {"min_volume_usd": 50000, "max_spread_pct": 2.0}}
 CONFIG = {
-    "symbol_filter": {"min_volume_usd": 50000},
+    "symbol_filter": {"min_volume_usd": 50000, "max_spread_pct": 2.0},
     "symbol_score_weights": {"volume": 1, "change": 0, "spread": 0, "age": 0, "latency": 0},
     "max_vol": 100000,
     "min_symbol_score": 0.0,
@@ -49,7 +48,7 @@ def test_filter_symbols(monkeypatch):
     symbols = asyncio.run(
         filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG)
     )
-    assert symbols == ["BTC/USD"]
+    assert symbols == [("BTC/USD", 0.6)]
 
 
 class DummyExchangeList:
@@ -62,7 +61,7 @@ def test_filter_symbols_handles_list_values(monkeypatch):
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
     )
     symbols = asyncio.run(filter_symbols(DummyExchangeList(), ["ETH/USD"], CONFIG))
-    assert symbols == ["ETH/USD"]
+    assert symbols == [("ETH/USD", 0.8)]
 class EmptyExchange:
     def __init__(self):
         self.markets_by_id = {}
@@ -80,7 +79,7 @@ def test_load_markets_when_missing(monkeypatch):
     )
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], CONFIG))
     assert ex.called is True
-    assert symbols == ["ETH/USD"]
+    assert symbols == [("ETH/USD", 0.8)]
 
 
 def test_non_dict_market_entry(monkeypatch):
@@ -91,7 +90,7 @@ def test_non_dict_market_entry(monkeypatch):
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
     )
     symbols = asyncio.run(filter_symbols(BadExchange(), ["ETH/USD"], CONFIG))
-    assert symbols == ["XETHZUSD"]
+    assert symbols == [("XETHZUSD", 0.8)]
 
 
 def test_multiple_batches(monkeypatch):
@@ -178,11 +177,15 @@ def test_filter_symbols_sorted_by_score(monkeypatch):
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch_sorted
     )
 
+    cfg = {
+        **CONFIG,
+        "symbol_filter": {"min_volume_usd": 50000, "change_pct_percentile": 0, "max_spread_pct": 2.0},
+    }
     symbols = asyncio.run(
-        filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG)
+        filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg)
     )
 
-    assert symbols == ["BTC/USD", "ETH/USD"]
+    assert symbols == [("BTC/USD", 0.8), ("ETH/USD", 0.6)]
 
 
 def test_filter_symbols_min_score(monkeypatch):
@@ -190,10 +193,13 @@ def test_filter_symbols_min_score(monkeypatch):
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
     )
 
-    cfg = {**CONFIG, "min_symbol_score": 0.7}
+    cfg = {
+        **CONFIG,
+        "min_symbol_score": 0.7,
+        "symbol_filter": {"min_volume_usd": 50000, "change_pct_percentile": 0},
+    }
     symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg))
-    assert symbols == ["ETH/USD"]
-    assert symbols == ["BTC/USD"]
+    assert symbols == [("ETH/USD", 0.8)]
 class HistoryExchange:
     def __init__(self, candles: int):
         self.markets_by_id = {"XETHZUSD": {"symbol": "ETH/USD"}}
@@ -220,7 +226,7 @@ def test_filter_symbols_min_age_allows(monkeypatch):
     cfg = {**CONFIG, "min_symbol_age_days": 2}
     ex = HistoryExchange(48)
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], cfg))
-    assert symbols == ["ETH/USD"]
+    assert symbols == [("ETH/USD", 0.8)]
 
 
 def test_filter_symbols_correlation(monkeypatch):
@@ -232,11 +238,15 @@ def test_filter_symbols_correlation(monkeypatch):
     df2 = pd.DataFrame({"close": [2, 4, 6, 8, 10]})
     cache = {"ETH/USD": df1, "BTC/USD": df2}
 
+    cfg = {
+        **CONFIG,
+        "symbol_filter": {"min_volume_usd": 50000, "max_spread_pct": 2.0, "change_pct_percentile": 0},
+    }
     symbols = asyncio.run(
-        filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG, df_cache=cache)
+        filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg, df_cache=cache)
     )
 
-    assert symbols == ["ETH/USD"]
+    assert symbols == [("ETH/USD", 0.8)]
 async def fake_fetch_wide_spread(_):
     return {
         "result": {
@@ -285,5 +295,4 @@ def test_percentile_selects_top_movers(monkeypatch):
         markets_by_id = {p: {"symbol": p} for p in pairs}
 
     symbols = asyncio.run(filter_symbols(DummyEx(), pairs, CONFIG))
-
-    assert set(symbols) == {"PAIR9", "PAIR10"}
+    assert {s for s, _ in symbols} == {"PAIR9", "PAIR10"}

@@ -329,9 +329,7 @@ async def main() -> None:
         symbols = await get_filtered_symbols(exchange, config)
         global symbol_priority_queue
         if not symbol_priority_queue:
-            symbol_priority_queue = build_priority_queue(
-                [(s, i) for i, s in enumerate(symbols)]
-            )
+            symbol_priority_queue = build_priority_queue(symbols)
         ticker_fetch_time = time.perf_counter() - start_filter
         total_available = len(config.get("symbols") or [config.get("symbol")])
         symbol_filter_ratio = (
@@ -339,12 +337,10 @@ async def main() -> None:
         )
         global SYMBOL_EVAL_QUEUE
         if not SYMBOL_EVAL_QUEUE:
-            SYMBOL_EVAL_QUEUE.extend(symbols)
+            SYMBOL_EVAL_QUEUE.extend(sym for sym, _ in symbols)
         batch_size = config.get("symbol_batch_size", 10)
         if len(symbol_priority_queue) < batch_size:
-            symbol_priority_queue.extend(
-                build_priority_queue([(s, i) for i, s in enumerate(symbols)])
-            )
+            symbol_priority_queue.extend(build_priority_queue(symbols))
         current_batch = [
             symbol_priority_queue.popleft()
             for _ in range(min(batch_size, len(symbol_priority_queue)))
