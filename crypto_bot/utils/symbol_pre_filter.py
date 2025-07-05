@@ -110,48 +110,23 @@ def _timeframe_seconds(exchange, timeframe: str) -> int:
 
 
 async def filter_symbols(
-    exchange, symbols: Iterable[str], config: dict | None = None, df_cache: Dict[str, pd.DataFrame] | None = None
-) -> List[str]:
-    """Return subset of ``symbols`` passing liquidity and volatility checks."""
-    """Return subset of ``symbols`` passing liquidity checks sorted by score."""
+    exchange,
+    symbols: Iterable[str],
+    config: dict | None = None,
+    df_cache: Dict[str, pd.DataFrame] | None = None,
+) -> List[tuple[str, float]]:
+    """Return ``symbols`` passing liquidity checks sorted by score."""
 
     cfg = config or {}
-    min_volume = cfg.get("symbol_filter", {}).get(
-        "min_volume_usd", DEFAULT_MIN_VOLUME_USD
-    )
+    sf = cfg.get("symbol_filter", {})
+    min_volume = sf.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
+    max_spread = sf.get("max_spread_pct", 1.0)
+    pct = sf.get("change_pct_percentile", 80)
     min_age = cfg.get("min_symbol_age_days", 0)
-
-    """Return subset of ``symbols`` passing liquidity and volatility checks.
-
-    Parameters
-    ----------
-    exchange: object
-        Exchange instance providing market metadata.
-    symbols: Iterable[str]
-        Pairs to evaluate.
-    config: dict | None
-        Optional configuration dictionary containing ``symbol_filter`` with
-        ``min_volume_usd`` and ``max_spread_pct`` settings.
-    """
-
-    min_volume = DEFAULT_MIN_VOLUME_USD
-    max_spread = 1.0
-    min_age = 0
-    pct = 80
-    if config:
-        filter_cfg = config.get("symbol_filter", {})
-        min_volume = filter_cfg.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
-        max_spread = filter_cfg.get("max_spread_pct", 1.0)
-        sf = config.get("symbol_filter", {})
-        min_volume = sf.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
-        pct = sf.get("change_pct_percentile", 80)
-        min_age = config.get("min_symbol_age_days", 0)
 
     pairs = [s.replace("/", "") for s in symbols]
     data = (await _fetch_ticker_async(pairs)).get("result", {})
-    id_map: Dict[str, str] = {}
 
-    id_map = {}
     id_map: dict[str, str] = {}
     if hasattr(exchange, "markets_by_id"):
         if not exchange.markets_by_id and hasattr(exchange, "load_markets"):
@@ -167,6 +142,7 @@ async def filter_symbols(
             else:
                 id_map[k] = v if isinstance(v, str) else k
 
+    metrics: List[tuple[str, float, float, float]] = []
     allowed: List[tuple[str, float]] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)
@@ -186,18 +162,28 @@ async def filter_symbols(
             change_pct,
             spread_pct,
         )
-        if vol_usd > min_volume and abs(change_pct) > 1:
-            allowed.append((symbol, vol_usd))
-    allowed.sort(key=lambda x: x[1], reverse=True)
-    sorted_symbols = [sym for sym, _ in allowed]
+        if vol_usd >= min_volume and spread_pct <= max_spread:
+            metrics.append((symbol, vol_usd, change_pct, spread_pct))
+
+    if metrics and pct:
+        threshold = np.percentile([abs(m[2]) for m in metrics], pct)
+        metrics = [m for m in metrics if abs(m[2]) >= threshold]
+
+    scored: List[tuple[str, float]] = []
+    for sym, vol, chg, spr in metrics:
+        score = score_symbol(sym, vol, chg, spr, cfg)
+        if score >= min_score:
+            scored.append((sym, score))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
 
     corr_map: Dict[tuple[str, str], float] = {}
     if df_cache:
-        subset = {s: df_cache.get(s) for s in sorted_symbols}
+        subset = {s: df_cache.get(s) for s, _ in scored}
         corr_map = compute_pairwise_correlation(subset)
 
-    result: List[str] = []
-    for sym in sorted_symbols:
+    result: List[tuple[str, float]] = []
+    for sym, score in scored:
         if min_age > 0:
             enough = await has_enough_history(exchange, sym, min_age, timeframe="1h")
             if not enough:
@@ -205,11 +191,12 @@ async def filter_symbols(
                 continue
         keep = True
         if df_cache:
-            for kept in result:
+            for kept, _ in result:
                 corr = corr_map.get((sym, kept)) or corr_map.get((kept, sym))
                 if corr is not None and corr >= 0.95:
                     keep = False
                     break
         if keep:
-            result.append(sym)
+            result.append((sym, score))
+
     return result

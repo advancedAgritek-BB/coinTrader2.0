@@ -30,16 +30,16 @@ async def get_filtered_symbols(exchange, config) -> list:
 
     symbols = config.get("symbols", [config.get("symbol")])
     if asyncio.iscoroutinefunction(filter_symbols):
-        symbols = await filter_symbols(exchange, symbols, config)
+        scored = await filter_symbols(exchange, symbols, config)
     else:
-        symbols = await asyncio.to_thread(filter_symbols, exchange, symbols, config)
-    if not symbols:
+        scored = await asyncio.to_thread(filter_symbols, exchange, symbols, config)
+    if not scored:
         logger.warning(
             "No symbols passed filters, falling back to %s",
             config.get("symbol"),
         )
-        symbols = [config.get("symbol")]
+        scored = [(config.get("symbol"), 0.0)]
 
-    _cached_symbols = symbols
+    _cached_symbols = scored
     _last_refresh = now
-    return symbols
+    return scored
