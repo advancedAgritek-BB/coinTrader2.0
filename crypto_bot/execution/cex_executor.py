@@ -172,6 +172,10 @@ def execute_trade(
                 and hasattr(exchange, "fetch_order_book")
                 and not has_liquidity(slice_amount)
             ):
+                err_liq = notifier.notify(
+                    "Insufficient liquidity during TWAP execution",
+                    "\u26a0\ufe0f Error: Insufficient liquidity during TWAP execution",
+                )
                 err_liq = notifier.notify("Insufficient liquidity during TWAP execution")
                 err_liq = TelegramNotifier.notify(
                     token,
@@ -310,6 +314,13 @@ async def execute_trade_async(
                     exchange.create_market_order, symbol, side, amount
                 )
         except Exception as e:  # pragma: no cover - network
+            err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
+            err_msg = notifier.notify(f"Order failed: {e}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
+            err_msg = TelegramNotifier.notify(token, chat_id, f"Order failed: {e}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
             err_msg = notifier.notify(f"Order failed: {e}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
@@ -402,6 +413,10 @@ def place_stop_order(
             )
         except Exception as e:
             err_msg = notifier.notify(f"Stop order failed: {e}")
+            err_msg = notifier.notify(f"\u26a0\ufe0f Error: Stop order failed: {e}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
+            err_msg = TelegramNotifier.notify(token, chat_id, f"Stop order failed: {e}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
             return {}

@@ -118,7 +118,7 @@ def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
 class TelegramNotifier:
     """Helper class for sending Telegram notifications."""
 
-    def __init__(self, enabled: bool, token: str, chat_id: str) -> None:
+    def __init__(self, token: str = "", chat_id: str = "", enabled: bool = True) -> None:
         self.enabled = enabled
         self.token = token
         self.chat_id = chat_id
