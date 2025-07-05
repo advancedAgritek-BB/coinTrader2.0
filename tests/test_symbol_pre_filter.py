@@ -117,3 +117,32 @@ def test_multiple_batches(monkeypatch):
 
     assert len(symbols) == 25
     assert len(calls) == 2
+
+
+class HistoryExchange:
+    def __init__(self, candles: int):
+        self.markets_by_id = {"XETHZUSD": {"symbol": "ETH/USD"}}
+        self.candles = candles
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        return [[i * 3600, 0, 0, 0, 0, 0] for i in range(min(self.candles, limit))]
+
+
+def test_filter_symbols_min_age_skips(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
+    cfg = {**CONFIG, "min_symbol_age_days": 2}
+    ex = HistoryExchange(24)
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], cfg))
+    assert symbols == []
+
+
+def test_filter_symbols_min_age_allows(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
+    cfg = {**CONFIG, "min_symbol_age_days": 2}
+    ex = HistoryExchange(48)
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], cfg))
+    assert symbols == ["ETH/USD"]
