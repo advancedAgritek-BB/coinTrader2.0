@@ -346,3 +346,6 @@ pip install -r requirements.txt
 ```bash
 pytest -q
 ```
+
+This project is provided for educational purposes only. Use it at your own risk, and remember that nothing here constitutes financial advice.
+
