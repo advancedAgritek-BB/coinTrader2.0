@@ -2,11 +2,18 @@ import pandas as pd
 from typing import Dict
 
 from crypto_bot.regime.regime_classifier import classify_regime_async
-from crypto_bot.strategy_router import strategy_for, strategy_name
+from crypto_bot.strategy_router import route, strategy_name
+from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.signals.signal_scoring import evaluate_async
 
 
-async def analyze_symbol(symbol: str, df: pd.DataFrame, mode: str, config: Dict) -> Dict:
+async def analyze_symbol(
+    symbol: str,
+    df: pd.DataFrame,
+    mode: str,
+    config: Dict,
+    notifier: TelegramNotifier | None = None,
+) -> Dict:
     """Classify the market regime and evaluate the trading signal for ``symbol``.
 
     Parameters
@@ -19,6 +26,8 @@ async def analyze_symbol(symbol: str, df: pd.DataFrame, mode: str, config: Dict)
         Execution mode of the bot ("cex", "onchain" or "auto").
     config : Dict
         Bot configuration.
+    notifier : TelegramNotifier | None
+        Optional notifier used to send a message when the strategy is invoked.
     """
     regime = await classify_regime_async(df)
 
@@ -38,9 +47,10 @@ async def analyze_symbol(symbol: str, df: pd.DataFrame, mode: str, config: Dict)
 
     if regime != "unknown":
         env = mode if mode != "auto" else "cex"
-        strategy_fn = strategy_for(regime)
+        strategy_fn = route(regime, env, config, notifier)
         name = strategy_name(regime, env)
-        score, direction = await evaluate_async(strategy_fn, df, config)
+        cfg = {**config, "symbol": symbol}
+        score, direction = await evaluate_async(strategy_fn, df, cfg)
         result.update({
             "env": env,
             "name": name,
