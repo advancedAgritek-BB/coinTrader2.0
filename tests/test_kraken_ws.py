@@ -247,3 +247,36 @@ def test_parse_ohlc_message_extracts_volume():
 
     result = kraken_ws.parse_ohlc_message(msg)
     assert result == [1712106000000, 30000.0, 30100.0, 29900.0, 30050.0, 12.34]
+
+
+def test_ping_sends_correct_json():
+    client = KrakenWSClient()
+    pub = DummyWS()
+    priv = DummyWS()
+    client.public_ws = pub
+    client.private_ws = priv
+
+    msg = client.ping(42)
+    expected = {"method": "ping", "req_id": 42}
+    assert msg == expected
+    assert priv.sent == [json.dumps(expected)]
+    assert not pub.sent
+
+
+def test_handle_message_records_heartbeat(monkeypatch):
+    client = KrakenWSClient()
+    pub = DummyWS()
+    priv = DummyWS()
+    client.public_ws = pub
+    client.private_ws = priv
+
+    client._handle_message(pub, json.dumps({"channel": "heartbeat"}))
+    assert client.last_public_heartbeat is not None
+    assert client.is_alive("public")
+
+    client.last_public_heartbeat -= timedelta(seconds=11)
+    assert not client.is_alive("public")
+
+    client._handle_message(priv, json.dumps({"channel": "heartbeat"}))
+    assert client.last_private_heartbeat is not None
+    assert client.is_alive("private")

@@ -82,8 +82,32 @@ class KrakenWSClient:
             self.token_created = datetime.now(timezone.utc)
         self.public_ws: Optional[WebSocketApp] = None
         self.private_ws: Optional[WebSocketApp] = None
+        self.last_public_heartbeat: Optional[datetime] = None
+        self.last_private_heartbeat: Optional[datetime] = None
         self._public_subs = []
         self._private_subs = []
+
+    def _handle_message(self, ws: WebSocketApp, message: str) -> None:
+        """Default ``on_message`` handler that records heartbeats."""
+        logger.info("WS message: %s", message)
+        try:
+            data = json.loads(message)
+        except json.JSONDecodeError:
+            return
+
+        def update(obj: Any) -> None:
+            if isinstance(obj, dict) and obj.get("channel") == "heartbeat":
+                now = datetime.now(timezone.utc)
+                if ws == self.private_ws:
+                    self.last_private_heartbeat = now
+                else:
+                    self.last_public_heartbeat = now
+
+        if isinstance(data, list):
+            for item in data:
+                update(item)
+        else:
+            update(data)
 
     def _regenerate_private_subs(self) -> None:
         """Update stored private subscription messages with the current token."""
@@ -130,7 +154,7 @@ class KrakenWSClient:
         """Start a ``WebSocketApp`` and begin the reader thread."""
 
         def default_on_message(ws, message):
-            logger.info("WS message: %s", message)
+            self._handle_message(ws, message)
 
         def default_on_error(ws, error):
             logger.error("WS error: %s", error)
@@ -288,6 +312,25 @@ class KrakenWSClient:
         data = json.dumps(msg)
         self.private_ws.send(data)
         return msg
+
+    def ping(self, req_id: Optional[int] = None) -> dict:
+        """Send a ping message to keep the websocket connection alive."""
+        msg = {"method": "ping", "req_id": req_id}
+        data = json.dumps(msg)
+        ws = self.private_ws or self.public_ws
+        if not ws:
+            raise RuntimeError("WebSocket not connected")
+        ws.send(data)
+        return msg
+
+    def is_alive(self, conn_type: str) -> bool:
+        """Return ``True`` if the connection received a heartbeat recently."""
+        now = datetime.now(timezone.utc)
+        if conn_type == "private":
+            last = self.last_private_heartbeat
+        else:
+            last = self.last_public_heartbeat
+        return bool(last and (now - last) <= timedelta(seconds=10))
 
     def on_close(self, conn_type: str) -> None:
         """Handle WebSocket closure by reconnecting and resubscribing."""
