@@ -55,6 +55,15 @@ async def analyze_symbol(
     )
     higher_df = df_map.get(higher_tf)
 
+    if df is not None:
+        regime, info = await classify_regime_async(df, higher_df)
+        if isinstance(info, dict):
+            patterns = info
+        elif isinstance(info, set):
+            patterns = {p: 1.0 for p in info}
+        else:
+            base_conf = float(info)
+
     regime_counts: Dict[str, int] = {}
     regime_tfs = config.get("regime_timeframes", [base_tf])
     min_agree = config.get("min_consistent_agreement", 1)
