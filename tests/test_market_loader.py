@@ -746,6 +746,39 @@ def test_watch_ohlcv_since_reduces_limit(monkeypatch):
     assert ex.limit == 4
 
 
+class SymbolCheckExchange:
+    def __init__(self):
+        self.symbols: list[str] = []
+        self.calls: list[str] = []
+        self.loaded = False
+
+    def load_markets(self):
+        self.loaded = True
+        self.symbols = ["BTC/USD"]
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.calls.append(symbol)
+        return [[0] * 6]
+
+
+def test_invalid_symbol_skipped(caplog):
+    from crypto_bot.utils import market_loader
+
+    ex = SymbolCheckExchange()
+    caplog.set_level(logging.WARNING)
+    result = asyncio.run(
+        market_loader.load_ohlcv_parallel(
+            ex,
+            ["BTC/USD", "ETH/USD"],
+            max_concurrent=1,
+        )
+    )
+    assert ex.loaded is True
+    assert ex.calls == ["BTC/USD"]
+    assert result == {"BTC/USD": [[0] * 6]}
+    assert any(
+        "Skipping unsupported symbol ETH/USD" in r.getMessage() for r in caplog.records
+    )
 class MissingTFExchange:
     has = {"fetchOHLCV": True}
     timeframes = {"5m": "5m"}
