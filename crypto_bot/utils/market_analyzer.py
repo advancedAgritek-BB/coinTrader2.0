@@ -1,7 +1,6 @@
 import pandas as pd
 from typing import Dict
 
-from crypto_bot.regime.regime_classifier import classify_regime_async
 from crypto_bot.regime.pattern_detector import detect_patterns
 from crypto_bot.regime.regime_classifier import (
     classify_regime_async,
@@ -47,7 +46,7 @@ async def analyze_symbol(
     patterns = detect_patterns(df)
     base_conf = float(probs.get(regime, 0.0))
     profile = bool(config.get("profile_regime", False))
-    regime, info = await classify_regime_cached(
+    regime, _ = await classify_regime_cached(
         symbol,
         base_tf,
         df,
@@ -55,28 +54,6 @@ async def analyze_symbol(
         profile,
     )
     higher_df = df_map.get(higher_tf)
-
-    regime = "unknown"
-    regime, info = await classify_regime_async(df, higher_df)
-    patterns: dict | set = {}
-    patterns: dict[str, float] = {}
-    patterns: Dict[str, float] = {}
-    base_conf = 1.0
-    if isinstance(info, dict):
-        patterns = info
-    elif isinstance(info, set):
-        patterns = {p: 1.0 for p in info}
-    else:
-        base_conf = float(info)
-    patterns: set[str] = set()
-    base_conf = 1.0
-
-    if df is not None:
-        regime, info = await classify_regime_async(df, higher_df)
-        if isinstance(info, set):
-            patterns = info
-        else:
-            base_conf = float(info)
 
     regime_counts: Dict[str, int] = {}
     regime_tfs = config.get("regime_timeframes", [base_tf])
