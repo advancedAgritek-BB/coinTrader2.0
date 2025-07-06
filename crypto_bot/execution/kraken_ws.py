@@ -207,6 +207,172 @@ def parse_book_message(message: str) -> Optional[dict]:
     return {"type": msg_type, "bids": _convert(bids), "asks": _convert(asks)}
 
 
+def _parse_l3_orders(levels: List[Any]) -> Optional[List[dict]]:
+    """Return parsed list of L3 book orders or ``None`` on error."""
+
+    result = []
+    for lvl in levels:
+        if not isinstance(lvl, list) or len(lvl) < 3:
+            return None
+        try:
+            price = float(lvl[0])
+            qty = float(lvl[1])
+            order_id = str(lvl[2])
+        except (TypeError, ValueError):
+            return None
+        result.append(
+            {
+                "order_id": order_id,
+                "limit_price": price,
+                "order_qty": qty,
+            }
+        )
+    return result
+
+
+def parse_level3_snapshot(msg: str) -> Optional[dict]:
+    """Parse a Kraken level 3 order book snapshot message."""
+
+    try:
+        data: Any = json.loads(msg)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+    if data.get("channel") != "book" or data.get("type") != "snapshot":
+        return None
+
+    payload = data.get("data")
+    symbol = data.get("symbol")
+    if not isinstance(payload, dict) or not isinstance(symbol, str):
+        return None
+
+    bids_raw = payload.get("bids")
+    asks_raw = payload.get("asks")
+    if not isinstance(bids_raw, list) or not isinstance(asks_raw, list):
+        return None
+
+    bids = _parse_l3_orders(bids_raw)
+    asks = _parse_l3_orders(asks_raw)
+    if bids is None or asks is None:
+        return None
+
+    checksum = payload.get("checksum")
+    try:
+        checksum = int(checksum)
+    except (TypeError, ValueError):
+        return None
+
+    ts_val = payload.get("timestamp")
+    timestamp = None
+    if ts_val is not None:
+        try:
+            tsf = float(ts_val)
+            if tsf > 1e12:
+                tsf /= 1000
+            timestamp = datetime.fromtimestamp(tsf, timezone.utc)
+        except Exception:
+            timestamp = None
+
+    return {
+        "symbol": symbol,
+        "bids": bids,
+        "asks": asks,
+        "checksum": checksum,
+        "timestamp": timestamp,
+    }
+
+
+def _parse_l3_events(levels: List[Any]) -> Optional[List[dict]]:
+    """Parse level 3 order book update events."""
+
+    result = []
+    for lvl in levels:
+        if not isinstance(lvl, list) or len(lvl) < 5:
+            return None
+        event, order_id = lvl[0], lvl[1]
+        try:
+            price = float(lvl[2])
+            qty = float(lvl[3])
+        except (TypeError, ValueError):
+            return None
+        ts_val = lvl[4]
+        ts = None
+        if ts_val is not None:
+            try:
+                tsf = float(ts_val)
+                if tsf > 1e12:
+                    tsf /= 1000
+                ts = datetime.fromtimestamp(tsf, timezone.utc)
+            except Exception:
+                ts = None
+        result.append(
+            {
+                "event": str(event),
+                "order_id": str(order_id),
+                "limit_price": price,
+                "order_qty": qty,
+                "timestamp": ts,
+            }
+        )
+    return result
+
+
+def parse_level3_update(msg: str) -> Optional[dict]:
+    """Parse a Kraken level 3 order book update message."""
+
+    try:
+        data: Any = json.loads(msg)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+    if data.get("channel") != "book" or data.get("type") != "update":
+        return None
+
+    payload = data.get("data")
+    symbol = data.get("symbol")
+    if not isinstance(payload, dict) or not isinstance(symbol, str):
+        return None
+
+    bids_raw = payload.get("bids")
+    asks_raw = payload.get("asks")
+    if not isinstance(bids_raw, list) or not isinstance(asks_raw, list):
+        return None
+
+    bids = _parse_l3_events(bids_raw)
+    asks = _parse_l3_events(asks_raw)
+    if bids is None or asks is None:
+        return None
+
+    checksum = payload.get("checksum")
+    try:
+        checksum = int(checksum)
+    except (TypeError, ValueError):
+        return None
+
+    ts_val = payload.get("timestamp")
+    timestamp = None
+    if ts_val is not None:
+        try:
+            tsf = float(ts_val)
+            if tsf > 1e12:
+                tsf /= 1000
+            timestamp = datetime.fromtimestamp(tsf, timezone.utc)
+        except Exception:
+            timestamp = None
+
+    return {
+        "symbol": symbol,
+        "bids": bids,
+        "asks": asks,
+        "checksum": checksum,
+        "timestamp": timestamp,
+    }
+
+
 class KrakenWSClient:
     """Minimal Kraken WebSocket client for public and private channels."""
 
@@ -411,7 +577,7 @@ class KrakenWSClient:
         self,
         symbol: Union[str, List[str]],
         *,
-        event_trigger: Optional[dict] = None,
+        event_trigger: Optional[str] = None,
         req_id: Optional[int] = None,
     ) -> None:
         """Unsubscribe from ticker updates for one or more symbols."""
@@ -505,21 +671,6 @@ class KrakenWSClient:
         data = json.dumps(msg)
         self._public_subs.append(data)
         self.public_ws.send(data)
-
-    def unsubscribe_book(self, symbol: Union[str, List[str]]) -> None:
-        """Unsubscribe from order book updates for one or more symbols."""
-        self.connect_public()
-        if isinstance(symbol, str):
-            symbol = [symbol]
-        msg = {
-            "method": "unsubscribe",
-            "params": {"channel": "book", "symbol": symbol},
-        }
-        data = json.dumps(msg)
-        try:
-            self.public_ws.send(data)
-        except Exception:
-            pass
 
     def subscribe_instruments(self, snapshot: bool = True) -> None:
         """Subscribe to the instrument reference data channel."""
@@ -615,6 +766,65 @@ class KrakenWSClient:
         data = json.dumps(msg)
         self._private_subs.append(data)
         self.private_ws.send(data)
+
+    def subscribe_level3(
+        self,
+        symbol: Union[str, List[str]],
+        *,
+        depth: int = 10,
+        snapshot: bool = True,
+    ) -> None:
+        """Subscribe to authenticated level3 order book updates."""
+
+        self.connect_private()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "subscribe",
+            "params": {
+                "channel": "level3",
+                "symbol": symbol,
+                "depth": depth,
+                "snapshot": snapshot,
+                "token": self.token,
+            },
+        }
+        data = json.dumps(msg)
+        self._private_subs.append(data)
+        self.private_ws.send(data)
+
+    def unsubscribe_level3(self, symbol: Union[str, List[str]], depth: int = 10) -> None:
+        """Unsubscribe from authenticated level3 order book updates."""
+
+        self.connect_private()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "unsubscribe",
+            "params": {
+                "channel": "level3",
+                "symbol": symbol,
+                "depth": depth,
+                "token": self.token,
+            },
+        }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+
+        def _matches(sub: str) -> bool:
+            try:
+                parsed = json.loads(sub)
+            except Exception:
+                return False
+            params = parsed.get("params", {}) if isinstance(parsed, dict) else {}
+            return (
+                parsed.get("method") == "subscribe"
+                and params.get("channel") == "level3"
+                and params.get("depth", depth) == depth
+                and sorted(params.get("symbol", [])) == sorted(symbol)
+            )
+
+        self._private_subs = [s for s in self._private_subs if not _matches(s)]
 
     def add_order(
         self,

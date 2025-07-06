@@ -99,6 +99,45 @@ def test_reconnect_resubscribes_book(monkeypatch):
     assert created == [(PUBLIC_URL, "public"), (PUBLIC_URL, "public")]
     assert client.public_ws is not old_ws
     assert client.public_ws.sent == [sub_msg]
+
+
+def test_reconnect_resubscribes_level3(monkeypatch):
+    client = KrakenWSClient()
+    created = []
+
+    def dummy_start_ws(url, conn_type=None, **_):
+        ws = DummyWS()
+        created.append((url, conn_type))
+        ws.on_close = lambda *_: client.on_close(conn_type)
+        return ws
+
+    monkeypatch.setattr(client, "_start_ws", dummy_start_ws)
+    monkeypatch.setattr(client, "get_token", lambda: "token")
+
+    client.token = "token"
+
+    client.subscribe_level3("BTC/USD")
+    sub_msg = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {
+                "channel": "level3",
+                "symbol": ["BTC/USD"],
+                "depth": 10,
+                "snapshot": True,
+                "token": "token",
+            },
+        }
+    )
+    assert created == [(PRIVATE_URL, "private")]
+    assert client.private_ws.sent == [sub_msg]
+
+    old_ws = client.private_ws
+    old_ws.on_close(None, None)
+
+    assert created == [(PRIVATE_URL, "private"), (PRIVATE_URL, "private")]
+    assert client.private_ws is not old_ws
+    assert client.private_ws.sent == [sub_msg]
 def test_subscribe_ticker_with_options(monkeypatch):
     client = KrakenWSClient()
     ws = DummyWS()
@@ -466,6 +505,45 @@ def test_subscribe_book_and_unsubscribe(monkeypatch):
     assert ws.sent == [expected_unsub]
 
 
+def test_subscribe_and_unsubscribe_level3(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+    client.token = "token"
+
+    client.subscribe_level3("ETH/USD", depth=5, snapshot=False)
+    expected_sub = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {
+                "channel": "level3",
+                "symbol": ["ETH/USD"],
+                "depth": 5,
+                "snapshot": False,
+                "token": "token",
+            },
+        }
+    )
+    assert ws.sent == [expected_sub]
+    assert client._private_subs[0] == expected_sub
+
+    ws.sent.clear()
+    client.unsubscribe_level3("ETH/USD", depth=5)
+    expected_unsub = json.dumps(
+        {
+            "method": "unsubscribe",
+            "params": {
+                "channel": "level3",
+                "symbol": ["ETH/USD"],
+                "depth": 5,
+                "token": "token",
+            },
+        }
+    )
+    assert ws.sent == [expected_unsub]
+    assert client._private_subs == []
+
+
 def test_parse_book_message_snapshot_and_update():
     snap_msg = json.dumps(
         {
@@ -543,3 +621,79 @@ def test_subscribe_and_unsubscribe_ohlc(monkeypatch):
     )
     assert ws.sent == [expected_unsub]
     assert client._public_subs == []
+def test_parse_level3_snapshot_and_update():
+    snap_msg = json.dumps(
+        {
+            "channel": "book",
+            "type": "snapshot",
+            "symbol": "ETH/USD",
+            "data": {
+                "bids": [["3000.1", "1.0", "B1"], ["3000.0", "2.0", "B2"]],
+                "asks": [["3000.2", "1.5", "A1"]],
+                "checksum": 111,
+                "timestamp": 1712150000,
+            },
+        }
+    )
+
+    upd_msg = json.dumps(
+        {
+            "channel": "book",
+            "type": "update",
+            "symbol": "ETH/USD",
+            "data": {
+                "bids": [["new", "B3", "2999.5", "0.5", 1712150001]],
+                "asks": [["delete", "A1", "3000.2", "0", 1712150002]],
+                "checksum": 112,
+                "timestamp": 1712150003,
+            },
+        }
+    )
+
+    snap = kraken_ws.parse_level3_snapshot(snap_msg)
+    upd = kraken_ws.parse_level3_update(upd_msg)
+
+    assert snap == {
+        "symbol": "ETH/USD",
+        "bids": [
+            {"order_id": "B1", "limit_price": 3000.1, "order_qty": 1.0},
+            {"order_id": "B2", "limit_price": 3000.0, "order_qty": 2.0},
+        ],
+        "asks": [
+            {"order_id": "A1", "limit_price": 3000.2, "order_qty": 1.5},
+        ],
+        "checksum": 111,
+        "timestamp": datetime.fromtimestamp(1712150000, timezone.utc),
+    }
+
+    assert upd == {
+        "symbol": "ETH/USD",
+        "bids": [
+            {
+                "event": "new",
+                "order_id": "B3",
+                "limit_price": 2999.5,
+                "order_qty": 0.5,
+                "timestamp": datetime.fromtimestamp(1712150001, timezone.utc),
+            }
+        ],
+        "asks": [
+            {
+                "event": "delete",
+                "order_id": "A1",
+                "limit_price": 3000.2,
+                "order_qty": 0.0,
+                "timestamp": datetime.fromtimestamp(1712150002, timezone.utc),
+            }
+        ],
+        "checksum": 112,
+        "timestamp": datetime.fromtimestamp(1712150003, timezone.utc),
+    }
+
+
+def test_level3_invalid_messages():
+    assert kraken_ws.parse_level3_snapshot("not json") is None
+    bad = json.dumps({"channel": "book", "type": "snapshot", "data": {"bids": []}})
+    assert kraken_ws.parse_level3_snapshot(bad) is None
+    bad_upd = json.dumps({"channel": "book", "type": "update", "data": {"bids": []}})
+    assert kraken_ws.parse_level3_update(bad_upd) is None

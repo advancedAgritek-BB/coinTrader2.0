@@ -384,6 +384,28 @@ client.cancel_all_orders()
 client.open_orders()
 ```
 
+#### Level 3 Order Updates
+
+Subscribe to the full depth feed using `subscribe_level3`. The call requires a
+session token obtained from Kraken's `GetWebSocketsToken` REST endpoint. Depth
+values of `10`, `100` or `1000` are supported.
+
+```python
+import json
+from crypto_bot.execution.kraken_ws import KrakenWSClient
+
+ws = KrakenWSClient(ws_token="your_ws_token")
+ws.subscribe_level3("BTC/USD", depth=100)
+
+def handle(msg: str):
+    data = json.loads(msg)
+    if data.get("channel") == "level3":
+        for side, updates in data["data"].items():
+            for price, size, order_id in updates:
+                # process each order update
+                pass
+```
+
 Binance.US is not recommended because of API limitations.
 
 ### Automatic Market Scanning
