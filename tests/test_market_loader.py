@@ -257,6 +257,57 @@ def test_watch_ohlcv_since_limit_reduction():
     assert len(data) == 4
 
 
+class SkipLargeLimitExchange:
+    def __init__(self):
+        self.ws_called = False
+        self.fetch_called = False
+
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.ws_called = True
+        return [[0] * 6 for _ in range(limit)]
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.fetch_called = True
+        return [[1] * 6 for _ in range(limit)]
+
+
+def test_watch_ohlcv_skipped_when_limit_exceeds(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    ex = SkipLargeLimitExchange()
+    monkeypatch.setattr(market_loader, "MAX_WS_LIMIT", 50)
+    data = asyncio.run(
+        market_loader.fetch_ohlcv_async(
+            ex,
+            "BTC/USD",
+            limit=100,
+            use_websocket=True,
+        )
+    )
+    assert ex.ws_called is False
+    assert ex.fetch_called is True
+    assert len(data) == 100
+
+
+def test_force_websocket_history_ignores_max_ws_limit(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    ex = SkipLargeLimitExchange()
+    monkeypatch.setattr(market_loader, "MAX_WS_LIMIT", 50)
+    data = asyncio.run(
+        market_loader.fetch_ohlcv_async(
+            ex,
+            "BTC/USD",
+            limit=100,
+            use_websocket=True,
+            force_websocket_history=True,
+        )
+    )
+    assert ex.ws_called is True
+    assert ex.fetch_called is False
+    assert len(data) == 100
+
+
 class DummyIncExchange:
     has = {"fetchOHLCV": True}
     def __init__(self):
