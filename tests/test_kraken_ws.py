@@ -70,8 +70,10 @@ class DummyWSApp:
         self.kwargs = kwargs
         self.run_called = False
 
-    def run_forever(self):
+    def run_forever(self, *args, **kwargs):
         self.run_called = True
+        self.run_args = args
+        self.run_kwargs = kwargs
 
 class DummyThread:
     def __init__(self, target=None, daemon=None):
