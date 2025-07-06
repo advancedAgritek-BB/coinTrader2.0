@@ -245,15 +245,29 @@ class KrakenWSClient:
             for sub in self._private_subs:
                 self.private_ws.send(sub)
 
-    def subscribe_ticker(self, symbol: Union[str, List[str]]) -> None:
+    def subscribe_ticker(
+        self,
+        symbol: Union[str, List[str]],
+        *,
+        event_trigger: Optional[str] = None,
+        snapshot: Optional[bool] = None,
+        req_id: Optional[int] = None,
+    ) -> None:
         """Subscribe to ticker updates for one or more symbols."""
+
         self.connect_public()
         if isinstance(symbol, str):
             symbol = [symbol]
-        msg = {
-            "method": "subscribe",
-            "params": {"channel": "ticker", "symbol": symbol},
-        }
+
+        params = {"channel": "ticker", "symbol": symbol}
+        if event_trigger is not None:
+            params["event_trigger"] = event_trigger
+        if snapshot is not None:
+            params["snapshot"] = snapshot
+        if req_id is not None:
+            params["req_id"] = req_id
+
+        msg = {"method": "subscribe", "params": params}
         data = json.dumps(msg)
         self._public_subs.append(data)
         self.public_ws.send(data)
