@@ -146,6 +146,18 @@ def _make_breakout_df(rows: int = 30) -> pd.DataFrame:
     return df
 
 
+def _make_ascending_triangle_df(rows: int = 30) -> pd.DataFrame:
+    df = _make_trending_df(rows)
+    start = rows - 5
+    high = df["high"].iloc[start]
+    base_low = df["low"].iloc[start]
+    for i in range(start, rows):
+        df.loc[df.index[i], "high"] = high
+        df.loc[df.index[i], "low"] = base_low + (i - start) * 0.02
+        df.loc[df.index[i], "close"] = (df.loc[df.index[i], "high"] + df.loc[df.index[i], "low"]) / 2
+    return df
+
+
 def test_trend_confirmed_by_higher_timeframe(tmp_path):
     df_low = _make_trending_df()
     df_high = _make_trending_df()
@@ -238,7 +250,7 @@ def test_analyze_symbol_async_consistent():
 
     res = asyncio.run(run())
     assert res["regime"] == regime
-    assert isinstance(res.get("patterns"), set)
+    assert isinstance(res.get("patterns"), dict)
     assert res["confidence"] == 1.0
     assert res["score"] == sync_score
     assert res["direction"] == sync_dir
@@ -376,6 +388,14 @@ def test_breakout_pattern_sets_regime():
     regime, patterns = classify_regime(df)
     assert regime == "breakout"
     assert "breakout" in patterns
+    assert isinstance(patterns["breakout"], float)
+
+
+def test_ascending_triangle_promotes_breakout():
+    df = _make_ascending_triangle_df()
+    regime, patterns = classify_regime(df)
+    assert "ascending_triangle" in patterns
+    assert regime == "breakout"
 
 
 def test_ml_fallback_does_not_trigger_on_short_data(monkeypatch, tmp_path):
@@ -455,4 +475,4 @@ ml_min_bars: 20
 
     regime, patterns = classify_regime(df, config_path=str(cfg))
     assert regime == "trending"
-    assert patterns == set()
+    assert patterns == {}
