@@ -187,6 +187,10 @@ def classify_regime(
     -------
     Tuple[str, object]
         When sufficient history is available the function returns ``(label,
+        pattern_scores)`` where ``pattern_scores`` is a ``dict`` mapping pattern
+        names to confidence values.  If insufficient history triggers the ML
+        fallback the return value is ``(label, confidence)`` where ``confidence``
+        is a float between 0 and 1.
         patterns)`` where ``patterns`` is a mapping of pattern names to
         confidence scores. If insufficient history triggers the ML fallback the
         return value is ``(label, confidence)`` where ``confidence`` is a float
@@ -240,6 +244,16 @@ def classify_regime(
                 "Skipping ML fallback \u2014 insufficient data (%d rows)", len(df)
             )
 
+    pattern_scores = detect_patterns(df)
+
+    regime_scores: Dict[str, float] = {regime: 1.0}
+    if pattern_scores.get("breakout", 0) > 0.8:
+        regime_scores["breakout"] = regime_scores.get("breakout", 0) + 0.2
+
+    final_regime = max(regime_scores, key=regime_scores.get)
+
+    if final_regime == "unknown":
+        if len(df) >= ml_min_bars:
     patterns = detect_patterns(df)
 
     if regime == "unknown" and len(df) < ml_min_bars:
@@ -282,8 +296,9 @@ def classify_regime(
         if len(df) < ml_min_bars:
             return regime, 0.0
         logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
-        return regime, patterns
+        return final_regime, pattern_scores
 
+    return final_regime, pattern_scores
     return regime, {} if used_ml else patterns
 
 

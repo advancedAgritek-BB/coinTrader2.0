@@ -27,6 +27,7 @@ def test_detect_patterns_breakout():
     df.loc[df.index[-1], "volume"] = df["volume"].mean() * 2
 
     patterns = detect_patterns(df)
+    assert patterns.get("breakout", 0) == 1.0
     assert "breakout" in patterns
     assert patterns["breakout"] > 0
     assert isinstance(patterns["breakout"], float)
@@ -40,6 +41,8 @@ def test_classify_regime_includes_patterns():
     df.loc[df.index[-1], "volume"] = df["volume"].mean() * 2
 
     regime, patterns = classify_regime(df)
+    assert regime == "sideways"
+    assert patterns.get("breakout", 0) == 1.0
     assert regime == "breakout"
     assert "breakout" in patterns
     assert patterns["breakout"] > 0

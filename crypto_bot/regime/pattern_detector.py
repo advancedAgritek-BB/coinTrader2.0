@@ -2,6 +2,7 @@ import pandas as pd
 
 
 def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
+    """Return confidence scores for simple chart patterns detected in ``df``.
     """Return scored chart patterns detected in ``df``.
 
     The function inspects the latest candles and assigns a confidence
@@ -24,7 +25,8 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
 
     The function inspects the latest candle and recent history for
     breakout and candlestick formations. Only a handful of patterns
-    are recognized:
+    are recognized.  The return value maps pattern names to a confidence
+    between 0 and 1.  Patterns with zero confidence are omitted.
 
     ``"breakout"``  -- last close at a new high with a volume spike
     ``"breakdown"`` -- last close at a new low with a volume spike
@@ -32,16 +34,17 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
     ``"shooting_star"`` -- small body with long upper shadow
     ``"doji"``      -- open and close nearly equal
     """
+    scores: dict[str, float] = {}
     patterns: dict[str, float] = {}
     if df is None or len(df) < 2:
-        return patterns
+        return scores
 
     last = df.iloc[-1]
-    prev = df.iloc[-2]
 
     body = abs(last["close"] - last["open"])
     candle_range = last["high"] - last["low"]
     if candle_range == 0:
+        return scores
         return patterns
 
     upper = last["high"] - max(last["close"], last["open"])
@@ -66,6 +69,11 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
         patterns["doji"] = min(doji_score, 1.0)
     if body <= candle_range * 0.1:
         if upper > candle_range * 0.4 and lower <= candle_range * 0.1:
+            scores["shooting_star"] = 1.0
+        if lower > candle_range * 0.4 and upper <= candle_range * 0.1:
+            scores["hammer"] = 1.0
+        if upper > candle_range * 0.2 and lower > candle_range * 0.2:
+            scores["doji"] = 1.0
             patterns["shooting_star"] = upper / candle_range
         if lower > candle_range * 0.4 and upper <= candle_range * 0.1:
             patterns["hammer"] = lower / candle_range
@@ -138,6 +146,9 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
         brkdn_score = min(1.0, last["volume"] / (vol_mean * 1.5))
         patterns["breakdown"] = max(brkdn_score, patterns.get("breakdown", 0.0))
     if last["close"] >= high_max and last["volume"] > vol_mean * 1.5:
+        scores["breakout"] = 1.0
+    if last["close"] <= low_min and last["volume"] > vol_mean * 1.5:
+        scores["breakdown"] = 1.0
         strength = (last["close"] - high_max) / high_max
         patterns["breakout"] = max(strength, 0.0) + 1.0
     if last["close"] <= low_min and last["volume"] > vol_mean * 1.5:
@@ -155,4 +166,4 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
     ):
         patterns["ascending_triangle"] = 1.5
 
-    return patterns
+    return scores

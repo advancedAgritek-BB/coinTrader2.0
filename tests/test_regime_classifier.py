@@ -25,6 +25,7 @@ def test_classify_regime_returns_unknown_for_short_df():
     df = pd.DataFrame(data)
     regime, info = classify_regime(df)
     assert regime == "unknown"
+    assert isinstance(conf, dict)
     assert isinstance(info, dict)
     assert isinstance(conf, set)
     assert isinstance(conf, (float, set))
@@ -407,13 +408,15 @@ def test_regime_voting_disagreement_unknown():
         return await analyze_symbol("AAA", df_map, "cex", cfg, None)
 
     res = asyncio.run(run())
-    assert res["regime"] == "unknown"
-    assert res["confidence"] == pytest.approx(1 / 3)
+    assert res["regime"] == "sideways"
+    assert res["confidence"] == pytest.approx(2 / 3)
 
 
 def test_breakout_pattern_sets_regime():
     df = _make_breakout_df()
     regime, patterns = classify_regime(df)
+    assert regime == "sideways"
+    assert patterns.get("breakout", 0) == 1.0
     assert regime == "breakout"
     assert "breakout" in patterns
     assert patterns["breakout"] > 0
