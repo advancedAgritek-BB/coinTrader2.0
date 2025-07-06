@@ -130,6 +130,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **execution_mode** – choose `dry_run` for simulation or `live` for real orders.
 * **use_websocket** – enable WebSocket data via `ccxt.pro`.
 * **force_websocket_history** – disable REST fallbacks when streaming.
+* **max_ws_limit** – skip WebSocket OHLCV when `limit` exceeds this value.
 * **exchange_market_types** – market types to trade (spot, margin, futures).
 * **preferred_chain** – chain used for on-chain swaps (e.g. `solana`).
 * **wallet_address** – destination wallet for DEX trades.
@@ -313,6 +314,7 @@ timeframe: 1h                # candles for regime detection
 scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
 loop_interval_minutes: 5     # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
+max_ws_limit: 50             # skip WebSocket when request exceeds this
 ohlcv_timeout: 10            # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
 metrics:
@@ -342,6 +344,8 @@ When OHLCV streaming returns fewer candles than requested the bot calculates
 how many bars are missing and fetches only that remainder via REST. This
 adaptive limit keeps history current without waiting for a full response.
 Disable this fallback by setting `force_websocket_history` to `true`.
+Large history requests skip streaming entirely when `limit` exceeds
+`max_ws_limit`.
 
 Example usage for Kraken WebSockets:
 

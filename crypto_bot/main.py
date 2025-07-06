@@ -123,6 +123,7 @@ async def main() -> None:
     market_loader_configure(
         config.get("ohlcv_timeout", 60),
         config.get("max_ohlcv_failures", 3),
+        config.get("max_ws_limit", 50),
     )
     secrets = dotenv_values(ENV_PATH)
     os.environ.update(secrets)

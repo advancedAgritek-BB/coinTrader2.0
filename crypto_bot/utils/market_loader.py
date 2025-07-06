@@ -18,15 +18,17 @@ RETRY_DELAY = 300
 MAX_RETRY_DELAY = 3600
 OHLCV_TIMEOUT = 30
 MAX_OHLCV_FAILURES = 3
+MAX_WS_LIMIT = 50
 UNSUPPORTED_SYMBOL = object()
 
 
 def configure(
     ohlcv_timeout: int | float | None = None,
     max_failures: int | None = None,
+    max_ws_limit: int | None = None,
 ) -> None:
     """Configure module-wide settings."""
-    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES
+    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT
     if ohlcv_timeout is not None:
         try:
             OHLCV_TIMEOUT = max(1, int(ohlcv_timeout))
@@ -44,6 +46,15 @@ def configure(
                 "Invalid MAX_OHLCV_FAILURES %s; using default %s",
                 max_failures,
                 MAX_OHLCV_FAILURES,
+            )
+    if max_ws_limit is not None:
+        try:
+            MAX_WS_LIMIT = max(1, int(max_ws_limit))
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid MAX_WS_LIMIT %s; using default %s",
+                max_ws_limit,
+                MAX_WS_LIMIT,
             )
 
 
@@ -197,7 +208,7 @@ async def fetch_ohlcv_async(
 ) -> list | Exception:
     """Return OHLCV data for ``symbol`` using async I/O."""
 
-    if not getattr(exchange, "has", {}).get("fetchOHLCV"):
+    if hasattr(exchange, "has") and not exchange.has.get("fetchOHLCV"):
         ex_id = getattr(exchange, "id", "unknown")
         logger.warning("Exchange %s lacks fetchOHLCV capability", ex_id)
         return []
@@ -226,6 +237,14 @@ async def fetch_ohlcv_async(
                     getattr(exchange, "id", "unknown"),
                 )
                 return UNSUPPORTED_SYMBOL
+        if use_websocket and since is None and limit > MAX_WS_LIMIT and not force_websocket_history:
+            logger.info(
+                "Skipping WebSocket OHLCV for %s limit %d exceeds %d",
+                symbol,
+                limit,
+                MAX_WS_LIMIT,
+            )
+            use_websocket = False
         if use_websocket and since is not None:
             try:
                 seconds = timeframe_seconds(exchange, timeframe)
