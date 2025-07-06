@@ -620,6 +620,34 @@ class KrakenWSClient:
         self._public_subs.append(data)
         self.public_ws.send(data)
 
+    def subscribe_ohlc(
+        self,
+        symbol: Union[str, List[str]],
+        interval: int,
+        *,
+        snapshot: bool = True,
+        req_id: Optional[int] = None,
+    ) -> None:
+        """Subscribe to OHLC updates for one or more symbols."""
+
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+
+        params = {
+            "channel": "ohlc",
+            "symbol": symbol,
+            "interval": interval,
+            "snapshot": snapshot,
+        }
+        if req_id is not None:
+            params["req_id"] = req_id
+
+        msg = {"method": "subscribe", "params": params}
+        data = json.dumps(msg)
+        self._public_subs.append(data)
+        self.public_ws.send(data)
+
     def subscribe_book(
         self,
         symbol: Union[str, List[str]],
@@ -677,6 +705,46 @@ class KrakenWSClient:
                 parsed.get("method") == "subscribe"
                 and params.get("channel") == "book"
                 and params.get("depth", depth) == depth
+                and sorted(params.get("symbol", [])) == sorted(symbol)
+            )
+
+        self._public_subs = [s for s in self._public_subs if not _matches(s)]
+
+    def unsubscribe_ohlc(
+        self,
+        symbol: Union[str, List[str]],
+        interval: int,
+        *,
+        req_id: Optional[int] = None,
+    ) -> None:
+        """Unsubscribe from OHLC updates for the given symbols."""
+
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+
+        params = {
+            "channel": "ohlc",
+            "symbol": symbol,
+            "interval": interval,
+        }
+        if req_id is not None:
+            params["req_id"] = req_id
+
+        msg = {"method": "unsubscribe", "params": params}
+        data = json.dumps(msg)
+        self.public_ws.send(data)
+
+        def _matches(sub: str) -> bool:
+            try:
+                parsed = json.loads(sub)
+            except Exception:
+                return False
+            params = parsed.get("params", {}) if isinstance(parsed, dict) else {}
+            return (
+                parsed.get("method") == "subscribe"
+                and params.get("channel") == "ohlc"
+                and params.get("interval") == interval
                 and sorted(params.get("symbol", [])) == sorted(symbol)
             )
 

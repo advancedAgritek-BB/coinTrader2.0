@@ -585,6 +585,42 @@ def test_parse_book_message_snapshot_and_update():
     }
 
 
+def test_subscribe_and_unsubscribe_ohlc(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_ohlc("BTC/USD", 1, snapshot=False, req_id=5)
+    expected_sub = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {
+                "channel": "ohlc",
+                "symbol": ["BTC/USD"],
+                "interval": 1,
+                "snapshot": False,
+                "req_id": 5,
+            },
+        }
+    )
+    assert ws.sent == [expected_sub]
+    assert client._public_subs == [expected_sub]
+
+    ws.sent.clear()
+    client.unsubscribe_ohlc("BTC/USD", 1, req_id=6)
+    expected_unsub = json.dumps(
+        {
+            "method": "unsubscribe",
+            "params": {
+                "channel": "ohlc",
+                "symbol": ["BTC/USD"],
+                "interval": 1,
+                "req_id": 6,
+            },
+        }
+    )
+    assert ws.sent == [expected_unsub]
+    assert client._public_subs == []
 def test_parse_level3_snapshot_and_update():
     snap_msg = json.dumps(
         {
