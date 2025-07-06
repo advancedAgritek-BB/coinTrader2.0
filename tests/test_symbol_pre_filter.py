@@ -1,6 +1,8 @@
 import asyncio
 import json
 import pandas as pd
+import pytest
+import crypto_bot.utils.symbol_scoring as sc
 
 from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_history
 
@@ -296,3 +298,30 @@ def test_percentile_selects_top_movers(monkeypatch):
 
     symbols = asyncio.run(filter_symbols(DummyEx(), pairs, CONFIG))
     assert {s for s, _ in symbols} == {"PAIR9", "PAIR10"}
+
+
+def test_get_symbol_age(monkeypatch):
+    class AgeExchange:
+        def __init__(self):
+            self.markets = {"BTC/USD": {"created": 0}}
+
+        def milliseconds(self):
+            return 10 * 86400000
+
+    age = sc.get_symbol_age(AgeExchange(), "BTC/USD")
+    assert age == 10.0
+
+
+def test_get_latency(monkeypatch):
+    class LatencyExchange:
+        def fetch_ticker(self, symbol):
+            return {}
+
+    calls = [1.0, 1.2]
+
+    def fake_counter():
+        return calls.pop(0)
+
+    monkeypatch.setattr(sc.time, "perf_counter", fake_counter)
+    latency = sc.get_latency(LatencyExchange(), "BTC/USD")
+    assert latency == pytest.approx(200.0)
