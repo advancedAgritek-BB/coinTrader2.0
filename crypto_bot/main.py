@@ -242,6 +242,7 @@ async def _main_impl() -> TelegramNotifier:
     )
 
     open_side = None
+    open_symbol = None
     entry_price = None
     entry_time = None
     entry_regime = None
@@ -458,7 +459,7 @@ async def _main_impl() -> TelegramNotifier:
                 df_sym = pd.DataFrame(df_sym.to_numpy(), columns=expected_cols)
             logger.info("Fetched %d candles for %s", len(df_sym), sym)
             df_map[config["timeframe"]] = df_sym
-            if sym == config.get("symbol"):
+            if sym == (open_symbol or config.get("symbol")):
                 df_current = df_sym
             tasks.append(analyze_symbol(sym, df_map, mode, config, notifier))
 
@@ -500,8 +501,8 @@ async def _main_impl() -> TelegramNotifier:
             scalper_results = await asyncio.gather(*tasks)
             mapping = {r["symbol"]: r for r in scalper_results}
             results = [mapping.get(r["symbol"], r) for r in results]
-            if config.get("symbol") in mapping:
-                df_current = df_cache.get(config["timeframe"], {}).get(config["symbol"])
+            if (open_symbol or config.get("symbol")) in mapping:
+                df_current = df_cache.get(config["timeframe"], {}).get(open_symbol or config.get("symbol"))
 
         analyze_time = time.perf_counter() - analyze_start
 
@@ -604,24 +605,28 @@ async def _main_impl() -> TelegramNotifier:
             try:
                 if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
                     data = await exchange.watch_ohlcv(
-                        config["symbol"], timeframe=config["timeframe"], limit=100
+                        open_symbol or config["symbol"],
+                        timeframe=config["timeframe"],
+                        limit=100
                     )
                 else:
                     if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
                         data = await exchange.fetch_ohlcv(
-                            config["symbol"], timeframe=config["timeframe"], limit=100
+                            open_symbol or config["symbol"],
+                            timeframe=config["timeframe"],
+                            limit=100
                         )
                     else:
                         data = await asyncio.to_thread(
                             exchange.fetch_ohlcv,
-                            config["symbol"],
+                            open_symbol or config["symbol"],
                             timeframe=config["timeframe"],
                             limit=100,
                         )
             except Exception as exc:  # pragma: no cover - network
                 logger.error(
                     "OHLCV fetch failed for %s on %s (limit %d): %s",
-                    config["symbol"],
+                    open_symbol or config["symbol"],
                     config["timeframe"],
                     100,
                     exc,
@@ -671,7 +676,7 @@ async def _main_impl() -> TelegramNotifier:
                 )
             log_balance(float(equity))
             log_position(
-                config.get("symbol", ""),
+                open_symbol or config.get("symbol", ""),
                 open_side,
                 position_size,
                 entry_price,
@@ -706,7 +711,7 @@ async def _main_impl() -> TelegramNotifier:
                 await cex_trade_async(
                     exchange,
                     ws_client,
-                    config["symbol"],
+                    open_symbol or config["symbol"],
                     opposite_side(open_side),
                     sell_amount,
                     notifier,
@@ -765,7 +770,7 @@ async def _main_impl() -> TelegramNotifier:
                     check_balance_change(float(latest_balance), "trade executed")
                     log_balance(float(latest_balance))
                     log_position(
-                        config.get("symbol", ""),
+                        open_symbol or config.get("symbol", ""),
                         open_side or "",
                         sell_amount,
                         entry_price or 0.0,
@@ -775,12 +780,13 @@ async def _main_impl() -> TelegramNotifier:
                     if notifier and trade_updates:
                         report_exit(
                             notifier,
-                            config.get("symbol", ""),
+                            open_symbol or config.get("symbol", ""),
                             entry_strategy or "",
                             realized_pnl,
                             "long" if open_side == "buy" else "short",
                         )
                     open_side = None
+                    open_symbol = None
                     entry_price = None
                     entry_time = None
                     entry_regime = None
@@ -791,7 +797,7 @@ async def _main_impl() -> TelegramNotifier:
                     trailing_stop = 0.0
                     highest_price = 0.0
                     current_strategy = None
-                    mark_cooldown(config["symbol"], active_strategy or name)
+                    mark_cooldown(open_symbol or config["symbol"], active_strategy or name)
                     active_strategy = None
                 else:
                     position_size -= sell_amount
@@ -945,6 +951,7 @@ async def _main_impl() -> TelegramNotifier:
                 float(latest_balance),
             )
             open_side = trade_side
+            open_symbol = candidate["symbol"]
             entry_price = current_price
             position_size = order_amount
             realized_pnl = 0.0
