@@ -851,6 +851,9 @@ async def _main_impl() -> TelegramNotifier:
                         exchange, paper_wallet, config
                     )
 
+        if open_side:
+            continue
+
         if not filtered_results:
             continue
 
