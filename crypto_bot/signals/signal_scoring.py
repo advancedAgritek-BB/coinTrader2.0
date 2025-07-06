@@ -10,18 +10,25 @@ logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
 
 def evaluate(
-    strategy_fn: Callable[[pd.DataFrame], Tuple[float, str]],
+    strategy_fn: Callable[[pd.DataFrame], Tuple],
     df: pd.DataFrame,
     config: Optional[dict] = None,
-) -> Tuple[float, str]:
+) -> Tuple[float, str, Optional[float]]:
     """Evaluate signal from a strategy callable."""
     if config is not None:
         try:
-            score, direction = strategy_fn(df, config)
+            result = strategy_fn(df, config)
         except TypeError:
-            score, direction = strategy_fn(df)
+            result = strategy_fn(df)
     else:
-        score, direction = strategy_fn(df)
+        result = strategy_fn(df)
+
+    if isinstance(result, tuple):
+        score, direction, *extras = result
+        atr = extras[0] if extras else None
+    else:
+        score, direction = result, "none"
+        atr = None
     score = max(0.0, min(score, 1.0))
 
     if config:
@@ -44,20 +51,20 @@ def evaluate(
             except Exception:
                 pass
 
-    return score, direction
+    return score, direction, atr
 
 
 async def evaluate_async(
-    strategy_fn: Callable[[pd.DataFrame], Tuple[float, str]],
+    strategy_fn: Callable[[pd.DataFrame], Tuple],
     df: pd.DataFrame,
     config: Optional[dict] = None,
-) -> Tuple[float, str]:
+) -> Tuple[float, str, Optional[float]]:
     """Asynchronous wrapper around ``evaluate``."""
     return await asyncio.to_thread(evaluate, strategy_fn, df, config)
 
 
 def evaluate_strategies(
-    strategies: Iterable[Callable[[pd.DataFrame], Tuple[float, str]]],
+    strategies: Iterable[Callable[[pd.DataFrame], Tuple]],
     df: pd.DataFrame,
     config: Optional[Dict] = None,
 ) -> Dict[str, object]:
@@ -77,7 +84,7 @@ def evaluate_strategies(
 
     for strat in strategies:
         try:
-            score, direction = evaluate(strat, df, config)
+            score, direction, _ = evaluate(strat, df, config)
         except Exception as exc:  # pragma: no cover - best effort
             logger.warning("Strategy %s failed: %s", getattr(strat, "__name__", str(strat)), exc)
             continue

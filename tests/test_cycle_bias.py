@@ -31,7 +31,7 @@ def test_cycle_bias_adjusts_score(monkeypatch):
     df = pd.DataFrame({"close": [1, 2]})
     monkeypatch.setattr(sc, "get_cycle_bias", lambda cfg=None: 1.5)
     cfg = {"cycle_bias": {"enabled": True}}
-    score, direction = sc.evaluate(lambda _df: (0.5, "long"), df, cfg)
+    score, direction, _ = sc.evaluate(lambda _df: (0.5, "long"), df, cfg)
     assert direction == "long"
     assert score == pytest.approx(0.75)
 
@@ -45,6 +45,6 @@ def test_cycle_bias_disabled(monkeypatch):
         return 0.0
 
     monkeypatch.setattr(sc, "get_cycle_bias", fake)
-    score, _ = sc.evaluate(lambda _df: (0.5, "long"), df, {"cycle_bias": {"enabled": False}})
+    score, _, _ = sc.evaluate(lambda _df: (0.5, "long"), df, {"cycle_bias": {"enabled": False}})
     assert score == pytest.approx(0.5)
     assert "hit" not in called

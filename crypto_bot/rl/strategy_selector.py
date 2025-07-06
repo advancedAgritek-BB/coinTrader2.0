@@ -17,7 +17,7 @@ from crypto_bot.strategy import (
 LOG_FILE = Path("logs/strategy_pnl.csv")
 
 # Map strategy names to generation functions
-_STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple[float, str]]] = {
+_STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {
     "trend_bot": trend_bot.generate_signal,
     "grid_bot": grid_bot.generate_signal,
     "sniper_bot": sniper_bot.generate_signal,
@@ -43,7 +43,7 @@ class RLStrategySelector:
             for (regime, strat), pnl in grouped.items():
                 self.regime_scores.setdefault(regime, {})[strat] = float(pnl)
 
-    def select(self, regime: str) -> Callable[[pd.DataFrame], tuple[float, str]]:
+    def select(self, regime: str) -> Callable[[pd.DataFrame], tuple]:
         from ..strategy_router import strategy_for
 
         scores = self.regime_scores.get(regime)
@@ -61,7 +61,7 @@ def train(log_file: Path = LOG_FILE) -> None:
     _selector.train(log_file)
 
 
-def select_strategy(regime: str) -> Callable[[pd.DataFrame], tuple[float, str]]:
+def select_strategy(regime: str) -> Callable[[pd.DataFrame], tuple]:
     """Return strategy for regime using the trained selector."""
     if not _selector.regime_scores:
         _selector.train()

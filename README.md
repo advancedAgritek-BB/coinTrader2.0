@@ -171,7 +171,13 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
 * **exit_strategy** – partial profit taking and trailing stop logic.
 * **micro_scalp** – EMA and volume settings for the scalp bot.
-* **breakout** – Bollinger/Keltner squeeze, volume multiplier and ATR buffer.
+* **breakout** – Bollinger/Keltner squeeze, volume multiplier, ATR buffer and
+  outputs ATR for stop sizing.
+
+```python
+score, direction, atr = breakout_bot.generate_signal(lower_df, cfg, higher_df)
+size = risk_manager.position_size(score, balance, lower_df, atr=atr)
+```
 * **ml_signal_model**/**signal_weight_optimizer** – blend strategy scores with machine-learning predictions.
 * **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade.
 * **regime_timeframes**/**regime_return_period** – windows used for regime detection.

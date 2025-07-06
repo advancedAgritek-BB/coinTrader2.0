@@ -38,7 +38,7 @@ _STRATEGY_FN_MAP = {
 
 def get_strategy_by_name(
     name: str,
-) -> Callable[[pd.DataFrame], tuple[float, str]] | None:
+) -> Callable[[pd.DataFrame], tuple] | None:
     """Return the strategy function mapped to ``name`` if present."""
     return _STRATEGY_FN_MAP.get(name)
 
@@ -73,7 +73,7 @@ def _scores_for(regime: str) -> Dict[str, float]:
     return scores
 
 
-def choose_best(regime: str) -> Callable[[pd.DataFrame], tuple[float, str]]:
+def choose_best(regime: str) -> Callable[[pd.DataFrame], tuple]:
     """Return strategy with best historical score for ``regime``."""
     from .strategy_router import strategy_for
 
