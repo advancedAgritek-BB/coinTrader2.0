@@ -505,6 +505,22 @@ def test_subscribe_book_and_unsubscribe(monkeypatch):
     assert ws.sent == [expected_unsub]
 
 
+def test_subscribe_trades_snapshot_option(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_trades("BTC/USD", snapshot=False)
+    expected = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {"channel": "trade", "symbol": ["BTC/USD"], "snapshot": False},
+        }
+    )
+    assert ws.sent == [expected]
+    assert client._public_subs[0] == expected
+
+
 def test_subscribe_and_unsubscribe_level3(monkeypatch):
     client = KrakenWSClient()
     ws = DummyWS()
