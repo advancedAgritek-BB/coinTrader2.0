@@ -21,8 +21,7 @@ def test_main_sends_telegram_check(monkeypatch):
     monkeypatch.setattr(main, "load_or_create", lambda: {"telegram_token": "t", "telegram_chat_id": "c"})
     monkeypatch.setattr(main, "get_exchange", lambda config: _raise_stop())
 
-    with pytest.raises(StopLoop):
-        asyncio.run(main.main())
+    asyncio.run(main.main())
 
     assert calls["args"] == ("t", "c", "Bot started")
 
@@ -44,8 +43,7 @@ def test_trade_updates_disabled(monkeypatch):
     monkeypatch.setattr(main, "load_or_create", lambda: {"telegram_token": "t", "telegram_chat_id": "c"})
     monkeypatch.setattr(main, "get_exchange", lambda config: _raise_stop())
 
-    with pytest.raises(StopLoop):
-        asyncio.run(main.main())
+    asyncio.run(main.main())
 
     assert calls["entry"] == 0
     assert calls["exit"] == 0

@@ -10,6 +10,7 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 * Portfolio rotation and auto optimizer utilities
 * Risk management with drawdown limits, cooldown management and volume/volatility filters
 * Telegram notifications and optional Google Sheets logging
+* Balance change alerts when USDT funds move
 * Capital tracker, sentiment filter and tax logger helpers
 * Solana mempool monitor to avoid swaps when fees spike
 * Paper trading wallet for dry-run simulation
@@ -185,6 +186,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **loop_interval_minutes** – delay between trading cycles.
 * **log_to_google** – export trades to Google Sheets.
 * **telegram** – bot token, chat ID and trade notifications.
+* **balance_change_threshold** – delta for Telegram balance alerts.
 * **tax_tracking** – CSV export of executed trades.
 * **metrics_enabled**, **metrics_backend**, **metrics_output_file** – cycle metrics output.
 * **testing_mode** – indicates a sandbox environment.

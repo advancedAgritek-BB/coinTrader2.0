@@ -101,6 +101,20 @@ def notify_balance_change(
     if notifier and enabled and previous is not None and new_balance != previous:
         notifier.notify(f"Balance changed: {new_balance:.2f} USDT")
     return new_balance
+async def fetch_and_log_balance(exchange, paper_wallet, config):
+    """Return the latest wallet balance and log it."""
+    if config["execution_mode"] != "dry_run":
+        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+            bal = await exchange.fetch_balance()
+        else:
+            bal = await asyncio.to_thread(exchange.fetch_balance)
+        latest_balance = (
+            bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
+        )
+    else:
+        latest_balance = paper_wallet.balance if paper_wallet else 0.0
+    log_balance(float(latest_balance))
+    return latest_balance
 
 
 def _emit_timing(symbol_t: float, ohlcv_t: float, analyze_t: float,
@@ -124,18 +138,20 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
-async def main() -> None:
-    """Entry point for running the trading bot."""
+async def _main_impl() -> TelegramNotifier:
+    """Implementation for running the trading bot."""
 
     logger.info("Starting bot")
     config = load_config()
     metrics_path = Path(config.get("metrics_csv")) if config.get("metrics_csv") else None
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
     cooldown_configure(config.get("min_cooldown", 0))
+    status_updates = config.get("telegram", {}).get("status_updates", True)
     market_loader_configure(
         config.get("ohlcv_timeout", 60),
         config.get("max_ohlcv_failures", 3),
         config.get("max_ws_limit", 50),
+        status_updates,
     )
     secrets = dotenv_values(ENV_PATH)
     os.environ.update(secrets)
@@ -182,6 +198,18 @@ async def main() -> None:
         else:
             logger.error("No symbols discovered during scan; using existing configuration")
 
+    balance_threshold = config.get("balance_change_threshold", 0.01)
+    previous_balance = 0.0
+
+    def check_balance_change(new_balance: float, reason: str) -> None:
+        nonlocal previous_balance
+        delta = new_balance - previous_balance
+        if abs(delta) > balance_threshold and notifier:
+            notifier.notify(
+                f"Balance changed by {delta:.4f} USDT due to {reason}"
+            )
+        previous_balance = new_balance
+
     try:
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
             bal = await exchange.fetch_balance()
@@ -201,6 +229,13 @@ async def main() -> None:
             if err:
                 logger.error("Failed to notify user: %s", err)
         return
+        previous_balance = float(init_bal)
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("Exchange API setup failed: %s", exc)
+        err = notifier.notify(f"API error: {exc}")
+        if err:
+            logger.error("Failed to notify user: %s", err)
+        return notifier
     risk_params = {**config.get("risk", {})}
     risk_params.update(config.get("sentiment_filter", {}))
     risk_params.update(config.get("volatility_filter", {}))
@@ -236,6 +271,7 @@ async def main() -> None:
     )
 
     open_side = None
+    open_symbol = None
     entry_price = None
     entry_time = None
     entry_regime = None
@@ -335,6 +371,16 @@ async def main() -> None:
                 slippage_bps=config.get("solana_slippage_bps", 50),
                 notifier=notifier,
             )
+            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                bal = await exchange.fetch_balance()
+            else:
+                bal = await asyncio.to_thread(exchange.fetch_balance)
+            bal_val = (
+                bal.get("USDT", {}).get("free", 0)
+                if isinstance(bal.get("USDT"), dict)
+                else bal.get("USDT", 0)
+            )
+            check_balance_change(float(bal_val), "funds converted")
 
         if rotator.config.get("enabled"):
             if (
@@ -345,6 +391,12 @@ async def main() -> None:
                     bal = await exchange.fetch_balance()
                 else:
                     bal = await asyncio.to_thread(exchange.fetch_balance)
+                current_balance = (
+                    bal.get("USDT", {}).get("free", 0)
+                    if isinstance(bal.get("USDT"), dict)
+                    else bal.get("USDT", 0)
+                )
+                check_balance_change(float(current_balance), "external change")
                 holdings = {
                     k: (v.get("total") if isinstance(v, dict) else v)
                     for k, v in bal.items()
@@ -437,7 +489,7 @@ async def main() -> None:
                 df_sym = pd.DataFrame(df_sym.to_numpy(), columns=expected_cols)
             logger.info("Fetched %d candles for %s", len(df_sym), sym)
             df_map[config["timeframe"]] = df_sym
-            if sym == config.get("symbol"):
+            if sym == (open_symbol or config.get("symbol")):
                 df_current = df_sym
             tasks.append(analyze_symbol(sym, df_map, mode, config, notifier))
 
@@ -479,8 +531,8 @@ async def main() -> None:
             scalper_results = await asyncio.gather(*tasks)
             mapping = {r["symbol"]: r for r in scalper_results}
             results = [mapping.get(r["symbol"], r) for r in results]
-            if config.get("symbol") in mapping:
-                df_current = df_cache.get(config["timeframe"], {}).get(config["symbol"])
+            if (open_symbol or config.get("symbol")) in mapping:
+                df_current = df_cache.get(config["timeframe"], {}).get(open_symbol or config.get("symbol"))
 
         analyze_time = time.perf_counter() - analyze_start
 
@@ -583,24 +635,28 @@ async def main() -> None:
             try:
                 if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
                     data = await exchange.watch_ohlcv(
-                        config["symbol"], timeframe=config["timeframe"], limit=100
+                        open_symbol or config["symbol"],
+                        timeframe=config["timeframe"],
+                        limit=100
                     )
                 else:
                     if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
                         data = await exchange.fetch_ohlcv(
-                            config["symbol"], timeframe=config["timeframe"], limit=100
+                            open_symbol or config["symbol"],
+                            timeframe=config["timeframe"],
+                            limit=100
                         )
                     else:
                         data = await asyncio.to_thread(
                             exchange.fetch_ohlcv,
-                            config["symbol"],
+                            open_symbol or config["symbol"],
                             timeframe=config["timeframe"],
                             limit=100,
                         )
             except Exception as exc:  # pragma: no cover - network
                 logger.error(
                     "OHLCV fetch failed for %s on %s (limit %d): %s",
-                    config["symbol"],
+                    open_symbol or config["symbol"],
                     config["timeframe"],
                     100,
                     exc,
@@ -656,7 +712,7 @@ async def main() -> None:
                 balance_updates,
             )
             log_position(
-                config.get("symbol", ""),
+                open_symbol or config.get("symbol", ""),
                 open_side,
                 position_size,
                 entry_price,
@@ -691,7 +747,7 @@ async def main() -> None:
                 await cex_trade_async(
                     exchange,
                     ws_client,
-                    config["symbol"],
+                    open_symbol or config["symbol"],
                     opposite_side(open_side),
                     sell_amount,
                     notifier,
@@ -747,6 +803,7 @@ async def main() -> None:
                         latest_balance = bal["USDT"]["free"]
                     else:
                         latest_balance = paper_wallet.balance if paper_wallet else 0.0
+                    check_balance_change(float(latest_balance), "trade executed")
                     log_balance(float(latest_balance))
                     last_balance = notify_balance_change(
                         notifier,
@@ -755,7 +812,7 @@ async def main() -> None:
                         balance_updates,
                     )
                     log_position(
-                        config.get("symbol", ""),
+                        open_symbol or config.get("symbol", ""),
                         open_side or "",
                         sell_amount,
                         entry_price or 0.0,
@@ -765,12 +822,13 @@ async def main() -> None:
                     if notifier and trade_updates:
                         report_exit(
                             notifier,
-                            config.get("symbol", ""),
+                            open_symbol or config.get("symbol", ""),
                             entry_strategy or "",
                             realized_pnl,
                             "long" if open_side == "buy" else "short",
                         )
                     open_side = None
+                    open_symbol = None
                     entry_price = None
                     entry_time = None
                     entry_regime = None
@@ -781,7 +839,7 @@ async def main() -> None:
                     trailing_stop = 0.0
                     highest_price = 0.0
                     current_strategy = None
-                    mark_cooldown(config["symbol"], active_strategy or name)
+                    mark_cooldown(open_symbol or config["symbol"], active_strategy or name)
                     active_strategy = None
                 else:
                     position_size -= sell_amount
@@ -789,6 +847,9 @@ async def main() -> None:
                         current_strategy, sell_amount * entry_price
                     )
                     risk_manager.update_stop_order(position_size)
+                    latest_balance = await fetch_and_log_balance(
+                        exchange, paper_wallet, config
+                    )
 
         if not filtered_results:
             continue
@@ -832,10 +893,15 @@ async def main() -> None:
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
 
             if config["execution_mode"] != "dry_run":
-                bal = await (exchange.fetch_balance() if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)) else asyncio.to_thread(exchange.fetch_balance))
+                bal = await (
+                    exchange.fetch_balance()
+                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None))
+                    else asyncio.to_thread(exchange.fetch_balance)
+                )
                 balance = bal["USDT"]["free"]
             else:
                 balance = paper_wallet.balance if paper_wallet else 0.0
+            check_balance_change(float(balance), "external change")
 
             size = risk_manager.position_size(score, balance, df_for_size)
             order_amount = size / current_price if current_price > 0 else 0.0
@@ -916,6 +982,7 @@ async def main() -> None:
                 else:
                     bal = await asyncio.to_thread(exchange.fetch_balance)
                 latest_balance = bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
+            check_balance_change(float(latest_balance), "trade executed")
             log_balance(float(latest_balance))
             last_balance = notify_balance_change(
                 notifier,
@@ -932,6 +999,7 @@ async def main() -> None:
                 float(latest_balance),
             )
             open_side = trade_side
+            open_symbol = candidate["symbol"]
             entry_price = current_price
             position_size = order_amount
             realized_pnl = 0.0
@@ -1011,6 +1079,23 @@ async def main() -> None:
             await exchange.close()
         else:
             await asyncio.to_thread(exchange.close)
+
+    return notifier
+
+
+async def main() -> None:
+    """Entry point for running the trading bot with error handling."""
+    notifier: TelegramNotifier | None = None
+    try:
+        notifier = await _main_impl()
+    except Exception as exc:  # pragma: no cover - error path
+        logger.exception("Unhandled error in main: %s", exc)
+        if notifier:
+            notifier.notify(f"❌ Bot stopped: {exc}")
+    finally:
+        if notifier:
+            notifier.notify("Bot shutting down")
+        logger.info("Bot shutting down")
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution
