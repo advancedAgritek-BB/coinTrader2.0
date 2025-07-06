@@ -2,8 +2,10 @@ import pandas as pd
 from crypto_bot.risk.exit_manager import (
     should_exit,
     calculate_trailing_stop,
+    calculate_atr_trailing_stop,
     momentum_healthy,
 )
+from crypto_bot.volatility_filter import calc_atr
 
 def _sample_df(length=30):
     data = {
@@ -72,4 +74,41 @@ def test_should_exit_ignores_historical_high_when_trailing_stop_zero():
 
     assert exit_signal is False
     assert new_stop == 0.0
+
+
+def test_calculate_atr_trailing_stop():
+    df = _sample_df()
+    atr = calc_atr(df)
+    expected = df["close"].max() - atr * 2
+    result = calculate_atr_trailing_stop(df, 2)
+    assert result == expected
+
+
+def test_should_exit_updates_stop_with_atr_factor():
+    df = _sample_df()
+    trailing_stop = calculate_atr_trailing_stop(df, 2)
+    df_new = pd.concat(
+        [
+            df,
+            pd.DataFrame(
+                {
+                    "open": [30],
+                    "high": [30],
+                    "low": [30],
+                    "close": [30],
+                    "volume": [10],
+                }
+            ),
+        ],
+        ignore_index=True,
+    )
+    config = {"exit_strategy": {"trailing_stop_factor": 2}, "symbol": "TEST"}
+    exit_signal, new_stop = should_exit(
+        df_new,
+        30,
+        trailing_stop,
+        config,
+    )
+    assert exit_signal is False
+    assert new_stop > trailing_stop
 
