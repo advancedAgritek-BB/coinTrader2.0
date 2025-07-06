@@ -1,4 +1,4 @@
-from typing import Iterable, List, Dict
+from typing import Iterable, List, Dict, Any
 import asyncio
 import inspect
 import time
@@ -34,15 +34,19 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
-failed_symbols: Dict[str, Dict[str, float]] = {}
+failed_symbols: Dict[str, Dict[str, Any]] = {}
 retry_delay = 300
 max_retry_delay = 3600
 OHLCV_TIMEOUT = 30
+max_ohlcv_failures = 3
 
 
-def configure(ohlcv_timeout: int | float | None = None) -> None:
+def configure(
+    ohlcv_timeout: int | float | None = None,
+    max_failures: int | None = None,
+) -> None:
     """Configure module-wide settings."""
-    global OHLCV_TIMEOUT
+    global OHLCV_TIMEOUT, max_ohlcv_failures
     if ohlcv_timeout is not None:
         try:
             OHLCV_TIMEOUT = max(1, int(ohlcv_timeout))
@@ -51,6 +55,15 @@ def configure(ohlcv_timeout: int | float | None = None) -> None:
                 "Invalid ohlcv_timeout %s; using default %s",
                 ohlcv_timeout,
                 OHLCV_TIMEOUT,
+            )
+    if max_failures is not None:
+        try:
+            max_ohlcv_failures = max(1, int(max_failures))
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid max_ohlcv_failures %s; using default %s",
+                max_failures,
+                max_ohlcv_failures,
             )
 
 
@@ -344,7 +357,12 @@ async def load_ohlcv_parallel(
     filtered_symbols: List[str] = []
     for s in symbols:
         info = failed_symbols.get(s)
-        if info is None or now - info["time"] >= info["delay"]:
+        if not info:
+            filtered_symbols.append(s)
+            continue
+        if info.get("disabled"):
+            continue
+        if now - info["time"] >= info["delay"]:
             filtered_symbols.append(s)
     symbols = filtered_symbols
 
@@ -393,9 +411,22 @@ async def load_ohlcv_parallel(
                 notifier.notify(msg)
             info = failed_symbols.get(sym)
             delay = retry_delay
+            count = 1
+            disabled = False
             if info is not None:
                 delay = min(info["delay"] * 2, max_retry_delay)
-            failed_symbols[sym] = {"time": time.time(), "delay": delay}
+                count = info.get("count", 0) + 1
+                disabled = info.get("disabled", False)
+            if count >= max_ohlcv_failures:
+                disabled = True
+                if not info or not info.get("disabled"):
+                    logger.info("Disabling %s after %d OHLCV failures", sym, count)
+            failed_symbols[sym] = {
+                "time": time.time(),
+                "delay": delay,
+                "count": count,
+                "disabled": disabled,
+            }
             continue
         if isinstance(res, Exception) or not res:
             msg = f"Failed to load OHLCV for {sym}: {res}"
@@ -404,9 +435,22 @@ async def load_ohlcv_parallel(
                 notifier.notify(msg)
             info = failed_symbols.get(sym)
             delay = retry_delay
+            count = 1
+            disabled = False
             if info is not None:
                 delay = min(info["delay"] * 2, max_retry_delay)
-            failed_symbols[sym] = {"time": time.time(), "delay": delay}
+                count = info.get("count", 0) + 1
+                disabled = info.get("disabled", False)
+            if count >= max_ohlcv_failures:
+                disabled = True
+                if not info or not info.get("disabled"):
+                    logger.info("Disabling %s after %d OHLCV failures", sym, count)
+            failed_symbols[sym] = {
+                "time": time.time(),
+                "delay": delay,
+                "count": count,
+                "disabled": disabled,
+            }
             continue
         if res and len(res[0]) > 6:
             res = [[c[0], c[1], c[2], c[3], c[4], c[6]] for c in res]
@@ -463,7 +507,12 @@ async def update_ohlcv_cache(
     filtered_symbols: List[str] = []
     for s in symbols:
         info = failed_symbols.get(s)
-        if info is None or now - info["time"] >= info["delay"]:
+        if not info:
+            filtered_symbols.append(s)
+            continue
+        if info.get("disabled"):
+            continue
+        if now - info["time"] >= info["delay"]:
             filtered_symbols.append(s)
     symbols = filtered_symbols
     if not symbols:

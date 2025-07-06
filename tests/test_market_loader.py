@@ -557,6 +557,33 @@ def test_backoff_resets_on_success(monkeypatch):
     assert market_loader.failed_symbols["BTC/USD"]["delay"] == 10
 
 
+def test_symbol_disabled_after_max_failures(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    ex = AlwaysFailExchange()
+    market_loader.failed_symbols.clear()
+    monkeypatch.setattr(market_loader, "retry_delay", 0)
+    monkeypatch.setattr(market_loader, "max_ohlcv_failures", 2)
+
+    asyncio.run(
+        market_loader.load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1)
+    )
+    assert market_loader.failed_symbols["BTC/USD"]["count"] == 1
+    assert not market_loader.failed_symbols["BTC/USD"].get("disabled")
+
+    asyncio.run(
+        market_loader.load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1)
+    )
+    assert market_loader.failed_symbols["BTC/USD"]["count"] == 2
+    assert market_loader.failed_symbols["BTC/USD"].get("disabled") is True
+
+    calls = ex.calls
+    asyncio.run(
+        market_loader.load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1)
+    )
+    assert ex.calls == calls
+
+
 class StopLoop(Exception):
     pass
 
