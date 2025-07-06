@@ -32,6 +32,11 @@ be calculated reliably. When fewer rows are available the function returns
 
 ### Optional ML Fallback
 
+Set `use_ml_regime_classifier` to `true` in `crypto_bot/config.yaml` to fall
+back to a machine learning model whenever the indicator rules return
+`"unknown"`.  A small gradient boosting model trained with LightGBM is bundled
+directly in `crypto_bot.regime.model_data` as a base64 string and loaded
+automatically.
 `use_ml_regime_classifier` is enabled by default in
 `crypto_bot/regime/regime_config.yaml`, so the router falls back to a small
 machine learning model whenever the indicator rules return `"unknown"`.

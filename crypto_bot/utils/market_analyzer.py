@@ -1,7 +1,10 @@
 import pandas as pd
 from typing import Dict
 
-from crypto_bot.regime.regime_classifier import classify_regime_async
+from crypto_bot.regime.regime_classifier import (
+    classify_regime_async,
+    classify_regime_cached,
+)
 from crypto_bot.strategy_router import (
     route,
     strategy_name,
@@ -37,9 +40,29 @@ async def analyze_symbol(
     base_tf = config.get("timeframe", "1h")
     higher_tf = config.get("higher_timeframe", "1d")
     df = df_map.get(base_tf)
+    higher_df = df_map.get("1d")
+    profile = bool(config.get("profile_regime", False))
+    regime, info = await classify_regime_cached(
+        symbol,
+        base_tf,
+        df,
+        higher_df,
+        profile,
+    )
     higher_df = df_map.get(higher_tf)
 
     regime = "unknown"
+    regime, info = await classify_regime_async(df, higher_df)
+    patterns: dict | set = {}
+    patterns: dict[str, float] = {}
+    patterns: Dict[str, float] = {}
+    base_conf = 1.0
+    if isinstance(info, dict):
+        patterns = info
+    elif isinstance(info, set):
+        patterns = {p: 1.0 for p in info}
+    else:
+        base_conf = float(info)
     patterns: set[str] = set()
     base_conf = 1.0
 
@@ -57,6 +80,17 @@ async def analyze_symbol(
     vote_map: Dict[str, pd.DataFrame] = {}
     for tf in regime_tfs:
         tf_df = df_map.get(tf)
+        if tf_df is None:
+            continue
+        higher_df = df_map.get("1d") if tf != "1d" else None
+        r, _ = await classify_regime_cached(
+            symbol,
+            tf,
+            tf_df,
+            higher_df,
+            profile,
+        )
+        regime_counts[r] = regime_counts.get(r, 0) + 1
         if tf_df is not None:
             vote_map[tf] = tf_df
     if higher_tf in df_map:
