@@ -583,3 +583,81 @@ def test_parse_book_message_snapshot_and_update():
         "bids": [[30000.1, 0.5]],
         "asks": [[30000.2, 1.0]],
     }
+
+
+def test_parse_level3_snapshot_and_update():
+    snap_msg = json.dumps(
+        {
+            "channel": "book",
+            "type": "snapshot",
+            "symbol": "ETH/USD",
+            "data": {
+                "bids": [["3000.1", "1.0", "B1"], ["3000.0", "2.0", "B2"]],
+                "asks": [["3000.2", "1.5", "A1"]],
+                "checksum": 111,
+                "timestamp": 1712150000,
+            },
+        }
+    )
+
+    upd_msg = json.dumps(
+        {
+            "channel": "book",
+            "type": "update",
+            "symbol": "ETH/USD",
+            "data": {
+                "bids": [["new", "B3", "2999.5", "0.5", 1712150001]],
+                "asks": [["delete", "A1", "3000.2", "0", 1712150002]],
+                "checksum": 112,
+                "timestamp": 1712150003,
+            },
+        }
+    )
+
+    snap = kraken_ws.parse_level3_snapshot(snap_msg)
+    upd = kraken_ws.parse_level3_update(upd_msg)
+
+    assert snap == {
+        "symbol": "ETH/USD",
+        "bids": [
+            {"order_id": "B1", "limit_price": 3000.1, "order_qty": 1.0},
+            {"order_id": "B2", "limit_price": 3000.0, "order_qty": 2.0},
+        ],
+        "asks": [
+            {"order_id": "A1", "limit_price": 3000.2, "order_qty": 1.5},
+        ],
+        "checksum": 111,
+        "timestamp": datetime.fromtimestamp(1712150000, timezone.utc),
+    }
+
+    assert upd == {
+        "symbol": "ETH/USD",
+        "bids": [
+            {
+                "event": "new",
+                "order_id": "B3",
+                "limit_price": 2999.5,
+                "order_qty": 0.5,
+                "timestamp": datetime.fromtimestamp(1712150001, timezone.utc),
+            }
+        ],
+        "asks": [
+            {
+                "event": "delete",
+                "order_id": "A1",
+                "limit_price": 3000.2,
+                "order_qty": 0.0,
+                "timestamp": datetime.fromtimestamp(1712150002, timezone.utc),
+            }
+        ],
+        "checksum": 112,
+        "timestamp": datetime.fromtimestamp(1712150003, timezone.utc),
+    }
+
+
+def test_level3_invalid_messages():
+    assert kraken_ws.parse_level3_snapshot("not json") is None
+    bad = json.dumps({"channel": "book", "type": "snapshot", "data": {"bids": []}})
+    assert kraken_ws.parse_level3_snapshot(bad) is None
+    bad_upd = json.dumps({"channel": "book", "type": "update", "data": {"bids": []}})
+    assert kraken_ws.parse_level3_update(bad_upd) is None
