@@ -30,7 +30,6 @@ MODEL_REPORT = Path('crypto_bot/ml_signal_model/models/model_report.json')
 TRADE_FILE = Path('crypto_bot/logs/trades.csv')
 ERROR_FILE = Path('crypto_bot/logs/errors.log')
 CONFIG_FILE = Path('crypto_bot/config.yaml')
-TRADES_FILE = Path('crypto_bot/logs/trades.csv')
 REGIME_FILE = Path('crypto_bot/logs/regime_history.txt')
 
 
@@ -199,8 +198,8 @@ def cli():
     return render_template('cli.html', output=output)
 @app.route('/dashboard')
 def dashboard():
-    summary = log_reader.trade_summary(TRADES_FILE)
-    df = log_reader._read_trades(TRADES_FILE)
+    summary = log_reader.trade_summary(TRADE_FILE)
+    df = log_reader._read_trades(TRADE_FILE)
     perf = utils.compute_performance(df)
     allocation = {}
     if CONFIG_FILE.exists():
@@ -274,8 +273,8 @@ def trades_tail():
 @app.route('/trades_data')
 def trades_data():
     """Return full trade history as JSON records."""
-    if TRADES_FILE.exists():
-        df = log_reader._read_trades(TRADES_FILE)
+    if TRADE_FILE.exists():
+        df = log_reader._read_trades(TRADE_FILE)
         return jsonify(df.to_dict(orient='records'))
     return jsonify([])
 

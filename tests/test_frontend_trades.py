@@ -9,7 +9,6 @@ def test_trades_data_route(tmp_path, monkeypatch):
         {"symbol": "ETH/USDT", "side": "sell", "amount": 2, "price": 200, "timestamp": "t2"},
     ])
     df.to_csv(path, index=False, header=False)
-    monkeypatch.setattr(app, "TRADES_FILE", path)
     monkeypatch.setattr(app, "TRADE_FILE", path)
     client = app.app.test_client()
     resp = client.get("/trades_data")
