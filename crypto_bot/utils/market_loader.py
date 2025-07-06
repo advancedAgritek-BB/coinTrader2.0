@@ -309,6 +309,13 @@ async def update_ohlcv_cache(
     if not symbols:
         return cache
 
+    logger.info(
+        "Fetching %d candles for %d symbols on %s",
+        limit,
+        len(symbols),
+        timeframe,
+    )
+
     data_map = await load_ohlcv_parallel(
         exchange,
         symbols,
@@ -318,6 +325,13 @@ async def update_ohlcv_cache(
         use_websocket,
         force_websocket_history,
         max_concurrent,
+    )
+
+    logger.info(
+        "Fetched OHLCV for %d/%d symbols on %s",
+        len([s for s in symbols if s in data_map]),
+        len(symbols),
+        timeframe,
     )
 
     for sym in symbols:
@@ -377,8 +391,11 @@ async def update_multi_tf_ohlcv_cache(
     config : Dict
         Configuration containing a ``timeframes`` list.
     """
+    tfs = config.get("timeframes", ["1h"])
+    logger.info("Updating OHLCV cache for timeframes: %s", tfs)
 
-    for tf in config.get("timeframes", ["1h"]):
+    for tf in tfs:
+        logger.info("Processing timeframe %s", tf)
         tf_cache = cache.get(tf, {})
         cache[tf] = await update_ohlcv_cache(
             exchange,
@@ -405,8 +422,8 @@ async def update_regime_tf_cache(
     max_concurrent: int | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for regime detection timeframes."""
-
     regime_cfg = {**config, "timeframes": config.get("regime_timeframes", [])}
+    logger.info("Updating regime cache for timeframes: %s", regime_cfg["timeframes"])
     return await update_multi_tf_ohlcv_cache(
         exchange,
         cache,
