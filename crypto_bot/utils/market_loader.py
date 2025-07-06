@@ -19,6 +19,7 @@ retry_delay = 300
 max_retry_delay = 3600
 OHLCV_TIMEOUT = 30
 max_ohlcv_failures = 3
+UNSUPPORTED_SYMBOL = object()
 
 
 def configure(
@@ -188,7 +189,36 @@ async def fetch_ohlcv_async(
     force_websocket_history: bool = False,
 ) -> list | Exception:
     """Return OHLCV data for ``symbol`` using async I/O."""
+
+    if not getattr(exchange, "has", {}).get("fetchOHLCV"):
+        ex_id = getattr(exchange, "id", "unknown")
+        logger.warning("Exchange %s lacks fetchOHLCV capability", ex_id)
+        return []
+    if (
+        getattr(exchange, "timeframes", None)
+        and timeframe not in getattr(exchange, "timeframes", {})
+    ):
+        ex_id = getattr(exchange, "id", "unknown")
+        logger.warning("Timeframe %s not supported on %s", timeframe, ex_id)
+        return []
+
     try:
+        if hasattr(exchange, "symbols"):
+            if not exchange.symbols and hasattr(exchange, "load_markets"):
+                try:
+                    if asyncio.iscoroutinefunction(getattr(exchange, "load_markets", None)):
+                        await exchange.load_markets()
+                    else:
+                        await asyncio.to_thread(exchange.load_markets)
+                except Exception as exc:
+                    logger.warning("load_markets failed: %s", exc)
+            if exchange.symbols and symbol not in exchange.symbols:
+                logger.warning(
+                    "Skipping unsupported symbol %s on %s",
+                    symbol,
+                    getattr(exchange, "id", "unknown"),
+                )
+                return UNSUPPORTED_SYMBOL
         if use_websocket and since is not None:
             try:
                 seconds = timeframe_seconds(exchange, timeframe)
@@ -418,6 +448,8 @@ async def load_ohlcv_parallel(
     ex_id = getattr(exchange, "id", "unknown")
     mode = "websocket" if use_websocket else "REST"
     for sym, res in zip(symbols, results):
+        if res is UNSUPPORTED_SYMBOL:
+            continue
         if isinstance(res, asyncio.TimeoutError):
             logger.error(
                 "Timeout loading OHLCV for %s on %s limit %d: %s",
