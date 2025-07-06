@@ -1,4 +1,4 @@
-"""Machine learning fallback model for regime classification."""
+"""Gradient boosting fallback model for regime classification."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ _model = None
 
 
 def load_model():
-    """Decode and return the embedded sklearn model."""
+    """Decode and return the embedded LightGBM model."""
     global _model
     if _model is None:
         data = base64.b64decode(MODEL_B64)
@@ -40,4 +40,3 @@ def predict_regime(df: pd.DataFrame) -> Tuple[str, float]:
         label = "sideways"
     confidence = abs(prob - 0.5) * 2
     return label, confidence
-
