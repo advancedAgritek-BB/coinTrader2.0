@@ -489,8 +489,10 @@ async def fetch_ohlcv_async(
                     use_websocket,
                     exc2,
                     exc_info=True,
-                )
+            )
         return exc
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:  # pragma: no cover - network
         if (
             use_websocket
@@ -598,6 +600,8 @@ async def load_ohlcv_parallel(
     for sym, res in zip(symbols, results):
         if res is UNSUPPORTED_SYMBOL:
             continue
+        if isinstance(res, asyncio.CancelledError):
+            raise res
         if isinstance(res, asyncio.TimeoutError):
             logger.error(
                 "Timeout loading OHLCV for %s on %s limit %d: %s",

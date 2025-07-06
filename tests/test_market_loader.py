@@ -925,3 +925,44 @@ def test_fetch_ohlcv_async_skips_unsupported_timeframe():
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", timeframe="1m"))
     assert data == []
     assert ex.called is False
+
+
+class CancelWSExchange:
+    has = {"fetchOHLCV": True}
+    def __init__(self):
+        self.fetch_called = False
+
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        raise asyncio.CancelledError
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.fetch_called = True
+        return [[0] * 6]
+
+
+def test_fetch_ohlcv_async_cancelled_error():
+    ex = CancelWSExchange()
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", use_websocket=True, limit=1))
+    assert ex.fetch_called is False
+
+
+def test_load_ohlcv_parallel_cancelled_error(monkeypatch, caplog):
+    from crypto_bot.utils import market_loader
+
+    ex = CancelWSExchange()
+    market_loader.failed_symbols.clear()
+    caplog.set_level(logging.ERROR)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(
+            market_loader.load_ohlcv_parallel(
+                ex,
+                ["BTC/USD"],
+                use_websocket=True,
+                limit=1,
+                max_concurrent=1,
+            )
+        )
+    assert "BTC/USD" not in market_loader.failed_symbols
+    assert not caplog.records
+
