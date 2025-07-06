@@ -966,3 +966,16 @@ def test_load_ohlcv_parallel_cancelled_error(monkeypatch, caplog):
     assert "BTC/USD" not in market_loader.failed_symbols
     assert not caplog.records
 
+class CancelExchange:
+    has = {"fetchOHLCV": True}
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        raise asyncio.CancelledError()
+
+
+def test_load_ohlcv_parallel_propagates_cancelled(caplog):
+    ex = CancelExchange()
+    caplog.set_level(logging.ERROR)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1))
+    assert len(caplog.records) == 0
