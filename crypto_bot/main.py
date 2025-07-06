@@ -751,7 +751,6 @@ async def main() -> None:
                 )
             logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
-            continue
 
             if config["execution_mode"] != "dry_run":
                 bal = await (exchange.fetch_balance() if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)) else asyncio.to_thread(exchange.fetch_balance))
@@ -764,41 +763,38 @@ async def main() -> None:
 
             if not risk_manager.can_allocate(name, size, balance):
                 logger.info("Capital cap reached for %s, skipping", name)
-                continue
-        if not risk_manager.can_allocate(name, size, balance):
-            logger.info("Capital cap reached for %s, skipping", name)
-            logger.info(
-                "Loop Summary: %s evaluated | %s trades | %s volume fails | %s score fails | %s unknown regime",
-                total_pairs,
-                trades_executed,
-                rejected_volume,
-                rejected_score,
-                rejected_regime,
-            )
-            logger.info(
-                "Cycle Summary: %s pairs evaluated, %s signals, %s trades executed, %s rejected volume, %s rejected score, %s rejected regime.",
-                total_pairs,
-                signals_generated,
-                trades_executed,
-                volume_rejections,
-                score_rejections,
-                regime_rejections,
-            )
-            if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
-                metrics = {
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "ticker_fetch_time": ticker_fetch_time,
-                    "symbol_filter_ratio": symbol_filter_ratio,
-                    "ohlcv_fetch_latency": ohlcv_fetch_latency,
-                    "unknown_regimes": rejected_regime,
-                }
-                log_metrics_to_csv(
-                    metrics,
-                    config.get("metrics_output_file", "crypto_bot/logs/metrics.csv"),
+                logger.info(
+                    "Loop Summary: %s evaluated | %s trades | %s volume fails | %s score fails | %s unknown regime",
+                    total_pairs,
+                    trades_executed,
+                    rejected_volume,
+                    rejected_score,
+                    rejected_regime,
                 )
-            logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
-            await asyncio.sleep(config["loop_interval_minutes"] * 60)
-            continue
+                logger.info(
+                    "Cycle Summary: %s pairs evaluated, %s signals, %s trades executed, %s rejected volume, %s rejected score, %s rejected regime.",
+                    total_pairs,
+                    signals_generated,
+                    trades_executed,
+                    volume_rejections,
+                    score_rejections,
+                    regime_rejections,
+                )
+                if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
+                    metrics = {
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "ticker_fetch_time": ticker_fetch_time,
+                        "symbol_filter_ratio": symbol_filter_ratio,
+                        "ohlcv_fetch_latency": ohlcv_fetch_latency,
+                        "unknown_regimes": rejected_regime,
+                    }
+                    log_metrics_to_csv(
+                        metrics,
+                        config.get("metrics_output_file", "crypto_bot/logs/metrics.csv"),
+                    )
+                logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
+                await asyncio.sleep(config["loop_interval_minutes"] * 60)
+                continue
 
             order = await cex_trade_async(
                 exchange,
