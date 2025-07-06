@@ -2,9 +2,12 @@ from __future__ import annotations
 
 """Log active trade position and wallet balance."""
 
+from pathlib import Path
+
 from .logger import setup_logger
 
-logger = setup_logger(__name__, "crypto_bot/logs/positions.log")
+LOG_FILE = Path(__file__).resolve().parents[1] / "logs" / "positions.log"
+logger = setup_logger(__name__, LOG_FILE)
 
 
 def log_balance(balance: float) -> None:
