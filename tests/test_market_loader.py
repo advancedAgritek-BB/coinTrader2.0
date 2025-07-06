@@ -428,7 +428,7 @@ def test_failed_symbol_skipped_until_delay(monkeypatch):
     ex = FailOnceExchange()
     cache: dict[str, pd.DataFrame] = {}
     market_loader.failed_symbols.clear()
-    monkeypatch.setattr(market_loader, "retry_delay", 10)
+    monkeypatch.setattr(market_loader, "RETRY_DELAY", 10)
 
     t = 0
 
@@ -482,8 +482,8 @@ def test_failed_symbol_backoff(monkeypatch):
     ex = AlwaysFailExchange()
     cache: dict[str, pd.DataFrame] = {}
     market_loader.failed_symbols.clear()
-    monkeypatch.setattr(market_loader, "retry_delay", 10)
-    monkeypatch.setattr(market_loader, "max_retry_delay", 40)
+    monkeypatch.setattr(market_loader, "RETRY_DELAY", 10)
+    monkeypatch.setattr(market_loader, "MAX_RETRY_DELAY", 40)
 
     t = 0
 
@@ -546,7 +546,7 @@ def test_backoff_resets_on_success(monkeypatch):
     ex = FailSuccessExchange()
     cache: dict[str, pd.DataFrame] = {}
     market_loader.failed_symbols.clear()
-    monkeypatch.setattr(market_loader, "retry_delay", 10)
+    monkeypatch.setattr(market_loader, "RETRY_DELAY", 10)
 
     t = 0
 
@@ -598,8 +598,8 @@ def test_symbol_disabled_after_max_failures(monkeypatch):
 
     ex = AlwaysFailExchange()
     market_loader.failed_symbols.clear()
-    monkeypatch.setattr(market_loader, "retry_delay", 0)
-    monkeypatch.setattr(market_loader, "max_ohlcv_failures", 2)
+    monkeypatch.setattr(market_loader, "RETRY_DELAY", 0)
+    monkeypatch.setattr(market_loader, "MAX_OHLCV_FAILURES", 2)
 
     asyncio.run(
         market_loader.load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1)
