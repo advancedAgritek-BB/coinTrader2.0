@@ -153,13 +153,15 @@ async def load_kraken_symbols(
 
     symbols: List[str] = []
     for symbol, data in markets.items():
+        reason = None
         if not data.get("active", True):
-            continue
-        if not is_symbol_type(data, allowed_types):
-            continue
-        if symbol in exclude_set:
-            continue
-        if allowed_types:
+            reason = "inactive"
+        elif not is_symbol_type(data, allowed_types):
+            m_t = data.get("type") or "unknown"
+            reason = f"type mismatch ({m_t})"
+        elif symbol in exclude_set:
+            reason = "excluded"
+        elif allowed_types:
             m_type = data.get("type")
             if m_type is None:
                 if data.get("spot"):
@@ -169,7 +171,13 @@ async def load_kraken_symbols(
                 elif data.get("future") or data.get("futures"):
                     m_type = "futures"
             if m_type not in allowed_types:
-                continue
+                reason = f"type {m_type} not allowed"
+
+        if reason:
+            logger.debug("Skipping symbol %s: %s", symbol, reason)
+            continue
+
+        logger.debug("Including symbol %s", symbol)
         symbols.append(symbol)
 
     if not symbols:
