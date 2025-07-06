@@ -316,6 +316,9 @@ evaluation cycle, giving the market time to evolve before scanning again.
 controls the timeout for each fetch call. If you still encounter timeouts after
 raising this value, try lowering `max_concurrent_ohlcv` to reduce pressure on
 the exchange API.
+The updater automatically determines how many candles are missing from the
+cache, so even when `limit` is large it only requests the data required to fill
+the gap, avoiding needless delays.
 The `metrics` section enables recording of cycle summaries to the specified CSV
 file for later analysis.
 `scalp_timeframe` sets the candle interval specifically for the micro_scalp
@@ -324,7 +327,10 @@ and bounce_scalper strategies while `timeframe` covers all other analysis.
 When `use_websocket` is enabled the bot relies on `ccxt.pro` for realtime
 streaming data. Install it alongside the other requirements or disable
 websockets if you do not have access to `ccxt.pro`.
-When OHLCV streaming returns fewer candles than requested the bot fills the gap using REST to ensure indicators have enough history. Disable this fallback by setting `force_websocket_history` to `true`.
+When OHLCV streaming returns fewer candles than requested the bot calculates
+how many bars are missing and fetches only that remainder via REST. This
+adaptive limit keeps history current without waiting for a full response.
+Disable this fallback by setting `force_websocket_history` to `true`.
 
 Example usage for Kraken WebSockets:
 
