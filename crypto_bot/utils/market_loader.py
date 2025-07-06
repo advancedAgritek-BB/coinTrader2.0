@@ -7,26 +7,6 @@ import pandas as pd
 from .telegram import TelegramNotifier
 
 
-def _timeframe_seconds(exchange, timeframe: str) -> int:
-    """Return the number of seconds represented by ``timeframe``."""
-    if hasattr(exchange, "parse_timeframe"):
-        try:
-            return int(exchange.parse_timeframe(timeframe))
-        except Exception:
-            pass
-    unit = timeframe[-1]
-    value = int(timeframe[:-1])
-    if unit == "m":
-        return value * 60
-    if unit == "h":
-        return value * 3600
-    if unit == "d":
-        return value * 86400
-    if unit == "w":
-        return value * 604800
-    if unit == "M":
-        return value * 2592000
-    raise ValueError(f"Unknown timeframe {timeframe}")
 
 
 _last_snapshot_time = 0
@@ -211,7 +191,7 @@ async def fetch_ohlcv_async(
     try:
         if use_websocket and since is not None:
             try:
-                seconds = _timeframe_seconds(exchange, timeframe)
+                seconds = timeframe_seconds(exchange, timeframe)
                 candles_needed = int((time.time() - since) / seconds) + 1
                 if candles_needed < limit:
                     limit = candles_needed
