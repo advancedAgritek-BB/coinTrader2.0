@@ -400,6 +400,24 @@ client.cancel_all_orders()
 client.open_orders()
 ```
 
+#### Trade Updates
+
+Subscribe to the public trades channel to monitor real-time fills.
+Refer to Kraken's v2 WebSocket documentation for message details:
+<https://docs.kraken.com/websockets-v2/#tag/Trading>.
+
+```python
+ws.subscribe_trades(["BTC/USD"], snapshot=False)
+
+msg = ...  # read from ws.public_ws
+trade = parse_trade_message(msg)
+if trade:
+    ts, side, price, volume = trade
+    print(ts, side, price, volume)
+
+ws.unsubscribe_trades(["BTC/USD"])
+```
+
 #### Level 3 Order Updates
 
 Subscribe to the full depth feed using `subscribe_level3`. The call requires a
