@@ -249,6 +249,7 @@ class KrakenWSClient:
         self,
         symbol: Union[str, List[str]],
         *,
+        event_trigger: Optional[dict] = None,
         event_trigger: Optional[str] = None,
         snapshot: Optional[bool] = None,
         req_id: Optional[int] = None,
@@ -258,6 +259,14 @@ class KrakenWSClient:
         self.connect_public()
         if isinstance(symbol, str):
             symbol = [symbol]
+        msg = {
+            "method": "subscribe",
+            "params": {"channel": "ticker", "symbol": symbol},
+        }
+        if event_trigger is not None:
+            msg["params"]["eventTrigger"] = event_trigger
+        if req_id is not None:
+            msg["req_id"] = req_id
 
         params = {"channel": "ticker", "symbol": symbol}
         if event_trigger is not None:
@@ -270,6 +279,40 @@ class KrakenWSClient:
         msg = {"method": "subscribe", "params": params}
         data = json.dumps(msg)
         self._public_subs.append(data)
+        self.public_ws.send(data)
+
+    def unsubscribe_ticker(
+        self,
+        symbol: Union[str, List[str]],
+        *,
+        event_trigger: Optional[dict] = None,
+        req_id: Optional[int] = None,
+    ) -> None:
+        """Unsubscribe from ticker updates for one or more symbols."""
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "unsubscribe",
+            "params": {"channel": "ticker", "symbol": symbol},
+        }
+        if event_trigger is not None:
+            msg["params"]["eventTrigger"] = event_trigger
+        if req_id is not None:
+            msg["req_id"] = req_id
+        data = json.dumps(msg)
+
+        sub_msg = {
+            "method": "subscribe",
+            "params": {"channel": "ticker", "symbol": symbol},
+        }
+        if event_trigger is not None:
+            sub_msg["params"]["eventTrigger"] = event_trigger
+        if req_id is not None:
+            sub_msg["req_id"] = req_id
+        sub_data = json.dumps(sub_msg)
+        if sub_data in self._public_subs:
+            self._public_subs.remove(sub_data)
         self.public_ws.send(data)
 
     def subscribe_trades(self, symbol: Union[str, List[str]]) -> None:
