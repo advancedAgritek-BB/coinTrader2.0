@@ -438,7 +438,7 @@ async def fetch_ohlcv_async(
                 limit,
                 use_websocket,
                 exc,
-                exc_info=True,
+                exc_info=False,
             )
         else:
             logger.error(
@@ -449,7 +449,7 @@ async def fetch_ohlcv_async(
                 limit,
                 use_websocket,
                 exc,
-                exc_info=True,
+                exc_info=False,
             )
         if use_websocket and hasattr(exchange, "fetch_ohlcv"):
             logger.info(

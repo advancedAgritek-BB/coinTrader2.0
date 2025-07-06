@@ -253,8 +253,8 @@ def test_watch_ohlcv_since_limit_reduction():
         )
     )
     assert ex.fetch_called is False
-    assert ex.watch_limit == 4
-    assert len(data) == 4
+    assert ex.watch_limit == 1
+    assert len(data) == 1
 
 
 class SkipLargeLimitExchange:
