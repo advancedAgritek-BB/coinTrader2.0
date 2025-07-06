@@ -35,6 +35,20 @@ def test_excluded_symbols_are_removed():
     assert set(symbols) == {"BTC/USD"}
 
 
+def test_load_kraken_symbols_logs_exclusions(caplog):
+    ex = DummyExchange()
+    from crypto_bot.utils import market_loader
+    with caplog.at_level(logging.DEBUG):
+        market_loader.logger.setLevel(logging.DEBUG)
+        symbols = asyncio.run(load_kraken_symbols(ex, exclude=["ETH/USD"]))
+    assert set(symbols) == {"BTC/USD"}
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("Skipping symbol XRP/USD" in m for m in messages)
+    assert any("Skipping symbol ETH/USD" in m for m in messages)
+    assert any("Skipping symbol XBT/USD-PERP" in m for m in messages)
+    assert any("Including symbol BTC/USD" in m for m in messages)
+
+
 def test_load_kraken_symbols_market_type_filter():
     ex = DummyExchange()
     ex.exchange_market_types = {"margin", "futures"}
