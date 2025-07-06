@@ -14,10 +14,10 @@ _last_snapshot_time = 0
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
 failed_symbols: Dict[str, Dict[str, Any]] = {}
-retry_delay = 300
-max_retry_delay = 3600
+RETRY_DELAY = 300
+MAX_RETRY_DELAY = 3600
 OHLCV_TIMEOUT = 30
-max_ohlcv_failures = 3
+MAX_OHLCV_FAILURES = 3
 UNSUPPORTED_SYMBOL = object()
 
 
@@ -26,7 +26,7 @@ def configure(
     max_failures: int | None = None,
 ) -> None:
     """Configure module-wide settings."""
-    global OHLCV_TIMEOUT, max_ohlcv_failures
+    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES
     if ohlcv_timeout is not None:
         try:
             OHLCV_TIMEOUT = max(1, int(ohlcv_timeout))
@@ -38,12 +38,12 @@ def configure(
             )
     if max_failures is not None:
         try:
-            max_ohlcv_failures = max(1, int(max_failures))
+            MAX_OHLCV_FAILURES = max(1, int(max_failures))
         except (TypeError, ValueError):
             logger.warning(
-                "Invalid max_ohlcv_failures %s; using default %s",
+                "Invalid MAX_OHLCV_FAILURES %s; using default %s",
                 max_failures,
-                max_ohlcv_failures,
+                MAX_OHLCV_FAILURES,
             )
 
 
@@ -569,14 +569,14 @@ async def load_ohlcv_parallel(
                     f"Timeout loading OHLCV for {sym} on {timeframe} limit {limit}"
                 )
             info = failed_symbols.get(sym)
-            delay = retry_delay
+            delay = RETRY_DELAY
             count = 1
             disabled = False
             if info is not None:
-                delay = min(info["delay"] * 2, max_retry_delay)
+                delay = min(info["delay"] * 2, MAX_RETRY_DELAY)
                 count = info.get("count", 0) + 1
                 disabled = info.get("disabled", False)
-            if count >= max_ohlcv_failures:
+            if count >= MAX_OHLCV_FAILURES:
                 disabled = True
                 if not info or not info.get("disabled"):
                     logger.info("Disabling %s after %d OHLCV failures", sym, count)
@@ -606,14 +606,14 @@ async def load_ohlcv_parallel(
                     f"Failed to load OHLCV for {sym} on {timeframe} limit {limit}: {res}"
                 )
             info = failed_symbols.get(sym)
-            delay = retry_delay
+            delay = RETRY_DELAY
             count = 1
             disabled = False
             if info is not None:
-                delay = min(info["delay"] * 2, max_retry_delay)
+                delay = min(info["delay"] * 2, MAX_RETRY_DELAY)
                 count = info.get("count", 0) + 1
                 disabled = info.get("disabled", False)
-            if count >= max_ohlcv_failures:
+            if count >= MAX_OHLCV_FAILURES:
                 disabled = True
                 if not info or not info.get("disabled"):
                     logger.info("Disabling %s after %d OHLCV failures", sym, count)
