@@ -19,6 +19,7 @@ retry_delay = 300
 max_retry_delay = 3600
 OHLCV_TIMEOUT = 30
 max_ohlcv_failures = 3
+UNSUPPORTED_SYMBOL = object()
 
 
 def configure(
@@ -152,13 +153,15 @@ async def load_kraken_symbols(
 
     symbols: List[str] = []
     for symbol, data in markets.items():
+        reason = None
         if not data.get("active", True):
-            continue
-        if not is_symbol_type(data, allowed_types):
-            continue
-        if symbol in exclude_set:
-            continue
-        if allowed_types:
+            reason = "inactive"
+        elif not is_symbol_type(data, allowed_types):
+            m_t = data.get("type") or "unknown"
+            reason = f"type mismatch ({m_t})"
+        elif symbol in exclude_set:
+            reason = "excluded"
+        elif allowed_types:
             m_type = data.get("type")
             if m_type is None:
                 if data.get("spot"):
@@ -168,7 +171,13 @@ async def load_kraken_symbols(
                 elif data.get("future") or data.get("futures"):
                     m_type = "futures"
             if m_type not in allowed_types:
-                continue
+                reason = f"type {m_type} not allowed"
+
+        if reason:
+            logger.debug("Skipping symbol %s: %s", symbol, reason)
+            continue
+
+        logger.debug("Including symbol %s", symbol)
         symbols.append(symbol)
 
     if not symbols:
@@ -188,7 +197,44 @@ async def fetch_ohlcv_async(
     force_websocket_history: bool = False,
 ) -> list | Exception:
     """Return OHLCV data for ``symbol`` using async I/O."""
+
+    if not getattr(exchange, "has", {}).get("fetchOHLCV"):
+        ex_id = getattr(exchange, "id", "unknown")
+        logger.warning("Exchange %s lacks fetchOHLCV capability", ex_id)
+        return []
+    if (
+        getattr(exchange, "timeframes", None)
+        and timeframe not in getattr(exchange, "timeframes", {})
+    ):
+        ex_id = getattr(exchange, "id", "unknown")
+        logger.warning("Timeframe %s not supported on %s", timeframe, ex_id)
+        return []
+
     try:
+        if hasattr(exchange, "symbols"):
+            if not exchange.symbols and hasattr(exchange, "load_markets"):
+                try:
+                    if asyncio.iscoroutinefunction(getattr(exchange, "load_markets", None)):
+                        await exchange.load_markets()
+                    else:
+                        await asyncio.to_thread(exchange.load_markets)
+                except Exception as exc:
+                    logger.warning("load_markets failed: %s", exc)
+            if exchange.symbols and symbol not in exchange.symbols:
+                logger.warning(
+                    "Skipping unsupported symbol %s on %s",
+                    symbol,
+                    getattr(exchange, "id", "unknown"),
+                )
+                return UNSUPPORTED_SYMBOL
+        if use_websocket and since is not None:
+            try:
+                seconds = timeframe_seconds(exchange, timeframe)
+                candles_needed = int((time.time() - since) / seconds) + 1
+                if candles_needed < limit:
+                    limit = candles_needed
+            except Exception:
+                pass
         if use_websocket and hasattr(exchange, "watch_ohlcv"):
             params = inspect.signature(exchange.watch_ohlcv).parameters
             ws_limit = limit
@@ -474,26 +520,26 @@ async def load_ohlcv_parallel(
         sem = None
 
     async def sem_fetch(sym: str):
+        async def _fetch_and_sleep():
+            data = await fetch_ohlcv_async(
+                exchange,
+                sym,
+                timeframe=timeframe,
+                limit=limit,
+                since=since_map.get(sym),
+                use_websocket=use_websocket,
+                force_websocket_history=force_websocket_history,
+            )
+            rl = getattr(exchange, "rateLimit", None)
+            if rl:
+                await asyncio.sleep(rl / 1000)
+            return data
+
         if sem:
             async with sem:
-                return await fetch_ohlcv_async(
-                    exchange,
-                    sym,
-                    timeframe=timeframe,
-                    limit=limit,
-                    since=since_map.get(sym),
-                    use_websocket=use_websocket,
-                    force_websocket_history=force_websocket_history,
-                )
-        return await fetch_ohlcv_async(
-            exchange,
-            sym,
-            timeframe=timeframe,
-            limit=limit,
-            since=since_map.get(sym),
-            use_websocket=use_websocket,
-            force_websocket_history=force_websocket_history,
-        )
+                return await _fetch_and_sleep()
+
+        return await _fetch_and_sleep()
 
     tasks = [asyncio.create_task(sem_fetch(s)) for s in symbols]
 
@@ -503,6 +549,8 @@ async def load_ohlcv_parallel(
     ex_id = getattr(exchange, "id", "unknown")
     mode = "websocket" if use_websocket else "REST"
     for sym, res in zip(symbols, results):
+        if res is UNSUPPORTED_SYMBOL:
+            continue
         if isinstance(res, asyncio.TimeoutError):
             logger.error(
                 "Timeout loading OHLCV for %s on %s limit %d: %s",

@@ -35,6 +35,20 @@ def test_excluded_symbols_are_removed():
     assert set(symbols) == {"BTC/USD"}
 
 
+def test_load_kraken_symbols_logs_exclusions(caplog):
+    ex = DummyExchange()
+    from crypto_bot.utils import market_loader
+    with caplog.at_level(logging.DEBUG):
+        market_loader.logger.setLevel(logging.DEBUG)
+        symbols = asyncio.run(load_kraken_symbols(ex, exclude=["ETH/USD"]))
+    assert set(symbols) == {"BTC/USD"}
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("Skipping symbol XRP/USD" in m for m in messages)
+    assert any("Skipping symbol ETH/USD" in m for m in messages)
+    assert any("Skipping symbol XBT/USD-PERP" in m for m in messages)
+    assert any("Including symbol BTC/USD" in m for m in messages)
+
+
 def test_load_kraken_symbols_market_type_filter():
     ex = DummyExchange()
     ex.exchange_market_types = {"margin", "futures"}
@@ -766,3 +780,77 @@ def test_watch_ohlcv_since_reduces_limit(monkeypatch):
         )
     )
     assert ex.limit == 4
+
+
+class RateLimitExchange:
+    def __init__(self):
+        self.times: list[float] = []
+        self.rateLimit = 50
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.times.append(time.time())
+        return [[0] * 6]
+
+
+def test_load_ohlcv_parallel_rate_limit_sleep():
+    ex = RateLimitExchange()
+    asyncio.run(
+        load_ohlcv_parallel(
+            ex,
+            ["A", "B"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert len(ex.times) == 2
+    assert ex.times[1] - ex.times[0] >= ex.rateLimit / 1000
+class SymbolCheckExchange:
+    def __init__(self):
+        self.symbols: list[str] = []
+        self.calls: list[str] = []
+        self.loaded = False
+
+    def load_markets(self):
+        self.loaded = True
+        self.symbols = ["BTC/USD"]
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.calls.append(symbol)
+        return [[0] * 6]
+
+
+def test_invalid_symbol_skipped(caplog):
+    from crypto_bot.utils import market_loader
+
+    ex = SymbolCheckExchange()
+    caplog.set_level(logging.WARNING)
+    result = asyncio.run(
+        market_loader.load_ohlcv_parallel(
+            ex,
+            ["BTC/USD", "ETH/USD"],
+            max_concurrent=1,
+        )
+    )
+    assert ex.loaded is True
+    assert ex.calls == ["BTC/USD"]
+    assert result == {"BTC/USD": [[0] * 6]}
+    assert any(
+        "Skipping unsupported symbol ETH/USD" in r.getMessage() for r in caplog.records
+    )
+class MissingTFExchange:
+    has = {"fetchOHLCV": True}
+    timeframes = {"5m": "5m"}
+
+    def __init__(self):
+        self.called = False
+
+    async def fetch_ohlcv(self, *args, **kwargs):
+        self.called = True
+        return [[0] * 6]
+
+
+def test_fetch_ohlcv_async_skips_unsupported_timeframe():
+    ex = MissingTFExchange()
+    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", timeframe="1m"))
+    assert data == []
+    assert ex.called is False
