@@ -12,9 +12,13 @@ class DummyWS:
     def __init__(self):
         self.sent = []
         self.on_close = None
+        self.closed = False
 
     def send(self, msg):
         self.sent.append(msg)
+
+    def close(self):
+        self.closed = True
 
 
 def test_reconnect_and_resubscribe(monkeypatch):
@@ -961,3 +965,22 @@ def test_parse_trade_message_snapshot_update():
             "timestamp_ms": 1704067202000,
         }
     ]
+
+
+def test_close_shuts_down_connections(monkeypatch):
+    client = KrakenWSClient()
+    pub = DummyWS()
+    priv = DummyWS()
+    client.public_ws = pub
+    client.private_ws = priv
+    client._public_subs = ["x"]
+    client._private_subs = ["y"]
+
+    client.close()
+
+    assert pub.closed
+    assert priv.closed
+    assert client.public_ws is None
+    assert client.private_ws is None
+    assert client._public_subs == []
+    assert client._private_subs == []

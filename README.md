@@ -354,6 +354,7 @@ ws.subscribe_book("BTC/USD", depth=10, snapshot=True)
 ws.add_order(["BTC/USD"], "buy", 0.01)
 ws.cancel_order("OABCDEF", ["BTC/USD"])
 ws.subscribe_instruments()  # stream asset and pair details
+ws.close()  # gracefully close the websockets when done
 ```
 
 To stream ticker data use `subscribe_ticker`. The optional `event_trigger`
@@ -398,6 +399,7 @@ client.add_order("BTC/USD", "buy", 0.1)
 client.cancel_order("TXID123")
 client.cancel_all_orders()
 client.open_orders()
+client.close()
 ```
 
 #### Trade Updates
