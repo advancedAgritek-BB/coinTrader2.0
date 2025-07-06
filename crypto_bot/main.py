@@ -706,6 +706,14 @@ async def main() -> None:
                     else:
                         latest_balance = paper_wallet.balance if paper_wallet else 0.0
                     log_balance(float(latest_balance))
+                    log_position(
+                        config.get("symbol", ""),
+                        open_side or "",
+                        sell_amount,
+                        entry_price or 0.0,
+                        current_price,
+                        float(latest_balance),
+                    )
                     if notifier and trade_updates:
                         report_exit(
                             notifier,
