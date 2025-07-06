@@ -42,7 +42,7 @@ from crypto_bot.fund_manager import (
     auto_convert_funds,
 )
 from crypto_bot.paper_wallet import PaperWallet
-from crypto_bot import console_monitor
+from crypto_bot import console_monitor, console_control
 from crypto_bot.utils.performance_logger import log_performance
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.utils.position_logger import log_position, log_balance
@@ -231,6 +231,9 @@ async def main() -> None:
     state = {"running": True, "mode": mode}
     df_cache: dict[str, dict[str, pd.DataFrame]] = {}
     regime_cache: dict[str, dict[str, pd.DataFrame]] = {}
+
+    control_task = asyncio.create_task(console_control.control_loop(state))
+    print("Bot running. Type 'stop' to pause, 'start' to resume, 'quit' to exit.")
 
     from crypto_bot.telegram_bot_ui import TelegramBotUI
 
@@ -893,10 +896,15 @@ async def main() -> None:
         await asyncio.sleep(config["loop_interval_minutes"] * 60)
 
     monitor_task.cancel()
+    control_task.cancel()
     if telegram_bot:
         telegram_bot.stop()
     try:
         await monitor_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await control_task
     except asyncio.CancelledError:
         pass
     if hasattr(exchange, "close"):
