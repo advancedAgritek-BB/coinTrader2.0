@@ -64,6 +64,32 @@ def test_reconnect_and_resubscribe(monkeypatch):
     assert created[-1] == (PRIVATE_URL, "private")
     assert client.private_ws is not old_private
     assert client.private_ws.sent == [expected_private]
+
+
+def test_subscribe_ticker_with_options(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_ticker(
+        "BTC/USD", event_trigger="bbo", snapshot=False, req_id=1
+    )
+
+    expected = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {
+                "channel": "ticker",
+                "symbol": ["BTC/USD"],
+                "event_trigger": "bbo",
+                "snapshot": False,
+                "req_id": 1,
+            },
+        }
+    )
+    assert ws.sent == [expected]
+    assert client._public_subs[-1] == expected
+
 import crypto_bot.execution.kraken_ws as kraken_ws
 from crypto_bot.execution.kraken_ws import KrakenWSClient
 
@@ -310,3 +336,35 @@ def test_handle_message_records_heartbeat(monkeypatch):
     client._handle_message(priv, json.dumps({"channel": "heartbeat"}))
     assert client.last_private_heartbeat is not None
     assert client.is_alive("private")
+
+
+def test_subscribe_instruments(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_instruments(snapshot=False)
+    expected = json.dumps(
+        {"method": "subscribe", "params": {"channel": "instrument", "snapshot": False}}
+    )
+    assert ws.sent == [expected]
+    assert client._public_subs[0] == expected
+
+
+def test_parse_instrument_message_returns_payload():
+    msg = json.dumps(
+        {
+            "channel": "instrument",
+            "type": "snapshot",
+            "data": {
+                "assets": [{"id": "XBT", "status": "enabled"}],
+                "pairs": [{"symbol": "BTC/USD", "status": "online"}],
+            },
+        }
+    )
+
+    result = kraken_ws.parse_instrument_message(msg)
+    assert result == {
+        "assets": [{"id": "XBT", "status": "enabled"}],
+        "pairs": [{"symbol": "BTC/USD", "status": "online"}],
+    }
