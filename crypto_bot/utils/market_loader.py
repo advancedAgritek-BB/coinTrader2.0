@@ -4,6 +4,8 @@ import inspect
 import time
 import pandas as pd
 
+from .telegram import TelegramNotifier
+
 _last_snapshot_time = 0
 from .logger import setup_logger
 
@@ -277,11 +279,17 @@ async def load_ohlcv_parallel(
     data: Dict[str, list] = {}
     for sym, res in zip(symbols, results):
         if isinstance(res, asyncio.TimeoutError):
-            logger.error("Timeout loading OHLCV for %s", sym)
+            msg = f"Timeout loading OHLCV for {sym}"
+            logger.error(msg)
+            if notifier:
+                notifier.notify(msg)
             failed_symbols[sym] = time.time()
             continue
         if isinstance(res, Exception) or not res:
-            logger.error("Failed to load OHLCV for %s: %s", sym, res)
+            msg = f"Failed to load OHLCV for {sym}: {res}"
+            logger.error(msg)
+            if notifier:
+                notifier.notify(msg)
             failed_symbols[sym] = time.time()
             continue
         if res and len(res[0]) > 6:
@@ -301,6 +309,7 @@ async def update_ohlcv_cache(
     force_websocket_history: bool = False,
     config: Dict | None = None,
     max_concurrent: int | None = None,
+    notifier: TelegramNotifier | None = None,
 ) -> Dict[str, pd.DataFrame]:
     """Update cached OHLCV DataFrames with new candles.
 
@@ -319,6 +328,8 @@ async def update_ohlcv_cache(
     snapshot_interval = config.get("ohlcv_snapshot_frequency_minutes", 1440) * 60
     now = time.time()
     snapshot_due = now - _last_snapshot_time >= snapshot_interval
+
+    logger.info("Starting OHLCV update for timeframe %s", timeframe)
 
     since_map: Dict[str, int | None] = {}
     if snapshot_due:
@@ -401,6 +412,7 @@ async def update_ohlcv_cache(
             cache[sym] = pd.concat([cache[sym], df_new], ignore_index=True)
         else:
             cache[sym] = df_new
+    logger.info("Completed OHLCV update for timeframe %s", timeframe)
     return cache
 
 
@@ -413,6 +425,7 @@ async def update_multi_tf_ohlcv_cache(
     use_websocket: bool = False,
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
+    notifier: TelegramNotifier | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for multiple timeframes.
 
@@ -425,7 +438,7 @@ async def update_multi_tf_ohlcv_cache(
     logger.info("Updating OHLCV cache for timeframes: %s", tfs)
 
     for tf in tfs:
-        logger.info("Processing timeframe %s", tf)
+        logger.info("Starting update for timeframe %s", tf)
         tf_cache = cache.get(tf, {})
         cache[tf] = await update_ohlcv_cache(
             exchange,
@@ -436,7 +449,9 @@ async def update_multi_tf_ohlcv_cache(
             use_websocket=use_websocket,
             force_websocket_history=force_websocket_history,
             max_concurrent=max_concurrent,
+            notifier=notifier,
         )
+        logger.info("Finished update for timeframe %s", tf)
 
     return cache
 
@@ -450,6 +465,7 @@ async def update_regime_tf_cache(
     use_websocket: bool = False,
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
+    notifier: TelegramNotifier | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for regime detection timeframes."""
     regime_cfg = {**config, "timeframes": config.get("regime_timeframes", [])}
@@ -463,4 +479,5 @@ async def update_regime_tf_cache(
         use_websocket=use_websocket,
         force_websocket_history=force_websocket_history,
         max_concurrent=max_concurrent,
+        notifier=notifier,
     )
