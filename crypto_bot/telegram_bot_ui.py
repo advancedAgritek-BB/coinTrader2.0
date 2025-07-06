@@ -21,7 +21,7 @@ from telegram.ext import (
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
-from crypto_bot import log_reader
+from crypto_bot import log_reader, console_monitor
 from crypto_bot.utils.open_trades import get_open_trades
 
 MENU = "MENU"
@@ -136,7 +136,10 @@ class TelegramBotUI:
             text = "\n".join(lines) if lines else "(no logs)"
         else:
             text = "Log file not found"
-        await update.message.reply_text(text)
+        if getattr(update, "callback_query", None):
+            await update.callback_query.message.edit_text(text)
+        else:
+            await update.message.reply_text(text)
 
     async def rotate_now_cmd(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -199,16 +202,20 @@ class TelegramBotUI:
         await update.message.reply_text("Available commands:\n" + "\n".join(cmds))
 
     async def show_signals(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if SIGNALS_FILE.exists():
+        # Use ``ASSET_SCORES_FILE`` so tests can patch the path easily.
+        if ASSET_SCORES_FILE.exists():
             try:
-                data = json.loads(SIGNALS_FILE.read_text())
+                data = json.loads(ASSET_SCORES_FILE.read_text())
                 lines = [f"{k}: {v:.2f}" for k, v in data.items()]
                 text = "\n".join(lines) if lines else "(no signals)"
             except Exception:
                 text = "Invalid signals file"
         else:
             text = "No signals found"
-        await update.message.reply_text(text)
+        if getattr(update, "callback_query", None):
+            await update.callback_query.message.edit_text(text)
+        else:
+            await update.message.reply_text(text)
 
     async def show_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self.exchange:
@@ -219,7 +226,13 @@ class TelegramBotUI:
                 bal = await self.exchange.fetch_balance()
             else:
                 bal = await asyncio.to_thread(self.exchange.fetch_balance)
-            lines = [
+            free_usdt = (
+                bal.get("USDT", {}).get("free")
+                if isinstance(bal.get("USDT"), dict)
+                else None
+            )
+            lines = [f"Free USDT: {free_usdt or 0}"]
+            lines += [
                 f"{k}: {v.get('total') if isinstance(v, dict) else v}"
                 for k, v in bal.items()
             ]
@@ -227,12 +240,18 @@ class TelegramBotUI:
         except Exception as exc:  # pragma: no cover - network
             self.logger.error("Balance fetch failed: %s", exc)
             text = "Balance fetch failed"
-        await update.message.reply_text(text)
+        if getattr(update, "callback_query", None):
+            await update.callback_query.message.edit_text(text)
+        else:
+            await update.message.reply_text(text)
 
     async def show_trades(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if TRADES_FILE.exists():
-            lines = TRADES_FILE.read_text().splitlines()[-20:]
+            lines = await console_monitor.trade_stats_lines(self.exchange, TRADES_FILE)
             text = "\n".join(lines) if lines else "(no trades)"
         else:
             text = "No trades found"
-        await update.message.reply_text(text)
+        if getattr(update, "callback_query", None):
+            await update.callback_query.message.edit_text(text)
+        else:
+            await update.message.reply_text(text)
