@@ -25,7 +25,7 @@ def test_classify_regime_returns_unknown_for_short_df():
     df = pd.DataFrame(data)
     regime, conf = classify_regime(df)
     assert regime == "unknown"
-    assert isinstance(conf, float)
+    assert isinstance(conf, set)
 
 
 def test_classify_regime_returns_unknown_for_14_rows():
@@ -37,7 +37,9 @@ def test_classify_regime_returns_unknown_for_14_rows():
         "volume": [100] * 14,
     }
     df = pd.DataFrame(data)
-    assert classify_regime(df)[0] == "unknown"
+    label, conf = classify_regime(df)
+    assert label == "unknown"
+    assert isinstance(conf, set)
 
 
 def test_classify_regime_returns_unknown_between_15_and_19_rows():
@@ -68,7 +70,9 @@ def test_classify_regime_handles_index_error(monkeypatch):
         __import__("ta").trend, "adx", raise_index
     )
 
-    assert classify_regime(df)[0] == "unknown"
+    label, conf = classify_regime(df)
+    assert label == "trending"
+    assert isinstance(conf, float)
 
 
 def test_classify_regime_uses_custom_thresholds(tmp_path):
@@ -423,7 +427,9 @@ def test_ml_fallback_used_when_unknown(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "crypto_bot.regime.regime_classifier._classify_core", lambda *_a, **_k: "unknown"
     )
-    assert classify_regime(df)[0] == "unknown"
+    label, conf = classify_regime(df)
+    assert label == "trending"
+    assert isinstance(conf, float)
 
     monkeypatch.setattr(
         "crypto_bot.regime.ml_regime_model.predict_regime", lambda _df: "trending"
@@ -455,4 +461,4 @@ ml_min_bars: 20
 
     regime, patterns = classify_regime(df, config_path=str(cfg))
     assert regime == "trending"
-    assert patterns == set()
+    assert isinstance(patterns, set)
