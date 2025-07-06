@@ -418,6 +418,8 @@ def test_breakout_pattern_sets_regime():
     assert regime == "sideways"
     assert patterns.get("breakout", 0) == 1.0
     assert regime == "breakout"
+    assert isinstance(patterns, dict)
+    assert patterns.get("breakout", 0) > 0
     assert "breakout" in patterns
     assert patterns["breakout"] > 0
     assert isinstance(patterns["breakout"], float)
@@ -526,6 +528,7 @@ ml_min_bars: 20
 
     regime, _ = classify_regime(df, config_path=str(cfg))
     assert regime == "trending"
+    assert patterns == {}
     assert isinstance(patterns, dict)
 
 
