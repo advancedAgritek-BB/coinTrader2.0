@@ -394,7 +394,10 @@ async def main() -> None:
                 df_map[tf] = cache_tf.get(sym)
             df_sym = df_map.get(config["timeframe"])
             if df_sym is None or df_sym.empty:
-                msg = f"OHLCV fetch failed for {sym}"
+                msg = (
+                    f"OHLCV fetch failed for {sym} on {config['timeframe']} "
+                    f"(limit {100})"
+                )
                 logger.error(msg)
                 if notifier:
                     notifier.notify(msg)
@@ -568,7 +571,14 @@ async def main() -> None:
                             limit=100,
                         )
             except Exception as exc:  # pragma: no cover - network
-                logger.error("OHLCV fetch failed for %s: %s", config["symbol"], exc)
+                logger.error(
+                    "OHLCV fetch failed for %s on %s (limit %d): %s",
+                    config["symbol"],
+                    config["timeframe"],
+                    100,
+                    exc,
+                    exc_info=True,
+                )
                 continue
 
             if data and len(data[0]) > 6:
