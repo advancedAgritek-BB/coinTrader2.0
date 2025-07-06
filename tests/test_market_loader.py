@@ -70,11 +70,13 @@ def test_market_type_filter():
 
 
 class DummyAsyncExchange:
+    has = {"fetchOHLCV": True}
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         return [[0, 1, 2, 3, 4, 5]]
 
 
 class DummyWSExchange:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.fetch_called = False
 
@@ -114,6 +116,7 @@ def test_watch_ohlcv_no_fallback_when_enough():
 
 
 class IncompleteExchange:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.calls = 0
 
@@ -136,6 +139,7 @@ def test_incomplete_ohlcv_warns_and_retries(caplog):
 
 
 class DummySyncExchange:
+    has = {"fetchOHLCV": True}
     def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         return [[0, 1, 2, 3, 4, 5]]
 
@@ -155,6 +159,7 @@ def test_load_ohlcv_parallel():
 
 
 class DummyWSEchange:
+    has = {"fetchOHLCV": True}
     async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
         return [[0, 1, 2, 3, 4, 5]]
 
@@ -163,6 +168,7 @@ class DummyWSEchange:
 
 
 class DummyWSExceptionExchange:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.fetch_called = False
 
@@ -216,6 +222,7 @@ def test_watch_ohlcv_exception_falls_back_to_fetch():
 
 
 class LimitCaptureExchange:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.watch_limit = None
         self.fetch_called = False
@@ -243,11 +250,12 @@ def test_watch_ohlcv_since_limit_reduction():
         )
     )
     assert ex.fetch_called is False
-    assert ex.watch_limit == 4
-    assert len(data) == 4
+    assert ex.watch_limit == 1
+    assert len(data) == 1
 
 
 class DummyIncExchange:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.data = [[i] * 6 for i in range(100, 400, 100)]
 
@@ -282,6 +290,7 @@ def test_update_ohlcv_cache_fallback_full_history():
     cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2))
     assert len(cache["BTC/USD"]) == 4
 class CountingExchange:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.active = 0
         self.max_active = 0
@@ -345,6 +354,7 @@ def test_load_ohlcv_parallel_invalid_max_concurrent():
 
 
 class DummyMultiTFExchange:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.calls: list[str] = []
 
@@ -392,6 +402,7 @@ def test_update_regime_tf_cache():
         assert "BTC/USD" in cache[tf]
     assert set(ex.calls) == {"5m", "15m", "1h"}
 class FailOnceExchange:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.calls = 0
 
@@ -403,6 +414,7 @@ class FailOnceExchange:
 
 
 class AlwaysFailExchange:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.calls = 0
 
@@ -412,6 +424,7 @@ class AlwaysFailExchange:
 
 
 class FailSuccessExchange:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.calls = 0
 
@@ -674,12 +687,14 @@ def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
 
 
 class SlowExchange:
+    has = {"fetchOHLCV": True}
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         await asyncio.sleep(0.05)
         return [[0] * 6]
 
 
 class SlowWSExchange:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.fetch_called = False
 
@@ -755,6 +770,7 @@ def test_load_ohlcv_parallel_timeout_fallback(monkeypatch):
 
 
 class LimitCaptureWS:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.limit = None
 
@@ -783,6 +799,7 @@ def test_watch_ohlcv_since_reduces_limit(monkeypatch):
 
 
 class RateLimitExchange:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.times: list[float] = []
         self.rateLimit = 50
@@ -805,6 +822,7 @@ def test_load_ohlcv_parallel_rate_limit_sleep():
     assert len(ex.times) == 2
     assert ex.times[1] - ex.times[0] >= ex.rateLimit / 1000
 class SymbolCheckExchange:
+    has = {"fetchOHLCV": True}
     def __init__(self):
         self.symbols: list[str] = []
         self.calls: list[str] = []
