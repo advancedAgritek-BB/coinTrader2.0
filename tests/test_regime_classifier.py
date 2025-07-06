@@ -26,6 +26,7 @@ def test_classify_regime_returns_unknown_for_short_df():
     regime, conf = classify_regime(df)
     assert regime == "unknown"
     assert isinstance(conf, set)
+    assert isinstance(conf, (float, set))
 
 
 def test_classify_regime_returns_unknown_for_14_rows():
@@ -40,6 +41,8 @@ def test_classify_regime_returns_unknown_for_14_rows():
     label, conf = classify_regime(df)
     assert label == "unknown"
     assert isinstance(conf, set)
+    label, _ = classify_regime(df)
+    assert isinstance(label, str)
 
 
 def test_classify_regime_returns_unknown_between_15_and_19_rows():
@@ -73,6 +76,7 @@ def test_classify_regime_handles_index_error(monkeypatch):
     label, conf = classify_regime(df)
     assert label == "trending"
     assert isinstance(conf, float)
+    assert isinstance(classify_regime(df)[0], str)
 
 
 def test_classify_regime_uses_custom_thresholds(tmp_path):
@@ -104,6 +108,7 @@ rsi_mean_rev_min: 30
 rsi_mean_rev_max: 70
 ema_distance_mean_rev_max: 0.01
 atr_volatility_mult: 1.5
+normalized_range_volatility_min: 1.5
 ema_fast: 20
 ema_slow: 50
 indicator_window: 14
@@ -150,6 +155,18 @@ def _make_breakout_df(rows: int = 30) -> pd.DataFrame:
     return df
 
 
+def _make_ascending_triangle_df(rows: int = 30) -> pd.DataFrame:
+    df = _make_trending_df(rows)
+    start = rows - 5
+    high = df["high"].iloc[start]
+    base_low = df["low"].iloc[start]
+    for i in range(start, rows):
+        df.loc[df.index[i], "high"] = high
+        df.loc[df.index[i], "low"] = base_low + (i - start) * 0.02
+        df.loc[df.index[i], "close"] = (df.loc[df.index[i], "high"] + df.loc[df.index[i], "low"]) / 2
+    return df
+
+
 def test_trend_confirmed_by_higher_timeframe(tmp_path):
     df_low = _make_trending_df()
     df_high = _make_trending_df()
@@ -166,6 +183,7 @@ rsi_mean_rev_min: 30
 rsi_mean_rev_max: 70
 ema_distance_mean_rev_max: 0.01
 atr_volatility_mult: 1.5
+normalized_range_volatility_min: 1.5
 ema_fast: 20
 ema_slow: 50
 indicator_window: 14
@@ -204,6 +222,7 @@ rsi_mean_rev_min: 30
 rsi_mean_rev_max: 70
 ema_distance_mean_rev_max: 0.01
 atr_volatility_mult: 1.5
+normalized_range_volatility_min: 1.5
 ema_fast: 20
 ema_slow: 50
 indicator_window: 14
@@ -229,6 +248,21 @@ def test_classify_regime_async_matches_sync():
     assert async_res == sync_res
 
 
+def test_classify_regime_multi_timeframe_dict():
+    df = _make_trending_df()
+    res = classify_regime(df_map={"1h": df, "15m": df, "1d": df})
+    assert isinstance(res, dict)
+    assert set(res.values()) == {"trending"}
+
+
+def test_classify_regime_two_timeframe_tuple():
+    df = _make_trending_df()
+    high = _make_trending_df()
+    res = classify_regime(df_map={"1h": df, "4h": high})
+    assert isinstance(res, tuple)
+    assert res == ("trending", "trending")
+
+
 def test_analyze_symbol_async_consistent():
     df = _make_trending_df()
     regime, _ = classify_regime(df)
@@ -242,7 +276,7 @@ def test_analyze_symbol_async_consistent():
 
     res = asyncio.run(run())
     assert res["regime"] == regime
-    assert isinstance(res.get("patterns"), set)
+    assert isinstance(res.get("patterns"), dict)
     assert res["confidence"] == 1.0
     assert res["score"] == sync_score
     assert res["direction"] == sync_dir
@@ -380,6 +414,27 @@ def test_breakout_pattern_sets_regime():
     regime, patterns = classify_regime(df)
     assert regime == "breakout"
     assert "breakout" in patterns
+    assert isinstance(patterns["breakout"], float)
+
+
+def test_ascending_triangle_promotes_breakout():
+    df = _make_ascending_triangle_df()
+    regime, patterns = classify_regime(df)
+    assert "ascending_triangle" in patterns
+    assert regime == "breakout"
+
+
+def test_volume_spike_triggers_breakout():
+    df = _make_sideways_df()
+    df.loc[df.index[-1], "volume"] = df.loc[df.index[-2], "volume"] * 2
+    assert classify_regime(df)[0] == "breakout"
+
+
+def test_high_volume_zscore_breakout():
+    df = _make_sideways_df()
+    df["volume"] = 100
+    df.loc[df.index[-1], "volume"] = 200
+    assert classify_regime(df)[0] == "breakout"
 
 
 def test_ml_fallback_does_not_trigger_on_short_data(monkeypatch, tmp_path):
@@ -405,6 +460,7 @@ rsi_mean_rev_min: 30
 rsi_mean_rev_max: 70
 ema_distance_mean_rev_max: 0.01
 atr_volatility_mult: 1.5
+normalized_range_volatility_min: 1.5
 ema_fast: 20
 ema_slow: 50
 indicator_window: 14
@@ -430,6 +486,7 @@ def test_ml_fallback_used_when_unknown(monkeypatch, tmp_path):
     label, conf = classify_regime(df)
     assert label == "trending"
     assert isinstance(conf, float)
+    assert isinstance(classify_regime(df)[0], str)
 
     monkeypatch.setattr(
         "crypto_bot.regime.ml_regime_model.predict_regime", lambda _df: "trending"
@@ -447,6 +504,7 @@ rsi_mean_rev_min: 30
 rsi_mean_rev_max: 70
 ema_distance_mean_rev_max: 0.01
 atr_volatility_mult: 1.5
+normalized_range_volatility_min: 1.5
 ema_fast: 20
 ema_slow: 50
 indicator_window: 14
@@ -459,6 +517,110 @@ ml_min_bars: 20
 """
     )
 
-    regime, patterns = classify_regime(df, config_path=str(cfg))
+    regime, _ = classify_regime(df, config_path=str(cfg))
     assert regime == "trending"
+
+
+def test_fallback_scores_when_indicator_unknown(monkeypatch, tmp_path):
+    df = _make_trending_df(30)
+    monkeypatch.setattr(
+        "crypto_bot.regime.regime_classifier._classify_core", lambda *_a, **_k: "unknown"
+    )
+    monkeypatch.setattr(
+        "crypto_bot.regime.ml_regime_model.predict_regime", lambda _df: "unknown"
+    )
+
+    cfg = tmp_path / "regime.yaml"
+    cfg.write_text(
+        """\
+adx_trending_min: 25
+adx_sideways_max: 20
+bb_width_sideways_max: 5
+bb_width_breakout_max: 4
+breakout_volume_mult: 2
+rsi_mean_rev_min: 30
+rsi_mean_rev_max: 70
+ema_distance_mean_rev_max: 0.01
+atr_volatility_mult: 1.5
+    assert patterns == {}
+    assert patterns == set()
+
+
+def _make_volatility_df(base_range: float, last_range: float, rows: int = 50) -> pd.DataFrame:
+    close = np.ones(rows)
+    high = close + base_range / 2
+    low = close - base_range / 2
+    volume = [100] * rows
+    df = pd.DataFrame({
+        "open": close,
+        "high": high,
+        "low": low,
+        "close": close,
+        "volume": volume,
+    })
+    df.loc[df.index[-1], "high"] = 1 + last_range / 2
+    df.loc[df.index[-1], "low"] = 1 - last_range / 2
+    return df
+
+
+def test_normalized_range_volatile_detection(tmp_path):
+    df = _make_volatility_df(0.1, 0.2)
+    cfg = tmp_path / "regime.yaml"
+    cfg.write_text(
+        """\
+adx_trending_min: 100
+adx_sideways_max: 0
+bb_width_sideways_max: 0
+bb_width_breakout_max: 0
+breakout_volume_mult: 100
+rsi_mean_rev_min: 0
+rsi_mean_rev_max: 0
+ema_distance_mean_rev_max: 0
+atr_volatility_mult: 1.5
+normalized_range_volatility_min: 1.5
+ema_fast: 20
+ema_slow: 50
+indicator_window: 14
+bb_window: 20
+ma_window: 20
+higher_timeframe: '4h'
+confirm_trend_with_higher_tf: false
+use_ml_regime_classifier: true
+ml_min_bars: 20
+"""
+    )
+
+    label, confidence = classify_regime(df, config_path=str(cfg))
+    assert label in {"trending", "mean-reverting", "sideways"}
+    assert 0.0 <= confidence <= 1.0
+"""
+    )
+    regime, _ = classify_regime(df, config_path=str(cfg))
+    assert regime == "volatile"
+
+
+def test_normalized_range_not_volatile_when_atr_high(tmp_path):
+    df = _make_volatility_df(5, 6)
+    cfg = tmp_path / "regime.yaml"
+    cfg.write_text(
+        """\
+adx_trending_min: 100
+adx_sideways_max: 0
+bb_width_sideways_max: 0
+bb_width_breakout_max: 0
+breakout_volume_mult: 100
+rsi_mean_rev_min: 0
+rsi_mean_rev_max: 0
+ema_distance_mean_rev_max: 0
+atr_volatility_mult: 1.5
+normalized_range_volatility_min: 1.5
+ema_fast: 20
+ema_slow: 50
+indicator_window: 14
+bb_window: 20
+ma_window: 20
+"""
+    )
+    regime, _ = classify_regime(df, config_path=str(cfg))
+    assert regime != "volatile"
     assert isinstance(patterns, set)
