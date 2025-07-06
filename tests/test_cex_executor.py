@@ -330,21 +330,19 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
 
 def test_execute_trade_no_message_when_disabled(monkeypatch):
     calls = {"count": 0}
+    monkeypatch.setattr(
+        "crypto_bot.utils.telegram.send_message",
+        lambda *a, **k: calls.__setitem__("count", calls["count"] + 1),
+    )
 
-    import crypto_bot.utils.telegram_notifier as notifier
+    class DummyExchange:
+        def create_market_order(self, symbol, side, amount):
+            return {}
 
-    monkeypatch.setattr(notifier, "send_message", lambda *a, **k: calls.__setitem__("count", calls["count"] + 1))
-    notifier.TelegramNotifier.configure(False)
-    try:
-        class DummyExchange:
-            def create_market_order(self, symbol, side, amount):
-                return {}
-
-        monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
-        cex_executor.execute_trade(
-            DummyExchange(), None, "BTC/USDT", "buy", 1.0, "t", "c", dry_run=True
-        )
-    finally:
-        notifier.TelegramNotifier.configure(True)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+    cex_executor.execute_trade(
+        DummyExchange(), None, "BTC/USDT", "buy", 1.0,
+        notifier=TelegramNotifier(False, "t", "c"), dry_run=True
+    )
 
     assert calls["count"] == 0

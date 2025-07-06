@@ -137,10 +137,10 @@ def test_execute_swap_skips_on_slippage(monkeypatch):
 def test_swap_no_message_when_disabled(monkeypatch):
     calls = {"count": 0}
 
-    import crypto_bot.utils.telegram_notifier as notifier
-
-    monkeypatch.setattr(notifier, "send_message", lambda *a, **k: calls.__setitem__("count", calls["count"] + 1))
-    notifier.TelegramNotifier.configure(False)
+    monkeypatch.setattr(
+        "crypto_bot.utils.telegram.send_message",
+        lambda *a, **k: calls.__setitem__("count", calls["count"] + 1),
+    )
     monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: DummySession())
     monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")
 
@@ -177,20 +177,16 @@ def test_swap_no_message_when_disabled(monkeypatch):
     monkeypatch.setattr(sys.modules["solana.transaction"], "Transaction", Tx, raising=False)
     monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
 
-    try:
-        asyncio.run(
-            solana_executor.execute_swap(
-                "SOL",
-                "USDC",
-                100,
-                "t",
-                "c",
-                dry_run=False,
-                config={"max_slippage_pct": 0.05},
-            )
+    asyncio.run(
+        solana_executor.execute_swap(
+            "SOL",
+            "USDC",
+            100,
+            notifier=TelegramNotifier(False, "t", "c"),
+            dry_run=False,
+            config={"max_slippage_pct": 0.05},
         )
-    finally:
-        notifier.TelegramNotifier.configure(True)
+    )
 
     assert calls["count"] == 0
 
