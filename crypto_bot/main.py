@@ -183,6 +183,18 @@ async def _main_impl() -> TelegramNotifier:
         else:
             logger.error("No symbols discovered during scan; using existing configuration")
 
+    balance_threshold = config.get("balance_change_threshold", 0.01)
+    previous_balance = 0.0
+
+    def check_balance_change(new_balance: float, reason: str) -> None:
+        nonlocal previous_balance
+        delta = new_balance - previous_balance
+        if abs(delta) > balance_threshold and notifier:
+            notifier.notify(
+                f"Balance changed by {delta:.4f} USDT due to {reason}"
+            )
+        previous_balance = new_balance
+
     try:
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
             bal = await exchange.fetch_balance()
@@ -194,6 +206,7 @@ async def _main_impl() -> TelegramNotifier:
             else bal.get("USDT", 0)
         )
         log_balance(float(init_bal))
+        previous_balance = float(init_bal)
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)
         err = notifier.notify(f"API error: {exc}")
@@ -327,6 +340,16 @@ async def _main_impl() -> TelegramNotifier:
                 slippage_bps=config.get("solana_slippage_bps", 50),
                 notifier=notifier,
             )
+            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                bal = await exchange.fetch_balance()
+            else:
+                bal = await asyncio.to_thread(exchange.fetch_balance)
+            bal_val = (
+                bal.get("USDT", {}).get("free", 0)
+                if isinstance(bal.get("USDT"), dict)
+                else bal.get("USDT", 0)
+            )
+            check_balance_change(float(bal_val), "funds converted")
 
         if rotator.config.get("enabled"):
             if (
@@ -337,6 +360,12 @@ async def _main_impl() -> TelegramNotifier:
                     bal = await exchange.fetch_balance()
                 else:
                     bal = await asyncio.to_thread(exchange.fetch_balance)
+                current_balance = (
+                    bal.get("USDT", {}).get("free", 0)
+                    if isinstance(bal.get("USDT"), dict)
+                    else bal.get("USDT", 0)
+                )
+                check_balance_change(float(current_balance), "external change")
                 holdings = {
                     k: (v.get("total") if isinstance(v, dict) else v)
                     for k, v in bal.items()
@@ -733,6 +762,7 @@ async def _main_impl() -> TelegramNotifier:
                         latest_balance = bal["USDT"]["free"]
                     else:
                         latest_balance = paper_wallet.balance if paper_wallet else 0.0
+                    check_balance_change(float(latest_balance), "trade executed")
                     log_balance(float(latest_balance))
                     log_position(
                         config.get("symbol", ""),
@@ -815,10 +845,15 @@ async def _main_impl() -> TelegramNotifier:
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
 
             if config["execution_mode"] != "dry_run":
-                bal = await (exchange.fetch_balance() if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)) else asyncio.to_thread(exchange.fetch_balance))
+                bal = await (
+                    exchange.fetch_balance()
+                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None))
+                    else asyncio.to_thread(exchange.fetch_balance)
+                )
                 balance = bal["USDT"]["free"]
             else:
                 balance = paper_wallet.balance if paper_wallet else 0.0
+            check_balance_change(float(balance), "external change")
 
             size = risk_manager.position_size(score, balance, df_for_size)
             order_amount = size / current_price if current_price > 0 else 0.0
@@ -899,6 +934,7 @@ async def _main_impl() -> TelegramNotifier:
                 else:
                     bal = await asyncio.to_thread(exchange.fetch_balance)
                 latest_balance = bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
+            check_balance_change(float(latest_balance), "trade executed")
             log_balance(float(latest_balance))
             log_position(
                 candidate["symbol"],
