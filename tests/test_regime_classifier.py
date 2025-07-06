@@ -322,6 +322,26 @@ def test_analyze_symbol_best_mode(monkeypatch):
     assert res["score"] == 0.7
 
 
+def test_analyze_symbol_accepts_dict_patterns(monkeypatch):
+    df = _make_trending_df()
+
+    async def fake_async(*_a, **_k):
+        return "trending", {"foo": 1.0}
+
+    import crypto_bot.utils.market_analyzer as ma
+    monkeypatch.setattr(ma, "classify_regime_async", fake_async)
+    monkeypatch.setattr(ma, "classify_regime_cached", lambda *a, **k: ("trending", {"foo": 1.0}))
+
+    async def run():
+        cfg = {"timeframe": "1h"}
+        df_map = {"1h": df}
+        return await analyze_symbol("AAA", df_map, "cex", cfg, None)
+
+    res = asyncio.run(run())
+    assert res["patterns"] == {"foo": 1.0}
+    assert isinstance(res["patterns"], dict)
+
+
 def test_voting_direction_override(monkeypatch):
     df = _make_trending_df()
 
@@ -548,6 +568,19 @@ def test_fallback_scores_when_indicator_unknown(monkeypatch, tmp_path):
     )
 
     cfg = tmp_path / "regime.yaml"
+#    cfg.write_text(
+#        """\
+#adx_trending_min: 25
+#adx_sideways_max: 20
+#bb_width_sideways_max: 5
+#bb_width_breakout_max: 4
+#breakout_volume_mult: 2
+#rsi_mean_rev_min: 30
+#rsi_mean_rev_max: 70
+#ema_distance_mean_rev_max: 0.01
+#atr_volatility_mult: 1.5
+#    assert patterns == {}
+#    assert patterns == set()
     cfg.write_text(
         """\
 adx_trending_min: 25
@@ -559,8 +592,14 @@ rsi_mean_rev_min: 30
 rsi_mean_rev_max: 70
 ema_distance_mean_rev_max: 0.01
 atr_volatility_mult: 1.5
+"""
+    )
+    regime, patterns = classify_regime_with_patterns(df, config_path=str(cfg))
+    regime, _ = classify_regime(df, config_path=str(cfg))
+    assert regime == "trending"
     assert patterns == {}
-    assert patterns == set()
+    assert isinstance(patterns, dict)
+
 
 
 def _make_volatility_df(base_range: float, last_range: float, rows: int = 50) -> pd.DataFrame:
@@ -610,8 +649,6 @@ ml_min_bars: 20
     label, confidence = classify_regime(df, config_path=str(cfg))
     assert label in {"trending", "mean-reverting", "sideways"}
     assert 0.0 <= confidence <= 1.0
-"""
-    )
     regime, _ = classify_regime(df, config_path=str(cfg))
     assert regime == "volatile"
 
