@@ -434,7 +434,8 @@ python -m frontend.app
 
 Navigate to `http://localhost:5000` to start or stop the bot, watch the logs
 refresh live and review the trade statistics stored in
-`crypto_bot/logs/strategy_stats.json` and the detailed performance records in
+`crypto_bot/logs/strategy_stats.json` (automatically produced from
+`strategy_performance.json`) and the detailed performance records in
 `crypto_bot/logs/strategy_performance.json`. When the bot is stopped a form
 lets you select the execution mode (dry run or live) before launching.
 
@@ -448,7 +449,8 @@ include:
 - `trades.csv` – CSV export of every executed trade used by the dashboard and
   backtester. Stop orders are logged here as well with an `is_stop` flag so they
   can be filtered out from performance calculations.
-- `strategy_stats.json` – summary statistics of win rate, PnL and other metrics.
+- `strategy_stats.json` – summary statistics of win rate, PnL and other metrics
+  generated automatically from `strategy_performance.json`.
 - `strategy_performance.json` – list of individual trades grouped by regime and
   strategy with fields like `pnl` and timestamps.
 - `metrics.csv` – per cycle summary showing how many pairs were scanned,
@@ -475,7 +477,8 @@ strategy. Example snippet:
 ```
 
 `strategy_stats.json` contains aggregated statistics per strategy such as win
-rate and average PnL:
+rate and average PnL. It is produced automatically from
+`strategy_performance.json`:
 
 ```json
 {
@@ -528,6 +531,7 @@ results = backtest_runner.backtest(
 )
 print(results.head())  # best combo appears first
 ```
+The resulting statistics are written automatically to
 `crypto_bot/logs/strategy_stats.json`. The home page indicates whether the bot
 is running so you can quickly see if it has stopped.
 

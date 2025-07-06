@@ -61,7 +61,7 @@ from crypto_bot.utils.eval_queue import build_priority_queue
 from crypto_bot.utils.symbol_pre_filter import filter_symbols
 from crypto_bot.utils.symbol_utils import get_filtered_symbols
 from crypto_bot.utils.pnl_logger import log_pnl
-from crypto_bot.utils.strategy_analytics import write_scores
+from crypto_bot.utils.strategy_analytics import write_scores, write_stats
 from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
 from crypto_bot.utils.trend_confirmation import confirm_multi_tf_trend
 from crypto_bot.utils.correlation import compute_correlation_matrix
@@ -221,7 +221,6 @@ async def main() -> None:
     stats_file = Path("crypto_bot/logs/strategy_stats.json")
     # File tracking individual trade performance used for analytics
     perf_file = Path("crypto_bot/logs/strategy_performance.json")
-    stats = json.loads(stats_file.read_text()) if stats_file.exists() else {}
     scores_file = Path("crypto_bot/logs/strategy_scores.json")
 
     rotator = PortfolioRotator()
@@ -861,12 +860,8 @@ async def main() -> None:
             trades_executed += 1
             break
 
-        key = f"{env}_{regime}"
-        stats.setdefault(key, {"trades": 0})
-        stats[key]["trades"] += 1
-        stats_file.write_text(json.dumps(stats))
         write_scores(scores_file, perf_file)
-        logger.info("Updated trade stats %s", stats[key])
+        write_stats(stats_file, perf_file)
 
         logger.info(
             "Loop Summary: %s evaluated | %s trades | %s volume fails | %s score fails | %s unknown regime",
