@@ -610,17 +610,24 @@ class KrakenWSClient:
             msg["req_id"] = req_id
         data = json.dumps(msg)
 
-        sub_msg = {
-            "method": "subscribe",
-            "params": {"channel": "ticker", "symbol": symbol},
-        }
-        if event_trigger is not None:
-            sub_msg["params"]["eventTrigger"] = event_trigger
-        if req_id is not None:
-            sub_msg["req_id"] = req_id
-        sub_data = json.dumps(sub_msg)
-        if sub_data in self._public_subs:
-            self._public_subs.remove(sub_data)
+        def _matches(sub: str) -> bool:
+            try:
+                parsed = json.loads(sub)
+            except Exception:
+                return False
+            params = parsed.get("params", {}) if isinstance(parsed, dict) else {}
+            return (
+                parsed.get("method") == "subscribe"
+                and params.get("channel") == "ticker"
+                and sorted(params.get("symbol", [])) == sorted(symbol)
+                and (
+                    event_trigger is None
+                    or params.get("event_trigger") == event_trigger
+                )
+                and (req_id is None or params.get("req_id") == req_id)
+            )
+
+        self._public_subs = [s for s in self._public_subs if not _matches(s)]
         self.public_ws.send(data)
 
     def subscribe_trades(
@@ -650,13 +657,19 @@ class KrakenWSClient:
         }
         data = json.dumps(msg)
 
-        sub_msg = {
-            "method": "subscribe",
-            "params": {"channel": "trade", "symbol": symbol},
-        }
-        sub_data = json.dumps(sub_msg)
-        if sub_data in self._public_subs:
-            self._public_subs.remove(sub_data)
+        def _matches(sub: str) -> bool:
+            try:
+                parsed = json.loads(sub)
+            except Exception:
+                return False
+            params = parsed.get("params", {}) if isinstance(parsed, dict) else {}
+            return (
+                parsed.get("method") == "subscribe"
+                and params.get("channel") == "trade"
+                and sorted(params.get("symbol", [])) == sorted(symbol)
+            )
+
+        self._public_subs = [s for s in self._public_subs if not _matches(s)]
         self.public_ws.send(data)
 
     def subscribe_ohlc(

@@ -162,6 +162,33 @@ def test_subscribe_ticker_with_options(monkeypatch):
     assert ws.sent == [expected]
     assert client._public_subs[-1] == expected
 
+
+def test_unsubscribe_ticker_snapshot_option(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_ticker("ETH/USD", snapshot=False)
+    expected_sub = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {"channel": "ticker", "symbol": ["ETH/USD"], "snapshot": False},
+        }
+    )
+    assert ws.sent == [expected_sub]
+    assert client._public_subs[-1] == expected_sub
+
+    ws.sent.clear()
+    client.unsubscribe_ticker("ETH/USD")
+    expected_unsub = json.dumps(
+        {
+            "method": "unsubscribe",
+            "params": {"channel": "ticker", "symbol": ["ETH/USD"]},
+        }
+    )
+    assert ws.sent == [expected_unsub]
+    assert client._public_subs == []
+
 import crypto_bot.execution.kraken_ws as kraken_ws
 from crypto_bot.execution.kraken_ws import KrakenWSClient
 
@@ -525,11 +552,31 @@ def test_subscribe_instruments(monkeypatch):
     assert client._public_subs[0] == expected
 
 
+def test_unsubscribe_trades_snapshot_option(monkeypatch):
 def test_subscribe_and_unsubscribe_instruments(monkeypatch):
     client = KrakenWSClient()
     ws = DummyWS()
     monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
 
+    client.subscribe_trades("LTC/USD", snapshot=False)
+    expected_sub = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {"channel": "trade", "symbol": ["LTC/USD"], "snapshot": False},
+        }
+    )
+    assert ws.sent == [expected_sub]
+    assert client._public_subs[-1] == expected_sub
+
+    ws.sent.clear()
+    client.unsubscribe_trades("LTC/USD")
+    expected_unsub = json.dumps(
+        {
+            "method": "unsubscribe",
+            "params": {"channel": "trade", "symbol": ["LTC/USD"]},
+        }
+    )
+    assert ws.sent == [expected_unsub]
     client.subscribe_instruments(snapshot=False)
     sub_msg = json.dumps(
         {"method": "subscribe", "params": {"channel": "instrument", "snapshot": False}}
@@ -596,6 +643,7 @@ def test_subscribe_book_and_unsubscribe(monkeypatch):
     assert ws.sent == [expected_unsub]
 
 
+def test_subscribe_trades_snapshot_option(monkeypatch):
 def test_subscribe_and_unsubscribe_trades(monkeypatch):
     client = KrakenWSClient()
     ws = DummyWS()
