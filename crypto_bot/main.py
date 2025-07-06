@@ -614,13 +614,23 @@ async def main() -> None:
             pnl_pct = ((current_price - entry_price) / entry_price) * (
                 1 if open_side == "buy" else -1
             )
+            unreal = paper_wallet.unrealized(current_price) if paper_wallet else 0.0
+            equity = (paper_wallet.balance + unreal) if paper_wallet else latest_balance
             if paper_wallet:
-                unreal = paper_wallet.unrealized(current_price)
                 logger.info(
                     "Paper balance %.2f USDT (Unrealized %.2f)",
-                    paper_wallet.balance + unreal,
+                    equity,
                     unreal,
                 )
+            log_balance(float(equity))
+            log_position(
+                config.get("symbol", ""),
+                open_side,
+                position_size,
+                entry_price,
+                current_price,
+                float(equity),
+            )
             if pnl_pct >= config["exit_strategy"]["min_gain_to_trail"]:
                 if current_price > highest_price:
                     highest_price = current_price
