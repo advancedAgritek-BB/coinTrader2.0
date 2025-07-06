@@ -312,3 +312,75 @@ def test_parse_instrument_message_returns_payload():
         "assets": [{"id": "XBT", "status": "enabled"}],
         "pairs": [{"symbol": "BTC/USD", "status": "online"}],
     }
+
+
+def test_subscribe_book_and_unsubscribe(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_book("ETH/USD", depth=25, snapshot=False)
+    expected_sub = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {
+                "channel": "book",
+                "symbol": ["ETH/USD"],
+                "depth": 25,
+                "snapshot": False,
+            },
+        }
+    )
+    assert ws.sent == [expected_sub]
+    assert client._public_subs[0] == expected_sub
+
+    ws.sent.clear()
+    client.unsubscribe_book("ETH/USD")
+    expected_unsub = json.dumps(
+        {
+            "method": "unsubscribe",
+            "params": {"channel": "book", "symbol": ["ETH/USD"]},
+        }
+    )
+    assert ws.sent == [expected_unsub]
+
+
+def test_parse_book_message_snapshot_and_update():
+    snap_msg = json.dumps(
+        {
+            "channel": "book",
+            "type": "snapshot",
+            "symbol": "BTC/USD",
+            "data": {
+                "bids": [["30000.1", "1.0"], ["29999.9", "2.0"]],
+                "asks": [["30000.2", "1.5"], ["30001.0", "3.0"]],
+            },
+        }
+    )
+
+    upd_msg = json.dumps(
+        {
+            "channel": "book",
+            "type": "update",
+            "symbol": "BTC/USD",
+            "data": {
+                "bids": [["30000.1", "0.5"]],
+                "asks": [["30000.2", "1.0"]],
+            },
+        }
+    )
+
+    snap = kraken_ws.parse_book_message(snap_msg)
+    upd = kraken_ws.parse_book_message(upd_msg)
+
+    assert snap == {
+        "type": "snapshot",
+        "bids": [[30000.1, 1.0], [29999.9, 2.0]],
+        "asks": [[30000.2, 1.5], [30001.0, 3.0]],
+    }
+
+    assert upd == {
+        "type": "update",
+        "bids": [[30000.1, 0.5]],
+        "asks": [[30000.2, 1.0]],
+    }
