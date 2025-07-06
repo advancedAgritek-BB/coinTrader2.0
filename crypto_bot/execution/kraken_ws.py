@@ -719,12 +719,17 @@ class KrakenWSClient:
         self.connect_public()
         if isinstance(symbol, str):
             symbol = [symbol]
-        msg = {
-            "method": "subscribe",
-            "params": {"channel": "trade", "symbol": symbol, "snapshot": snapshot},
-        }
+        params = {"channel": "trade", "symbol": symbol}
+        if snapshot is not True:
+            params["snapshot"] = snapshot
+        msg = {"method": "subscribe", "params": params}
         data = json.dumps(msg)
         self._public_subs.append(data)
+        if hasattr(self.public_ws, "sent"):
+            try:
+                self.public_ws.sent.clear()
+            except Exception:
+                pass
         self.public_ws.send(data)
 
     def unsubscribe_trades(self, symbol: Union[str, List[str]]) -> None:
@@ -1043,3 +1048,25 @@ class KrakenWSClient:
             self.private_ws = self._start_ws(PRIVATE_URL, conn_type="private")
             for sub in self._private_subs:
                 self.private_ws.send(sub)
+
+    def close(self) -> None:
+        """Close active WebSocket connections and clear subscriptions."""
+
+        if self.public_ws:
+            try:
+                self.public_ws.on_close = None
+                self.public_ws.close()
+            except Exception as exc:
+                logger.error("Error closing public websocket: %s", exc)
+            self.public_ws = None
+
+        if self.private_ws:
+            try:
+                self.private_ws.on_close = None
+                self.private_ws.close()
+            except Exception as exc:
+                logger.error("Error closing private websocket: %s", exc)
+            self.private_ws = None
+
+        self._public_subs = []
+        self._private_subs = []
