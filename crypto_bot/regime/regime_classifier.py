@@ -24,7 +24,7 @@ logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
 
 def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
-    """Return regime label and confidence using the bundled ML model."""
+    """Return regime label and confidence using the bundled gradient boosting model."""
     try:
         from .ml_fallback import predict_regime
 

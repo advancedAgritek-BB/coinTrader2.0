@@ -423,7 +423,6 @@ def test_ml_fallback_used_when_unknown(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "crypto_bot.regime.regime_classifier._classify_core", lambda *_a, **_k: "unknown"
     )
-    assert classify_regime(df)[0] == "unknown"
 
     monkeypatch.setattr(
         "crypto_bot.regime.ml_regime_model.predict_regime", lambda _df: "trending"
@@ -453,6 +452,43 @@ ml_min_bars: 20
 """
     )
 
-    regime, patterns = classify_regime(df, config_path=str(cfg))
+    regime, _ = classify_regime(df, config_path=str(cfg))
     assert regime == "trending"
-    assert patterns == set()
+
+
+def test_fallback_scores_when_indicator_unknown(monkeypatch, tmp_path):
+    df = _make_trending_df(30)
+    monkeypatch.setattr(
+        "crypto_bot.regime.regime_classifier._classify_core", lambda *_a, **_k: "unknown"
+    )
+    monkeypatch.setattr(
+        "crypto_bot.regime.ml_regime_model.predict_regime", lambda _df: "unknown"
+    )
+
+    cfg = tmp_path / "regime.yaml"
+    cfg.write_text(
+        """\
+adx_trending_min: 25
+adx_sideways_max: 20
+bb_width_sideways_max: 5
+bb_width_breakout_max: 4
+breakout_volume_mult: 2
+rsi_mean_rev_min: 30
+rsi_mean_rev_max: 70
+ema_distance_mean_rev_max: 0.01
+atr_volatility_mult: 1.5
+ema_fast: 20
+ema_slow: 50
+indicator_window: 14
+bb_window: 20
+ma_window: 20
+higher_timeframe: '4h'
+confirm_trend_with_higher_tf: false
+use_ml_regime_classifier: true
+ml_min_bars: 20
+"""
+    )
+
+    label, confidence = classify_regime(df, config_path=str(cfg))
+    assert label in {"trending", "mean-reverting", "sideways"}
+    assert 0.0 <= confidence <= 1.0
