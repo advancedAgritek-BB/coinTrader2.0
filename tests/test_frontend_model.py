@@ -44,7 +44,13 @@ def test_validate_route(monkeypatch, tmp_path):
     report = tmp_path / "report.json"
     monkeypatch.setattr(app, "MODEL_REPORT", report)
     client = app.app.test_client()
-    resp = client.post("/validate_model", data={}, follow_redirects=True)
+    data = {"csv": (BytesIO(b"a,b\n1,2"), "data.csv")}
+    resp = client.post(
+        "/validate_model",
+        data=data,
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
     assert resp.status_code == 200
     assert json.loads(report.read_text()) == metrics
 
