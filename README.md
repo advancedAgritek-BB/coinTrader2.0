@@ -350,10 +350,13 @@ from crypto_bot.execution.kraken_ws import KrakenWSClient
 
 ws = KrakenWSClient()
 ws.subscribe_orders(["BTC/USD"])  # open_orders channel
+ws.subscribe_book("BTC/USD", depth=10, snapshot=True)
 ws.add_order(["BTC/USD"], "buy", 0.01)
 ws.cancel_order("OABCDEF", ["BTC/USD"])
 ws.subscribe_instruments()  # stream asset and pair details
 ```
+
+`subscribe_book` streams the order book for the given pair. `depth` sets how many levels are sent, while `snapshot` requests an initial book snapshot before updates.
 
 The Kraken WebSocket client automatically reconnects if the connection drops and
 resubscribes to any previously requested channels.  Trading commands use the new
