@@ -2,6 +2,10 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
+from .logger import setup_logger
+
+logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+
 STATS_FILE = Path("crypto_bot/logs/strategy_stats.json")
 
 
@@ -9,8 +13,12 @@ def _load_stats() -> Dict[str, Any]:
     if STATS_FILE.exists():
         try:
             return json.loads(STATS_FILE.read_text())
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Failed to parse strategy stats file %s: %s", STATS_FILE, exc
+            )
             return {}
+    logger.warning("Strategy stats file %s not found", STATS_FILE)
     return {}
 
 
