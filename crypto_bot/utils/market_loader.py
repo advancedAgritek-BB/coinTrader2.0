@@ -16,6 +16,20 @@ retry_delay = 300
 OHLCV_TIMEOUT = 30
 
 
+def configure(ohlcv_timeout: int | float | None = None) -> None:
+    """Configure module-wide settings."""
+    global OHLCV_TIMEOUT
+    if ohlcv_timeout is not None:
+        try:
+            OHLCV_TIMEOUT = max(1, int(ohlcv_timeout))
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid ohlcv_timeout %s; using default %s",
+                ohlcv_timeout,
+                OHLCV_TIMEOUT,
+            )
+
+
 def is_symbol_type(pair_info: dict, allowed: List[str]) -> bool:
     """Return ``True`` if ``pair_info`` matches one of the ``allowed`` types.
 
@@ -141,9 +155,7 @@ async def fetch_ohlcv_async(
             kwargs = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
             if since is not None and "since" in params:
                 kwargs["since"] = since
-            data = await asyncio.wait_for(
-                exchange.watch_ohlcv(**kwargs), OHLCV_TIMEOUT
-            )
+            data = await asyncio.wait_for(exchange.watch_ohlcv(**kwargs), OHLCV_TIMEOUT)
             if (
                 limit
                 and len(data) < limit
