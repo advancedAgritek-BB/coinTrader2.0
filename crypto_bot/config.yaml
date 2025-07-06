@@ -1,164 +1,164 @@
-atr_normalization: true  # scale ATR features
-cycle_bias:  # on-chain cycle metrics
-  enabled: true  # toggle cycle bias use
-  mvrv_url: https://api.example.com/mvrv  # MVRV API endpoint
-  nupl_url: https://api.example.com/nupl  # NUPL API endpoint
-  sopr_url: https://api.example.com/sopr  # SOPR API endpoint
-exchange: kraken  # default exchange
+atr_normalization: true
+cycle_bias:
+  enabled: true
+  mvrv_url: https://api.example.com/mvrv
+  nupl_url: https://api.example.com/nupl
+  sopr_url: https://api.example.com/sopr
+exchange: kraken
 exchange_market_types:
-- spot  # allowed market types
-excluded_symbols: []  # symbols never traded
-execution_mode: dry_run  # live or dry_run
-exit_strategy:  # trade exit rules
-  fib_tp_enabled: true  # enable Fibonacci targets
-  min_gain_to_trail: 0.1  # start trailing at this profit
-  partial_levels:  # take-profit percentages
+- spot
+excluded_symbols: []
+execution_mode: dry_run
+exit_strategy:
+  fib_tp_enabled: true
+  min_gain_to_trail: 0.1
+  partial_levels:
   - 33
   - 66
   - 100
-  scale_out: true  # exit in portions
-  trailing_stop_pct: 0.07  # trailing stop distance
-force_websocket_history: false  # use WS for history fetch
-liquidity_check: true  # verify order book depth
-liquidity_depth: 10  # depth levels to check
-log_to_google: true  # record trades to sheets
-loop_interval_minutes: 2  # main loop delay
-max_age_days: 180  # max candle age
-max_change_pct: 10  # ignore large moves
-max_concurrent_ohlcv: 50  # limit OHLCV requests
-ohlcv_timeout: 60  # seconds to wait for OHLCV responses
-max_latency_ms: 1000  # max order latency
-max_slippage_pct: 0.05  # allowed slippage percent
-max_spread_pct: 2  # allowed bid-ask spread
-max_vol: 1000000  # maximum trade volume
+  scale_out: true
+  trailing_stop_pct: 0.07
+force_websocket_history: false
+liquidity_check: true
+liquidity_depth: 10
+log_to_google: true
+loop_interval_minutes: 2
+max_age_days: 180
+max_change_pct: 10
+max_concurrent_ohlcv: 50
+max_latency_ms: 1000
+max_ohlcv_failures: 3
+max_slippage_pct: 0.05
+max_spread_pct: 2
+max_vol: 1000000
 mempool_monitor:
-  action: pause  # what to do on high fees
-  enabled: false  # monitor mempool data
-  reprice_multiplier: 1.05  # adjust prices when paused
-  suspicious_fee_threshold: 100  # fee threshold to trigger
+  action: pause
+  enabled: false
+  reprice_multiplier: 1.05
+  suspicious_fee_threshold: 100
 meta_selector:
-  enabled: false  # dynamic strategy selection
+  enabled: false
+metrics_backend: csv
+metrics_enabled: true
+metrics_output_file: crypto_bot/logs/metrics.csv
 micro_scalp:
-  ema_fast: 3  # short EMA window
-  ema_slow: 8  # long EMA window
-  volume_threshold: 1.5  # volume spike factor
-  volume_window: 20  # candle window for volume
-min_agreeing_votes: 2  # votes needed for consensus
-min_confidence_score: 0.65  # minimum combined score
-min_consistent_agreement: 2  # consecutive votes required
-min_cooldown: 60  # seconds between trades
-min_symbol_age_days: 10  # exclude new listings
-min_symbol_score: 0.4  # minimum filter score
+  ema_fast: 3
+  ema_slow: 8
+  volume_threshold: 1.5
+  volume_window: 20
+min_agreeing_votes: 2
+min_confidence_score: 0.65
+min_consistent_agreement: 2
+min_cooldown: 60
+min_symbol_age_days: 10
+min_symbol_score: 0.4
 ml_signal_model:
-  enabled: true  # use ML signals
-  weight: 0.4  # ML weight in score
-mode: auto  # run mode selection
-ohlcv_snapshot_frequency_minutes: 1440  # store OHLCV frequency
-ohlcv_snapshot_limit: 500  # max OHLCV records
+  enabled: true
+  weight: 0.4
+mode: auto
+ohlcv_snapshot_frequency_minutes: 1440
+ohlcv_snapshot_limit: 500
+ohlcv_timeout: 60
 optimization:
-  enabled: true  # toggle auto optimization
-  interval_days: 5  # optimize every N days
-  parameter_ranges:  # ranges for tuning
+  enabled: true
+  interval_days: 5
+  parameter_ranges:
     trend:
       stop_loss:
       - 0.02
       take_profit:
       - 0.04
 portfolio_rotation:
-  enabled: true  # rotate holdings
-  interval_days: 3  # days between rotations
-  rebalance_threshold: 0.08  # rebalance when off by %
-  scoring_method: sharpe  # metric for ranking
-  top_assets: 5  # number of assets to hold
-preferred_chain: solana  # blockchain preference
-regime_return_period: 5  # days for regime returns
+  enabled: true
+  interval_days: 3
+  rebalance_threshold: 0.08
+  scoring_method: sharpe
+  top_assets: 5
+preferred_chain: solana
+regime_return_period: 5
 regime_timeframes:
-- 5m  # timeframe list for regime
+- 5m
 - 15m
 - 1h
 risk:
-  atr_long_window: 50  # ATR window long term
-  atr_short_window: 14  # ATR window short term
-  max_drawdown: 0.5  # allowed portfolio drawdown
-  max_volatility_factor: 1.5  # volatility cap
-  min_expected_value: 0.0  # disables EV threshold when no stats exist
-  min_volume: 50  # minimum volume in units
-  stop_loss_pct: 0.015  # default stop loss
-  take_profit_pct: 0.05  # default take profit
-  volume_threshold_ratio: 0.05  # risk volume ratio
+  atr_long_window: 50
+  atr_short_window: 14
+  max_drawdown: 0.5
+  max_volatility_factor: 1.5
+  min_expected_value: 0.0
+  min_volume: 50
+  stop_loss_pct: 0.015
+  take_profit_pct: 0.05
+  volume_threshold_ratio: 0.05
 rl_selector:
-  enabled: false  # RL strategy chooser
-scalp_timeframe: 1m  # timeframe for scalping
-scan_markets: true  # run market scans
+  enabled: false
+scalp_timeframe: 1m
+scan_markets: true
 scoring_weights:
-  regime_confidence: 0.2  # weight of regime signal
-  spread_penalty: -0.1  # penalty for wide spreads
-  strategy_regime_strength: 0.2  # weighting for regime fit
-  strategy_score: 0.4  # base strategy weight
-  symbol_score: 0.1  # fundamental symbol weight
-  volume_score: 0.1  # order flow weight
+  regime_confidence: 0.2
+  spread_penalty: -0.1
+  strategy_regime_strength: 0.2
+  strategy_score: 0.4
+  symbol_score: 0.1
+  volume_score: 0.1
 sentiment_filter:
-  bull_fng: 70  # fear and greed bull level
-  bull_sentiment: 60  # sentiment bull threshold
-  min_fng: 0  # min FNG to trade
-  min_sentiment: 0  # min sentiment index
-signal_threshold: 0.4  # min score to signal
+  bull_fng: 70
+  bull_sentiment: 60
+  min_fng: 0
+  min_sentiment: 0
+signal_threshold: 0.4
 signal_weight_optimizer:
-  enabled: false  # tune signal weights
-  learning_rate: 0.1  # optimizer step size
-  min_weight: 0.05  # smallest weight allowed
-sl_pct: 0.03  # stop loss percent
-solana_slippage_bps: 50  # slippage on Solana DEX
+  enabled: false
+  learning_rate: 0.1
+  min_weight: 0.05
+sl_pct: 0.03
+solana_slippage_bps: 50
 strategy_allocation:
-  grid_bot: 0.3  # portion for grid bot
-  sniper_bot: 0.3  # portion for sniper bot
-  trend_bot: 0.4  # portion for trend bot
-strategy_evaluation_mode: voting  # evaluation scheme
-symbol: BTC/USDT  # default trading pair
-symbol_batch_size: 10  # symbols processed per batch
+  grid_bot: 0.3
+  sniper_bot: 0.3
+  trend_bot: 0.4
+strategy_evaluation_mode: voting
+symbol: BTC/USDT
+symbol_batch_size: 10
 symbol_filter:
-  max_spread_pct: 0.4  # filter by spread
-  min_volume_usd: 100000  # filter by volume
-  change_pct_percentile: 80  # price change rank
-  max_correlation: 0.85  # cross-asset correlation
-symbol_refresh_minutes: 30  # update symbol list
+  change_pct_percentile: 80
+  max_correlation: 0.85
+  max_spread_pct: 0.4
+  min_volume_usd: 100000
+symbol_refresh_minutes: 30
 symbol_score_weights:
-  age: 0.05  # weight for age metric
-  change: 0.3  # weight for price change
-  latency: 0.05  # weight for latency
-  spread: 0.2  # weight for spread
-  volume: 0.4  # weight for volume
-symbols: []  # explicit trading list
+  age: 0.05
+  change: 0.3
+  latency: 0.05
+  spread: 0.2
+  volume: 0.4
+symbols: []
 tax_tracking:
-  enabled: false  # log trades for taxes
-  export_path: crypto_bot/logs/tax_trades.csv  # path for CSV export
+  enabled: false
+  export_path: crypto_bot/logs/tax_trades.csv
 telegram:
-  chat_id: your_chat_id  # Telegram chat
-  enabled: true  # enable Telegram bot
-  token: your_telegram_token  # Telegram API token
-  trade_updates: true  # send trade alerts
-testing_mode: true  # run tests only
-timeframe: 1h  # main trading timeframe
+  chat_id: your_chat_id
+  enabled: true
+  token: your_telegram_token
+  trade_updates: true
+testing_mode: true
+timeframe: 1h
 timeframes:
-- 1h  # additional timeframes
+- 1h
 - 4h
 - 1d
-top_n_symbols: 3  # top symbols to trade
-tp_pct: 0.07  # take profit percentage
-trade_size_pct: 0.1  # portfolio size per trade
-twap_enabled: true  # enable TWAP orders
-twap_interval_seconds: 10  # seconds between slices
-twap_slices: 4  # number of TWAP slices
-use_websocket: true  # prefer WebSocket API
+top_n_symbols: 3
+tp_pct: 0.07
+trade_size_pct: 0.1
+twap_enabled: true
+twap_interval_seconds: 10
+twap_slices: 4
+use_websocket: true
 volatility_filter:
-  max_funding_rate: 0.05  # cap funding rate
-  min_atr_pct: 0.001  # minimum ATR percent
+  max_funding_rate: 0.05
+  min_atr_pct: 0.001
 voting_strategies:
-- trend  # active strategies
+- trend
 - momentum
 - mean_reversion
-wallet_address: your_wallet  # deposit address
-min_agreeing_votes: 2  # consensus threshold
-metrics_enabled: true  # enable metrics logging
-metrics_backend: "csv"       # output backend, or "prometheus"
-metrics_output_file: "crypto_bot/logs/metrics.csv"  # metrics storage file
+wallet_address: your_wallet
