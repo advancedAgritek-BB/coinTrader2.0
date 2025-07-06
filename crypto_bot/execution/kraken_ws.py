@@ -32,6 +32,33 @@ def parse_ohlc_message(message: str) -> Optional[List[float]]:
     except json.JSONDecodeError:
         return None
 
+    # object based format
+    if isinstance(data, dict):
+        if data.get("channel") == "ohlc" and data.get("type") in {"snapshot", "update"}:
+            arr = data.get("data")
+            if isinstance(arr, list) and arr:
+                candle = arr[0]
+                if isinstance(candle, dict):
+                    ts_val = candle.get("interval_begin")
+                    if isinstance(ts_val, str):
+                        try:
+                            ts = int(datetime.fromisoformat(ts_val.replace("Z", "+00:00")).timestamp() * 1000)
+                        except Exception:
+                            ts = None
+                    else:
+                        ts = None
+                    try:
+                        o = float(candle.get("open"))
+                        h = float(candle.get("high"))
+                        l = float(candle.get("low"))
+                        c = float(candle.get("close"))
+                        vol = float(candle.get("volume"))
+                    except (TypeError, ValueError):
+                        return None
+                    if ts is not None:
+                        return [ts, o, h, l, c, vol]
+
+    # list based format
     if not isinstance(data, list) or len(data) < 3:
         return None
 

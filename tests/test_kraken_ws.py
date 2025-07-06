@@ -409,6 +409,29 @@ def test_parse_ohlc_message_extracts_volume():
     assert result == [1712106000000, 30000.0, 30100.0, 29900.0, 30050.0, 12.34]
 
 
+def test_parse_ohlc_message_object_format():
+    msg = json.dumps(
+        {
+            "channel": "ohlc",
+            "type": "update",
+            "data": [
+                {
+                    "interval": 1,
+                    "interval_begin": "2024-04-02T00:00:00Z",
+                    "open": "100.0",
+                    "high": "110.0",
+                    "low": "90.0",
+                    "close": "105.0",
+                    "volume": "5.5",
+                }
+            ],
+        }
+    )
+
+    result = kraken_ws.parse_ohlc_message(msg)
+    assert result == [1712016000000, 100.0, 110.0, 90.0, 105.0, 5.5]
+
+
 def test_ping_sends_correct_json():
     client = KrakenWSClient()
     pub = DummyWS()
