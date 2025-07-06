@@ -207,6 +207,83 @@ def parse_book_message(message: str) -> Optional[dict]:
     return {"type": msg_type, "bids": _convert(bids), "asks": _convert(asks)}
 
 
+def parse_trade_message(message: str) -> Optional[List[dict]]:
+    """Parse a Kraken trade snapshot or update message.
+
+    Parameters
+    ----------
+    message : str
+        Raw JSON message from the websocket.
+
+    Returns
+    -------
+    Optional[List[dict]]
+        List of trade dictionaries with fields ``symbol``,
+        ``side``, ``qty``, ``price``, ``ord_type``, ``trade_id`` and
+        ``timestamp_ms`` if the message is valid.
+    """
+
+    try:
+        data: Any = json.loads(message)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict) or data.get("channel") != "trade":
+        return None
+
+    trades = data.get("data")
+    if not isinstance(trades, list):
+        return None
+
+    result: List[dict] = []
+    for t in trades:
+        if not isinstance(t, dict):
+            return None
+
+        symbol = t.get("symbol") or data.get("symbol")
+        side = t.get("side")
+        qty = t.get("qty")
+        price = t.get("price")
+        ord_type = t.get("ord_type")
+        trade_id = t.get("trade_id")
+        ts = t.get("timestamp")
+
+        if not isinstance(symbol, str):
+            return None
+        try:
+            qty = float(qty)
+            price = float(price)
+        except (TypeError, ValueError):
+            return None
+
+        timestamp_ms = None
+        if isinstance(ts, str):
+            try:
+                if ts.endswith("Z"):
+                    ts_obj = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                else:
+                    ts_obj = datetime.fromisoformat(ts)
+                timestamp_ms = int(ts_obj.timestamp() * 1000)
+            except Exception:
+                return None
+        else:
+            return None
+
+        result.append(
+            {
+                "symbol": symbol,
+                "side": side,
+                "qty": qty,
+                "price": price,
+                "ord_type": ord_type,
+                "trade_id": trade_id,
+                "timestamp_ms": timestamp_ms,
+            }
+        )
+
+    return result
+
+
 def _parse_l3_orders(levels: List[Any]) -> Optional[List[dict]]:
     """Return parsed list of L3 book orders or ``None`` on error."""
 

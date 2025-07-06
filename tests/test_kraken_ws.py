@@ -697,3 +697,85 @@ def test_level3_invalid_messages():
     assert kraken_ws.parse_level3_snapshot(bad) is None
     bad_upd = json.dumps({"channel": "book", "type": "update", "data": {"bids": []}})
     assert kraken_ws.parse_level3_update(bad_upd) is None
+
+
+def test_parse_trade_message_snapshot_update():
+    snap_msg = json.dumps(
+        {
+            "channel": "trade",
+            "type": "snapshot",
+            "symbol": "BTC/USD",
+            "data": [
+                {
+                    "price": "30000.1",
+                    "qty": "0.5",
+                    "side": "buy",
+                    "ord_type": "limit",
+                    "trade_id": "T1",
+                    "timestamp": "2024-01-01T00:00:00Z",
+                },
+                {
+                    "price": "30000.2",
+                    "qty": "0.6",
+                    "side": "sell",
+                    "ord_type": "market",
+                    "trade_id": "T2",
+                    "timestamp": "2024-01-01T00:00:01Z",
+                },
+            ],
+        }
+    )
+
+    upd_msg = json.dumps(
+        {
+            "channel": "trade",
+            "type": "update",
+            "symbol": "BTC/USD",
+            "data": [
+                {
+                    "price": "30001.0",
+                    "qty": "0.2",
+                    "side": "buy",
+                    "ord_type": "limit",
+                    "trade_id": "T3",
+                    "timestamp": "2024-01-01T00:00:02Z",
+                }
+            ],
+        }
+    )
+
+    snap = kraken_ws.parse_trade_message(snap_msg)
+    upd = kraken_ws.parse_trade_message(upd_msg)
+
+    assert snap == [
+        {
+            "symbol": "BTC/USD",
+            "side": "buy",
+            "qty": 0.5,
+            "price": 30000.1,
+            "ord_type": "limit",
+            "trade_id": "T1",
+            "timestamp_ms": 1704067200000,
+        },
+        {
+            "symbol": "BTC/USD",
+            "side": "sell",
+            "qty": 0.6,
+            "price": 30000.2,
+            "ord_type": "market",
+            "trade_id": "T2",
+            "timestamp_ms": 1704067201000,
+        },
+    ]
+
+    assert upd == [
+        {
+            "symbol": "BTC/USD",
+            "side": "buy",
+            "qty": 0.2,
+            "price": 30001.0,
+            "ord_type": "limit",
+            "trade_id": "T3",
+            "timestamp_ms": 1704067202000,
+        }
+    ]
