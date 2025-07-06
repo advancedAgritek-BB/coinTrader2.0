@@ -172,7 +172,7 @@ async def filter_symbols(
 
     scored: List[tuple[str, float]] = []
     for sym, vol, chg, spr in metrics:
-        score = score_symbol(exchange, sym, vol, chg, spr, cfg)
+        score = await score_symbol(exchange, sym, vol, chg, spr, cfg)
         if score >= min_score:
             scored.append((sym, score))
 
