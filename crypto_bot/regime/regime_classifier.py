@@ -1,15 +1,15 @@
 from pathlib import Path
 from typing import Dict, Optional, Tuple
-from typing import Optional, Tuple, Dict
 import asyncio
 import time
-from .pattern_detector import detect_patterns
-from crypto_bot.utils.pattern_logger import log_patterns
 
 import pandas as pd
 import numpy as np
 import ta
 import yaml
+
+from .pattern_detector import detect_patterns
+from crypto_bot.utils.pattern_logger import log_patterns
 from crypto_bot.utils.logger import setup_logger
 
 
@@ -34,12 +34,6 @@ _ALL_REGIMES = [
     "unknown",
 ]
 
-
-def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
-    """Return regime label and confidence using the bundled ML model."""
-    # Simplified for testing environments without optional dependencies
-    return "unknown", 0.0
-
 # Impact of each detected pattern on regime scoring. Values are multipliers
 # applied to the pattern strength.
 PATTERN_WEIGHTS = {
@@ -53,9 +47,16 @@ PATTERN_WEIGHTS = {
 
 
 def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
-    """Return regime label and confidence using the bundled gradient boosting model."""
-    try:
+    """Return regime label and confidence using the bundled ML fallback model."""
+    try:  # pragma: no cover - optional dependency
         from .ml_fallback import predict_regime
+    except Exception:
+        return "unknown", 0.0
+
+    try:
+        return predict_regime(df)
+    except Exception:
+        return "unknown", 0.0
 
 def _probabilities(label: str, confidence: float | None = None) -> Dict[str, float]:
     """Return a probability mapping for all regimes."""
@@ -182,11 +183,64 @@ def _classify_core(
 
 
 def _classify_all(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame],
     higher_df: Optional[pd.DataFrame],
     cfg: dict,
-) -> Tuple[str, Dict[str, float], set[str]]:
-    """Return regime label, probability mapping and detected patterns."""
+    *,
+    df_map: Optional[Dict[str, pd.DataFrame]] = None,
+) -> Tuple[str, Dict[str, float], Dict[str, float]] | Dict[str, str] | Tuple[str, str]:
+    """Return regime label, probability mapping and patterns or labels for ``df_map``."""
+
+    ml_min_bars = cfg.get("ml_min_bars", 20)
+
+    if df_map is not None:
+        labels: Dict[str, str] = {}
+        for tf, frame in df_map.items():
+            h_df = None
+            if tf != cfg.get("higher_timeframe"):
+                h_df = df_map.get(cfg.get("higher_timeframe"))
+            label, _, _ = _classify_all(frame, h_df, cfg)
+            labels[tf] = label
+        if len(df_map) == 2:
+            return tuple(labels[tf] for tf in df_map.keys())  # type: ignore
+        return labels
+
+    if df is None:
+        raise ValueError("df must be provided when df_map is None")
+
+    regime = _classify_core(df, cfg, higher_df)
+    patterns = detect_patterns(df)
+
+    # Score regimes based on indicator result and detected patterns
+    scores: Dict[str, float] = {}
+    if regime != "unknown":
+        scores[regime] = 1.0
+    for name, strength in patterns.items():
+        target, weight = PATTERN_WEIGHTS.get(name, (None, 0.0))
+        if target is None:
+            continue
+        if regime == "unknown" and name not in {"breakout", "ascending_triangle"}:
+            continue
+        scores[target] = scores.get(target, 0.0) + weight * float(strength)
+
+    if scores:
+        regime = max(scores, key=scores.get)
+
+    if regime == "unknown":
+        if cfg.get("use_ml_regime_classifier", False) and len(df) >= ml_min_bars:
+            label, conf = _ml_fallback(df)
+            log_patterns(label, patterns)
+            return label, _probabilities(label, conf), patterns
+        if len(df) >= ml_min_bars:
+            logger.info("Skipping ML fallback \u2014 ML disabled")
+        else:
+            logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
+        return regime, _probabilities(regime, 0.0), patterns
+
+    log_patterns(regime, patterns)
+    return regime, _probabilities(regime), patterns
+
+
 def classify_regime(
     df: Optional[pd.DataFrame] = None,
     higher_df: Optional[pd.DataFrame] = None,
@@ -232,80 +286,15 @@ def classify_regime(
         supplied, as a tuple respecting the insertion order of ``df_map``.
     """
 
-    ml_min_bars = cfg.get("ml_min_bars", 20)
-
-    if df_map is not None:
-        labels: Dict[str, str] = {}
-        for tf, frame in df_map.items():
-            h_df = None
-            if tf != cfg.get("higher_timeframe"):
-                h_df = df_map.get(cfg.get("higher_timeframe"))
-            r, _ = classify_regime(frame, h_df, config_path=config_path)
-            labels[tf] = r
-        if len(df_map) == 2:
-            return tuple(labels[tf] for tf in df_map.keys())  # type: ignore
-        return labels
-
-    if df is None:
-        raise ValueError("df must be provided when df_map is None")
-
-    regime = _classify_core(df, cfg, higher_df)
-    used_ml = False
-    ml_used = False
-
-    if regime == "unknown" and cfg.get("use_ml_regime_classifier", False):
-        if len(df) >= ml_min_bars:
-            try:  # pragma: no cover - optional
-                from .ml_regime_model import predict_regime
-
-                regime = predict_regime(df)
-                used_ml = True
-                ml_used = True
-            except Exception:
-                pass
-        else:
-            logger.info(
-                "Skipping ML fallback \u2014 insufficient data (%d rows)", len(df)
-            )
-
-    pattern_scores = detect_patterns(df)
-
-    regime_scores: Dict[str, float] = {regime: 1.0}
-    if pattern_scores.get("breakout", 0) > 0.8:
-        regime_scores["breakout"] = regime_scores.get("breakout", 0) + 0.2
-
-    final_regime = max(regime_scores, key=regime_scores.get)
-
-    if final_regime == "unknown":
-        if len(df) >= ml_min_bars:
-    patterns = detect_patterns(df)
-    candlestick = {"doji", "hammer", "shooting_star"}
-    patterns -= candlestick
-    if "breakout" in patterns:
-        regime = "breakout"
-
-    if regime == "unknown":
-        if len(df) >= ml_min_bars:
-            label, conf = _ml_fallback(df)
-            return label, _probabilities(label, conf), patterns
-        logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
-        return regime, _probabilities(regime, 0.0), patterns
-
-    return regime, _probabilities(regime), patterns
-
-
-def classify_regime(
-    df: pd.DataFrame,
-    higher_df: Optional[pd.DataFrame] = None,
-    *,
-    config_path: Optional[str] = None,
-) -> Tuple[str, Dict[str, float]]:
-    """Classify market regime and return a probability mapping."""
-
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
 
-    regime, probs, _ = _classify_all(df, higher_df, cfg)
-    return regime, probs
+    result = _classify_all(df, higher_df, cfg, df_map=df_map)
+
+    if df_map is not None:
+        return result
+
+    label, probs, _ = result
+    return label, probs
 
 
 def classify_regime_with_patterns(
@@ -313,58 +302,12 @@ def classify_regime_with_patterns(
     higher_df: Optional[pd.DataFrame] = None,
     *,
     config_path: Optional[str] = None,
-) -> Tuple[str, set[str]]:
-    """Deprecated wrapper returning detected patterns."""
+) -> Tuple[str, Dict[str, float]]:
+    """Return the regime label and detected pattern scores."""
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
-
-    regime, _, patterns = _classify_all(df, higher_df, cfg)
-    return regime, patterns
-
-    if regime == "unknown" and len(df) < ml_min_bars:
-        log_patterns(regime, patterns)
-        return regime, 0.0
-
-    # Score regimes based on the base classification and detected patterns
-    scores: Dict[str, float] = {}
-    if regime != "unknown":
-        scores[regime] = 1.0
-    for name, strength in patterns.items():
-        target, weight = PATTERN_WEIGHTS.get(name, (None, 0.0))
-        if target:
-            if regime == "unknown" and name not in {"breakout", "ascending_triangle"}:
-                continue
-            scores[target] = scores.get(target, 0.0) + weight * float(strength)
-
-    if scores:
-        regime = max(scores, key=scores.get)
-
-    log_patterns(regime, patterns)
-
-    if regime == "unknown":
-        if cfg.get("use_ml_regime_classifier", False) and len(df) >= ml_min_bars:
-            label, confidence = _ml_fallback(df)
-            log_patterns(label, patterns)
-            return label, confidence
-        if len(df) >= ml_min_bars:
-            logger.info("Skipping ML fallback \u2014 ML disabled")
-        else:
-            logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
-        return regime, {}
-    patterns = set()
-    if not ml_used:
-        patterns = detect_patterns(df)
-        if "breakout" in patterns:
-            regime = "breakout"
-
-    if regime == "unknown":
-        if len(df) < ml_min_bars:
-            return regime, 0.0
-        logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
-        return final_regime, pattern_scores
-
-    return final_regime, pattern_scores
-    return regime, {} if used_ml else patterns
+    label, _, patterns = _classify_all(df, higher_df, cfg)
+    return label, patterns
 
 
 async def classify_regime_async(
@@ -373,7 +316,6 @@ async def classify_regime_async(
     *,
     df_map: Optional[Dict[str, pd.DataFrame]] = None,
     config_path: Optional[str] = None,
-) -> Tuple[str, Dict[str, float]]:
 ) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Asynchronous wrapper around :func:`classify_regime`."""
     return await asyncio.to_thread(
