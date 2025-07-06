@@ -356,6 +356,14 @@ ws.cancel_order("OABCDEF", ["BTC/USD"])
 ws.subscribe_instruments()  # stream asset and pair details
 ```
 
+To stream ticker data use `subscribe_ticker`. The optional `event_trigger`
+parameter controls which events push updates and defaults to `"trades"`. The
+`snapshot` flag requests an initial snapshot and defaults to `True`.
+
+```python
+# Request ticker updates triggered by book changes without an initial snapshot
+ws.subscribe_ticker(["ETH/USD"], event_trigger="book", snapshot=False)
+```
 `subscribe_book` streams the order book for the given pair. `depth` sets how many levels are sent, while `snapshot` requests an initial book snapshot before updates.
 
 The Kraken WebSocket client automatically reconnects if the connection drops and
