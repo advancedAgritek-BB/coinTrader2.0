@@ -373,6 +373,8 @@ async def update_ohlcv_cache(
         Maximum number of concurrent OHLCV requests. ``None`` means no limit.
     """
 
+    from crypto_bot.regime.regime_classifier import clear_regime_cache
+
     if max_concurrent is not None:
         if not isinstance(max_concurrent, int) or max_concurrent < 1:
             raise ValueError("max_concurrent must be a positive integer or None")
@@ -462,14 +464,19 @@ async def update_ohlcv_cache(
         df_new = pd.DataFrame(
             data, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
+        changed = False
         if sym in cache and not cache[sym].empty:
             last_ts = cache[sym]["timestamp"].iloc[-1]
             df_new = df_new[df_new["timestamp"] > last_ts]
             if df_new.empty:
                 continue
             cache[sym] = pd.concat([cache[sym], df_new], ignore_index=True)
+            changed = True
         else:
             cache[sym] = df_new
+            changed = True
+        if changed:
+            clear_regime_cache(sym, timeframe)
     logger.info("Completed OHLCV update for timeframe %s", timeframe)
     return cache
 

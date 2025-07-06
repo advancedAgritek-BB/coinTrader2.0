@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional, Tuple, Dict
 import asyncio
+import time
 from .pattern_detector import detect_patterns
 
 import pandas as pd
@@ -41,17 +42,14 @@ def _classify_core(
         return "unknown"
 
     df = data.copy()
+    for col in ("ema20", "ema50", "adx", "rsi", "atr", "bb_width"):
+        df[col] = np.nan
 
-    df["ema20"] = (
-        ta.trend.ema_indicator(df["close"], window=cfg["ema_fast"])
-        if len(df) >= cfg["ema_fast"]
-        else np.nan
-    )
-    df["ema50"] = (
-        ta.trend.ema_indicator(df["close"], window=cfg["ema_slow"])
-        if len(df) >= cfg["ema_slow"]
-        else np.nan
-    )
+    if len(df) >= cfg["ema_fast"]:
+        df["ema20"] = ta.trend.ema_indicator(df["close"], window=cfg["ema_fast"])
+
+    if len(df) >= cfg["ema_slow"]:
+        df["ema50"] = ta.trend.ema_indicator(df["close"], window=cfg["ema_slow"])
 
     if len(df) >= cfg["indicator_window"]:
         try:
@@ -64,6 +62,7 @@ def _classify_core(
             )
             df["normalized_range"] = (df["high"] - df["low"]) / df["atr"]
         except IndexError:
+            return "unknown"
             df["adx"] = np.nan
             df["rsi"] = np.nan
             df["atr"] = np.nan
@@ -78,8 +77,6 @@ def _classify_core(
     if len(df) >= cfg["bb_window"]:
         bb = ta.volatility.BollingerBands(df["close"], window=cfg["bb_window"])
         df["bb_width"] = bb.bollinger_wband()
-    else:
-        df["bb_width"] = np.nan
 
     volume_ma20 = (
         df["volume"].rolling(cfg["ma_window"]).mean()
@@ -228,5 +225,52 @@ async def classify_regime_async(
         df_map=df_map,
         config_path=config_path,
     )
+
+
+# Caching utilities -----------------------------------------------------
+
+regime_cache: Dict[tuple[str, str], str] = {}
+_regime_cache_ts: Dict[tuple[str, str], int] = {}
+
+
+async def classify_regime_cached(
+    symbol: str,
+    timeframe: str,
+    df: pd.DataFrame,
+    higher_df: Optional[pd.DataFrame] = None,
+    profile: bool = False,
+    *,
+    config_path: Optional[str] = None,
+) -> Tuple[str, object]:
+    """Classify ``symbol`` regime with caching and optional profiling."""
+
+    if df is None or df.empty:
+        return "unknown", 0.0
+
+    ts = int(df["timestamp"].iloc[-1]) if "timestamp" in df.columns else len(df)
+    key = (symbol, timeframe)
+    if key in regime_cache and _regime_cache_ts.get(key) == ts:
+        label = regime_cache[key]
+        # Info is not cached; recompute minimal patterns for compatibility
+        return label, set()
+
+    start = time.perf_counter() if profile else 0.0
+    label, info = await classify_regime_async(df, higher_df, config_path=config_path)
+    regime_cache[key] = label
+    _regime_cache_ts[key] = ts
+    if profile:
+        logger.info(
+            "Regime classification for %s %s took %.4fs",
+            symbol,
+            timeframe,
+            time.perf_counter() - start,
+        )
+    return label, info
+
+
+def clear_regime_cache(symbol: str, timeframe: str) -> None:
+    """Remove cached regime entry for ``symbol`` and ``timeframe``."""
+    regime_cache.pop((symbol, timeframe), None)
+    _regime_cache_ts.pop((symbol, timeframe), None)
 
 
