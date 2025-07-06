@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 import asyncio
 from .pattern_detector import detect_patterns
 
@@ -152,9 +152,10 @@ def classify_regime(
     -------
     Tuple[str, object]
         When sufficient history is available the function returns ``(label,
-        patterns)`` where ``patterns`` is a ``set`` of detected formations. If
-        insufficient history triggers the ML fallback the return value is
-        ``(label, confidence)`` where ``confidence`` is a float between 0 and 1.
+        pattern_scores)`` where ``pattern_scores`` is a ``dict`` mapping pattern
+        names to confidence values.  If insufficient history triggers the ML
+        fallback the return value is ``(label, confidence)`` where ``confidence``
+        is a float between 0 and 1.
     """
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
@@ -175,18 +176,22 @@ def classify_regime(
                 "Skipping ML fallback \u2014 insufficient data (%d rows)", len(df)
             )
 
-    patterns = detect_patterns(df)
-    if "breakout" in patterns:
-        regime = "breakout"
+    pattern_scores = detect_patterns(df)
 
-    if regime == "unknown":
+    regime_scores: Dict[str, float] = {regime: 1.0}
+    if pattern_scores.get("breakout", 0) > 0.8:
+        regime_scores["breakout"] = regime_scores.get("breakout", 0) + 0.2
+
+    final_regime = max(regime_scores, key=regime_scores.get)
+
+    if final_regime == "unknown":
         if len(df) >= ml_min_bars:
             label, confidence = _ml_fallback(df)
             return label, confidence
         logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
-        return regime, patterns
+        return final_regime, pattern_scores
 
-    return regime, patterns
+    return final_regime, pattern_scores
 
 
 async def classify_regime_async(

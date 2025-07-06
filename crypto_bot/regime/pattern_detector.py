@@ -1,12 +1,13 @@
 import pandas as pd
 
 
-def detect_patterns(df: pd.DataFrame) -> set[str]:
-    """Return a set of simple chart patterns detected in ``df``.
+def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
+    """Return confidence scores for simple chart patterns detected in ``df``.
 
     The function inspects the latest candle and recent history for
     breakout and candlestick formations. Only a handful of patterns
-    are recognized:
+    are recognized.  The return value maps pattern names to a confidence
+    between 0 and 1.  Patterns with zero confidence are omitted.
 
     ``"breakout"``  -- last close at a new high with a volume spike
     ``"breakdown"`` -- last close at a new low with a volume spike
@@ -14,27 +15,26 @@ def detect_patterns(df: pd.DataFrame) -> set[str]:
     ``"shooting_star"`` -- small body with long upper shadow
     ``"doji"``      -- open and close nearly equal
     """
-    patterns: set[str] = set()
+    scores: dict[str, float] = {}
     if df is None or len(df) < 2:
-        return patterns
+        return scores
 
     last = df.iloc[-1]
-    prev = df.iloc[-2]
 
     body = abs(last["close"] - last["open"])
     candle_range = last["high"] - last["low"]
     if candle_range == 0:
-        return patterns
+        return scores
     upper = last["high"] - max(last["close"], last["open"])
     lower = min(last["close"], last["open"]) - last["low"]
 
     if body <= candle_range * 0.1:
         if upper > candle_range * 0.4 and lower <= candle_range * 0.1:
-            patterns.add("shooting_star")
+            scores["shooting_star"] = 1.0
         if lower > candle_range * 0.4 and upper <= candle_range * 0.1:
-            patterns.add("hammer")
+            scores["hammer"] = 1.0
         if upper > candle_range * 0.2 and lower > candle_range * 0.2:
-            patterns.add("doji")
+            scores["doji"] = 1.0
 
     lookback = min(len(df), 20)
     if len(df) >= 2:
@@ -47,8 +47,8 @@ def detect_patterns(df: pd.DataFrame) -> set[str]:
         vol_mean = df["volume"].mean()
 
     if last["close"] >= high_max and last["volume"] > vol_mean * 1.5:
-        patterns.add("breakout")
+        scores["breakout"] = 1.0
     if last["close"] <= low_min and last["volume"] > vol_mean * 1.5:
-        patterns.add("breakdown")
+        scores["breakdown"] = 1.0
 
-    return patterns
+    return scores

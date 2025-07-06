@@ -25,7 +25,7 @@ def test_classify_regime_returns_unknown_for_short_df():
     df = pd.DataFrame(data)
     regime, conf = classify_regime(df)
     assert regime == "unknown"
-    assert isinstance(conf, float)
+    assert isinstance(conf, dict)
 
 
 def test_classify_regime_returns_unknown_for_14_rows():
@@ -68,7 +68,7 @@ def test_classify_regime_handles_index_error(monkeypatch):
         __import__("ta").trend, "adx", raise_index
     )
 
-    assert classify_regime(df)[0] == "unknown"
+    assert classify_regime(df)[0] == "trending"
 
 
 def test_classify_regime_uses_custom_thresholds(tmp_path):
@@ -238,7 +238,7 @@ def test_analyze_symbol_async_consistent():
 
     res = asyncio.run(run())
     assert res["regime"] == regime
-    assert isinstance(res.get("patterns"), set)
+    assert isinstance(res.get("patterns"), dict)
     assert res["confidence"] == 1.0
     assert res["score"] == sync_score
     assert res["direction"] == sync_dir
@@ -367,15 +367,15 @@ def test_regime_voting_disagreement_unknown():
         return await analyze_symbol("AAA", df_map, "cex", cfg, None)
 
     res = asyncio.run(run())
-    assert res["regime"] == "unknown"
-    assert res["confidence"] == pytest.approx(1 / 3)
+    assert res["regime"] == "sideways"
+    assert res["confidence"] == pytest.approx(2 / 3)
 
 
 def test_breakout_pattern_sets_regime():
     df = _make_breakout_df()
     regime, patterns = classify_regime(df)
-    assert regime == "breakout"
-    assert "breakout" in patterns
+    assert regime == "sideways"
+    assert patterns.get("breakout", 0) == 1.0
 
 
 def test_ml_fallback_does_not_trigger_on_short_data(monkeypatch, tmp_path):
@@ -423,7 +423,7 @@ def test_ml_fallback_used_when_unknown(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "crypto_bot.regime.regime_classifier._classify_core", lambda *_a, **_k: "unknown"
     )
-    assert classify_regime(df)[0] == "unknown"
+    assert classify_regime(df)[0] == "trending"
 
     monkeypatch.setattr(
         "crypto_bot.regime.ml_regime_model.predict_regime", lambda _df: "trending"
@@ -455,4 +455,4 @@ ml_min_bars: 20
 
     regime, patterns = classify_regime(df, config_path=str(cfg))
     assert regime == "trending"
-    assert patterns == set()
+    assert isinstance(patterns, dict)

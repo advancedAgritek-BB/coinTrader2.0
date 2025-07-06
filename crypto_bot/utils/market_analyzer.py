@@ -38,10 +38,12 @@ async def analyze_symbol(
     df = df_map.get(base_tf)
     higher_df = df_map.get("1d")
     regime, info = await classify_regime_async(df, higher_df)
-    patterns: set[str] = set()
+    patterns: dict | set = {}
     base_conf = 1.0
-    if isinstance(info, set):
+    if isinstance(info, dict):
         patterns = info
+    elif isinstance(info, set):
+        patterns = {p: 1.0 for p in info}
     else:
         base_conf = float(info)
 
