@@ -1,5 +1,11 @@
 import json
 from datetime import datetime, timedelta, timezone
+import sys
+import types
+
+sys.modules.setdefault("scipy", types.ModuleType("scipy"))
+sys.modules.setdefault("scipy.stats", types.SimpleNamespace(pearsonr=lambda *a, **k: 0))
+
 from crypto_bot.execution.kraken_ws import KrakenWSClient, PUBLIC_URL, PRIVATE_URL
 
 class DummyWS:
@@ -58,6 +64,65 @@ def test_reconnect_and_resubscribe(monkeypatch):
     assert created[-1] == (PRIVATE_URL, "private")
     assert client.private_ws is not old_private
     assert client.private_ws.sent == [expected_private]
+
+
+def test_reconnect_resubscribes_book(monkeypatch):
+    client = KrakenWSClient()
+    created = []
+
+    def dummy_start_ws(url, conn_type=None, **_):
+        ws = DummyWS()
+        created.append((url, conn_type))
+        ws.on_close = lambda *_: client.on_close(conn_type)
+        return ws
+
+    monkeypatch.setattr(client, "_start_ws", dummy_start_ws)
+
+    client.subscribe_book("BTC/USD")
+    sub_msg = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {
+                "channel": "book",
+                "symbol": ["BTC/USD"],
+                "depth": 10,
+                "snapshot": True,
+            },
+        }
+    )
+    assert created == [(PUBLIC_URL, "public")]
+    assert client.public_ws.sent == [sub_msg]
+
+    old_ws = client.public_ws
+    old_ws.on_close(None, None)
+
+    assert created == [(PUBLIC_URL, "public"), (PUBLIC_URL, "public")]
+    assert client.public_ws is not old_ws
+    assert client.public_ws.sent == [sub_msg]
+def test_subscribe_ticker_with_options(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_ticker(
+        "BTC/USD", event_trigger="bbo", snapshot=False, req_id=1
+    )
+
+    expected = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {
+                "channel": "ticker",
+                "symbol": ["BTC/USD"],
+                "event_trigger": "bbo",
+                "snapshot": False,
+                "req_id": 1,
+            },
+        }
+    )
+    assert ws.sent == [expected]
+    assert client._public_subs[-1] == expected
+
 import crypto_bot.execution.kraken_ws as kraken_ws
 from crypto_bot.execution.kraken_ws import KrakenWSClient
 
@@ -195,6 +260,30 @@ def test_token_refresh_updates_private_subs(monkeypatch):
 
     assert client._private_subs[0] == second_msg
     assert client.private_ws.sent[-1] == second_msg
+
+
+def test_subscribe_then_unsubscribe(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_ticker("XBT/USD")
+    sub_msg = json.dumps(
+        {"method": "subscribe", "params": {"channel": "ticker", "symbol": ["XBT/USD"]}}
+    )
+    assert ws.sent == [sub_msg]
+    assert client._public_subs == [sub_msg]
+
+    ws.sent.clear()
+    client.unsubscribe_ticker("XBT/USD")
+    unsub_msg = json.dumps(
+        {
+            "method": "unsubscribe",
+            "params": {"channel": "ticker", "symbol": ["XBT/USD"]},
+        }
+    )
+    assert ws.sent == [unsub_msg]
+    assert client._public_subs == []
 def _setup_private_client(monkeypatch):
     client = KrakenWSClient()
     ws = DummyWS()
@@ -225,6 +314,38 @@ def test_open_orders(monkeypatch):
     expected = {"method": "open_orders", "params": {"token": "token"}}
     assert msg == expected
     assert ws.sent == [json.dumps(expected)]
+
+
+def test_subscribe_and_unsubscribe_book(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_book("ETH/USD", depth=5)
+    sub_msg = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {
+                "channel": "book",
+                "symbol": ["ETH/USD"],
+                "depth": 5,
+                "snapshot": True,
+            },
+        }
+    )
+    assert ws.sent == [sub_msg]
+    assert client._public_subs == [sub_msg]
+
+    ws.sent = []
+    client.unsubscribe_book("ETH/USD", depth=5)
+    unsub_msg = json.dumps(
+        {
+            "method": "unsubscribe",
+            "params": {"channel": "book", "symbol": ["ETH/USD"], "depth": 5},
+        }
+    )
+    assert ws.sent == [unsub_msg]
+    assert client._public_subs == []
 
 
 def test_parse_ohlc_message_extracts_volume():
@@ -280,3 +401,107 @@ def test_handle_message_records_heartbeat(monkeypatch):
     client._handle_message(priv, json.dumps({"channel": "heartbeat"}))
     assert client.last_private_heartbeat is not None
     assert client.is_alive("private")
+
+
+def test_subscribe_instruments(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_instruments(snapshot=False)
+    expected = json.dumps(
+        {"method": "subscribe", "params": {"channel": "instrument", "snapshot": False}}
+    )
+    assert ws.sent == [expected]
+    assert client._public_subs[0] == expected
+
+
+def test_parse_instrument_message_returns_payload():
+    msg = json.dumps(
+        {
+            "channel": "instrument",
+            "type": "snapshot",
+            "data": {
+                "assets": [{"id": "XBT", "status": "enabled"}],
+                "pairs": [{"symbol": "BTC/USD", "status": "online"}],
+            },
+        }
+    )
+
+    result = kraken_ws.parse_instrument_message(msg)
+    assert result == {
+        "assets": [{"id": "XBT", "status": "enabled"}],
+        "pairs": [{"symbol": "BTC/USD", "status": "online"}],
+    }
+
+
+def test_subscribe_book_and_unsubscribe(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_book("ETH/USD", depth=25, snapshot=False)
+    expected_sub = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {
+                "channel": "book",
+                "symbol": ["ETH/USD"],
+                "depth": 25,
+                "snapshot": False,
+            },
+        }
+    )
+    assert ws.sent == [expected_sub]
+    assert client._public_subs[0] == expected_sub
+
+    ws.sent.clear()
+    client.unsubscribe_book("ETH/USD")
+    expected_unsub = json.dumps(
+        {
+            "method": "unsubscribe",
+            "params": {"channel": "book", "symbol": ["ETH/USD"]},
+        }
+    )
+    assert ws.sent == [expected_unsub]
+
+
+def test_parse_book_message_snapshot_and_update():
+    snap_msg = json.dumps(
+        {
+            "channel": "book",
+            "type": "snapshot",
+            "symbol": "BTC/USD",
+            "data": {
+                "bids": [["30000.1", "1.0"], ["29999.9", "2.0"]],
+                "asks": [["30000.2", "1.5"], ["30001.0", "3.0"]],
+            },
+        }
+    )
+
+    upd_msg = json.dumps(
+        {
+            "channel": "book",
+            "type": "update",
+            "symbol": "BTC/USD",
+            "data": {
+                "bids": [["30000.1", "0.5"]],
+                "asks": [["30000.2", "1.0"]],
+            },
+        }
+    )
+
+    snap = kraken_ws.parse_book_message(snap_msg)
+    upd = kraken_ws.parse_book_message(upd_msg)
+
+    assert snap == {
+        "type": "snapshot",
+        "bids": [[30000.1, 1.0], [29999.9, 2.0]],
+        "asks": [[30000.2, 1.5], [30001.0, 3.0]],
+    }
+
+    assert upd == {
+        "type": "update",
+        "bids": [[30000.1, 0.5]],
+        "asks": [[30000.2, 1.0]],
+    }

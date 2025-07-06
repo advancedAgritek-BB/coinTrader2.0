@@ -49,6 +49,163 @@ def parse_ohlc_message(message: str) -> Optional[List[float]]:
         return None
     return [ts, o, h, l, c, vol]
 
+def parse_book_message(message: str) -> Optional[dict]:
+    """Parse a Kraken order book websocket message."""
+    try:
+        data: Any = json.loads(message)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, list) or len(data) < 3:
+        return None
+
+    chan = data[1] if len(data) > 1 else {}
+    book = data[2] if len(data) > 2 else None
+    if not isinstance(chan, dict) or not isinstance(book, dict):
+        return None
+    if not str(chan.get("channel", "")).startswith("book"):
+        return None
+
+    msg_type = book.get("type")
+    if msg_type not in ("snapshot", "update"):
+        return None
+
+    symbol = book.get("symbol") or chan.get("symbol")
+    if not isinstance(symbol, str):
+        return None
+
+    def _levels(keys):
+        for k in keys:
+            if k in book:
+                return book[k]
+        return None
+
+    asks_raw = _levels(["asks", "as", "a"])
+    bids_raw = _levels(["bids", "bs", "b"])
+    if asks_raw is None or bids_raw is None:
+        return None
+
+    def _parse(levels):
+        result = []
+        for lvl in levels:
+            if not isinstance(lvl, list) or len(lvl) < 2:
+                return None
+            try:
+                price = float(lvl[0])
+                qty = float(lvl[1])
+            except (TypeError, ValueError):
+                return None
+            result.append((price, qty))
+        return result
+
+    asks = _parse(asks_raw)
+    bids = _parse(bids_raw)
+    if asks is None or bids is None:
+        return None
+
+    checksum = book.get("checksum")
+    try:
+        checksum = int(checksum)
+    except (TypeError, ValueError):
+        return None
+
+    timestamp_val = book.get("timestamp")
+    timestamp = None
+    if timestamp_val is not None:
+        try:
+            tsf = float(timestamp_val)
+            if tsf > 1e12:
+                tsf /= 1000
+            timestamp = datetime.fromtimestamp(tsf, timezone.utc)
+        except Exception:
+            timestamp = None
+
+    return {
+        "type": msg_type,
+        "symbol": symbol,
+        "asks": asks,
+        "bids": bids,
+        "checksum": checksum,
+        "timestamp": timestamp,
+    }
+
+
+def parse_instrument_message(message: str) -> Optional[dict]:
+    """Parse a Kraken instrument snapshot or update message.
+
+    Parameters
+    ----------
+    message : str
+        Raw JSON message from the websocket.
+
+    Returns
+    -------
+    Optional[dict]
+        The ``data`` payload containing ``assets`` and ``pairs`` if the
+        message is a valid instrument snapshot or update.
+    """
+    try:
+        data: Any = json.loads(message)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+    if data.get("channel") != "instrument":
+        return None
+
+    payload = data.get("data")
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def parse_book_message(message: str) -> Optional[dict]:
+    """Parse a Kraken order book snapshot or update message.
+
+    Parameters
+    ----------
+    message : str
+        Raw JSON message from the websocket.
+
+    Returns
+    -------
+    Optional[dict]
+        Dictionary with ``bids`` and ``asks`` lists containing ``[price, volume]``
+        floats and a ``type`` field if the message is valid.
+    """
+
+    try:
+        data: Any = json.loads(message)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict) or data.get("channel") != "book":
+        return None
+
+    msg_type = data.get("type")
+    payload = data.get("data")
+    if msg_type not in ("snapshot", "update") or not isinstance(payload, dict):
+        return None
+
+    bids = payload.get("bids")
+    asks = payload.get("asks")
+    if not isinstance(bids, list) or not isinstance(asks, list):
+        return None
+
+    def _convert(items: List[Any]) -> List[List[float]]:
+        parsed = []
+        for it in items:
+            try:
+                price = float(it[0])
+                volume = float(it[1])
+            except (IndexError, ValueError, TypeError):
+                continue
+            parsed.append([price, volume])
+        return parsed
+
+    return {"type": msg_type, "bids": _convert(bids), "asks": _convert(asks)}
+
 
 class KrakenWSClient:
     """Minimal Kraken WebSocket client for public and private channels."""
@@ -215,8 +372,17 @@ class KrakenWSClient:
             for sub in self._private_subs:
                 self.private_ws.send(sub)
 
-    def subscribe_ticker(self, symbol: Union[str, List[str]]) -> None:
+    def subscribe_ticker(
+        self,
+        symbol: Union[str, List[str]],
+        *,
+        event_trigger: Optional[dict] = None,
+        event_trigger: Optional[str] = None,
+        snapshot: Optional[bool] = None,
+        req_id: Optional[int] = None,
+    ) -> None:
         """Subscribe to ticker updates for one or more symbols."""
+
         self.connect_public()
         if isinstance(symbol, str):
             symbol = [symbol]
@@ -224,8 +390,56 @@ class KrakenWSClient:
             "method": "subscribe",
             "params": {"channel": "ticker", "symbol": symbol},
         }
+        if event_trigger is not None:
+            msg["params"]["eventTrigger"] = event_trigger
+        if req_id is not None:
+            msg["req_id"] = req_id
+
+        params = {"channel": "ticker", "symbol": symbol}
+        if event_trigger is not None:
+            params["event_trigger"] = event_trigger
+        if snapshot is not None:
+            params["snapshot"] = snapshot
+        if req_id is not None:
+            params["req_id"] = req_id
+
+        msg = {"method": "subscribe", "params": params}
         data = json.dumps(msg)
         self._public_subs.append(data)
+        self.public_ws.send(data)
+
+    def unsubscribe_ticker(
+        self,
+        symbol: Union[str, List[str]],
+        *,
+        event_trigger: Optional[dict] = None,
+        req_id: Optional[int] = None,
+    ) -> None:
+        """Unsubscribe from ticker updates for one or more symbols."""
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "unsubscribe",
+            "params": {"channel": "ticker", "symbol": symbol},
+        }
+        if event_trigger is not None:
+            msg["params"]["eventTrigger"] = event_trigger
+        if req_id is not None:
+            msg["req_id"] = req_id
+        data = json.dumps(msg)
+
+        sub_msg = {
+            "method": "subscribe",
+            "params": {"channel": "ticker", "symbol": symbol},
+        }
+        if event_trigger is not None:
+            sub_msg["params"]["eventTrigger"] = event_trigger
+        if req_id is not None:
+            sub_msg["req_id"] = req_id
+        sub_data = json.dumps(sub_msg)
+        if sub_data in self._public_subs:
+            self._public_subs.remove(sub_data)
         self.public_ws.send(data)
 
     def subscribe_trades(self, symbol: Union[str, List[str]]) -> None:
@@ -240,6 +454,84 @@ class KrakenWSClient:
         data = json.dumps(msg)
         self._public_subs.append(data)
         self.public_ws.send(data)
+
+    def subscribe_book(
+        self,
+        symbol: Union[str, List[str]],
+        *,
+        depth: int = 10,
+        snapshot: bool = True,
+        self, symbol: Union[str, List[str]], depth: int = 10, snapshot: bool = True
+    ) -> None:
+        """Subscribe to order book updates for one or more symbols."""
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "subscribe",
+            "params": {
+                "channel": "book",
+                "symbol": symbol,
+                "depth": depth,
+                "snapshot": snapshot,
+            },
+        }
+        data = json.dumps(msg)
+        self._public_subs.append(data)
+        self.public_ws.send(data)
+
+    def unsubscribe_book(self, symbol: Union[str, List[str]]) -> None:
+        """Unsubscribe from order book updates for one or more symbols."""
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "unsubscribe",
+            "params": {"channel": "book", "symbol": symbol},
+        }
+        data = json.dumps(msg)
+        try:
+            self.public_ws.send(data)
+        except Exception:
+            pass
+
+    def subscribe_instruments(self, snapshot: bool = True) -> None:
+        """Subscribe to the instrument reference data channel."""
+        self.connect_public()
+        msg = {
+            "method": "subscribe",
+            "params": {"channel": "instrument", "snapshot": snapshot},
+        }
+        data = json.dumps(msg)
+        self._public_subs.append(data)
+        self.public_ws.send(data)
+
+    def unsubscribe_book(self, symbol: Union[str, List[str]], depth: int = 10) -> None:
+        """Unsubscribe from order book updates for the given symbols."""
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "unsubscribe",
+            "params": {"channel": "book", "symbol": symbol, "depth": depth},
+        }
+        data = json.dumps(msg)
+        self.public_ws.send(data)
+
+        def _matches(sub: str) -> bool:
+            try:
+                parsed = json.loads(sub)
+            except Exception:
+                return False
+            params = parsed.get("params", {}) if isinstance(parsed, dict) else {}
+            return (
+                parsed.get("method") == "subscribe"
+                and params.get("channel") == "book"
+                and params.get("depth", depth) == depth
+                and sorted(params.get("symbol", [])) == sorted(symbol)
+            )
+
+        self._public_subs = [s for s in self._public_subs if not _matches(s)]
 
     def subscribe_orders(self, symbol: Optional[str] = None) -> None:
         """Subscribe to private open order updates.
