@@ -113,6 +113,28 @@ def test_watch_ohlcv_no_fallback_when_enough():
     assert data[0][0] == 2
 
 
+class IncompleteExchange:
+    def __init__(self):
+        self.calls = 0
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
+        self.calls += 1
+        if self.calls == 1:
+            return [[0] * 6 for _ in range(2)]
+        return [[1] * 6 for _ in range(limit)]
+
+
+def test_incomplete_ohlcv_warns_and_retries(caplog):
+    ex = IncompleteExchange()
+    caplog.set_level(logging.WARNING)
+    data = asyncio.run(
+        fetch_ohlcv_async(ex, "BTC/USD", limit=5, since=1000)
+    )
+    assert ex.calls >= 2
+    assert len(data) == 5
+    assert any("Incomplete OHLCV for BTC/USD" in r.getMessage() for r in caplog.records)
+
+
 class DummySyncExchange:
     def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         return [[0, 1, 2, 3, 4, 5]]

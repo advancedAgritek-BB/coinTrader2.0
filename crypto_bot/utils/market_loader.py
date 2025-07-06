@@ -242,10 +242,14 @@ async def fetch_ohlcv_async(
             if since is not None and "since" in params:
                 kwargs["since"] = since
                 tf_sec = timeframe_seconds(exchange, timeframe)
-                now_ms = int(time.time() * 1000)
                 try:
-                    expected = max(0, (now_ms - since) // (tf_sec * 1000))
-                    ws_limit = max(1, min(limit, int(expected) + 2))
+                    if since > 1e10:
+                        now_ms = int(time.time() * 1000)
+                        expected = max(0, (now_ms - since) // (tf_sec * 1000))
+                        ws_limit = max(1, min(ws_limit, int(expected) + 2))
+                    else:
+                        expected = max(0, (time.time() - since) // tf_sec)
+                        ws_limit = max(1, min(ws_limit, int(expected) + 1))
                     kwargs["limit"] = ws_limit
                 except Exception:
                     pass
@@ -265,32 +269,121 @@ async def fetch_ohlcv_async(
                     }
                     if since is not None and "since" in params_f:
                         kwargs_f["since"] = since
-                    return await asyncio.wait_for(
+                    data = await asyncio.wait_for(
                         exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
                     )
+                    expected = limit
+                    if since is not None:
+                        try:
+                            tf_sec = timeframe_seconds(exchange, timeframe)
+                            now_ms = int(time.time() * 1000)
+                            expected = min(limit, int((now_ms - since) // (tf_sec * 1000)) + 1)
+                        except Exception:
+                            pass
+                    if len(data) < expected:
+                        logger.warning("Incomplete OHLCV for %s", symbol)
+                    return data
                 params_f = inspect.signature(exchange.fetch_ohlcv).parameters
                 kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                 if since is not None and "since" in params_f:
                     kwargs_f["since"] = since
-                return await asyncio.wait_for(
+                data = await asyncio.wait_for(
                     asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f), OHLCV_TIMEOUT
                 )
+                expected = limit
+                if since is not None:
+                    try:
+                        tf_sec = timeframe_seconds(exchange, timeframe)
+                        now_ms = int(time.time() * 1000)
+                        expected = min(limit, int((now_ms - since) // (tf_sec * 1000)) + 1)
+                    except Exception:
+                        pass
+                if len(data) < expected:
+                    logger.warning("Incomplete OHLCV for %s", symbol)
+                return data
+            expected = limit
+            if since is not None:
+                try:
+                    tf_sec = timeframe_seconds(exchange, timeframe)
+                    now_ms = int(time.time() * 1000)
+                    expected = min(limit, int((now_ms - since) // (tf_sec * 1000)) + 1)
+                except Exception:
+                    pass
+            if len(data) < expected:
+                logger.warning("Incomplete OHLCV for %s", symbol)
+                if since is not None and hasattr(exchange, "fetch_ohlcv"):
+                    try:
+                        kwargs_r = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
+                            data_r = await asyncio.wait_for(
+                                exchange.fetch_ohlcv(**kwargs_r), OHLCV_TIMEOUT
+                            )
+                        else:
+                            data_r = await asyncio.wait_for(
+                                asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_r), OHLCV_TIMEOUT
+                            )
+                        if len(data_r) > len(data):
+                            data = data_r
+                    except Exception:
+                        pass
             return data
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
             params_f = inspect.signature(exchange.fetch_ohlcv).parameters
             kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
             if since is not None and "since" in params_f:
                 kwargs_f["since"] = since
-            return await asyncio.wait_for(
+            data = await asyncio.wait_for(
                 exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
             )
+            expected = limit
+            if since is not None:
+                try:
+                    tf_sec = timeframe_seconds(exchange, timeframe)
+                    now_ms = int(time.time() * 1000)
+                    expected = min(limit, int((now_ms - since) // (tf_sec * 1000)) + 1)
+                except Exception:
+                    pass
+            if len(data) < expected:
+                logger.warning("Incomplete OHLCV for %s", symbol)
+                if since is not None:
+                    try:
+                        kwargs_r = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                        data_r = await asyncio.wait_for(
+                            exchange.fetch_ohlcv(**kwargs_r), OHLCV_TIMEOUT
+                        )
+                        if len(data_r) > len(data):
+                            data = data_r
+                    except Exception:
+                        pass
+            return data
         params_f = inspect.signature(exchange.fetch_ohlcv).parameters
         kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
         if since is not None and "since" in params_f:
             kwargs_f["since"] = since
-        return await asyncio.wait_for(
+        data = await asyncio.wait_for(
             asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f), OHLCV_TIMEOUT
         )
+        expected = limit
+        if since is not None:
+            try:
+                tf_sec = timeframe_seconds(exchange, timeframe)
+                now_ms = int(time.time() * 1000)
+                expected = min(limit, int((now_ms - since) // (tf_sec * 1000)) + 1)
+            except Exception:
+                pass
+        if len(data) < expected:
+            logger.warning("Incomplete OHLCV for %s", symbol)
+            if since is not None:
+                try:
+                    kwargs_r = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                    data_r = await asyncio.wait_for(
+                        asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_r), OHLCV_TIMEOUT
+                    )
+                    if len(data_r) > len(data):
+                        data = data_r
+                except Exception:
+                    pass
+        return data
     except asyncio.TimeoutError as exc:
         ex_id = getattr(exchange, "id", "unknown")
         if use_websocket and hasattr(exchange, "watch_ohlcv"):
