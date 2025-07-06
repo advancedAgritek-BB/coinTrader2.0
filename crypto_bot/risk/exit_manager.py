@@ -31,38 +31,6 @@ def calculate_trailing_stop(
     logger.info("Calculated trailing stop %.4f from high %.4f", stop, highest)
     return stop
 
-
-def momentum_timer(price_series: pd.Series) -> Tuple[int, bool]:
-    """Measure momentum of consecutive closes.
-
-    Parameters
-    ----------
-    price_series : pd.Series
-        Series of closing prices.
-
-    Returns
-    -------
-    Tuple[int, bool]
-        Number of consecutive up closes and whether price has stalled
-        with three or more consecutive down closes.
-    """
-    diffs = price_series.diff().dropna()
-    up_streak = 0
-    for change in reversed(diffs):
-        if change > 0:
-            up_streak += 1
-        else:
-            break
-    down_streak = 0
-    for change in reversed(diffs):
-        if change < 0:
-            down_streak += 1
-        else:
-            break
-    stall = down_streak >= 3
-    return up_streak, stall
-
-
 def momentum_healthy(df: pd.DataFrame) -> bool:
     """Check RSI, MACD and volume to gauge trend health.
 
@@ -100,30 +68,6 @@ def momentum_healthy(df: pd.DataFrame) -> bool:
         and latest['macd'] > latest['macd_signal']
         and vol_rising
     )
-
-
-def fib_extensions(
-    last_swing_low: float, last_swing_high: float
-) -> Tuple[float, float]:
-    """Return 1.618 and 2.618 fib extension levels.
-
-    Parameters
-    ----------
-    last_swing_low : float
-        Most recent swing low in price.
-    last_swing_high : float
-        Most recent swing high in price.
-
-    Returns
-    -------
-    Tuple[float, float]
-        The 1.618 and 2.618 extension levels.
-    """
-    diff = last_swing_high - last_swing_low
-    ext_1618 = last_swing_low + diff * 1.618
-    ext_2618 = last_swing_low + diff * 2.618
-    return ext_1618, ext_2618
-
 
 def should_exit(
     df: pd.DataFrame,
