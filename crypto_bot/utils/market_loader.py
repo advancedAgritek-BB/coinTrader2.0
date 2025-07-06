@@ -11,6 +11,7 @@ logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
 failed_symbols: Dict[str, float] = {}
 retry_delay = 300
+OHLCV_TIMEOUT = 30
 
 
 def is_symbol_type(pair_info: dict, allowed: List[str]) -> bool:
@@ -138,7 +139,9 @@ async def fetch_ohlcv_async(
             kwargs = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
             if since is not None and "since" in params:
                 kwargs["since"] = since
-            data = await exchange.watch_ohlcv(**kwargs)
+            data = await asyncio.wait_for(
+                exchange.watch_ohlcv(**kwargs), OHLCV_TIMEOUT
+            )
             if (
                 limit
                 and len(data) < limit
@@ -147,27 +150,42 @@ async def fetch_ohlcv_async(
             ):
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
                     params_f = inspect.signature(exchange.fetch_ohlcv).parameters
-                    kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                    kwargs_f = {
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                        "limit": limit,
+                    }
                     if since is not None and "since" in params_f:
                         kwargs_f["since"] = since
-                    return await exchange.fetch_ohlcv(**kwargs_f)
+                    return await asyncio.wait_for(
+                        exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
+                    )
                 params_f = inspect.signature(exchange.fetch_ohlcv).parameters
                 kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                 if since is not None and "since" in params_f:
                     kwargs_f["since"] = since
-                return await asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f)
+                return await asyncio.wait_for(
+                    asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f), OHLCV_TIMEOUT
+                )
             return data
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
             params_f = inspect.signature(exchange.fetch_ohlcv).parameters
             kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
             if since is not None and "since" in params_f:
                 kwargs_f["since"] = since
-            return await exchange.fetch_ohlcv(**kwargs_f)
+            return await asyncio.wait_for(
+                exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
+            )
         params_f = inspect.signature(exchange.fetch_ohlcv).parameters
         kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
         if since is not None and "since" in params_f:
             kwargs_f["since"] = since
-        return await asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f)
+        return await asyncio.wait_for(
+            asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f), OHLCV_TIMEOUT
+        )
+    except asyncio.TimeoutError as exc:
+        logger.error("OHLCV fetch timed out for %s", symbol)
+        return exc
     except Exception as exc:  # pragma: no cover - network
         if (
             use_websocket
@@ -177,15 +195,23 @@ async def fetch_ohlcv_async(
             try:
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
                     params_f = inspect.signature(exchange.fetch_ohlcv).parameters
-                    kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                    kwargs_f = {
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                        "limit": limit,
+                    }
                     if since is not None and "since" in params_f:
                         kwargs_f["since"] = since
-                    return await exchange.fetch_ohlcv(**kwargs_f)
+                    return await asyncio.wait_for(
+                        exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
+                    )
                 params_f = inspect.signature(exchange.fetch_ohlcv).parameters
                 kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                 if since is not None and "since" in params_f:
                     kwargs_f["since"] = since
-                return await asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f)
+                return await asyncio.wait_for(
+                    asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f), OHLCV_TIMEOUT
+                )
             except Exception:
                 pass
         return exc
@@ -250,6 +276,10 @@ async def load_ohlcv_parallel(
 
     data: Dict[str, list] = {}
     for sym, res in zip(symbols, results):
+        if isinstance(res, asyncio.TimeoutError):
+            logger.error("Timeout loading OHLCV for %s", sym)
+            failed_symbols[sym] = time.time()
+            continue
         if isinstance(res, Exception) or not res:
             logger.error("Failed to load OHLCV for %s: %s", sym, res)
             failed_symbols[sym] = time.time()

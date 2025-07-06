@@ -438,3 +438,33 @@ def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
 
     assert "symbols" not in captured["cfg"]
     assert any("symbol scan empty" in r.getMessage() for r in caplog.records)
+
+
+class SlowExchange:
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        await asyncio.sleep(0.05)
+        return [[0] * 6]
+
+
+def test_fetch_ohlcv_async_timeout(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    ex = SlowExchange()
+    monkeypatch.setattr(market_loader, "OHLCV_TIMEOUT", 0.01)
+
+    res = asyncio.run(market_loader.fetch_ohlcv_async(ex, "BTC/USD"))
+    assert isinstance(res, asyncio.TimeoutError)
+
+
+def test_load_ohlcv_parallel_timeout(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    ex = SlowExchange()
+    market_loader.failed_symbols.clear()
+    monkeypatch.setattr(market_loader, "OHLCV_TIMEOUT", 0.01)
+
+    result = asyncio.run(
+        market_loader.load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1)
+    )
+    assert result == {}
+    assert "BTC/USD" in market_loader.failed_symbols
