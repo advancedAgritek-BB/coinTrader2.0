@@ -27,6 +27,7 @@ max_age_days: 180  # max candle age
 max_change_pct: 10  # ignore large moves
 max_concurrent_ohlcv: 50  # limit OHLCV requests
 ohlcv_timeout: 60  # seconds to wait for OHLCV responses
+max_ohlcv_failures: 3  # disable symbol after this many OHLCV errors
 max_latency_ms: 1000  # max order latency
 max_slippage_pct: 0.05  # allowed slippage percent
 max_spread_pct: 2  # allowed bid-ask spread

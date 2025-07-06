@@ -489,7 +489,7 @@ def test_failed_symbol_backoff(monkeypatch):
             max_concurrent=1,
         )
     )
-    assert market_loader.failed_symbols["BTC/USD"]["delay"] == 40
+    assert market_loader.failed_symbols["BTC/USD"]["delay"] == 10
 
     t += 41
     asyncio.run(
@@ -501,7 +501,7 @@ def test_failed_symbol_backoff(monkeypatch):
             max_concurrent=1,
         )
     )
-    assert market_loader.failed_symbols["BTC/USD"]["delay"] == 40
+    assert market_loader.failed_symbols["BTC/USD"]["delay"] == 10
 
 
 def test_backoff_resets_on_success(monkeypatch):
@@ -555,6 +555,54 @@ def test_backoff_resets_on_success(monkeypatch):
         )
     )
     assert market_loader.failed_symbols["BTC/USD"]["delay"] == 10
+
+
+def test_symbol_disabled_after_max_failures(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    ex = AlwaysFailExchange()
+    cache: dict[str, pd.DataFrame] = {}
+    market_loader.failed_symbols.clear()
+    monkeypatch.setattr(market_loader, "retry_delay", 0)
+    monkeypatch.setattr(market_loader, "max_ohlcv_failures", 2)
+    monkeypatch.setattr(market_loader.time, "time", lambda: 0)
+
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert ex.calls == 2
+    assert market_loader.failed_symbols["BTC/USD"]["count"] == 2
+    assert market_loader.failed_symbols["BTC/USD"]["disabled"] is True
+
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert ex.calls == 2
+    assert market_loader.failed_symbols["BTC/USD"]["count"] == 2
+    assert market_loader.failed_symbols["BTC/USD"]["disabled"] is True
+
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert ex.calls == 2
 
 
 class StopLoop(Exception):
@@ -694,10 +742,17 @@ def test_load_ohlcv_parallel_timeout_fallback(monkeypatch):
 class LimitCaptureExchange:
     def __init__(self):
         self.limit = None
+        self.watch_limit = None
+        self.fetch_called = False
 
     async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, since=None):
         self.limit = limit
-        return [[0] * 6]
+        self.watch_limit = limit
+        return [[0] * 6 for _ in range(limit)]
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100, since=None):
+        self.fetch_called = True
+        return [[1] * 6 for _ in range(limit)]
 
 
 def test_watch_ohlcv_since_reduces_limit(monkeypatch):

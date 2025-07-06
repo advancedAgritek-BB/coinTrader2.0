@@ -34,15 +34,19 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
-failed_symbols: Dict[str, Dict[str, float]] = {}
+failed_symbols: Dict[str, Dict[str, float | int | bool]] = {}
 retry_delay = 300
 max_retry_delay = 3600
 OHLCV_TIMEOUT = 30
+max_ohlcv_failures = 3
 
 
-def configure(ohlcv_timeout: int | float | None = None) -> None:
+def configure(
+    ohlcv_timeout: int | float | None = None,
+    max_failures: int | None = None,
+) -> None:
     """Configure module-wide settings."""
-    global OHLCV_TIMEOUT
+    global OHLCV_TIMEOUT, max_ohlcv_failures
     if ohlcv_timeout is not None:
         try:
             OHLCV_TIMEOUT = max(1, int(ohlcv_timeout))
@@ -51,6 +55,15 @@ def configure(ohlcv_timeout: int | float | None = None) -> None:
                 "Invalid ohlcv_timeout %s; using default %s",
                 ohlcv_timeout,
                 OHLCV_TIMEOUT,
+            )
+    if max_failures is not None:
+        try:
+            max_ohlcv_failures = max(1, int(max_failures))
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid max_failures %s; using default %s",
+                max_failures,
+                max_ohlcv_failures,
             )
 
 
@@ -199,9 +212,11 @@ async def fetch_ohlcv_async(
         if use_websocket and since is not None:
             try:
                 seconds = _timeframe_seconds(exchange, timeframe)
-                candles_needed = int((time.time() - since) / seconds) + 1
-                if candles_needed < limit:
-                    limit = candles_needed
+                s_since = since / 1000 if since > 1e11 else since
+                if since <= 1e11:
+                    candles_needed = int((time.time() - s_since) / seconds) + 1
+                    if candles_needed < limit:
+                        limit = candles_needed
             except Exception:
                 pass
         if use_websocket and hasattr(exchange, "watch_ohlcv"):
@@ -213,7 +228,8 @@ async def fetch_ohlcv_async(
                 tf_sec = timeframe_seconds(exchange, timeframe)
                 now_ms = int(time.time() * 1000)
                 try:
-                    expected = max(0, (now_ms - since) // (tf_sec * 1000))
+                    s_since_ms = since if since > 1e11 else since * 1000
+                    expected = max(0, (now_ms - s_since_ms) // (tf_sec * 1000))
                     ws_limit = max(1, min(limit, int(expected) + 2))
                     kwargs["limit"] = ws_limit
                 except Exception:
@@ -344,7 +360,12 @@ async def load_ohlcv_parallel(
     filtered_symbols: List[str] = []
     for s in symbols:
         info = failed_symbols.get(s)
-        if info is None or now - info["time"] >= info["delay"]:
+        if info is None:
+            filtered_symbols.append(s)
+            continue
+        if info.get("disabled"):
+            continue
+        if now - info["time"] >= info["delay"]:
             filtered_symbols.append(s)
     symbols = filtered_symbols
 
@@ -391,22 +412,48 @@ async def load_ohlcv_parallel(
             logger.error(msg)
             if notifier:
                 notifier.notify(msg)
-            info = failed_symbols.get(sym)
+            info = failed_symbols.get(sym, {})
             delay = retry_delay
-            if info is not None:
+            if info:
                 delay = min(info["delay"] * 2, max_retry_delay)
-            failed_symbols[sym] = {"time": time.time(), "delay": delay}
+            count = info.get("count", 0) + 1
+            disabled = info.get("disabled", False)
+            if count >= max_ohlcv_failures:
+                if not disabled:
+                    logger.error(
+                        "Disabling OHLCV for %s after %d failures", sym, count
+                    )
+                disabled = True
+            failed_symbols[sym] = {
+                "time": time.time(),
+                "delay": delay,
+                "count": count,
+                "disabled": disabled,
+            }
             continue
         if isinstance(res, Exception) or not res:
             msg = f"Failed to load OHLCV for {sym}: {res}"
             logger.error(msg)
             if notifier:
                 notifier.notify(msg)
-            info = failed_symbols.get(sym)
+            info = failed_symbols.get(sym, {})
             delay = retry_delay
-            if info is not None:
+            if info:
                 delay = min(info["delay"] * 2, max_retry_delay)
-            failed_symbols[sym] = {"time": time.time(), "delay": delay}
+            count = info.get("count", 0) + 1
+            disabled = info.get("disabled", False)
+            if count >= max_ohlcv_failures:
+                if not disabled:
+                    logger.error(
+                        "Disabling OHLCV for %s after %d failures", sym, count
+                    )
+                disabled = True
+            failed_symbols[sym] = {
+                "time": time.time(),
+                "delay": delay,
+                "count": count,
+                "disabled": disabled,
+            }
             continue
         if res and len(res[0]) > 6:
             res = [[c[0], c[1], c[2], c[3], c[4], c[6]] for c in res]
@@ -463,7 +510,12 @@ async def update_ohlcv_cache(
     filtered_symbols: List[str] = []
     for s in symbols:
         info = failed_symbols.get(s)
-        if info is None or now - info["time"] >= info["delay"]:
+        if info is None:
+            filtered_symbols.append(s)
+            continue
+        if info.get("disabled"):
+            continue
+        if now - info["time"] >= info["delay"]:
             filtered_symbols.append(s)
     symbols = filtered_symbols
     if not symbols:
@@ -501,12 +553,13 @@ async def update_ohlcv_cache(
             info = failed_symbols.get(sym)
             skip_retry = (
                 info is not None
+                and not info.get("disabled")
                 and time.time() - info["time"] < info["delay"]
                 and since_map.get(sym) is None
             )
             if skip_retry:
                 continue
-            failed_symbols.pop(sym, None)
+            prev = failed_symbols.pop(sym, None)
             full = await load_ohlcv_parallel(
                 exchange,
                 [sym],
@@ -521,8 +574,20 @@ async def update_ohlcv_cache(
             data = full.get(sym)
             if data:
                 failed_symbols.pop(sym, None)
-        if data is None:
-            continue
+            else:
+                entry = failed_symbols.get(sym)
+                if entry and prev:
+                    entry["count"] += prev.get("count", 0)
+                    if entry["count"] >= max_ohlcv_failures:
+                        if not entry.get("disabled"):
+                            logger.error(
+                                "Disabling OHLCV for %s after %d failures",
+                                sym,
+                                entry["count"],
+                            )
+                        entry["disabled"] = True
+            if data is None:
+                continue
         df_new = pd.DataFrame(
             data, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )

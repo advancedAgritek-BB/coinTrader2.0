@@ -18,3 +18,4 @@ def test_load_config_returns_dict():
     assert "voting_strategies" in config
     assert "min_agreeing_votes" in config
     assert "ohlcv_timeout" in config
+    assert "max_ohlcv_failures" in config

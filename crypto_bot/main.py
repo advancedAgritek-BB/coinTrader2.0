@@ -120,7 +120,10 @@ async def main() -> None:
     metrics_path = Path(config.get("metrics_csv")) if config.get("metrics_csv") else None
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
     cooldown_configure(config.get("min_cooldown", 0))
-    market_loader_configure(config.get("ohlcv_timeout", 60))
+    market_loader_configure(
+        config.get("ohlcv_timeout", 60),
+        max_failures=config.get("max_ohlcv_failures", 3),
+    )
     secrets = dotenv_values(ENV_PATH)
     os.environ.update(secrets)
 
