@@ -160,6 +160,53 @@ def parse_instrument_message(message: str) -> Optional[dict]:
     return payload
 
 
+def parse_book_message(message: str) -> Optional[dict]:
+    """Parse a Kraken order book snapshot or update message.
+
+    Parameters
+    ----------
+    message : str
+        Raw JSON message from the websocket.
+
+    Returns
+    -------
+    Optional[dict]
+        Dictionary with ``bids`` and ``asks`` lists containing ``[price, volume]``
+        floats and a ``type`` field if the message is valid.
+    """
+
+    try:
+        data: Any = json.loads(message)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict) or data.get("channel") != "book":
+        return None
+
+    msg_type = data.get("type")
+    payload = data.get("data")
+    if msg_type not in ("snapshot", "update") or not isinstance(payload, dict):
+        return None
+
+    bids = payload.get("bids")
+    asks = payload.get("asks")
+    if not isinstance(bids, list) or not isinstance(asks, list):
+        return None
+
+    def _convert(items: List[Any]) -> List[List[float]]:
+        parsed = []
+        for it in items:
+            try:
+                price = float(it[0])
+                volume = float(it[1])
+            except (IndexError, ValueError, TypeError):
+                continue
+            parsed.append([price, volume])
+        return parsed
+
+    return {"type": msg_type, "bids": _convert(bids), "asks": _convert(asks)}
+
+
 class KrakenWSClient:
     """Minimal Kraken WebSocket client for public and private channels."""
 
@@ -409,6 +456,11 @@ class KrakenWSClient:
         self.public_ws.send(data)
 
     def subscribe_book(
+        self,
+        symbol: Union[str, List[str]],
+        *,
+        depth: int = 10,
+        snapshot: bool = True,
         self, symbol: Union[str, List[str]], depth: int = 10, snapshot: bool = True
     ) -> None:
         """Subscribe to order book updates for one or more symbols."""
@@ -423,6 +475,26 @@ class KrakenWSClient:
                 "depth": depth,
                 "snapshot": snapshot,
             },
+        }
+        data = json.dumps(msg)
+        self._public_subs.append(data)
+        self.public_ws.send(data)
+
+    def unsubscribe_book(self, symbol: Union[str, List[str]]) -> None:
+        """Unsubscribe from order book updates for one or more symbols."""
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "unsubscribe",
+            "params": {"channel": "book", "symbol": symbol},
+        }
+        data = json.dumps(msg)
+        try:
+            self.public_ws.send(data)
+        except Exception:
+            pass
+
     def subscribe_instruments(self, snapshot: bool = True) -> None:
         """Subscribe to the instrument reference data channel."""
         self.connect_public()
