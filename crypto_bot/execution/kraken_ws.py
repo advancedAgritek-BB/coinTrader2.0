@@ -607,14 +607,17 @@ class KrakenWSClient:
             self._public_subs.remove(sub_data)
         self.public_ws.send(data)
 
-    def subscribe_trades(self, symbol: Union[str, List[str]]) -> None:
+    def subscribe_trades(
+        self, symbol: Union[str, List[str]], *, snapshot: bool = True
+    ) -> None:
         """Subscribe to trade updates for one or more symbols."""
+
         self.connect_public()
         if isinstance(symbol, str):
             symbol = [symbol]
         msg = {
             "method": "subscribe",
-            "params": {"channel": "trade", "symbol": symbol},
+            "params": {"channel": "trade", "symbol": symbol, "snapshot": snapshot},
         }
         data = json.dumps(msg)
         self._public_subs.append(data)
