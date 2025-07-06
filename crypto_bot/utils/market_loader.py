@@ -277,10 +277,6 @@ async def fetch_ohlcv_async(
         ex_id = getattr(exchange, "id", "unknown")
         if use_websocket and hasattr(exchange, "watch_ohlcv"):
             logger.error(
-                "WS OHLCV timeout for %s on %s limit %d: %s",
-                symbol,
-                timeframe,
-                limit,
                 "WS OHLCV timeout for %s on %s (tf=%s limit=%s ws=%s): %s",
                 symbol,
                 ex_id,
@@ -292,10 +288,6 @@ async def fetch_ohlcv_async(
             )
         else:
             logger.error(
-                "REST OHLCV timeout for %s on %s limit %d: %s",
-                symbol,
-                timeframe,
-                limit,
                 "REST OHLCV timeout for %s on %s (tf=%s limit=%s ws=%s): %s",
                 symbol,
                 ex_id,
@@ -331,10 +323,6 @@ async def fetch_ohlcv_async(
             except Exception as exc2:  # pragma: no cover - fallback
                 ex_id = getattr(exchange, "id", "unknown")
                 logger.error(
-                    "REST fallback fetch_ohlcv failed for %s on %s limit %d: %s",
-                    symbol,
-                    timeframe,
-                    limit,
                     "REST fallback fetch_ohlcv failed for %s on %s (tf=%s limit=%s ws=%s): %s",
                     symbol,
                     ex_id,
