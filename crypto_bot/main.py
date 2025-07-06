@@ -55,6 +55,7 @@ from crypto_bot.utils.market_loader import (
     update_multi_tf_ohlcv_cache,
     update_regime_tf_cache,
     fetch_ohlcv_async,
+    configure as market_loader_configure,
 )
 from crypto_bot.utils.eval_queue import build_priority_queue
 from crypto_bot.utils.symbol_pre_filter import filter_symbols
@@ -119,6 +120,7 @@ async def main() -> None:
     metrics_path = Path(config.get("metrics_csv")) if config.get("metrics_csv") else None
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
     cooldown_configure(config.get("min_cooldown", 0))
+    market_loader_configure(config.get("ohlcv_timeout", 60))
     secrets = dotenv_values(ENV_PATH)
     os.environ.update(secrets)
 
