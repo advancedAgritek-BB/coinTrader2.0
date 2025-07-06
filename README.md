@@ -364,6 +364,22 @@ parameter controls which events push updates and defaults to `"trades"`. The
 # Request ticker updates triggered by book changes without an initial snapshot
 ws.subscribe_ticker(["ETH/USD"], event_trigger="book", snapshot=False)
 ```
+To stream candlestick data use `subscribe_ohlc`. The helper
+`parse_ohlc_message` converts the raw payload into `[timestamp, open, high,
+low, close, volume]` where `timestamp` is the `interval_begin` field converted
+to a Unix epoch in milliseconds.
+
+```python
+ws.subscribe_ohlc("ETH/USD", interval=1)
+
+msg = ...  # read from ws.public_ws
+candle = parse_ohlc_message(msg)
+if candle:
+    ts, o, h, l, c, volume = candle
+    print(ts, o, h, l, c, volume)
+```
+Call `unsubscribe_ohlc("ETH/USD", interval=1)` to stop receiving updates.
+
 `subscribe_book` streams the order book for the given pair. `depth` sets how many levels are sent, while `snapshot` requests an initial book snapshot before updates.
 
 The Kraken WebSocket client automatically reconnects if the connection drops and
