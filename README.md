@@ -357,7 +357,11 @@ ws.cancel_order("OABCDEF", ["BTC/USD"])
 The Kraken WebSocket client automatically reconnects if the connection drops and
 resubscribes to any previously requested channels.  Trading commands use the new
 `/v2` naming scheme such as `add_order`, `cancel_order`, `cancel_all_orders` and
-`open_orders`.  Refer to Kraken's v2 WebSocket documentation for a full list:
+`open_orders`.  The client now listens for `status` and `heartbeat` messages to
+monitor connection health.  Call `get_status()` to read the most recent
+`systemStatus` update or `is_alive()` to check if heartbeats are arriving in a
+timely fashion.  The `ping()` method measures round-trip latency.  Refer to
+Kraken's v2 WebSocket documentation for a full list:
 <https://docs.kraken.com/websockets-v2/#tag/Trading>.
 
 Example usage:
@@ -370,6 +374,9 @@ client.add_order("BTC/USD", "buy", 0.1)
 client.cancel_order("TXID123")
 client.cancel_all_orders()
 client.open_orders()
+client.ping()                 # returns round-trip latency
+status = client.get_status()  # last systemStatus message
+alive = client.is_alive()     # True if heartbeats are recent
 ```
 
 Binance.US is not recommended because of API limitations.
