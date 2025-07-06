@@ -79,6 +79,9 @@ wss://ws.kraken.com/v2
 **Private WS Endpoint**
 wss://ws-auth.kraken.com/v2
 
+The `KrakenWSClient` automatically processes `status` and `heartbeat` channels,
+so explicit subscriptions for those are unnecessary.
+
 ### Subscribe to Market Data
 Ticker
 
