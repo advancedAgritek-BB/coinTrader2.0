@@ -592,6 +592,12 @@ async def load_ohlcv_parallel(
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
+    if any(isinstance(r, asyncio.CancelledError) for r in results):
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+        raise asyncio.CancelledError()
+
     data: Dict[str, list] = {}
     ex_id = getattr(exchange, "id", "unknown")
     mode = "websocket" if use_websocket else "REST"
@@ -635,7 +641,7 @@ async def load_ohlcv_parallel(
                 "disabled": disabled,
             }
             continue
-        if isinstance(res, Exception) or not res:
+        if (isinstance(res, Exception) and not isinstance(res, asyncio.CancelledError)) or not res:
             logger.error(
                 "Failed to load OHLCV for %s on %s limit %d: %s",
                 sym,

@@ -925,3 +925,18 @@ def test_fetch_ohlcv_async_skips_unsupported_timeframe():
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", timeframe="1m"))
     assert data == []
     assert ex.called is False
+
+
+class CancelExchange:
+    has = {"fetchOHLCV": True}
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        raise asyncio.CancelledError()
+
+
+def test_load_ohlcv_parallel_propagates_cancelled(caplog):
+    ex = CancelExchange()
+    caplog.set_level(logging.ERROR)
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1))
+    assert len(caplog.records) == 0
