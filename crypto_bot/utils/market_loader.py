@@ -389,26 +389,26 @@ async def load_ohlcv_parallel(
         sem = None
 
     async def sem_fetch(sym: str):
+        async def _fetch_and_sleep():
+            data = await fetch_ohlcv_async(
+                exchange,
+                sym,
+                timeframe=timeframe,
+                limit=limit,
+                since=since_map.get(sym),
+                use_websocket=use_websocket,
+                force_websocket_history=force_websocket_history,
+            )
+            rl = getattr(exchange, "rateLimit", None)
+            if rl:
+                await asyncio.sleep(rl / 1000)
+            return data
+
         if sem:
             async with sem:
-                return await fetch_ohlcv_async(
-                    exchange,
-                    sym,
-                    timeframe=timeframe,
-                    limit=limit,
-                    since=since_map.get(sym),
-                    use_websocket=use_websocket,
-                    force_websocket_history=force_websocket_history,
-                )
-        return await fetch_ohlcv_async(
-            exchange,
-            sym,
-            timeframe=timeframe,
-            limit=limit,
-            since=since_map.get(sym),
-            use_websocket=use_websocket,
-            force_websocket_history=force_websocket_history,
-        )
+                return await _fetch_and_sleep()
+
+        return await _fetch_and_sleep()
 
     tasks = [asyncio.create_task(sem_fetch(s)) for s in symbols]
 
