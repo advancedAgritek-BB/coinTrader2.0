@@ -733,8 +733,7 @@ def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
 
     monkeypatch.setattr(main, "get_exchange", fake_get_exchange)
 
-    with pytest.raises(StopLoop):
-        asyncio.run(main.main())
+    asyncio.run(main.main())
 
     assert "symbols" not in captured["cfg"]
     assert any("symbol scan empty" in r.getMessage() for r in caplog.records)

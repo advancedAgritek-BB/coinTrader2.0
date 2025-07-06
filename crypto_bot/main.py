@@ -128,8 +128,8 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
-async def main() -> None:
-    """Entry point for running the trading bot."""
+async def _main_impl() -> TelegramNotifier:
+    """Implementation for running the trading bot."""
 
     logger.info("Starting bot")
     config = load_config()
@@ -199,7 +199,7 @@ async def main() -> None:
         err = notifier.notify(f"API error: {exc}")
         if err:
             logger.error("Failed to notify user: %s", err)
-        return
+        return notifier
     risk_params = {**config.get("risk", {})}
     risk_params.update(config.get("sentiment_filter", {}))
     risk_params.update(config.get("volatility_filter", {}))
@@ -988,6 +988,23 @@ async def main() -> None:
             await exchange.close()
         else:
             await asyncio.to_thread(exchange.close)
+
+    return notifier
+
+
+async def main() -> None:
+    """Entry point for running the trading bot with error handling."""
+    notifier: TelegramNotifier | None = None
+    try:
+        notifier = await _main_impl()
+    except Exception as exc:  # pragma: no cover - error path
+        logger.exception("Unhandled error in main: %s", exc)
+        if notifier:
+            notifier.notify(f"❌ Bot stopped: {exc}")
+    finally:
+        if notifier:
+            notifier.notify("Bot shutting down")
+        logger.info("Bot shutting down")
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution
