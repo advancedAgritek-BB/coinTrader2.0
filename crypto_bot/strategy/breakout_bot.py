@@ -34,10 +34,16 @@ def generate_signal(
     df: pd.DataFrame,
     config: Optional[dict] = None,
     higher_df: Optional[pd.DataFrame] = None,
-) -> Tuple[float, str]:
-    """Breakout strategy using Bollinger/Keltner squeeze confirmation."""
+) -> Tuple[float, str, float]:
+    """Breakout strategy using Bollinger/Keltner squeeze confirmation.
+
+    Returns
+    -------
+    Tuple[float, str, float]
+        Signal score, direction and ATR value used for stop distance.
+    """
     if df is None or df.empty:
-        return 0.0, "none"
+        return 0.0, "none", 0.0
 
     cfg = (config or {}).get("breakout", {})
     bb_len = int(cfg.get("bb_length", 20))
@@ -53,16 +59,16 @@ def generate_signal(
 
     lookback = max(bb_len, kc_len, dc_len, vol_window, 14)
     if len(df) < lookback:
-        return 0.0, "none"
+        return 0.0, "none", 0.0
 
     squeeze, atr = _squeeze(df, bb_len, bb_std, kc_len, kc_mult, threshold)
     if pd.isna(squeeze.iloc[-1]) or not squeeze.iloc[-1]:
-        return 0.0, "none"
+        return 0.0, "none", 0.0
 
     if higher_df is not None and not higher_df.empty:
         h_sq, _ = _squeeze(higher_df, bb_len, bb_std, kc_len, kc_mult, threshold)
         if pd.isna(h_sq.iloc[-1]) or not h_sq.iloc[-1]:
-            return 0.0, "none"
+            return 0.0, "none", 0.0
 
     close = df["close"]
     high = df["high"]
@@ -100,4 +106,4 @@ def generate_signal(
     if score > 0 and (config is None or config.get("atr_normalization", True)):
         score = normalize_score_by_volatility(df, score)
 
-    return score, direction
+    return score, direction, atr_last

@@ -913,7 +913,12 @@ async def _main_impl() -> TelegramNotifier:
                 balance = paper_wallet.balance if paper_wallet else 0.0
             check_balance_change(float(balance), "external change")
 
-            size = risk_manager.position_size(score, balance, df_for_size)
+            size = risk_manager.position_size(
+                score,
+                balance,
+                df_for_size,
+                atr=candidate.get("atr"),
+            )
             order_amount = size / current_price if current_price > 0 else 0.0
 
             if not risk_manager.can_allocate(name, size, balance):

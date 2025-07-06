@@ -128,6 +128,7 @@ async def analyze_symbol(
         eval_mode = config.get("strategy_evaluation_mode", "mapped")
         cfg = {**config, "symbol": symbol}
 
+        atr = None
         if eval_mode == "best":
             strategies = get_strategies_for_regime(regime)
             res = evaluate_strategies(strategies, df, cfg)
@@ -137,7 +138,7 @@ async def analyze_symbol(
         else:
             strategy_fn = route(regime, env, config, notifier)
             name = strategy_name(regime, env)
-            score, direction = await evaluate_async(strategy_fn, df, cfg)
+            score, direction, atr = await evaluate_async(strategy_fn, df, cfg)
 
         weights = config.get("scoring_weights", {})
         final = (
@@ -154,6 +155,7 @@ async def analyze_symbol(
             "name": name,
             "score": final,
             "direction": direction,
+            "atr": atr,
         })
 
         votes = []

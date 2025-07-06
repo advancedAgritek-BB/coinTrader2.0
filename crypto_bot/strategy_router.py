@@ -105,9 +105,13 @@ def route(
 
         def wrapped(df: pd.DataFrame, cfg=None):
             try:
-                score, direction = fn(df, cfg)
+                res = fn(df, cfg)
             except TypeError:
-                score, direction = fn(df)
+                res = fn(df)
+            if isinstance(res, tuple):
+                score, direction = res[0], res[1]
+            else:
+                score, direction = res, "none"
             symbol = ""
             if isinstance(cfg, dict):
                 symbol = cfg.get("symbol", "")

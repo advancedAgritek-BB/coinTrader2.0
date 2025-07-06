@@ -274,7 +274,7 @@ def test_analyze_symbol_async_consistent():
     df = _make_trending_df()
     regime, _ = classify_regime(df)
     strategy = strategy_for(regime)
-    sync_score, sync_dir = asyncio.run(evaluate_async(strategy, df, {}))
+    sync_score, sync_dir, _ = asyncio.run(evaluate_async(strategy, df, {}))
 
     async def run():
         cfg = {"timeframe": "1h", "regime_timeframes": ["5m", "15m", "1h"], "min_consistent_agreement": 2}
