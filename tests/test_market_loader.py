@@ -746,6 +746,28 @@ def test_watch_ohlcv_since_reduces_limit(monkeypatch):
     assert ex.limit == 4
 
 
+class RateLimitExchange:
+    def __init__(self):
+        self.times: list[float] = []
+        self.rateLimit = 50
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.times.append(time.time())
+        return [[0] * 6]
+
+
+def test_load_ohlcv_parallel_rate_limit_sleep():
+    ex = RateLimitExchange()
+    asyncio.run(
+        load_ohlcv_parallel(
+            ex,
+            ["A", "B"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert len(ex.times) == 2
+    assert ex.times[1] - ex.times[0] >= ex.rateLimit / 1000
 class SymbolCheckExchange:
     def __init__(self):
         self.symbols: list[str] = []
