@@ -525,6 +525,27 @@ def test_subscribe_instruments(monkeypatch):
     assert client._public_subs[0] == expected
 
 
+def test_subscribe_and_unsubscribe_instruments(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_instruments(snapshot=False)
+    sub_msg = json.dumps(
+        {"method": "subscribe", "params": {"channel": "instrument", "snapshot": False}}
+    )
+    assert ws.sent == [sub_msg]
+    assert client._public_subs[0] == sub_msg
+
+    ws.sent.clear()
+    client.unsubscribe_instruments()
+    unsub_msg = json.dumps(
+        {"method": "unsubscribe", "params": {"channel": "instrument"}}
+    )
+    assert ws.sent == [unsub_msg]
+    assert client._public_subs == []
+
+
 def test_parse_instrument_message_returns_payload():
     msg = json.dumps(
         {
@@ -576,6 +597,7 @@ def test_subscribe_book_and_unsubscribe(monkeypatch):
 
 
 def test_subscribe_and_unsubscribe_trades(monkeypatch):
+def test_subscribe_trades_snapshot_option(monkeypatch):
     client = KrakenWSClient()
     ws = DummyWS()
     monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
