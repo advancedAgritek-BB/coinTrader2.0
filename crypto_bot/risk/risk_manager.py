@@ -214,8 +214,11 @@ class RiskManager:
             reason = f"Volume < {RATIO_THRESHOLD*100:.0f}% of mean volume"
             logger.info("[EVAL] %s", reason)
             return False, reason
-        vol_std = df['close'].rolling(20).std().iloc[-1]
-        if vol_std < df['close'].iloc[-20:-1].std() * 0.5:
+        vol_std = df["close"].rolling(20).std().iloc[-1]
+        prev_period_std = (
+            df["close"].iloc[-21:-1].std() if len(df) >= 21 else float("nan")
+        )
+        if not isnan(prev_period_std) and vol_std < prev_period_std * 0.5:
             reason = "Volatility too low"
             logger.info("[EVAL] %s", reason)
             return False, reason
