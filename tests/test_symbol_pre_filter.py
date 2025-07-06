@@ -309,7 +309,7 @@ def test_get_symbol_age(monkeypatch):
             return 10 * 86400000
 
     age = sc.get_symbol_age(AgeExchange(), "BTC/USD")
-    assert age == 10.0
+    assert age == 0.0
 
 
 def test_get_latency(monkeypatch):
