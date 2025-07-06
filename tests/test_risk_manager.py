@@ -349,3 +349,18 @@ def test_allow_trade_allows_on_positive_ev(tmp_path, monkeypatch):
     )
     allowed, _ = RiskManager(cfg).allow_trade(_df(), "trend_bot")
     assert allowed
+
+
+def test_allow_trade_ignores_ev_when_stats_missing(tmp_path, monkeypatch):
+    file = tmp_path / "stats.json"
+    file.write_text("{}")
+    monkeypatch.setattr(ev_tracker, "STATS_FILE", file)
+
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_expected_value=0.5,
+    )
+    allowed, _ = RiskManager(cfg).allow_trade(_df(), "trend_bot")
+    assert allowed

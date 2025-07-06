@@ -151,6 +151,10 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **mempool_monitor** – pause or reprice when Solana fees spike.
 * **min_cooldown** – minimum minutes between trades.
 * **cycle_bias** – optional on-chain metrics to bias trades.
+* **min_expected_value** – minimum expected value for a strategy based on
+  historical stats.
+* **default_expected_value** – fallback EV when no stats exist. When unset,
+  the expected value check is skipped.
 
 ### Strategy and Signals
 * **strategy_allocation** – capital split across strategies.
