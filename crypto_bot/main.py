@@ -120,10 +120,12 @@ async def main() -> None:
     metrics_path = Path(config.get("metrics_csv")) if config.get("metrics_csv") else None
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
     cooldown_configure(config.get("min_cooldown", 0))
+    status_updates = config.get("telegram", {}).get("status_updates", True)
     market_loader_configure(
         config.get("ohlcv_timeout", 60),
         config.get("max_ohlcv_failures", 3),
         config.get("max_ws_limit", 50),
+        status_updates,
     )
     secrets = dotenv_values(ENV_PATH)
     os.environ.update(secrets)
@@ -400,7 +402,7 @@ async def main() -> None:
                     f"(limit {100})"
                 )
                 logger.error(msg)
-                if notifier:
+                if notifier and status_updates:
                     notifier.notify(msg)
                 continue
 
@@ -945,7 +947,7 @@ async def main() -> None:
                 config.get("metrics_output_file", "crypto_bot/logs/metrics.csv"),
             )
         summary = f"Cycle complete: {total_pairs} symbols, {trades_executed} trades"
-        if notifier:
+        if notifier and status_updates:
             notifier.notify(summary)
         logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
         await asyncio.sleep(config["loop_interval_minutes"] * 60)
