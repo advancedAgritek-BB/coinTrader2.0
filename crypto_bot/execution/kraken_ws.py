@@ -122,6 +122,9 @@ class KrakenWSClient:
         on_message: Optional[Callable] = None,
         on_error: Optional[Callable] = None,
         on_close: Optional[Callable] = None,
+        *,
+        ping_interval: int = 20,
+        ping_timeout: int = 10,
         **kwargs,
     ) -> WebSocketApp:
         """Start a ``WebSocketApp`` and begin the reader thread."""
@@ -153,7 +156,12 @@ class KrakenWSClient:
             on_close=_on_close,
             **kwargs,
         )
-        thread = threading.Thread(target=ws.run_forever, daemon=True)
+        thread = threading.Thread(
+            target=lambda: ws.run_forever(
+                ping_interval=ping_interval, ping_timeout=ping_timeout
+            ),
+            daemon=True,
+        )
         thread.start()
         return ws
 
