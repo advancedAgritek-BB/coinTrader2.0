@@ -78,6 +78,14 @@ def _classify_core(
     else:
         df["bb_width"] = np.nan
 
+    df["volume_change"] = df["volume"].pct_change()
+    if len(df) >= cfg["ma_window"]:
+        mean_change = df["volume_change"].rolling(cfg["ma_window"]).mean()
+        std_change = df["volume_change"].rolling(cfg["ma_window"]).std()
+        df["volume_zscore"] = (df["volume_change"] - mean_change) / std_change
+    else:
+        df["volume_zscore"] = np.nan
+
     volume_ma20 = (
         df["volume"].rolling(cfg["ma_window"]).mean()
         if len(df) >= cfg["ma_window"]
@@ -88,6 +96,16 @@ def _classify_core(
         if len(df) >= cfg["ma_window"]
         else pd.Series(np.nan, index=df.index)
     )
+
+    volume_jump = False
+    if len(df) > 1:
+        vol_change = df["volume_change"].iloc[-1]
+        vol_z = df["volume_zscore"].iloc[-1]
+        if (
+            (not np.isnan(vol_change) and vol_change > 1.0)
+            or (not np.isnan(vol_z) and vol_z > 3)
+        ):
+            volume_jump = True
 
     latest = df.iloc[-1]
 
@@ -104,19 +122,19 @@ def _classify_core(
 
     regime = "sideways"
 
-    if trending:
+    if (
+        latest["bb_width"] < cfg["bb_width_breakout_max"]
+        and not np.isnan(volume_ma20.iloc[-1])
+        and latest["volume"] > volume_ma20.iloc[-1] * cfg["breakout_volume_mult"]
+    ) or volume_jump:
+        regime = "breakout"
+    elif trending:
         regime = "trending"
     elif (
         latest["adx"] < cfg["adx_sideways_max"]
         and latest["bb_width"] < cfg["bb_width_sideways_max"]
     ):
         regime = "sideways"
-    elif (
-        latest["bb_width"] < cfg["bb_width_breakout_max"]
-        and not np.isnan(volume_ma20.iloc[-1])
-        and latest["volume"] > volume_ma20.iloc[-1] * cfg["breakout_volume_mult"]
-    ):
-        regime = "breakout"
     elif (
         cfg["rsi_mean_rev_min"] <= latest["rsi"] <= cfg["rsi_mean_rev_max"]
         and abs(latest["close"] - latest["ema20"]) / latest["close"]
@@ -161,6 +179,7 @@ def classify_regime(
     ml_min_bars = cfg.get("ml_min_bars", 20)
 
     regime = _classify_core(df, cfg, higher_df)
+    ml_used = False
 
     if regime == "unknown" and cfg.get("use_ml_regime_classifier", False):
         if len(df) >= ml_min_bars:
@@ -168,6 +187,7 @@ def classify_regime(
                 from .ml_regime_model import predict_regime
 
                 regime = predict_regime(df)
+                ml_used = True
             except Exception:
                 pass
         else:
@@ -175,14 +195,15 @@ def classify_regime(
                 "Skipping ML fallback \u2014 insufficient data (%d rows)", len(df)
             )
 
-    patterns = detect_patterns(df)
-    if "breakout" in patterns:
-        regime = "breakout"
+    patterns = set()
+    if not ml_used:
+        patterns = detect_patterns(df)
+        if "breakout" in patterns:
+            regime = "breakout"
 
     if regime == "unknown":
-        if len(df) >= ml_min_bars:
-            label, confidence = _ml_fallback(df)
-            return label, confidence
+        if len(df) < ml_min_bars:
+            return regime, 0.0
         logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
         return regime, patterns
 

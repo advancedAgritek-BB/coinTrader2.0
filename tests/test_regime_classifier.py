@@ -378,6 +378,19 @@ def test_breakout_pattern_sets_regime():
     assert "breakout" in patterns
 
 
+def test_volume_spike_triggers_breakout():
+    df = _make_sideways_df()
+    df.loc[df.index[-1], "volume"] = df.loc[df.index[-2], "volume"] * 2
+    assert classify_regime(df)[0] == "breakout"
+
+
+def test_high_volume_zscore_breakout():
+    df = _make_sideways_df()
+    df["volume"] = 100
+    df.loc[df.index[-1], "volume"] = 200
+    assert classify_regime(df)[0] == "breakout"
+
+
 def test_ml_fallback_does_not_trigger_on_short_data(monkeypatch, tmp_path):
     df = _make_trending_df(10)
     called = False
