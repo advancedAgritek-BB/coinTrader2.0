@@ -376,7 +376,6 @@ class KrakenWSClient:
         self,
         symbol: Union[str, List[str]],
         *,
-        event_trigger: Optional[dict] = None,
         event_trigger: Optional[str] = None,
         snapshot: Optional[bool] = None,
         req_id: Optional[int] = None,
@@ -455,13 +454,40 @@ class KrakenWSClient:
         self._public_subs.append(data)
         self.public_ws.send(data)
 
+    def subscribe_ohlc(
+        self,
+        symbol: Union[str, List[str]],
+        interval: int,
+        *,
+        snapshot: bool = True,
+        req_id: Optional[int] = None,
+    ) -> None:
+        """Subscribe to OHLC updates for one or more symbols."""
+
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+
+        params = {
+            "channel": "ohlc",
+            "symbol": symbol,
+            "interval": interval,
+            "snapshot": snapshot,
+        }
+        if req_id is not None:
+            params["req_id"] = req_id
+
+        msg = {"method": "subscribe", "params": params}
+        data = json.dumps(msg)
+        self._public_subs.append(data)
+        self.public_ws.send(data)
+
     def subscribe_book(
         self,
         symbol: Union[str, List[str]],
         *,
         depth: int = 10,
         snapshot: bool = True,
-        self, symbol: Union[str, List[str]], depth: int = 10, snapshot: bool = True
     ) -> None:
         """Subscribe to order book updates for one or more symbols."""
         self.connect_public()
@@ -528,6 +554,46 @@ class KrakenWSClient:
                 parsed.get("method") == "subscribe"
                 and params.get("channel") == "book"
                 and params.get("depth", depth) == depth
+                and sorted(params.get("symbol", [])) == sorted(symbol)
+            )
+
+        self._public_subs = [s for s in self._public_subs if not _matches(s)]
+
+    def unsubscribe_ohlc(
+        self,
+        symbol: Union[str, List[str]],
+        interval: int,
+        *,
+        req_id: Optional[int] = None,
+    ) -> None:
+        """Unsubscribe from OHLC updates for the given symbols."""
+
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+
+        params = {
+            "channel": "ohlc",
+            "symbol": symbol,
+            "interval": interval,
+        }
+        if req_id is not None:
+            params["req_id"] = req_id
+
+        msg = {"method": "unsubscribe", "params": params}
+        data = json.dumps(msg)
+        self.public_ws.send(data)
+
+        def _matches(sub: str) -> bool:
+            try:
+                parsed = json.loads(sub)
+            except Exception:
+                return False
+            params = parsed.get("params", {}) if isinstance(parsed, dict) else {}
+            return (
+                parsed.get("method") == "subscribe"
+                and params.get("channel") == "ohlc"
+                and params.get("interval") == interval
                 and sorted(params.get("symbol", [])) == sorted(symbol)
             )
 
