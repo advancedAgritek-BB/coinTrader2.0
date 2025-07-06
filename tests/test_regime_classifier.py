@@ -238,7 +238,7 @@ def test_analyze_symbol_async_consistent():
 
     res = asyncio.run(run())
     assert res["regime"] == regime
-    assert isinstance(res.get("patterns"), set)
+    assert isinstance(res.get("patterns"), dict)
     assert res["confidence"] == 1.0
     assert res["score"] == sync_score
     assert res["direction"] == sync_dir
@@ -375,7 +375,8 @@ def test_breakout_pattern_sets_regime():
     df = _make_breakout_df()
     regime, patterns = classify_regime(df)
     assert regime == "breakout"
-    assert "breakout" in patterns
+    assert isinstance(patterns, dict)
+    assert patterns.get("breakout", 0) > 0
 
 
 def test_ml_fallback_does_not_trigger_on_short_data(monkeypatch, tmp_path):
@@ -455,4 +456,4 @@ ml_min_bars: 20
 
     regime, patterns = classify_regime(df, config_path=str(cfg))
     assert regime == "trending"
-    assert patterns == set()
+    assert patterns == {}
