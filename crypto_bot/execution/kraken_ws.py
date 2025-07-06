@@ -237,12 +237,12 @@ def _parse_l3_orders(levels: List[Any]) -> Optional[List[dict]]:
 
     result = []
     for lvl in levels:
-        if not isinstance(lvl, list) or len(lvl) < 3:
+        if not isinstance(lvl, dict):
             return None
         try:
-            price = float(lvl[0])
-            qty = float(lvl[1])
-            order_id = str(lvl[2])
+            price = float(lvl.get("limit_price"))
+            qty = float(lvl.get("order_qty"))
+            order_id = str(lvl.get("order_id"))
         except (TypeError, ValueError):
             return None
         result.append(
@@ -265,12 +265,17 @@ def parse_level3_snapshot(msg: str) -> Optional[dict]:
 
     if not isinstance(data, dict):
         return None
-    if data.get("channel") != "book" or data.get("type") != "snapshot":
+    if data.get("channel") != "level3" or data.get("type") != "snapshot":
         return None
 
-    payload = data.get("data")
-    symbol = data.get("symbol")
-    if not isinstance(payload, dict) or not isinstance(symbol, str):
+    payload_list = data.get("data")
+    if not isinstance(payload_list, list) or not payload_list:
+        return None
+    payload = payload_list[0]
+    if not isinstance(payload, dict):
+        return None
+    symbol = payload.get("symbol")
+    if not isinstance(symbol, str):
         return None
 
     bids_raw = payload.get("bids")
@@ -291,12 +296,9 @@ def parse_level3_snapshot(msg: str) -> Optional[dict]:
 
     ts_val = payload.get("timestamp")
     timestamp = None
-    if ts_val is not None:
+    if isinstance(ts_val, str):
         try:
-            tsf = float(ts_val)
-            if tsf > 1e12:
-                tsf /= 1000
-            timestamp = datetime.fromtimestamp(tsf, timezone.utc)
+            timestamp = datetime.fromisoformat(ts_val.replace("Z", "+00:00"))
         except Exception:
             timestamp = None
 
@@ -314,22 +316,20 @@ def _parse_l3_events(levels: List[Any]) -> Optional[List[dict]]:
 
     result = []
     for lvl in levels:
-        if not isinstance(lvl, list) or len(lvl) < 5:
+        if not isinstance(lvl, dict):
             return None
-        event, order_id = lvl[0], lvl[1]
+        event = lvl.get("event")
+        order_id = lvl.get("order_id")
         try:
-            price = float(lvl[2])
-            qty = float(lvl[3])
+            price = float(lvl.get("limit_price"))
+            qty = float(lvl.get("order_qty"))
         except (TypeError, ValueError):
             return None
-        ts_val = lvl[4]
+        ts_val = lvl.get("timestamp")
         ts = None
-        if ts_val is not None:
+        if isinstance(ts_val, str):
             try:
-                tsf = float(ts_val)
-                if tsf > 1e12:
-                    tsf /= 1000
-                ts = datetime.fromtimestamp(tsf, timezone.utc)
+                ts = datetime.fromisoformat(ts_val.replace("Z", "+00:00"))
             except Exception:
                 ts = None
         result.append(
@@ -354,12 +354,17 @@ def parse_level3_update(msg: str) -> Optional[dict]:
 
     if not isinstance(data, dict):
         return None
-    if data.get("channel") != "book" or data.get("type") != "update":
+    if data.get("channel") != "level3" or data.get("type") != "update":
         return None
 
-    payload = data.get("data")
-    symbol = data.get("symbol")
-    if not isinstance(payload, dict) or not isinstance(symbol, str):
+    payload_list = data.get("data")
+    if not isinstance(payload_list, list) or not payload_list:
+        return None
+    payload = payload_list[0]
+    if not isinstance(payload, dict):
+        return None
+    symbol = payload.get("symbol")
+    if not isinstance(symbol, str):
         return None
 
     bids_raw = payload.get("bids")
@@ -380,12 +385,9 @@ def parse_level3_update(msg: str) -> Optional[dict]:
 
     ts_val = payload.get("timestamp")
     timestamp = None
-    if ts_val is not None:
+    if isinstance(ts_val, str):
         try:
-            tsf = float(ts_val)
-            if tsf > 1e12:
-                tsf /= 1000
-            timestamp = datetime.fromtimestamp(tsf, timezone.utc)
+            timestamp = datetime.fromisoformat(ts_val.replace("Z", "+00:00"))
         except Exception:
             timestamp = None
 

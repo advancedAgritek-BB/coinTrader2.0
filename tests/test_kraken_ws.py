@@ -808,29 +808,69 @@ def test_subscribe_and_unsubscribe_ohlc(monkeypatch):
 def test_parse_level3_snapshot_and_update():
     snap_msg = json.dumps(
         {
-            "channel": "book",
+            "channel": "level3",
             "type": "snapshot",
-            "symbol": "ETH/USD",
-            "data": {
-                "bids": [["3000.1", "1.0", "B1"], ["3000.0", "2.0", "B2"]],
-                "asks": [["3000.2", "1.5", "A1"]],
-                "checksum": 111,
-                "timestamp": 1712150000,
-            },
+            "data": [
+                {
+                    "symbol": "ETH/USD",
+                    "bids": [
+                        {
+                            "order_id": "B1",
+                            "limit_price": "3000.1",
+                            "order_qty": "1.0",
+                            "timestamp": "2024-01-01T00:00:00Z",
+                        },
+                        {
+                            "order_id": "B2",
+                            "limit_price": "3000.0",
+                            "order_qty": "2.0",
+                            "timestamp": "2024-01-01T00:00:01Z",
+                        },
+                    ],
+                    "asks": [
+                        {
+                            "order_id": "A1",
+                            "limit_price": "3000.2",
+                            "order_qty": "1.5",
+                            "timestamp": "2024-01-01T00:00:02Z",
+                        }
+                    ],
+                    "checksum": 111,
+                    "timestamp": "2024-01-01T00:00:03Z",
+                }
+            ],
         }
     )
 
     upd_msg = json.dumps(
         {
-            "channel": "book",
+            "channel": "level3",
             "type": "update",
-            "symbol": "ETH/USD",
-            "data": {
-                "bids": [["new", "B3", "2999.5", "0.5", 1712150001]],
-                "asks": [["delete", "A1", "3000.2", "0", 1712150002]],
-                "checksum": 112,
-                "timestamp": 1712150003,
-            },
+            "data": [
+                {
+                    "symbol": "ETH/USD",
+                    "bids": [
+                        {
+                            "event": "new",
+                            "order_id": "B3",
+                            "limit_price": "2999.5",
+                            "order_qty": "0.5",
+                            "timestamp": "2024-01-01T00:00:04Z",
+                        }
+                    ],
+                    "asks": [
+                        {
+                            "event": "delete",
+                            "order_id": "A1",
+                            "limit_price": "3000.2",
+                            "order_qty": "0",
+                            "timestamp": "2024-01-01T00:00:05Z",
+                        }
+                    ],
+                    "checksum": 112,
+                    "timestamp": "2024-01-01T00:00:06Z",
+                }
+            ],
         }
     )
 
@@ -847,7 +887,7 @@ def test_parse_level3_snapshot_and_update():
             {"order_id": "A1", "limit_price": 3000.2, "order_qty": 1.5},
         ],
         "checksum": 111,
-        "timestamp": datetime.fromtimestamp(1712150000, timezone.utc),
+        "timestamp": datetime.fromisoformat("2024-01-01T00:00:03+00:00"),
     }
 
     assert upd == {
@@ -858,7 +898,7 @@ def test_parse_level3_snapshot_and_update():
                 "order_id": "B3",
                 "limit_price": 2999.5,
                 "order_qty": 0.5,
-                "timestamp": datetime.fromtimestamp(1712150001, timezone.utc),
+                "timestamp": datetime.fromisoformat("2024-01-01T00:00:04+00:00"),
             }
         ],
         "asks": [
@@ -867,19 +907,19 @@ def test_parse_level3_snapshot_and_update():
                 "order_id": "A1",
                 "limit_price": 3000.2,
                 "order_qty": 0.0,
-                "timestamp": datetime.fromtimestamp(1712150002, timezone.utc),
+                "timestamp": datetime.fromisoformat("2024-01-01T00:00:05+00:00"),
             }
         ],
         "checksum": 112,
-        "timestamp": datetime.fromtimestamp(1712150003, timezone.utc),
+        "timestamp": datetime.fromisoformat("2024-01-01T00:00:06+00:00"),
     }
 
 
 def test_level3_invalid_messages():
     assert kraken_ws.parse_level3_snapshot("not json") is None
-    bad = json.dumps({"channel": "book", "type": "snapshot", "data": {"bids": []}})
+    bad = json.dumps({"channel": "level3", "type": "snapshot", "data": []})
     assert kraken_ws.parse_level3_snapshot(bad) is None
-    bad_upd = json.dumps({"channel": "book", "type": "update", "data": {"bids": []}})
+    bad_upd = json.dumps({"channel": "level3", "type": "update", "data": []})
     assert kraken_ws.parse_level3_update(bad_upd) is None
 
 

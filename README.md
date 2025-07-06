@@ -440,10 +440,10 @@ ws.subscribe_level3("BTC/USD", depth=100)
 def handle(msg: str):
     data = json.loads(msg)
     if data.get("channel") == "level3":
-        for side, updates in data["data"].items():
-            for price, size, order_id in updates:
-                # process each order update
-                pass
+        book = data["data"][0]
+        for order in book.get("bids", []):
+            # each order dict contains event, order_id, limit_price, order_qty
+            print(order)
 ```
 
 Binance.US is not recommended because of API limitations.

@@ -170,6 +170,14 @@ Snapshot messages include `a` and `b` arrays for ask and bid levels,
 Subsequent updates set `"snapshot": false` and only send changed levels
 in `a` or `b`.
 
+### 🔒 Level 3 Orders Channel
+
+Authenticated clients can subscribe to the full depth book using the
+`level3` channel. Only one depth level per symbol is allowed (10, 100 or
+1000). A session token obtained via the REST `GetWebSocketsToken` endpoint
+is required.
+
+Example subscribe request:
 ### \U1F4C8 OHLC Channel
 
 Kraken streams candlestick data through the public WebSocket endpoint:
@@ -184,6 +192,64 @@ Subscribe with the following fields:
 {
   "method": "subscribe",
   "params": {
+    "channel": "level3",
+    "symbol": ["ALGO/USD", "MATIC/USD"],
+    "snapshot": true,
+    "token": "YOUR_WS_TOKEN"
+  }
+}
+```
+
+Each symbol receives a separate acknowledgement:
+
+```json
+{
+  "method": "subscribe",
+  "result": {
+    "channel": "level3",
+    "snapshot": true,
+    "symbol": "ALGO/USD"
+  },
+  "success": true,
+  "time_in": "2023-10-06T18:20:56.506266Z",
+  "time_out": "2023-10-06T18:20:56.521803Z"
+}
+```
+
+Snapshot messages provide all visible orders:
+
+```json
+{
+  "channel": "level3",
+  "type": "snapshot",
+  "data": [
+    {
+      "symbol": "MATIC/USD",
+      "checksum": 281817320,
+      "bids": [
+        {
+          "order_id": "O6ZQNQ-BXL4E-5WGINO",
+          "limit_price": 0.5629,
+          "order_qty": 111.56125344,
+          "timestamp": "2023-10-06T17:35:00.279389650Z"
+        }
+      ],
+      "asks": [
+        {
+          "order_id": "OLLSXO-HDMT3-BUOKEI",
+          "limit_price": 0.563,
+          "order_qty": 4422.9978357,
+          "timestamp": "2023-10-06T18:18:20.734897896Z"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Updates share the same structure but use `"type": "update"` and only
+include changed orders. The `checksum` field validates the top levels of
+the book.
     "channel": "ohlc",
     "symbol": ["XBT/USD"],
     "interval": 1,
