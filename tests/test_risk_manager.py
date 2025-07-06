@@ -4,6 +4,7 @@ from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.utils import trade_memory
 from crypto_bot.utils import ev_tracker
+import logging
 
 def test_allow_trade_rejects_low_volume():
     data = {
@@ -364,3 +365,17 @@ def test_allow_trade_ignores_ev_when_stats_missing(tmp_path, monkeypatch):
     )
     allowed, _ = RiskManager(cfg).allow_trade(_df(), "trend_bot")
     assert allowed
+
+
+def test_ev_tracker_logs_missing_file_once(tmp_path, monkeypatch, caplog):
+    missing = tmp_path / "missing.json"
+    monkeypatch.setattr(ev_tracker, "STATS_FILE", missing)
+    # reset warning flag in case other tests altered it
+    monkeypatch.setattr(ev_tracker, "_missing_warning_emitted", False, raising=False)
+
+    with caplog.at_level(logging.WARNING):
+        ev_tracker.get_expected_value("trend_bot")
+        ev_tracker.get_expected_value("grid_bot")
+
+    messages = [r.getMessage() for r in caplog.records if "Strategy stats file" in r.getMessage()]
+    assert len(messages) == 1
