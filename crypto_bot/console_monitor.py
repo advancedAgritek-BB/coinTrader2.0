@@ -23,52 +23,56 @@ async def monitor_loop(
     last_line = ""
     prev_lines = 0
     prev_output = ""
-    fh = None
     offset = 0
-    while True:
-        await asyncio.sleep(5)
-        balance = None
-        try:
-            if paper_wallet is not None:
-                balance = getattr(paper_wallet, "balance", None)
-            elif hasattr(exchange, "fetch_balance"):
-                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance")):
-                    bal = await exchange.fetch_balance()
+
+    try:
+        with log_path.open("r", encoding="utf-8") as fh:
+            while True:
+                await asyncio.sleep(5)
+                balance = None
+                try:
+                    if paper_wallet is not None:
+                        balance = getattr(paper_wallet, "balance", None)
+                    elif hasattr(exchange, "fetch_balance"):
+                        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance")):
+                            bal = await exchange.fetch_balance()
+                        else:
+                            bal = await asyncio.to_thread(exchange.fetch_balance)
+                        balance = bal.get("USDT", {}).get("free", 0) if isinstance(bal.get("USDT"), dict) else bal.get("USDT", 0)
+                except Exception:
+                    pass
+
+                fh.seek(offset)
+                for line in fh:
+                    if "Loading config" not in line:
+                        last_line = line.rstrip("\n")
+                offset = fh.tell()
+
+                message = f"[Monitor] balance={balance} log='{last_line}'"
+                stats_lines = await trade_stats_lines(exchange)
+                stats = "\n".join(stats_lines)
+
+                output = message
+                if stats:
+                    output += "\n" + stats
+
+                if sys.stdout.isatty():
+                    # Clear previously printed lines
+                    if prev_lines:
+                        print("\033[2K", end="")
+                        for _ in range(prev_lines - 1):
+                            print("\033[F\033[2K", end="")
+                    print(output, end="\r", flush=True)
+                    prev_lines = output.count("\n") + 1
+                    prev_output = output
                 else:
-                    bal = await asyncio.to_thread(exchange.fetch_balance)
-                balance = bal.get("USDT", {}).get("free", 0) if isinstance(bal.get("USDT"), dict) else bal.get("USDT", 0)
-        except Exception:
-            pass
-        if fh is None and log_path.exists():
-            fh = log_path.open("r", encoding="utf-8")
-        if fh is not None:
-            fh.seek(offset)
-            for line in fh:
-                if "Loading config" not in line:
-                    last_line = line.rstrip("\n")
-            offset = fh.tell()
-
-        message = f"[Monitor] balance={balance} log='{last_line}'"
-        stats_lines = await trade_stats_lines(exchange)
-        stats = "\n".join(stats_lines)
-
-        output = message
-        if stats:
-            output += "\n" + stats
-
-        if sys.stdout.isatty():
-            # Clear previously printed lines
-            if prev_lines:
-                print("\033[2K", end="")
-                for _ in range(prev_lines - 1):
-                    print("\033[F\033[2K", end="")
-            print(output, end="\r", flush=True)
-            prev_lines = output.count("\n") + 1
-            prev_output = output
-        else:
-            if output != prev_output:
-                print(output)
-                prev_output = output
+                    if output != prev_output:
+                        print(output)
+                        prev_output = output
+    except asyncio.CancelledError:
+        # Propagate cancellation after the file handle is closed by the
+        # context manager.
+        raise
 """Simple console monitor for displaying trades."""
 
 from pathlib import Path
