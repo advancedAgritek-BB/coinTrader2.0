@@ -2,6 +2,7 @@ import pandas as pd
 from typing import Dict
 
 from crypto_bot.regime.regime_classifier import classify_regime_async
+from crypto_bot.regime.pattern_detector import detect_patterns
 from crypto_bot.strategy_router import (
     route,
     strategy_name,
@@ -37,13 +38,9 @@ async def analyze_symbol(
     base_tf = config.get("timeframe", "1h")
     df = df_map.get(base_tf)
     higher_df = df_map.get("1d")
-    regime, info = await classify_regime_async(df, higher_df)
-    patterns: set[str] = set()
-    base_conf = 1.0
-    if isinstance(info, set):
-        patterns = info
-    else:
-        base_conf = float(info)
+    regime, probs = await classify_regime_async(df, higher_df)
+    patterns = detect_patterns(df)
+    base_conf = float(probs.get(regime, 0.0))
 
     regime_counts: Dict[str, int] = {}
     regime_tfs = config.get("regime_timeframes", [base_tf])

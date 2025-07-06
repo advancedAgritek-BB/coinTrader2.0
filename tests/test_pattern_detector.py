@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 from crypto_bot.regime.pattern_detector import detect_patterns
-from crypto_bot.regime.regime_classifier import classify_regime
+from crypto_bot.regime.regime_classifier import classify_regime_with_patterns
 
 
 def _base_df(rows: int = 30) -> pd.DataFrame:
@@ -37,6 +37,6 @@ def test_classify_regime_includes_patterns():
     df.loc[df.index[-1], "low"] = df.loc[df.index[-1], "close"] - 0.1
     df.loc[df.index[-1], "volume"] = df["volume"].mean() * 2
 
-    regime, patterns = classify_regime(df)
+    regime, patterns = classify_regime_with_patterns(df)
     assert regime == "breakout"
     assert "breakout" in patterns

@@ -251,7 +251,7 @@ def validate_model_route():
         if default_csv.exists():
             metrics = ml.validate_from_csv(default_csv)
         else:
-            metrics = {}
+            metrics = ml.validate_from_csv(default_csv)
     if metrics:
         MODEL_REPORT.write_text(json.dumps(metrics))
     return redirect(url_for('model_page'))
