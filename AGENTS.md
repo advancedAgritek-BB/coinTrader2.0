@@ -169,3 +169,79 @@ Snapshot messages include `a` and `b` arrays for ask and bid levels,
 `checksum`, `symbol`, `channel`, `timestamp` and `sequence` numbers.
 Subsequent updates set `"snapshot": false` and only send changed levels
 in `a` or `b`.
+
+### \U1F4C8 OHLC Channel
+
+Kraken streams candlestick data through the public WebSocket endpoint:
+
+```
+wss://ws.kraken.com/v2
+```
+
+Subscribe with the following fields:
+
+```json
+{
+  "method": "subscribe",
+  "params": {
+    "channel": "ohlc",
+    "symbol": ["XBT/USD"],
+    "interval": 1,
+    "snapshot": true
+  },
+  "req_id": 42
+}
+```
+
+Example ACK response:
+
+```json
+{
+  "channel": "ohlc",
+  "event": "subscribe",
+  "req_id": 42,
+  "status": "ok"
+}
+```
+
+Snapshot and update messages contain the candle fields:
+`open`, `high`, `low`, `close`, `vwap`, `volume`, `trades`,
+`interval_begin`, `interval`, and `snapshot`.
+
+Snapshot example:
+
+```json
+{
+  "channel": "ohlc",
+  "symbol": "XBT/USD",
+  "interval": 1,
+  "interval_begin": 1682305800,
+  "open": "28885.4",
+  "high": "28888.0",
+  "low": "28880.1",
+  "close": "28882.3",
+  "vwap": "28883.1",
+  "volume": "12.3456",
+  "trades": 25,
+  "snapshot": true
+}
+```
+
+Update example:
+
+```json
+{
+  "channel": "ohlc",
+  "symbol": "XBT/USD",
+  "interval": 1,
+  "interval_begin": 1682305860,
+  "open": "28882.3",
+  "high": "28890.5",
+  "low": "28881.0",
+  "close": "28889.9",
+  "vwap": "28888.0",
+  "volume": "3.2100",
+  "trades": 7,
+  "snapshot": false
+}
+```
