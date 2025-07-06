@@ -187,6 +187,26 @@ async def fetch_ohlcv_async(
         )
     except asyncio.TimeoutError as exc:
         logger.error("OHLCV fetch timed out for %s", symbol)
+        if use_websocket and hasattr(exchange, "fetch_ohlcv"):
+            logger.info("Falling back to REST fetch_ohlcv for %s", symbol)
+            try:
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
+                    params_f = inspect.signature(exchange.fetch_ohlcv).parameters
+                    kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                    if since is not None and "since" in params_f:
+                        kwargs_f["since"] = since
+                    return await asyncio.wait_for(
+                        exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
+                    )
+                params_f = inspect.signature(exchange.fetch_ohlcv).parameters
+                kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                if since is not None and "since" in params_f:
+                    kwargs_f["since"] = since
+                return await asyncio.wait_for(
+                    asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f), OHLCV_TIMEOUT
+                )
+            except Exception as exc2:  # pragma: no cover - fallback
+                logger.error("Fallback fetch_ohlcv failed for %s: %s", symbol, exc2)
         return exc
     except Exception as exc:  # pragma: no cover - network
         if (
