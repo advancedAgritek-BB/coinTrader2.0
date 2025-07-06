@@ -17,6 +17,7 @@ exit_strategy:
   - 66
   - 100
   scale_out: true
+  trailing_stop_factor: 2.0
   trailing_stop_pct: 0.07
 force_websocket_history: false
 liquidity_check: true

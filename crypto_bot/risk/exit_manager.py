@@ -4,6 +4,7 @@ import pandas as pd
 import ta
 
 from crypto_bot.utils.logger import setup_logger
+from crypto_bot.volatility_filter import calc_atr
 
 # Use the main bot log for exit messages
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
@@ -29,6 +30,36 @@ def calculate_trailing_stop(
     highest = price_series.max()
     stop = highest * (1 - trail_pct)
     logger.info("Calculated trailing stop %.4f from high %.4f", stop, highest)
+    return stop
+
+
+def calculate_atr_trailing_stop(df: pd.DataFrame, atr_factor: float = 2.0) -> float:
+    """Return an ATR based trailing stop.
+
+    The stop is calculated as ``highest_price_since_entry - ATR * atr_factor``.
+    ``df`` should contain the OHLC data from trade entry to the current bar.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Data containing ``high``, ``low`` and ``close`` columns.
+    atr_factor : float, optional
+        Multiplier applied to the ATR value.
+
+    Returns
+    -------
+    float
+        Calculated trailing stop using ATR.
+    """
+    highest = df["close"].max()
+    atr = calc_atr(df)
+    stop = highest - atr * atr_factor
+    logger.info(
+        "Calculated ATR trailing stop %.4f using high %.4f and ATR %.4f",
+        stop,
+        highest,
+        atr,
+    )
     return stop
 
 def momentum_healthy(df: pd.DataFrame) -> bool:
@@ -128,10 +159,17 @@ def should_exit(
                     )
     else:
         if trailing_stop > 0:
-            trailed = calculate_trailing_stop(
-                df['close'],
-                config['exit_strategy']['trailing_stop_pct'],
-            )
+            exit_cfg = config.get('exit_strategy', {})
+            if 'trailing_stop_factor' in exit_cfg:
+                trailed = calculate_atr_trailing_stop(
+                    df,
+                    exit_cfg['trailing_stop_factor'],
+                )
+            else:
+                trailed = calculate_trailing_stop(
+                    df['close'],
+                    exit_cfg['trailing_stop_pct'],
+                )
             if trailed > trailing_stop:
                 new_stop = trailed
                 logger.info("Trailing stop moved to %.4f", new_stop)
