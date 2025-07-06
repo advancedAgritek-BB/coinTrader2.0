@@ -328,6 +328,21 @@ class KrakenWSClient:
         self._public_subs.append(data)
         self.public_ws.send(data)
 
+    def subscribe_book(
+        self, symbol: Union[str, List[str]], depth: int = 10, snapshot: bool = True
+    ) -> None:
+        """Subscribe to order book updates for one or more symbols."""
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "subscribe",
+            "params": {
+                "channel": "book",
+                "symbol": symbol,
+                "depth": depth,
+                "snapshot": snapshot,
+            },
     def subscribe_instruments(self, snapshot: bool = True) -> None:
         """Subscribe to the instrument reference data channel."""
         self.connect_public()
@@ -338,6 +353,33 @@ class KrakenWSClient:
         data = json.dumps(msg)
         self._public_subs.append(data)
         self.public_ws.send(data)
+
+    def unsubscribe_book(self, symbol: Union[str, List[str]], depth: int = 10) -> None:
+        """Unsubscribe from order book updates for the given symbols."""
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "unsubscribe",
+            "params": {"channel": "book", "symbol": symbol, "depth": depth},
+        }
+        data = json.dumps(msg)
+        self.public_ws.send(data)
+
+        def _matches(sub: str) -> bool:
+            try:
+                parsed = json.loads(sub)
+            except Exception:
+                return False
+            params = parsed.get("params", {}) if isinstance(parsed, dict) else {}
+            return (
+                parsed.get("method") == "subscribe"
+                and params.get("channel") == "book"
+                and params.get("depth", depth) == depth
+                and sorted(params.get("symbol", [])) == sorted(symbol)
+            )
+
+        self._public_subs = [s for s in self._public_subs if not _matches(s)]
 
     def subscribe_orders(self, symbol: Optional[str] = None) -> None:
         """Subscribe to private open order updates.
