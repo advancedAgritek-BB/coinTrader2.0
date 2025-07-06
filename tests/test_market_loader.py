@@ -744,3 +744,22 @@ def test_watch_ohlcv_since_reduces_limit(monkeypatch):
         )
     )
     assert ex.limit == 4
+
+
+class MissingTFExchange:
+    has = {"fetchOHLCV": True}
+    timeframes = {"5m": "5m"}
+
+    def __init__(self):
+        self.called = False
+
+    async def fetch_ohlcv(self, *args, **kwargs):
+        self.called = True
+        return [[0] * 6]
+
+
+def test_fetch_ohlcv_async_skips_unsupported_timeframe():
+    ex = MissingTFExchange()
+    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", timeframe="1m"))
+    assert data == []
+    assert ex.called is False
