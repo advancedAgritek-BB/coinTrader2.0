@@ -58,6 +58,41 @@ def test_reconnect_and_resubscribe(monkeypatch):
     assert created[-1] == (PRIVATE_URL, "private")
     assert client.private_ws is not old_private
     assert client.private_ws.sent == [expected_private]
+
+
+def test_reconnect_resubscribes_book(monkeypatch):
+    client = KrakenWSClient()
+    created = []
+
+    def dummy_start_ws(url, conn_type=None, **_):
+        ws = DummyWS()
+        created.append((url, conn_type))
+        ws.on_close = lambda *_: client.on_close(conn_type)
+        return ws
+
+    monkeypatch.setattr(client, "_start_ws", dummy_start_ws)
+
+    client.subscribe_book("BTC/USD")
+    sub_msg = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {
+                "channel": "book",
+                "symbol": ["BTC/USD"],
+                "depth": 10,
+                "snapshot": True,
+            },
+        }
+    )
+    assert created == [(PUBLIC_URL, "public")]
+    assert client.public_ws.sent == [sub_msg]
+
+    old_ws = client.public_ws
+    old_ws.on_close(None, None)
+
+    assert created == [(PUBLIC_URL, "public"), (PUBLIC_URL, "public")]
+    assert client.public_ws is not old_ws
+    assert client.public_ws.sent == [sub_msg]
 import crypto_bot.execution.kraken_ws as kraken_ws
 from crypto_bot.execution.kraken_ws import KrakenWSClient
 
@@ -225,6 +260,38 @@ def test_open_orders(monkeypatch):
     expected = {"method": "open_orders", "params": {"token": "token"}}
     assert msg == expected
     assert ws.sent == [json.dumps(expected)]
+
+
+def test_subscribe_and_unsubscribe_book(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_book("ETH/USD", depth=5)
+    sub_msg = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {
+                "channel": "book",
+                "symbol": ["ETH/USD"],
+                "depth": 5,
+                "snapshot": True,
+            },
+        }
+    )
+    assert ws.sent == [sub_msg]
+    assert client._public_subs == [sub_msg]
+
+    ws.sent = []
+    client.unsubscribe_book("ETH/USD", depth=5)
+    unsub_msg = json.dumps(
+        {
+            "method": "unsubscribe",
+            "params": {"channel": "book", "symbol": ["ETH/USD"], "depth": 5},
+        }
+    )
+    assert ws.sent == [unsub_msg]
+    assert client._public_subs == []
 
 
 def test_parse_ohlc_message_extracts_volume():
