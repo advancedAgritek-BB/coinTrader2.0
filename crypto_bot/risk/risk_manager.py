@@ -41,6 +41,7 @@ class RiskConfig:
     atr_long_window: int = 50
     max_volatility_factor: float = 1.5
     min_expected_value: float = 0.0
+    default_expected_value: float | None = None
 
 
 class RiskManager:
@@ -225,7 +226,14 @@ class RiskManager:
 
         if strategy is not None:
             ev = ev_tracker.get_expected_value(strategy)
-            if ev < self.config.min_expected_value:
+            if ev == 0.0:
+                stats = ev_tracker._load_stats().get(strategy, {})
+                if not stats:
+                    if self.config.default_expected_value is not None:
+                        ev = self.config.default_expected_value
+                    else:
+                        ev = None
+            if ev is not None and ev < self.config.min_expected_value:
                 reason = (
                     f"Expected value {ev:.4f} below {self.config.min_expected_value}"
                 )
