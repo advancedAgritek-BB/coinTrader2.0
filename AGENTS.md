@@ -142,3 +142,30 @@ Subscribe to private channels after authentication:
 4. Add headers:
 API-Key
 API-Sign
+
+### \U1F4DA Book Channel
+
+The order book is streamed via the public WebSocket endpoint:
+
+```
+wss://ws.kraken.com/v2
+```
+
+Subscribe with:
+
+```json
+{
+  "method": "subscribe",
+  "params": {
+    "channel": "book",
+    "symbol": ["XBT/USD"],
+    "depth": 10,
+    "snapshot": true
+  }
+}
+```
+
+Snapshot messages include `a` and `b` arrays for ask and bid levels,
+`checksum`, `symbol`, `channel`, `timestamp` and `sequence` numbers.
+Subsequent updates set `"snapshot": false` and only send changed levels
+in `a` or `b`.
