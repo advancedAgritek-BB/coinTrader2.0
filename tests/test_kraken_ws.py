@@ -153,7 +153,7 @@ def test_subscribe_ticker_with_options(monkeypatch):
             "params": {
                 "channel": "ticker",
                 "symbol": ["BTC/USD"],
-                "event_trigger": "bbo",
+                "eventTrigger": "bbo",
                 "snapshot": False,
                 "req_id": 1,
             },

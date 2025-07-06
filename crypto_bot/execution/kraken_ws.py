@@ -655,18 +655,9 @@ class KrakenWSClient:
         self.connect_public()
         if isinstance(symbol, str):
             symbol = [symbol]
-        msg = {
-            "method": "subscribe",
-            "params": {"channel": "ticker", "symbol": symbol},
-        }
-        if event_trigger is not None:
-            msg["params"]["eventTrigger"] = event_trigger
-        if req_id is not None:
-            msg["req_id"] = req_id
-
         params = {"channel": "ticker", "symbol": symbol}
         if event_trigger is not None:
-            params["event_trigger"] = event_trigger
+            params["eventTrigger"] = event_trigger
         if snapshot is not None:
             params["snapshot"] = snapshot
         if req_id is not None:
