@@ -275,7 +275,12 @@ async def fetch_ohlcv_async(
                     kwargs["limit"] = ws_limit
                 except Exception:
                     pass
-            data = await asyncio.wait_for(exchange.watch_ohlcv(**kwargs), OHLCV_TIMEOUT)
+            try:
+                data = await asyncio.wait_for(
+                    exchange.watch_ohlcv(**kwargs), OHLCV_TIMEOUT
+                )
+            except asyncio.CancelledError:
+                raise
             if (
                 ws_limit
                 and len(data) < ws_limit
@@ -291,9 +296,12 @@ async def fetch_ohlcv_async(
                     }
                     if since is not None and "since" in params_f:
                         kwargs_f["since"] = since
-                    data = await asyncio.wait_for(
-                        exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
-                    )
+                    try:
+                        data = await asyncio.wait_for(
+                            exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
+                        )
+                    except asyncio.CancelledError:
+                        raise
                     expected = limit
                     if since is not None:
                         try:
@@ -314,9 +322,13 @@ async def fetch_ohlcv_async(
                 kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                 if since is not None and "since" in params_f:
                     kwargs_f["since"] = since
-                data = await asyncio.wait_for(
-                    asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f), OHLCV_TIMEOUT
-                )
+                try:
+                    data = await asyncio.wait_for(
+                        asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f),
+                        OHLCV_TIMEOUT,
+                    )
+                except asyncio.CancelledError:
+                    raise
                 expected = limit
                 if since is not None:
                     try:
@@ -352,13 +364,20 @@ async def fetch_ohlcv_async(
                     try:
                         kwargs_r = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-                            data_r = await asyncio.wait_for(
-                                exchange.fetch_ohlcv(**kwargs_r), OHLCV_TIMEOUT
-                            )
+                            try:
+                                data_r = await asyncio.wait_for(
+                                    exchange.fetch_ohlcv(**kwargs_r), OHLCV_TIMEOUT
+                                )
+                            except asyncio.CancelledError:
+                                raise
                         else:
-                            data_r = await asyncio.wait_for(
-                                asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_r), OHLCV_TIMEOUT
-                            )
+                            try:
+                                data_r = await asyncio.wait_for(
+                                    asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_r),
+                                    OHLCV_TIMEOUT,
+                                )
+                            except asyncio.CancelledError:
+                                raise
                         if len(data_r) > len(data):
                             data = data_r
                     except Exception:
@@ -369,9 +388,12 @@ async def fetch_ohlcv_async(
             kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
             if since is not None and "since" in params_f:
                 kwargs_f["since"] = since
-            data = await asyncio.wait_for(
-                exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
-            )
+            try:
+                data = await asyncio.wait_for(
+                    exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
+                )
+            except asyncio.CancelledError:
+                raise
             expected = limit
             if since is not None:
                 try:
@@ -390,9 +412,12 @@ async def fetch_ohlcv_async(
             if since is not None:
                     try:
                         kwargs_r = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
-                        data_r = await asyncio.wait_for(
-                            exchange.fetch_ohlcv(**kwargs_r), OHLCV_TIMEOUT
-                        )
+                        try:
+                            data_r = await asyncio.wait_for(
+                                exchange.fetch_ohlcv(**kwargs_r), OHLCV_TIMEOUT
+                            )
+                        except asyncio.CancelledError:
+                            raise
                         if len(data_r) > len(data):
                             data = data_r
                     except Exception:
@@ -402,9 +427,12 @@ async def fetch_ohlcv_async(
         kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
         if since is not None and "since" in params_f:
             kwargs_f["since"] = since
-        data = await asyncio.wait_for(
-            asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f), OHLCV_TIMEOUT
-        )
+        try:
+            data = await asyncio.wait_for(
+                asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f), OHLCV_TIMEOUT
+            )
+        except asyncio.CancelledError:
+            raise
         expected = limit
         if since is not None:
             try:
@@ -423,9 +451,13 @@ async def fetch_ohlcv_async(
             if since is not None:
                 try:
                     kwargs_r = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
-                    data_r = await asyncio.wait_for(
-                        asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_r), OHLCV_TIMEOUT
-                    )
+                    try:
+                        data_r = await asyncio.wait_for(
+                            asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_r),
+                            OHLCV_TIMEOUT,
+                        )
+                    except asyncio.CancelledError:
+                        raise
                     if len(data_r) > len(data):
                         data = data_r
                 except Exception:
@@ -468,16 +500,23 @@ async def fetch_ohlcv_async(
                     kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                     if since is not None and "since" in params_f:
                         kwargs_f["since"] = since
-                    return await asyncio.wait_for(
-                        exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
-                    )
+                    try:
+                        return await asyncio.wait_for(
+                            exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
+                        )
+                    except asyncio.CancelledError:
+                        raise
                 params_f = inspect.signature(exchange.fetch_ohlcv).parameters
                 kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                 if since is not None and "since" in params_f:
                     kwargs_f["since"] = since
-                return await asyncio.wait_for(
-                    asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f), OHLCV_TIMEOUT
-                )
+                try:
+                    return await asyncio.wait_for(
+                        asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f),
+                        OHLCV_TIMEOUT,
+                    )
+                except asyncio.CancelledError:
+                    raise
             except Exception as exc2:  # pragma: no cover - fallback
                 ex_id = getattr(exchange, "id", "unknown")
                 logger.error(
@@ -507,16 +546,23 @@ async def fetch_ohlcv_async(
                     }
                     if since is not None and "since" in params_f:
                         kwargs_f["since"] = since
-                    return await asyncio.wait_for(
-                        exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
-                    )
+                    try:
+                        return await asyncio.wait_for(
+                            exchange.fetch_ohlcv(**kwargs_f), OHLCV_TIMEOUT
+                        )
+                    except asyncio.CancelledError:
+                        raise
                 params_f = inspect.signature(exchange.fetch_ohlcv).parameters
                 kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                 if since is not None and "since" in params_f:
                     kwargs_f["since"] = since
-                return await asyncio.wait_for(
-                    asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f), OHLCV_TIMEOUT
-                )
+                try:
+                    return await asyncio.wait_for(
+                        asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f),
+                        OHLCV_TIMEOUT,
+                    )
+                except asyncio.CancelledError:
+                    raise
             except Exception:
                 pass
         return exc
@@ -604,6 +650,8 @@ async def load_ohlcv_parallel(
     for sym, res in zip(symbols, results):
         if res is UNSUPPORTED_SYMBOL:
             continue
+        if isinstance(res, asyncio.CancelledError):
+            raise res
         if isinstance(res, asyncio.TimeoutError):
             logger.error(
                 "Timeout loading OHLCV for %s on %s limit %d: %s",
