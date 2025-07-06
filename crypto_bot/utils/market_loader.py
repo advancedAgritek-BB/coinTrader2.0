@@ -11,8 +11,9 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
-failed_symbols: Dict[str, float] = {}
+failed_symbols: Dict[str, Dict[str, float]] = {}
 retry_delay = 300
+max_retry_delay = 3600
 OHLCV_TIMEOUT = 30
 
 
@@ -273,11 +274,12 @@ async def load_ohlcv_parallel(
     since_map = since_map or {}
 
     now = time.time()
-    symbols = [
-        s
-        for s in symbols
-        if failed_symbols.get(s, 0) <= 0 or now - failed_symbols[s] >= retry_delay
-    ]
+    filtered_symbols: List[str] = []
+    for s in symbols:
+        info = failed_symbols.get(s)
+        if info is None or now - info["time"] >= info["delay"]:
+            filtered_symbols.append(s)
+    symbols = filtered_symbols
 
     if not symbols:
         return {}
@@ -322,14 +324,22 @@ async def load_ohlcv_parallel(
             logger.error(msg)
             if notifier:
                 notifier.notify(msg)
-            failed_symbols[sym] = time.time()
+            info = failed_symbols.get(sym)
+            delay = retry_delay
+            if info is not None:
+                delay = min(info["delay"] * 2, max_retry_delay)
+            failed_symbols[sym] = {"time": time.time(), "delay": delay}
             continue
         if isinstance(res, Exception) or not res:
             msg = f"Failed to load OHLCV for {sym}: {res}"
             logger.error(msg)
             if notifier:
                 notifier.notify(msg)
-            failed_symbols[sym] = time.time()
+            info = failed_symbols.get(sym)
+            delay = retry_delay
+            if info is not None:
+                delay = min(info["delay"] * 2, max_retry_delay)
+            failed_symbols[sym] = {"time": time.time(), "delay": delay}
             continue
         if res and len(res[0]) > 6:
             res = [[c[0], c[1], c[2], c[3], c[4], c[6]] for c in res]
@@ -381,11 +391,12 @@ async def update_ohlcv_cache(
             if df is not None and not df.empty:
                 since_map[sym] = int(df["timestamp"].iloc[-1]) + 1
     now = time.time()
-    symbols = [
-        s
-        for s in symbols
-        if s not in failed_symbols or now - failed_symbols[s] >= retry_delay
-    ]
+    filtered_symbols: List[str] = []
+    for s in symbols:
+        info = failed_symbols.get(s)
+        if info is None or now - info["time"] >= info["delay"]:
+            filtered_symbols.append(s)
+    symbols = filtered_symbols
     if not symbols:
         return cache
 
@@ -418,9 +429,10 @@ async def update_ohlcv_cache(
     for sym in symbols:
         data = data_map.get(sym)
         if not data:
+            info = failed_symbols.get(sym)
             skip_retry = (
-                sym in failed_symbols
-                and time.time() - failed_symbols[sym] < retry_delay
+                info is not None
+                and time.time() - info["time"] < info["delay"]
                 and since_map.get(sym) is None
             )
             if skip_retry:
