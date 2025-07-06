@@ -33,7 +33,7 @@ def test_short_bounce_signal():
     assert score > 0
 
 
-def test_requires_volume_spike():
+def test_no_signal_without_volume_spike():
     prices = list(range(100, 80, -1)) + [82]
     volumes = [100] * 21
     df = _df(prices, volumes)
