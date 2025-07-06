@@ -376,7 +376,6 @@ class KrakenWSClient:
         self,
         symbol: Union[str, List[str]],
         *,
-        event_trigger: Optional[dict] = None,
         event_trigger: Optional[str] = None,
         snapshot: Optional[bool] = None,
         req_id: Optional[int] = None,
@@ -461,7 +460,6 @@ class KrakenWSClient:
         *,
         depth: int = 10,
         snapshot: bool = True,
-        self, symbol: Union[str, List[str]], depth: int = 10, snapshot: bool = True
     ) -> None:
         """Subscribe to order book updates for one or more symbols."""
         self.connect_public()
@@ -549,6 +547,65 @@ class KrakenWSClient:
         data = json.dumps(msg)
         self._private_subs.append(data)
         self.private_ws.send(data)
+
+    def subscribe_level3(
+        self,
+        symbol: Union[str, List[str]],
+        *,
+        depth: int = 10,
+        snapshot: bool = True,
+    ) -> None:
+        """Subscribe to authenticated level3 order book updates."""
+
+        self.connect_private()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "subscribe",
+            "params": {
+                "channel": "level3",
+                "symbol": symbol,
+                "depth": depth,
+                "snapshot": snapshot,
+                "token": self.token,
+            },
+        }
+        data = json.dumps(msg)
+        self._private_subs.append(data)
+        self.private_ws.send(data)
+
+    def unsubscribe_level3(self, symbol: Union[str, List[str]], depth: int = 10) -> None:
+        """Unsubscribe from authenticated level3 order book updates."""
+
+        self.connect_private()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "unsubscribe",
+            "params": {
+                "channel": "level3",
+                "symbol": symbol,
+                "depth": depth,
+                "token": self.token,
+            },
+        }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+
+        def _matches(sub: str) -> bool:
+            try:
+                parsed = json.loads(sub)
+            except Exception:
+                return False
+            params = parsed.get("params", {}) if isinstance(parsed, dict) else {}
+            return (
+                parsed.get("method") == "subscribe"
+                and params.get("channel") == "level3"
+                and params.get("depth", depth) == depth
+                and sorted(params.get("symbol", [])) == sorted(symbol)
+            )
+
+        self._private_subs = [s for s in self._private_subs if not _matches(s)]
 
     def add_order(
         self,
