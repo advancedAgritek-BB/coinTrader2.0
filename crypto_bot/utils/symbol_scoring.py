@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from typing import Mapping
+import asyncio
+import inspect
 import time
 
 DEFAULT_WEIGHTS = {
@@ -42,7 +44,7 @@ def get_symbol_age(exchange, symbol: str) -> float:
         return 0.0
 
 
-def get_latency(exchange, symbol: str) -> float:
+async def get_latency(exchange, symbol: str) -> float:
     """Return recent API latency for ``symbol`` in milliseconds."""
 
     if not hasattr(exchange, "fetch_ticker"):
@@ -50,14 +52,18 @@ def get_latency(exchange, symbol: str) -> float:
 
     start = time.perf_counter()
     try:
-        exchange.fetch_ticker(symbol)
+        fetch = exchange.fetch_ticker
+        if inspect.iscoroutinefunction(fetch):
+            await fetch(symbol)
+        else:
+            await asyncio.to_thread(fetch, symbol)
     except Exception:  # pragma: no cover - best effort
         pass
     end = time.perf_counter()
     return (end - start) * 1000.0
 
 
-def score_symbol(
+async def score_symbol(
     exchange,
     symbol: str,
     volume_usd: float,
@@ -81,7 +87,7 @@ def score_symbol(
     change_norm = min(abs(change_pct) / max_change, 1.0)
     spread_norm = 1.0 - min(spread_pct / max_spread, 1.0)
     age_norm = min(get_symbol_age(exchange, symbol) / max_age, 1.0)
-    latency_norm = 1.0 - min(get_latency(exchange, symbol) / max_latency, 1.0)
+    latency_norm = 1.0 - min(await get_latency(exchange, symbol) / max_latency, 1.0)
 
     score = (
         volume_norm * weights.get("volume", 0)

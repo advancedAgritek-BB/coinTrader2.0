@@ -323,5 +323,5 @@ def test_get_latency(monkeypatch):
         return calls.pop(0)
 
     monkeypatch.setattr(sc.time, "perf_counter", fake_counter)
-    latency = sc.get_latency(LatencyExchange(), "BTC/USD")
+    latency = asyncio.run(sc.get_latency(LatencyExchange(), "BTC/USD"))
     assert latency == pytest.approx(200.0)
