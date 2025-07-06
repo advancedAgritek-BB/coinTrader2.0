@@ -6,6 +6,7 @@ import pytest
 from crypto_bot.regime.regime_classifier import (
     classify_regime,
     classify_regime_async,
+    classify_regime_with_patterns,
 )
 from crypto_bot.utils.market_analyzer import analyze_symbol
 from crypto_bot.strategy_router import strategy_for
@@ -23,6 +24,9 @@ def test_classify_regime_returns_unknown_for_short_df():
         "volume": [100] * 10,
     }
     df = pd.DataFrame(data)
+    regime, probs = classify_regime(df)
+    assert regime == "unknown"
+    assert isinstance(probs, dict)
     regime, info = classify_regime(df)
     assert regime == "unknown"
     assert isinstance(conf, dict)
@@ -414,6 +418,7 @@ def test_regime_voting_disagreement_unknown():
 
 def test_breakout_pattern_sets_regime():
     df = _make_breakout_df()
+    regime, patterns = classify_regime_with_patterns(df)
     regime, patterns = classify_regime(df)
     assert regime == "sideways"
     assert patterns.get("breakout", 0) == 1.0
@@ -526,6 +531,7 @@ ml_min_bars: 20
 """
     )
 
+    regime, patterns = classify_regime_with_patterns(df, config_path=str(cfg))
     regime, _ = classify_regime(df, config_path=str(cfg))
     assert regime == "trending"
     assert patterns == {}

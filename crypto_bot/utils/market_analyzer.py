@@ -1,6 +1,8 @@
 import pandas as pd
 from typing import Dict
 
+from crypto_bot.regime.regime_classifier import classify_regime_async
+from crypto_bot.regime.pattern_detector import detect_patterns
 from crypto_bot.regime.regime_classifier import (
     classify_regime_async,
     classify_regime_cached,
@@ -41,6 +43,9 @@ async def analyze_symbol(
     higher_tf = config.get("higher_timeframe", "1d")
     df = df_map.get(base_tf)
     higher_df = df_map.get("1d")
+    regime, probs = await classify_regime_async(df, higher_df)
+    patterns = detect_patterns(df)
+    base_conf = float(probs.get(regime, 0.0))
     profile = bool(config.get("profile_regime", False))
     regime, info = await classify_regime_cached(
         symbol,

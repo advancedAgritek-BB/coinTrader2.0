@@ -25,6 +25,7 @@ def test_backtest_tracks_switches(monkeypatch):
 
     def fake_classify(df):
         idx = min(len(df) - 1, len(regimes) - 1)
+        return regimes[idx], {regimes[idx]: 1.0}
         return regimes[idx], {}
 
     monkeypatch.setattr(backtest_runner, "classify_regime", fake_classify)
@@ -48,6 +49,7 @@ def test_backtest_tracks_switches(monkeypatch):
 
 def test_backtest_misclassification(monkeypatch):
     monkeypatch.setattr(ccxt, "binance", lambda: FakeExchange())
+    monkeypatch.setattr(backtest_runner, "classify_regime", lambda df: ("trending", {"trending": 1.0}))
     monkeypatch.setattr(backtest_runner, "classify_regime", lambda df: ("trending", {}))
     monkeypatch.setattr(backtest_runner, "strategy_for", lambda r: _constant_strategy)
 
@@ -67,6 +69,7 @@ def test_backtest_misclassification(monkeypatch):
 
 def test_walk_forward_optimize(monkeypatch):
     monkeypatch.setattr(ccxt, "binance", lambda: FakeExchange())
+    monkeypatch.setattr(backtest_runner, "classify_regime", lambda df: ("trending", {"trending": 1.0}))
     monkeypatch.setattr(backtest_runner, "classify_regime", lambda df: ("trending", {}))
     monkeypatch.setattr(backtest_runner, "strategy_for", lambda r: _constant_strategy)
 

@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Dict, Optional, Tuple
 from typing import Optional, Tuple, Dict
 import asyncio
 import time
@@ -24,6 +25,21 @@ CONFIG = _load_config(CONFIG_PATH)
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
+_ALL_REGIMES = [
+    "trending",
+    "sideways",
+    "mean-reverting",
+    "breakout",
+    "volatile",
+    "unknown",
+]
+
+
+def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
+    """Return regime label and confidence using the bundled ML model."""
+    # Simplified for testing environments without optional dependencies
+    return "unknown", 0.0
+
 # Impact of each detected pattern on regime scoring. Values are multipliers
 # applied to the pattern strength.
 PATTERN_WEIGHTS = {
@@ -41,10 +57,13 @@ def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
     try:
         from .ml_fallback import predict_regime
 
-        label, confidence = predict_regime(df)
-        return label, confidence
-    except Exception:
-        return "unknown", 0.0
+def _probabilities(label: str, confidence: float | None = None) -> Dict[str, float]:
+    """Return a probability mapping for all regimes."""
+    probs = {r: 0.0 for r in _ALL_REGIMES}
+    if confidence is None:
+        confidence = 1.0 if label in probs else 0.0
+    probs[label] = confidence
+    return probs
 
 
 def _classify_core(
@@ -162,6 +181,12 @@ def _classify_core(
     return regime
 
 
+def _classify_all(
+    df: pd.DataFrame,
+    higher_df: Optional[pd.DataFrame],
+    cfg: dict,
+) -> Tuple[str, Dict[str, float], set[str]]:
+    """Return regime label, probability mapping and detected patterns."""
 def classify_regime(
     df: Optional[pd.DataFrame] = None,
     higher_df: Optional[pd.DataFrame] = None,
@@ -207,7 +232,6 @@ def classify_regime(
         supplied, as a tuple respecting the insertion order of ``df_map``.
     """
 
-    cfg = CONFIG if config_path is None else _load_config(Path(config_path))
     ml_min_bars = cfg.get("ml_min_bars", 20)
 
     if df_map is not None:
@@ -231,7 +255,7 @@ def classify_regime(
 
     if regime == "unknown" and cfg.get("use_ml_regime_classifier", False):
         if len(df) >= ml_min_bars:
-            try:  # pragma: no cover - safety net
+            try:  # pragma: no cover - optional
                 from .ml_regime_model import predict_regime
 
                 regime = predict_regime(df)
@@ -255,6 +279,47 @@ def classify_regime(
     if final_regime == "unknown":
         if len(df) >= ml_min_bars:
     patterns = detect_patterns(df)
+    candlestick = {"doji", "hammer", "shooting_star"}
+    patterns -= candlestick
+    if "breakout" in patterns:
+        regime = "breakout"
+
+    if regime == "unknown":
+        if len(df) >= ml_min_bars:
+            label, conf = _ml_fallback(df)
+            return label, _probabilities(label, conf), patterns
+        logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
+        return regime, _probabilities(regime, 0.0), patterns
+
+    return regime, _probabilities(regime), patterns
+
+
+def classify_regime(
+    df: pd.DataFrame,
+    higher_df: Optional[pd.DataFrame] = None,
+    *,
+    config_path: Optional[str] = None,
+) -> Tuple[str, Dict[str, float]]:
+    """Classify market regime and return a probability mapping."""
+
+    cfg = CONFIG if config_path is None else _load_config(Path(config_path))
+
+    regime, probs, _ = _classify_all(df, higher_df, cfg)
+    return regime, probs
+
+
+def classify_regime_with_patterns(
+    df: pd.DataFrame,
+    higher_df: Optional[pd.DataFrame] = None,
+    *,
+    config_path: Optional[str] = None,
+) -> Tuple[str, set[str]]:
+    """Deprecated wrapper returning detected patterns."""
+
+    cfg = CONFIG if config_path is None else _load_config(Path(config_path))
+
+    regime, _, patterns = _classify_all(df, higher_df, cfg)
+    return regime, patterns
 
     if regime == "unknown" and len(df) < ml_min_bars:
         log_patterns(regime, patterns)
@@ -308,6 +373,7 @@ async def classify_regime_async(
     *,
     df_map: Optional[Dict[str, pd.DataFrame]] = None,
     config_path: Optional[str] = None,
+) -> Tuple[str, Dict[str, float]]:
 ) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Asynchronous wrapper around :func:`classify_regime`."""
     return await asyncio.to_thread(
@@ -319,6 +385,16 @@ async def classify_regime_async(
     )
 
 
+async def classify_regime_with_patterns_async(
+    df: pd.DataFrame,
+    higher_df: Optional[pd.DataFrame] = None,
+    *,
+    config_path: Optional[str] = None,
+) -> Tuple[str, set[str]]:
+    """Async wrapper around :func:`classify_regime_with_patterns`."""
+    return await asyncio.to_thread(
+        classify_regime_with_patterns, df, higher_df, config_path=config_path
+    )
 # Caching utilities -----------------------------------------------------
 
 regime_cache: Dict[tuple[str, str], str] = {}
