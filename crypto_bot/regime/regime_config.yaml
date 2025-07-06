@@ -1,19 +1,20 @@
-adx_trending_min: 25
-adx_sideways_max: 20
+adx_trending_min: 20
+adx_sideways_max: 18
 bb_width_sideways_max: 5
 bb_width_breakout_max: 4
 breakout_volume_mult: 2
 rsi_mean_rev_min: 30
 rsi_mean_rev_max: 70
-ema_distance_mean_rev_max: 0.01
+ema_distance_mean_rev_max: 0.02
 atr_volatility_mult: 1.5
+normalized_range_volatility_min: 1.5
 
-ema_fast: 20
-ema_slow: 50
+ema_fast: 8
+ema_slow: 21
 indicator_window: 14
 bb_window: 20
 ma_window: 20
 higher_timeframe: '4h'
 confirm_trend_with_higher_tf: false
-use_ml_regime_classifier: false
+use_ml_regime_classifier: true
 ml_min_bars: 20

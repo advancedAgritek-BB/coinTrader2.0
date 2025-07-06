@@ -1,7 +1,10 @@
 import pandas as pd
 from typing import Dict
 
-from crypto_bot.regime.regime_classifier import classify_regime_async
+from crypto_bot.regime.regime_classifier import (
+    classify_regime_async,
+    classify_regime_cached,
+)
 from crypto_bot.strategy_router import (
     route,
     strategy_name,
@@ -35,27 +38,67 @@ async def analyze_symbol(
         Optional notifier used to send a message when the strategy is invoked.
     """
     base_tf = config.get("timeframe", "1h")
+    higher_tf = config.get("higher_timeframe", "1d")
     df = df_map.get(base_tf)
     higher_df = df_map.get("1d")
+    profile = bool(config.get("profile_regime", False))
+    regime, info = await classify_regime_cached(
+        symbol,
+        base_tf,
+        df,
+        higher_df,
+        profile,
+    )
+    higher_df = df_map.get(higher_tf)
     regime, info = await classify_regime_async(df, higher_df)
-    patterns: set[str] = set()
+    patterns: dict | set = {}
+    patterns: dict[str, float] = {}
+    patterns: Dict[str, float] = {}
     base_conf = 1.0
-    if isinstance(info, set):
+    if isinstance(info, dict):
         patterns = info
+    elif isinstance(info, set):
+        patterns = {p: 1.0 for p in info}
     else:
         base_conf = float(info)
+    patterns: set[str] = set()
+    higher_df = df_map.get("1d")
+    regime, patterns = await classify_regime_async(df, higher_df)
+    base_conf = 1.0
 
     regime_counts: Dict[str, int] = {}
     regime_tfs = config.get("regime_timeframes", [base_tf])
     min_agree = config.get("min_consistent_agreement", 1)
 
+    vote_map: Dict[str, pd.DataFrame] = {}
     for tf in regime_tfs:
         tf_df = df_map.get(tf)
         if tf_df is None:
             continue
         higher_df = df_map.get("1d") if tf != "1d" else None
-        r, _ = await classify_regime_async(tf_df, higher_df)
+        r, _ = await classify_regime_cached(
+            symbol,
+            tf,
+            tf_df,
+            higher_df,
+            profile,
+        )
         regime_counts[r] = regime_counts.get(r, 0) + 1
+        if tf_df is not None:
+            vote_map[tf] = tf_df
+    if higher_tf in df_map:
+        vote_map.setdefault(higher_tf, df_map[higher_tf])
+
+    if vote_map:
+        labels = await classify_regime_async(df_map=vote_map)
+        if isinstance(labels, tuple):
+            label_map = dict(zip(vote_map.keys(), labels))
+        else:
+            label_map = labels
+        for tf in regime_tfs:
+            r = label_map.get(tf)
+            if r:
+                regime_counts[r] = regime_counts.get(r, 0) + 1
 
     if regime_counts:
         regime, votes = max(regime_counts.items(), key=lambda kv: kv[1])

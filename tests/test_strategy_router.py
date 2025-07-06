@@ -42,3 +42,14 @@ def test_route_notifier(monkeypatch):
     assert score == 0.5
     assert direction == "long"
     assert msgs == ["\U0001F4C8 Signal: AAA \u2192 LONG | Confidence: 0.50"]
+
+
+def test_route_multi_tf_combo(monkeypatch):
+    def dummy(df, cfg=None):
+        return 0.1, "long"
+
+    monkeypatch.setitem(strategy_router.STRATEGY_MAP, "breakout", dummy)
+
+    fn = route({"1m": "breakout", "15m": "trending"}, "cex", {"timeframe": "1m"})
+    score, direction = fn(None)
+    assert (score, direction) == (0.1, "long")
