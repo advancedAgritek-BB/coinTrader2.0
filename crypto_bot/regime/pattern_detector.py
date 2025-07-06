@@ -10,12 +10,32 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
     returned.
     """
 
+    """Return a mapping of detected chart patterns to their strength.
+
+    The latest candles are scanned for classic candlestick formations
+    and simple breakout signals.  Each pattern is assigned a confidence
+    value between ``0`` and ``1`` and only those with non–zero confidence
+    are returned.
+
+    ``"breakout"``         -- last close at a new high with volume spike
+    ``"breakdown"``        -- last close at a new low with volume spike
+    ``"hammer"``           -- small body with long lower shadow
+    ``"shooting_star"``    -- small body with long upper shadow
+    ``"doji"``             -- open and close nearly equal
+    ``"bullish_engulfing"``  -- last candle engulfs previous bearish body
+    ``"bearish_engulfing"`` -- last candle engulfs previous bullish body
+    ``"inside_bar"``       -- current range is inside previous bar
+    ``"three_bar_reversal"`` -- two bars one way then strong reversal
+    ``"volume_spike"``     -- volume significantly above average
+    """
+    scores: dict[str, float] = {}
     patterns: dict[str, float] = {}
     if df is None or len(df) < 2:
         return patterns
 
     prev = df.iloc[-2]
     last = df.iloc[-1]
+    prev = df.iloc[-2]
 
     body = abs(last["close"] - last["open"])
     candle_range = last["high"] - last["low"]
