@@ -277,6 +277,10 @@ async def fetch_ohlcv_async(
         ex_id = getattr(exchange, "id", "unknown")
         if use_websocket and hasattr(exchange, "watch_ohlcv"):
             logger.error(
+                "WS OHLCV timeout for %s on %s limit %d: %s",
+                symbol,
+                timeframe,
+                limit,
                 "WS OHLCV timeout for %s on %s (tf=%s limit=%s ws=%s): %s",
                 symbol,
                 ex_id,
@@ -288,6 +292,10 @@ async def fetch_ohlcv_async(
             )
         else:
             logger.error(
+                "REST OHLCV timeout for %s on %s limit %d: %s",
+                symbol,
+                timeframe,
+                limit,
                 "REST OHLCV timeout for %s on %s (tf=%s limit=%s ws=%s): %s",
                 symbol,
                 ex_id,
@@ -298,7 +306,12 @@ async def fetch_ohlcv_async(
                 exc_info=True,
             )
         if use_websocket and hasattr(exchange, "fetch_ohlcv"):
-            logger.info("Falling back to REST fetch_ohlcv for %s", symbol)
+            logger.info(
+                "Falling back to REST fetch_ohlcv for %s on %s limit %d",
+                symbol,
+                timeframe,
+                limit,
+            )
             try:
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
                     params_f = inspect.signature(exchange.fetch_ohlcv).parameters
@@ -318,6 +331,10 @@ async def fetch_ohlcv_async(
             except Exception as exc2:  # pragma: no cover - fallback
                 ex_id = getattr(exchange, "id", "unknown")
                 logger.error(
+                    "REST fallback fetch_ohlcv failed for %s on %s limit %d: %s",
+                    symbol,
+                    timeframe,
+                    limit,
                     "REST fallback fetch_ohlcv failed for %s on %s (tf=%s limit=%s ws=%s): %s",
                     symbol,
                     ex_id,
@@ -434,13 +451,23 @@ async def load_ohlcv_parallel(
     mode = "websocket" if use_websocket else "REST"
     for sym, res in zip(symbols, results):
         if isinstance(res, asyncio.TimeoutError):
+            logger.error(
+                "Timeout loading OHLCV for %s on %s limit %d: %s",
+                sym,
+                timeframe,
+                limit,
+                res,
+                exc_info=True,
+            )
             msg = (
                 f"Timeout loading OHLCV for {sym} on {ex_id} "
                 f"(tf={timeframe} limit={limit} mode={mode})"
             )
             logger.error(msg)
             if notifier:
-                notifier.notify(msg)
+                notifier.notify(
+                    f"Timeout loading OHLCV for {sym} on {timeframe} limit {limit}"
+                )
             info = failed_symbols.get(sym)
             delay = retry_delay
             count = 1
@@ -461,13 +488,23 @@ async def load_ohlcv_parallel(
             }
             continue
         if isinstance(res, Exception) or not res:
+            logger.error(
+                "Failed to load OHLCV for %s on %s limit %d: %s",
+                sym,
+                timeframe,
+                limit,
+                res,
+                exc_info=isinstance(res, Exception),
+            )
             msg = (
                 f"Failed to load OHLCV for {sym} on {ex_id} "
                 f"(tf={timeframe} limit={limit} mode={mode}): {res}"
             )
             logger.error(msg)
             if notifier:
-                notifier.notify(msg)
+                notifier.notify(
+                    f"Failed to load OHLCV for {sym} on {timeframe} limit {limit}: {res}"
+                )
             info = failed_symbols.get(sym)
             delay = retry_delay
             count = 1

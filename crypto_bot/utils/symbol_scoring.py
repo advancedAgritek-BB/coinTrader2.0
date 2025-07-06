@@ -28,13 +28,13 @@ def get_symbol_age(exchange, symbol: str) -> float:
             return 0.0
 
         ts = market.get("created")
-        if ts is None:
+        if not ts:
             ts = market.get("timestamp")
-        if ts is None:
+        if not ts:
             ts = market.get("info", {}).get("listed")
-        if ts is None:
+        if not ts:
             ts = market.get("info", {}).get("launch")
-        if ts is None:
+        if not ts:
             return 0.0
 
         now = (

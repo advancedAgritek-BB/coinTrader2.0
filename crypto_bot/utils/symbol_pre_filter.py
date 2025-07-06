@@ -36,7 +36,14 @@ async def has_enough_history(
             exchange, symbol, timeframe=timeframe, limit=candles_needed
         )
     except Exception as exc:  # pragma: no cover - network
-        logger.warning("fetch_ohlcv failed for %s: %s", symbol, exc)
+        logger.warning(
+            "fetch_ohlcv failed for %s on %s for %d days: %s",
+            symbol,
+            timeframe,
+            days,
+            exc,
+            exc_info=True,
+        )
         return False
     if not data or len(data) < candles_needed:
         return False
