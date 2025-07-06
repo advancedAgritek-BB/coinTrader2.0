@@ -193,3 +193,88 @@ def test_swap_no_message_when_disabled(monkeypatch):
         notifier.TelegramNotifier.configure(True)
 
     assert calls["count"] == 0
+
+
+class EmptyResp:
+    def __init__(self):
+        self._data = {"data": []}
+
+    async def json(self):
+        return self._data
+
+    def raise_for_status(self):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
+
+
+class EmptySession:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
+
+    def get(self, *a, **k):
+        return EmptyResp()
+
+    def post(self, *a, **k):
+        return EmptyResp()
+
+
+def test_execute_swap_no_routes(monkeypatch):
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: EmptySession())
+    monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")
+
+    class KP:
+        public_key = "k"
+
+        @staticmethod
+        def from_secret_key(b):
+            return KP()
+
+        def sign(self, tx):
+            pass
+
+    class Tx:
+        @staticmethod
+        def deserialize(raw):
+            return Tx()
+
+        def sign(self, kp):
+            pass
+
+    class Client:
+        def __init__(self, *a, **k):
+            pass
+
+        def send_transaction(self, tx, kp):
+            return {"result": "h"}
+
+    import sys, types
+
+    sys.modules.setdefault("solana.keypair", types.ModuleType("solana.keypair"))
+    sys.modules.setdefault("solana.transaction", types.ModuleType("solana.transaction"))
+    sys.modules.setdefault("solana.rpc.api", types.ModuleType("solana.rpc.api"))
+    monkeypatch.setattr(sys.modules["solana.keypair"], "Keypair", KP, raising=False)
+    monkeypatch.setattr(sys.modules["solana.transaction"], "Transaction", Tx, raising=False)
+    monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
+
+    res = asyncio.run(
+        solana_executor.execute_swap(
+            "SOL",
+            "USDC",
+            100,
+            TelegramNotifier("t", "c"),
+            notifier=DummyNotifier(),
+            dry_run=False,
+        )
+    )
+    assert res == {}

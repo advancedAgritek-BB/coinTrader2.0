@@ -123,6 +123,9 @@ async def execute_swap(
         ) as quote_resp:
             quote_resp.raise_for_status()
             quote_data = await quote_resp.json()
+        if not quote_data.get("data"):
+            logger.warning("No routes returned from Jupiter")
+            return {}
         route = quote_data["data"][0]
 
         try:
