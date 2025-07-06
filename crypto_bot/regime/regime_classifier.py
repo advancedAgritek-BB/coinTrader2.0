@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 import asyncio
 from .pattern_detector import detect_patterns
 
@@ -136,32 +136,53 @@ def _classify_core(
 
 
 def classify_regime(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame] = None,
     higher_df: Optional[pd.DataFrame] = None,
     *,
+    df_map: Optional[Dict[str, pd.DataFrame]] = None,
     config_path: Optional[str] = None,
-) -> Tuple[str, object]:
+) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Classify market regime.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        OHLCV data.
+    df : pd.DataFrame | None
+        OHLCV data for the base timeframe.
+    df_map : dict[str, pd.DataFrame] | None
+        Optional mapping of timeframe to dataframes. When provided the function
+        returns only the regime labels for each timeframe without pattern
+        information.
     config_path : Optional[str], default None
         Optional path to override the default configuration. Primarily used for
         testing.
 
     Returns
     -------
-    Tuple[str, object]
-        When sufficient history is available the function returns ``(label,
-        patterns)`` where ``patterns`` is a ``set`` of detected formations. If
-        insufficient history triggers the ML fallback the return value is
-        ``(label, confidence)`` where ``confidence`` is a float between 0 and 1.
+    Tuple[str, object] | Dict[str, str] | Tuple[str, str]
+        When a single dataframe is supplied the function behaves like before
+        and returns ``(label, patterns)`` or ``(label, confidence)``. When a
+        mapping of dataframes is provided the regimes for each timeframe are
+        returned either as a dictionary or, if exactly two timeframes are
+        supplied, as a tuple respecting the insertion order of ``df_map``.
     """
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
     ml_min_bars = cfg.get("ml_min_bars", 20)
+
+    if df_map is not None:
+        labels: Dict[str, str] = {}
+        for tf, frame in df_map.items():
+            h_df = None
+            if tf != cfg.get("higher_timeframe"):
+                h_df = df_map.get(cfg.get("higher_timeframe"))
+            r, _ = classify_regime(frame, h_df, config_path=config_path)
+            labels[tf] = r
+        if len(df_map) == 2:
+            return tuple(labels[tf] for tf in df_map.keys())  # type: ignore
+        return labels
+
+    if df is None:
+        raise ValueError("df must be provided when df_map is None")
 
     regime = _classify_core(df, cfg, higher_df)
 
@@ -193,14 +214,19 @@ def classify_regime(
 
 
 async def classify_regime_async(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame] = None,
     higher_df: Optional[pd.DataFrame] = None,
     *,
+    df_map: Optional[Dict[str, pd.DataFrame]] = None,
     config_path: Optional[str] = None,
-) -> Tuple[str, object]:
+) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Asynchronous wrapper around :func:`classify_regime`."""
     return await asyncio.to_thread(
-        classify_regime, df, higher_df, config_path=config_path
+        classify_regime,
+        df,
+        higher_df,
+        df_map=df_map,
+        config_path=config_path,
     )
 
 
