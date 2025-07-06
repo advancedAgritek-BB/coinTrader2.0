@@ -23,7 +23,6 @@ def test_control_loop(monkeypatch):
     # Function should exit after processing all commands
     assert len(seen) == 3
     assert state["running"] is True
-from crypto_bot import console_control
 
 
 def test_control_loop_updates_state(monkeypatch):
