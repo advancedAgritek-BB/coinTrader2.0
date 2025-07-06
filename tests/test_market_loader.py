@@ -1,6 +1,7 @@
 import asyncio
 import pandas as pd
 import pytest
+import logging
 
 from crypto_bot.utils.market_loader import (
     load_kraken_symbols,
@@ -384,3 +385,56 @@ def test_failed_symbol_skipped_until_delay(monkeypatch):
     )
     assert ex.calls == 2
     assert "BTC/USD" in cache
+
+
+class StopLoop(Exception):
+    pass
+
+
+def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
+    import crypto_bot.main as main
+
+    caplog.set_level(logging.WARNING)
+
+    async def fake_loader(exchange, exclude=None, config=None):
+        main.logger.warning("symbol scan empty")
+        return []
+
+    cfg = {"symbol": "BTC/USD", "scan_markets": True}
+
+    monkeypatch.setattr(main, "load_config", lambda: cfg)
+    monkeypatch.setattr(main, "load_kraken_symbols", fake_loader)
+    monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
+    monkeypatch.setattr(main, "dotenv_values", lambda path: {})
+    monkeypatch.setattr(main, "load_or_create", lambda: {})
+    monkeypatch.setattr(main, "send_test_message", lambda *_a, **_k: True)
+    monkeypatch.setattr(main, "log_balance", lambda *_a, **_k: None)
+
+    class DummyRC:
+        def __init__(self, *_a, **_k):
+            pass
+
+    class DummyRM:
+        def __init__(self, *_a, **_k):
+            raise StopLoop
+
+    monkeypatch.setattr(main, "RiskConfig", DummyRC)
+    monkeypatch.setattr(main, "RiskManager", DummyRM)
+
+    captured = {}
+
+    class DummyExchange:
+        def fetch_balance(self):
+            return {"USDT": {"free": 0}}
+
+    def fake_get_exchange(config):
+        captured["cfg"] = config
+        return DummyExchange(), None
+
+    monkeypatch.setattr(main, "get_exchange", fake_get_exchange)
+
+    with pytest.raises(StopLoop):
+        asyncio.run(main.main())
+
+    assert "symbols" not in captured["cfg"]
+    assert any("symbol scan empty" in r.getMessage() for r in caplog.records)

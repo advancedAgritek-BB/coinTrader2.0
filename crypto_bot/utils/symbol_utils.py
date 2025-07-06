@@ -40,6 +40,8 @@ async def get_filtered_symbols(exchange, config) -> list:
         )
         scored = [(config.get("symbol"), 0.0)]
 
+    logger.info("%d symbols passed filtering", len(scored))
+
     _cached_symbols = scored
     _last_refresh = now
     return scored

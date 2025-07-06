@@ -149,11 +149,15 @@ async def main() -> None:
     exchange, ws_client = get_exchange(config)
 
     if config.get("scan_markets", False) and not config.get("symbols"):
-        config["symbols"] = await load_kraken_symbols(
+        discovered = await load_kraken_symbols(
             exchange,
             config.get("excluded_symbols", []),
             config,
         )
+        if discovered:
+            config["symbols"] = discovered
+        else:
+            logger.error("No symbols discovered during scan; using existing configuration")
 
     try:
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
