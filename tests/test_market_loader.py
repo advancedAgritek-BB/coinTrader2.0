@@ -2,6 +2,7 @@ import asyncio
 import pandas as pd
 import pytest
 import logging
+import time
 
 from crypto_bot.utils.market_loader import (
     load_kraken_symbols,
@@ -176,6 +177,38 @@ def test_watch_ohlcv_exception_falls_back_to_fetch():
     assert ex.fetch_called is True
     assert len(data) == 2
     assert data[0][0] == 9
+
+
+class LimitCaptureExchange:
+    def __init__(self):
+        self.watch_limit = None
+        self.fetch_called = False
+
+    async def watch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
+        self.watch_limit = limit
+        return [[0] * 6 for _ in range(limit)]
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
+        self.fetch_called = True
+        return [[1] * 6 for _ in range(limit)]
+
+
+def test_watch_ohlcv_since_limit_reduction():
+    ex = LimitCaptureExchange()
+    since = int(time.time() * 1000) - 2 * 3600 * 1000
+    data = asyncio.run(
+        fetch_ohlcv_async(
+            ex,
+            "BTC/USD",
+            timeframe="1h",
+            limit=50,
+            since=since,
+            use_websocket=True,
+        )
+    )
+    assert ex.fetch_called is False
+    assert ex.watch_limit == 4
+    assert len(data) == 4
 
 
 class DummyIncExchange:
