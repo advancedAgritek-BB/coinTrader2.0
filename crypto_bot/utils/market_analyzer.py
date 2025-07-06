@@ -40,11 +40,9 @@ async def analyze_symbol(
     higher_df = df_map.get(higher_tf)
     regime, info = await classify_regime_async(df, higher_df)
     patterns: set[str] = set()
+    higher_df = df_map.get("1d")
+    regime, patterns = await classify_regime_async(df, higher_df)
     base_conf = 1.0
-    if isinstance(info, set):
-        patterns = info
-    else:
-        base_conf = float(info)
 
     regime_counts: Dict[str, int] = {}
     regime_tfs = config.get("regime_timeframes", [base_tf])
