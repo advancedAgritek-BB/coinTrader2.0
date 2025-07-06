@@ -37,9 +37,15 @@ back to a machine learning model whenever the indicator rules return
 `"unknown"`.  A small gradient boosting model trained with LightGBM is bundled
 directly in `crypto_bot.regime.model_data` as a base64 string and loaded
 automatically.
+`use_ml_regime_classifier` is enabled by default in
+`crypto_bot/regime/regime_config.yaml`, so the router falls back to a small
+machine learning model whenever the indicator rules return `"unknown"`.
+The EMA windows have been shortened to **8** and **21** and the ADX threshold
+lowered to switch regimes more quickly. The fallback model is bundled in
+`crypto_bot.regime.model_data` as a base64 string and loaded automatically.
 By default the ML model only runs when at least **20** candles are available
-(tunable via `ml_min_bars`).  You can replace that module with your own
-encoded model if desired.
+(tunable via `ml_min_bars`). You can replace that module with your own encoded
+model if desired.
 
 ## Quick Start
 

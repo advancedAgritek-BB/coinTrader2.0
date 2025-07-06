@@ -1,4 +1,4 @@
-from typing import Callable, Tuple, Dict, Iterable
+from typing import Callable, Tuple, Dict, Iterable, Union
 
 import pandas as pd
 
@@ -75,7 +75,7 @@ def strategy_name(regime: str, mode: str) -> str:
 
 
 def route(
-    regime: str,
+    regime: Union[str, Dict[str, str]],
     mode: str,
     config: Dict | None = None,
     notifier: TelegramNotifier | None = None,
@@ -118,6 +118,15 @@ def route(
 
         wrapped.__name__ = fn.__name__
         return wrapped
+
+    if isinstance(regime, dict):
+        if regime.get("1m") == "breakout" and regime.get("15m") == "trending":
+            regime = "breakout"
+        else:
+            base = None
+            if config:
+                base = config.get("timeframe")
+            regime = regime.get(base, next(iter(regime.values())))
 
     if mode == "onchain":
         if regime in {"breakout", "volatile"}:
