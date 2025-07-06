@@ -731,6 +731,26 @@ class KrakenWSClient:
         self._public_subs.append(data)
         self.public_ws.send(data)
 
+    def unsubscribe_instruments(self) -> None:
+        """Unsubscribe from the instrument reference data channel."""
+        self.connect_public()
+        msg = {"method": "unsubscribe", "params": {"channel": "instrument"}}
+        data = json.dumps(msg)
+        self.public_ws.send(data)
+
+        def _matches(sub: str) -> bool:
+            try:
+                parsed = json.loads(sub)
+            except Exception:
+                return False
+            params = parsed.get("params", {}) if isinstance(parsed, dict) else {}
+            return (
+                parsed.get("method") == "subscribe"
+                and params.get("channel") == "instrument"
+            )
+
+        self._public_subs = [s for s in self._public_subs if not _matches(s)]
+
     def unsubscribe_book(self, symbol: Union[str, List[str]], depth: int = 10) -> None:
         """Unsubscribe from order book updates for the given symbols."""
         self.connect_public()
