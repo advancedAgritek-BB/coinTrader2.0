@@ -1,8 +1,8 @@
 adx_trending_min: 20
 adx_sideways_max: 18
-bb_width_sideways_max: 3
-bb_width_breakout_max: 2
-breakout_volume_mult: 1.5
+bb_width_sideways_max: 5
+bb_width_breakout_max: 4
+breakout_volume_mult: 2
 rsi_mean_rev_min: 30
 rsi_mean_rev_max: 70
 ema_distance_mean_rev_max: 0.02
@@ -10,7 +10,7 @@ atr_volatility_mult: 1.5
 
 ema_fast: 8
 ema_slow: 21
-indicator_window: 10
+indicator_window: 14
 bb_window: 20
 ma_window: 20
 higher_timeframe: '4h'
