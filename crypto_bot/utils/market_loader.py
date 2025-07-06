@@ -189,6 +189,19 @@ async def fetch_ohlcv_async(
     force_websocket_history: bool = False,
 ) -> list | Exception:
     """Return OHLCV data for ``symbol`` using async I/O."""
+
+    if not getattr(exchange, "has", {}).get("fetchOHLCV"):
+        ex_id = getattr(exchange, "id", "unknown")
+        logger.warning("Exchange %s lacks fetchOHLCV capability", ex_id)
+        return []
+    if (
+        getattr(exchange, "timeframes", None)
+        and timeframe not in getattr(exchange, "timeframes", {})
+    ):
+        ex_id = getattr(exchange, "id", "unknown")
+        logger.warning("Timeframe %s not supported on %s", timeframe, ex_id)
+        return []
+
     try:
         if hasattr(exchange, "symbols"):
             if not exchange.symbols and hasattr(exchange, "load_markets"):
