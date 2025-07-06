@@ -153,7 +153,7 @@ def test_subscribe_ticker_with_options(monkeypatch):
             "params": {
                 "channel": "ticker",
                 "symbol": ["BTC/USD"],
-                "event_trigger": "bbo",
+                "eventTrigger": "bbo",
                 "snapshot": False,
                 "req_id": 1,
             },
@@ -382,6 +382,53 @@ def test_open_orders(monkeypatch):
     assert ws.sent == [json.dumps(expected)]
 
 
+def test_subscribe_and_unsubscribe_orders(monkeypatch):
+    client, ws = _setup_private_client(monkeypatch)
+
+    client.subscribe_orders()
+    expected_sub = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {"channel": "open_orders", "token": "token"},
+        }
+    )
+    assert ws.sent == [expected_sub]
+    assert client._private_subs == [expected_sub]
+
+    ws.sent.clear()
+    client.unsubscribe_orders()
+    expected_unsub = json.dumps(
+        {
+            "method": "unsubscribe",
+            "params": {"channel": "open_orders", "token": "token"},
+        }
+    )
+    assert ws.sent == [expected_unsub]
+    assert client._private_subs == []
+
+    ws.sent.clear()
+    client.subscribe_orders("ETH/USD")
+    expected_sub = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {"channel": "openOrders", "token": "token"},
+        }
+    )
+    assert ws.sent == [expected_sub]
+    assert client._private_subs == [expected_sub]
+
+    ws.sent.clear()
+    client.unsubscribe_orders("ETH/USD")
+    expected_unsub = json.dumps(
+        {
+            "method": "unsubscribe",
+            "params": {"channel": "openOrders", "token": "token"},
+        }
+    )
+    assert ws.sent == [expected_unsub]
+    assert client._private_subs == []
+
+
 def test_subscribe_and_unsubscribe_book(monkeypatch):
     client = KrakenWSClient()
     ws = DummyWS()
@@ -506,6 +553,7 @@ def test_subscribe_instruments(monkeypatch):
 
 
 def test_unsubscribe_trades_snapshot_option(monkeypatch):
+def test_subscribe_and_unsubscribe_instruments(monkeypatch):
     client = KrakenWSClient()
     ws = DummyWS()
     monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
@@ -529,6 +577,19 @@ def test_unsubscribe_trades_snapshot_option(monkeypatch):
         }
     )
     assert ws.sent == [expected_unsub]
+    client.subscribe_instruments(snapshot=False)
+    sub_msg = json.dumps(
+        {"method": "subscribe", "params": {"channel": "instrument", "snapshot": False}}
+    )
+    assert ws.sent == [sub_msg]
+    assert client._public_subs[0] == sub_msg
+
+    ws.sent.clear()
+    client.unsubscribe_instruments()
+    unsub_msg = json.dumps(
+        {"method": "unsubscribe", "params": {"channel": "instrument"}}
+    )
+    assert ws.sent == [unsub_msg]
     assert client._public_subs == []
 
 
@@ -583,6 +644,7 @@ def test_subscribe_book_and_unsubscribe(monkeypatch):
 
 
 def test_subscribe_trades_snapshot_option(monkeypatch):
+def test_subscribe_and_unsubscribe_trades(monkeypatch):
     client = KrakenWSClient()
     ws = DummyWS()
     monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
@@ -607,6 +669,13 @@ def test_subscribe_trades_snapshot_option(monkeypatch):
     )
     assert ws.sent == [expected_unsub]
     assert client._public_subs == []
+
+
+def test_subscribe_trades_snapshot_option(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
     client.subscribe_trades("BTC/USD", snapshot=False)
     expected = json.dumps(
         {

@@ -76,85 +76,6 @@ def parse_ohlc_message(message: str) -> Optional[List[float]]:
         return None
     return [ts, o, h, l, c, vol]
 
-def parse_book_message(message: str) -> Optional[dict]:
-    """Parse a Kraken order book websocket message."""
-    try:
-        data: Any = json.loads(message)
-    except json.JSONDecodeError:
-        return None
-
-    if not isinstance(data, list) or len(data) < 3:
-        return None
-
-    chan = data[1] if len(data) > 1 else {}
-    book = data[2] if len(data) > 2 else None
-    if not isinstance(chan, dict) or not isinstance(book, dict):
-        return None
-    if not str(chan.get("channel", "")).startswith("book"):
-        return None
-
-    msg_type = book.get("type")
-    if msg_type not in ("snapshot", "update"):
-        return None
-
-    symbol = book.get("symbol") or chan.get("symbol")
-    if not isinstance(symbol, str):
-        return None
-
-    def _levels(keys):
-        for k in keys:
-            if k in book:
-                return book[k]
-        return None
-
-    asks_raw = _levels(["asks", "as", "a"])
-    bids_raw = _levels(["bids", "bs", "b"])
-    if asks_raw is None or bids_raw is None:
-        return None
-
-    def _parse(levels):
-        result = []
-        for lvl in levels:
-            if not isinstance(lvl, list) or len(lvl) < 2:
-                return None
-            try:
-                price = float(lvl[0])
-                qty = float(lvl[1])
-            except (TypeError, ValueError):
-                return None
-            result.append((price, qty))
-        return result
-
-    asks = _parse(asks_raw)
-    bids = _parse(bids_raw)
-    if asks is None or bids is None:
-        return None
-
-    checksum = book.get("checksum")
-    try:
-        checksum = int(checksum)
-    except (TypeError, ValueError):
-        return None
-
-    timestamp_val = book.get("timestamp")
-    timestamp = None
-    if timestamp_val is not None:
-        try:
-            tsf = float(timestamp_val)
-            if tsf > 1e12:
-                tsf /= 1000
-            timestamp = datetime.fromtimestamp(tsf, timezone.utc)
-        except Exception:
-            timestamp = None
-
-    return {
-        "type": msg_type,
-        "symbol": symbol,
-        "asks": asks,
-        "bids": bids,
-        "checksum": checksum,
-        "timestamp": timestamp,
-    }
 
 
 def parse_instrument_message(message: str) -> Optional[dict]:
@@ -655,18 +576,9 @@ class KrakenWSClient:
         self.connect_public()
         if isinstance(symbol, str):
             symbol = [symbol]
-        msg = {
-            "method": "subscribe",
-            "params": {"channel": "ticker", "symbol": symbol},
-        }
-        if event_trigger is not None:
-            msg["params"]["eventTrigger"] = event_trigger
-        if req_id is not None:
-            msg["req_id"] = req_id
-
         params = {"channel": "ticker", "symbol": symbol}
         if event_trigger is not None:
-            params["event_trigger"] = event_trigger
+            params["eventTrigger"] = event_trigger
         if snapshot is not None:
             params["snapshot"] = snapshot
         if req_id is not None:
@@ -823,6 +735,26 @@ class KrakenWSClient:
         self._public_subs.append(data)
         self.public_ws.send(data)
 
+    def unsubscribe_instruments(self) -> None:
+        """Unsubscribe from the instrument reference data channel."""
+        self.connect_public()
+        msg = {"method": "unsubscribe", "params": {"channel": "instrument"}}
+        data = json.dumps(msg)
+        self.public_ws.send(data)
+
+        def _matches(sub: str) -> bool:
+            try:
+                parsed = json.loads(sub)
+            except Exception:
+                return False
+            params = parsed.get("params", {}) if isinstance(parsed, dict) else {}
+            return (
+                parsed.get("method") == "subscribe"
+                and params.get("channel") == "instrument"
+            )
+
+        self._public_subs = [s for s in self._public_subs if not _matches(s)]
+
     def unsubscribe_book(self, symbol: Union[str, List[str]], depth: int = 10) -> None:
         """Unsubscribe from order book updates for the given symbols."""
         self.connect_public()
@@ -906,6 +838,31 @@ class KrakenWSClient:
         data = json.dumps(msg)
         self._private_subs.append(data)
         self.private_ws.send(data)
+
+    def unsubscribe_orders(self, symbol: Optional[str] = None) -> None:
+        """Unsubscribe from private open order updates."""
+
+        self.connect_private()
+        channel = "openOrders" if symbol is not None else "open_orders"
+        msg = {
+            "method": "unsubscribe",
+            "params": {"channel": channel, "token": self.token},
+        }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+
+        def _matches(sub: str) -> bool:
+            try:
+                parsed = json.loads(sub)
+            except Exception:
+                return False
+            params = parsed.get("params", {}) if isinstance(parsed, dict) else {}
+            return (
+                parsed.get("method") == "subscribe"
+                and params.get("channel") == channel
+            )
+
+        self._private_subs = [s for s in self._private_subs if not _matches(s)]
 
     def subscribe_level3(
         self,
