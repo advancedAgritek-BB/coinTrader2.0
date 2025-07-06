@@ -198,7 +198,10 @@ async def fetch_ohlcv_async(
             asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f), OHLCV_TIMEOUT
         )
     except asyncio.TimeoutError as exc:
-        logger.error("OHLCV fetch timed out for %s", symbol)
+        if use_websocket and hasattr(exchange, "watch_ohlcv"):
+            logger.error("WS OHLCV timeout for %s: %s", symbol, exc)
+        else:
+            logger.error("REST OHLCV timeout for %s: %s", symbol, exc)
         if use_websocket and hasattr(exchange, "fetch_ohlcv"):
             logger.info("Falling back to REST fetch_ohlcv for %s", symbol)
             try:
@@ -218,7 +221,9 @@ async def fetch_ohlcv_async(
                     asyncio.to_thread(exchange.fetch_ohlcv, **kwargs_f), OHLCV_TIMEOUT
                 )
             except Exception as exc2:  # pragma: no cover - fallback
-                logger.error("Fallback fetch_ohlcv failed for %s: %s", symbol, exc2)
+                logger.error(
+                    "REST fallback fetch_ohlcv failed for %s: %s", symbol, exc2
+                )
         return exc
     except Exception as exc:  # pragma: no cover - network
         if (
