@@ -228,8 +228,15 @@ async def load_ohlcv_parallel(
     use_websocket: bool = False,
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
+    notifier: TelegramNotifier | None = None,
 ) -> Dict[str, list]:
-    """Fetch OHLCV data for multiple symbols concurrently."""
+    """Fetch OHLCV data for multiple symbols concurrently.
+
+    Parameters
+    ----------
+    notifier : TelegramNotifier | None, optional
+        If provided, failures will be sent using this notifier.
+    """
 
     since_map = since_map or {}
 
@@ -366,6 +373,7 @@ async def update_ohlcv_cache(
         use_websocket,
         force_websocket_history,
         max_concurrent,
+        notifier,
     )
 
     logger.info(
@@ -395,6 +403,7 @@ async def update_ohlcv_cache(
                 use_websocket,
                 force_websocket_history,
                 max_concurrent,
+                notifier,
             )
             data = full.get(sym)
             if data:
