@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Optional
 import asyncio
 import inspect
+import threading
 
 from telegram import Bot
 
@@ -61,17 +62,25 @@ class TelegramNotifier:
         self.chat_id = chat_id
         # internal flag set to True after a failed send
         self._disabled = False
+        # lock to serialize send attempts
+        self._lock = threading.Lock()
 
     def notify(self, text: str) -> Optional[str]:
         """Send ``text`` if notifications are enabled and credentials exist."""
         if self._disabled or not self.enabled or not self.token or not self.chat_id:
             return None
 
-        err = send_message(self.token, self.chat_id, text)
-        if err is not None:
-            self._disabled = True
-            logger.error("Disabling Telegram notifications due to send failure: %s", err)
-        return err
+        with self._lock:
+            if self._disabled:
+                return None
+            err = send_message(self.token, self.chat_id, text)
+            if err is not None:
+                self._disabled = True
+                logger.error(
+                    "Disabling Telegram notifications due to send failure: %s",
+                    err,
+                )
+            return err
 
     @classmethod
     def from_config(cls, config: dict) -> "TelegramNotifier":

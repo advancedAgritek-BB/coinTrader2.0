@@ -234,7 +234,18 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 3. If you see `Failed to send message: Not Found` in the logs, the chat ID or
    token is likely incorrect or the bot lacks permission to message the chat.
    Double-check the values in `config.yaml` and ensure you've started a
-   conversation with your bot.
+  conversation with your bot.
+
+#### Troubleshooting
+
+Before running the bot, call `send_test_message` from
+`crypto_bot.utils.telegram` to verify your token and chat ID. If the call fails,
+check for these common issues:
+
+* **Incorrect token** – the API token was mistyped or revoked.
+* **Wrong chat ID** – the bot does not have permission to message that chat.
+* **Bot not started** – you have not sent `/start` to your bot yet.
+* **Network restrictions** – firewalls or proxies are blocking Telegram.
 
 ### Twitter Sentiment API
 
