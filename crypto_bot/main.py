@@ -851,6 +851,24 @@ async def main() -> None:
                 direction=trade_side,
             )
             risk_manager.allocate_capital(name, size)
+            if config["execution_mode"] == "dry_run" and paper_wallet:
+                paper_wallet.open(trade_side, order_amount, current_price)
+                latest_balance = paper_wallet.balance
+            else:
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                    bal = await exchange.fetch_balance()
+                else:
+                    bal = await asyncio.to_thread(exchange.fetch_balance)
+                latest_balance = bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
+            log_balance(float(latest_balance))
+            log_position(
+                candidate["symbol"],
+                trade_side,
+                order_amount,
+                current_price,
+                current_price,
+                float(latest_balance),
+            )
             open_side = trade_side
             entry_price = current_price
             position_size = order_amount
