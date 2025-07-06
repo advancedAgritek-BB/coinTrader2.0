@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Optional, Any
 import sys
 
+from rich.console import Console
+from rich.table import Table
+
+from .utils.open_trades import get_open_trades
+from . import log_reader
+
 
 async def monitor_loop(
     exchange: object,
@@ -73,17 +79,6 @@ async def monitor_loop(
         # Propagate cancellation after the file handle is closed by the
         # context manager.
         raise
-"""Simple console monitor for displaying trades."""
-
-from pathlib import Path
-from typing import Any
-
-from rich.console import Console
-from rich.table import Table
-
-from .utils.open_trades import get_open_trades
-
-from . import log_reader
 
 TRADE_FILE = Path("crypto_bot/logs/trades.csv")
 
