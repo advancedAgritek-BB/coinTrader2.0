@@ -3,6 +3,7 @@ from typing import Optional, Tuple, Dict
 import asyncio
 import time
 from .pattern_detector import detect_patterns
+from crypto_bot.utils.pattern_logger import log_patterns
 
 import pandas as pd
 import numpy as np
@@ -22,6 +23,17 @@ def _load_config(path: Path) -> dict:
 CONFIG = _load_config(CONFIG_PATH)
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+
+# Impact of each detected pattern on regime scoring. Values are multipliers
+# applied to the pattern strength.
+PATTERN_WEIGHTS = {
+    "breakout": ("breakout", 2.0),
+    "breakdown": ("volatile", 1.0),
+    "hammer": ("mean-reverting", 0.5),
+    "shooting_star": ("mean-reverting", 0.5),
+    "doji": ("sideways", 0.2),
+    "ascending_triangle": ("breakout", 1.5),
+}
 
 
 def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
@@ -173,6 +185,12 @@ def classify_regime(
 
     Returns
     -------
+    Tuple[str, object]
+        When sufficient history is available the function returns ``(label,
+        patterns)`` where ``patterns`` is a ``dict`` mapping formation name to
+        strength. If insufficient history triggers the ML fallback the return
+        value is ``(label, confidence)`` where ``confidence`` is a float between
+        0 and 1.
     Tuple[str, object] | Dict[str, str] | Tuple[str, str]
         When a single dataframe is supplied the function behaves like before
         and returns ``(label, patterns)`` or ``(label, confidence)``. When a
@@ -200,6 +218,7 @@ def classify_regime(
         raise ValueError("df must be provided when df_map is None")
 
     regime = _classify_core(df, cfg, higher_df)
+    used_ml = False
     ml_used = False
 
     if regime == "unknown" and cfg.get("use_ml_regime_classifier", False):
@@ -208,6 +227,7 @@ def classify_regime(
                 from .ml_regime_model import predict_regime
 
                 regime = predict_regime(df)
+                used_ml = True
                 ml_used = True
             except Exception:
                 pass
@@ -216,6 +236,38 @@ def classify_regime(
                 "Skipping ML fallback \u2014 insufficient data (%d rows)", len(df)
             )
 
+    patterns = detect_patterns(df)
+
+    if regime == "unknown" and len(df) < ml_min_bars:
+        log_patterns(regime, patterns)
+        return regime, 0.0
+
+    # Score regimes based on the base classification and detected patterns
+    scores: Dict[str, float] = {}
+    if regime != "unknown":
+        scores[regime] = 1.0
+    for name, strength in patterns.items():
+        target, weight = PATTERN_WEIGHTS.get(name, (None, 0.0))
+        if target:
+            if regime == "unknown" and name not in {"breakout", "ascending_triangle"}:
+                continue
+            scores[target] = scores.get(target, 0.0) + weight * float(strength)
+
+    if scores:
+        regime = max(scores, key=scores.get)
+
+    log_patterns(regime, patterns)
+
+    if regime == "unknown":
+        if cfg.get("use_ml_regime_classifier", False) and len(df) >= ml_min_bars:
+            label, confidence = _ml_fallback(df)
+            log_patterns(label, patterns)
+            return label, confidence
+        if len(df) >= ml_min_bars:
+            logger.info("Skipping ML fallback \u2014 ML disabled")
+        else:
+            logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
+        return regime, {}
     patterns = set()
     if not ml_used:
         patterns = detect_patterns(df)
@@ -228,7 +280,7 @@ def classify_regime(
         logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
         return regime, patterns
 
-    return regime, patterns
+    return regime, {} if used_ml else patterns
 
 
 async def classify_regime_async(

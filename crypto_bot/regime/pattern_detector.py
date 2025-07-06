@@ -1,8 +1,8 @@
 import pandas as pd
 
 
-def detect_patterns(df: pd.DataFrame) -> set[str]:
-    """Return a set of simple chart patterns detected in ``df``.
+def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
+    """Return a mapping of detected chart patterns to their strength.
 
     The function inspects the latest candle and recent history for
     breakout and candlestick formations. Only a handful of patterns
@@ -14,7 +14,7 @@ def detect_patterns(df: pd.DataFrame) -> set[str]:
     ``"shooting_star"`` -- small body with long upper shadow
     ``"doji"``      -- open and close nearly equal
     """
-    patterns: set[str] = set()
+    patterns: dict[str, float] = {}
     if df is None or len(df) < 2:
         return patterns
 
@@ -30,11 +30,11 @@ def detect_patterns(df: pd.DataFrame) -> set[str]:
 
     if body <= candle_range * 0.1:
         if upper > candle_range * 0.4 and lower <= candle_range * 0.1:
-            patterns.add("shooting_star")
+            patterns["shooting_star"] = upper / candle_range
         if lower > candle_range * 0.4 and upper <= candle_range * 0.1:
-            patterns.add("hammer")
+            patterns["hammer"] = lower / candle_range
         if upper > candle_range * 0.2 and lower > candle_range * 0.2:
-            patterns.add("doji")
+            patterns["doji"] = 1 - body / candle_range
 
     lookback = min(len(df), 20)
     if len(df) >= 2:
@@ -47,8 +47,21 @@ def detect_patterns(df: pd.DataFrame) -> set[str]:
         vol_mean = df["volume"].mean()
 
     if last["close"] >= high_max and last["volume"] > vol_mean * 1.5:
-        patterns.add("breakout")
+        strength = (last["close"] - high_max) / high_max
+        patterns["breakout"] = max(strength, 0.0) + 1.0
     if last["close"] <= low_min and last["volume"] > vol_mean * 1.5:
-        patterns.add("breakdown")
+        strength = (low_min - last["close"]) / low_min
+        patterns["breakdown"] = max(strength, 0.0) + 1.0
+
+    # Detect simple ascending triangle
+    lookback = min(len(df), 5)
+    recent = df.iloc[-lookback:]
+    highs = recent["high"]
+    lows = recent["low"]
+    if (
+        highs.max() - highs.min() <= highs.mean() * 0.005
+        and lows.diff().dropna().gt(0).all()
+    ):
+        patterns["ascending_triangle"] = 1.5
 
     return patterns
