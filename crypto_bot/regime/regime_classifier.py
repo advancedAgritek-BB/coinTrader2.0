@@ -187,6 +187,10 @@ def classify_regime(
     -------
     Tuple[str, object]
         When sufficient history is available the function returns ``(label,
+        patterns)`` where ``patterns`` is a mapping of pattern names to
+        confidence scores. If insufficient history triggers the ML fallback the
+        return value is ``(label, confidence)`` where ``confidence`` is a float
+        between 0 and 1.
         patterns)`` where ``patterns`` is a ``dict`` mapping formation name to
         strength. If insufficient history triggers the ML fallback the return
         value is ``(label, confidence)`` where ``confidence`` is a float between

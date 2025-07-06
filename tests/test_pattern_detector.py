@@ -28,6 +28,7 @@ def test_detect_patterns_breakout():
 
     patterns = detect_patterns(df)
     assert "breakout" in patterns
+    assert patterns["breakout"] > 0
     assert isinstance(patterns["breakout"], float)
 
 
@@ -41,4 +42,5 @@ def test_classify_regime_includes_patterns():
     regime, patterns = classify_regime(df)
     assert regime == "breakout"
     assert "breakout" in patterns
+    assert patterns["breakout"] > 0
     assert isinstance(patterns, dict)
