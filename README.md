@@ -58,6 +58,8 @@ encoded model if desired.
    trades in real time. Profitable positions are shown in green while
    losing ones appear in red. A second line now lists each open trade with
    its running profit or loss.
+   The program prints "Bot running..." before the [Monitor] lines.
+   Type `start`, `stop` or `quit` in the terminal to control the bot.
    Or launch the web dashboard with:
    ```bash
    python -m frontend.app
