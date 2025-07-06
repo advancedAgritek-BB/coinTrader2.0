@@ -49,6 +49,7 @@ def _precompute_regimes(df: pd.DataFrame) -> List[str]:
     work["atr"] = ta.volatility.average_true_range(
         work["high"], work["low"], work["close"], window=cfg["indicator_window"]
     )
+    work["normalized_range"] = (work["high"] - work["low"]) / work["atr"]
     bb = ta.volatility.BollingerBands(work["close"], window=cfg["bb_window"])
     work["bb_width"] = bb.bollinger_wband()
     work["volume_ma"] = work["volume"].rolling(cfg["ma_window"]).mean()
@@ -83,7 +84,10 @@ def _precompute_regimes(df: pd.DataFrame) -> List[str]:
             < cfg["ema_distance_mean_rev_max"]
         ):
             regime = "mean-reverting"
-        elif not pd.isna(atr_ma) and latest["atr"] > atr_ma * cfg["atr_volatility_mult"]:
+        elif (
+            not pd.isna(latest["normalized_range"])
+            and latest["normalized_range"] > cfg["normalized_range_volatility_min"]
+        ):
             regime = "volatile"
         else:
             regime = "sideways"

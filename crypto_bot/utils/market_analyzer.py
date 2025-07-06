@@ -38,6 +38,7 @@ async def analyze_symbol(
         Optional notifier used to send a message when the strategy is invoked.
     """
     base_tf = config.get("timeframe", "1h")
+    higher_tf = config.get("higher_timeframe", "1d")
     df = df_map.get(base_tf)
     higher_df = df_map.get("1d")
     profile = bool(config.get("profile_regime", False))
@@ -48,17 +49,18 @@ async def analyze_symbol(
         higher_df,
         profile,
     )
+    higher_df = df_map.get(higher_tf)
+    regime, info = await classify_regime_async(df, higher_df)
     patterns: set[str] = set()
+    higher_df = df_map.get("1d")
+    regime, patterns = await classify_regime_async(df, higher_df)
     base_conf = 1.0
-    if isinstance(info, set):
-        patterns = info
-    else:
-        base_conf = float(info)
 
     regime_counts: Dict[str, int] = {}
     regime_tfs = config.get("regime_timeframes", [base_tf])
     min_agree = config.get("min_consistent_agreement", 1)
 
+    vote_map: Dict[str, pd.DataFrame] = {}
     for tf in regime_tfs:
         tf_df = df_map.get(tf)
         if tf_df is None:
@@ -72,6 +74,21 @@ async def analyze_symbol(
             profile,
         )
         regime_counts[r] = regime_counts.get(r, 0) + 1
+        if tf_df is not None:
+            vote_map[tf] = tf_df
+    if higher_tf in df_map:
+        vote_map.setdefault(higher_tf, df_map[higher_tf])
+
+    if vote_map:
+        labels = await classify_regime_async(df_map=vote_map)
+        if isinstance(labels, tuple):
+            label_map = dict(zip(vote_map.keys(), labels))
+        else:
+            label_map = labels
+        for tf in regime_tfs:
+            r = label_map.get(tf)
+            if r:
+                regime_counts[r] = regime_counts.get(r, 0) + 1
 
     if regime_counts:
         regime, votes = max(regime_counts.items(), key=lambda kv: kv[1])
