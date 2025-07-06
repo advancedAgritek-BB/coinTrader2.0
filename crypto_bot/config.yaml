@@ -81,7 +81,7 @@ risk:
   atr_short_window: 14  # ATR window short term
   max_drawdown: 0.5  # allowed portfolio drawdown
   max_volatility_factor: 1.5  # volatility cap
-  min_expected_value: 0.01  # minimum expected EV
+  min_expected_value: 0.0  # disables EV threshold when no stats exist
   min_volume: 50  # minimum volume in units
   stop_loss_pct: 0.015  # default stop loss
   take_profit_pct: 0.05  # default take profit
