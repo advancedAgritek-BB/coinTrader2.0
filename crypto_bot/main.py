@@ -855,6 +855,13 @@ async def _main_impl() -> TelegramNotifier:
             continue
 
         for candidate in filtered_results:
+            if open_side and candidate["symbol"] == (open_symbol or config.get("symbol")):
+                logger.info(
+                    "Existing position %s on %s still open – skipping new trade",
+                    open_side,
+                    candidate["symbol"],
+                )
+                continue
             score = candidate["score"]
             direction = candidate["direction"]
             trade_side = direction_to_side(direction)
