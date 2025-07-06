@@ -656,3 +656,31 @@ def test_load_ohlcv_parallel_timeout_fallback(monkeypatch):
     assert "BTC/USD" in result
     assert ex.fetch_called is True
     assert "BTC/USD" not in market_loader.failed_symbols
+
+
+class LimitCaptureExchange:
+    def __init__(self):
+        self.limit = None
+
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, since=None):
+        self.limit = limit
+        return [[0] * 6]
+
+
+def test_watch_ohlcv_since_reduces_limit(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    ex = LimitCaptureExchange()
+    monkeypatch.setattr(market_loader.time, "time", lambda: 1000)
+    since = 1000 - 3 * 3600
+    asyncio.run(
+        market_loader.fetch_ohlcv_async(
+            ex,
+            "BTC/USD",
+            timeframe="1h",
+            limit=10,
+            since=since,
+            use_websocket=True,
+        )
+    )
+    assert ex.limit == 4
