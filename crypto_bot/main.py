@@ -330,7 +330,6 @@ async def main() -> None:
         symbols = await get_filtered_symbols(exchange, config)
         symbol_time = time.perf_counter() - t0
         start_filter = time.perf_counter()
-        symbols = await get_filtered_symbols(exchange, config)
         global symbol_priority_queue
         if not symbol_priority_queue:
             symbol_priority_queue = build_priority_queue(symbols)
