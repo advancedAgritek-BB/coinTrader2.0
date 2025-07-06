@@ -363,6 +363,7 @@ async def main() -> None:
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
+            notifier=notifier,
         )
 
         regime_cache = await update_regime_tf_cache(
@@ -374,6 +375,7 @@ async def main() -> None:
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
+            notifier=notifier,
         )
         ohlcv_time = time.perf_counter() - t0
         ohlcv_fetch_latency = time.perf_counter() - start_ohlcv
@@ -388,7 +390,10 @@ async def main() -> None:
                 df_map[tf] = cache_tf.get(sym)
             df_sym = df_map.get(config["timeframe"])
             if df_sym is None or df_sym.empty:
-                logger.error("OHLCV fetch failed for %s", sym)
+                msg = f"OHLCV fetch failed for {sym}"
+                logger.error(msg)
+                if notifier:
+                    notifier.notify(msg)
                 continue
 
             expected_cols = ["timestamp", "open", "high", "low", "close", "volume"]
@@ -892,6 +897,9 @@ async def main() -> None:
                 metrics,
                 config.get("metrics_output_file", "crypto_bot/logs/metrics.csv"),
             )
+        summary = f"Cycle complete: {total_pairs} symbols, {trades_executed} trades"
+        if notifier:
+            notifier.notify(summary)
         logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
         await asyncio.sleep(config["loop_interval_minutes"] * 60)
 
