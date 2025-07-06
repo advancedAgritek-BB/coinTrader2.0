@@ -70,7 +70,7 @@ async def load_kraken_symbols(
     exchange,
     exclude: Iterable[str] | None = None,
     config: Dict | None = None,
-) -> List[str]:
+) -> List[str] | None:
     """Return a list of active trading pairs on Kraken.
 
     Parameters
@@ -114,6 +114,11 @@ async def load_kraken_symbols(
             if m_type not in allowed_types:
                 continue
         symbols.append(symbol)
+
+    if not symbols:
+        logger.warning("No active trading pairs were discovered")
+        return None
+
     return symbols
 
 
