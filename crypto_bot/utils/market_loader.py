@@ -84,6 +84,28 @@ def is_symbol_type(pair_info: dict, allowed: List[str]) -> bool:
     return False
 
 
+def timeframe_seconds(exchange, timeframe: str) -> int:
+    """Return timeframe length in seconds."""
+    if hasattr(exchange, "parse_timeframe"):
+        try:
+            return int(exchange.parse_timeframe(timeframe))
+        except Exception:
+            pass
+    unit = timeframe[-1]
+    value = int(timeframe[:-1])
+    if unit == "m":
+        return value * 60
+    if unit == "h":
+        return value * 3600
+    if unit == "d":
+        return value * 86400
+    if unit == "w":
+        return value * 604800
+    if unit == "M":
+        return value * 2592000
+    raise ValueError(f"Unknown timeframe {timeframe}")
+
+
 async def load_kraken_symbols(
     exchange,
     exclude: Iterable[str] | None = None,
@@ -153,13 +175,22 @@ async def fetch_ohlcv_async(
     try:
         if use_websocket and hasattr(exchange, "watch_ohlcv"):
             params = inspect.signature(exchange.watch_ohlcv).parameters
-            kwargs = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+            ws_limit = limit
+            kwargs = {"symbol": symbol, "timeframe": timeframe, "limit": ws_limit}
             if since is not None and "since" in params:
                 kwargs["since"] = since
+                tf_sec = timeframe_seconds(exchange, timeframe)
+                now_ms = int(time.time() * 1000)
+                try:
+                    expected = max(0, (now_ms - since) // (tf_sec * 1000))
+                    ws_limit = max(1, min(limit, int(expected) + 2))
+                    kwargs["limit"] = ws_limit
+                except Exception:
+                    pass
             data = await asyncio.wait_for(exchange.watch_ohlcv(**kwargs), OHLCV_TIMEOUT)
             if (
-                limit
-                and len(data) < limit
+                ws_limit
+                and len(data) < ws_limit
                 and not force_websocket_history
                 and hasattr(exchange, "fetch_ohlcv")
             ):
