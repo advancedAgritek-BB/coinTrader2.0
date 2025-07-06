@@ -280,7 +280,12 @@ async def fetch_ohlcv_async(
                         except Exception:
                             pass
                     if len(data) < expected:
-                        logger.warning("Incomplete OHLCV for %s", symbol)
+                        logger.warning(
+                            "Incomplete OHLCV for %s: got %d of %d",
+                            symbol,
+                            len(data),
+                            expected,
+                        )
                     return data
                 params_f = inspect.signature(exchange.fetch_ohlcv).parameters
                 kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
@@ -298,7 +303,12 @@ async def fetch_ohlcv_async(
                     except Exception:
                         pass
                 if len(data) < expected:
-                    logger.warning("Incomplete OHLCV for %s", symbol)
+                    logger.warning(
+                        "Incomplete OHLCV for %s: got %d of %d",
+                        symbol,
+                        len(data),
+                        expected,
+                    )
                 return data
             expected = limit
             if since is not None:
@@ -309,8 +319,13 @@ async def fetch_ohlcv_async(
                 except Exception:
                     pass
             if len(data) < expected:
-                logger.warning("Incomplete OHLCV for %s", symbol)
-                if since is not None and hasattr(exchange, "fetch_ohlcv"):
+                logger.warning(
+                    "Incomplete OHLCV for %s: got %d of %d",
+                    symbol,
+                    len(data),
+                    expected,
+                )
+            if since is not None and hasattr(exchange, "fetch_ohlcv"):
                     try:
                         kwargs_r = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
@@ -343,8 +358,13 @@ async def fetch_ohlcv_async(
                 except Exception:
                     pass
             if len(data) < expected:
-                logger.warning("Incomplete OHLCV for %s", symbol)
-                if since is not None:
+                logger.warning(
+                    "Incomplete OHLCV for %s: got %d of %d",
+                    symbol,
+                    len(data),
+                    expected,
+                )
+            if since is not None:
                     try:
                         kwargs_r = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                         data_r = await asyncio.wait_for(
@@ -371,7 +391,12 @@ async def fetch_ohlcv_async(
             except Exception:
                 pass
         if len(data) < expected:
-            logger.warning("Incomplete OHLCV for %s", symbol)
+            logger.warning(
+                "Incomplete OHLCV for %s: got %d of %d",
+                symbol,
+                len(data),
+                expected,
+            )
             if since is not None:
                 try:
                     kwargs_r = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
