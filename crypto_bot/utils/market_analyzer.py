@@ -1,7 +1,10 @@
 import pandas as pd
 from typing import Dict
 
-from crypto_bot.regime.regime_classifier import classify_regime_async
+from crypto_bot.regime.regime_classifier import (
+    classify_regime_async,
+    classify_regime_cached,
+)
 from crypto_bot.strategy_router import (
     route,
     strategy_name,
@@ -37,7 +40,14 @@ async def analyze_symbol(
     base_tf = config.get("timeframe", "1h")
     df = df_map.get(base_tf)
     higher_df = df_map.get("1d")
-    regime, info = await classify_regime_async(df, higher_df)
+    profile = bool(config.get("profile_regime", False))
+    regime, info = await classify_regime_cached(
+        symbol,
+        base_tf,
+        df,
+        higher_df,
+        profile,
+    )
     patterns: set[str] = set()
     base_conf = 1.0
     if isinstance(info, set):
@@ -54,7 +64,13 @@ async def analyze_symbol(
         if tf_df is None:
             continue
         higher_df = df_map.get("1d") if tf != "1d" else None
-        r, _ = await classify_regime_async(tf_df, higher_df)
+        r, _ = await classify_regime_cached(
+            symbol,
+            tf,
+            tf_df,
+            higher_df,
+            profile,
+        )
         regime_counts[r] = regime_counts.get(r, 0) + 1
 
     if regime_counts:
