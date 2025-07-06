@@ -528,8 +528,10 @@ async def fetch_ohlcv_async(
                     use_websocket,
                     exc2,
                     exc_info=True,
-                )
+            )
         return exc
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:  # pragma: no cover - network
         if (
             use_websocket
