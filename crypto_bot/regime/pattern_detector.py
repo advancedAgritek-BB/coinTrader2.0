@@ -2,17 +2,17 @@ import pandas as pd
 
 
 def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
-    """Return confidence scores for simple chart patterns detected in ``df``.
-    """Return scored chart patterns detected in ``df``.
+    """Return a mapping of detected chart patterns to their strength.
 
-    The function inspects the latest candles and assigns a confidence
-    between ``0`` and ``1`` for each detected pattern. Patterns include
-    classic candlestick formations and simple breakout signals:
+    The latest candles are scanned for classic candlestick formations
+    and simple breakout signals.  Each pattern is assigned a confidence
+    value between ``0`` and ``1`` and only those with non–zero confidence
+    are returned.
 
     ``"breakout"``         -- last close at a new high with volume spike
     ``"breakdown"``        -- last close at a new low with volume spike
-    ``"hammer"``           -- small body, long lower shadow
-    ``"shooting_star"``    -- small body, long upper shadow
+    ``"hammer"``           -- small body with long lower shadow
+    ``"shooting_star"``    -- small body with long upper shadow
     ``"doji"``             -- open and close nearly equal
     ``"bullish_engulfing"``  -- last candle engulfs previous bearish body
     ``"bearish_engulfing"`` -- last candle engulfs previous bullish body
@@ -20,31 +20,17 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
     ``"three_bar_reversal"`` -- two bars one way then strong reversal
     ``"volume_spike"``     -- volume significantly above average
     """
-
-    """Return a mapping of detected chart patterns to their strength.
-
-    The function inspects the latest candle and recent history for
-    breakout and candlestick formations. Only a handful of patterns
-    are recognized.  The return value maps pattern names to a confidence
-    between 0 and 1.  Patterns with zero confidence are omitted.
-
-    ``"breakout"``  -- last close at a new high with a volume spike
-    ``"breakdown"`` -- last close at a new low with a volume spike
-    ``"hammer"``    -- small body with long lower shadow
-    ``"shooting_star"`` -- small body with long upper shadow
-    ``"doji"``      -- open and close nearly equal
-    """
     scores: dict[str, float] = {}
     patterns: dict[str, float] = {}
     if df is None or len(df) < 2:
-        return scores
+        return patterns
 
     last = df.iloc[-1]
+    prev = df.iloc[-2]
 
     body = abs(last["close"] - last["open"])
     candle_range = last["high"] - last["low"]
     if candle_range == 0:
-        return scores
         return patterns
 
     upper = last["high"] - max(last["close"], last["open"])
@@ -166,4 +152,4 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
     ):
         patterns["ascending_triangle"] = 1.5
 
-    return scores
+    return patterns

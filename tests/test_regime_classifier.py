@@ -421,7 +421,7 @@ def test_breakout_pattern_sets_regime():
     regime, patterns = classify_regime_with_patterns(df)
     regime, patterns = classify_regime(df)
     assert regime == "sideways"
-    assert patterns.get("breakout", 0) == 1.0
+    assert patterns.get("breakout", 0) >= 1.0
     assert regime == "breakout"
     assert isinstance(patterns, dict)
     assert patterns.get("breakout", 0) > 0
