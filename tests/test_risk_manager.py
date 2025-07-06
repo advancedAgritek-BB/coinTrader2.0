@@ -145,6 +145,21 @@ def test_allow_trade_rejects_when_volume_far_below_mean():
     assert "1% of mean" in reason
 
 
+def test_allow_trade_rejects_on_volatility_drop():
+    data = {
+        "open": [1] * 21,
+        "high": [1] * 21,
+        "low": [1] * 21,
+        "close": [100] + [1] * 20,
+        "volume": [10] * 21,
+    }
+    df = pd.DataFrame(data)
+    cfg = RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
+    allowed, reason = RiskManager(cfg).allow_trade(df)
+    assert not allowed
+    assert "volatility" in reason.lower()
+
+
 def test_stop_order_management():
     manager = RiskManager(RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01))
     order = {"id": "1", "symbol": "BTC/USDT", "side": "sell", "amount": 1, "dry_run": True}
