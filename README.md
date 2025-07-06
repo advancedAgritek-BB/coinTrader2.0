@@ -542,6 +542,27 @@ pip install -r requirements.txt
 pytest -q
 ```
 
+## Testing
+
+The repository includes an automated test suite. To set up the environment and
+run the tests, execute:
+
+```bash
+bash codex/setup.sh  # installs system and Python dependencies
+```
+
+Alternatively you can install the Python packages manually:
+
+```bash
+pip install -r requirements.txt
+```
+
+Once the dependencies are installed, run:
+
+```bash
+pytest -q
+```
+
 ## Troubleshooting
 
 High `max_concurrent_ohlcv` values combined with short `ohlcv_timeout`
