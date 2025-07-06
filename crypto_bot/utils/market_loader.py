@@ -20,15 +20,17 @@ OHLCV_TIMEOUT = 30
 MAX_OHLCV_FAILURES = 3
 MAX_WS_LIMIT = 50
 UNSUPPORTED_SYMBOL = object()
+STATUS_UPDATES = True
 
 
 def configure(
     ohlcv_timeout: int | float | None = None,
     max_failures: int | None = None,
     max_ws_limit: int | None = None,
+    status_updates: bool | None = None,
 ) -> None:
     """Configure module-wide settings."""
-    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT
+    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES
     if ohlcv_timeout is not None:
         try:
             OHLCV_TIMEOUT = max(1, int(ohlcv_timeout))
@@ -56,6 +58,8 @@ def configure(
                 max_ws_limit,
                 MAX_WS_LIMIT,
             )
+    if status_updates is not None:
+        STATUS_UPDATES = bool(status_updates)
 
 
 def is_symbol_type(pair_info: dict, allowed: List[str]) -> bool:
@@ -344,7 +348,7 @@ async def fetch_ohlcv_async(
                     len(data),
                     expected,
                 )
-            if since is not None and hasattr(exchange, "fetch_ohlcv"):
+                if since is not None and hasattr(exchange, "fetch_ohlcv"):
                     try:
                         kwargs_r = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
@@ -608,7 +612,7 @@ async def load_ohlcv_parallel(
                 f"(tf={timeframe} limit={limit} mode={mode})"
             )
             logger.error(msg)
-            if notifier:
+            if notifier and STATUS_UPDATES:
                 notifier.notify(
                     f"Timeout loading OHLCV for {sym} on {timeframe} limit {limit}"
                 )
@@ -645,7 +649,7 @@ async def load_ohlcv_parallel(
                 f"(tf={timeframe} limit={limit} mode={mode}): {res}"
             )
             logger.error(msg)
-            if notifier:
+            if notifier and STATUS_UPDATES:
                 notifier.notify(
                     f"Failed to load OHLCV for {sym} on {timeframe} limit {limit}: {res}"
                 )
