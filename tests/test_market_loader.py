@@ -333,6 +333,26 @@ class FailOnceExchange:
         return [[0] * 6]
 
 
+class AlwaysFailExchange:
+    def __init__(self):
+        self.calls = 0
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.calls += 1
+        raise RuntimeError("fail")
+
+
+class FailSuccessExchange:
+    def __init__(self):
+        self.calls = 0
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.calls += 1
+        if self.calls % 2 == 1:
+            raise RuntimeError("fail")
+        return [[0] * 6]
+
+
 def test_failed_symbol_skipped_until_delay(monkeypatch):
     from crypto_bot.utils import market_loader
 
@@ -385,6 +405,123 @@ def test_failed_symbol_skipped_until_delay(monkeypatch):
     )
     assert ex.calls == 2
     assert "BTC/USD" in cache
+
+
+def test_failed_symbol_backoff(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    ex = AlwaysFailExchange()
+    cache: dict[str, pd.DataFrame] = {}
+    market_loader.failed_symbols.clear()
+    monkeypatch.setattr(market_loader, "retry_delay", 10)
+    monkeypatch.setattr(market_loader, "max_retry_delay", 40)
+
+    t = 0
+
+    def fake_time():
+        return t
+
+    monkeypatch.setattr(market_loader.time, "time", fake_time)
+
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert market_loader.failed_symbols["BTC/USD"]["delay"] == 10
+
+    t += 11
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert market_loader.failed_symbols["BTC/USD"]["delay"] == 20
+
+    t += 21
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert market_loader.failed_symbols["BTC/USD"]["delay"] == 40
+
+    t += 41
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert market_loader.failed_symbols["BTC/USD"]["delay"] == 40
+
+
+def test_backoff_resets_on_success(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    ex = FailSuccessExchange()
+    cache: dict[str, pd.DataFrame] = {}
+    market_loader.failed_symbols.clear()
+    monkeypatch.setattr(market_loader, "retry_delay", 10)
+
+    t = 0
+
+    def fake_time():
+        return t
+
+    monkeypatch.setattr(market_loader.time, "time", fake_time)
+
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert market_loader.failed_symbols["BTC/USD"]["delay"] == 10
+
+    t += 11
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert "BTC/USD" in cache
+    assert "BTC/USD" not in market_loader.failed_symbols
+
+    t += 1
+    ex2 = AlwaysFailExchange()
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex2,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            max_concurrent=1,
+        )
+    )
+    assert market_loader.failed_symbols["BTC/USD"]["delay"] == 10
 
 
 class StopLoop(Exception):
