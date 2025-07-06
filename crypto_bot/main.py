@@ -91,6 +91,16 @@ def opposite_side(side: str) -> str:
     return "sell" if side == "buy" else "buy"
 
 
+def notify_balance_change(
+    notifier: TelegramNotifier | None,
+    previous: float | None,
+    new_balance: float,
+    enabled: bool,
+) -> float:
+    """Send a notification if the balance changed."""
+    if notifier and enabled and previous is not None and new_balance != previous:
+        notifier.notify(f"Balance changed: {new_balance:.2f} USDT")
+    return new_balance
 async def fetch_and_log_balance(exchange, paper_wallet, config):
     """Return the latest wallet balance and log it."""
     if config["execution_mode"] != "dry_run":
@@ -149,6 +159,8 @@ async def _main_impl() -> TelegramNotifier:
     user = load_or_create()
 
     trade_updates = config.get("telegram", {}).get("trade_updates", True)
+    status_updates = config.get("telegram", {}).get("status_updates", True)
+    balance_updates = config.get("telegram", {}).get("balance_updates", False)
 
     tg_cfg = {**config.get("telegram", {})}
     if user.get("telegram_token"):
@@ -156,9 +168,12 @@ async def _main_impl() -> TelegramNotifier:
     if user.get("telegram_chat_id"):
         tg_cfg["chat_id"] = user["telegram_chat_id"]
     trade_updates = tg_cfg.get("trade_updates", True)
+    status_updates = tg_cfg.get("status_updates", status_updates)
+    balance_updates = tg_cfg.get("balance_updates", balance_updates)
 
     notifier = TelegramNotifier.from_config(tg_cfg)
-    notifier.notify("🤖 CoinTrader2.0 started")
+    if status_updates:
+        notifier.notify("🤖 CoinTrader2.0 started")
 
     if notifier.token and notifier.chat_id:
         if not send_test_message(notifier.token, notifier.chat_id, "Bot started"):
@@ -206,6 +221,14 @@ async def _main_impl() -> TelegramNotifier:
             else bal.get("USDT", 0)
         )
         log_balance(float(init_bal))
+        last_balance = float(init_bal)
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("Exchange API setup failed: %s", exc)
+        if status_updates:
+            err = notifier.notify(f"API error: {exc}")
+            if err:
+                logger.error("Failed to notify user: %s", err)
+        return
         previous_balance = float(init_bal)
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)
@@ -234,6 +257,12 @@ async def _main_impl() -> TelegramNotifier:
             start_bal = 1000.0
         paper_wallet = PaperWallet(start_bal)
         log_balance(paper_wallet.balance)
+        last_balance = notify_balance_change(
+            notifier,
+            last_balance,
+            float(paper_wallet.balance),
+            balance_updates,
+        )
 
     monitor_task = asyncio.create_task(
         console_monitor.monitor_loop(
@@ -254,6 +283,7 @@ async def _main_impl() -> TelegramNotifier:
     highest_price = 0.0
     current_strategy = None
     active_strategy = None
+    last_balance: float | None = None
     stats_file = Path("crypto_bot/logs/strategy_stats.json")
     # File tracking individual trade performance used for analytics
     perf_file = Path("crypto_bot/logs/strategy_performance.json")
@@ -416,7 +446,7 @@ async def _main_impl() -> TelegramNotifier:
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
-            notifier=notifier,
+            notifier=notifier if status_updates else None,
         )
 
         regime_cache = await update_regime_tf_cache(
@@ -428,7 +458,7 @@ async def _main_impl() -> TelegramNotifier:
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
-            notifier=notifier,
+            notifier=notifier if status_updates else None,
         )
         ohlcv_time = time.perf_counter() - t0
         ohlcv_fetch_latency = time.perf_counter() - start_ohlcv
@@ -675,6 +705,12 @@ async def _main_impl() -> TelegramNotifier:
                     unreal,
                 )
             log_balance(float(equity))
+            last_balance = notify_balance_change(
+                notifier,
+                last_balance,
+                float(equity),
+                balance_updates,
+            )
             log_position(
                 open_symbol or config.get("symbol", ""),
                 open_side,
@@ -769,6 +805,12 @@ async def _main_impl() -> TelegramNotifier:
                         latest_balance = paper_wallet.balance if paper_wallet else 0.0
                     check_balance_change(float(latest_balance), "trade executed")
                     log_balance(float(latest_balance))
+                    last_balance = notify_balance_change(
+                        notifier,
+                        last_balance,
+                        float(latest_balance),
+                        balance_updates,
+                    )
                     log_position(
                         open_symbol or config.get("symbol", ""),
                         open_side or "",
@@ -942,6 +984,12 @@ async def _main_impl() -> TelegramNotifier:
                 latest_balance = bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
             check_balance_change(float(latest_balance), "trade executed")
             log_balance(float(latest_balance))
+            last_balance = notify_balance_change(
+                notifier,
+                last_balance,
+                float(latest_balance),
+                balance_updates,
+            )
             log_position(
                 candidate["symbol"],
                 trade_side,
