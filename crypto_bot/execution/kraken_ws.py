@@ -620,6 +620,26 @@ class KrakenWSClient:
         self._public_subs.append(data)
         self.public_ws.send(data)
 
+    def unsubscribe_trades(self, symbol: Union[str, List[str]]) -> None:
+        """Unsubscribe from trade updates for one or more symbols."""
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "unsubscribe",
+            "params": {"channel": "trade", "symbol": symbol},
+        }
+        data = json.dumps(msg)
+
+        sub_msg = {
+            "method": "subscribe",
+            "params": {"channel": "trade", "symbol": symbol},
+        }
+        sub_data = json.dumps(sub_msg)
+        if sub_data in self._public_subs:
+            self._public_subs.remove(sub_data)
+        self.public_ws.send(data)
+
     def subscribe_ohlc(
         self,
         symbol: Union[str, List[str]],
@@ -688,10 +708,10 @@ class KrakenWSClient:
         self.connect_public()
         if isinstance(symbol, str):
             symbol = [symbol]
-        msg = {
-            "method": "unsubscribe",
-            "params": {"channel": "book", "symbol": symbol, "depth": depth},
-        }
+        params = {"channel": "book", "symbol": symbol}
+        if depth != 10:
+            params["depth"] = depth
+        msg = {"method": "unsubscribe", "params": params}
         data = json.dumps(msg)
         self.public_ws.send(data)
 
