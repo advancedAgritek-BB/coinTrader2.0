@@ -50,7 +50,9 @@ class PortfolioRotator:
                         fetch_fn, sym, timeframe="1d", limit=lookback_days
                     )
             except Exception as exc:  # pragma: no cover - network
-                self.logger.error("OHLCV fetch failed for %s: %s", sym, exc)
+                self.logger.exception(
+                    "OHLCV fetch failed for %s timeframe 1d lookback %s", sym, lookback_days
+                )
                 continue
 
             if (
