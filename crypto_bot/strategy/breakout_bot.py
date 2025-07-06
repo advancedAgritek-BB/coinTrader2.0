@@ -6,72 +6,98 @@ import ta
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 
+def _squeeze(
+    df: pd.DataFrame,
+    bb_len: int,
+    bb_std: float,
+    kc_len: int,
+    kc_mult: float,
+    threshold: float,
+) -> Tuple[pd.Series, pd.Series]:
+    """Return squeeze boolean series and ATR values."""
+    close = df["close"]
+    high = df["high"]
+    low = df["low"]
+
+    bb = ta.volatility.BollingerBands(close, window=bb_len, window_dev=bb_std)
+    bb_width = bb.bollinger_hband() - bb.bollinger_lband()
+    bb_mid = bb.bollinger_mavg()
+
+    atr = ta.volatility.average_true_range(high, low, close, window=kc_len)
+    kc_width = 2 * atr * kc_mult
+
+    squeeze = (bb_width / bb_mid < threshold) & (bb_width < kc_width)
+    return squeeze, atr
+
+
 def generate_signal(
     df: pd.DataFrame,
     config: Optional[dict] = None,
+    higher_df: Optional[pd.DataFrame] = None,
 ) -> Tuple[float, str]:
-    """Breakout strategy with volatility contraction and momentum checks.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        OHLCV data ordered oldest -> newest.
-    config : dict, optional
-        Optional configuration overriding the default thresholds:
-        ``contraction_threshold`` (float), ``consolidation_period`` (int),
-        ``volume_multiple`` (float) and ``slope_window`` (int).
-    """
-
-    contraction_threshold = 0.9
-    consolidation_period = 5
-    volume_multiple = 2.0
-    slope_window = 5
-
-    if config:
-        contraction_threshold = config.get("contraction_threshold", contraction_threshold)
-        consolidation_period = config.get("consolidation_period", consolidation_period)
-        volume_multiple = config.get("volume_multiple", volume_multiple)
-        slope_window = config.get("slope_window", slope_window)
-
-    if len(df) < max(40, consolidation_period + 20):
+    """Breakout strategy using Bollinger/Keltner squeeze confirmation."""
+    if df is None or df.empty:
         return 0.0, "none"
+
+    cfg = (config or {}).get("breakout", {})
+    bb_len = int(cfg.get("bb_length", 20))
+    bb_std = float(cfg.get("bb_std", 2))
+    kc_len = int(cfg.get("kc_length", 20))
+    kc_mult = float(cfg.get("kc_mult", 1.5))
+    dc_len = int(cfg.get("dc_length", 20))
+    atr_buffer_mult = float(cfg.get("atr_buffer_mult", 0.1))
+    vol_window = int(cfg.get("volume_window", 20))
+    volume_mult = float(cfg.get("volume_mult", 2))
+    threshold = float(cfg.get("squeeze_threshold", 0.03))
+    momentum_filter = bool(cfg.get("momentum_filter", False))
+
+    lookback = max(bb_len, kc_len, dc_len, vol_window, 14)
+    if len(df) < lookback:
+        return 0.0, "none"
+
+    squeeze, atr = _squeeze(df, bb_len, bb_std, kc_len, kc_mult, threshold)
+    if pd.isna(squeeze.iloc[-1]) or not squeeze.iloc[-1]:
+        return 0.0, "none"
+
+    if higher_df is not None and not higher_df.empty:
+        h_sq, _ = _squeeze(higher_df, bb_len, bb_std, kc_len, kc_mult, threshold)
+        if pd.isna(h_sq.iloc[-1]) or not h_sq.iloc[-1]:
+            return 0.0, "none"
 
     close = df["close"]
+    high = df["high"]
+    low = df["low"]
     volume = df["volume"]
 
-    macd = ta.trend.macd_diff(close)
+    dc_high = high.rolling(dc_len).max().shift(1)
+    dc_low = low.rolling(dc_len).min().shift(1)
+    vol_ma = volume.rolling(vol_window).mean()
 
-    bb = ta.volatility.BollingerBands(close)
-    hband = bb.bollinger_hband()
-    lband = bb.bollinger_lband()
-    width = hband - lband
-    width_mean = width.rolling(20).mean()
+    rsi = ta.momentum.rsi(close, window=14)
+    macd_hist = ta.trend.macd_diff(close)
 
-    contraction = width < width_mean * contraction_threshold
-    if not contraction.iloc[-consolidation_period:-1].all():
-        return 0.0, "none"
+    vol_ok = volume.iloc[-1] > vol_ma.iloc[-1] * volume_mult if vol_ma.iloc[-1] > 0 else False
+    atr_last = atr.iloc[-1]
+    upper_break = dc_high.iloc[-1] + atr_last * atr_buffer_mult
+    lower_break = dc_low.iloc[-1] - atr_last * atr_buffer_mult
 
-    vol_mean = volume.rolling(20).mean()
-    vol_spike = volume.iloc[-1] > vol_mean.iloc[-1] * volume_multiple
+    long_cond = close.iloc[-1] > upper_break
+    short_cond = close.iloc[-1] < lower_break
 
-    ema_fast = ta.trend.ema_indicator(close, window=slope_window)
-    ema_slope = ema_fast.iloc[-1] - ema_fast.iloc[-2]
+    if momentum_filter:
+        long_cond = long_cond and (rsi.iloc[-1] > 50 or macd_hist.iloc[-1] > 0)
+        short_cond = short_cond and (rsi.iloc[-1] < 50 or macd_hist.iloc[-1] < 0)
 
-    direction: str
-    if close.iloc[-1] > hband.iloc[-1] and macd.iloc[-1] > 0:
-        momentum_ok = vol_spike or ema_slope > 0
-        if not momentum_ok:
-            return 0.0, "none"
-        score, direction = 1.0, "long"
-    elif close.iloc[-1] < lband.iloc[-1] and macd.iloc[-1] < 0:
-        momentum_ok = vol_spike or ema_slope < 0
-        if not momentum_ok:
-            return 0.0, "none"
-        score, direction = 1.0, "short"
-    else:
-        return 0.0, "none"
+    direction = "none"
+    score = 0.0
+    if long_cond and vol_ok:
+        direction = "long"
+        score = 1.0
+    elif short_cond and vol_ok:
+        direction = "short"
+        score = 1.0
 
-    if config is None or config.get("atr_normalization", True):
+    if score > 0 and (config is None or config.get("atr_normalization", True)):
         score = normalize_score_by_volatility(df, score)
 
     return score, direction
