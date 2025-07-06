@@ -42,7 +42,7 @@ from crypto_bot.fund_manager import (
     auto_convert_funds,
 )
 from crypto_bot.paper_wallet import PaperWallet
-from crypto_bot import console_monitor
+from crypto_bot import console_monitor, console_control
 from crypto_bot.utils.performance_logger import log_performance
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.utils.position_logger import log_position, log_balance
@@ -232,6 +232,9 @@ async def main() -> None:
     df_cache: dict[str, dict[str, pd.DataFrame]] = {}
     regime_cache: dict[str, dict[str, pd.DataFrame]] = {}
 
+    control_task = asyncio.create_task(console_control.control_loop(state))
+    print("Bot running. Type 'stop' to pause, 'start' to resume, 'quit' to exit.")
+
     from crypto_bot.telegram_bot_ui import TelegramBotUI
 
     telegram_bot = (
@@ -360,6 +363,7 @@ async def main() -> None:
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
+            notifier=notifier,
         )
 
         regime_cache = await update_regime_tf_cache(
@@ -371,6 +375,7 @@ async def main() -> None:
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
+            notifier=notifier,
         )
         ohlcv_time = time.perf_counter() - t0
         ohlcv_fetch_latency = time.perf_counter() - start_ohlcv
@@ -385,7 +390,10 @@ async def main() -> None:
                 df_map[tf] = cache_tf.get(sym)
             df_sym = df_map.get(config["timeframe"])
             if df_sym is None or df_sym.empty:
-                logger.error("OHLCV fetch failed for %s", sym)
+                msg = f"OHLCV fetch failed for {sym}"
+                logger.error(msg)
+                if notifier:
+                    notifier.notify(msg)
                 continue
 
             expected_cols = ["timestamp", "open", "high", "low", "close", "volume"]
@@ -889,14 +897,22 @@ async def main() -> None:
                 metrics,
                 config.get("metrics_output_file", "crypto_bot/logs/metrics.csv"),
             )
+        summary = f"Cycle complete: {total_pairs} symbols, {trades_executed} trades"
+        if notifier:
+            notifier.notify(summary)
         logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
         await asyncio.sleep(config["loop_interval_minutes"] * 60)
 
     monitor_task.cancel()
+    control_task.cancel()
     if telegram_bot:
         telegram_bot.stop()
     try:
         await monitor_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await control_task
     except asyncio.CancelledError:
         pass
     if hasattr(exchange, "close"):
