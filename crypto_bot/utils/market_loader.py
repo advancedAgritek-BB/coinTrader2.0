@@ -1,3 +1,5 @@
+"""Utilities for loading trading symbols and fetching OHLCV data."""
+
 from typing import Iterable, List, Dict, Any
 import asyncio
 import inspect
@@ -5,12 +7,9 @@ import time
 import pandas as pd
 
 from .telegram import TelegramNotifier
-
-
-
+from .logger import setup_logger
 
 _last_snapshot_time = 0
-from .logger import setup_logger
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
