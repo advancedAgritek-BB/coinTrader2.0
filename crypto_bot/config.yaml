@@ -46,10 +46,10 @@ micro_scalp:
   ema_slow: 8
   volume_threshold: 1.5
   volume_window: 20
-min_agreeing_votes: 2
-min_confidence_score: 0.65
-min_consistent_agreement: 2
-min_cooldown: 60
+min_agreeing_votes: 1
+min_confidence_score: 0.3
+min_consistent_agreement: 1
+min_cooldown: 10
 min_symbol_age_days: 10
 min_symbol_score: 0.4
 ml_signal_model:
@@ -83,13 +83,13 @@ regime_timeframes:
 risk:
   atr_long_window: 50
   atr_short_window: 14
-  max_drawdown: 0.5
+  max_drawdown: 0.8
   max_volatility_factor: 1.5
-  min_expected_value: 0.0
-  min_volume: 50
-  stop_loss_pct: 0.015
-  take_profit_pct: 0.05
-  volume_threshold_ratio: 0.05
+  min_expected_value: -0.1
+  min_volume: 5
+  stop_loss_pct: 0.03
+  take_profit_pct: 0.08
+  volume_threshold_ratio: 0.01
 rl_selector:
   enabled: false
 scalp_timeframe: 1m
@@ -106,7 +106,7 @@ sentiment_filter:
   bull_sentiment: 60
   min_fng: 0
   min_sentiment: 0
-signal_threshold: 0.4
+signal_threshold: 0.3
 signal_weight_optimizer:
   enabled: false
   learning_rate: 0.1
@@ -121,10 +121,10 @@ strategy_evaluation_mode: voting
 symbol: BTC/USDT
 symbol_batch_size: 10
 symbol_filter:
-  change_pct_percentile: 80
+  change_pct_percentile: 0
   max_correlation: 0.85
-  max_spread_pct: 0.4
-  min_volume_usd: 100000
+  max_spread_pct: 1.0
+  min_volume_usd: 20000
 symbol_refresh_minutes: 30
 symbol_score_weights:
   age: 0.05
@@ -156,7 +156,7 @@ twap_slices: 4
 use_websocket: true
 volatility_filter:
   max_funding_rate: 0.05
-  min_atr_pct: 0.001
+  min_atr_pct: 0.0
 voting_strategies:
 - trend
 - momentum
