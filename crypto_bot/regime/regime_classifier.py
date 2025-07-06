@@ -62,15 +62,18 @@ def _classify_core(
             df["atr"] = ta.volatility.average_true_range(
                 df["high"], df["low"], df["close"], window=cfg["indicator_window"]
             )
+            df["normalized_range"] = (df["high"] - df["low"]) / df["atr"]
         except IndexError:
             df["adx"] = np.nan
             df["rsi"] = np.nan
             df["atr"] = np.nan
+            df["normalized_range"] = np.nan
             return "unknown"
     else:
         df["adx"] = np.nan
         df["rsi"] = np.nan
         df["atr"] = np.nan
+        df["normalized_range"] = np.nan
 
     if len(df) >= cfg["bb_window"]:
         bb = ta.volatility.BollingerBands(df["close"], window=cfg["bb_window"])
@@ -124,8 +127,8 @@ def _classify_core(
     ):
         regime = "mean-reverting"
     elif (
-        not np.isnan(atr_ma20.iloc[-1])
-        and latest["atr"] > atr_ma20.iloc[-1] * cfg["atr_volatility_mult"]
+        not np.isnan(latest["normalized_range"])
+        and latest["normalized_range"] > cfg["normalized_range_volatility_min"]
     ):
         regime = "volatile"
 
