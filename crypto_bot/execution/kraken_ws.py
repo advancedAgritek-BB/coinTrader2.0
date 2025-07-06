@@ -50,6 +50,36 @@ def parse_ohlc_message(message: str) -> Optional[List[float]]:
     return [ts, o, h, l, c, vol]
 
 
+def parse_instrument_message(message: str) -> Optional[dict]:
+    """Parse a Kraken instrument snapshot or update message.
+
+    Parameters
+    ----------
+    message : str
+        Raw JSON message from the websocket.
+
+    Returns
+    -------
+    Optional[dict]
+        The ``data`` payload containing ``assets`` and ``pairs`` if the
+        message is a valid instrument snapshot or update.
+    """
+    try:
+        data: Any = json.loads(message)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+    if data.get("channel") != "instrument":
+        return None
+
+    payload = data.get("data")
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
 class KrakenWSClient:
     """Minimal Kraken WebSocket client for public and private channels."""
 
@@ -215,8 +245,17 @@ class KrakenWSClient:
             for sub in self._private_subs:
                 self.private_ws.send(sub)
 
-    def subscribe_ticker(self, symbol: Union[str, List[str]]) -> None:
+    def subscribe_ticker(
+        self,
+        symbol: Union[str, List[str]],
+        *,
+        event_trigger: Optional[dict] = None,
+        event_trigger: Optional[str] = None,
+        snapshot: Optional[bool] = None,
+        req_id: Optional[int] = None,
+    ) -> None:
         """Subscribe to ticker updates for one or more symbols."""
+
         self.connect_public()
         if isinstance(symbol, str):
             symbol = [symbol]
@@ -224,8 +263,56 @@ class KrakenWSClient:
             "method": "subscribe",
             "params": {"channel": "ticker", "symbol": symbol},
         }
+        if event_trigger is not None:
+            msg["params"]["eventTrigger"] = event_trigger
+        if req_id is not None:
+            msg["req_id"] = req_id
+
+        params = {"channel": "ticker", "symbol": symbol}
+        if event_trigger is not None:
+            params["event_trigger"] = event_trigger
+        if snapshot is not None:
+            params["snapshot"] = snapshot
+        if req_id is not None:
+            params["req_id"] = req_id
+
+        msg = {"method": "subscribe", "params": params}
         data = json.dumps(msg)
         self._public_subs.append(data)
+        self.public_ws.send(data)
+
+    def unsubscribe_ticker(
+        self,
+        symbol: Union[str, List[str]],
+        *,
+        event_trigger: Optional[dict] = None,
+        req_id: Optional[int] = None,
+    ) -> None:
+        """Unsubscribe from ticker updates for one or more symbols."""
+        self.connect_public()
+        if isinstance(symbol, str):
+            symbol = [symbol]
+        msg = {
+            "method": "unsubscribe",
+            "params": {"channel": "ticker", "symbol": symbol},
+        }
+        if event_trigger is not None:
+            msg["params"]["eventTrigger"] = event_trigger
+        if req_id is not None:
+            msg["req_id"] = req_id
+        data = json.dumps(msg)
+
+        sub_msg = {
+            "method": "subscribe",
+            "params": {"channel": "ticker", "symbol": symbol},
+        }
+        if event_trigger is not None:
+            sub_msg["params"]["eventTrigger"] = event_trigger
+        if req_id is not None:
+            sub_msg["req_id"] = req_id
+        sub_data = json.dumps(sub_msg)
+        if sub_data in self._public_subs:
+            self._public_subs.remove(sub_data)
         self.public_ws.send(data)
 
     def subscribe_trades(self, symbol: Union[str, List[str]]) -> None:
@@ -256,6 +343,12 @@ class KrakenWSClient:
                 "depth": depth,
                 "snapshot": snapshot,
             },
+    def subscribe_instruments(self, snapshot: bool = True) -> None:
+        """Subscribe to the instrument reference data channel."""
+        self.connect_public()
+        msg = {
+            "method": "subscribe",
+            "params": {"channel": "instrument", "snapshot": snapshot},
         }
         data = json.dumps(msg)
         self._public_subs.append(data)
