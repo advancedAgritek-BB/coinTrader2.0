@@ -1,5 +1,11 @@
 import json
 from datetime import datetime, timedelta, timezone
+import sys
+import types
+
+sys.modules.setdefault("scipy", types.ModuleType("scipy"))
+sys.modules.setdefault("scipy.stats", types.SimpleNamespace(pearsonr=lambda *a, **k: 0))
+
 from crypto_bot.execution.kraken_ws import KrakenWSClient, PUBLIC_URL, PRIVATE_URL
 
 class DummyWS:
@@ -195,6 +201,30 @@ def test_token_refresh_updates_private_subs(monkeypatch):
 
     assert client._private_subs[0] == second_msg
     assert client.private_ws.sent[-1] == second_msg
+
+
+def test_subscribe_then_unsubscribe(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    client.subscribe_ticker("XBT/USD")
+    sub_msg = json.dumps(
+        {"method": "subscribe", "params": {"channel": "ticker", "symbol": ["XBT/USD"]}}
+    )
+    assert ws.sent == [sub_msg]
+    assert client._public_subs == [sub_msg]
+
+    ws.sent.clear()
+    client.unsubscribe_ticker("XBT/USD")
+    unsub_msg = json.dumps(
+        {
+            "method": "unsubscribe",
+            "params": {"channel": "ticker", "symbol": ["XBT/USD"]},
+        }
+    )
+    assert ws.sent == [unsub_msg]
+    assert client._public_subs == []
 def _setup_private_client(monkeypatch):
     client = KrakenWSClient()
     ws = DummyWS()
