@@ -2,6 +2,14 @@ import pandas as pd
 
 
 def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
+    """Return confidence scores for simple chart patterns detected in ``df``.
+
+    The latest candle and recent history are inspected for a small
+    selection of candlestick formations and breakout signals. Only
+    patterns that are detected with a confidence between 0 and 1 are
+    returned.
+    """
+
     """Return a mapping of detected chart patterns to their strength.
 
     The latest candles are scanned for classic candlestick formations
@@ -25,6 +33,7 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
     if df is None or len(df) < 2:
         return patterns
 
+    prev = df.iloc[-2]
     last = df.iloc[-1]
     prev = df.iloc[-2]
 
@@ -40,43 +49,23 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
     upper_ratio = upper / candle_range
     lower_ratio = lower / candle_range
 
-    # hammer and shooting star scoring
     if body_ratio <= 0.4:
-        hammer_score = max(0.0, min((lower_ratio - upper_ratio) * (1 - body_ratio), 1.0))
-        shooting_score = max(0.0, min((upper_ratio - lower_ratio) * (1 - body_ratio), 1.0))
+        hammer_score = max(0.0, (lower_ratio - upper_ratio) * (1 - body_ratio))
         if hammer_score > 0:
-            patterns["hammer"] = hammer_score
+            patterns["hammer"] = min(hammer_score, 1.0)
+        shooting_score = max(0.0, (upper_ratio - lower_ratio) * (1 - body_ratio))
         if shooting_score > 0:
-            patterns["shooting_star"] = shooting_score
+            patterns["shooting_star"] = min(shooting_score, 1.0)
 
-    # doji score based on body proportion
     doji_score = max(0.0, 1.0 - body_ratio / 0.1)
     if doji_score > 0:
         patterns["doji"] = min(doji_score, 1.0)
-    if body <= candle_range * 0.1:
-        if upper > candle_range * 0.4 and lower <= candle_range * 0.1:
-            scores["shooting_star"] = 1.0
-        if lower > candle_range * 0.4 and upper <= candle_range * 0.1:
-            scores["hammer"] = 1.0
-        if upper > candle_range * 0.2 and lower > candle_range * 0.2:
-            scores["doji"] = 1.0
-            patterns["shooting_star"] = upper / candle_range
-        if lower > candle_range * 0.4 and upper <= candle_range * 0.1:
-            patterns["hammer"] = lower / candle_range
-        if upper > candle_range * 0.2 and lower > candle_range * 0.2:
-            patterns["doji"] = 1 - body / candle_range
 
     lookback = min(len(df), 20)
-    if len(df) >= 2:
-        high_max = df["high"].rolling(lookback).max().iloc[-2]
-        low_min = df["low"].rolling(lookback).min().iloc[-2]
-        vol_mean = df["volume"].rolling(lookback).mean().iloc[-2]
-    else:
-        high_max = df["high"].max()
-        low_min = df["low"].min()
-        vol_mean = df["volume"].mean()
+    high_max = df["high"].rolling(lookback).max().iloc[-2]
+    low_min = df["low"].rolling(lookback).min().iloc[-2]
+    vol_mean = df["volume"].rolling(lookback).mean().iloc[-2]
 
-    # engulfing patterns
     body_prev = abs(prev["close"] - prev["open"])
     body_last = abs(last["close"] - last["open"])
     if (
@@ -95,53 +84,44 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
     ):
         patterns["bearish_engulfing"] = min(1.0, body_last / (body_prev + 1e-9))
 
-    # inside bar
     if last["high"] < prev["high"] and last["low"] > prev["low"]:
         range_prev = prev["high"] - prev["low"]
-        inside_score = 1.0 - (prev["high"] - last["high"] + last["low"] - prev["low"]) / (range_prev + 1e-9)
-        patterns["inside_bar"] = max(0.0, min(inside_score, 1.0))
+        inside_score = 1.0 - (
+            prev["high"] - last["high"] + last["low"] - prev["low"]
+        ) / (range_prev + 1e-9)
+        if inside_score > 0:
+            patterns["inside_bar"] = min(inside_score, 1.0)
 
-    # three bar reversal
     if len(df) >= 3:
         a = df.iloc[-3]
-        if (
+        bullish = (
             a["close"] < a["open"]
             and prev["close"] < prev["open"]
             and last["close"] > last["open"]
             and last["close"] > max(a["high"], prev["high"])
-        ) or (
+        )
+        bearish = (
             a["close"] > a["open"]
             and prev["close"] > prev["open"]
             and last["close"] < last["open"]
             and last["close"] < min(a["low"], prev["low"])
-        ):
+        )
+        if bullish or bearish:
             patterns["three_bar_reversal"] = 1.0
 
-    # volume spike
     if vol_mean > 0:
-        vol_score = max(0.0, min(last["volume"] / vol_mean - 1.0, 1.0))
+        vol_score = last["volume"] / vol_mean - 1.0
         if vol_score > 0:
-            patterns["volume_spike"] = vol_score
+            patterns["volume_spike"] = min(vol_score, 1.0)
 
-    # breakout and breakdown
     if last["close"] >= high_max and last["volume"] > vol_mean:
         brk_score = min(1.0, last["volume"] / (vol_mean * 1.5))
-        patterns["breakout"] = max(brk_score, patterns.get("breakout", 0.0))
+        patterns["breakout"] = brk_score
 
     if last["close"] <= low_min and last["volume"] > vol_mean:
         brkdn_score = min(1.0, last["volume"] / (vol_mean * 1.5))
-        patterns["breakdown"] = max(brkdn_score, patterns.get("breakdown", 0.0))
-    if last["close"] >= high_max and last["volume"] > vol_mean * 1.5:
-        scores["breakout"] = 1.0
-    if last["close"] <= low_min and last["volume"] > vol_mean * 1.5:
-        scores["breakdown"] = 1.0
-        strength = (last["close"] - high_max) / high_max
-        patterns["breakout"] = max(strength, 0.0) + 1.0
-    if last["close"] <= low_min and last["volume"] > vol_mean * 1.5:
-        strength = (low_min - last["close"]) / low_min
-        patterns["breakdown"] = max(strength, 0.0) + 1.0
+        patterns["breakdown"] = brkdn_score
 
-    # Detect simple ascending triangle
     lookback = min(len(df), 5)
     recent = df.iloc[-lookback:]
     highs = recent["high"]
