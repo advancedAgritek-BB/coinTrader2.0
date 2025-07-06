@@ -262,11 +262,30 @@ async def fetch_ohlcv_async(
         )
     except asyncio.TimeoutError as exc:
         if use_websocket and hasattr(exchange, "watch_ohlcv"):
-            logger.error("WS OHLCV timeout for %s: %s", symbol, exc)
+            logger.error(
+                "WS OHLCV timeout for %s on %s limit %d: %s",
+                symbol,
+                timeframe,
+                limit,
+                exc,
+                exc_info=True,
+            )
         else:
-            logger.error("REST OHLCV timeout for %s: %s", symbol, exc)
+            logger.error(
+                "REST OHLCV timeout for %s on %s limit %d: %s",
+                symbol,
+                timeframe,
+                limit,
+                exc,
+                exc_info=True,
+            )
         if use_websocket and hasattr(exchange, "fetch_ohlcv"):
-            logger.info("Falling back to REST fetch_ohlcv for %s", symbol)
+            logger.info(
+                "Falling back to REST fetch_ohlcv for %s on %s limit %d",
+                symbol,
+                timeframe,
+                limit,
+            )
             try:
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
                     params_f = inspect.signature(exchange.fetch_ohlcv).parameters
@@ -285,7 +304,12 @@ async def fetch_ohlcv_async(
                 )
             except Exception as exc2:  # pragma: no cover - fallback
                 logger.error(
-                    "REST fallback fetch_ohlcv failed for %s: %s", symbol, exc2
+                    "REST fallback fetch_ohlcv failed for %s on %s limit %d: %s",
+                    symbol,
+                    timeframe,
+                    limit,
+                    exc2,
+                    exc_info=True,
                 )
         return exc
     except Exception as exc:  # pragma: no cover - network
@@ -387,10 +411,18 @@ async def load_ohlcv_parallel(
     data: Dict[str, list] = {}
     for sym, res in zip(symbols, results):
         if isinstance(res, asyncio.TimeoutError):
-            msg = f"Timeout loading OHLCV for {sym}"
-            logger.error(msg)
+            logger.error(
+                "Timeout loading OHLCV for %s on %s limit %d: %s",
+                sym,
+                timeframe,
+                limit,
+                res,
+                exc_info=True,
+            )
             if notifier:
-                notifier.notify(msg)
+                notifier.notify(
+                    f"Timeout loading OHLCV for {sym} on {timeframe} limit {limit}"
+                )
             info = failed_symbols.get(sym)
             delay = retry_delay
             if info is not None:
@@ -398,10 +430,18 @@ async def load_ohlcv_parallel(
             failed_symbols[sym] = {"time": time.time(), "delay": delay}
             continue
         if isinstance(res, Exception) or not res:
-            msg = f"Failed to load OHLCV for {sym}: {res}"
-            logger.error(msg)
+            logger.error(
+                "Failed to load OHLCV for %s on %s limit %d: %s",
+                sym,
+                timeframe,
+                limit,
+                res,
+                exc_info=isinstance(res, Exception),
+            )
             if notifier:
-                notifier.notify(msg)
+                notifier.notify(
+                    f"Failed to load OHLCV for {sym} on {timeframe} limit {limit}: {res}"
+                )
             info = failed_symbols.get(sym)
             delay = retry_delay
             if info is not None:

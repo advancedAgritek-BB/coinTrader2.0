@@ -691,7 +691,7 @@ def test_load_ohlcv_parallel_timeout_fallback(monkeypatch):
     assert "BTC/USD" not in market_loader.failed_symbols
 
 
-class LimitCaptureExchange:
+class LimitCaptureWS:
     def __init__(self):
         self.limit = None
 
@@ -703,7 +703,7 @@ class LimitCaptureExchange:
 def test_watch_ohlcv_since_reduces_limit(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    ex = LimitCaptureExchange()
+    ex = LimitCaptureWS()
     monkeypatch.setattr(market_loader.time, "time", lambda: 1000)
     since = 1000 - 3 * 3600
     asyncio.run(

@@ -2,6 +2,10 @@ import numpy as np
 import pandas as pd
 
 from crypto_bot.regime.pattern_detector import detect_patterns
+from crypto_bot.regime.regime_classifier import (
+    classify_regime,
+    classify_regime_with_patterns,
+)
 
 
 def _base_df(rows: int = 30) -> pd.DataFrame:
