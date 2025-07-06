@@ -91,6 +91,22 @@ def opposite_side(side: str) -> str:
     return "sell" if side == "buy" else "buy"
 
 
+async def fetch_and_log_balance(exchange, paper_wallet, config):
+    """Return the latest wallet balance and log it."""
+    if config["execution_mode"] != "dry_run":
+        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+            bal = await exchange.fetch_balance()
+        else:
+            bal = await asyncio.to_thread(exchange.fetch_balance)
+        latest_balance = (
+            bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
+        )
+    else:
+        latest_balance = paper_wallet.balance if paper_wallet else 0.0
+    log_balance(float(latest_balance))
+    return latest_balance
+
+
 def _emit_timing(symbol_t: float, ohlcv_t: float, analyze_t: float,
                  total_t: float, metrics_path: Path | None = None) -> None:
     """Log timing information and optionally append to metrics CSV."""
@@ -751,6 +767,9 @@ async def main() -> None:
                         current_strategy, sell_amount * entry_price
                     )
                     risk_manager.update_stop_order(position_size)
+                    latest_balance = await fetch_and_log_balance(
+                        exchange, paper_wallet, config
+                    )
 
         if not filtered_results:
             continue
