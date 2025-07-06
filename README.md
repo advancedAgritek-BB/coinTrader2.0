@@ -354,6 +354,15 @@ ws.add_order(["BTC/USD"], "buy", 0.01)
 ws.cancel_order("OABCDEF", ["BTC/USD"])
 ```
 
+To stream ticker data use `subscribe_ticker`. The optional `event_trigger`
+parameter controls which events push updates and defaults to `"trades"`. The
+`snapshot` flag requests an initial snapshot and defaults to `True`.
+
+```python
+# Request ticker updates triggered by book changes without an initial snapshot
+ws.subscribe_ticker(["ETH/USD"], event_trigger="book", snapshot=False)
+```
+
 The Kraken WebSocket client automatically reconnects if the connection drops and
 resubscribes to any previously requested channels.  Trading commands use the new
 `/v2` naming scheme such as `add_order`, `cancel_order`, `cancel_all_orders` and
