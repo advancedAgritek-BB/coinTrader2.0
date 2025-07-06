@@ -290,6 +290,7 @@ timeframe: 1h                # candles for regime detection
 scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
 loop_interval_minutes: 5     # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
+ohlcv_timeout: 10            # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
 metrics:
   enabled: true              # write cycle statistics to metrics.csv
@@ -299,7 +300,10 @@ metrics:
 `loop_interval_minutes` determines how long the bot sleeps between each
 evaluation cycle, giving the market time to evolve before scanning again.
 `max_concurrent_ohlcv` caps how many OHLCV requests run in parallel when
-`update_ohlcv_cache` gathers new candles.
+`update_ohlcv_cache` gathers new candles. The new `ohlcv_timeout` option
+controls the timeout for each fetch call. If you still encounter timeouts after
+raising this value, try lowering `max_concurrent_ohlcv` to reduce pressure on
+the exchange API.
 The `metrics` section enables recording of cycle summaries to the specified CSV
 file for later analysis.
 `scalp_timeframe` sets the candle interval specifically for the micro_scalp
@@ -536,6 +540,13 @@ pip install -r requirements.txt
 ```bash
 pytest -q
 ```
+
+## Troubleshooting
+
+High `max_concurrent_ohlcv` values combined with short `ohlcv_timeout`
+settings can overload the exchange and lead to failed candle fetches.
+Increase `ohlcv_timeout` to give each request more time and lower
+`max_concurrent_ohlcv` if errors continue.
 
 This project is provided for educational purposes only. Use it at your own risk, and remember that nothing here constitutes financial advice.
 
