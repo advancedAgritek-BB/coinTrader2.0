@@ -43,14 +43,10 @@ def test_reporter_disabled(monkeypatch):
     def fake_send(token, chat_id, text):
         calls["count"] += 1
 
-    import crypto_bot.utils.telegram_notifier as notifier
+    monkeypatch.setattr("crypto_bot.utils.telegram.send_message", fake_send)
 
-    monkeypatch.setattr(notifier, "send_message", fake_send)
-    notifier.TelegramNotifier.configure(False)
-    try:
-        trade_reporter.report_entry("t", "c", "BTC/USDT", "s", 0.0, "long")
-        trade_reporter.report_exit("t", "c", "BTC/USDT", "s", 0.0, "long")
-    finally:
-        notifier.TelegramNotifier.configure(True)
+    notifier = TelegramNotifier(False, "t", "c")
+    trade_reporter.report_entry(notifier, "BTC/USDT", "s", 0.0, "long")
+    trade_reporter.report_exit(notifier, "BTC/USDT", "s", 0.0, "long")
 
     assert calls["count"] == 0
