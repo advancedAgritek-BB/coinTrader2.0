@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Console control loop for starting and stopping the trading bot."""
+"""Console utilities for starting and stopping the trading bot."""
 
 import asyncio
 from typing import Dict, Any
