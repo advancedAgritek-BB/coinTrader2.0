@@ -50,6 +50,36 @@ def parse_ohlc_message(message: str) -> Optional[List[float]]:
     return [ts, o, h, l, c, vol]
 
 
+def parse_instrument_message(message: str) -> Optional[dict]:
+    """Parse a Kraken instrument snapshot or update message.
+
+    Parameters
+    ----------
+    message : str
+        Raw JSON message from the websocket.
+
+    Returns
+    -------
+    Optional[dict]
+        The ``data`` payload containing ``assets`` and ``pairs`` if the
+        message is a valid instrument snapshot or update.
+    """
+    try:
+        data: Any = json.loads(message)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+    if data.get("channel") != "instrument":
+        return None
+
+    payload = data.get("data")
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
 class KrakenWSClient:
     """Minimal Kraken WebSocket client for public and private channels."""
 
@@ -236,6 +266,17 @@ class KrakenWSClient:
         msg = {
             "method": "subscribe",
             "params": {"channel": "trade", "symbol": symbol},
+        }
+        data = json.dumps(msg)
+        self._public_subs.append(data)
+        self.public_ws.send(data)
+
+    def subscribe_instruments(self, snapshot: bool = True) -> None:
+        """Subscribe to the instrument reference data channel."""
+        self.connect_public()
+        msg = {
+            "method": "subscribe",
+            "params": {"channel": "instrument", "snapshot": snapshot},
         }
         data = json.dumps(msg)
         self._public_subs.append(data)
