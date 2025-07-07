@@ -215,11 +215,9 @@ def predict_signal(
         model = load_model()
     if scaler is None:
         scaler = load_scaler()
-    feats = extract_features(df).iloc[[-1]]
+    feats = extract_latest_features(df)
     feats_scaled = scaler.transform(feats)
     proba = float(model.predict_proba(feats_scaled)[0, 1])
-    feats = extract_latest_features(df)
-    proba = float(model.predict_proba(feats)[0, 1])
 
     model_hash = hashlib.md5(MODEL_PATH.read_bytes()).hexdigest()[:8]
     log_path = Path(__file__).resolve().parent / "logs" / "ml_features.csv"

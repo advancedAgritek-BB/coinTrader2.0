@@ -38,6 +38,41 @@ def test_training_and_prediction(tmp_path, monkeypatch):
     assert 0.0 <= pred <= 1.0
 
 
+def test_predict_single_path(tmp_path, monkeypatch):
+    df = _synthetic_df()
+    monkeypatch.setattr(ml, "MODEL_PATH", tmp_path / "model.pkl")
+    monkeypatch.setattr(ml, "REPORT_PATH", tmp_path / "report.json")
+    monkeypatch.setattr(ml, "SCALER_PATH", tmp_path / "scaler.pkl")
+
+    features = ml.extract_features(df)
+    targets = df.loc[features.index, "label"]
+    model = ml.train_model(features, targets)
+
+    call_counts = {"latest": 0, "extract": 0}
+
+    original_extract = ml.extract_features
+
+    def wrapped_extract(data, *a, **k):
+        call_counts["extract"] += 1
+        return original_extract(data, *a, **k)
+
+    monkeypatch.setattr(ml, "extract_features", wrapped_extract)
+
+    original_latest = ml.extract_latest_features
+
+    def wrapped_latest(data):
+        call_counts["latest"] += 1
+        return original_latest(data)
+
+    monkeypatch.setattr(ml, "extract_latest_features", wrapped_latest)
+
+    pred = ml.predict_signal(df, model=model, scaler=ml.load_scaler())
+
+    assert 0.0 <= pred <= 1.0
+    assert call_counts["latest"] == 1
+    assert call_counts["extract"] == 1
+
+
 def test_train_from_csv(tmp_path, monkeypatch):
     df = _synthetic_df()
     csv = tmp_path / "data.csv"
