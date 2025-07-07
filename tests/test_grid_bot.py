@@ -15,8 +15,6 @@ def _df_with_price(price: float, volume: float = 300.0) -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
-def test_short_signal_above_upper_grid(monkeypatch):
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
 def _df_trend_down() -> pd.DataFrame:
     close = list(range(110, 91, -1)) + [89]
     data = {
@@ -33,6 +31,10 @@ def _df_trend_up() -> pd.DataFrame:
         "high": [110.0] * 20,
         "low": [90.0] * 20,
         "close": close,
+    }
+    return pd.DataFrame(data)
+
+
 def _df_range_change() -> pd.DataFrame:
     data = {
         "high": [150.0] * 20 + [110.0] * 10,
@@ -42,7 +44,8 @@ def _df_range_change() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
-def test_short_signal_above_upper_grid():
+def test_short_signal_above_upper_grid(monkeypatch):
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
     df = _df_with_price(111.0)
     score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert direction == "short"
@@ -68,7 +71,6 @@ def test_no_signal_in_middle(monkeypatch):
 def test_grid_levels_env_override(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
     df = _df_with_price(102.0)
-    # default configuration -> neutral
     _, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert direction == "none"
 
@@ -108,12 +110,17 @@ def test_breakout_trigger_long(monkeypatch):
     assert called.get('called')
     assert direction == "long"
     assert score == 0.7
+
+
 def test_cooldown_blocks_signal(monkeypatch):
     df = _df_with_price(89.0)
     cfg = GridConfig(symbol="BTC/USDT")
     grid_state.clear()
     monkeypatch.setattr(grid_bot.grid_state, "in_cooldown", lambda s, b: True)
     score, direction = grid_bot.generate_signal(df, config=cfg)
+    assert (score, direction) == (0.0, "none")
+
+
 def test_volume_filter_blocks_short_signal():
     df = _df_with_price(111.0, volume=100.0)
     score, direction = grid_bot.generate_signal(df)
@@ -129,11 +136,15 @@ def test_respects_active_leg_limit(monkeypatch):
     score, direction = grid_bot.generate_signal(df, config=cfg)
     assert direction == "none"
     assert score == 0.0
+
+
 def test_volume_filter_blocks_long_signal():
     df = _df_with_price(89.0, volume=100.0)
     score, direction = grid_bot.generate_signal(df)
     assert direction == "none"
     assert score == 0.0
+
+
 def test_atr_spacing(monkeypatch):
     df = _df_with_price(106.0)
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 2.0)
@@ -141,6 +152,7 @@ def test_atr_spacing(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 10.0)
     wide, _ = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert narrow > wide
+
 
 def test_long_blocked_by_trend_filter():
     df = _df_trend_down()
@@ -154,6 +166,8 @@ def test_short_blocked_by_trend_filter():
     cfg = {"trend_ema_fast": 3, "trend_ema_slow": 5}
     score, direction = grid_bot.generate_signal(df, config=cfg)
     assert (score, direction) == (0.0, "none")
+
+
 @pytest.mark.parametrize("cfg", [{"range_window": 10}, GridConfig(range_window=10)])
 def test_range_window_config(cfg):
     df = _df_range_change()
