@@ -11,6 +11,9 @@ import numpy as np
 import pandas as pd
 
 from .model_data import MODEL_B64
+from crypto_bot.utils.logger import setup_logger
+
+logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
 _model = None
 
@@ -19,8 +22,17 @@ def load_model():
     """Decode and return the embedded LightGBM model."""
     global _model
     if _model is None:
-        data = base64.b64decode(MODEL_B64)
-        _model = joblib.load(io.BytesIO(data))
+        try:
+            data = base64.b64decode(MODEL_B64)
+        except Exception as exc:  # pragma: no cover - log decode failure
+            logger.error("Failed to decode ML model: %s", exc)
+            return None
+        try:
+            _model = joblib.load(io.BytesIO(data))
+        except Exception as exc:  # pragma: no cover - log load failure
+            logger.error("Failed to load ML model: %s", exc)
+            _model = None
+            return None
     return _model
 
 
@@ -29,6 +41,8 @@ def predict_regime(df: pd.DataFrame) -> Tuple[str, float]:
     if df is None or len(df) < 2:
         return "unknown", 0.0
     model = load_model()
+    if model is None:
+        return "unknown", 0.0
     change = df["close"].iloc[-1] - df["close"].iloc[0]
     X = np.array([[change]])
     prob = float(model.predict_proba(X)[0, 1])
