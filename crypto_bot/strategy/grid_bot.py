@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, Tuple
+from typing import Mapping, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+import ta
+
+from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 
@@ -17,6 +20,27 @@ def _get_num_levels() -> int:
         return int(env) if env else 5
     except ValueError:  # pragma: no cover - invalid env
         return 5
+
+
+def recent_window(df: pd.DataFrame, cfg: Mapping[str, int] | None) -> pd.DataFrame:
+    """Return trailing slice for indicator calculations."""
+    params = cfg or {}
+    range_window = int(params.get("range_window", 20))
+    atr_period = int(params.get("atr_period", 14))
+    volume_ma_window = int(params.get("volume_ma_window", 20))
+    trend_ema_slow = int(params.get("trend_ema_slow", 50))
+    lookback = max(range_window, atr_period, volume_ma_window, trend_ema_slow)
+    return df.iloc[-lookback:]
+
+
+def compute_vwap(df: pd.DataFrame, window: int) -> pd.Series:
+    """Return rolling Volume Weighted Average Price."""
+    if not {"high", "low", "close", "volume"}.issubset(df.columns):
+        return pd.Series(index=df.index, dtype=float)
+    typical = (df["high"] + df["low"] + df["close"]) / 3
+    pv = typical * df["volume"]
+    vwap = pv.rolling(window).sum() / df["volume"].rolling(window).sum()
+    return vwap
 
 
 def generate_signal(df: pd.DataFrame, num_levels: int | None = None, config: Optional[dict] = None) -> Tuple[float, str]:
@@ -32,12 +56,35 @@ def generate_signal(df: pd.DataFrame, num_levels: int | None = None, config: Opt
     if num_levels is None:
         num_levels = _get_num_levels()
 
-    if df.empty or len(df) < 20:
+    cfg = config or {}
+
+    if df.empty:
         return 0.0, "none"
 
-    recent = df.tail(20)
-    high = recent["high"].max()
-    low = recent["low"].min()
+    recent = recent_window(df, cfg)
+    if recent.empty:
+        return 0.0, "none"
+
+    range_window = int(cfg.get("range_window", 20))
+    atr_period = int(cfg.get("atr_period", 14))
+    volume_ma_window = int(cfg.get("volume_ma_window", 20))
+
+    atr_series = ta.volatility.average_true_range(
+        recent["high"], recent["low"], recent["close"], window=atr_period
+    )
+    vwap_series = compute_vwap(recent, volume_ma_window)
+
+    lookback = len(recent)
+    atr_series = cache_series(f"atr_{atr_period}", df, atr_series, lookback)
+    vwap_series = cache_series(f"vwap_{volume_ma_window}", df, vwap_series, lookback)
+
+    recent = recent.copy()
+    recent["atr"] = atr_series
+    recent["vwap"] = vwap_series
+
+    range_slice = recent.iloc[-range_window:]
+    high = range_slice["high"].max()
+    low = range_slice["low"].min()
 
     if high == low:
         return 0.0, "none"
