@@ -157,6 +157,9 @@ class TelegramBotUI:
 
     async def log_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text = await self.controller.logs()
+
+    async def log_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        text = await self.controller.logs()
         if not await self._check_admin(update):
             return
         running = self.state.get("running", False)
