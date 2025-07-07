@@ -7,24 +7,17 @@ def test_long_position_profit():
     wallet = PaperWallet(1000.0)
     wallet.open("BTC/USDT", "buy", 1.0, 100.0)
     assert wallet.balance == 900.0
-    pnl = wallet.close("BTC/USDT", 1.0, 110.0)
-    tid = wallet.open("buy", 1.0, 100.0)
-    assert wallet.balance == 910.0
 
-    pnl = wallet.close(1.0, 110.0, tid)
+    pnl = wallet.close("BTC/USDT", 1.0, 110.0)
     assert pnl == 10.0
-    assert wallet.realized_pnl == 20.0
-    assert wallet.balance == 1020.0
-    pnl1 = wallet.close("BTC/USDT", 1.0, 110.0)
-    assert pnl1 == 10.0
     assert wallet.realized_pnl == 10.0
     assert wallet.balance == 1010.0
 
     tid = wallet.open("buy", 1.0, 100.0)
     assert wallet.balance == 910.0
 
-    pnl2 = wallet.close(1.0, 110.0, tid)
-    assert pnl2 == 10.0
+    pnl = wallet.close(1.0, 110.0, tid)
+    assert pnl == 10.0
     assert wallet.realized_pnl == 20.0
     assert wallet.balance == 1020.0
 
@@ -35,23 +28,15 @@ def test_short_position_profit():
     assert wallet.balance == 1100.0
 
     pnl = wallet.close("BTC/USDT", 1.0, 90.0)
-    tid = wallet.open("sell", 1.0, 100.0)
-    assert wallet.balance == 1110.0
-
-    pnl = wallet.close(1.0, 90.0, tid)
     assert pnl == 10.0
-    assert wallet.realized_pnl == 20.0
-    assert wallet.balance == 1020.0
-    pnl1 = wallet.close("BTC/USDT", 1.0, 90.0)
-    assert pnl1 == 10.0
     assert wallet.realized_pnl == 10.0
     assert wallet.balance == 1010.0
 
     tid = wallet.open("sell", 1.0, 100.0)
     assert wallet.balance == 1110.0
 
-    pnl2 = wallet.close(1.0, 90.0, tid)
-    assert pnl2 == 10.0
+    pnl = wallet.close(1.0, 90.0, tid)
+    assert pnl == 10.0
     assert wallet.realized_pnl == 20.0
     assert wallet.balance == 1020.0
 
@@ -117,7 +102,7 @@ def test_open_allows_multiple_positions():
     assert pnl2 == 0.0
     assert pnl3 == 0.0
     assert wallet.realized_pnl == 0.0
-    assert wallet.balance == 100.0
+    assert wallet.balance == 1000.0
     assert wallet.positions == {}
 
 
@@ -142,12 +127,8 @@ def test_open_multiple_positions_allowed():
     wallet = PaperWallet(1000.0, max_open_trades=2)
     id1 = wallet.open("buy", 1.0, 100.0, "long1")
     id2 = wallet.open("sell", 2.0, 50.0, "short1")
-
-    id1 = wallet.open("buy", 1.0, 100.0, "long1")
-    id2 = wallet.open("sell", 2.0, 50.0, "short1")
-
-    assert set(wallet.positions.keys()) == {"long1", "short1"}
-    assert wallet.position_size == 3.0
+    with pytest.raises(RuntimeError):
+        wallet.open("buy", 1.0, 100.0, "long2")
 
     pnl1 = wallet.close(1.0, 110.0, id1)
     pnl2 = wallet.close(2.0, 40.0, id2)
