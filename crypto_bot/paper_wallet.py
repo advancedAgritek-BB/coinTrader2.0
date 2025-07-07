@@ -167,6 +167,19 @@ class PaperWallet:
                 self.balance -= amount * price
             pos[key] -= amount
             self.realized_pnl += pnl
+        pnl = (
+            (price - pos["entry_price"]) * amount
+            if pos["side"] == "buy"
+            else (pos["entry_price"] - price) * amount
+        )
+
+        if pos["side"] == "buy":
+            self.balance += amount * price
+        else:
+            self.balance -= amount * price
+
+        pos[key] -= amount
+        self.realized_pnl += pnl
 
         if pos[key] <= 0:
             del self.positions[identifier]
