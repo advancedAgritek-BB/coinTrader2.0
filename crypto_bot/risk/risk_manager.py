@@ -59,7 +59,6 @@ class RiskManager:
         self.stop_orders: dict[str, dict] = {}
         self.stop_order: dict | None = None
         # Track protective stop orders for each open trade by symbol
-        self.stop_orders: dict[str, dict] = {}
         self.boost = 1.0
 
     def get_stop_order(self, symbol: str) -> dict | None:
@@ -293,30 +292,18 @@ class RiskManager:
     def update_stop_order(self, new_amount: float, symbol: str | None = None) -> None:
         """Update the stored stop order amount."""
         order = self.stop_orders.get(symbol) if symbol else self.stop_order
-        if order:
-            order["amount"] = new_amount
-            if symbol:
-                self.stop_orders[symbol] = order
-            else:
-                self.stop_order = order
-            logger.info("Updated stop order amount to %.4f", new_amount)
+        if not order:
+            return
+        order["amount"] = new_amount
+        if symbol:
+            self.stop_orders[symbol] = order
+        else:
+            self.stop_order = order
+        logger.info("Updated stop order amount to %.4f", new_amount)
 
     def cancel_stop_order(self, exchange, symbol: str | None = None) -> None:
-        """Cancel the existing stop order on the exchange if needed."""
+        """Cancel the existing stop order if needed."""
         order = self.stop_orders.get(symbol) if symbol else self.stop_order
-        self.stop_orders[symbol] = order
-        logger.info("Registered stop order %s", order)
-
-    def update_stop_order(self, symbol: str, new_amount: float) -> None:
-        """Update the stored stop order amount for ``symbol``."""
-        order = self.stop_orders.get(symbol)
-        if order:
-            order["amount"] = new_amount
-            logger.info("Updated stop order for %s amount to %.4f", symbol, new_amount)
-
-    def cancel_stop_order(self, exchange, symbol: str) -> None:
-        """Cancel the existing stop order for ``symbol`` if needed."""
-        order = self.stop_orders.get(symbol)
         if not order:
             return
         if not order.get("dry_run") and "id" in order:
@@ -329,7 +316,6 @@ class RiskManager:
             self.stop_orders.pop(symbol, None)
         else:
             self.stop_order = None
-        del self.stop_orders[symbol]
 
     def can_allocate(self, strategy: str, amount: float, balance: float) -> bool:
         """Check if ``strategy`` can use additional ``amount`` capital."""

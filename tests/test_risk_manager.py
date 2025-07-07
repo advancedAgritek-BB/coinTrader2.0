@@ -192,8 +192,8 @@ def test_stop_order_management():
     assert manager.stop_orders["BTC/USDT"]["amount"] == 1
     assert manager.stop_orders["ETH/USDT"]["amount"] == 2
 
-    manager.update_stop_order("BTC/USDT", 0.5)
-    manager.update_stop_order("ETH/USDT", 1.5)
+    manager.update_stop_order(0.5, symbol="BTC/USDT")
+    manager.update_stop_order(1.5, symbol="ETH/USDT")
 
     assert manager.stop_orders["BTC/USDT"]["amount"] == 0.5
     assert manager.stop_orders["ETH/USDT"]["amount"] == 1.5
@@ -209,11 +209,11 @@ def test_stop_order_management():
     manager.cancel_stop_order(ex, symbol="BTC/USDT")
     assert "BTC/USDT" not in manager.stop_orders
     ex1 = DummyEx()
-    manager.cancel_stop_order(ex1, "BTC/USDT")
+    manager.cancel_stop_order(ex1, symbol="BTC/USDT")
     assert "BTC/USDT" not in manager.stop_orders
 
     ex2 = DummyEx()
-    manager.cancel_stop_order(ex2, "ETH/USDT")
+    manager.cancel_stop_order(ex2, symbol="ETH/USDT")
     assert manager.stop_orders == {}
 
 
