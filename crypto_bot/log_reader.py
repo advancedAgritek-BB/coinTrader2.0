@@ -34,8 +34,14 @@ def trade_summary(path: Path | str) -> Dict[str, float]:
     open_positions: List[Tuple[float, float]] = []
     for _, row in df.iterrows():
         side = row.get("side")
-        price = float(row.get("price", 0))
-        amount = float(row.get("amount", 0))
+        try:
+            price = float(row.get("price", 0))
+        except Exception:
+            price = 0.0
+        try:
+            amount = float(row.get("amount", 0))
+        except Exception:
+            amount = 0.0
         if side == "buy":
             open_positions.append((price, amount))
         elif side == "sell" and open_positions:
