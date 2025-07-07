@@ -1,13 +1,8 @@
 import pandas as pd
 import ccxt
 
-from crypto_bot.backtest import backtest_runner as bt
+from crypto_bot.backtest import backtest_runner as bt, backtest_runner
 from crypto_bot.backtest.backtest_runner import BacktestConfig, BacktestRunner
-from crypto_bot.backtest.backtest_runner import (
-    BacktestConfig,
-    BacktestRunner,
-)
-from crypto_bot.backtest import backtest_runner
 
 
 class FakeExchange:
@@ -52,11 +47,9 @@ def test_backtest_tracks_switches(monkeypatch):
         fee_pct=0.0,
         seed=1,
     )
-    df = BacktestRunner(cfg).run_grid()
-    row = df.iloc[0]
     runner = BacktestRunner(cfg)
-    result = runner.run_grid()
-    row = result.iloc[0]
+    df = runner.run_grid()
+    row = df.iloc[0]
     assert row["switches"] > 0
     assert row["slippage_cost"] > 0
 
@@ -80,11 +73,9 @@ def test_backtest_misclassification(monkeypatch):
         misclass_prob=1.0,
         seed=42,
     )
-    df = BacktestRunner(cfg).run_grid()
-    row = df.iloc[0]
     runner = BacktestRunner(cfg)
-    result = runner.run_grid()
-    row = result.iloc[0]
+    df = runner.run_grid()
+    row = df.iloc[0]
     assert row["misclassified"] > 0
 
 
@@ -107,7 +98,6 @@ def test_walk_forward_optimize(monkeypatch):
         seed=3,
         window=20,
     )
-    df = BacktestRunner(cfg).run_walk_forward()
     runner = BacktestRunner(cfg)
     df = runner.run_walk_forward()
     assert {"regime", "train_stop_loss_pct", "train_take_profit_pct"} <= set(df.columns)

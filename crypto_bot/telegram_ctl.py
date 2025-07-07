@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Sequence, Any
+import json
+from pathlib import Path
+from typing import Any, Dict, Sequence
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
+
+from . import console_monitor, log_reader
 from .utils.logger import setup_logger
+from .utils.open_trades import get_open_trades
 from .utils.telegram import TelegramNotifier
 
 logger = setup_logger(__name__, "crypto_bot/logs/telegram_ctl.log")
@@ -51,17 +58,6 @@ def start(
         return None
     return asyncio.create_task(status_loop(controller, admins, update_interval))
 """Telegram command handlers used by TelegramBotUI and other clients."""
-
-import asyncio
-import json
-from pathlib import Path
-from typing import Any, Dict
-
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ContextTypes
-
-from . import console_monitor, log_reader
-from .utils.open_trades import get_open_trades
 
 STRATEGY_FILE = Path("crypto_bot/logs/strategy_stats.json")
 TRADES_FILE = Path("crypto_bot/logs/trades.csv")
