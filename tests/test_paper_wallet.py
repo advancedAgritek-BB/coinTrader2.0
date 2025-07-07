@@ -1,5 +1,6 @@
 import pytest
 
+
 from crypto_bot.paper_wallet import PaperWallet
 
 
@@ -91,6 +92,13 @@ def test_multiple_positions_unrealized_and_close():
 
     unreal = wallet.unrealized({"long1": 110.0, "short1": 40.0})
     assert unreal == 30.0
+
+
+def test_open_multiple_positions_allowed():
+    wallet = PaperWallet(100.0, max_open_trades=2)
+    wallet.open("buy", 1.0, 10.0)
+    wallet.open("buy", 1.0, 10.0)
+    assert wallet.position_size == 2.0
 
     pnl1 = wallet.close(1.0, 110.0, id1)
     pnl2 = wallet.close(2.0, 40.0, id2)
