@@ -1,4 +1,5 @@
-from typing import Optional, Tuple
+from dataclasses import dataclass, fields
+from typing import Optional, Tuple, Union
 
 import pandas as pd
 import ta
@@ -6,18 +7,55 @@ import ta
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 
-def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
+@dataclass
+class BounceScalperConfig:
+    """Configuration options for :func:`generate_signal`."""
+
+    rsi_window: int = 14
+    oversold: float = 30.0
+    overbought: float = 70.0
+    vol_window: int = 20
+    volume_multiple: float = 2.0
+    zscore_threshold: float = 1.5
+    down_candles: int = 3
+    up_candles: int = 3
+    trend_ema_fast: int = 9
+    trend_ema_slow: int = 21
+    cooldown_bars: int = 2
+    atr_period: int = 14
+    stop_loss_atr_mult: float = 1.5
+    take_profit_atr_mult: float = 2.0
+    min_score: float = 0.3
+    max_concurrent_signals: int = 1
+    atr_normalization: bool = True
+
+    @classmethod
+    def from_dict(cls, cfg: Optional[dict]) -> "BounceScalperConfig":
+        """Build a config from a dictionary."""
+        cfg = cfg or {}
+        params = {f.name: cfg.get(f.name, getattr(cls, f.name)) for f in fields(cls)}
+        return cls(**params)
+
+
+def generate_signal(
+    df: pd.DataFrame, config: Optional[Union[dict, BounceScalperConfig]] = None
+) -> Tuple[float, str]:
     """Identify short-term bounces with volume confirmation."""
     if df.empty:
         return 0.0, "none"
 
-    cfg = config or {}
-    rsi_window = int(cfg.get("rsi_window", 14))
-    oversold = float(cfg.get("oversold", 30))
-    overbought = float(cfg.get("overbought", 70))
-    vol_window = int(cfg.get("vol_window", 20))
-    volume_multiple = float(cfg.get("volume_multiple", 2.0))
-    down_candles = int(cfg.get("down_candles", 3))
+    params = (
+        config
+        if isinstance(config, BounceScalperConfig)
+        else BounceScalperConfig.from_dict(config)
+    )
+
+    rsi_window = params.rsi_window
+    oversold = params.oversold
+    overbought = params.overbought
+    vol_window = params.vol_window
+    volume_multiple = params.volume_multiple
+    down_candles = params.down_candles
 
     lookback = max(rsi_window, vol_window, down_candles + 1)
     if len(df) < lookback:
@@ -63,7 +101,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         score = (rsi_score + vol_score) / 2
         direction = "short"
 
-    if score > 0 and (config is None or config.get("atr_normalization", True)):
+    if score > 0 and params.atr_normalization:
         score = normalize_score_by_volatility(df, score)
 
     return score, direction
