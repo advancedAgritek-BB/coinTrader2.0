@@ -94,6 +94,17 @@ def test_open_allows_multiple_positions():
     id2 = wallet.open("sell", 1.0, 10.0, "t2")
     assert set(wallet.positions.keys()) == {"BTC/USDT", "t1", "t2"}
 
+    pnl1 = wallet.close("BTC/USDT", 1.0, 10.0)
+    pnl2 = wallet.close(1.0, 10.0, id1)
+    pnl3 = wallet.close(1.0, 10.0, id2)
+
+    assert pnl1 == 0.0
+    assert pnl2 == 0.0
+    assert pnl3 == 0.0
+    assert wallet.realized_pnl == 0.0
+    assert wallet.balance == 100.0
+    assert wallet.positions == {}
+
 
 def test_multiple_positions_unrealized_and_close():
     wallet = PaperWallet(1000.0)
