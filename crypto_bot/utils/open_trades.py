@@ -12,8 +12,8 @@ from crypto_bot import log_reader
 def get_open_trades(log_path: Path) -> List[Dict]:
     """Return a list of open trade entries from ``log_path``.
 
-    Each returned dictionary contains ``symbol``, ``amount``, ``price`` and
-    ``entry_time`` keys. Buy orders are matched with later sells on a FIFO
+    Each returned dictionary contains ``symbol``, ``side``, ``amount``, ``price``
+    and ``entry_time`` keys. Buy orders are matched with later sells on a FIFO
     basis to determine remaining open quantity per symbol.
     """
     df = log_reader._read_trades(log_path)
@@ -40,6 +40,7 @@ def get_open_trades(log_path: Path) -> List[Dict]:
             open_positions.setdefault(symbol, []).append(
                 {
                     "symbol": symbol,
+                    "side": "buy",
                     "amount": amount,
                     "price": price,
                     "entry_time": entry_time,
