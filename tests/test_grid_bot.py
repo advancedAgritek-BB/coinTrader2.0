@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 from crypto_bot.strategy import grid_bot
 from crypto_bot.strategy.grid_bot import GridConfig
 
@@ -14,6 +15,16 @@ def _df_with_price(price: float) -> pd.DataFrame:
 
 def test_short_signal_above_upper_grid(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+def _df_range_change() -> pd.DataFrame:
+    data = {
+        "high": [150.0] * 20 + [110.0] * 10,
+        "low": [50.0] * 20 + [90.0] * 10,
+        "close": [100.0] * 29 + [89.0],
+    }
+    return pd.DataFrame(data)
+
+
+def test_short_signal_above_upper_grid():
     df = _df_with_price(111.0)
     score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert direction == "short"
@@ -57,3 +68,12 @@ def test_atr_spacing(monkeypatch):
     wide, _ = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert narrow > wide
 
+@pytest.mark.parametrize("cfg", [{"range_window": 10}, GridConfig(range_window=10)])
+def test_range_window_config(cfg):
+    df = _df_range_change()
+    _, default_direction = grid_bot.generate_signal(df)
+    assert default_direction == "none"
+
+    score, direction = grid_bot.generate_signal(df, config=cfg)
+    assert direction == "long"
+    assert score > 0.0

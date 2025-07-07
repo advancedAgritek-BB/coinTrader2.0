@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from dataclasses import asdict, dataclass, fields
 from typing import Optional, Tuple, Union
+from dataclasses import asdict, dataclass, is_dataclass
+from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -51,10 +53,21 @@ def generate_signal(
     df: pd.DataFrame,
     num_levels: int | None = None,
     config: ConfigType = None,
+@dataclass
+class GridConfig:
+    """Configuration for :func:`generate_signal`."""
+
+    range_window: int = 20
+
+
+def generate_signal(
+    df: pd.DataFrame,
+    num_levels: int | None = None,
+    config: Optional[dict | GridConfig] = None,
 ) -> Tuple[float, str]:
     """Generate a grid based trading signal.
 
-    The last 20 bars define a high/low range which is divided into grid levels.
+    The recent ``range_window`` bars define a high/low range divided into grid levels.
     A positive score is returned when price trades near the lower grid levels
     and a negative score near the upper levels. The magnitude is proportional to
     the distance from the mid-point of the range. ``(0.0, "none")`` is returned
@@ -74,6 +87,19 @@ def generate_signal(
         return 0.0, "none"
 
     recent = df.tail(lookback)
+    cfg = {}
+    if config is not None:
+        if is_dataclass(config):
+            cfg = asdict(config)
+        else:
+            cfg = dict(config)
+
+    window = int(cfg.get("range_window", 20))
+
+    if df.empty or len(df) < window:
+        return 0.0, "none"
+
+    recent = df.tail(window)
     high = recent["high"].max()
     low = recent["low"].min()
 
@@ -99,12 +125,14 @@ def generate_signal(
         distance = centre - price
         score = min(distance / half_range, 1.0)
         if cfg.atr_normalization:
+        if cfg.get("atr_normalization", True):
             score = normalize_score_by_volatility(df, score)
         return score, "long"
     if price >= upper_bound:
         distance = price - centre
         score = min(distance / half_range, 1.0)
         if cfg.atr_normalization:
+        if cfg.get("atr_normalization", True):
             score = normalize_score_by_volatility(df, score)
         return score, "short"
 
