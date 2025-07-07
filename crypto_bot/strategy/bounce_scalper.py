@@ -1,7 +1,5 @@
 from dataclasses import asdict, dataclass, fields
 from typing import Optional, Tuple, Union
-from dataclasses import dataclass, fields
-from typing import Optional, Tuple, Union
 
 from crypto_bot import cooldown_manager
 
