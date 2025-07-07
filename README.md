@@ -96,6 +96,7 @@ FERNET_KEY=optional_key_for_encryption
 KRAKEN_WS_TOKEN=your_ws_token          # optional for Kraken
 KRAKEN_API_TOKEN=your_api_token        # optional for Kraken
 TELEGRAM_TOKEN=your_telegram_token
+TELE_CHAT_ADMINS=12345,67890          # comma-separated chat IDs
 GOOGLE_CRED_JSON=path_to_google_credentials.json
 TWITTER_SENTIMENT_URL=https://api.example.com/twitter-sentiment
 FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
@@ -233,6 +234,7 @@ The bounce scalper looks for short-term reversals when a volume spike confirms m
    telegram:
      token: your_telegram_token
      chat_id: your_chat_id
+     chat_admins: your_chat_id
      trade_updates: true
    ```
 
@@ -244,6 +246,9 @@ The bounce scalper looks for short-term reversals when a volume spike confirms m
 
    The bot reads these values only from `config.yaml`. Disable
    `trade_updates` if you don't want trade entry and exit messages.
+   Set `chat_admins` to a comma-separated list of Telegram chat IDs allowed to
+   control the bot. You can also provide this list via the `TELE_CHAT_ADMINS`
+   environment variable.
 2. Send `/start` to your bot so it can message you. Use `/menu` at any time to
    open a list of buttons—**Start**, **Stop**, **Status**, **Log**, **Rotate
    Now** and **Toggle Mode**—for quick interaction.
