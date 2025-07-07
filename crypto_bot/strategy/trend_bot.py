@@ -12,6 +12,18 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     if df.empty or len(df) < 50:
         return 0.0, "none"
 
+    df = df.copy()
+    params = config or {}
+    fast_window = int(params.get("trend_ema_fast", 20))
+    slow_window = int(params.get("trend_ema_slow", 50))
+    atr_period = int(params.get("atr_period", 14))
+    k = float(params.get("k", 1.0))
+
+    df["ema_fast"] = ta.trend.ema_indicator(df["close"], window=fast_window)
+    df["ema_slow"] = ta.trend.ema_indicator(df["close"], window=slow_window)
+    df["rsi"] = ta.momentum.rsi(df["close"], window=14)
+    df["volume_ma"] = df["volume"].rolling(window=20).mean()
+    df["atr"] = ta.volatility.average_true_range(df["high"], df["low"], df["close"], window=atr_period)
     lookback = 50
     recent = df.iloc[-(lookback + 1) :]
 
@@ -38,15 +50,23 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     score = 0.0
     direction = "none"
 
+    atr_pct = 0.0
+    if latest["close"] != 0:
+        atr_pct = (latest["atr"] / latest["close"]) * 100
+    dynamic_oversold = 30 + k * atr_pct
+    dynamic_overbought = 70 - k * atr_pct
+
     long_cond = (
-        latest["ema20"] > latest["ema50"]
-        and latest["rsi"] > 55
+        latest["close"] > latest["ema_fast"]
+        and latest["ema_fast"] > latest["ema_slow"]
+        and latest["rsi"] > dynamic_overbought
         and latest["adx"] > 20
         and latest["volume"] > latest["volume_ma"]
     )
     short_cond = (
-        latest["ema20"] < latest["ema50"]
-        and latest["rsi"] < 45
+        latest["close"] < latest["ema_fast"]
+        and latest["ema_fast"] < latest["ema_slow"]
+        and latest["rsi"] < dynamic_oversold
         and latest["adx"] > 20
         and latest["volume"] > latest["volume_ma"]
     )

@@ -193,6 +193,11 @@ timeframes:
 top_n_symbols: 3
 tp_pct: 0.07
 trade_size_pct: 0.1
+trend:
+  atr_period: 14
+  k: 1.0
+  trend_ema_fast: 20
+  trend_ema_slow: 50
 twap_enabled: true
 twap_interval_seconds: 10
 twap_slices: 4
