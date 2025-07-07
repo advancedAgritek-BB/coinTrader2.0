@@ -6,13 +6,17 @@ import time
 from pathlib import Path
 from typing import Dict, Tuple
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import (
-    ApplicationBuilder,
-    CallbackQueryHandler,
-    CommandHandler,
-    ContextTypes,
-)
+try:  # pragma: no cover - optional dependency
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+    from telegram.ext import (
+        ApplicationBuilder,
+        CallbackQueryHandler,
+        CommandHandler,
+        ContextTypes,
+    )
+except Exception:  # pragma: no cover - telegram not installed
+    InlineKeyboardButton = InlineKeyboardMarkup = Update = object  # type: ignore
+    ApplicationBuilder = CallbackQueryHandler = CommandHandler = ContextTypes = object  # type: ignore
 
 LOG_FILE = Path("crypto_bot/logs/bot.log")
 STRATEGY_FILE = Path("crypto_bot/logs/strategy_scores.json")

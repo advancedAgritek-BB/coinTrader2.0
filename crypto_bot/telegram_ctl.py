@@ -59,6 +59,21 @@ def start(
     return asyncio.create_task(status_loop(controller, admins, update_interval))
 """Telegram command handlers used by TelegramBotUI and other clients."""
 
+import asyncio
+import json
+from pathlib import Path
+from typing import Any, Dict
+
+try:  # pragma: no cover - optional dependency
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+    from telegram.ext import ContextTypes
+except Exception:  # pragma: no cover - telegram not installed
+    InlineKeyboardButton = InlineKeyboardMarkup = Update = object  # type: ignore
+    ContextTypes = object  # type: ignore
+
+from . import console_monitor, log_reader
+from .utils.open_trades import get_open_trades
+
 STRATEGY_FILE = Path("crypto_bot/logs/strategy_stats.json")
 TRADES_FILE = Path("crypto_bot/logs/trades.csv")
 LOG_FILE = Path("crypto_bot/logs/bot.log")
@@ -195,4 +210,85 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     text = await context.bot_data["controller"].settings()
     await update.message.reply_text(text)
+
+
+ITEMS_PER_PAGE = 20
+
+
+def _paginate(text: str, lines_per_page: int = ITEMS_PER_PAGE) -> list[str]:
+    """Return ``text`` split into pages of ``lines_per_page`` lines."""
+    lines = text.splitlines()
+    return [
+        "\n".join(lines[i : i + lines_per_page])
+        for i in range(0, len(lines), lines_per_page)
+    ] or [""]
+
+
+class TelegramCtl:
+    """Minimal Telegram controller wrapper for tests."""
+
+    def __init__(self, controller: Any, admin_id: str | int) -> None:
+        self.controller = controller
+        self.admin_id = str(admin_id)
+        self._heartbeat: asyncio.Task | None = None
+
+    # ------------------------------------------------------------------
+    def _is_admin(self, update: Update) -> bool:
+        return str(getattr(update.effective_user, "id", "")) == self.admin_id
+
+    async def _reply(self, update: Update, text: str) -> None:
+        await update.reply_text(text)
+
+    async def _call(self, update: Update, name: str, ok: str = "") -> None:
+        if not self._is_admin(update):
+            await self._reply(update, "Unauthorized")
+            return
+        func = getattr(self.controller, name)
+        result = await _maybe_call(func)
+        await self._reply(update, result if isinstance(result, str) else ok)
+
+    # Command handlers -------------------------------------------------
+    async def start_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._call(update, "start", "Started")
+
+    async def stop_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._call(update, "stop", "Stopped")
+
+    async def status_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._call(update, "status")
+
+    async def log_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._call(update, "log")
+
+    async def rotate_now_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._call(update, "rotate_now")
+
+    async def toggle_mode_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._call(update, "toggle_mode")
+
+    async def signals_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._call(update, "signals")
+
+    async def balance_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._call(update, "balance")
+
+    async def trades_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._call(update, "trades")
+
+    async def _send_pages(self, update: Update, pages: list[str]) -> None:
+        for page in pages:
+            await update.reply_text(page)
+
+    def start_heartbeat(self) -> asyncio.Task:
+        async def _loop() -> None:
+            while True:  # pragma: no cover - loop
+                await asyncio.sleep(1)
+
+        self._heartbeat = asyncio.create_task(_loop())
+        return self._heartbeat
+
+    def stop_heartbeat(self) -> None:
+        if self._heartbeat:
+            self._heartbeat.cancel()
+
 
