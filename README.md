@@ -96,12 +96,17 @@ FERNET_KEY=optional_key_for_encryption
 KRAKEN_WS_TOKEN=your_ws_token          # optional for Kraken
 KRAKEN_API_TOKEN=your_api_token        # optional for Kraken
 TELEGRAM_TOKEN=your_telegram_token
+TELE_CHAT_ADMINS=123456,789012         # optional comma separated admin IDs
 GOOGLE_CRED_JSON=path_to_google_credentials.json
 TWITTER_SENTIMENT_URL=https://api.example.com/twitter-sentiment
 FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
 SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
 ```
+
+`TELE_CHAT_ADMINS` lets the Telegram bot accept commands from multiple
+admin chats. Omit it to restrict control to the single `chat_id` in the
+configuration file.
 
 ### YAML Configuration
 
@@ -115,6 +120,8 @@ telegram:
   token: your_telegram_token
   chat_id: your_chat_id
   trade_updates: true
+  status_updates: true
+  balance_updates: false
 mempool_monitor:
   enabled: false
   suspicious_fee_threshold: 100
@@ -198,7 +205,9 @@ The bounce scalper looks for short-term reversals when a volume spike confirms m
 * **loop_interval_minutes** – delay between trading cycles.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
 * **log_to_google** – export trades to Google Sheets.
-* **telegram** – bot token, chat ID and trade notifications.
+* **telegram** – bot token, chat ID and trade notifications. Optional
+  **status_updates** and **balance_updates** flags control startup and
+  balance alerts.
 * **balance_change_threshold** – delta for Telegram balance alerts.
 * **tax_tracking** – CSV export of executed trades.
 * **metrics_enabled**, **metrics_backend**, **metrics_output_file** – cycle metrics output.
@@ -246,8 +255,13 @@ The bounce scalper looks for short-term reversals when a volume spike confirms m
    `trade_updates` if you don't want trade entry and exit messages.
 2. Send `/start` to your bot so it can message you. Use `/menu` at any time to
    open a list of buttons—**Start**, **Stop**, **Status**, **Log**, **Rotate
-   Now** and **Toggle Mode**—for quick interaction.
-3. If you see `Failed to send message: Not Found` in the logs, the chat ID or
+   Now**, **Toggle Mode**, **Signals**, **Balance** and **Trades**—for quick
+   interaction.
+3. You can also issue these commands directly:
+   - `/signals` – show the latest scored assets
+   - `/balance` – display your current exchange holdings
+   - `/trades` – summarize executed trades
+4. If you see `Failed to send message: Not Found` in the logs, the chat ID or
    token is likely incorrect or the bot lacks permission to message the chat.
    Double-check the values in `config.yaml` and ensure you've started a
   conversation with your bot.
@@ -361,6 +375,10 @@ adaptive limit keeps history current without waiting for a full response.
 Disable this fallback by setting `force_websocket_history` to `true`.
 Large history requests skip streaming entirely when `limit` exceeds
 `max_ws_limit`.
+
+The client now records heartbeat events and exposes `is_alive(conn_type)` to
+check if a connection has received a heartbeat within the last 10 seconds. Call
+`ping()` periodically to keep the session active.
 
 Example usage for Kraken WebSockets:
 
