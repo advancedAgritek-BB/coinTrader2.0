@@ -572,15 +572,29 @@ include:
 
 - `bot.log` – main log file containing startup events, strategy choices and all
   decision messages.
-- `trades.csv` – CSV export of every executed trade used by the dashboard and
-  backtester. Stop orders are logged here as well with an `is_stop` flag so they
-  can be filtered out from performance calculations.
+- `trades.csv` – CSV export of every executed order used by the dashboard and
+  backtester. Entries may represent long or short positions: a `buy` side opens
+  or closes a short while a `sell` side opens or closes a long. Stop orders are
+  logged here as well with an `is_stop` flag so they can be filtered out from
+  performance calculations. Open positions are reconstructed by scanning the
+  rows sequentially and pairing each entry with the next opposite side.
 - `strategy_stats.json` – summary statistics of win rate, PnL and other metrics
   generated automatically from `strategy_performance.json`.
 - `strategy_performance.json` – list of individual trades grouped by regime and
   strategy with fields like `pnl` and timestamps.
 - `metrics.csv` – per cycle summary showing how many pairs were scanned,
   how many signals fired and how many trades executed.
+
+Example short trade:
+
+```csv
+symbol,side,amount,price,timestamp
+BTC/USDT,sell,0.1,25000,2024-05-01T00:00:00Z
+BTC/USDT,buy,0.1,24000,2024-05-02T00:00:00Z
+```
+
+This opens a short at 25,000 and covers at 24,000 for a profit of
+`(25000 - 24000) * 0.1 = 100` USDT.
 
 ### Statistics File Structure
 
