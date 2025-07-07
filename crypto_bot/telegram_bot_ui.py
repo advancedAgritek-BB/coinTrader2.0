@@ -1,4 +1,3 @@
-# DEPRECATED: use crypto_bot.telegram_ctl instead
 from __future__ import annotations
 
 import asyncio
