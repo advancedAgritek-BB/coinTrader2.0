@@ -1,3 +1,4 @@
+# DEPRECATED: use crypto_bot.telegram_ctl instead
 from __future__ import annotations
 
 import asyncio
@@ -22,6 +23,7 @@ from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot import log_reader, console_monitor
+from .telegram_ctl import BotController
 from crypto_bot.utils.open_trades import get_open_trades
 
 MENU = "MENU"
@@ -52,11 +54,15 @@ class TelegramBotUI:
         self.state = state
         self.log_file = Path(log_file)
         self.rotator = rotator
+        self.controller = BotController(state, exchange, log_file=self.log_file, trades_file=TRADES_FILE)
         self.exchange = exchange
         self.wallet = wallet
         self.logger = setup_logger(__name__, "crypto_bot/logs/telegram_ui.log")
 
         self.app = ApplicationBuilder().token(self.token).build()
+        if hasattr(self.app, "bot_data"):
+            self.app.bot_data["controller"] = self.controller
+            self.app.bot_data["admin_id"] = self.chat_id
         self.app.add_handler(CommandHandler("start", self.start_cmd))
         self.app.add_handler(CommandHandler("stop", self.stop_cmd))
         self.app.add_handler(CommandHandler("status", self.status_cmd))
@@ -114,28 +120,23 @@ class TelegramBotUI:
     async def start_cmd(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        self.state["running"] = True
-        await update.message.reply_text("Trading started")
+        text = await self.controller.start()
+        await update.message.reply_text(text)
 
     async def stop_cmd(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        self.state["running"] = False
-        await update.message.reply_text("Trading stopped")
+        text = await self.controller.stop()
+        await update.message.reply_text(text)
 
     async def status_cmd(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        running = self.state.get("running", False)
-        mode = self.state.get("mode")
-        await update.message.reply_text(f"Running: {running}, mode: {mode}")
+        text = await self.controller.status()
+        await update.message.reply_text(text)
 
     async def log_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if self.log_file.exists():
-            lines = self.log_file.read_text().splitlines()[-20:]
-            text = "\n".join(lines) if lines else "(no logs)"
-        else:
-            text = "Log file not found"
+        text = await self.controller.logs()
         if getattr(update, "callback_query", None):
             await update.callback_query.message.edit_text(text)
         else:
