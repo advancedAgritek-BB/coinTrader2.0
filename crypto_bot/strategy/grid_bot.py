@@ -3,32 +3,18 @@
 from __future__ import annotations
 
 import os
-from typing import Mapping, Optional, Tuple
+from dataclasses import asdict, dataclass, fields
+from typing import Mapping, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import ta
 
-from crypto_bot.utils.indicator_cache import cache_series
-from dataclasses import asdict, dataclass, fields
-from typing import Optional, Tuple, Union
-from dataclasses import dataclass, fields, asdict
-from typing import Optional, Tuple, Union
-from dataclasses import dataclass
-from typing import Optional, Tuple, Union
-from dataclasses import asdict, dataclass, fields
-from typing import Optional, Tuple, Union
-from dataclasses import dataclass
-from dataclasses import asdict, dataclass, is_dataclass
-from typing import Optional, Tuple
-
-import numpy as np
-import pandas as pd
-from crypto_bot.volatility_filter import calc_atr
-import ta
-from crypto_bot.utils.volatility import normalize_score_by_volatility
-from . import breakout_bot
 from crypto_bot import grid_state
+from crypto_bot.utils.indicator_cache import cache_series
+from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.volatility_filter import calc_atr
+from . import breakout_bot
 
 
 @dataclass
@@ -40,7 +26,18 @@ class GridConfig:
     cooldown_bars: int = 6
     max_active_legs: int = 4
     symbol: str = ""
+
     atr_normalization: bool = True
+    volume_ma_window: int = 20
+    volume_multiple: float = 1.5
+    vol_zscore_threshold: float = 2.0
+
+    atr_period: int = 14
+    spacing_factor: float = 0.75
+    trend_ema_fast: int = 50
+    trend_ema_slow: int = 200
+
+    range_window: int = 20
 
     @classmethod
     def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":
@@ -51,63 +48,35 @@ class GridConfig:
                 params[f.name] = int(cfg.get("num_levels", _get_num_levels()))
             else:
                 params[f.name] = cfg.get(f.name, getattr(cls, f.name))
-        params = {f.name: cfg.get(f.name, getattr(cls, f.name)) for f in fields(cls)}
-        return cls(**params)
-
-
-def _as_dict(cfg: Union[dict, GridConfig, None]) -> dict:
-    if cfg is None:
-        return {}
-    if isinstance(cfg, GridConfig):
-        return asdict(cfg)
-    return dict(cfg)
-
-
-@dataclass
-class GridConfig:
-    """Configuration values for :func:`generate_signal`."""
-
-    atr_normalization: bool = True
-    volume_ma_window: int = 20
-    volume_multiple: float = 1.5
-    vol_zscore_threshold: float = 2.0
-    """Configuration for :func:`generate_signal`."""
-
-    atr_period: int = 14
-    spacing_factor: float = 0.75
-    """Configuration options for :func:`generate_signal`."""
-
-    trend_ema_fast: int = 50
-    trend_ema_slow: int = 200
-    atr_normalization: bool = True
-
-    @classmethod
-    def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":
-        cfg = cfg or {}
-        params = {f.name: cfg.get(f.name, getattr(cls, f.name)) for f in fields(cls)}
         return cls(**params)
 
 
 ConfigType = Union[dict, GridConfig, None]
 
 
-def _get_config(cfg: ConfigType) -> GridConfig:
+def _as_dict(cfg: ConfigType) -> dict:
     if cfg is None:
-        return GridConfig()
+        return {}
     if isinstance(cfg, GridConfig):
-        return cfg
-    cfg = dict(cfg)
-    return GridConfig(
-        atr_normalization=cfg.get("atr_normalization", True),
-        volume_ma_window=cfg.get("volume_ma_window", 20),
-        volume_multiple=cfg.get("volume_multiple", 1.5),
-        vol_zscore_threshold=cfg.get("vol_zscore_threshold", 2.0),
-    )
+        data = asdict(cfg)
+        env_levels = os.getenv("GRID_LEVELS")
+        if env_levels and cfg.num_levels == GridConfig.num_levels:
+            data.pop("num_levels", None)
+        return data
+    return dict(cfg)
+
+
+def _get_num_levels() -> int:
+    """Return grid levels from ``GRID_LEVELS`` env var or default of 5."""
+    env = os.getenv("GRID_LEVELS")
+    try:
+        return int(env) if env else 5
+    except ValueError:  # pragma: no cover - invalid env
+        return 5
 
 
 def volume_ok(series: pd.Series, window: int, mult: float, z_thresh: float) -> bool:
     """Return ``True`` if ``series`` shows a volume spike."""
-
     if len(series) < window:
         return False
 
@@ -121,28 +90,6 @@ def volume_ok(series: pd.Series, window: int, mult: float, z_thresh: float) -> b
     current = series.iloc[-1]
     z = (current - mean) / std if std > 0 else float("-inf")
     return current > mean * mult or z >= z_thresh
-def _as_dict(cfg: ConfigType) -> dict:
-    if cfg is None:
-        return {}
-    if isinstance(cfg, GridConfig):
-        return asdict(cfg)
-    return dict(cfg)
-        return cls(
-            trend_ema_fast=int(cfg.get("trend_ema_fast", cls.trend_ema_fast)),
-            trend_ema_slow=int(cfg.get("trend_ema_slow", cls.trend_ema_slow)),
-            atr_normalization=bool(
-                cfg.get("atr_normalization", cls.atr_normalization)
-            ),
-        )
-
-
-def _get_num_levels() -> int:
-    """Return grid levels from ``GRID_LEVELS`` env var or default of 5."""
-    env = os.getenv("GRID_LEVELS")
-    try:
-        return int(env) if env else 5
-    except ValueError:  # pragma: no cover - invalid env
-        return 5
 
 
 def recent_window(df: pd.DataFrame, cfg: Mapping[str, int] | None) -> pd.DataFrame:
@@ -151,8 +98,8 @@ def recent_window(df: pd.DataFrame, cfg: Mapping[str, int] | None) -> pd.DataFra
     range_window = int(params.get("range_window", 20))
     atr_period = int(params.get("atr_period", 14))
     volume_ma_window = int(params.get("volume_ma_window", 20))
-    trend_ema_slow = int(params.get("trend_ema_slow", 50))
-    lookback = max(range_window, atr_period, volume_ma_window, trend_ema_slow)
+    lookback = min(len(df), range_window)
+    lookback = max(lookback, atr_period)
     return df.iloc[-lookback:]
 
 
@@ -164,15 +111,10 @@ def compute_vwap(df: pd.DataFrame, window: int) -> pd.Series:
     pv = typical * df["volume"]
     vwap = pv.rolling(window).sum() / df["volume"].rolling(window).sum()
     return vwap
-def generate_signal(
-    df: pd.DataFrame,
-    num_levels: int | None = None,
-    config: ConfigType = None,
-    config: Optional[Union[dict, GridConfig]] = None,
-    config: ConfigType = None,
+
+
 def is_in_trend(df: pd.DataFrame, fast: int, slow: int, side: str) -> bool:
     """Return ``True`` if ``side`` aligns with the EMA trend."""
-
     if len(df) < max(fast, slow):
         return True
 
@@ -189,36 +131,16 @@ def is_in_trend(df: pd.DataFrame, fast: int, slow: int, side: str) -> bool:
     return True
 
 
-def generate_signal(df: pd.DataFrame, num_levels: int | None = None, config: Optional[dict] = None) -> Tuple[float, str]:
-@dataclass
-class GridConfig:
-    """Configuration for :func:`generate_signal`."""
-
-    range_window: int = 20
-
-
 def generate_signal(
     df: pd.DataFrame,
     num_levels: int | None = None,
-    config: Optional[dict | GridConfig] = None,
+    config: ConfigType = None,
 ) -> Tuple[float, str]:
-    """Generate a grid based trading signal.
-
-    The recent ``range_window`` bars define a high/low range divided into grid levels.
-    A positive score is returned when price trades near the lower grid levels
-    and a negative score near the upper levels. The magnitude is proportional to
-    the distance from the mid-point of the range. ``(0.0, "none")`` is returned
-    when price stays around the centre of the grid.
-    """
-
-    cfg_dict = _as_dict(config)
-    cfg = GridConfig.from_dict(cfg_dict)
+    """Generate a grid based trading signal."""
+    cfg = GridConfig.from_dict(_as_dict(config))
 
     if num_levels is None:
         num_levels = cfg.num_levels
-
-    cfg_dict = _as_dict(config)
-    cfg = GridConfig.from_dict(cfg_dict)
 
     symbol = cfg.symbol
     if symbol:
@@ -227,37 +149,24 @@ def generate_signal(
             return 0.0, "none"
         if grid_state.active_leg_count(symbol) >= cfg.max_active_legs:
             return 0.0, "none"
-    cfg = _get_config(config)
 
     min_len = max(20, cfg.volume_ma_window)
-    if df.empty or len(df) < min_len or "volume" not in df:
+    if df.empty or len(df) < min_len:
         return 0.0, "none"
 
-    if not volume_ok(df["volume"], cfg.volume_ma_window, cfg.volume_multiple, cfg.vol_zscore_threshold):
-    cfg_dict = _as_dict(config)
-    cfg = GridConfig.from_dict(cfg_dict)
+    if "volume" in df and not volume_ok(
+        df["volume"], cfg.volume_ma_window, cfg.volume_multiple, cfg.vol_zscore_threshold
+    ):
+        return 0.0, "none"
+
+    range_window = cfg.range_window
     atr_period = cfg.atr_period
-    spacing_factor = cfg.spacing_factor
+    volume_ma_window = cfg.volume_ma_window
 
-    lookback = max(20, atr_period)
-    if df.empty or len(df) < lookback:
-        return 0.0, "none"
-
-    recent = df.tail(lookback)
-    cfg = GridConfig.from_dict(config)
-
-    cfg = config or {}
-
-    if df.empty:
-        return 0.0, "none"
-
-    recent = recent_window(df, cfg)
+    recent_len = max(range_window, atr_period, volume_ma_window)
+    recent = df.tail(recent_len)
     if recent.empty:
         return 0.0, "none"
-
-    range_window = int(cfg.get("range_window", 20))
-    atr_period = int(cfg.get("atr_period", 14))
-    volume_ma_window = int(cfg.get("volume_ma_window", 20))
 
     atr_series = ta.volatility.average_true_range(
         recent["high"], recent["low"], recent["close"], window=atr_period
@@ -270,45 +179,33 @@ def generate_signal(
 
     recent = recent.copy()
     recent["atr"] = atr_series
-    recent["vwap"] = vwap_series
+    if not vwap_series.isna().all():
+        recent["vwap"] = vwap_series
 
-    range_slice = recent.iloc[-range_window:]
+    range_slice = df.tail(range_window)
     high = range_slice["high"].max()
     low = range_slice["low"].min()
-    if df.empty or len(df) < 20:
-    cfg = {}
-    if config is not None:
-        if is_dataclass(config):
-            cfg = asdict(config)
-        else:
-            cfg = dict(config)
-
-    window = int(cfg.get("range_window", 20))
-
-    if df.empty or len(df) < window:
-        return 0.0, "none"
-
-    recent = df.tail(window)
-    high = recent["high"].max()
-    low = recent["low"].min()
 
     if high == low:
         return 0.0, "none"
 
     price = recent["close"].iloc[-1]
-    centre = recent["vwap"].iloc[-1] if "vwap" in recent.columns else (high + low) / 2
+    if "vwap" in recent.columns and not pd.isna(recent["vwap"].iloc[-1]):
+        centre = recent["vwap"].iloc[-1]
+    else:
+        centre = (high + low) / 2
 
     atr = calc_atr(recent, window=atr_period)
-    grid_step = atr * spacing_factor
+    range_step = (high - low) / max(num_levels - 1, 1)
+    grid_step = min(atr * cfg.spacing_factor, range_step)
     if not grid_step:
         return 0.0, "none"
 
     n = num_levels // 2
     levels = centre + np.arange(-n, n + 1) * grid_step
     half_range = grid_step * n
-
-    # defer to breakout logic when price extends far beyond the grid range
-    breakout_threshold = half_range * cfg.breakout_mult
+    breakout_range = (high - low) / 2
+    breakout_threshold = breakout_range * cfg.breakout_mult
     if price > centre + breakout_threshold or price < centre - breakout_threshold:
         return breakout_bot.generate_signal(df, _as_dict(config))
 
@@ -321,7 +218,6 @@ def generate_signal(
         distance = centre - price
         score = min(distance / half_range, 1.0)
         if cfg.atr_normalization:
-        if cfg.get("atr_normalization", True):
             score = normalize_score_by_volatility(df, score)
         return score, "long"
 
@@ -331,7 +227,6 @@ def generate_signal(
         distance = price - centre
         score = min(distance / half_range, 1.0)
         if cfg.atr_normalization:
-        if cfg.get("atr_normalization", True):
             score = normalize_score_by_volatility(df, score)
         return score, "short"
 
