@@ -153,6 +153,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 ### Risk Parameters
 * **risk** – default stop loss, take profit and drawdown limits.
 * **trade_size_pct** – percent of capital used per trade.
+* **max_open_trades** – maximum simultaneous open trades.
 * **max_slippage_pct** – slippage tolerance for orders.
 * **liquidity_check**/**liquidity_depth** – verify order book depth.
 * **volatility_filter** – ATR and funding rate thresholds.

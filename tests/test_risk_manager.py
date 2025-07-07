@@ -272,9 +272,13 @@ def test_can_allocate_uses_tracker():
         strategy_allocation={"trend_bot": 0.5},
     )
     manager = RiskManager(cfg)
-    assert manager.can_allocate("trend_bot", 40, 100)
-    manager.allocate_capital("trend_bot", 40)
+    assert manager.can_allocate("trend_bot", 20, 100)
+    manager.allocate_capital("trend_bot", 20)
+    assert manager.can_allocate("trend_bot", 20, 100)
+    manager.allocate_capital("trend_bot", 20)
     assert not manager.can_allocate("trend_bot", 20, 100)
+    manager.deallocate_capital("trend_bot", 10)
+    assert manager.can_allocate("trend_bot", 10, 100)
 
 
 def test_risk_config_has_volume_threshold_ratio_default():
