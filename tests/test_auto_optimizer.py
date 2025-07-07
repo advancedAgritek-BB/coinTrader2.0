@@ -25,6 +25,18 @@ def test_optimize_strategies_writes_best_params(tmp_path, monkeypatch):
         ]
     )
     monkeypatch.setattr(BacktestRunner, "run_grid", lambda self: data)
+    data = pd.DataFrame([
+        {"stop_loss_pct": 0.01, "take_profit_pct": 0.02, "sharpe": 1.0, "max_drawdown": 0.1},
+        {"stop_loss_pct": 0.02, "take_profit_pct": 0.03, "sharpe": 0.5, "max_drawdown": 0.05},
+    ])
+    class FakeRunner:
+        def __init__(self, config):
+            self.config = config
+
+        def run_grid(self):
+            return data
+
+    monkeypatch.setattr(auto_optimizer, "BacktestRunner", lambda cfg: FakeRunner(cfg))
 
     cfg = {
         "symbol": "BTC/USDT",

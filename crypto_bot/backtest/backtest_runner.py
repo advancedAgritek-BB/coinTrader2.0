@@ -4,6 +4,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional
 from numpy.random import default_rng, Generator
+from dataclasses import dataclass
 
 import ta
 from crypto_bot.regime.regime_classifier import classify_regime, CONFIG
@@ -386,3 +387,118 @@ def walk_forward_optimize(
         window=window,
     )
     return BacktestRunner(config).run_walk_forward()
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+
+    stop_loss_range = stop_loss_range or [0.02]
+    take_profit_range = take_profit_range or [0.04]
+    rng = default_rng(seed)
+
+    results: List[Dict] = []
+    start = 0
+    while start + window * 2 <= len(df):
+        train = df.iloc[start : start + window]
+        test = df.iloc[start + window : start + window * 2]
+        regime, _ = classify_regime(train)
+        best_sl = stop_loss_range[0]
+        best_tp = take_profit_range[0]
+        best_sharpe = -np.inf
+        for sl in stop_loss_range:
+            for tp in take_profit_range:
+                metrics = _run_single(
+                    train,
+                    sl,
+                    tp,
+                    mode,
+                    slippage_pct,
+                    fee_pct,
+                    misclass_prob,
+                    rng,
+                )
+                if metrics["sharpe"] > best_sharpe:
+                    best_sharpe = metrics["sharpe"]
+                    best_sl = sl
+                    best_tp = tp
+        test_metrics = _run_single(
+            test,
+            best_sl,
+            best_tp,
+            mode,
+            slippage_pct,
+            fee_pct,
+            misclass_prob,
+            rng,
+        )
+        test_metrics.update(
+            {
+                "regime": regime,
+                "train_stop_loss_pct": best_sl,
+                "train_take_profit_pct": best_tp,
+            }
+        )
+        results.append(test_metrics)
+        start += window
+
+    return pd.DataFrame(results)
+
+
+@dataclass
+class BacktestConfig:
+    """Configuration for running backtests."""
+
+    symbol: str
+    timeframe: str
+    since: int
+    limit: int = 1000
+    mode: str = "cex"
+    stop_loss_range: Iterable[float] | None = None
+    take_profit_range: Iterable[float] | None = None
+    slippage_pct: float = 0.001
+    fee_pct: float = 0.001
+    misclass_prob: float = 0.0
+    seed: Optional[int] = None
+
+
+class BacktestRunner:
+    """Wrapper class providing a simple interface for grid backtests."""
+
+    def __init__(self, config: BacktestConfig) -> None:
+        self.config = config
+
+    def run_grid(self) -> pd.DataFrame:
+        """Execute the standard grid search backtest."""
+    """Simple wrapper for backtest routines using a config object."""
+
+    def __init__(self, config: BacktestConfig):
+        self.config = config
+
+    def run(self) -> pd.DataFrame:
+        return backtest(
+            self.config.symbol,
+            self.config.timeframe,
+            since=self.config.since,
+            limit=self.config.limit,
+            mode=self.config.mode,
+            stop_loss_range=self.config.stop_loss_range,
+            take_profit_range=self.config.take_profit_range,
+            slippage_pct=self.config.slippage_pct,
+            fee_pct=self.config.fee_pct,
+            misclass_prob=self.config.misclass_prob,
+            seed=self.config.seed,
+        )
+
+    def walk_forward(self, window: int) -> pd.DataFrame:
+        return walk_forward_optimize(
+            self.config.symbol,
+            self.config.timeframe,
+            since=self.config.since,
+            limit=self.config.limit,
+            window=window,
+            mode=self.config.mode,
+            stop_loss_range=self.config.stop_loss_range,
+            take_profit_range=self.config.take_profit_range,
+            slippage_pct=self.config.slippage_pct,
+            fee_pct=self.config.fee_pct,
+            misclass_prob=self.config.misclass_prob,
+            seed=self.config.seed,
+        )
+
