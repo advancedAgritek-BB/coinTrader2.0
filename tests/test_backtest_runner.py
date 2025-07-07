@@ -3,6 +3,11 @@ import ccxt
 
 from crypto_bot.backtest import backtest_runner as bt
 from crypto_bot.backtest.backtest_runner import BacktestConfig, BacktestRunner
+from crypto_bot.backtest.backtest_runner import (
+    BacktestConfig,
+    BacktestRunner,
+)
+from crypto_bot.backtest import backtest_runner
 
 
 class FakeExchange:
@@ -12,7 +17,9 @@ class FakeExchange:
         data = []
         for t in ts[:limit]:
             price += 0.5
-            data.append([int(t.timestamp() * 1000), price, price + 1, price - 1, price, 100])
+            data.append(
+                [int(t.timestamp() * 1000), price, price + 1, price - 1, price, 100]
+            )
         return data
 
 
@@ -21,7 +28,6 @@ def _constant_strategy(df):
 
 
 def test_backtest_tracks_switches(monkeypatch):
-    monkeypatch.setattr(ccxt, "binance", lambda: FakeExchange())
     regimes = ["trending"] * 40 + ["sideways"] * 40 + ["trending"] * 40
 
     def fake_classify(df):
@@ -30,6 +36,10 @@ def test_backtest_tracks_switches(monkeypatch):
 
     monkeypatch.setattr(bt, "classify_regime", fake_classify)
     monkeypatch.setattr(bt, "strategy_for", lambda r: _constant_strategy)
+    fake_data = FakeExchange().fetch_ohlcv("BTC/USDT", "1h", 0, 120)
+    monkeypatch.setattr(BacktestRunner, "_fetch_data", lambda self: fake_data)
+    monkeypatch.setattr(backtest_runner, "classify_regime", fake_classify)
+    monkeypatch.setattr(backtest_runner, "strategy_for", lambda r: _constant_strategy)
 
     cfg = BacktestConfig(
         symbol="BTC/USDT",
@@ -44,6 +54,9 @@ def test_backtest_tracks_switches(monkeypatch):
     )
     df = BacktestRunner(cfg).run_grid()
     row = df.iloc[0]
+    runner = BacktestRunner(cfg)
+    result = runner.run_grid()
+    row = result.iloc[0]
     assert row["switches"] > 0
     assert row["slippage_cost"] > 0
 
@@ -52,6 +65,10 @@ def test_backtest_misclassification(monkeypatch):
     monkeypatch.setattr(ccxt, "binance", lambda: FakeExchange())
     monkeypatch.setattr(bt, "classify_regime", lambda df: ("trending", {"trending": 1.0}))
     monkeypatch.setattr(bt, "strategy_for", lambda r: _constant_strategy)
+    monkeypatch.setattr(backtest_runner, "classify_regime", lambda df: ("trending", {}))
+    monkeypatch.setattr(backtest_runner, "strategy_for", lambda r: _constant_strategy)
+    fake_data = FakeExchange().fetch_ohlcv("BTC/USDT", "1h", 0, 80)
+    monkeypatch.setattr(BacktestRunner, "_fetch_data", lambda self: fake_data)
 
     cfg = BacktestConfig(
         symbol="BTC/USDT",
@@ -65,6 +82,9 @@ def test_backtest_misclassification(monkeypatch):
     )
     df = BacktestRunner(cfg).run_grid()
     row = df.iloc[0]
+    runner = BacktestRunner(cfg)
+    result = runner.run_grid()
+    row = result.iloc[0]
     assert row["misclassified"] > 0
 
 
@@ -72,16 +92,22 @@ def test_walk_forward_optimize(monkeypatch):
     monkeypatch.setattr(ccxt, "binance", lambda: FakeExchange())
     monkeypatch.setattr(bt, "classify_regime", lambda df: ("trending", {"trending": 1.0}))
     monkeypatch.setattr(bt, "strategy_for", lambda r: _constant_strategy)
+    monkeypatch.setattr(backtest_runner, "classify_regime", lambda df: ("trending", {}))
+    monkeypatch.setattr(backtest_runner, "strategy_for", lambda r: _constant_strategy)
+    fake_data = FakeExchange().fetch_ohlcv("BTC/USDT", "1h", 0, 60)
+    monkeypatch.setattr(BacktestRunner, "_fetch_data", lambda self: fake_data)
 
     cfg = BacktestConfig(
         symbol="BTC/USDT",
         timeframe="1h",
         since=0,
         limit=60,
-        window=20,
         stop_loss_range=[0.01],
         take_profit_range=[0.02],
         seed=3,
+        window=20,
     )
     df = BacktestRunner(cfg).run_walk_forward()
+    runner = BacktestRunner(cfg)
+    df = runner.run_walk_forward()
     assert {"regime", "train_stop_loss_pct", "train_take_profit_pct"} <= set(df.columns)

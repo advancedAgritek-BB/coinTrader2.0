@@ -34,8 +34,18 @@ def optimize_strategies() -> Dict[str, Dict[str, float]]:
     for name, ranges in param_ranges.items():
         sl_range: Iterable[float] = ranges.get("stop_loss", [])
         tp_range: Iterable[float] = ranges.get("take_profit", [])
+        cfg_obj = BacktestConfig(
+            symbol=bot_cfg.get("symbol", "BTC/USDT"),
+            timeframe=bot_cfg.get("timeframe", "1h"),
+            since=0,
+            limit=1000,
+            mode=bot_cfg.get("mode", "cex"),
+            stop_loss_range=sl_range,
+            take_profit_range=tp_range,
+        )
         try:
             cfg_params = BacktestConfig(
+            bt_cfg = BacktestConfig(
                 symbol=bot_cfg.get("symbol", "BTC/USDT"),
                 timeframe=bot_cfg.get("timeframe", "1h"),
                 since=0,
@@ -45,6 +55,8 @@ def optimize_strategies() -> Dict[str, Dict[str, float]]:
                 take_profit_range=tp_range,
             )
             df = BacktestRunner(cfg_params).run_grid()
+            df = BacktestRunner(bt_cfg).run_grid()
+            df = BacktestRunner(cfg_obj).run_grid()
         except Exception as exc:  # pragma: no cover - network
             logger.error("Backtest failed for %s: %s", name, exc)
             continue

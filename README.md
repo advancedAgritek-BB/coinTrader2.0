@@ -640,15 +640,15 @@ When enabled, `execute_swap` checks the current priority fee and pauses
 or adjusts the trade according to the selected action.
 ### Backtesting
 
-The `backtest` function in `crypto_bot.backtest.backtest_runner` can evaluate
+The `BacktestRunner` class in `crypto_bot.backtest.backtest_runner` can evaluate
 different stop‑loss and take‑profit percentages and reports the PnL,
 maximum drawdown and Sharpe ratio for each combination.
 
 ```python
-from crypto_bot.backtest import backtest_runner
+from crypto_bot.backtest.backtest_runner import BacktestRunner
 
-results = backtest_runner.backtest(
-    'BTC/USDT', '1h', since=0,
+runner = BacktestRunner('BTC/USDT', '1h', since=0)
+results = runner.run_grid(
     stop_loss_range=[0.01, 0.02],
     take_profit_range=[0.02, 0.04],
 )

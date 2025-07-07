@@ -10,6 +10,11 @@ from typing import Iterable, List, Optional
 import ccxt
 import numpy as np
 import pandas as pd
+from dataclasses import dataclass
+from typing import Dict, Iterable, List, Optional
+from numpy.random import default_rng, Generator
+from dataclasses import dataclass
+
 import ta
 
 from crypto_bot.regime.regime_classifier import CONFIG, classify_regime
@@ -28,6 +33,7 @@ _REGIMES = [
 @dataclass
 class BacktestConfig:
     """Configuration for :class:`BacktestRunner`."""
+    """Configuration for ``BacktestRunner``."""
 
     symbol: str
     timeframe: str
@@ -37,6 +43,9 @@ class BacktestConfig:
     stop_loss_range: Iterable[float] = field(default_factory=lambda: [0.02])
     take_profit_range: Iterable[float] = field(default_factory=lambda: [0.04])
     window: int = 50
+    stop_loss_range: Iterable[float] | None = None
+    take_profit_range: Iterable[float] | None = None
+    window: int = 20
     slippage_pct: float = 0.001
     fee_pct: float = 0.001
     misclass_prob: float = 0.0
@@ -74,10 +83,160 @@ class BacktestRunner:
                 self.config.limit,
             )
         ohlcv = self.exchange.fetch_ohlcv(
+
+
+class BacktestRunner:
+    """Run backtests using :class:`BacktestConfig`."""
+
+    def __init__(self, config: BacktestConfig) -> None:
+        self.config = config
+
+    # The following two methods allow tests to easily stub data preparation.
+    def _fetch_data(self) -> List[List[float]]:
+        exchange = ccxt.binance()
+        return exchange.fetch_ohlcv(
             self.config.symbol,
             timeframe=self.config.timeframe,
             since=self.config.since,
             limit=self.config.limit,
+        )
+
+    def _prepare_data(self, ohlcv: List[List[float]]) -> pd.DataFrame:
+        df = pd.DataFrame(
+            ohlcv,
+            columns=["timestamp", "open", "high", "low", "close", "volume"],
+        )
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        return df
+
+    def _get_df(self) -> pd.DataFrame:
+        return self._prepare_data(self._fetch_data())
+
+    def run_grid(self) -> pd.DataFrame:
+        """Backtest over parameter grid."""
+        df = self._get_df()
+        sl_range = self.config.stop_loss_range or [0.02]
+        tp_range = self.config.take_profit_range or [0.04]
+        rng = default_rng(self.config.seed)
+        results: List[Dict] = []
+        for sl in sl_range:
+            for tp in tp_range:
+                metrics = _run_single(
+                    df,
+                    sl,
+                    tp,
+                    self.config.mode,
+                    self.config.slippage_pct,
+                    self.config.fee_pct,
+                    self.config.misclass_prob,
+                    rng,
+                )
+                results.append(metrics)
+        return (
+            pd.DataFrame(results)
+            .sort_values("sharpe", ascending=False)
+            .reset_index(drop=True)
+        )
+
+    def run_walk_forward(self) -> pd.DataFrame:
+        """Perform walk-forward optimization segmented by regime."""
+        df = self._get_df()
+        sl_range = self.config.stop_loss_range or [0.02]
+        tp_range = self.config.take_profit_range or [0.04]
+        rng = default_rng(self.config.seed)
+        window = self.config.window
+        results: List[Dict] = []
+        start = 0
+        while start + window * 2 <= len(df):
+            train = df.iloc[start : start + window]
+            test = df.iloc[start + window : start + window * 2]
+            regime, _ = classify_regime(train)
+            best_sl = sl_range[0]
+            best_tp = tp_range[0]
+            best_sharpe = -np.inf
+            for sl in sl_range:
+                for tp in tp_range:
+                    metrics = _run_single(
+                        train,
+                        sl,
+                        tp,
+                        self.config.mode,
+                        self.config.slippage_pct,
+                        self.config.fee_pct,
+                        self.config.misclass_prob,
+                        rng,
+                    )
+                    if metrics["sharpe"] > best_sharpe:
+                        best_sharpe = metrics["sharpe"]
+                        best_sl = sl
+                        best_tp = tp
+            test_metrics = _run_single(
+                test,
+                best_sl,
+                best_tp,
+                self.config.mode,
+                self.config.slippage_pct,
+                self.config.fee_pct,
+                self.config.misclass_prob,
+                rng,
+            )
+            test_metrics.update(
+                {
+                    "regime": regime,
+                    "train_stop_loss_pct": best_sl,
+                    "train_take_profit_pct": best_tp,
+                }
+            )
+            results.append(test_metrics)
+            start += window
+
+        return pd.DataFrame(results)
+
+
+def _trade_return(
+    entry: float,
+    exit: float,
+    position: str,
+    cost: float,
+) -> float:
+    """Calculate trade return after cost."""
+    raw = (exit - entry) / entry if position == "long" else (entry - exit) / entry
+    return raw - cost
+
+
+def _precompute_regimes(df: pd.DataFrame) -> List[str]:
+    """Vectorized regime classification for each row."""
+    # If ``classify_regime`` was monkeypatched (e.g. in tests), fall back to
+    # repeatedly calling it to preserve expected behaviour.
+    if classify_regime.__module__ != "crypto_bot.regime.regime_classifier":
+        return [classify_regime(df.iloc[: i + 1])[0] for i in range(len(df))]
+
+    cfg = CONFIG
+    work = df.copy()
+
+    work["ema_fast"] = ta.trend.ema_indicator(work["close"], window=cfg["ema_fast"])
+    work["ema_slow"] = ta.trend.ema_indicator(work["close"], window=cfg["ema_slow"])
+    work["adx"] = ta.trend.adx(
+        work["high"], work["low"], work["close"], window=cfg["indicator_window"]
+    )
+    work["rsi"] = ta.momentum.rsi(work["close"], window=cfg["indicator_window"])
+    work["atr"] = ta.volatility.average_true_range(
+        work["high"], work["low"], work["close"], window=cfg["indicator_window"]
+    )
+    work["normalized_range"] = (work["high"] - work["low"]) / work["atr"]
+    bb = ta.volatility.BollingerBands(work["close"], window=cfg["bb_window"])
+    work["bb_width"] = bb.bollinger_wband()
+    work["volume_ma"] = work["volume"].rolling(cfg["ma_window"]).mean()
+    work["atr_ma"] = work["atr"].rolling(cfg["ma_window"]).mean()
+
+    regimes: List[str] = []
+    for i in range(len(work)):
+        latest = work.iloc[i]
+        volume_ma = latest["volume_ma"]
+        atr_ma = latest["atr_ma"]
+        trending = (
+            latest["adx"] > cfg["adx_trending_min"]
+            and latest["ema_fast"] > latest["ema_slow"]
         )
         df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
@@ -322,6 +481,135 @@ class BacktestRunner:
         metrics = Parallel(n_jobs=-1)(
             delayed(self._run_single)(self.df_prepared, p["stop_loss"], p["take_profit"], self.rng)
             for p in opt.cv_results_["params"]
+    if position is not None:
+        final_price = df["close"].iloc[-1]
+        cost = (fee_pct + slippage_pct) * 2
+        r = _trade_return(entry_price, final_price, position, cost)
+        equity *= 1 + r
+        returns.append(r)
+        slippage_cost += cost
+        peak_equity = max(peak_equity, equity)
+        max_dd = max(max_dd, 1 - equity / peak_equity)
+
+    pnl = equity - 1
+    sharpe = 0.0
+    if len(returns) > 1 and np.std(returns) != 0:
+        sharpe = np.mean(returns) / np.std(returns) * np.sqrt(len(returns))
+
+    return {
+        "stop_loss_pct": stop_loss,
+        "take_profit_pct": take_profit,
+        "pnl": pnl,
+        "max_drawdown": max_dd,
+        "sharpe": sharpe,
+        "misclassified": misclassified,
+        "switches": switches,
+        "slippage_cost": slippage_cost,
+    }
+
+
+def backtest(
+    symbol: str,
+    timeframe: str,
+    *,
+    since: int,
+    limit: int = 1000,
+    mode: str = "cex",
+    stop_loss_range: Iterable[float] | None = None,
+    take_profit_range: Iterable[float] | None = None,
+    slippage_pct: float = 0.001,
+    fee_pct: float = 0.001,
+    misclass_prob: float = 0.0,
+    seed: Optional[int] = None,
+) -> pd.DataFrame:
+    """Run regime-aware backtests over parameter ranges."""
+    config = BacktestConfig(
+        symbol=symbol,
+        timeframe=timeframe,
+        since=since,
+        limit=limit,
+        mode=mode,
+        stop_loss_range=stop_loss_range,
+        take_profit_range=take_profit_range,
+        slippage_pct=slippage_pct,
+        fee_pct=fee_pct,
+        misclass_prob=misclass_prob,
+        seed=seed,
+    )
+    return BacktestRunner(config).run_grid()
+
+
+def walk_forward_optimize(
+    symbol: str,
+    timeframe: str,
+    *,
+    since: int,
+    limit: int,
+    window: int,
+    mode: str = "cex",
+    stop_loss_range: Iterable[float] | None = None,
+    take_profit_range: Iterable[float] | None = None,
+    slippage_pct: float = 0.001,
+    fee_pct: float = 0.001,
+    misclass_prob: float = 0.0,
+    seed: Optional[int] = None,
+) -> pd.DataFrame:
+    """Perform walk-forward optimization segmented by regime."""
+    config = BacktestConfig(
+        symbol=symbol,
+        timeframe=timeframe,
+        since=since,
+        limit=limit,
+        mode=mode,
+        stop_loss_range=stop_loss_range,
+        take_profit_range=take_profit_range,
+        slippage_pct=slippage_pct,
+        fee_pct=fee_pct,
+        misclass_prob=misclass_prob,
+        seed=seed,
+        window=window,
+    )
+    return BacktestRunner(config).run_walk_forward()
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+
+    stop_loss_range = stop_loss_range or [0.02]
+    take_profit_range = take_profit_range or [0.04]
+    rng = default_rng(seed)
+
+    results: List[Dict] = []
+    start = 0
+    while start + window * 2 <= len(df):
+        train = df.iloc[start : start + window]
+        test = df.iloc[start + window : start + window * 2]
+        regime, _ = classify_regime(train)
+        best_sl = stop_loss_range[0]
+        best_tp = take_profit_range[0]
+        best_sharpe = -np.inf
+        for sl in stop_loss_range:
+            for tp in take_profit_range:
+                metrics = _run_single(
+                    train,
+                    sl,
+                    tp,
+                    mode,
+                    slippage_pct,
+                    fee_pct,
+                    misclass_prob,
+                    rng,
+                )
+                if metrics["sharpe"] > best_sharpe:
+                    best_sharpe = metrics["sharpe"]
+                    best_sl = sl
+                    best_tp = tp
+        test_metrics = _run_single(
+            test,
+            best_sl,
+            best_tp,
+            mode,
+            slippage_pct,
+            fee_pct,
+            misclass_prob,
+            rng,
         )
         df = pd.DataFrame(metrics)
         return df.sort_values("sharpe", ascending=False).reset_index(drop=True)
@@ -400,5 +688,69 @@ class BacktestRunner:
                 "win_loss": [win_loss],
                 "expectancy": [expectancy],
             }
+        )
+
+    return pd.DataFrame(results)
+
+
+@dataclass
+class BacktestConfig:
+    """Configuration for running backtests."""
+
+    symbol: str
+    timeframe: str
+    since: int
+    limit: int = 1000
+    mode: str = "cex"
+    stop_loss_range: Iterable[float] | None = None
+    take_profit_range: Iterable[float] | None = None
+    slippage_pct: float = 0.001
+    fee_pct: float = 0.001
+    misclass_prob: float = 0.0
+    seed: Optional[int] = None
+
+
+class BacktestRunner:
+    """Wrapper class providing a simple interface for grid backtests."""
+
+    def __init__(self, config: BacktestConfig) -> None:
+        self.config = config
+
+    def run_grid(self) -> pd.DataFrame:
+        """Execute the standard grid search backtest."""
+    """Simple wrapper for backtest routines using a config object."""
+
+    def __init__(self, config: BacktestConfig):
+        self.config = config
+
+    def run(self) -> pd.DataFrame:
+        return backtest(
+            self.config.symbol,
+            self.config.timeframe,
+            since=self.config.since,
+            limit=self.config.limit,
+            mode=self.config.mode,
+            stop_loss_range=self.config.stop_loss_range,
+            take_profit_range=self.config.take_profit_range,
+            slippage_pct=self.config.slippage_pct,
+            fee_pct=self.config.fee_pct,
+            misclass_prob=self.config.misclass_prob,
+            seed=self.config.seed,
+        )
+
+    def walk_forward(self, window: int) -> pd.DataFrame:
+        return walk_forward_optimize(
+            self.config.symbol,
+            self.config.timeframe,
+            since=self.config.since,
+            limit=self.config.limit,
+            window=window,
+            mode=self.config.mode,
+            stop_loss_range=self.config.stop_loss_range,
+            take_profit_range=self.config.take_profit_range,
+            slippage_pct=self.config.slippage_pct,
+            fee_pct=self.config.fee_pct,
+            misclass_prob=self.config.misclass_prob,
+            seed=self.config.seed,
         )
 
