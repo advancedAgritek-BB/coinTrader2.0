@@ -1,15 +1,21 @@
+# pylint: disable=too-many-locals
+"""Lightweight regime aware backtesting utilities."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from functools import lru_cache
+from typing import Iterable, List, Optional
+
 import ccxt
-import pandas as pd
 import numpy as np
-from typing import Dict, Iterable, List, Optional
-from numpy.random import default_rng, Generator
-
+import pandas as pd
 import ta
-from crypto_bot.regime.regime_classifier import classify_regime, CONFIG
-from crypto_bot.strategy_router import strategy_for
-from crypto_bot.signals.signal_scoring import evaluate
 
-# Available regimes used when simulating misclassification
+from crypto_bot.regime.regime_classifier import CONFIG, classify_regime
+from crypto_bot.signals.signal_scoring import evaluate
+from crypto_bot.strategy_router import strategy_for
+
 _REGIMES = [
     "trending",
     "sideways",
@@ -19,302 +25,380 @@ _REGIMES = [
 ]
 
 
-def _trade_return(
-    entry: float,
-    exit: float,
-    position: str,
-    cost: float,
-) -> float:
-    """Calculate trade return after cost."""
-    raw = (exit - entry) / entry if position == "long" else (entry - exit) / entry
-    return raw - cost
+@dataclass
+class BacktestConfig:
+    """Configuration for :class:`BacktestRunner`."""
+
+    symbol: str
+    timeframe: str
+    since: int
+    limit: int = 1000
+    mode: str = "cex"
+    stop_loss_range: Iterable[float] = field(default_factory=lambda: [0.02])
+    take_profit_range: Iterable[float] = field(default_factory=lambda: [0.04])
+    window: int = 50
+    slippage_pct: float = 0.001
+    fee_pct: float = 0.001
+    misclass_prob: float = 0.0
+    seed: Optional[int] = None
+    risk_per_trade_pct: float = 0.01
+    trailing_stop_atr_mult: float | None = None
+    partial_tp_atr_mult: float | None = None
 
 
-def _precompute_regimes(df: pd.DataFrame) -> List[str]:
-    """Vectorized regime classification for each row."""
-    # If ``classify_regime`` was monkeypatched (e.g. in tests), fall back to
-    # repeatedly calling it to preserve expected behaviour.
-    if classify_regime.__module__ != "crypto_bot.regime.regime_classifier":
-        return [classify_regime(df.iloc[: i + 1])[0] for i in range(len(df))]
+class BacktestRunner:
+    """Execute regime aware backtests."""
 
-    cfg = CONFIG
-    work = df.copy()
+    def __init__(self, config: BacktestConfig, exchange: ccxt.Exchange | None = None) -> None:
+        self.config = config
+        self.exchange = exchange
+        self.rng = np.random.default_rng(config.seed)
+        df_raw = self._fetch_data()
+        self.df_prepared = self._prepare_data(df_raw)
 
-    work["ema_fast"] = ta.trend.ema_indicator(work["close"], window=cfg["ema_fast"])
-    work["ema_slow"] = ta.trend.ema_indicator(work["close"], window=cfg["ema_slow"])
-    work["adx"] = ta.trend.adx(
-        work["high"], work["low"], work["close"], window=cfg["indicator_window"]
-    )
-    work["rsi"] = ta.momentum.rsi(work["close"], window=cfg["indicator_window"])
-    work["atr"] = ta.volatility.average_true_range(
-        work["high"], work["low"], work["close"], window=cfg["indicator_window"]
-    )
-    work["normalized_range"] = (work["high"] - work["low"]) / work["atr"]
-    bb = ta.volatility.BollingerBands(work["close"], window=cfg["bb_window"])
-    work["bb_width"] = bb.bollinger_wband()
-    work["volume_ma"] = work["volume"].rolling(cfg["ma_window"]).mean()
-    work["atr_ma"] = work["atr"].rolling(cfg["ma_window"]).mean()
+    @staticmethod
+    @lru_cache(maxsize=None)
+    def _cached_fetch(symbol: str, timeframe: str, since: int, limit: int) -> pd.DataFrame:
+        exch = ccxt.binance()
+        ohlcv = exch.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
+        df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        return df
 
-    regimes: List[str] = []
-    for i in range(len(work)):
-        latest = work.iloc[i]
-        volume_ma = latest["volume_ma"]
-        atr_ma = latest["atr_ma"]
-        trending = (
-            latest["adx"] > cfg["adx_trending_min"]
-            and latest["ema_fast"] > latest["ema_slow"]
-        )
-
-        if trending:
-            regime = "trending"
-        elif (
-            latest["adx"] < cfg["adx_sideways_max"]
-            and latest["bb_width"] < cfg["bb_width_sideways_max"]
-        ):
-            regime = "sideways"
-        elif (
-            latest["bb_width"] < cfg["bb_width_breakout_max"]
-            and not pd.isna(volume_ma)
-            and latest["volume"] > volume_ma * cfg["breakout_volume_mult"]
-        ):
-            regime = "breakout"
-        elif (
-            cfg["rsi_mean_rev_min"] <= latest["rsi"] <= cfg["rsi_mean_rev_max"]
-            and abs(latest["close"] - latest["ema_fast"]) / latest["close"]
-            < cfg["ema_distance_mean_rev_max"]
-        ):
-            regime = "mean-reverting"
-        elif (
-            not pd.isna(latest["normalized_range"])
-            and latest["normalized_range"] > cfg["normalized_range_volatility_min"]
-        ):
-            regime = "volatile"
-        else:
-            regime = "sideways"
-        regimes.append(regime)
-
-    return regimes
-
-
-def _run_single(
-    df: pd.DataFrame,
-    stop_loss: float,
-    take_profit: float,
-    mode: str,
-    slippage_pct: float,
-    fee_pct: float,
-    misclass_prob: float,
-    rng: Generator,
-) -> Dict:
-    """Execute a regime aware backtest for one parameter set."""
-
-    position: Optional[str] = None
-    entry_price = 0.0
-    equity = 1.0
-    peak_equity = 1.0
-    max_dd = 0.0
-    returns: List[float] = []
-    switches = 0
-    misclassified = 0
-    slippage_cost = 0.0
-
-    last_regime: Optional[str] = None
-    regimes = _precompute_regimes(df)
-
-    for i in range(60, len(df)):
-        subset = df.iloc[: i + 1]
-        true_regime = regimes[i]
-        regime = true_regime
-        if misclass_prob > 0 and rng.random() < misclass_prob:
-            regime = rng.choice([r for r in _REGIMES if r != true_regime])
-            misclassified += 1
-
-        if last_regime is not None and regime != last_regime and position is not None:
-            exit_price = df["close"].iloc[i]
-            cost = (fee_pct + slippage_pct) * 2
-            r = _trade_return(entry_price, exit_price, position, cost)
-            equity *= 1 + r
-            returns.append(r)
-            slippage_cost += cost
-            peak_equity = max(peak_equity, equity)
-            max_dd = max(max_dd, 1 - equity / peak_equity)
-            position = None
-            entry_price = 0.0
-            switches += 1
-        last_regime = regime
-
-        strategy_fn = strategy_for(regime)
-        _, direction, _ = evaluate(strategy_fn, subset, None)
-        price = df["close"].iloc[i]
-
-        if position is None and direction in {"long", "short"}:
-            position = direction
-            entry_price = price
-            continue
-
-        if position is not None:
-            change = (
-                (price - entry_price) / entry_price
-                if position == "long"
-                else (entry_price - price) / entry_price
+    def _fetch_data(self) -> pd.DataFrame:
+        if self.exchange is None:
+            return self._cached_fetch(
+                self.config.symbol,
+                self.config.timeframe,
+                self.config.since,
+                self.config.limit,
             )
-            if change <= -stop_loss or change >= take_profit:
-                exit_price = price
-                cost = (fee_pct + slippage_pct) * 2
-                r = _trade_return(entry_price, exit_price, position, cost)
-                equity *= 1 + r
+        ohlcv = self.exchange.fetch_ohlcv(
+            self.config.symbol,
+            timeframe=self.config.timeframe,
+            since=self.config.since,
+            limit=self.config.limit,
+        )
+        df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        return df
+
+    def _prepare_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        cfg = CONFIG
+        df = df.copy()
+        df["ema_fast"] = ta.trend.ema_indicator(df["close"], window=cfg["ema_fast"])
+        df["ema_slow"] = ta.trend.ema_indicator(df["close"], window=cfg["ema_slow"])
+        df["adx"] = ta.trend.adx(df["high"], df["low"], df["close"], window=cfg["indicator_window"])
+        df["rsi"] = ta.momentum.rsi(df["close"], window=cfg["indicator_window"])
+        df["atr"] = ta.volatility.average_true_range(
+            df["high"], df["low"], df["close"], window=cfg["indicator_window"]
+        )
+        df["normalized_range"] = (df["high"] - df["low"]) / df["atr"]
+        bb = ta.volatility.BollingerBands(df["close"], window=cfg["bb_window"])
+        df["bb_width"] = bb.bollinger_wband()
+        df["volume_ma"] = df["volume"].rolling(cfg["ma_window"]).mean()
+        df["atr_ma"] = df["atr"].rolling(cfg["ma_window"]).mean()
+        return df
+
+    def _precompute_regimes(self, df_prepared: pd.DataFrame) -> List[str]:
+        if classify_regime.__module__ != "crypto_bot.regime.regime_classifier":
+            return [classify_regime(df_prepared.iloc[: i + 1])[0] for i in range(len(df_prepared))]
+
+        cfg = CONFIG
+        trending = (df_prepared["adx"] > cfg["adx_trending_min"]) & (
+            df_prepared["ema_fast"] > df_prepared["ema_slow"]
+        )
+        sideways = (df_prepared["adx"] < cfg["adx_sideways_max"]) & (
+            df_prepared["bb_width"] < cfg["bb_width_sideways_max"]
+        )
+        breakout = (df_prepared["bb_width"] < cfg["bb_width_breakout_max"]) & (
+            df_prepared["volume"] > df_prepared["volume_ma"] * cfg["breakout_volume_mult"]
+        )
+        mean_rev = (
+            df_prepared["rsi"].between(cfg["rsi_mean_rev_min"], cfg["rsi_mean_rev_max"])
+            & ((df_prepared["close"] - df_prepared["ema_fast"]).abs() / df_prepared["close"]
+               < cfg["ema_distance_mean_rev_max"])
+        )
+        volatile = df_prepared["normalized_range"] > cfg["normalized_range_volatility_min"]
+
+        regimes = np.select(
+            [trending, sideways, breakout, mean_rev, volatile],
+            ["trending", "sideways", "breakout", "mean-reverting", "volatile"],
+            default="sideways",
+        )
+        return regimes.tolist()
+
+    def _trade_return(self, entry: float, exit: float, position: str, cost: float) -> float:
+        raw = (exit - entry) / entry if position == "long" else (entry - exit) / entry
+        return raw - cost
+
+    def _run_single(
+        self,
+        df_prepared: pd.DataFrame,
+        stop_loss: float,
+        take_profit: float,
+        rng: np.random.Generator,
+    ) -> dict:
+        cfg = self.config
+        position: Optional[str] = None
+        entry_price = 0.0
+        equity = 1.0
+        peak = 1.0
+        max_dd = 0.0
+        returns: List[float] = []
+        switches = 0
+        misclassified = 0
+        slippage_cost = 0.0
+        position_size = 0.0
+        trailing_stop = None
+        partial_done = False
+
+        last_regime: Optional[str] = None
+        regimes = self._precompute_regimes(df_prepared)
+
+        for i in range(60, len(df_prepared)):
+            subset = df_prepared.iloc[: i + 1]
+            true_regime = regimes[i]
+            regime = true_regime
+            if cfg.misclass_prob > 0 and rng.random() < cfg.misclass_prob:
+                regime = rng.choice([r for r in _REGIMES if r != true_regime])
+                misclassified += 1
+
+            if last_regime is not None and regime != last_regime and position is not None:
+                exit_price = df_prepared["close"].iloc[i]
+                cost = (cfg.fee_pct + cfg.slippage_pct) * 2
+                r = self._trade_return(entry_price, exit_price, position, cost)
+                equity *= 1 + r * position_size
                 returns.append(r)
                 slippage_cost += cost
-                peak_equity = max(peak_equity, equity)
-                max_dd = max(max_dd, 1 - equity / peak_equity)
+                peak = max(peak, equity)
+                max_dd = max(max_dd, 1 - equity / peak)
                 position = None
                 entry_price = 0.0
+                position_size = 0.0
+                trailing_stop = None
+                partial_done = False
+                switches += 1
+            last_regime = regime
 
-    if position is not None:
-        final_price = df["close"].iloc[-1]
-        cost = (fee_pct + slippage_pct) * 2
-        r = _trade_return(entry_price, final_price, position, cost)
-        equity *= 1 + r
-        returns.append(r)
-        slippage_cost += cost
-        peak_equity = max(peak_equity, equity)
-        max_dd = max(max_dd, 1 - equity / peak_equity)
+            strategy_fn = strategy_for(regime)
+            _, direction, _ = evaluate(strategy_fn, subset, None)
+            price = df_prepared["close"].iloc[i]
+            atr = df_prepared["atr"].iloc[i]
 
-    pnl = equity - 1
-    sharpe = 0.0
-    if len(returns) > 1 and np.std(returns) != 0:
-        sharpe = np.mean(returns) / np.std(returns) * np.sqrt(len(returns))
+            if position is None and direction in {"long", "short"}:
+                position = direction
+                entry_price = price
+                position_size = min(1.0, cfg.risk_per_trade_pct / stop_loss)
+                if cfg.trailing_stop_atr_mult:
+                    if position == "long":
+                        trailing_stop = price - atr * cfg.trailing_stop_atr_mult
+                    else:
+                        trailing_stop = price + atr * cfg.trailing_stop_atr_mult
+                continue
 
-    return {
-        "stop_loss_pct": stop_loss,
-        "take_profit_pct": take_profit,
-        "pnl": pnl,
-        "max_drawdown": max_dd,
-        "sharpe": sharpe,
-        "misclassified": misclassified,
-        "switches": switches,
-        "slippage_cost": slippage_cost,
-    }
-
-
-def backtest(
-    symbol: str,
-    timeframe: str,
-    *,
-    since: int,
-    limit: int = 1000,
-    mode: str = "cex",
-    stop_loss_range: Iterable[float] | None = None,
-    take_profit_range: Iterable[float] | None = None,
-    slippage_pct: float = 0.001,
-    fee_pct: float = 0.001,
-    misclass_prob: float = 0.0,
-    seed: Optional[int] = None,
-) -> pd.DataFrame:
-    """Run regime-aware backtests over parameter ranges."""
-    exchange = ccxt.binance()
-    ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
-    df = pd.DataFrame(
-        ohlcv,
-        columns=["timestamp", "open", "high", "low", "close", "volume"],
-    )
-    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-
-    stop_loss_range = stop_loss_range or [0.02]
-    take_profit_range = take_profit_range or [0.04]
-    rng = default_rng(seed)
-
-    results = []
-    for sl in stop_loss_range:
-        for tp in take_profit_range:
-            metrics = _run_single(
-                df,
-                sl,
-                tp,
-                mode,
-                slippage_pct,
-                fee_pct,
-                misclass_prob,
-                rng,
-            )
-            results.append(metrics)
-
-    results_df = pd.DataFrame(results)
-    results_df = results_df.sort_values("sharpe", ascending=False).reset_index(drop=True)
-    return results_df
-
-
-def walk_forward_optimize(
-    symbol: str,
-    timeframe: str,
-    *,
-    since: int,
-    limit: int,
-    window: int,
-    mode: str = "cex",
-    stop_loss_range: Iterable[float] | None = None,
-    take_profit_range: Iterable[float] | None = None,
-    slippage_pct: float = 0.001,
-    fee_pct: float = 0.001,
-    misclass_prob: float = 0.0,
-    seed: Optional[int] = None,
-) -> pd.DataFrame:
-    """Perform walk-forward optimization segmented by regime."""
-    exchange = ccxt.binance()
-    ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
-    df = pd.DataFrame(
-        ohlcv,
-        columns=["timestamp", "open", "high", "low", "close", "volume"],
-    )
-    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-
-    stop_loss_range = stop_loss_range or [0.02]
-    take_profit_range = take_profit_range or [0.04]
-    rng = default_rng(seed)
-
-    results: List[Dict] = []
-    start = 0
-    while start + window * 2 <= len(df):
-        train = df.iloc[start : start + window]
-        test = df.iloc[start + window : start + window * 2]
-        regime, _ = classify_regime(train)
-        best_sl = stop_loss_range[0]
-        best_tp = take_profit_range[0]
-        best_sharpe = -np.inf
-        for sl in stop_loss_range:
-            for tp in take_profit_range:
-                metrics = _run_single(
-                    train,
-                    sl,
-                    tp,
-                    mode,
-                    slippage_pct,
-                    fee_pct,
-                    misclass_prob,
-                    rng,
+            if position is not None:
+                change = (
+                    (price - entry_price) / entry_price
+                    if position == "long"
+                    else (entry_price - price) / entry_price
                 )
-                if metrics["sharpe"] > best_sharpe:
-                    best_sharpe = metrics["sharpe"]
-                    best_sl = sl
-                    best_tp = tp
-        test_metrics = _run_single(
-            test,
-            best_sl,
-            best_tp,
-            mode,
-            slippage_pct,
-            fee_pct,
-            misclass_prob,
-            rng,
+                if cfg.trailing_stop_atr_mult and trailing_stop is not None:
+                    if position == "long":
+                        trailing_stop = max(trailing_stop, price - atr * cfg.trailing_stop_atr_mult)
+                        if price <= trailing_stop:
+                            change = -stop_loss - 0.001  # force exit
+                    else:
+                        trailing_stop = min(trailing_stop, price + atr * cfg.trailing_stop_atr_mult)
+                        if price >= trailing_stop:
+                            change = -stop_loss - 0.001
+
+                if (
+                    cfg.partial_tp_atr_mult
+                    and not partial_done
+                    and position == "long"
+                    and price >= entry_price + atr * cfg.partial_tp_atr_mult
+                ) or (
+                    cfg.partial_tp_atr_mult
+                    and not partial_done
+                    and position == "short"
+                    and price <= entry_price - atr * cfg.partial_tp_atr_mult
+                ):
+                    exit_price = price
+                    cost = (cfg.fee_pct + cfg.slippage_pct) * 2
+                    r = self._trade_return(entry_price, exit_price, position, cost)
+                    equity *= 1 + r * (position_size / 2)
+                    returns.append(r)
+                    slippage_cost += cost
+                    position_size /= 2
+                    partial_done = True
+
+                if change <= -stop_loss or change >= take_profit:
+                    exit_price = price
+                    cost = (cfg.fee_pct + cfg.slippage_pct) * 2
+                    r = self._trade_return(entry_price, exit_price, position, cost)
+                    equity *= 1 + r * position_size
+                    returns.append(r)
+                    slippage_cost += cost
+                    peak = max(peak, equity)
+                    max_dd = max(max_dd, 1 - equity / peak)
+                    position = None
+                    entry_price = 0.0
+                    position_size = 0.0
+                    trailing_stop = None
+                    partial_done = False
+
+        if position is not None:
+            final_price = df_prepared["close"].iloc[-1]
+            cost = (cfg.fee_pct + cfg.slippage_pct) * 2
+            r = self._trade_return(entry_price, final_price, position, cost)
+            equity *= 1 + r * position_size
+            returns.append(r)
+            slippage_cost += cost
+            peak = max(peak, equity)
+            max_dd = max(max_dd, 1 - equity / peak)
+
+        pnl = equity - 1
+        sharpe = 0.0
+        if len(returns) > 1 and np.std(returns) != 0:
+            sharpe = np.mean(returns) / np.std(returns) * np.sqrt(len(returns))
+
+        return {
+            "stop_loss_pct": stop_loss,
+            "take_profit_pct": take_profit,
+            "pnl": pnl,
+            "max_drawdown": max_dd,
+            "sharpe": sharpe,
+            "misclassified": misclassified,
+            "switches": switches,
+            "slippage_cost": slippage_cost,
+        }
+
+    # ------------------------------------------------------------------
+    # Public APIs
+    # ------------------------------------------------------------------
+    def run_grid(self) -> pd.DataFrame:
+        """Bayesian optimisation over stop loss and take profit."""
+        from skopt import BayesSearchCV
+        from skopt.space import Real
+        from sklearn.base import BaseEstimator
+        from tqdm import tqdm
+        from joblib import Parallel, delayed
+
+        cfg = self.config
+
+        if len(cfg.stop_loss_range) == 1 and len(cfg.take_profit_range) == 1:
+            metrics = self._run_single(
+                self.df_prepared,
+                cfg.stop_loss_range[0],
+                cfg.take_profit_range[0],
+                self.rng,
+            )
+            return pd.DataFrame([metrics])
+
+        class Estimator(BaseEstimator):
+            def __init__(self, runner: BacktestRunner, stop_loss: float = 0.02, take_profit: float = 0.04) -> None:
+                self.runner = runner
+                self.stop_loss = stop_loss
+                self.take_profit = take_profit
+
+            def fit(self, X, y=None):  # noqa: D401 - sklearn API
+                return self
+
+            def score(self, X, y=None):  # noqa: D401 - sklearn API
+                res = self.runner._run_single(self.runner.df_prepared, self.stop_loss, self.take_profit, self.runner.rng)
+                return res["sharpe"]
+
+        search_spaces = {
+            "stop_loss": Real(min(cfg.stop_loss_range), max(cfg.stop_loss_range)),
+            "take_profit": Real(min(cfg.take_profit_range), max(cfg.take_profit_range)),
+        }
+        est = Estimator(self)
+        opt = BayesSearchCV(est, search_spaces, n_iter=10, n_jobs=-1, cv=[(slice(None), slice(None))])
+        dummy_X = np.zeros((1, 1))
+        with tqdm(total=opt.n_iter, desc="optimising") as bar:
+            opt.fit(dummy_X, [0], callback=lambda res: bar.update())
+
+        metrics = Parallel(n_jobs=-1)(
+            delayed(self._run_single)(self.df_prepared, p["stop_loss"], p["take_profit"], self.rng)
+            for p in opt.cv_results_["params"]
         )
-        test_metrics.update(
+        df = pd.DataFrame(metrics)
+        return df.sort_values("sharpe", ascending=False).reset_index(drop=True)
+
+    def run_walk_forward(self, rolling: bool = True) -> pd.DataFrame:
+        """Perform walk-forward optimisation."""
+        cfg = self.config
+        sl_range = list(cfg.stop_loss_range)
+        tp_range = list(cfg.take_profit_range)
+        df = self.df_prepared
+        results: List[dict] = []
+        start = 0
+        step = 1 if rolling else cfg.window
+        while start + cfg.window * 2 <= len(df):
+            train = df.iloc[start : start + cfg.window]
+            test = df.iloc[start + cfg.window : start + cfg.window * 2]
+            regime, _ = classify_regime(train)
+            best_sl = sl_range[0]
+            best_tp = tp_range[0]
+            best_sharpe = -np.inf
+            for sl in sl_range:
+                for tp in tp_range:
+                    metrics = self._run_single(train, sl, tp, self.rng)
+                    if metrics["sharpe"] > best_sharpe:
+                        best_sharpe = metrics["sharpe"]
+                        best_sl = sl
+                        best_tp = tp
+            test_metrics = self._run_single(test, best_sl, best_tp, self.rng)
+            test_metrics.update(
+                {
+                    "regime": regime,
+                    "train_stop_loss_pct": best_sl,
+                    "train_take_profit_pct": best_tp,
+                }
+            )
+            results.append(test_metrics)
+            start += step
+
+        return pd.DataFrame(results)
+
+    def report(self, df_results: pd.DataFrame) -> pd.DataFrame:
+        """Return summary statistics and equity curve."""
+        import matplotlib.pyplot as plt
+
+        pnl = df_results["pnl"].sum()
+        returns = df_results["pnl"].values
+        sharpe = 0.0
+        if len(returns) > 1 and np.std(returns) != 0:
+            sharpe = np.mean(returns) / np.std(returns) * np.sqrt(len(returns))
+        sortino = 0.0
+        downside = np.std([r for r in returns if r < 0]) or 1e-8
+        sortino = np.mean(returns) / downside * np.sqrt(len(returns))
+        calmar = 0.0
+        dd = df_results["max_drawdown"].max() or 1e-8
+        calmar = pnl / dd
+        wins = sum(r > 0 for r in returns)
+        losses = sum(r <= 0 for r in returns)
+        win_loss = wins / max(1, losses)
+        expectancy = np.mean(returns) if len(returns) else 0.0
+
+        eq = (1 + df_results["pnl"]).cumprod()
+        plt.figure(figsize=(8, 3))
+        plt.plot(eq)
+        plt.title("Equity Curve")
+        plt.xlabel("Trade")
+        plt.ylabel("Equity")
+        plt.tight_layout()
+        plt.close()
+
+        return pd.DataFrame(
             {
-                "regime": regime,
-                "train_stop_loss_pct": best_sl,
-                "train_take_profit_pct": best_tp,
+                "pnl": [pnl],
+                "sharpe": [sharpe],
+                "sortino": [sortino],
+                "calmar": [calmar],
+                "win_loss": [win_loss],
+                "expectancy": [expectancy],
             }
         )
-        results.append(test_metrics)
-        start += window
 
-    return pd.DataFrame(results)

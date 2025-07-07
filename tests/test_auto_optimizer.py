@@ -11,7 +11,14 @@ def test_optimize_strategies_writes_best_params(tmp_path, monkeypatch):
         {"stop_loss_pct": 0.01, "take_profit_pct": 0.02, "sharpe": 1.0, "max_drawdown": 0.1},
         {"stop_loss_pct": 0.02, "take_profit_pct": 0.03, "sharpe": 0.5, "max_drawdown": 0.05},
     ])
-    monkeypatch.setattr(auto_optimizer.backtest_runner, "backtest", lambda *a, **k: data)
+    class DummyRunner:
+        def __init__(self, *a, **k):
+            pass
+
+        def run_grid(self):
+            return data
+
+    monkeypatch.setattr(auto_optimizer, "BacktestRunner", DummyRunner)
 
     cfg = {
         "symbol": "BTC/USDT",
