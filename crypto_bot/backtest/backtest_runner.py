@@ -5,11 +5,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 import ccxt
 import numpy as np
 import pandas as pd
+from numpy.random import default_rng, Generator
+
 import ta
 
 from crypto_bot.regime.regime_classifier import CONFIG, classify_regime
