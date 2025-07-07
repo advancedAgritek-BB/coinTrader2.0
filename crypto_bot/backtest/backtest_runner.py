@@ -4,6 +4,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional
 from numpy.random import default_rng, Generator
+from dataclasses import dataclass
 
 import ta
 from crypto_bot.regime.regime_classifier import classify_regime, CONFIG
@@ -346,6 +347,12 @@ class BacktestRunner:
 
     def run_grid(self) -> pd.DataFrame:
         """Execute the standard grid search backtest."""
+    """Simple wrapper for backtest routines using a config object."""
+
+    def __init__(self, config: BacktestConfig):
+        self.config = config
+
+    def run(self) -> pd.DataFrame:
         return backtest(
             self.config.symbol,
             self.config.timeframe,
@@ -359,3 +366,20 @@ class BacktestRunner:
             misclass_prob=self.config.misclass_prob,
             seed=self.config.seed,
         )
+
+    def walk_forward(self, window: int) -> pd.DataFrame:
+        return walk_forward_optimize(
+            self.config.symbol,
+            self.config.timeframe,
+            since=self.config.since,
+            limit=self.config.limit,
+            window=window,
+            mode=self.config.mode,
+            stop_loss_range=self.config.stop_loss_range,
+            take_profit_range=self.config.take_profit_range,
+            slippage_pct=self.config.slippage_pct,
+            fee_pct=self.config.fee_pct,
+            misclass_prob=self.config.misclass_prob,
+            seed=self.config.seed,
+        )
+
