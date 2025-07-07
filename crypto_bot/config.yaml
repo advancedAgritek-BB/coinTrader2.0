@@ -28,19 +28,6 @@ breakout:
   squeeze_threshold: 0.03
   volume_mult: 2
   volume_window: 20
-grid_bot:
-  range_window: 20
-  atr_period: 14
-  spacing_factor: 0.75
-  trend_ema_fast: 50
-  trend_ema_slow: 200
-  volume_ma_window: 20
-  volume_multiple: 1.5
-  vol_zscore_threshold: 2.0
-  max_active_legs: 4
-  cooldown_bars: 6
-  breakout_mult: 1.5
-  atr_normalization: true
 cycle_bias:
   enabled: true
   mvrv_url: https://api.example.com/mvrv
@@ -62,6 +49,19 @@ exit_strategy:
   trailing_stop_factor: 2.0
   trailing_stop_pct: 0.07
 force_websocket_history: false
+grid_bot:
+  atr_normalization: true
+  atr_period: 14
+  breakout_mult: 1.5
+  cooldown_bars: 6
+  max_active_legs: 4
+  range_window: 20
+  spacing_factor: 0.75
+  trend_ema_fast: 50
+  trend_ema_slow: 200
+  vol_zscore_threshold: 2.0
+  volume_ma_window: 20
+  volume_multiple: 1.5
 liquidity_check: true
 liquidity_depth: 10
 log_to_google: true
@@ -71,6 +71,7 @@ max_change_pct: 10
 max_concurrent_ohlcv: 50
 max_latency_ms: 1000
 max_ohlcv_failures: 3
+max_open_trades: 3
 max_slippage_pct: 0.1
 max_spread_pct: 5
 max_vol: 1000000
@@ -183,6 +184,7 @@ tax_tracking:
   export_path: crypto_bot/logs/tax_trades.csv
 telegram:
   chat_id: your_chat_id
+  command_cooldown: 5
   enabled: true
   token: your_telegram_token
   trade_updates: true
@@ -195,7 +197,6 @@ timeframes:
 top_n_symbols: 3
 tp_pct: 0.07
 trade_size_pct: 0.2
-max_open_trades: 3
 trend:
   atr_period: 14
   k: 1.0
