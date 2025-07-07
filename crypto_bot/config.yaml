@@ -28,6 +28,19 @@ breakout:
   squeeze_threshold: 0.03
   volume_mult: 2
   volume_window: 20
+grid_bot:
+  range_window: 20
+  atr_period: 14
+  spacing_factor: 0.75
+  trend_ema_fast: 50
+  trend_ema_slow: 200
+  volume_ma_window: 20
+  volume_multiple: 1.5
+  vol_zscore_threshold: 2.0
+  max_active_legs: 4
+  cooldown_bars: 6
+  breakout_mult: 1.5
+  atr_normalization: true
 cycle_bias:
   enabled: true
   mvrv_url: https://api.example.com/mvrv
