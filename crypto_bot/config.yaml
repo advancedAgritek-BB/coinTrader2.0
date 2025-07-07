@@ -184,6 +184,7 @@ tax_tracking:
   export_path: crypto_bot/logs/tax_trades.csv
 telegram:
   chat_id: your_chat_id
+  command_cooldown: 5
   enabled: true
   token: your_telegram_token
   chat_admins: your_chat_id

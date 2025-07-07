@@ -314,6 +314,7 @@ async def _main_impl() -> TelegramNotifier:
             rotator,
             exchange,
             user.get("wallet_address", ""),
+            command_cooldown=config.get("telegram", {}).get("command_cooldown", 5),
         )
         if notifier.enabled
         else None
