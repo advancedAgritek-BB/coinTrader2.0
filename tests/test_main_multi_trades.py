@@ -16,13 +16,15 @@ class PriceExchange:
 def test_multi_trade_stats(tmp_path: Path):
     log_file = tmp_path / "trades.csv"
     log_file.write_text(
-        "BTC/USDT,buy,1,100,t1\nETH/USDT,buy,1,50,t2\nBTC/USDT,sell,0.5,110,t3\n"
+        "BTC/USDT,buy,1,100,t1\n"
+        "ETH/USDT,sell,1,60,t2\n"
+        "BTC/USDT,sell,0.5,110,t3\n"
     )
 
     open_trades = get_open_trades(log_file)
     assert len(open_trades) == 2
 
-    ex = PriceExchange({"BTC/USDT": 120, "ETH/USDT": 60})
+    ex = PriceExchange({"BTC/USDT": 120, "ETH/USDT": 55})
     lines = asyncio.run(trade_stats_lines(ex, log_file))
-    assert "BTC/USDT +10.00" in lines[0] or "BTC/USDT +10.00" in lines[1]
-    assert "ETH/USDT +10.00" in lines[0] or "ETH/USDT +10.00" in lines[1]
+    assert "BTC/USDT +10.00" in " ".join(lines)
+    assert "ETH/USDT +5.00" in " ".join(lines)

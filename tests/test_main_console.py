@@ -35,14 +35,17 @@ class PriceExchange:
 
 def test_trade_stats_line(tmp_path):
     trade_file = tmp_path / "trades.csv"
-    trade_file.write_text("BTC/USDT,buy,1,100,ts\n")
-    ex = PriceExchange({"BTC/USDT": 110})
+    trade_file.write_text(
+        "BTC/USDT,buy,1,100,ts1\nETH/USDT,sell,2,60,ts2\n"
+    )
+    ex = PriceExchange({"BTC/USDT": 110, "ETH/USDT": 55})
     line = asyncio.run(console_monitor.trade_stats_line(ex, trade_file))
     assert "BTC/USDT" in line
+    assert "ETH/USDT" in line
     assert "+10.00" in line
 
     lines = asyncio.run(console_monitor.trade_stats_lines(ex, trade_file))
-    assert lines == ["BTC/USDT +10.00"]
+    assert sorted(lines) == ["BTC/USDT +10.00", "ETH/USDT +10.00"]
 
 
 class StopLoop(Exception):

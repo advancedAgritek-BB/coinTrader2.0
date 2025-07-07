@@ -18,6 +18,10 @@ from crypto_bot import log_reader
 def get_open_trades(log_path: Path) -> List[Dict]:
     """Return a list of open trade entries from ``log_path``.
 
+    Each returned dictionary contains ``symbol``, ``side``, ``amount``, ``price``
+    and ``entry_time`` keys. Buy orders are matched with later sells on a FIFO
+    basis to determine remaining open quantity per symbol. If sells exceed buys
+    the remaining quantity is treated as an open short position.
     The returned dictionaries contain ``symbol``, ``side`` (``"long"`` or
     ``"short"``), ``amount``, ``price`` and ``entry_time`` keys. Buy orders are
     matched with sells on a FIFO basis while unmatched sells produce short
@@ -27,6 +31,9 @@ def get_open_trades(log_path: Path) -> List[Dict]:
     if df.empty:
         return []
 
+    # Map symbol to list of open long and short positions in order of entry
+    open_longs: Dict[str, List[Dict]] = {}
+    open_shorts: Dict[str, List[Dict]] = {}
     # Maintain separate FIFO queues for long and short entries per symbol
     long_positions: Dict[str, List[Dict]] = {}
     short_positions: Dict[str, List[Dict]] = {}
@@ -46,6 +53,23 @@ def get_open_trades(log_path: Path) -> List[Dict]:
 
         if side == "buy":
             qty = amount
+            # close existing shorts first
+            positions = open_shorts.get(symbol, [])
+            while qty > 0 and positions:
+                pos = positions[0]
+                if pos["amount"] <= qty:
+                    qty -= pos["amount"]
+                    positions.pop(0)
+                else:
+                    pos["amount"] -= qty
+                    qty = 0
+            if not positions:
+                open_shorts.pop(symbol, None)
+            if qty > 0:
+                open_longs.setdefault(symbol, []).append(
+                    {
+                        "symbol": symbol,
+                        "side": "buy",
             shorts = short_positions.get(symbol, [])
             # Close existing shorts first
             while qty > 0 and shorts:
@@ -72,6 +96,10 @@ def get_open_trades(log_path: Path) -> List[Dict]:
 
         if side == "sell":
             qty = amount
+            # close existing longs first
+            positions = open_longs.get(symbol, [])
+            while qty > 0 and positions:
+                pos = positions[0]
             longs = long_positions.get(symbol, [])
             # Close existing longs first
             while qty > 0 and longs:
@@ -82,6 +110,13 @@ def get_open_trades(log_path: Path) -> List[Dict]:
                 else:
                     pos["amount"] -= qty
                     qty = 0
+            if not positions:
+                open_longs.pop(symbol, None)
+            if qty > 0:
+                open_shorts.setdefault(symbol, []).append(
+                    {
+                        "symbol": symbol,
+                        "side": "sell",
             if not longs:
                 long_positions.pop(symbol, None)
             if qty > 0:
@@ -97,6 +132,9 @@ def get_open_trades(log_path: Path) -> List[Dict]:
 
     # Flatten remaining positions preserving entry order
     result: List[Dict] = []
+    for positions in open_longs.values():
+        result.extend(positions)
+    for positions in open_shorts.values():
     for positions in long_positions.values():
         result.extend(positions)
     for positions in short_positions.values():
