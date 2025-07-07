@@ -259,9 +259,9 @@ The bounce scalper looks for short-term reversals when a volume spike confirms m
    control the bot. You can also provide this list via the `TELE_CHAT_ADMINS`
    environment variable.
 2. Send `/start` to your bot so it can message you. Use `/menu` at any time to
-   open a list of buttons—**Start**, **Stop**, **Status**, **Log**, **Rotate
-   Now**, **Toggle Mode**, **Signals**, **Balance** and **Trades**—for quick
-   interaction.
+   open an interactive button menu—**Start**, **Stop**, **Status**, **Log**,
+   **Rotate Now**, **Toggle Mode**, **Signals**, **Balance** and **Trades**—for
+   quick interaction.
 3. You can also issue these commands directly:
    - `/signals` – show the latest scored assets
    - `/balance` – display your current exchange holdings
