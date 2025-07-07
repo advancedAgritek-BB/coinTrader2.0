@@ -185,6 +185,7 @@ telegram:
   chat_id: your_chat_id
   enabled: true
   token: your_telegram_token
+  chat_admins: your_chat_id
   trade_updates: true
 testing_mode: true
 timeframe: 1h
