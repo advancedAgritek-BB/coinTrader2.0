@@ -1,7 +1,5 @@
 from dataclasses import asdict, dataclass, fields
 from typing import Optional, Tuple, Union
-from dataclasses import dataclass, fields
-from typing import Optional, Tuple, Union
 
 from crypto_bot import cooldown_manager
 
@@ -18,14 +16,23 @@ class BounceScalperConfig:
     """Configuration for :func:`generate_signal`."""
 
     rsi_window: int = 14
-    oversold: float = 30
-    overbought: float = 70
+    oversold: float = 30.0
+    overbought: float = 70.0
     vol_window: int = 20
     zscore_threshold: float = 2.0
     volume_multiple: float = 2.0
     ema_window: int = 50
     atr_window: int = 14
     down_candles: int = 3
+    up_candles: int = 3
+    trend_ema_fast: int = 9
+    trend_ema_slow: int = 21
+    cooldown_bars: int = 2
+    atr_period: int = 14
+    stop_loss_atr_mult: float = 1.5
+    take_profit_atr_mult: float = 2.0
+    min_score: float = 0.3
+    max_concurrent_signals: int = 1
     strategy: str = "bounce_scalper"
     symbol: str = ""
     atr_normalization: bool = True
@@ -50,7 +57,6 @@ def _as_dict(cfg: ConfigType) -> dict:
     return dict(cfg)
 
 
-def generate_signal(df: pd.DataFrame, config: ConfigType = None) -> Tuple[float, str]:
 def is_engulfing(df: pd.DataFrame, body_pct: float) -> Optional[str]:
     """Return ``"bullish"`` or ``"bearish"`` if the last candle engulfs the
     previous one and its body is at least ``body_pct`` of the range."""
@@ -132,19 +138,6 @@ def confirm_lower_highs(df: pd.DataFrame, bars: int) -> bool:
     return highs.diff().dropna().lt(0).all()
 
 
-def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
-    """Identify short-term bounces with volume confirmation.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        OHLCV data.
-    config : dict, optional
-        Optional configuration. ``symbol`` can be provided to enable cooldown
-        checks. ``order_book`` may contain a parsed order book snapshot from
-        :func:`kraken_ws.parse_book_message` and ``imbalance_ratio`` sets the
-        required bid/ask volume ratio.
-    """
 @dataclass
 class BounceScalperConfig:
     """Configuration options for :func:`generate_signal`."""
@@ -182,45 +175,33 @@ def generate_signal(
     if df.empty:
         return 0.0, "none"
 
-    cfg = _as_dict(config)
+    cfg_dict = _as_dict(config)
+    cfg = BounceScalperConfig.from_dict(cfg_dict)
 
-    symbol = cfg.get("symbol", "")
-    strategy = cfg.get("strategy", "bounce_scalper")
+    symbol = cfg.symbol
+    strategy = cfg.strategy
     if symbol and in_cooldown(symbol, strategy):
         return 0.0, "none"
 
-    cfg = config or {}
-    symbol = cfg.get("symbol")
+    rsi_window = cfg.rsi_window
+    oversold = cfg.oversold
+    overbought = cfg.overbought
+    vol_window = cfg.vol_window
+    zscore_threshold = cfg.zscore_threshold
+    volume_multiple = cfg.volume_multiple
+    ema_window = cfg.ema_window
+    atr_window = cfg.atr_window
+    down_candles = cfg.down_candles
+    up_candles = cfg.up_candles
+    body_pct = cfg_dict.get("body_pct", 0.5)
 
-    if symbol and cooldown_manager.in_cooldown(symbol, "bounce_scalper"):
-        return 0.0, "none"
-    rsi_window = int(cfg.get("rsi_window", 14))
-    oversold = float(cfg.get("oversold", 30))
-    overbought = float(cfg.get("overbought", 70))
-    vol_window = int(cfg.get("vol_window", 20))
-    zscore_threshold = float(cfg.get("zscore_threshold", 2.0))
-    volume_multiple = float(cfg.get("volume_multiple", 2.0))
-    ema_window = int(cfg.get("ema_window", 50))
-    atr_window = int(cfg.get("atr_window", 14))
-    zscore_threshold = float(cfg.get("zscore_threshold", 2.0))
-    down_candles = int(cfg.get("down_candles", 3))
-    up_candles = int(cfg.get("up_candles", 3))
-    body_pct = float(cfg.get("body_pct", 0.5))
-    params = (
-        config
-        if isinstance(config, BounceScalperConfig)
-        else BounceScalperConfig.from_dict(config)
+    lookback = max(
+        rsi_window,
+        vol_window,
+        down_candles + 1,
+        up_candles + 1,
+        2,
     )
-
-    rsi_window = params.rsi_window
-    oversold = params.oversold
-    overbought = params.overbought
-    vol_window = params.vol_window
-    volume_multiple = params.volume_multiple
-    down_candles = params.down_candles
-
-    lookback = max(rsi_window, vol_window, ema_window, atr_window, down_candles + 1)
-    lookback = max(rsi_window, vol_window, down_candles + 1, up_candles + 1, 2)
     if len(df) < lookback:
         return 0.0, "none"
 
@@ -229,8 +210,9 @@ def generate_signal(
     df["vol_ma"] = df["volume"].rolling(window=vol_window).mean()
     df["vol_std"] = df["volume"].rolling(window=vol_window).std()
     df["ema"] = ta.trend.ema_indicator(df["close"], window=ema_window)
+    atr_window_used = min(atr_window, len(df))
     df["atr"] = ta.volatility.average_true_range(
-        df["high"], df["low"], df["close"], window=atr_window
+        df["high"], df["low"], df["close"], window=atr_window_used
     )
 
     latest = df.iloc[-1]
@@ -252,21 +234,24 @@ def generate_signal(
 
     trend_ok_long = latest["close"] > latest["ema"]
     trend_ok_short = latest["close"] < latest["ema"]
+
     recent = df.iloc[-(lookback + 1) :]
-
-    rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
+    rsi_series = ta.momentum.rsi(recent["close"], window=rsi_window)
     vol_ma = recent["volume"].rolling(window=vol_window).mean()
-
-    rsi = cache_series("rsi", df, rsi, lookback)
+    rsi_series = cache_series("rsi", df, rsi_series, lookback)
     vol_ma = cache_series("vol_ma", df, vol_ma, lookback)
 
     df = recent.copy()
-    df["rsi"] = rsi
+    df["rsi"] = rsi_series
     df["vol_ma"] = vol_ma
 
     latest = df.iloc[-1]
     prev_close = df["close"].iloc[-2]
-    vol_z = (latest["volume"] - latest["vol_ma"]) / latest["vol_std"] if latest["vol_std"] > 0 else float("inf")
+    vol_z = (
+        (latest["volume"] - latest["vol_ma"]) / latest["vol_std"]
+        if latest["vol_std"] > 0
+        else float("inf")
+    )
     volume_spike = vol_z > zscore_threshold
 
     eng_type = is_engulfing(df, body_pct)
@@ -324,12 +309,12 @@ def generate_signal(
         direction = "short"
 
     if score > 0:
-        if cfg.get("atr_normalization", True):
+        if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
         if symbol:
             mark_cooldown(symbol, strategy)
-        book = cfg.get("order_book")
-        ratio = float(cfg.get("imbalance_ratio", 0))
+        book = cfg_dict.get("order_book")
+        ratio = float(cfg_dict.get("imbalance_ratio", 0))
         if ratio and isinstance(book, dict):
             bids = sum(v for _, v in book.get("bids", []))
             asks = sum(v for _, v in book.get("asks", []))
@@ -339,12 +324,5 @@ def generate_signal(
                     return 0.0, "none"
                 if direction == "short" and (1 / bid_ask) < ratio:
                     return 0.0, "none"
-
-    if score > 0 and (config is None or config.get("atr_normalization", True)):
-    if score > 0 and params.atr_normalization:
-        score = normalize_score_by_volatility(df, score)
-
-    if score > 0 and symbol:
-        cooldown_manager.mark_cooldown(symbol, "bounce_scalper")
 
     return score, direction

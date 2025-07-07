@@ -56,8 +56,15 @@ class RiskManager:
         self.capital_tracker = CapitalTracker(config.strategy_allocation or {})
         self.equity = 1.0
         self.peak_equity = 1.0
-        self.stop_order = None
+        self.stop_orders: dict[str, dict] = {}
+        self.stop_order: dict | None = None
+        # Track protective stop orders for each open trade by symbol
+        self.stop_orders: dict[str, dict] = {}
         self.boost = 1.0
+
+    def get_stop_order(self, symbol: str) -> dict | None:
+        """Return the stop order for ``symbol`` if present."""
+        return self.stop_orders.get(symbol)
 
     def update_allocation(self, weights: dict) -> None:
         """Update strategy allocation weights at runtime."""
@@ -265,8 +272,11 @@ class RiskManager:
         order = dict(order)
         if strategy is not None:
             order["strategy"] = strategy
-        if symbol is not None:
-            order["symbol"] = symbol
+        if symbol is None:
+            symbol = order.get("symbol")
+        if symbol is None:
+            raise ValueError("Symbol required to register stop order")
+        order["symbol"] = symbol
         if entry_price is not None:
             order["entry_price"] = entry_price
         if confidence is not None:
@@ -276,26 +286,50 @@ class RiskManager:
         if take_profit is not None:
             order["take_profit"] = take_profit
         self.stop_order = order
+        if symbol is not None:
+            self.stop_orders[symbol] = order
         logger.info("Registered stop order %s", order)
 
-    def update_stop_order(self, new_amount: float) -> None:
+    def update_stop_order(self, new_amount: float, symbol: str | None = None) -> None:
         """Update the stored stop order amount."""
-        if self.stop_order:
-            self.stop_order["amount"] = new_amount
+        order = self.stop_orders.get(symbol) if symbol else self.stop_order
+        if order:
+            order["amount"] = new_amount
+            if symbol:
+                self.stop_orders[symbol] = order
+            else:
+                self.stop_order = order
             logger.info("Updated stop order amount to %.4f", new_amount)
 
-    def cancel_stop_order(self, exchange) -> None:
+    def cancel_stop_order(self, exchange, symbol: str | None = None) -> None:
         """Cancel the existing stop order on the exchange if needed."""
-        if not self.stop_order:
+        order = self.stop_orders.get(symbol) if symbol else self.stop_order
+        self.stop_orders[symbol] = order
+        logger.info("Registered stop order %s", order)
+
+    def update_stop_order(self, symbol: str, new_amount: float) -> None:
+        """Update the stored stop order amount for ``symbol``."""
+        order = self.stop_orders.get(symbol)
+        if order:
+            order["amount"] = new_amount
+            logger.info("Updated stop order for %s amount to %.4f", symbol, new_amount)
+
+    def cancel_stop_order(self, exchange, symbol: str) -> None:
+        """Cancel the existing stop order for ``symbol`` if needed."""
+        order = self.stop_orders.get(symbol)
+        if not order:
             return
-        order = self.stop_order
         if not order.get("dry_run") and "id" in order:
             try:
                 exchange.cancel_order(order["id"], order.get("symbol"))
                 logger.info("Cancelled stop order %s", order.get("id"))
             except Exception as e:
                 logger.error("Failed to cancel stop order: %s", e)
-        self.stop_order = None
+        if symbol:
+            self.stop_orders.pop(symbol, None)
+        else:
+            self.stop_order = None
+        del self.stop_orders[symbol]
 
     def can_allocate(self, strategy: str, amount: float, balance: float) -> bool:
         """Check if ``strategy`` can use additional ``amount`` capital."""
