@@ -5,14 +5,17 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 
 # Provide a minimal stub for the optional ``telegram`` package so modules that
-# depend on it can be imported without the real dependency.
-class _FakeTelegram:
-    class Bot:
-        def __init__(self, *a, **k):
-            pass
+# depend on it can be imported without the real dependency. If the real package
+# is installed we prefer to use it so related tests can run.
+try:  # pragma: no cover - optional dependency
+    import telegram  # type: ignore
+except Exception:  # pragma: no cover - telegram not installed
+    class _FakeTelegram:
+        class Bot:
+            def __init__(self, *a, **k):
+                pass
 
-
-sys.modules.setdefault("telegram", _FakeTelegram())
+    sys.modules.setdefault("telegram", _FakeTelegram())
 
 
 # Lightweight stub for ``scipy`` used in some utility modules.

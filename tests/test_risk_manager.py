@@ -287,6 +287,20 @@ def test_position_size_risk_based():
     assert size == 1.0
 
 
+def test_position_size_risk_based_capped():
+    manager = RiskManager(
+        RiskConfig(
+            max_drawdown=1,
+            stop_loss_pct=0.01,
+            take_profit_pct=0.01,
+            risk_pct=1.0,
+            trade_size_pct=0.1,
+        )
+    )
+    size = manager.position_size(1.0, 1000, stop_distance=0.01, price=1)
+    assert size == 100
+
+
 def test_position_size_uses_atr():
     manager = RiskManager(
         RiskConfig(
