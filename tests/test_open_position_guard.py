@@ -6,16 +6,16 @@ from crypto_bot.main import direction_to_side
 
 def test_open_position_guard(monkeypatch):
     wallet = PaperWallet(1000.0)
-    wallet.open("buy", 1.0, 100.0)
+    wallet.open("BTC/USDT", "buy", 1.0, 100.0)
 
     calls = {"count": 0}
 
-    def record_open(side, amount, price):
+    def record_open(symbol, side, amount, price):
         calls["count"] += 1
 
     monkeypatch.setattr(wallet, "open", record_open)
 
-    open_side = "buy"
+    positions = {"BTC/USDT": {"side": "buy"}}
     filtered_results = [
         {
             "symbol": "ETH/USDT",
@@ -30,7 +30,7 @@ def test_open_position_guard(monkeypatch):
     config = {"execution_mode": "dry_run", "signal_threshold": 0.0}
 
     # Simulate the main loop section responsible for opening trades
-    if open_side:
+    if positions:
         pass
     elif not filtered_results:
         pass
@@ -39,7 +39,7 @@ def test_open_position_guard(monkeypatch):
             trade_side = direction_to_side(candidate["direction"])
             current_price = candidate["df"]["close"].iloc[-1]
             if config["execution_mode"] == "dry_run" and wallet:
-                wallet.open(trade_side, 1.0, current_price)
+                wallet.open(candidate["symbol"], trade_side, 1.0, current_price)
 
     assert calls["count"] == 0
 

@@ -1,16 +1,14 @@
 class PaperWallet:
-    """Simple wallet for paper trading."""
+    """Simple wallet for paper trading supporting multiple positions."""
 
     def __init__(self, balance: float) -> None:
         self.balance = balance
-        self.position_size = 0.0
-        self.entry_price: float | None = None
-        self.side: str | None = None
+        self.positions: dict[str, dict] = {}
         self.realized_pnl = 0.0
 
-    def open(self, side: str, amount: float, price: float) -> None:
-        if self.position_size:
-            raise RuntimeError("Position already open")
+    def open(self, symbol: str, side: str, amount: float, price: float) -> None:
+        if symbol in self.positions:
+            raise RuntimeError("Position already open for symbol")
         if side == "buy":
             cost = amount * price
             if cost > self.balance:
@@ -18,30 +16,35 @@ class PaperWallet:
             self.balance -= cost
         else:
             self.balance += amount * price
-        self.position_size = amount
-        self.entry_price = price
-        self.side = side
+        self.positions[symbol] = {
+            "side": side,
+            "size": amount,
+            "entry_price": price,
+        }
 
-    def close(self, amount: float, price: float) -> float:
-        if self.position_size == 0:
+    def close(self, symbol: str, amount: float, price: float) -> float:
+        pos = self.positions.get(symbol)
+        if not pos:
             return 0.0
-        if self.side == "buy":
+        amount = min(amount, pos["size"])
+        if pos["side"] == "buy":
             self.balance += amount * price
-            pnl = (price - (self.entry_price or 0)) * amount
+            pnl = (price - pos["entry_price"]) * amount
         else:
             self.balance -= amount * price
-            pnl = ((self.entry_price or 0) - price) * amount
-        self.position_size -= amount
-        if self.position_size <= 0:
-            self.position_size = 0.0
-            self.entry_price = None
-            self.side = None
+            pnl = (pos["entry_price"] - price) * amount
+        pos["size"] -= amount
+        if pos["size"] <= 0:
+            del self.positions[symbol]
+        else:
+            self.positions[symbol] = pos
         self.realized_pnl += pnl
         return pnl
 
-    def unrealized(self, price: float) -> float:
-        if self.position_size and self.entry_price is not None and self.side:
-            if self.side == "buy":
-                return (price - self.entry_price) * self.position_size
-            return (self.entry_price - price) * self.position_size
-        return 0.0
+    def unrealized(self, symbol: str, price: float) -> float:
+        pos = self.positions.get(symbol)
+        if not pos:
+            return 0.0
+        if pos["side"] == "buy":
+            return (price - pos["entry_price"]) * pos["size"]
+        return (pos["entry_price"] - price) * pos["size"]

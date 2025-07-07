@@ -59,8 +59,8 @@ def test_close_trade_logs_realized_pnl(tmp_path, monkeypatch):
     monkeypatch.setattr(pl, "logger", logger)
 
     wallet = PaperWallet(1000.0)
-    wallet.open("buy", 1.0, 100.0)
-    wallet.close(1.0, 90.0)
+    wallet.open("BTC/USDT", "buy", 1.0, 100.0)
+    wallet.close("BTC/USDT", 1.0, 90.0)
 
     pl.log_position("BTC/USDT", "buy", 1.0, 100.0, 90.0, wallet.balance)
 

@@ -164,10 +164,10 @@ def test_allow_trade_rejects_on_volatility_drop():
 def test_stop_order_management():
     manager = RiskManager(RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01))
     order = {"id": "1", "symbol": "BTC/USDT", "side": "sell", "amount": 1, "dry_run": True}
-    manager.register_stop_order(order)
-    assert manager.stop_order["amount"] == 1
-    manager.update_stop_order(0.5)
-    assert manager.stop_order["amount"] == 0.5
+    manager.register_stop_order(order, symbol="BTC/USDT")
+    assert manager.stop_orders["BTC/USDT"]["amount"] == 1
+    manager.update_stop_order(0.5, symbol="BTC/USDT")
+    assert manager.stop_orders["BTC/USDT"]["amount"] == 0.5
 
     class DummyEx:
         def __init__(self):
@@ -177,8 +177,8 @@ def test_stop_order_management():
             self.cancelled = True
 
     ex = DummyEx()
-    manager.cancel_stop_order(ex)
-    assert manager.stop_order is None
+    manager.cancel_stop_order(ex, symbol="BTC/USDT")
+    assert "BTC/USDT" not in manager.stop_orders
 
 
 def test_position_size_uses_trade_size_pct_when_no_stop():

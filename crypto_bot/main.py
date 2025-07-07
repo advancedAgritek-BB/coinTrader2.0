@@ -277,18 +277,8 @@ async def _main_impl() -> TelegramNotifier:
         )
     )
 
-    open_side = None
-    open_symbol = None
-    entry_price = None
-    entry_time = None
-    entry_regime = None
-    entry_strategy = None
-    entry_confidence = 0.0
-    realized_pnl = 0.0
-    trailing_stop = 0.0
-    position_size = 0.0
-    highest_price = 0.0
-    current_strategy = None
+    positions: dict[str, dict] = {}
+    max_open_trades = config.get("max_open_trades", 1)
     active_strategy = None
     last_balance: float | None = None
     stats_file = Path("crypto_bot/logs/strategy_stats.json")
@@ -496,7 +486,7 @@ async def _main_impl() -> TelegramNotifier:
                 df_sym = pd.DataFrame(df_sym.to_numpy(), columns=expected_cols)
             logger.info("Fetched %d candles for %s", len(df_sym), sym)
             df_map[config["timeframe"]] = df_sym
-            if sym == (open_symbol or config.get("symbol")):
+            if sym in positions:
                 df_current = df_sym
             tasks.append(analyze_symbol(sym, df_map, mode, config, notifier))
 
@@ -538,8 +528,9 @@ async def _main_impl() -> TelegramNotifier:
             scalper_results = await asyncio.gather(*tasks)
             mapping = {r["symbol"]: r for r in scalper_results}
             results = [mapping.get(r["symbol"], r) for r in results]
-            if (open_symbol or config.get("symbol")) in mapping:
-                df_current = df_cache.get(config["timeframe"], {}).get(open_symbol or config.get("symbol"))
+            for sym_open in positions:
+                if sym_open in mapping:
+                    current_dfs[sym_open] = df_cache.get(config["timeframe"], {}).get(sym_open)
 
         analyze_time = time.perf_counter() - analyze_start
 
@@ -566,7 +557,7 @@ async def _main_impl() -> TelegramNotifier:
                 env_sym,
             )
 
-            if open_side is None and in_cooldown(sym, name_sym):
+            if sym not in positions and in_cooldown(sym, name_sym):
                 continue
 
             params_file = Path("crypto_bot/logs/optimized_params.json")
@@ -638,55 +629,59 @@ async def _main_impl() -> TelegramNotifier:
 
         best = filtered_results[0] if filtered_results else None
 
-        if open_side and df_current is None:
-            # ensure current market data is loaded
-            try:
-                if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
-                    data = await exchange.watch_ohlcv(
-                        open_symbol or config["symbol"],
-                        timeframe=config["timeframe"],
-                        limit=100
-                    )
-                else:
-                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-                        data = await exchange.fetch_ohlcv(
-                            open_symbol or config["symbol"],
-                            timeframe=config["timeframe"],
-                            limit=100
-                        )
-                    else:
-                        data = await asyncio.to_thread(
-                            exchange.fetch_ohlcv,
-                            open_symbol or config["symbol"],
+        current_dfs: dict[str, pd.DataFrame] = {}
+        current_prices: dict[str, float] = {}
+        for sym in list(positions.keys()):
+            df_current = df_cache.get(config["timeframe"], {}).get(sym)
+            if df_current is None:
+                # ensure current market data is loaded
+                try:
+                    if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
+                        data = await exchange.watch_ohlcv(
+                            sym,
                             timeframe=config["timeframe"],
                             limit=100,
                         )
-            except Exception as exc:  # pragma: no cover - network
-                logger.error(
-                    "OHLCV fetch failed for %s on %s (limit %d): %s",
-                    open_symbol or config["symbol"],
-                    config["timeframe"],
-                    100,
-                    exc,
-                    exc_info=True,
+                    else:
+                        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
+                            data = await exchange.fetch_ohlcv(
+                                sym,
+                                timeframe=config["timeframe"],
+                                limit=100,
+                            )
+                        else:
+                            data = await asyncio.to_thread(
+                                exchange.fetch_ohlcv,
+                                sym,
+                                timeframe=config["timeframe"],
+                                limit=100,
+                            )
+                except Exception as exc:  # pragma: no cover - network
+                    logger.error(
+                        "OHLCV fetch failed for %s on %s (limit %d): %s",
+                        sym,
+                        config["timeframe"],
+                        100,
+                        exc,
+                        exc_info=True,
+                    )
+                    continue
+
+                if data and len(data[0]) > 6:
+                    data = [[c[0], c[1], c[2], c[3], c[4], c[6]] for c in data]
+                df_current = pd.DataFrame(
+                    data,
+                    columns=["timestamp", "open", "high", "low", "close", "volume"],
                 )
-                continue
+            current_dfs[sym] = df_current
+            current_prices[sym] = df_current["close"].iloc[-1]
 
-            if data and len(data[0]) > 6:
-                data = [
-                    [c[0], c[1], c[2], c[3], c[4], c[6]] for c in data
-                ]
-            df_current = pd.DataFrame(
-                data,
-                columns=["timestamp", "open", "high", "low", "close", "volume"],
-            )
-
-        if open_side and df_current is not None:
+        df_current = current_dfs.get(best["symbol"] if best else "")
+        current_price = None
+        if best:
+            if df_current is None:
+                df_current = best["df"]
             current_price = df_current["close"].iloc[-1]
-        elif best:
-            current_price = best["df"]["close"].iloc[-1]
-        else:
-            current_price = None
 
         if best:
             score = best["score"]
@@ -700,63 +695,61 @@ async def _main_impl() -> TelegramNotifier:
             direction = "none"
             trade_side = None
 
-        if open_side:
-            pnl_pct = ((current_price - entry_price) / entry_price) * (
-                1 if open_side == "buy" else -1
+        for sym, pos in list(positions.items()):
+            cur_price = current_prices.get(sym)
+            df_cur = current_dfs.get(sym)
+            if cur_price is None or df_cur is None:
+                continue
+            pnl_pct = ((cur_price - pos["entry_price"]) / pos["entry_price"]) * (
+                1 if pos["side"] == "buy" else -1
             )
-            unreal = paper_wallet.unrealized(current_price) if paper_wallet else 0.0
-            equity = (paper_wallet.balance + unreal) if paper_wallet else latest_balance
-            if paper_wallet:
-                logger.info(
-                    "Paper balance %.2f USDT (Unrealized %.2f)",
-                    equity,
-                    unreal,
+            if pnl_pct >= config["exit_strategy"]["min_gain_to_trail"]:
+                if cur_price > pos.get("highest_price", pos["entry_price"]):
+                    pos["highest_price"] = cur_price
+                pos["trailing_stop"] = calculate_trailing_stop(
+                    pd.Series([pos.get("highest_price", cur_price)]),
+                    config["exit_strategy"]["trailing_stop_pct"],
                 )
+            risk_manager.stop_order = risk_manager.get_stop_order(sym)
+            exit_signal, new_stop = should_exit(
+                df_cur,
+                cur_price,
+                pos.get("trailing_stop", 0.0),
+                config,
+                risk_manager,
+            )
+            pos["trailing_stop"] = new_stop
+            equity = paper_wallet.balance if paper_wallet else latest_balance
+            if paper_wallet:
+                unreal = paper_wallet.unrealized(sym, cur_price)
+                equity += unreal
             log_balance(float(equity))
+            log_position(
+                sym,
+                pos["side"],
+                pos["size"],
+                pos["entry_price"],
+                cur_price,
+                float(equity),
+            )
             last_balance = notify_balance_change(
                 notifier,
                 last_balance,
                 float(equity),
                 balance_updates,
             )
-            log_position(
-                open_symbol or config.get("symbol", ""),
-                open_side,
-                position_size,
-                entry_price,
-                current_price,
-                float(equity),
-            )
-            if pnl_pct >= config["exit_strategy"]["min_gain_to_trail"]:
-                if current_price > highest_price:
-                    highest_price = current_price
-                if highest_price:
-                    trailing_stop = calculate_trailing_stop(
-                        pd.Series([highest_price]),
-                        config["exit_strategy"]["trailing_stop_pct"],
-                    )
-
-            df_to_use = df_current if df_current is not None else best["df"]
-            exit_signal, trailing_stop = should_exit(
-                df_to_use,
-                current_price,
-                trailing_stop,
-                config,
-                risk_manager,
-            )
             if exit_signal:
                 pct = get_partial_exit_percent(pnl_pct * 100)
                 sell_amount = (
-                    position_size * (pct / 100)
+                    pos["size"] * (pct / 100)
                     if config["exit_strategy"]["scale_out"] and pct > 0
-                    else position_size
+                    else pos["size"]
                 )
-                logger.info("Executing exit trade amount %.4f", sell_amount)
                 await cex_trade_async(
                     exchange,
                     ws_client,
-                    open_symbol or config["symbol"],
-                    opposite_side(open_side),
+                    sym,
+                    opposite_side(pos["side"]),
                     sell_amount,
                     notifier,
                     dry_run=config["execution_mode"] == "dry_run",
@@ -764,115 +757,60 @@ async def _main_impl() -> TelegramNotifier:
                     config=config,
                 )
                 if paper_wallet:
-                    paper_wallet.close(sell_amount, current_price)
-                realized_pnl += (
-                    (current_price - entry_price)
-                    * sell_amount
-                    * (1 if open_side == "buy" else -1)
+                    paper_wallet.close(sym, sell_amount, cur_price)
+                pos["pnl"] = pos.get("pnl", 0.0) + (
+                    (cur_price - pos["entry_price"]) * sell_amount * (1 if pos["side"] == "buy" else -1)
                 )
-                if sell_amount >= position_size:
-                    risk_manager.cancel_stop_order(exchange)
-                    risk_manager.deallocate_capital(
-                        current_strategy, sell_amount * entry_price
-                    )
+                if sell_amount >= pos["size"]:
+                    risk_manager.cancel_stop_order(exchange, sym)
+                    risk_manager.deallocate_capital(pos["strategy"], sell_amount * pos["entry_price"])
                     log_performance(
                         {
-                            "symbol": config["symbol"],
-                            "regime": entry_regime,
-                            "strategy": entry_strategy,
-                            "pnl": realized_pnl,
-                            "entry_time": entry_time,
+                            "symbol": sym,
+                            "regime": pos.get("regime"),
+                            "strategy": pos.get("strategy"),
+                            "pnl": pos["pnl"],
+                            "entry_time": pos.get("entry_time"),
                             "exit_time": datetime.utcnow().isoformat(),
                         }
                     )
                     log_pnl(
-                        entry_strategy or "",
-                        config["symbol"],
-                        entry_price or 0.0,
-                        current_price,
-                        realized_pnl,
-                        entry_confidence,
-                        open_side or "",
+                        pos.get("strategy", ""),
+                        sym,
+                        pos["entry_price"],
+                        cur_price,
+                        pos["pnl"],
+                        pos.get("confidence", 0.0),
+                        pos["side"],
                     )
                     log_regime_pnl(
-                        entry_regime or "unknown",
-                        entry_strategy or "",
-                        realized_pnl,
+                        pos.get("regime", "unknown"),
+                        pos.get("strategy", ""),
+                        pos["pnl"],
                     )
-                    if paper_wallet:
-                        logger.info(
-                            "Paper balance closed: %.2f USDT", paper_wallet.balance
-                        )
-                    if config["execution_mode"] != "dry_run":
-                        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-                            bal = await exchange.fetch_balance()
-                        else:
-                            bal = await asyncio.to_thread(exchange.fetch_balance)
-                        latest_balance = bal["USDT"]["free"]
-                    else:
-                        latest_balance = paper_wallet.balance if paper_wallet else 0.0
-                    check_balance_change(float(latest_balance), "trade executed")
-                    log_balance(float(latest_balance))
-                    last_balance = notify_balance_change(
-                        notifier,
-                        last_balance,
-                        float(latest_balance),
-                        balance_updates,
-                    )
-                    log_position(
-                        open_symbol or config.get("symbol", ""),
-                        open_side or "",
-                        sell_amount,
-                        entry_price or 0.0,
-                        current_price,
-                        float(latest_balance),
-                    )
-                    if notifier and trade_updates:
-                        report_exit(
-                            notifier,
-                            open_symbol or config.get("symbol", ""),
-                            entry_strategy or "",
-                            realized_pnl,
-                            "long" if open_side == "buy" else "short",
-                        )
-                    open_side = None
-                    open_symbol = None
-                    entry_price = None
-                    entry_time = None
-                    entry_regime = None
-                    entry_strategy = None
-                    entry_confidence = 0.0
-                    realized_pnl = 0.0
-                    position_size = 0.0
-                    trailing_stop = 0.0
-                    highest_price = 0.0
-                    current_strategy = None
-                    mark_cooldown(open_symbol or config["symbol"], active_strategy or name)
-                    active_strategy = None
+                    mark_cooldown(sym, active_strategy or pos.get("strategy", ""))
+                    positions.pop(sym, None)
                 else:
-                    position_size -= sell_amount
-                    risk_manager.deallocate_capital(
-                        current_strategy, sell_amount * entry_price
-                    )
-                    risk_manager.update_stop_order(position_size)
-                    latest_balance = await fetch_and_log_balance(
-                        exchange, paper_wallet, config
-                    )
+                    pos["size"] -= sell_amount
+                    risk_manager.deallocate_capital(pos["strategy"], sell_amount * pos["entry_price"])
+                    risk_manager.update_stop_order(pos["size"], symbol=sym)
+                    latest_balance = await fetch_and_log_balance(exchange, paper_wallet, config)
 
-        if open_side:
+        if positions:
             continue
 
         if not filtered_results:
             continue
 
         for candidate in filtered_results:
-            if open_side and candidate["symbol"] == (open_symbol or config.get("symbol")):
+            if candidate["symbol"] in positions:
                 logger.info(
-                    "Existing position %s on %s still open – skipping new trade",
-                    open_side,
+                    "Existing position on %s still open – skipping new trade",
                     candidate["symbol"],
                 )
                 continue
+            if len(positions) >= max_open_trades:
+                break
             score = candidate["score"]
             direction = candidate["direction"]
             trade_side = direction_to_side(direction)
@@ -1006,7 +944,7 @@ async def _main_impl() -> TelegramNotifier:
             )
             risk_manager.allocate_capital(name, size)
             if config["execution_mode"] == "dry_run" and paper_wallet:
-                paper_wallet.open(trade_side, order_amount, current_price)
+                paper_wallet.open(candidate["symbol"], trade_side, order_amount, current_price)
                 latest_balance = paper_wallet.balance
             else:
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
@@ -1030,17 +968,18 @@ async def _main_impl() -> TelegramNotifier:
                 current_price,
                 float(latest_balance),
             )
-            open_side = trade_side
-            open_symbol = candidate["symbol"]
-            entry_price = current_price
-            position_size = order_amount
-            realized_pnl = 0.0
-            entry_time = datetime.utcnow().isoformat()
-            entry_regime = regime
-            entry_strategy = strategy_name(regime, env)
-            entry_confidence = score
-            highest_price = entry_price
-            current_strategy = name
+            positions[candidate["symbol"]] = {
+                "side": trade_side,
+                "entry_price": current_price,
+                "entry_time": datetime.utcnow().isoformat(),
+                "regime": regime,
+                "strategy": strategy_name(regime, env),
+                "confidence": score,
+                "pnl": 0.0,
+                "size": order_amount,
+                "trailing_stop": 0.0,
+                "highest_price": current_price,
+            }
             active_strategy = name
             if notifier and trade_updates:
                 report_entry(
@@ -1050,7 +989,7 @@ async def _main_impl() -> TelegramNotifier:
                     score,
                     direction,
                 )
-            logger.info("Trade opened at %.4f", entry_price)
+            logger.info("Trade opened at %.4f", current_price)
             trades_executed += 1
             break
 
