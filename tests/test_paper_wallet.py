@@ -64,6 +64,9 @@ def test_open_while_position_active_raises():
     with pytest.raises(RuntimeError):
         wallet.open("BTC/USDT", "buy", 1.0, 10.0)
 
+    # Close the initial trade before opening a new one
+    wallet.close("BTC/USDT", 1.0, 10.0)
+
     tid = wallet.open("buy", 2.0, 50.0)
     assert wallet.balance == 890.0
     assert wallet.positions[tid]["amount"] == 2.0
@@ -81,6 +84,17 @@ def test_open_while_position_active_raises():
     assert tid not in wallet.positions
 
 
+def test_open_allows_multiple_positions():
+    wallet = PaperWallet(100.0)
+    wallet.open("BTC/USDT", "buy", 1.0, 10.0)
+    wallet.close("BTC/USDT", 1.0, 10.0)
+    wallet.open("BTC/USDT", "sell", 1.0, 10.0)
+    assert wallet.positions["BTC/USDT"]["size"] == 1.0
+    id1 = wallet.open("buy", 1.0, 10.0, "t1")
+    id2 = wallet.open("sell", 1.0, 10.0, "t2")
+    assert set(wallet.positions.keys()) == {"BTC/USDT", "t1", "t2"}
+
+
 def test_multiple_positions_unrealized_and_close():
     wallet = PaperWallet(1000.0)
     long_id = wallet.open("buy", 1.0, 100.0, "long1")
@@ -93,6 +107,20 @@ def test_multiple_positions_unrealized_and_close():
     pnl_long = wallet.close(1.0, 110.0, long_id)
     pnl_short = wallet.close(2.0, 40.0, short_id)
 
+def test_open_multiple_positions_allowed():
+    wallet = PaperWallet(1000.0, max_open_trades=2)
+
+    id1 = wallet.open("buy", 1.0, 100.0, "long1")
+    id2 = wallet.open("sell", 2.0, 50.0, "short1")
+
+    assert set(wallet.positions.keys()) == {"long1", "short1"}
+    assert wallet.position_size == 3.0
+
+    pnl1 = wallet.close(1.0, 110.0, id1)
+    pnl2 = wallet.close(2.0, 40.0, id2)
+
+    assert pnl1 == 10.0
+    assert pnl2 == 20.0
     assert pnl_long == 10.0
     assert pnl_short == 20.0
     assert wallet.realized_pnl == 30.0
