@@ -138,6 +138,9 @@ class RiskManager:
                 size = risk_value * trade_price / stop_loss_distance
             else:
                 size = balance * confidence * self.config.trade_size_pct
+            max_size = balance * self.config.trade_size_pct
+            if size > max_size:
+                size = max_size
         else:
             size = (
                 balance
