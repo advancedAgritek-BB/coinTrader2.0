@@ -1,6 +1,7 @@
 import ccxt
 import pandas as pd
 import numpy as np
+from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional
 from numpy.random import default_rng, Generator
 
@@ -318,3 +319,43 @@ def walk_forward_optimize(
         start += window
 
     return pd.DataFrame(results)
+
+
+@dataclass
+class BacktestConfig:
+    """Configuration for running backtests."""
+
+    symbol: str
+    timeframe: str
+    since: int
+    limit: int = 1000
+    mode: str = "cex"
+    stop_loss_range: Iterable[float] | None = None
+    take_profit_range: Iterable[float] | None = None
+    slippage_pct: float = 0.001
+    fee_pct: float = 0.001
+    misclass_prob: float = 0.0
+    seed: Optional[int] = None
+
+
+class BacktestRunner:
+    """Wrapper class providing a simple interface for grid backtests."""
+
+    def __init__(self, config: BacktestConfig) -> None:
+        self.config = config
+
+    def run_grid(self) -> pd.DataFrame:
+        """Execute the standard grid search backtest."""
+        return backtest(
+            self.config.symbol,
+            self.config.timeframe,
+            since=self.config.since,
+            limit=self.config.limit,
+            mode=self.config.mode,
+            stop_loss_range=self.config.stop_loss_range,
+            take_profit_range=self.config.take_profit_range,
+            slippage_pct=self.config.slippage_pct,
+            fee_pct=self.config.fee_pct,
+            misclass_prob=self.config.misclass_prob,
+            seed=self.config.seed,
+        )
