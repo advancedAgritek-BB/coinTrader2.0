@@ -2,10 +2,10 @@ from __future__ import annotations
 
 """Utility for detecting currently open trades from the trade log.
 
-The previous implementation only tracked remaining long positions created by
-``buy`` orders.  This version keeps independent FIFO queues for both long and
-short entries so that unmatched ``sell`` orders create short positions and
-subsequent ``buy`` orders can offset them.
+Earlier versions only tracked long entries created by ``buy`` orders. This
+module keeps separate FIFO queues for long and short entries so unmatched
+``sell`` orders become short positions and later ``buy`` orders can offset
+them.
 """
 
 from pathlib import Path
@@ -16,12 +16,16 @@ from crypto_bot import log_reader
 
 
 def get_open_trades(log_path: Path) -> List[Dict]:
-    """Return a list of open trade entries from ``log_path``.
+    """Return remaining open trades from ``log_path``.
 
     The returned dictionaries contain ``symbol``, ``side`` (``"long"`` or
     ``"short"``), ``amount``, ``price`` and ``entry_time`` keys. Buy orders are
     matched with sells on a FIFO basis while unmatched sells produce short
     entries that future buys may offset.
+    Each result dictionary includes ``symbol``, ``side`` (``"long"`` or
+    ``"short"``), ``amount``, ``price`` and ``entry_time``. Buy orders are
+    matched with later sells on a FIFO basis and excess sells create short
+    positions.
     """
     df = log_reader._read_trades(log_path)
     if df.empty:
@@ -35,9 +39,9 @@ def get_open_trades(log_path: Path) -> List[Dict]:
         symbol = row.get("symbol")
         side = row.get("side")
         try:
-            amount = float(row.get("amount", 0))
+            qty = float(row.get("amount", 0))
         except Exception:
-            amount = 0.0
+            qty = 0.0
         try:
             price = float(row.get("price", 0))
         except Exception:
@@ -47,7 +51,7 @@ def get_open_trades(log_path: Path) -> List[Dict]:
         if side == "buy":
             qty = amount
             shorts = short_positions.get(symbol, [])
-            # Close existing shorts first
+            # Offset existing shorts first
             while qty > 0 and shorts:
                 pos = shorts[0]
                 if pos["amount"] <= qty:
@@ -72,8 +76,9 @@ def get_open_trades(log_path: Path) -> List[Dict]:
 
         if side == "sell":
             qty = amount
+        elif side == "sell":
             longs = long_positions.get(symbol, [])
-            # Close existing longs first
+            # Offset existing longs first
             while qty > 0 and longs:
                 pos = longs[0]
                 if pos["amount"] <= qty:
