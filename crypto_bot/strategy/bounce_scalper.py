@@ -50,7 +50,6 @@ def _as_dict(cfg: ConfigType) -> dict:
     return dict(cfg)
 
 
-def generate_signal(df: pd.DataFrame, config: ConfigType = None) -> Tuple[float, str]:
 def is_engulfing(df: pd.DataFrame, body_pct: float) -> Optional[str]:
     """Return ``"bullish"`` or ``"bearish"`` if the last candle engulfs the
     previous one and its body is at least ``body_pct`` of the range."""
@@ -132,19 +131,6 @@ def confirm_lower_highs(df: pd.DataFrame, bars: int) -> bool:
     return highs.diff().dropna().lt(0).all()
 
 
-def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
-    """Identify short-term bounces with volume confirmation.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        OHLCV data.
-    config : dict, optional
-        Optional configuration. ``symbol`` can be provided to enable cooldown
-        checks. ``order_book`` may contain a parsed order book snapshot from
-        :func:`kraken_ws.parse_book_message` and ``imbalance_ratio`` sets the
-        required bid/ask volume ratio.
-    """
 @dataclass
 class BounceScalperConfig:
     """Configuration options for :func:`generate_signal`."""
