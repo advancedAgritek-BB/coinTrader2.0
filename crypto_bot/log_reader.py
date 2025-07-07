@@ -31,7 +31,9 @@ def trade_summary(path: Path | str) -> Dict[str, float]:
     pnl = 0.0
     wins = 0
     closed = 0
-    open_positions: List[Tuple[float, float]] = []
+    # Track open long and short trades separately
+    open_longs: List[Tuple[float, float]] = []
+    open_shorts: List[Tuple[float, float]] = []
     for _, row in df.iterrows():
         side = row.get("side")
         try:
@@ -43,19 +45,39 @@ def trade_summary(path: Path | str) -> Dict[str, float]:
         except Exception:
             amount = 0.0
         if side == "buy":
-            open_positions.append((price, amount))
-        elif side == "sell" and open_positions:
-            entry_price, qty = open_positions.pop(0)
-            traded = min(qty, amount)
-            profit = (price - entry_price) * traded
-            pnl += profit
-            closed += 1
-            if profit > 0:
-                wins += 1
-            if qty > traded:
-                open_positions.insert(0, (entry_price, qty - traded))
+            # Buy orders first close any open shorts
+            if open_shorts:
+                entry_price, qty = open_shorts.pop(0)
+                traded = min(qty, amount)
+                profit = (entry_price - price) * traded
+                pnl += profit
+                closed += 1
+                if profit > 0:
+                    wins += 1
+                if qty > traded:
+                    open_shorts.insert(0, (entry_price, qty - traded))
+                amount -= traded
+            # Remaining amount opens new long position
+            if amount > 0:
+                open_longs.append((price, amount))
+        elif side == "sell":
+            # Sell orders close longs first
+            if open_longs:
+                entry_price, qty = open_longs.pop(0)
+                traded = min(qty, amount)
+                profit = (price - entry_price) * traded
+                pnl += profit
+                closed += 1
+                if profit > 0:
+                    wins += 1
+                if qty > traded:
+                    open_longs.insert(0, (entry_price, qty - traded))
+                amount -= traded
+            # Excess sell amount opens short position
+            if amount > 0:
+                open_shorts.append((price, amount))
     win_rate = wins / closed if closed else 0.0
-    active = sum(qty for _, qty in open_positions)
+    active = sum(qty for _, qty in open_longs) + sum(qty for _, qty in open_shorts)
     return {
         "num_trades": num_trades,
         "total_pnl": pnl,
