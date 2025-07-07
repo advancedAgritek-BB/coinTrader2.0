@@ -1,6 +1,7 @@
 import ccxt
 import pandas as pd
 import numpy as np
+from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional
 from numpy.random import default_rng, Generator
 from dataclasses import dataclass
@@ -323,6 +324,8 @@ def walk_forward_optimize(
 
 @dataclass
 class BacktestConfig:
+    """Configuration for running backtests."""
+
     symbol: str
     timeframe: str
     since: int
@@ -337,6 +340,13 @@ class BacktestConfig:
 
 
 class BacktestRunner:
+    """Wrapper class providing a simple interface for grid backtests."""
+
+    def __init__(self, config: BacktestConfig) -> None:
+        self.config = config
+
+    def run_grid(self) -> pd.DataFrame:
+        """Execute the standard grid search backtest."""
     """Simple wrapper for backtest routines using a config object."""
 
     def __init__(self, config: BacktestConfig):
