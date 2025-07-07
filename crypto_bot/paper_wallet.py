@@ -88,6 +88,8 @@ class PaperWallet:
 
         if side == "buy":
             cost = amount * price
+            if cost > self.balance:
+                raise RuntimeError("Insufficient balance")
             self.balance -= cost
         else:
             self.balance += amount * price
