@@ -771,7 +771,9 @@ async def _main_impl() -> TelegramNotifier:
                     * (1 if open_side == "buy" else -1)
                 )
                 if sell_amount >= position_size:
-                    risk_manager.cancel_stop_order(exchange)
+                    risk_manager.cancel_stop_order(
+                        exchange, open_symbol or config.get("symbol", "")
+                    )
                     risk_manager.deallocate_capital(
                         current_strategy, sell_amount * entry_price
                     )
@@ -854,7 +856,9 @@ async def _main_impl() -> TelegramNotifier:
                     risk_manager.deallocate_capital(
                         current_strategy, sell_amount * entry_price
                     )
-                    risk_manager.update_stop_order(position_size)
+                    risk_manager.update_stop_order(
+                        open_symbol or config.get("symbol", ""), position_size
+                    )
                     latest_balance = await fetch_and_log_balance(
                         exchange, paper_wallet, config
                     )

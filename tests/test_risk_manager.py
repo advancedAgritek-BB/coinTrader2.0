@@ -162,12 +162,35 @@ def test_allow_trade_rejects_on_volatility_drop():
 
 
 def test_stop_order_management():
-    manager = RiskManager(RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01))
-    order = {"id": "1", "symbol": "BTC/USDT", "side": "sell", "amount": 1, "dry_run": True}
-    manager.register_stop_order(order)
-    assert manager.stop_order["amount"] == 1
-    manager.update_stop_order(0.5)
-    assert manager.stop_order["amount"] == 0.5
+    manager = RiskManager(
+        RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
+    )
+    order1 = {
+        "id": "1",
+        "symbol": "BTC/USDT",
+        "side": "sell",
+        "amount": 1,
+        "dry_run": True,
+    }
+    order2 = {
+        "id": "2",
+        "symbol": "ETH/USDT",
+        "side": "sell",
+        "amount": 2,
+        "dry_run": True,
+    }
+
+    manager.register_stop_order(order1)
+    manager.register_stop_order(order2)
+
+    assert manager.stop_orders["BTC/USDT"]["amount"] == 1
+    assert manager.stop_orders["ETH/USDT"]["amount"] == 2
+
+    manager.update_stop_order("BTC/USDT", 0.5)
+    manager.update_stop_order("ETH/USDT", 1.5)
+
+    assert manager.stop_orders["BTC/USDT"]["amount"] == 0.5
+    assert manager.stop_orders["ETH/USDT"]["amount"] == 1.5
 
     class DummyEx:
         def __init__(self):
@@ -176,9 +199,13 @@ def test_stop_order_management():
         def cancel_order(self, oid, symbol):
             self.cancelled = True
 
-    ex = DummyEx()
-    manager.cancel_stop_order(ex)
-    assert manager.stop_order is None
+    ex1 = DummyEx()
+    manager.cancel_stop_order(ex1, "BTC/USDT")
+    assert "BTC/USDT" not in manager.stop_orders
+
+    ex2 = DummyEx()
+    manager.cancel_stop_order(ex2, "ETH/USDT")
+    assert manager.stop_orders == {}
 
 
 def test_position_size_uses_trade_size_pct_when_no_stop():
