@@ -300,6 +300,19 @@ def test_position_size_uses_atr():
     assert abs(size - 2.5) < 1e-6
 
 
+def test_position_size_low_price_risk_based():
+    manager = RiskManager(
+        RiskConfig(
+            max_drawdown=1,
+            stop_loss_pct=0.01,
+            take_profit_pct=0.01,
+            risk_pct=0.02,
+        )
+    )
+    size = manager.position_size(0.5, 1000, stop_distance=0.02, price=0.1)
+    assert abs(size - 50.0) < 1e-6
+
+
 def test_can_allocate_uses_tracker():
     cfg = RiskConfig(
         max_drawdown=1,
