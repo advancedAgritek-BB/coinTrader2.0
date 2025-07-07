@@ -169,6 +169,8 @@ async def _main_impl() -> TelegramNotifier:
         tg_cfg["token"] = user["telegram_token"]
     if user.get("telegram_chat_id"):
         tg_cfg["chat_id"] = user["telegram_chat_id"]
+    if os.getenv("TELE_CHAT_ADMINS"):
+        tg_cfg["chat_admins"] = os.getenv("TELE_CHAT_ADMINS")
     trade_updates = tg_cfg.get("trade_updates", True)
     status_updates = tg_cfg.get("status_updates", status_updates)
     balance_updates = tg_cfg.get("balance_updates", balance_updates)
@@ -312,6 +314,7 @@ async def _main_impl() -> TelegramNotifier:
             rotator,
             exchange,
             user.get("wallet_address", ""),
+            command_cooldown=config.get("telegram", {}).get("command_cooldown", 5),
         )
         if notifier.enabled
         else None
