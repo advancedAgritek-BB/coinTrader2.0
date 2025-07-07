@@ -3,6 +3,7 @@ from typing import Optional, Tuple, Union
 
 import pandas as pd
 import ta
+from crypto_bot.utils.indicator_cache import cache_series
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
@@ -61,9 +62,17 @@ def generate_signal(
     if len(df) < lookback:
         return 0.0, "none"
 
-    df = df.copy()
-    df["rsi"] = ta.momentum.rsi(df["close"], window=rsi_window)
-    df["vol_ma"] = df["volume"].rolling(window=vol_window).mean()
+    recent = df.iloc[-(lookback + 1) :]
+
+    rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
+    vol_ma = recent["volume"].rolling(window=vol_window).mean()
+
+    rsi = cache_series("rsi", df, rsi, lookback)
+    vol_ma = cache_series("vol_ma", df, vol_ma, lookback)
+
+    df = recent.copy()
+    df["rsi"] = rsi
+    df["vol_ma"] = vol_ma
 
     latest = df.iloc[-1]
     prev_close = df["close"].iloc[-2]
