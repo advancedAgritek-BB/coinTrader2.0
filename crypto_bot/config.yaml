@@ -1,4 +1,33 @@
 atr_normalization: true
+bounce_scalper:
+  atr_normalization: true
+  atr_period: 14
+  cooldown_bars: 2
+  down_candles: 3
+  max_concurrent_signals: 1
+  min_score: 0.3
+  overbought: 70
+  oversold: 30
+  rsi_window: 14
+  stop_loss_atr_mult: 1.5
+  take_profit_atr_mult: 2.0
+  trend_ema_fast: 9
+  trend_ema_slow: 21
+  up_candles: 3
+  vol_window: 20
+  volume_multiple: 2
+  zscore_threshold: 1.5
+breakout:
+  atr_buffer_mult: 0.1
+  bb_length: 20
+  bb_std: 2
+  dc_length: 20
+  kc_length: 20
+  kc_mult: 1.5
+  momentum_filter: false
+  squeeze_threshold: 0.03
+  volume_mult: 2
+  volume_window: 20
 cycle_bias:
   enabled: true
   mvrv_url: https://api.example.com/mvrv

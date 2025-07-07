@@ -2,6 +2,7 @@ import pandas as pd
 from typing import Tuple, Optional
 import ta
 from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.utils.indicator_cache import cache_series
 
 
 def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
@@ -17,9 +18,18 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     if len(df) < slow_window:
         return 0.0, "none"
 
-    df = df.copy()
-    df["ema_fast"] = ta.trend.ema_indicator(df["close"], window=fast_window)
-    df["ema_slow"] = ta.trend.ema_indicator(df["close"], window=slow_window)
+    lookback = slow_window
+    recent = df.iloc[-(lookback + 1) :]
+
+    ema_fast = ta.trend.ema_indicator(recent["close"], window=fast_window)
+    ema_slow = ta.trend.ema_indicator(recent["close"], window=slow_window)
+
+    ema_fast = cache_series("ema_fast", df, ema_fast, lookback)
+    ema_slow = cache_series("ema_slow", df, ema_slow, lookback)
+
+    df = recent.copy()
+    df["ema_fast"] = ema_fast
+    df["ema_slow"] = ema_slow
 
     latest = df.iloc[-1]
     if (
