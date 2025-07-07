@@ -5,12 +5,14 @@ from __future__ import annotations
 import os
 from dataclasses import asdict, dataclass, fields
 from typing import Optional, Tuple, Union
+from dataclasses import dataclass
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
 from crypto_bot.volatility_filter import calc_atr
+import ta
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 
@@ -20,6 +22,10 @@ class GridConfig:
 
     atr_period: int = 14
     spacing_factor: float = 0.75
+    """Configuration options for :func:`generate_signal`."""
+
+    trend_ema_fast: int = 50
+    trend_ema_slow: int = 200
     atr_normalization: bool = True
 
     @classmethod
@@ -38,6 +44,13 @@ def _as_dict(cfg: ConfigType) -> dict:
     if isinstance(cfg, GridConfig):
         return asdict(cfg)
     return dict(cfg)
+        return cls(
+            trend_ema_fast=int(cfg.get("trend_ema_fast", cls.trend_ema_fast)),
+            trend_ema_slow=int(cfg.get("trend_ema_slow", cls.trend_ema_slow)),
+            atr_normalization=bool(
+                cfg.get("atr_normalization", cls.atr_normalization)
+            ),
+        )
 
 
 def _get_num_levels() -> int:
@@ -53,6 +66,26 @@ def generate_signal(
     df: pd.DataFrame,
     num_levels: int | None = None,
     config: ConfigType = None,
+def is_in_trend(df: pd.DataFrame, fast: int, slow: int, side: str) -> bool:
+    """Return ``True`` if ``side`` aligns with the EMA trend."""
+
+    if len(df) < max(fast, slow):
+        return True
+
+    fast_ema = ta.trend.ema_indicator(df["close"], window=fast).iloc[-1]
+    slow_ema = ta.trend.ema_indicator(df["close"], window=slow).iloc[-1]
+
+    if pd.isna(fast_ema) or pd.isna(slow_ema):
+        return True
+
+    if side == "long":
+        return fast_ema > slow_ema
+    if side == "short":
+        return fast_ema < slow_ema
+    return True
+
+
+def generate_signal(df: pd.DataFrame, num_levels: int | None = None, config: Optional[dict] = None) -> Tuple[float, str]:
 @dataclass
 class GridConfig:
     """Configuration for :func:`generate_signal`."""
@@ -87,6 +120,9 @@ def generate_signal(
         return 0.0, "none"
 
     recent = df.tail(lookback)
+    cfg = GridConfig.from_dict(config)
+
+    if df.empty or len(df) < 20:
     cfg = {}
     if config is not None:
         if is_dataclass(config):
@@ -122,13 +158,18 @@ def generate_signal(
     upper_bound = levels[-2]
 
     if price <= lower_bound:
+        if not is_in_trend(recent, cfg.trend_ema_fast, cfg.trend_ema_slow, "long"):
+            return 0.0, "none"
         distance = centre - price
         score = min(distance / half_range, 1.0)
         if cfg.atr_normalization:
         if cfg.get("atr_normalization", True):
             score = normalize_score_by_volatility(df, score)
         return score, "long"
+
     if price >= upper_bound:
+        if not is_in_trend(recent, cfg.trend_ema_fast, cfg.trend_ema_slow, "short"):
+            return 0.0, "none"
         distance = price - centre
         score = min(distance / half_range, 1.0)
         if cfg.atr_normalization:

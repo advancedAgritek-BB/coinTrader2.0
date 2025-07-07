@@ -15,6 +15,22 @@ def _df_with_price(price: float) -> pd.DataFrame:
 
 def test_short_signal_above_upper_grid(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+def _df_trend_down() -> pd.DataFrame:
+    close = list(range(110, 91, -1)) + [89]
+    data = {
+        "high": [110.0] * 20,
+        "low": [90.0] * 20,
+        "close": close,
+    }
+    return pd.DataFrame(data)
+
+
+def _df_trend_up() -> pd.DataFrame:
+    close = list(range(90, 109)) + [111]
+    data = {
+        "high": [110.0] * 20,
+        "low": [90.0] * 20,
+        "close": close,
 def _df_range_change() -> pd.DataFrame:
     data = {
         "high": [150.0] * 20 + [110.0] * 10,
@@ -68,6 +84,18 @@ def test_atr_spacing(monkeypatch):
     wide, _ = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert narrow > wide
 
+def test_long_blocked_by_trend_filter():
+    df = _df_trend_down()
+    cfg = {"trend_ema_fast": 3, "trend_ema_slow": 5}
+    score, direction = grid_bot.generate_signal(df, config=cfg)
+    assert (score, direction) == (0.0, "none")
+
+
+def test_short_blocked_by_trend_filter():
+    df = _df_trend_up()
+    cfg = {"trend_ema_fast": 3, "trend_ema_slow": 5}
+    score, direction = grid_bot.generate_signal(df, config=cfg)
+    assert (score, direction) == (0.0, "none")
 @pytest.mark.parametrize("cfg", [{"range_window": 10}, GridConfig(range_window=10)])
 def test_range_window_config(cfg):
     df = _df_range_change()
