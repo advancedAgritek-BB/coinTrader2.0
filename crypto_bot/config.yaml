@@ -47,6 +47,8 @@ micro_scalp:
   ema_slow: 8
   volume_threshold: 1.5
   volume_window: 20
+bounce_scalper:
+  zscore_threshold: 2
 breakout:
   bb_length: 20
   bb_std: 2

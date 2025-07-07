@@ -17,6 +17,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     overbought = float(cfg.get("overbought", 70))
     vol_window = int(cfg.get("vol_window", 20))
     volume_multiple = float(cfg.get("volume_multiple", 2.0))
+    zscore_threshold = float(cfg.get("zscore_threshold", 2.0))
     down_candles = int(cfg.get("down_candles", 3))
 
     lookback = max(rsi_window, vol_window, down_candles + 1)
@@ -26,12 +27,12 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df = df.copy()
     df["rsi"] = ta.momentum.rsi(df["close"], window=rsi_window)
     df["vol_ma"] = df["volume"].rolling(window=vol_window).mean()
+    df["vol_std"] = df["volume"].rolling(window=vol_window).std()
 
     latest = df.iloc[-1]
     prev_close = df["close"].iloc[-2]
-    volume_spike = (
-        latest["volume"] > latest["vol_ma"] * volume_multiple if latest["vol_ma"] > 0 else False
-    )
+    vol_z = (latest["volume"] - latest["vol_ma"]) / latest["vol_std"] if latest["vol_std"] > 0 else float("inf")
+    volume_spike = vol_z > zscore_threshold
 
     recent_changes = df["close"].diff()
     downs = (recent_changes.iloc[-down_candles - 1 : -1] < 0).all()
