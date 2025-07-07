@@ -5,6 +5,10 @@ from crypto_bot.paper_wallet import PaperWallet
 
 def test_long_position_profit():
     wallet = PaperWallet(1000.0)
+    wallet.open("BTC/USDT", "buy", 1.0, 100.0)
+    assert wallet.balance == 900.0
+
+    pnl = wallet.close("BTC/USDT", 1.0, 110.0)
     tid = wallet.open("buy", 1.0, 100.0)
     assert wallet.balance == 900.0
 
@@ -16,6 +20,10 @@ def test_long_position_profit():
 
 def test_short_position_profit():
     wallet = PaperWallet(1000.0)
+    wallet.open("BTC/USDT", "sell", 1.0, 100.0)
+    assert wallet.balance == 1100.0
+
+    pnl = wallet.close("BTC/USDT", 1.0, 90.0)
     tid = wallet.open("sell", 1.0, 100.0)
     assert wallet.balance == 1100.0
 
@@ -27,6 +35,26 @@ def test_short_position_profit():
 
 def test_partial_closes_accumulate_pnl():
     wallet = PaperWallet(1000.0)
+    wallet.open("BTC/USDT", "buy", 2.0, 50.0)
+    assert wallet.balance == 900.0
+    assert wallet.positions["BTC/USDT"]["size"] == 2.0
+
+    pnl1 = wallet.close("BTC/USDT", 1.0, 55.0)
+    assert pnl1 == 5.0
+    assert wallet.realized_pnl == 5.0
+    assert wallet.balance == 955.0
+    assert wallet.positions["BTC/USDT"]["size"] == 1.0
+
+    pnl2 = wallet.close("BTC/USDT", 1.0, 60.0)
+    assert pnl2 == 10.0
+    assert wallet.realized_pnl == 15.0
+    assert wallet.balance == 1015.0
+    assert "BTC/USDT" not in wallet.positions
+def test_open_while_position_active_raises():
+    wallet = PaperWallet(100.0)
+    wallet.open("BTC/USDT", "buy", 1.0, 10.0)
+    with pytest.raises(RuntimeError):
+        wallet.open("BTC/USDT", "buy", 1.0, 10.0)
     tid = wallet.open("buy", 2.0, 50.0)
     assert wallet.balance == 900.0
     assert wallet.positions[tid]["amount"] == 2.0
@@ -46,6 +74,10 @@ def test_partial_closes_accumulate_pnl():
 
 def test_open_allows_multiple_positions():
     wallet = PaperWallet(100.0)
+    wallet.open("BTC/USDT", "buy", 1.0, 10.0)
+    wallet.close("BTC/USDT", 1.0, 10.0)
+    wallet.open("BTC/USDT", "sell", 1.0, 10.0)
+    assert wallet.positions["BTC/USDT"]["size"] == 1.0
     id1 = wallet.open("buy", 1.0, 10.0, "t1")
     id2 = wallet.open("sell", 1.0, 10.0, "t2")
     assert set(wallet.positions.keys()) == {"t1", "t2"}

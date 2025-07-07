@@ -11,8 +11,8 @@ class DummyExchange:
 
 def test_partial_sell_logs_balance_dry_run(monkeypatch):
     wallet = main.PaperWallet(1000.0)
-    wallet.open("buy", 2.0, 100.0)
-    wallet.close(1.0, 110.0)
+    wallet.open("BTC/USDT", "buy", 2.0, 100.0)
+    wallet.close("BTC/USDT", 1.0, 110.0)
 
     logged = []
     monkeypatch.setattr(main, "log_balance", lambda bal: logged.append(bal))
