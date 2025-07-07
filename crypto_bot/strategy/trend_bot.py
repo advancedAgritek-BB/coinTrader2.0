@@ -2,6 +2,7 @@ from typing import Optional, Tuple
 
 import pandas as pd
 import ta
+from crypto_bot.utils.indicator_cache import cache_series
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
@@ -11,11 +12,24 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     if df.empty or len(df) < 50:
         return 0.0, "none"
 
-    df = df.copy()
-    df["ema20"] = ta.trend.ema_indicator(df["close"], window=20)
-    df["ema50"] = ta.trend.ema_indicator(df["close"], window=50)
-    df["rsi"] = ta.momentum.rsi(df["close"], window=14)
-    df["volume_ma"] = df["volume"].rolling(window=20).mean()
+    lookback = 50
+    recent = df.iloc[-(lookback + 1) :]
+
+    ema20 = ta.trend.ema_indicator(recent["close"], window=20)
+    ema50 = ta.trend.ema_indicator(recent["close"], window=50)
+    rsi = ta.momentum.rsi(recent["close"], window=14)
+    vol_ma = recent["volume"].rolling(window=20).mean()
+
+    ema20 = cache_series("ema20", df, ema20, lookback)
+    ema50 = cache_series("ema50", df, ema50, lookback)
+    rsi = cache_series("rsi", df, rsi, lookback)
+    vol_ma = cache_series("volume_ma", df, vol_ma, lookback)
+
+    df = recent.copy()
+    df["ema20"] = ema20
+    df["ema50"] = ema50
+    df["rsi"] = rsi
+    df["volume_ma"] = vol_ma
 
     adx_ind = ta.trend.ADXIndicator(df["high"], df["low"], df["close"], window=14)
     df["adx"] = adx_ind.adx()
