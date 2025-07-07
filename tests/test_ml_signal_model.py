@@ -50,3 +50,21 @@ def test_train_from_csv(tmp_path, monkeypatch):
         assert key in report
     pred = ml.predict_signal(df, model=model)
     assert 0.0 <= pred <= 1.0
+
+
+def test_latest_features_consistency():
+    df = _synthetic_df(200)
+    full_last = ml.extract_features(df).iloc[[-1]]
+    latest = ml.extract_latest_features(df, lookback=120)
+    pd.testing.assert_frame_equal(
+        full_last.reset_index(drop=True),
+        latest.reset_index(drop=True),
+        atol=1e-2,
+    )
+
+
+def test_extract_features_window():
+    df = _synthetic_df(200)
+    last_a = ml.extract_features(df).iloc[-1]
+    last_b = ml.extract_features(df, window=len(df)).iloc[-1]
+    pd.testing.assert_series_equal(last_a, last_b)
