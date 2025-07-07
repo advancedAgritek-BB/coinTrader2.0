@@ -18,6 +18,10 @@ from crypto_bot import log_reader
 def get_open_trades(log_path: Path) -> List[Dict]:
     """Return remaining open trades from ``log_path``.
 
+    The returned dictionaries contain ``symbol``, ``side`` (``"long"`` or
+    ``"short"``), ``amount``, ``price`` and ``entry_time`` keys. Buy orders are
+    matched with sells on a FIFO basis while unmatched sells produce short
+    entries that future buys may offset.
     Each result dictionary includes ``symbol``, ``side`` (``"long"`` or
     ``"short"``), ``amount``, ``price`` and ``entry_time``. Buy orders are
     matched with later sells on a FIFO basis and excess sells create short
@@ -27,6 +31,7 @@ def get_open_trades(log_path: Path) -> List[Dict]:
     if df.empty:
         return []
 
+    # Maintain separate FIFO queues for long and short entries per symbol
     long_positions: Dict[str, List[Dict]] = {}
     short_positions: Dict[str, List[Dict]] = {}
 
@@ -44,6 +49,7 @@ def get_open_trades(log_path: Path) -> List[Dict]:
         entry_time = row.get("timestamp")
 
         if side == "buy":
+            qty = amount
             shorts = short_positions.get(symbol, [])
             # Offset existing shorts first
             while qty > 0 and shorts:
@@ -66,6 +72,10 @@ def get_open_trades(log_path: Path) -> List[Dict]:
                         "entry_time": entry_time,
                     }
                 )
+            continue
+
+        if side == "sell":
+            qty = amount
         elif side == "sell":
             longs = long_positions.get(symbol, [])
             # Offset existing longs first
