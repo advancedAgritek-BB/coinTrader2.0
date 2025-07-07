@@ -43,6 +43,7 @@ from crypto_bot.fund_manager import (
     auto_convert_funds,
 )
 from crypto_bot.paper_wallet import PaperWallet
+from crypto_bot.open_position_guard import OpenPositionGuard
 from crypto_bot import console_monitor, console_control
 from crypto_bot.utils.performance_logger import log_performance
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
@@ -280,6 +281,7 @@ async def _main_impl() -> TelegramNotifier:
 
     positions: dict[str, dict] = {}
     max_open_trades = config.get("max_open_trades", 1)
+    position_guard = OpenPositionGuard(max_open_trades)
     active_strategy = None
     last_balance: float | None = None
     stats_file = Path("crypto_bot/logs/strategy_stats.json")
@@ -827,7 +829,7 @@ async def _main_impl() -> TelegramNotifier:
                     candidate["symbol"],
                 )
                 continue
-            if len(positions) >= max_open_trades:
+            if not position_guard.can_open(positions):
                 break
             score = candidate["score"]
             direction = candidate["direction"]
