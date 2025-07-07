@@ -37,12 +37,15 @@ class DummyBuilder:
 class DummyMessage:
     def __init__(self):
         self.text = None
+        self.reply_markup = None
 
-    async def reply_text(self, text):
+    async def reply_text(self, text, reply_markup=None):
         self.text = text
+        self.reply_markup = reply_markup
 
     async def edit_text(self, text, reply_markup=None):
         self.text = text
+        self.reply_markup = reply_markup
 
 
 class DummyUpdate:
@@ -165,7 +168,8 @@ def test_menu_signals_balance_trades(monkeypatch, tmp_path):
 
     update = DummyUpdate()
     asyncio.run(ui.menu_cmd(update, DummyContext()))
-    assert "rotate_now" in update.message.text
+    assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
+    assert len(update.message.reply_markup.inline_keyboard) == 3
 
     update = DummyUpdate()
     asyncio.run(ui.show_signals(update, DummyContext()))

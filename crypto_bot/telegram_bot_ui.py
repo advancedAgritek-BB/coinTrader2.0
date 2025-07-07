@@ -25,6 +25,12 @@ from crypto_bot import log_reader, console_monitor
 from .telegram_ctl import BotController
 from crypto_bot.utils.open_trades import get_open_trades
 
+START = "START"
+STOP = "STOP"
+STATUS = "STATUS"
+LOG = "LOG"
+ROTATE = "ROTATE"
+TOGGLE = "TOGGLE"
 MENU = "MENU"
 SIGNALS = "SIGNALS"
 BALANCE = "BALANCE"
@@ -75,6 +81,12 @@ class TelegramBotUI:
         self.app.add_handler(CommandHandler("signals", self.show_signals))
         self.app.add_handler(CommandHandler("balance", self.show_balance))
         self.app.add_handler(CommandHandler("trades", self.show_trades))
+        self.app.add_handler(CallbackQueryHandler(self.start_cmd, pattern=f"^{START}$"))
+        self.app.add_handler(CallbackQueryHandler(self.stop_cmd, pattern=f"^{STOP}$"))
+        self.app.add_handler(CallbackQueryHandler(self.status_cmd, pattern=f"^{STATUS}$"))
+        self.app.add_handler(CallbackQueryHandler(self.log_cmd, pattern=f"^{LOG}$"))
+        self.app.add_handler(CallbackQueryHandler(self.rotate_now_cmd, pattern=f"^{ROTATE}$"))
+        self.app.add_handler(CallbackQueryHandler(self.toggle_mode_cmd, pattern=f"^{TOGGLE}$"))
         self.app.add_handler(CallbackQueryHandler(self.menu_cmd, pattern=f"^{MENU}$"))
         self.app.add_handler(
             CallbackQueryHandler(self.show_signals, pattern=f"^{SIGNALS}$")
@@ -117,11 +129,16 @@ class TelegramBotUI:
                 return str(msg.chat_id)
         return str(self.chat_id)
 
-    async def _reply(self, update: Update, text: str) -> None:
+    async def _reply(
+        self,
+        update: Update,
+        text: str,
+        reply_markup: InlineKeyboardMarkup | None = None,
+    ) -> None:
         if getattr(update, "callback_query", None):
-            await update.callback_query.message.edit_text(text)
+            await update.callback_query.message.edit_text(text, reply_markup=reply_markup)
         else:
-            await update.message.reply_text(text)
+            await update.message.reply_text(text, reply_markup=reply_markup)
 
     async def _check_cooldown(self, update: Update, command: str) -> bool:
         chat = self._get_chat_id(update)
@@ -263,18 +280,25 @@ class TelegramBotUI:
             return
         if not await self._check_admin(update):
             return
-        cmds = [
-            "/start",
-            "/stop",
-            "/status",
-            "/log",
-            "/rotate_now",
-            "/toggle_mode",
-            "/signals",
-            "/balance",
-            "/trades",
+        keyboard = [
+            [
+                InlineKeyboardButton("Start", callback_data=START),
+                InlineKeyboardButton("Stop", callback_data=STOP),
+                InlineKeyboardButton("Status", callback_data=STATUS),
+            ],
+            [
+                InlineKeyboardButton("Log", callback_data=LOG),
+                InlineKeyboardButton("Rotate Now", callback_data=ROTATE),
+                InlineKeyboardButton("Toggle Mode", callback_data=TOGGLE),
+            ],
+            [
+                InlineKeyboardButton("Signals", callback_data=SIGNALS),
+                InlineKeyboardButton("Balance", callback_data=BALANCE),
+                InlineKeyboardButton("Trades", callback_data=TRADES),
+            ],
         ]
-        await self._reply(update, "Available commands:\n" + "\n".join(cmds))
+        markup = InlineKeyboardMarkup(keyboard)
+        await self._reply(update, "Select a command:", reply_markup=markup)
 
     async def show_signals(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "signals"):
