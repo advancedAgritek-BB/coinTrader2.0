@@ -52,3 +52,16 @@ def test_ml_fallback_triggers(monkeypatch, tmp_path):
     assert called
     assert label == "trending"
     assert probs["trending"] == 0.8
+
+
+def test_corrupted_model_data(monkeypatch):
+    from crypto_bot.regime import ml_fallback as mf
+
+    df = _make_df()
+    monkeypatch.setattr(mf, "MODEL_B64", "!!")
+    mf._model = None
+
+    assert mf.load_model() is None
+    label, conf = mf.predict_regime(df)
+    assert label == "unknown"
+    assert conf == 0.0

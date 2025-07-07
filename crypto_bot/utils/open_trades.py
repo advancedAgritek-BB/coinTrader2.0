@@ -9,12 +9,12 @@ from crypto_bot import log_reader
 
 
 def get_open_trades(log_path: Path | str) -> List[Dict]:
-    """Return a list of open trades remaining in ``log_path``.
+    """Parse ``log_path`` and return any open positions.
 
-    Each result dictionary contains ``symbol``, ``side`` (``"long"`` or ``"short"``),
-    ``amount``, ``price`` and ``entry_time`` keys. Buy orders close existing short
-    positions before opening longs while sell orders close longs first. Any
-    remaining quantity becomes a new position which is tracked on a FIFO basis.
+    Results are dictionaries with ``symbol``, ``side`` (``"long"`` or ``"short"``),
+    ``amount``, ``price`` and ``entry_time``. Buy orders reduce shorts before
+    opening longs, sells reduce longs before opening shorts, and leftover
+    quantity starts a new FIFO position.
     """
     df = log_reader._read_trades(log_path)
     if df.empty:
