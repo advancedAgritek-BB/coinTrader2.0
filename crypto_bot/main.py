@@ -23,6 +23,7 @@ from crypto_bot.cooldown_manager import (
     mark_cooldown,
     configure as cooldown_configure,
 )
+from crypto_bot import grid_state
 from crypto_bot.signals.signal_scoring import evaluate_async
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.risk.exit_manager import (
@@ -985,6 +986,8 @@ async def _main_impl() -> TelegramNotifier:
                 current_price,
                 float(latest_balance),
             )
+            if strategy_name(regime, env).startswith("grid"):
+                grid_state.record_fill(candidate["symbol"])
             positions[candidate["symbol"]] = {
                 "side": trade_side,
                 "entry_price": current_price,

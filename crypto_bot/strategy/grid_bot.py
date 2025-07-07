@@ -3,11 +3,37 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, Tuple
+from dataclasses import dataclass, fields, asdict
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot import grid_state
+
+
+@dataclass
+class GridConfig:
+    """Configuration options for :func:`generate_signal`."""
+
+    cooldown_bars: int = 6
+    max_active_legs: int = 4
+    symbol: str = ""
+    atr_normalization: bool = True
+
+    @classmethod
+    def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":
+        cfg = cfg or {}
+        params = {f.name: cfg.get(f.name, getattr(cls, f.name)) for f in fields(cls)}
+        return cls(**params)
+
+
+def _as_dict(cfg: Union[dict, GridConfig, None]) -> dict:
+    if cfg is None:
+        return {}
+    if isinstance(cfg, GridConfig):
+        return asdict(cfg)
+    return dict(cfg)
 
 
 def _get_num_levels() -> int:
@@ -19,7 +45,11 @@ def _get_num_levels() -> int:
         return 5
 
 
-def generate_signal(df: pd.DataFrame, num_levels: int | None = None, config: Optional[dict] = None) -> Tuple[float, str]:
+def generate_signal(
+    df: pd.DataFrame,
+    num_levels: int | None = None,
+    config: Optional[Union[dict, GridConfig]] = None,
+) -> Tuple[float, str]:
     """Generate a grid based trading signal.
 
     The last 20 bars define a high/low range which is divided into grid levels.
@@ -31,6 +61,17 @@ def generate_signal(df: pd.DataFrame, num_levels: int | None = None, config: Opt
 
     if num_levels is None:
         num_levels = _get_num_levels()
+
+    cfg_dict = _as_dict(config)
+    cfg = GridConfig.from_dict(cfg_dict)
+
+    symbol = cfg.symbol
+    if symbol:
+        grid_state.update_bar(symbol, len(df))
+        if grid_state.in_cooldown(symbol, cfg.cooldown_bars):
+            return 0.0, "none"
+        if grid_state.active_leg_count(symbol) >= cfg.max_active_legs:
+            return 0.0, "none"
 
     if df.empty or len(df) < 20:
         return 0.0, "none"
@@ -53,13 +94,13 @@ def generate_signal(df: pd.DataFrame, num_levels: int | None = None, config: Opt
     if price <= lower_bound:
         distance = centre - price
         score = min(distance / half_range, 1.0)
-        if config is None or config.get('atr_normalization', True):
+        if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
         return score, "long"
     if price >= upper_bound:
         distance = price - centre
         score = min(distance / half_range, 1.0)
-        if config is None or config.get('atr_normalization', True):
+        if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
         return score, "short"
 
