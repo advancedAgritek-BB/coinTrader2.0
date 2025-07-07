@@ -14,6 +14,7 @@ from crypto_bot.strategy_router import (
 )
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.signals.signal_scoring import evaluate_async, evaluate_strategies
+from crypto_bot.volatility_filter import calc_atr
 
 
 async def analyze_symbol(
@@ -139,6 +140,10 @@ async def analyze_symbol(
             strategy_fn = route(regime, env, config, notifier)
             name = strategy_name(regime, env)
             score, direction, atr = await evaluate_async(strategy_fn, df, cfg)
+
+        atr_period = int(config.get("risk", {}).get("atr_period", 14))
+        if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
+            atr = calc_atr(df, window=atr_period)
 
         weights = config.get("scoring_weights", {})
         final = (

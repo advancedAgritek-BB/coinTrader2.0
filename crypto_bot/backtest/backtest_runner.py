@@ -144,7 +144,7 @@ def _run_single(
         last_regime = regime
 
         strategy_fn = strategy_for(regime)
-        _, direction = evaluate(strategy_fn, subset, None)
+        _, direction, _ = evaluate(strategy_fn, subset, None)
         price = df["close"].iloc[i]
 
         if position is None and direction in {"long", "short"}:

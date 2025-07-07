@@ -106,4 +106,6 @@ def generate_signal(
     if score > 0 and (config is None or config.get("atr_normalization", True)):
         score = normalize_score_by_volatility(df, score)
 
+    if higher_df is not None:
+        return score, direction
     return score, direction, atr_last
