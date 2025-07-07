@@ -1,5 +1,7 @@
 import pandas as pd
+import pytest
 from crypto_bot.strategy import grid_bot
+from crypto_bot.strategy.grid_bot import GridConfig
 
 
 def _df_with_price(price: float) -> pd.DataFrame:
@@ -7,6 +9,15 @@ def _df_with_price(price: float) -> pd.DataFrame:
         "high": [110.0] * 20,
         "low": [90.0] * 20,
         "close": [100.0] * 19 + [price],
+    }
+    return pd.DataFrame(data)
+
+
+def _df_range_change() -> pd.DataFrame:
+    data = {
+        "high": [150.0] * 20 + [110.0] * 10,
+        "low": [50.0] * 20 + [90.0] * 10,
+        "close": [100.0] * 29 + [89.0],
     }
     return pd.DataFrame(data)
 
@@ -41,4 +52,15 @@ def test_grid_levels_env_override(monkeypatch):
     monkeypatch.setenv("GRID_LEVELS", "3")
     score, direction = grid_bot.generate_signal(df)
     assert direction == "short"
+    assert score > 0.0
+
+
+@pytest.mark.parametrize("cfg", [{"range_window": 10}, GridConfig(range_window=10)])
+def test_range_window_config(cfg):
+    df = _df_range_change()
+    _, default_direction = grid_bot.generate_signal(df)
+    assert default_direction == "none"
+
+    score, direction = grid_bot.generate_signal(df, config=cfg)
+    assert direction == "long"
     assert score > 0.0
