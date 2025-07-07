@@ -182,10 +182,6 @@ def train_model(features: pd.DataFrame, targets: pd.Series) -> LogisticRegressio
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, MODEL_PATH)
     joblib.dump(scaler, SCALER_PATH)
-    if hasattr(joblib, "dump"):
-        joblib.dump(model, MODEL_PATH)
-    else:
-        MODEL_PATH.write_bytes(b"")
     with open(REPORT_PATH, "w") as f:
         json.dump(report, f)
     return model
