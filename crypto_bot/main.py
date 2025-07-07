@@ -887,6 +887,7 @@ async def _main_impl() -> TelegramNotifier:
                 balance,
                 df_for_size,
                 atr=candidate.get("atr"),
+                price=current_price,
             )
             order_amount = size / current_price if current_price > 0 else 0.0
 

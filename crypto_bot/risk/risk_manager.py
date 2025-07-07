@@ -101,6 +101,7 @@ class RiskManager:
         df: Optional[pd.DataFrame] = None,
         stop_distance: float | None = None,
         atr: float | None = None,
+        price: float | None = None,
     ) -> float:
         """Return the trade value for a signal.
 
@@ -132,8 +133,9 @@ class RiskManager:
         if stop_distance is not None or atr is not None:
             risk_value = balance * self.config.risk_pct * confidence
             stop_loss_distance = atr if atr and atr > 0 else stop_distance
+            trade_price = price or 1.0
             if stop_loss_distance and stop_loss_distance > 0:
-                size = risk_value / stop_loss_distance
+                size = risk_value * trade_price / stop_loss_distance
             else:
                 size = balance * confidence * self.config.trade_size_pct
         else:
