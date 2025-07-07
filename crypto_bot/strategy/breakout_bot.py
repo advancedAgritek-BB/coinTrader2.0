@@ -45,16 +45,18 @@ def generate_signal(
     df: pd.DataFrame,
     config: Optional[dict] = None,
     higher_df: Optional[pd.DataFrame] = None,
-) -> Tuple[float, str]:
+) -> Tuple[float, str] | Tuple[float, str, float]:
     """Breakout strategy using Bollinger/Keltner squeeze confirmation.
 
     Returns
     -------
-    Tuple[float, str]
-        Signal score and direction.
+    Tuple[float, str] or Tuple[float, str, float]
+        If ``higher_df`` is provided the function returns ``(score, direction)``.
+        Otherwise it returns ``(score, direction, atr)`` where ``atr`` is the
+        most recent Average True Range value.
     """
     if df is None or df.empty:
-        return 0.0, "none"
+        return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
     cfg = (config or {}).get("breakout", {})
     bb_len = int(cfg.get("bb_length", 20))
@@ -70,13 +72,13 @@ def generate_signal(
 
     lookback = max(bb_len, kc_len, dc_len, vol_window, 14)
     if len(df) < lookback:
-        return 0.0, "none"
+        return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
     recent = df.iloc[-(lookback + 1) :]
 
     squeeze, atr = _squeeze(recent, bb_len, bb_std, kc_len, kc_mult, threshold)
     if pd.isna(squeeze.iloc[-1]) or not squeeze.iloc[-1]:
-        return 0.0, "none"
+        return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
     if higher_df is not None and not higher_df.empty:
         h_sq, _ = _squeeze(
@@ -142,4 +144,3 @@ def generate_signal(
     if higher_df is not None:
         return score, direction
     return score, direction, atr_last
-    return score, direction
