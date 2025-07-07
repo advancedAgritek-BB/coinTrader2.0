@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass, fields, asdict
+from typing import Optional, Tuple, Union
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 from dataclasses import asdict, dataclass, fields
@@ -16,6 +18,31 @@ import pandas as pd
 from crypto_bot.volatility_filter import calc_atr
 import ta
 from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot import grid_state
+
+
+@dataclass
+class GridConfig:
+    """Configuration options for :func:`generate_signal`."""
+
+    cooldown_bars: int = 6
+    max_active_legs: int = 4
+    symbol: str = ""
+    atr_normalization: bool = True
+
+    @classmethod
+    def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":
+        cfg = cfg or {}
+        params = {f.name: cfg.get(f.name, getattr(cls, f.name)) for f in fields(cls)}
+        return cls(**params)
+
+
+def _as_dict(cfg: Union[dict, GridConfig, None]) -> dict:
+    if cfg is None:
+        return {}
+    if isinstance(cfg, GridConfig):
+        return asdict(cfg)
+    return dict(cfg)
 
 
 @dataclass
@@ -103,6 +130,7 @@ def _get_num_levels() -> int:
 def generate_signal(
     df: pd.DataFrame,
     num_levels: int | None = None,
+    config: Optional[Union[dict, GridConfig]] = None,
     config: ConfigType = None,
 def is_in_trend(df: pd.DataFrame, fast: int, slow: int, side: str) -> bool:
     """Return ``True`` if ``side`` aligns with the EMA trend."""
@@ -148,6 +176,16 @@ def generate_signal(
     if num_levels is None:
         num_levels = _get_num_levels()
 
+    cfg_dict = _as_dict(config)
+    cfg = GridConfig.from_dict(cfg_dict)
+
+    symbol = cfg.symbol
+    if symbol:
+        grid_state.update_bar(symbol, len(df))
+        if grid_state.in_cooldown(symbol, cfg.cooldown_bars):
+            return 0.0, "none"
+        if grid_state.active_leg_count(symbol) >= cfg.max_active_legs:
+            return 0.0, "none"
     cfg = _get_config(config)
 
     min_len = max(20, cfg.volume_ma_window)
