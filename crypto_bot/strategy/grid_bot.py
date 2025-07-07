@@ -3,11 +3,44 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, Tuple
+from dataclasses import asdict, dataclass, fields
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 from crypto_bot.utils.volatility import normalize_score_by_volatility
+from . import breakout_bot
+
+
+@dataclass
+class GridConfig:
+    """Configuration options for :func:`generate_signal`."""
+
+    num_levels: int = 5
+    breakout_mult: float = 1.5
+    atr_normalization: bool = True
+
+    @classmethod
+    def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":
+        cfg = cfg or {}
+        params = {}
+        for f in fields(cls):
+            if f.name == "num_levels":
+                params[f.name] = int(cfg.get("num_levels", _get_num_levels()))
+            else:
+                params[f.name] = cfg.get(f.name, getattr(cls, f.name))
+        return cls(**params)
+
+
+ConfigType = Union[dict, GridConfig, None]
+
+
+def _as_dict(cfg: ConfigType) -> dict:
+    if cfg is None:
+        return {}
+    if isinstance(cfg, GridConfig):
+        return asdict(cfg)
+    return dict(cfg)
 
 
 def _get_num_levels() -> int:
@@ -19,7 +52,11 @@ def _get_num_levels() -> int:
         return 5
 
 
-def generate_signal(df: pd.DataFrame, num_levels: int | None = None, config: Optional[dict] = None) -> Tuple[float, str]:
+def generate_signal(
+    df: pd.DataFrame,
+    num_levels: int | None = None,
+    config: ConfigType = None,
+) -> Tuple[float, str]:
     """Generate a grid based trading signal.
 
     The last 20 bars define a high/low range which is divided into grid levels.
@@ -29,8 +66,11 @@ def generate_signal(df: pd.DataFrame, num_levels: int | None = None, config: Opt
     when price stays around the centre of the grid.
     """
 
+    cfg_dict = _as_dict(config)
+    cfg = GridConfig.from_dict(cfg_dict)
+
     if num_levels is None:
-        num_levels = _get_num_levels()
+        num_levels = cfg.num_levels
 
     if df.empty or len(df) < 20:
         return 0.0, "none"
@@ -47,19 +87,24 @@ def generate_signal(df: pd.DataFrame, num_levels: int | None = None, config: Opt
     centre = (high + low) / 2
     half_range = (high - low) / 2
 
+    # defer to breakout logic when price extends far beyond the grid range
+    breakout_threshold = half_range * cfg.breakout_mult
+    if price > centre + breakout_threshold or price < centre - breakout_threshold:
+        return breakout_bot.generate_signal(df, _as_dict(config))
+
     lower_bound = levels[1]
     upper_bound = levels[-2]
 
     if price <= lower_bound:
         distance = centre - price
         score = min(distance / half_range, 1.0)
-        if config is None or config.get('atr_normalization', True):
+        if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
         return score, "long"
     if price >= upper_bound:
         distance = price - centre
         score = min(distance / half_range, 1.0)
-        if config is None or config.get('atr_normalization', True):
+        if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
         return score, "short"
 
