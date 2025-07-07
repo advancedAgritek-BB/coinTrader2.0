@@ -45,6 +45,14 @@ def generate_signal(
     if df.empty:
         return 0.0, "none"
 
+    cfg = config or {}
+    rsi_window = int(cfg.get("rsi_window", 14))
+    oversold = float(cfg.get("oversold", 30))
+    overbought = float(cfg.get("overbought", 70))
+    vol_window = int(cfg.get("vol_window", 20))
+    volume_multiple = float(cfg.get("volume_multiple", 2.0))
+    zscore_threshold = float(cfg.get("zscore_threshold", 2.0))
+    down_candles = int(cfg.get("down_candles", 3))
     params = (
         config
         if isinstance(config, BounceScalperConfig)
@@ -62,6 +70,10 @@ def generate_signal(
     if len(df) < lookback:
         return 0.0, "none"
 
+    df = df.copy()
+    df["rsi"] = ta.momentum.rsi(df["close"], window=rsi_window)
+    df["vol_ma"] = df["volume"].rolling(window=vol_window).mean()
+    df["vol_std"] = df["volume"].rolling(window=vol_window).std()
     recent = df.iloc[-(lookback + 1) :]
 
     rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
@@ -76,9 +88,8 @@ def generate_signal(
 
     latest = df.iloc[-1]
     prev_close = df["close"].iloc[-2]
-    volume_spike = (
-        latest["volume"] > latest["vol_ma"] * volume_multiple if latest["vol_ma"] > 0 else False
-    )
+    vol_z = (latest["volume"] - latest["vol_ma"]) / latest["vol_std"] if latest["vol_std"] > 0 else float("inf")
+    volume_spike = vol_z > zscore_threshold
 
     recent_changes = df["close"].diff()
     downs = (recent_changes.iloc[-down_candles - 1 : -1] < 0).all()
