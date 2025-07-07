@@ -4,11 +4,12 @@ from crypto_bot.strategy import grid_bot
 from crypto_bot.strategy.grid_bot import GridConfig
 
 
-def _df_with_price(price: float) -> pd.DataFrame:
+def _df_with_price(price: float, volume: float = 300.0) -> pd.DataFrame:
     data = {
         "high": [110.0] * 20,
         "low": [90.0] * 20,
         "close": [100.0] * 19 + [price],
+        "volume": [100.0] * 19 + [volume],
     }
     return pd.DataFrame(data)
 
@@ -76,6 +77,18 @@ def test_grid_levels_env_override(monkeypatch):
     assert score > 0.0
 
 
+def test_volume_filter_blocks_short_signal():
+    df = _df_with_price(111.0, volume=100.0)
+    score, direction = grid_bot.generate_signal(df)
+    assert direction == "none"
+    assert score == 0.0
+
+
+def test_volume_filter_blocks_long_signal():
+    df = _df_with_price(89.0, volume=100.0)
+    score, direction = grid_bot.generate_signal(df)
+    assert direction == "none"
+    assert score == 0.0
 def test_atr_spacing(monkeypatch):
     df = _df_with_price(106.0)
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 2.0)

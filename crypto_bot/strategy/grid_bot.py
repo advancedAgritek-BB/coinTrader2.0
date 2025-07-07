@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
+from typing import Optional, Tuple, Union
 from dataclasses import asdict, dataclass, fields
 from typing import Optional, Tuple, Union
 from dataclasses import dataclass
@@ -18,6 +20,12 @@ from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 @dataclass
 class GridConfig:
+    """Configuration values for :func:`generate_signal`."""
+
+    atr_normalization: bool = True
+    volume_ma_window: int = 20
+    volume_multiple: float = 1.5
+    vol_zscore_threshold: float = 2.0
     """Configuration for :func:`generate_signal`."""
 
     atr_period: int = 14
@@ -38,6 +46,36 @@ class GridConfig:
 ConfigType = Union[dict, GridConfig, None]
 
 
+def _get_config(cfg: ConfigType) -> GridConfig:
+    if cfg is None:
+        return GridConfig()
+    if isinstance(cfg, GridConfig):
+        return cfg
+    cfg = dict(cfg)
+    return GridConfig(
+        atr_normalization=cfg.get("atr_normalization", True),
+        volume_ma_window=cfg.get("volume_ma_window", 20),
+        volume_multiple=cfg.get("volume_multiple", 1.5),
+        vol_zscore_threshold=cfg.get("vol_zscore_threshold", 2.0),
+    )
+
+
+def volume_ok(series: pd.Series, window: int, mult: float, z_thresh: float) -> bool:
+    """Return ``True`` if ``series`` shows a volume spike."""
+
+    if len(series) < window:
+        return False
+
+    recent = series.tail(window)
+    mean = recent.mean()
+    std = recent.std()
+
+    if np.isnan(mean):
+        return False
+
+    current = series.iloc[-1]
+    z = (current - mean) / std if std > 0 else float("-inf")
+    return current > mean * mult or z >= z_thresh
 def _as_dict(cfg: ConfigType) -> dict:
     if cfg is None:
         return {}
@@ -110,6 +148,13 @@ def generate_signal(
     if num_levels is None:
         num_levels = _get_num_levels()
 
+    cfg = _get_config(config)
+
+    min_len = max(20, cfg.volume_ma_window)
+    if df.empty or len(df) < min_len or "volume" not in df:
+        return 0.0, "none"
+
+    if not volume_ok(df["volume"], cfg.volume_ma_window, cfg.volume_multiple, cfg.vol_zscore_threshold):
     cfg_dict = _as_dict(config)
     cfg = GridConfig.from_dict(cfg_dict)
     atr_period = cfg.atr_period
