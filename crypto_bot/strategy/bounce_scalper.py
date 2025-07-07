@@ -13,29 +13,36 @@ from crypto_bot.cooldown_manager import in_cooldown, mark_cooldown
 
 @dataclass
 class BounceScalperConfig:
-    """Configuration for :func:`generate_signal`."""
+    """Configuration options for :func:`generate_signal`."""
 
+    # core indicators
     rsi_window: int = 14
     oversold: float = 30.0
     overbought: float = 70.0
     vol_window: int = 20
-    zscore_threshold: float = 2.0
+    zscore_threshold: float = 1.5
     volume_multiple: float = 2.0
     ema_window: int = 50
     atr_window: int = 14
+
+    # pattern confirmation
     down_candles: int = 3
     up_candles: int = 3
     trend_ema_fast: int = 9
     trend_ema_slow: int = 21
+
+    # risk management
     cooldown_bars: int = 2
     atr_period: int = 14
     stop_loss_atr_mult: float = 1.5
     take_profit_atr_mult: float = 2.0
     min_score: float = 0.3
     max_concurrent_signals: int = 1
+    atr_normalization: bool = True
+
+    # metadata
     strategy: str = "bounce_scalper"
     symbol: str = ""
-    atr_normalization: bool = True
 
     @classmethod
     def from_dict(cls, data: dict) -> "BounceScalperConfig":
@@ -136,36 +143,6 @@ def confirm_lower_highs(df: pd.DataFrame, bars: int) -> bool:
 
     highs = df["high"].iloc[-bars:]
     return highs.diff().dropna().lt(0).all()
-
-
-@dataclass
-class BounceScalperConfig:
-    """Configuration options for :func:`generate_signal`."""
-
-    rsi_window: int = 14
-    oversold: float = 30.0
-    overbought: float = 70.0
-    vol_window: int = 20
-    volume_multiple: float = 2.0
-    zscore_threshold: float = 1.5
-    down_candles: int = 3
-    up_candles: int = 3
-    trend_ema_fast: int = 9
-    trend_ema_slow: int = 21
-    cooldown_bars: int = 2
-    atr_period: int = 14
-    stop_loss_atr_mult: float = 1.5
-    take_profit_atr_mult: float = 2.0
-    min_score: float = 0.3
-    max_concurrent_signals: int = 1
-    atr_normalization: bool = True
-
-    @classmethod
-    def from_dict(cls, cfg: Optional[dict]) -> "BounceScalperConfig":
-        """Build a config from a dictionary."""
-        cfg = cfg or {}
-        params = {f.name: cfg.get(f.name, getattr(cls, f.name)) for f in fields(cls)}
-        return cls(**params)
 
 
 def generate_signal(
