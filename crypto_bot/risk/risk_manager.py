@@ -42,6 +42,9 @@ class RiskConfig:
     max_volatility_factor: float = 1.5
     min_expected_value: float = 0.0
     default_expected_value: float | None = None
+    atr_period: int = 14
+    stop_loss_atr_mult: float = 2.0
+    take_profit_atr_mult: float = 4.0
 
 
 class RiskManager:
@@ -256,6 +259,7 @@ class RiskManager:
         entry_price: float | None = None,
         confidence: float | None = None,
         direction: str | None = None,
+        take_profit: float | None = None,
     ) -> None:
         """Store the protective stop order and related trade info."""
         order = dict(order)
@@ -269,6 +273,8 @@ class RiskManager:
             order["confidence"] = confidence
         if direction is not None:
             order["direction"] = direction
+        if take_profit is not None:
+            order["take_profit"] = take_profit
         self.stop_order = order
         logger.info("Registered stop order %s", order)
 

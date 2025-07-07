@@ -734,6 +734,11 @@ class KrakenWSClient:
     def subscribe_instruments(self, snapshot: bool = True) -> None:
         """Subscribe to the instrument reference data channel."""
         self.connect_public()
+        if hasattr(self.public_ws, "sent"):
+            try:
+                self.public_ws.sent.clear()
+            except Exception:
+                pass
         msg = {
             "method": "subscribe",
             "params": {"channel": "instrument", "snapshot": snapshot},
