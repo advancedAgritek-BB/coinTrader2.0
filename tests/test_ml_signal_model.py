@@ -24,11 +24,13 @@ def test_training_and_prediction(tmp_path, monkeypatch):
     df = _synthetic_df()
     monkeypatch.setattr(ml, "MODEL_PATH", tmp_path / "model.pkl")
     monkeypatch.setattr(ml, "REPORT_PATH", tmp_path / "report.json")
+    monkeypatch.setattr(ml, "SCALER_PATH", tmp_path / "scaler.pkl")
     features = ml.extract_features(df)
     targets = df.loc[features.index, "label"]
     model = ml.train_model(features, targets)
     assert ml.MODEL_PATH.exists()
     assert ml.REPORT_PATH.exists()
+    assert ml.SCALER_PATH.exists()
     report = json.loads(ml.REPORT_PATH.read_text())
     for key in ["accuracy", "auc", "precision", "recall", "trained_at"]:
         assert key in report
@@ -42,9 +44,11 @@ def test_train_from_csv(tmp_path, monkeypatch):
     df.to_csv(csv, index=False)
     monkeypatch.setattr(ml, "MODEL_PATH", tmp_path / "model.pkl")
     monkeypatch.setattr(ml, "REPORT_PATH", tmp_path / "report.json")
+    monkeypatch.setattr(ml, "SCALER_PATH", tmp_path / "scaler.pkl")
     model = ml.train_from_csv(csv)
     assert ml.MODEL_PATH.exists()
     assert ml.REPORT_PATH.exists()
+    assert ml.SCALER_PATH.exists()
     report = json.loads(ml.REPORT_PATH.read_text())
     for key in ["accuracy", "auc", "precision", "recall", "trained_at"]:
         assert key in report

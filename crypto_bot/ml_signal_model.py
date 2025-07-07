@@ -21,9 +21,12 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
 
 MODEL_PATH = Path(__file__).resolve().parent / "models" / "signal_model.pkl"
 REPORT_PATH = MODEL_PATH.with_name("model_report.json")
+SCALER_PATH = MODEL_PATH.with_name("signal_model_scaler.pkl")
 
 
 def extract_features(
@@ -121,10 +124,17 @@ def train_model(features: pd.DataFrame, targets: pd.Series) -> LogisticRegressio
     elif len(features) < 2:
     """Train a classification model and save it along with a validation report."""
     if len(features) < 2:
-        model = LogisticRegression(max_iter=200, solver="liblinear")
-        model.fit(features, targets)
-        preds = model.predict(features)
-        proba = model.predict_proba(features)[:, 1]
+        pipeline = Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                ("model", LogisticRegression(max_iter=200, solver="liblinear")),
+            ]
+        )
+        pipeline.fit(features, targets)
+        preds = pipeline.predict(features)
+        proba = pipeline.predict_proba(features)[:, 1]
+        model = pipeline.named_steps["model"]
+        scaler = pipeline.named_steps["scaler"]
         val_metrics = {
             "auc": roc_auc_score(targets, proba),
             "accuracy": accuracy_score(targets, preds),
@@ -141,16 +151,24 @@ def train_model(features: pd.DataFrame, targets: pd.Series) -> LogisticRegressio
         )
         n_splits = min(5, len(train_feats))
         cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=0)
+        pipeline = Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                ("model", LogisticRegression(max_iter=200, solver="liblinear")),
+            ]
+        )
         grid = GridSearchCV(
-            LogisticRegression(max_iter=200, solver="liblinear"),
-            {"C": [0.1, 1.0]},
+            pipeline,
+            {"model__C": [0.1, 1.0]},
             cv=cv,
             scoring="roc_auc",
         )
         grid.fit(train_feats, train_tgt)
-        model = grid.best_estimator_
-        preds = model.predict(val_feats)
-        proba = model.predict_proba(val_feats)[:, 1]
+        best_pipeline = grid.best_estimator_
+        preds = best_pipeline.predict(val_feats)
+        proba = best_pipeline.predict_proba(val_feats)[:, 1]
+        model = best_pipeline.named_steps["model"]
+        scaler = best_pipeline.named_steps["scaler"]
         val_metrics = {
             "auc": roc_auc_score(val_tgt, proba),
             "accuracy": accuracy_score(val_tgt, preds),
@@ -164,6 +182,8 @@ def train_model(features: pd.DataFrame, targets: pd.Series) -> LogisticRegressio
     }
 
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, MODEL_PATH)
+    joblib.dump(scaler, SCALER_PATH)
     if hasattr(joblib, "dump"):
         joblib.dump(model, MODEL_PATH)
     else:
@@ -180,10 +200,26 @@ def load_model() -> LogisticRegression:
     return joblib.load(MODEL_PATH)
 
 
-def predict_signal(df: pd.DataFrame, model: Optional[LogisticRegression] = None) -> float:
+def load_scaler() -> StandardScaler:
+    """Load the scaler used for the signal model."""
+    if not SCALER_PATH.exists():
+        raise FileNotFoundError(SCALER_PATH)
+    return joblib.load(SCALER_PATH)
+
+
+def predict_signal(
+    df: pd.DataFrame,
+    model: Optional[LogisticRegression] = None,
+    scaler: Optional[StandardScaler] = None,
+) -> float:
     """Predict signal strength for the latest row of df."""
     if model is None:
         model = load_model()
+    if scaler is None:
+        scaler = load_scaler()
+    feats = extract_features(df).iloc[[-1]]
+    feats_scaled = scaler.transform(feats)
+    proba = float(model.predict_proba(feats_scaled)[0, 1])
     feats = extract_latest_features(df)
     proba = float(model.predict_proba(feats)[0, 1])
 
@@ -219,8 +255,10 @@ def validate_from_csv(csv_path: Path) -> dict:
     features = extract_features(df)
     targets = df.loc[features.index, "label"]
     model = load_model()
-    preds = model.predict(features)
-    proba = model.predict_proba(features)[:, 1]
+    scaler = load_scaler()
+    feats_scaled = scaler.transform(features)
+    preds = model.predict(feats_scaled)
+    proba = model.predict_proba(feats_scaled)[:, 1]
     return {
         "auc": roc_auc_score(targets, proba),
         "accuracy": accuracy_score(targets, preds),
