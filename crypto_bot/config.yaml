@@ -71,8 +71,8 @@ max_change_pct: 10
 max_concurrent_ohlcv: 50
 max_latency_ms: 1000
 max_ohlcv_failures: 3
-max_slippage_pct: 0.05
-max_spread_pct: 2
+max_slippage_pct: 0.1
+max_spread_pct: 5
 max_vol: 1000000
 mempool_monitor:
   action: pause
@@ -89,11 +89,11 @@ micro_scalp:
   ema_slow: 8
   volume_threshold: 1.5
 min_agreeing_votes: 1
-min_confidence_score: 0.3
+min_confidence_score: 0.1
 min_consistent_agreement: 1
-min_cooldown: 10
+min_cooldown: 1
 min_symbol_age_days: 10
-min_symbol_score: 0.4
+min_symbol_score: 0.2
 ml_signal_model:
   enabled: true
   weight: 0.4
@@ -129,7 +129,7 @@ risk:
   max_drawdown: 0.8
   max_volatility_factor: 1.5
   min_expected_value: -0.1
-  min_volume: 5
+  min_volume: 1
   stop_loss_atr_mult: 2.0
   stop_loss_pct: 0.03
   take_profit_atr_mult: 4.0
@@ -151,7 +151,7 @@ sentiment_filter:
   bull_sentiment: 60
   min_fng: 0
   min_sentiment: 0
-signal_threshold: 0.3
+signal_threshold: 0.1
 signal_weight_optimizer:
   enabled: false
   learning_rate: 0.1
@@ -168,8 +168,8 @@ symbol_batch_size: 10
 symbol_filter:
   change_pct_percentile: 0
   max_correlation: 0.85
-  max_spread_pct: 1.0
-  min_volume_usd: 20000
+  max_spread_pct: 3
+  min_volume_usd: 1000
 symbol_refresh_minutes: 30
 symbol_score_weights:
   age: 0.05
@@ -194,8 +194,8 @@ timeframes:
 - 1d
 top_n_symbols: 3
 tp_pct: 0.07
-trade_size_pct: 0.1
-max_open_trades: 1
+trade_size_pct: 0.2
+max_open_trades: 3
 trend:
   atr_period: 14
   k: 1.0
