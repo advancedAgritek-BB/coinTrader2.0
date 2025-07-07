@@ -10,7 +10,11 @@ import hashlib
 from crypto_bot.regime.regime_classifier import classify_regime
 
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedKFold, GridSearchCV
+from sklearn.model_selection import (
+    StratifiedKFold,
+    GridSearchCV,
+    train_test_split,
+)
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -115,12 +119,27 @@ def train_model(features: pd.DataFrame, targets: pd.Series) -> LogisticRegressio
         preds = model.predict(features)
         proba = [0.5] * len(features)
     elif len(features) < 2:
+    """Train a classification model and save it along with a validation report."""
+    if len(features) < 2:
         model = LogisticRegression(max_iter=200, solver="liblinear")
         model.fit(features, targets)
         preds = model.predict(features)
         proba = model.predict_proba(features)[:, 1]
+        val_metrics = {
+            "auc": roc_auc_score(targets, proba),
+            "accuracy": accuracy_score(targets, preds),
+            "precision": precision_score(targets, preds, zero_division=0),
+            "recall": recall_score(targets, preds, zero_division=0),
+        }
     else:
-        n_splits = min(5, len(features))
+        train_feats, val_feats, train_tgt, val_tgt = train_test_split(
+            features,
+            targets,
+            test_size=0.2,
+            stratify=targets,
+            random_state=0,
+        )
+        n_splits = min(5, len(train_feats))
         cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=0)
         grid = GridSearchCV(
             LogisticRegression(max_iter=200, solver="liblinear"),
@@ -128,16 +147,19 @@ def train_model(features: pd.DataFrame, targets: pd.Series) -> LogisticRegressio
             cv=cv,
             scoring="roc_auc",
         )
-        grid.fit(features, targets)
+        grid.fit(train_feats, train_tgt)
         model = grid.best_estimator_
-        preds = model.predict(features)
-        proba = model.predict_proba(features)[:, 1]
+        preds = model.predict(val_feats)
+        proba = model.predict_proba(val_feats)[:, 1]
+        val_metrics = {
+            "auc": roc_auc_score(val_tgt, proba),
+            "accuracy": accuracy_score(val_tgt, preds),
+            "precision": precision_score(val_tgt, preds, zero_division=0),
+            "recall": recall_score(val_tgt, preds, zero_division=0),
+        }
 
     report = {
-        "auc": roc_auc_score(targets, proba),
-        "accuracy": accuracy_score(targets, preds),
-        "precision": precision_score(targets, preds, zero_division=0),
-        "recall": recall_score(targets, preds, zero_division=0),
+        **val_metrics,
         "trained_at": datetime.utcnow().isoformat(),
     }
 

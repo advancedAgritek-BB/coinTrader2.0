@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict
 
 STATS_FILE = Path("crypto_bot/logs/strategy_stats.json")
+WEIGHTS_FILE = Path("crypto_bot/logs/weights.json")
 
 
 class OnlineWeightOptimizer:
@@ -14,6 +15,7 @@ class OnlineWeightOptimizer:
         self.learning_rate = learning_rate
         self.min_weight = min_weight
         self.weights: Dict[str, float] = {}
+        self._load_weights()
 
     def _load_stats(self) -> Dict[str, Dict]:
         if STATS_FILE.exists():
@@ -22,6 +24,17 @@ class OnlineWeightOptimizer:
             except Exception:
                 return {}
         return {}
+
+    def _load_weights(self) -> None:
+        if WEIGHTS_FILE.exists():
+            try:
+                self.weights = json.loads(WEIGHTS_FILE.read_text())
+            except Exception:
+                self.weights = {}
+
+    def _save_weights(self) -> None:
+        WEIGHTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        WEIGHTS_FILE.write_text(json.dumps(self.weights))
 
     def update(self) -> None:
         """Update weights using the latest PnL data."""
@@ -34,6 +47,7 @@ class OnlineWeightOptimizer:
                 w = self.min_weight
             self.weights[name] = w
         self._normalize()
+        self._save_weights()
 
     def _normalize(self) -> None:
         total = sum(self.weights.values())

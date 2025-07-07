@@ -28,20 +28,26 @@ _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {
 
 
 class RLStrategySelector:
-    """Simple contextual bandit using mean PnL per regime."""
+    """Contextual bandit using mean PnL weighted by trade counts."""
 
     def __init__(self) -> None:
-        self.regime_scores: Dict[str, Dict[str, float]] = {}
+        # {regime: {strategy: {"mean": float, "count": int}}}
+        self.regime_scores: Dict[str, Dict[str, Dict[str, float]]] = {}
 
     def train(self, log_file: Path = LOG_FILE) -> None:
         """Train on historical PnL log."""
         if not Path(log_file).exists():
             return
         df = pd.read_csv(log_file)
-        if set(["regime", "strategy", "pnl"]).issubset(df.columns):
-            grouped = df.groupby(["regime", "strategy"]).mean(numeric_only=True)["pnl"]
-            for (regime, strat), pnl in grouped.items():
-                self.regime_scores.setdefault(regime, {})[strat] = float(pnl)
+        if {"regime", "strategy", "pnl"}.issubset(df.columns):
+            grouped = df.groupby(["regime", "strategy"]).agg(
+                mean=("pnl", "mean"), count=("pnl", "count")
+            )
+            for (regime, strat), row in grouped.iterrows():
+                self.regime_scores.setdefault(regime, {})[strat] = {
+                    "mean": float(row["mean"]),
+                    "count": int(row["count"]),
+                }
 
     def select(self, regime: str) -> Callable[[pd.DataFrame], tuple]:
         from ..strategy_router import strategy_for
@@ -49,7 +55,9 @@ class RLStrategySelector:
         scores = self.regime_scores.get(regime)
         if not scores:
             return strategy_for(regime)
-        best = max(scores.items(), key=lambda x: x[1])[0]
+        best = max(
+            scores.items(), key=lambda x: x[1]["mean"] * x[1]["count"]
+        )[0]
         return _STRATEGY_FN_MAP.get(best, strategy_for(regime))
 
 
