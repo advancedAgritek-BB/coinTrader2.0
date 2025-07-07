@@ -138,3 +138,11 @@ def test_open_multiple_positions_allowed():
     assert wallet.realized_pnl == 30.0
     assert wallet.balance == 1030.0
     assert wallet.positions == {}
+
+
+def test_buy_rejected_when_insufficient_balance():
+    wallet = PaperWallet(100.0)
+    with pytest.raises(RuntimeError):
+        wallet.open("buy", 2.0, 60.0)
+    assert wallet.balance == 100.0
+    assert wallet.positions == {}
