@@ -1,8 +1,8 @@
-adx_trending_min: 20
+adx_trending_min: 25
 adx_sideways_max: 18
-bb_width_sideways_max: 5
+bb_width_sideways_max: 0.025
 bb_width_breakout_max: 4
-breakout_volume_mult: 2
+breakout_volume_mult: 1.5
 rsi_mean_rev_min: 30
 rsi_mean_rev_max: 70
 ema_distance_mean_rev_max: 0.02
