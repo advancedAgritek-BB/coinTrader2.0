@@ -2,6 +2,7 @@ from typing import Optional, Tuple
 
 import pandas as pd
 import ta
+from crypto_bot.utils.indicator_cache import cache_series
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
@@ -12,10 +13,35 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         return 0.0, "none"
 
     df = df.copy()
-    df["ema20"] = ta.trend.ema_indicator(df["close"], window=20)
-    df["ema50"] = ta.trend.ema_indicator(df["close"], window=50)
+    params = config or {}
+    fast_window = int(params.get("trend_ema_fast", 20))
+    slow_window = int(params.get("trend_ema_slow", 50))
+    atr_period = int(params.get("atr_period", 14))
+    k = float(params.get("k", 1.0))
+
+    df["ema_fast"] = ta.trend.ema_indicator(df["close"], window=fast_window)
+    df["ema_slow"] = ta.trend.ema_indicator(df["close"], window=slow_window)
     df["rsi"] = ta.momentum.rsi(df["close"], window=14)
     df["volume_ma"] = df["volume"].rolling(window=20).mean()
+    df["atr"] = ta.volatility.average_true_range(df["high"], df["low"], df["close"], window=atr_period)
+    lookback = 50
+    recent = df.iloc[-(lookback + 1) :]
+
+    ema20 = ta.trend.ema_indicator(recent["close"], window=20)
+    ema50 = ta.trend.ema_indicator(recent["close"], window=50)
+    rsi = ta.momentum.rsi(recent["close"], window=14)
+    vol_ma = recent["volume"].rolling(window=20).mean()
+
+    ema20 = cache_series("ema20", df, ema20, lookback)
+    ema50 = cache_series("ema50", df, ema50, lookback)
+    rsi = cache_series("rsi", df, rsi, lookback)
+    vol_ma = cache_series("volume_ma", df, vol_ma, lookback)
+
+    df = recent.copy()
+    df["ema20"] = ema20
+    df["ema50"] = ema50
+    df["rsi"] = rsi
+    df["volume_ma"] = vol_ma
 
     adx_ind = ta.trend.ADXIndicator(df["high"], df["low"], df["close"], window=14)
     df["adx"] = adx_ind.adx()
@@ -24,15 +50,23 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     score = 0.0
     direction = "none"
 
+    atr_pct = 0.0
+    if latest["close"] != 0:
+        atr_pct = (latest["atr"] / latest["close"]) * 100
+    dynamic_oversold = 30 + k * atr_pct
+    dynamic_overbought = 70 - k * atr_pct
+
     long_cond = (
-        latest["ema20"] > latest["ema50"]
-        and latest["rsi"] > 55
+        latest["close"] > latest["ema_fast"]
+        and latest["ema_fast"] > latest["ema_slow"]
+        and latest["rsi"] > dynamic_overbought
         and latest["adx"] > 20
         and latest["volume"] > latest["volume_ma"]
     )
     short_cond = (
-        latest["ema20"] < latest["ema50"]
-        and latest["rsi"] < 45
+        latest["close"] < latest["ema_fast"]
+        and latest["ema_fast"] < latest["ema_slow"]
+        and latest["rsi"] < dynamic_oversold
         and latest["adx"] > 20
         and latest["volume"] > latest["volume_ma"]
     )
