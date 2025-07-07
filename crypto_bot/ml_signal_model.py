@@ -122,8 +122,6 @@ def train_model(features: pd.DataFrame, targets: pd.Series) -> LogisticRegressio
         preds = model.predict(features)
         proba = [0.5] * len(features)
     elif len(features) < 2:
-    """Train a classification model and save it along with a validation report."""
-    if len(features) < 2:
         pipeline = Pipeline(
             [
                 ("scaler", StandardScaler()),
