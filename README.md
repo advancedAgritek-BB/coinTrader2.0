@@ -135,6 +135,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **exchange_market_types** – market types to trade (spot, margin, futures).
 * **preferred_chain** – chain used for on-chain swaps (e.g. `solana`).
 * **wallet_address** – destination wallet for DEX trades.
+* **solana_slippage_bps** – slippage tolerance for on-chain conversions.
 * **symbol**/**symbols** – pairs to trade when not scanning automatically.
 * **scan_markets** – load all exchange pairs when `symbols` is empty.
 * **excluded_symbols** – markets to skip during scanning.
@@ -174,6 +175,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **breakout** – Bollinger/Keltner squeeze, volume multiplier, ATR buffer and
   outputs ATR for stop sizing.
 
+* **atr_normalization** – adjust signal scores using ATR.
 ```python
 score, direction, atr = breakout_bot.generate_signal(lower_df, cfg, higher_df)
 size = risk_manager.position_size(score, balance, lower_df, atr=atr)
@@ -186,11 +188,14 @@ size = risk_manager.position_size(score, balance, lower_df, atr=atr)
 * **portfolio_rotation** – rotate holdings based on scoring metrics.
 * **meta_selector**/**rl_selector** – experimental strategy routers.
 * **mode** – `auto` or `manual` evaluation of strategies.
+#### Bounce Scalper
+The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry.
 
 ### Data and Logging
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options.
 * **loop_interval_minutes** – delay between trading cycles.
+* **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
 * **log_to_google** – export trades to Google Sheets.
 * **telegram** – bot token, chat ID and trade notifications.
 * **balance_change_threshold** – delta for Telegram balance alerts.
