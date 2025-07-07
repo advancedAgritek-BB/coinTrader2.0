@@ -136,6 +136,14 @@ async def trade_stats_lines(exchange: Any, trade_file: Path = TRADE_FILE) -> lis
         side = trade.get("side", "buy")
         mult = 1 if side == "buy" else -1
         pnl = (prices.get(sym, 0.0) - entry) * amount * mult
+        current = prices.get(sym, 0.0)
+        if side == "sell":
+        side = trade.get("side", "long")
+        current = prices.get(sym, 0.0)
+        if side == "short":
+            pnl = (entry - current) * amount
+        else:
+            pnl = (current - entry) * amount
         lines.append(f"{sym} {pnl:+.2f}")
     return lines
 
