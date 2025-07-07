@@ -74,7 +74,6 @@ def test_open_position_guard_rejects_at_limit(monkeypatch):
     config = {"execution_mode": "dry_run", "signal_threshold": 0.0}
 
     if len(wallet.positions) >= wallet.max_open_trades:
-    if positions:
         pass
     elif not filtered_results:
         pass
