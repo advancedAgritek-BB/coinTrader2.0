@@ -175,6 +175,23 @@ def test_menu_signals_balance_trades(monkeypatch, tmp_path):
     asyncio.run(ui.show_balance(update, DummyContext()))
     assert "BTC" in update.message.text
 
+
+
+def test_commands_require_admin(monkeypatch, tmp_path):
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
+    state = {"running": False, "mode": "cex"}
+    ui, _ = make_ui(tmp_path, state)
+    import crypto_bot.utils.telegram as tg
+    tg.set_admin_ids(["999"])  # only allow 999
+
+    update = DummyUpdate()
+    update.effective_chat = types.SimpleNamespace(id="123")
+    asyncio.run(ui.start_cmd(update, DummyContext()))
+    assert update.message.text == "Unauthorized"
+    assert state["running"] is False
+
+    tg.set_admin_ids([])
+
     update = DummyUpdate()
     asyncio.run(ui.show_trades(update, DummyContext()))
     assert "BTC/USDT" in update.message.text

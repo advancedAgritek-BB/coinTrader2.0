@@ -1,3 +1,4 @@
+# DEPRECATED: use crypto_bot.telegram_ctl instead
 from __future__ import annotations
 
 import asyncio
@@ -20,8 +21,9 @@ from telegram.ext import (
 
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.utils.logger import setup_logger
-from crypto_bot.utils.telegram import TelegramNotifier
+from crypto_bot.utils.telegram import TelegramNotifier, is_admin
 from crypto_bot import log_reader, console_monitor
+from .telegram_ctl import BotController
 from crypto_bot.utils.open_trades import get_open_trades
 
 MENU = "MENU"
@@ -53,6 +55,7 @@ class TelegramBotUI:
         self.state = state
         self.log_file = Path(log_file)
         self.rotator = rotator
+        self.controller = BotController(state, exchange, log_file=self.log_file, trades_file=TRADES_FILE)
         self.exchange = exchange
         self.wallet = wallet
         self.command_cooldown = command_cooldown
@@ -60,6 +63,9 @@ class TelegramBotUI:
         self.logger = setup_logger(__name__, "crypto_bot/logs/telegram_ui.log")
 
         self.app = ApplicationBuilder().token(self.token).build()
+        if hasattr(self.app, "bot_data"):
+            self.app.bot_data["controller"] = self.controller
+            self.app.bot_data["admin_id"] = self.chat_id
         self.app.add_handler(CommandHandler("start", self.start_cmd))
         self.app.add_handler(CommandHandler("stop", self.stop_cmd))
         self.app.add_handler(CommandHandler("status", self.status_cmd))
@@ -141,11 +147,26 @@ class TelegramBotUI:
         if self.scheduler_thread and self.scheduler_thread.is_alive():
             self.scheduler_thread.join(timeout=2)
 
+    async def _check_admin(self, update: Update) -> bool:
+        """Verify the update came from an authorized chat."""
+        chat_id = str(getattr(getattr(update, "effective_chat", None), "id", ""))
+        if not is_admin(chat_id):
+            if getattr(update, "message", None):
+                await update.message.reply_text("Unauthorized")
+            elif getattr(update, "callback_query", None):
+                await update.callback_query.answer("Unauthorized", show_alert=True)
+            self.logger.warning("Ignoring unauthorized command from %s", chat_id)
+            return False
+        return True
+
     # Command handlers -------------------------------------------------
     async def start_cmd(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not await self._check_cooldown(update, "start"):
+        text = await self.controller.start()
+        await update.message.reply_text(text)
+        if not await self._check_admin(update):
             return
         self.state["running"] = True
         await self._reply(update, "Trading started")
@@ -154,6 +175,9 @@ class TelegramBotUI:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not await self._check_cooldown(update, "stop"):
+        text = await self.controller.stop()
+        await update.message.reply_text(text)
+        if not await self._check_admin(update):
             return
         self.state["running"] = False
         await self._reply(update, "Trading stopped")
@@ -162,6 +186,15 @@ class TelegramBotUI:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not await self._check_cooldown(update, "status"):
+        text = await self.controller.status()
+        await update.message.reply_text(text)
+
+    async def log_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        text = await self.controller.logs()
+
+    async def log_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        text = await self.controller.logs()
+        if not await self._check_admin(update):
             return
         running = self.state.get("running", False)
         mode = self.state.get("mode")
@@ -169,6 +202,7 @@ class TelegramBotUI:
 
     async def log_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "log"):
+        if not await self._check_admin(update):
             return
         if self.log_file.exists():
             lines = self.log_file.read_text().splitlines()[-20:]
@@ -181,6 +215,7 @@ class TelegramBotUI:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not await self._check_cooldown(update, "rotate_now"):
+        if not await self._check_admin(update):
             return
         if not (self.rotator and self.exchange and self.wallet):
             await self._reply(update, "Rotation not configured")
@@ -221,6 +256,7 @@ class TelegramBotUI:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not await self._check_cooldown(update, "toggle_mode"):
+        if not await self._check_admin(update):
             return
         mode = self.state.get("mode")
         mode = "onchain" if mode == "cex" else "cex"
@@ -229,6 +265,7 @@ class TelegramBotUI:
 
     async def menu_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "menu"):
+        if not await self._check_admin(update):
             return
         cmds = [
             "/start",
@@ -245,6 +282,7 @@ class TelegramBotUI:
 
     async def show_signals(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "signals"):
+        if not await self._check_admin(update):
             return
         # Use ``ASSET_SCORES_FILE`` so tests can patch the path easily.
         if ASSET_SCORES_FILE.exists():
@@ -260,6 +298,7 @@ class TelegramBotUI:
 
     async def show_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "balance"):
+        if not await self._check_admin(update):
             return
         if not self.exchange:
             await self._reply(update, "Exchange not configured")
@@ -287,6 +326,7 @@ class TelegramBotUI:
 
     async def show_trades(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "trades"):
+        if not await self._check_admin(update):
             return
         if TRADES_FILE.exists():
             lines = await console_monitor.trade_stats_lines(self.exchange, TRADES_FILE)

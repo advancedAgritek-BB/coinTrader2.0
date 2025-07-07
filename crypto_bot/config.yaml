@@ -187,7 +187,11 @@ telegram:
   command_cooldown: 5
   enabled: true
   token: your_telegram_token
+  chat_admins: your_chat_id
   trade_updates: true
+telegram_ctl:
+  enabled: false
+  update_interval: 60
 testing_mode: true
 timeframe: 1h
 timeframes:
