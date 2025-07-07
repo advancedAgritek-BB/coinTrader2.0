@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -42,4 +41,22 @@ def test_signal_fusion_with_optimizer(tmp_path, monkeypatch):
     df = pd.DataFrame({"close": [1, 2]})
     score, _ = engine.fuse(df, cfg)
     assert score == pytest.approx(0.53, rel=1e-2)
+
+
+def test_optimizer_persists_weights(tmp_path, monkeypatch):
+    stats = {"a": {"pnl": 1.0}}
+    stats_file = tmp_path / "stats.json"
+    weights_file = tmp_path / "weights.json"
+    stats_file.write_text(json.dumps(stats))
+    monkeypatch.setattr(wo, "STATS_FILE", stats_file)
+    monkeypatch.setattr(wo, "WEIGHTS_FILE", weights_file)
+
+    opt = wo.OnlineWeightOptimizer(learning_rate=0.5)
+    opt.weights = {"a": 1.0}
+    opt.update()
+    assert weights_file.exists()
+
+    opt2 = wo.OnlineWeightOptimizer(learning_rate=0.5)
+    # weights loaded from file should match after init
+    assert opt2.weights == opt.weights
 

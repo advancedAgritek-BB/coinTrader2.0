@@ -584,6 +584,8 @@ include:
   strategy with fields like `pnl` and timestamps.
 - `metrics.csv` – per cycle summary showing how many pairs were scanned,
   how many signals fired and how many trades executed.
+- `weights.json` – persistent optimizer weights saved after each update
+  at `crypto_bot/logs/weights.json`.
 
 Example short trade:
 
