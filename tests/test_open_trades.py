@@ -15,7 +15,13 @@ def test_open_trades_simple(tmp_path: Path):
 
     open_orders = open_trades.get_open_trades(log_file)
     assert open_orders == [
-        {"symbol": "BTC/USDT", "amount": 0.5, "price": 110.0, "entry_time": "t2"}
+        {
+            "symbol": "BTC/USDT",
+            "side": "buy",
+            "amount": 0.5,
+            "price": 110.0,
+            "entry_time": "t2",
+        }
     ]
 
 
@@ -31,6 +37,38 @@ def test_open_trades_multiple_symbols(tmp_path: Path):
 
     open_orders = open_trades.get_open_trades(log_file)
     assert sorted(open_orders, key=lambda x: (x["symbol"], x["entry_time"])) == [
-        {"symbol": "BTC/USDT", "amount": 1.0, "price": 100.0, "entry_time": "b"},
-        {"symbol": "ETH/USDT", "amount": 0.5, "price": 50.0, "entry_time": "a"},
+        {
+            "symbol": "BTC/USDT",
+            "side": "buy",
+            "amount": 1.0,
+            "price": 100.0,
+            "entry_time": "b",
+        },
+        {
+            "symbol": "ETH/USDT",
+            "side": "buy",
+            "amount": 0.5,
+            "price": 50.0,
+            "entry_time": "a",
+        },
+    ]
+
+
+def test_open_trades_short_position(tmp_path: Path):
+    log_file = tmp_path / "trades.csv"
+    data = [
+        {"symbol": "BTC/USDT", "side": "sell", "amount": 1, "price": 100, "timestamp": "t1"},
+        {"symbol": "BTC/USDT", "side": "buy", "amount": 0.4, "price": 90, "timestamp": "t2"},
+    ]
+    pd.DataFrame(data).to_csv(log_file, index=False, header=False)
+
+    open_orders = open_trades.get_open_trades(log_file)
+    assert open_orders == [
+        {
+            "symbol": "BTC/USDT",
+            "side": "sell",
+            "amount": 0.6,
+            "price": 100.0,
+            "entry_time": "t1",
+        }
     ]
