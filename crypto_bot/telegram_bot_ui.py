@@ -164,6 +164,7 @@ class TelegramBotUI:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not await self._check_cooldown(update, "start"):
+            return
         text = await self.controller.start()
         await update.message.reply_text(text)
         if not await self._check_admin(update):
@@ -175,6 +176,7 @@ class TelegramBotUI:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not await self._check_cooldown(update, "stop"):
+            return
         text = await self.controller.stop()
         await update.message.reply_text(text)
         if not await self._check_admin(update):
@@ -186,22 +188,14 @@ class TelegramBotUI:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not await self._check_cooldown(update, "status"):
+            return
         text = await self.controller.status()
         await update.message.reply_text(text)
 
-    async def log_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        text = await self.controller.logs()
-
-    async def log_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        text = await self.controller.logs()
-        if not await self._check_admin(update):
-            return
-        running = self.state.get("running", False)
-        mode = self.state.get("mode")
-        await self._reply(update, f"Running: {running}, mode: {mode}")
 
     async def log_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "log"):
+            return
         if not await self._check_admin(update):
             return
         if self.log_file.exists():
@@ -215,6 +209,7 @@ class TelegramBotUI:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not await self._check_cooldown(update, "rotate_now"):
+            return
         if not await self._check_admin(update):
             return
         if not (self.rotator and self.exchange and self.wallet):
@@ -256,6 +251,7 @@ class TelegramBotUI:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if not await self._check_cooldown(update, "toggle_mode"):
+            return
         if not await self._check_admin(update):
             return
         mode = self.state.get("mode")
@@ -265,6 +261,7 @@ class TelegramBotUI:
 
     async def menu_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "menu"):
+            return
         if not await self._check_admin(update):
             return
         cmds = [
@@ -282,6 +279,7 @@ class TelegramBotUI:
 
     async def show_signals(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "signals"):
+            return
         if not await self._check_admin(update):
             return
         # Use ``ASSET_SCORES_FILE`` so tests can patch the path easily.
@@ -298,6 +296,7 @@ class TelegramBotUI:
 
     async def show_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "balance"):
+            return
         if not await self._check_admin(update):
             return
         if not self.exchange:
@@ -326,6 +325,7 @@ class TelegramBotUI:
 
     async def show_trades(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "trades"):
+            return
         if not await self._check_admin(update):
             return
         if TRADES_FILE.exists():
