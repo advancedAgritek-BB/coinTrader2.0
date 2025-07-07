@@ -237,6 +237,9 @@ The bounce scalper looks for short-term reversals when a volume spike confirms m
 
 ### Telegram Setup
 
+The built-in Telegram interface is provided by the `TelegramBotUI` class in
+`crypto_bot.telegram_bot_ui`.
+
 1. Open `crypto_bot/config.yaml` and fill in the `telegram` section:
 
    ```yaml
