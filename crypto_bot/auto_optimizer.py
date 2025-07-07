@@ -44,6 +44,7 @@ def optimize_strategies() -> Dict[str, Dict[str, float]]:
             take_profit_range=tp_range,
         )
         try:
+            cfg_params = BacktestConfig(
             bt_cfg = BacktestConfig(
                 symbol=bot_cfg.get("symbol", "BTC/USDT"),
                 timeframe=bot_cfg.get("timeframe", "1h"),
@@ -53,6 +54,7 @@ def optimize_strategies() -> Dict[str, Dict[str, float]]:
                 stop_loss_range=sl_range,
                 take_profit_range=tp_range,
             )
+            df = BacktestRunner(cfg_params).run_grid()
             df = BacktestRunner(bt_cfg).run_grid()
             df = BacktestRunner(cfg_obj).run_grid()
         except Exception as exc:  # pragma: no cover - network
