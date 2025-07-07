@@ -36,3 +36,6 @@ def test_load_config_returns_dict():
         "atr_normalization",
     ]:
         assert key in grid_bot
+
+    assert "telegram" in config
+    assert "command_cooldown" in config["telegram"]
