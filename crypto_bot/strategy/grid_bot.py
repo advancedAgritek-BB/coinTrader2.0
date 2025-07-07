@@ -3,18 +3,25 @@
 from __future__ import annotations
 
 import os
+from dataclasses import asdict, dataclass, fields
+from typing import Optional, Tuple, Union
 from dataclasses import dataclass
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
+from crypto_bot.volatility_filter import calc_atr
 import ta
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 
 @dataclass
 class GridConfig:
+    """Configuration for :func:`generate_signal`."""
+
+    atr_period: int = 14
+    spacing_factor: float = 0.75
     """Configuration options for :func:`generate_signal`."""
 
     trend_ema_fast: int = 50
@@ -24,6 +31,19 @@ class GridConfig:
     @classmethod
     def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":
         cfg = cfg or {}
+        params = {f.name: cfg.get(f.name, getattr(cls, f.name)) for f in fields(cls)}
+        return cls(**params)
+
+
+ConfigType = Union[dict, GridConfig, None]
+
+
+def _as_dict(cfg: ConfigType) -> dict:
+    if cfg is None:
+        return {}
+    if isinstance(cfg, GridConfig):
+        return asdict(cfg)
+    return dict(cfg)
         return cls(
             trend_ema_fast=int(cfg.get("trend_ema_fast", cls.trend_ema_fast)),
             trend_ema_slow=int(cfg.get("trend_ema_slow", cls.trend_ema_slow)),
@@ -42,6 +62,10 @@ def _get_num_levels() -> int:
         return 5
 
 
+def generate_signal(
+    df: pd.DataFrame,
+    num_levels: int | None = None,
+    config: ConfigType = None,
 def is_in_trend(df: pd.DataFrame, fast: int, slow: int, side: str) -> bool:
     """Return ``True`` if ``side`` aligns with the EMA trend."""
 
@@ -86,6 +110,16 @@ def generate_signal(
     if num_levels is None:
         num_levels = _get_num_levels()
 
+    cfg_dict = _as_dict(config)
+    cfg = GridConfig.from_dict(cfg_dict)
+    atr_period = cfg.atr_period
+    spacing_factor = cfg.spacing_factor
+
+    lookback = max(20, atr_period)
+    if df.empty or len(df) < lookback:
+        return 0.0, "none"
+
+    recent = df.tail(lookback)
     cfg = GridConfig.from_dict(config)
 
     if df.empty or len(df) < 20:
@@ -109,9 +143,16 @@ def generate_signal(
         return 0.0, "none"
 
     price = recent["close"].iloc[-1]
-    levels = np.linspace(low, high, num=num_levels)
-    centre = (high + low) / 2
-    half_range = (high - low) / 2
+    centre = recent["vwap"].iloc[-1] if "vwap" in recent.columns else (high + low) / 2
+
+    atr = calc_atr(recent, window=atr_period)
+    grid_step = atr * spacing_factor
+    if not grid_step:
+        return 0.0, "none"
+
+    n = num_levels // 2
+    levels = centre + np.arange(-n, n + 1) * grid_step
+    half_range = grid_step * n
 
     lower_bound = levels[1]
     upper_bound = levels[-2]
