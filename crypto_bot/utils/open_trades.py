@@ -20,6 +20,7 @@ def get_open_trades(log_path: Path) -> List[Dict]:
 
     Each returned dictionary contains ``symbol``, ``side``, ``amount``, ``price``
     and ``entry_time`` keys. Buy orders are matched with later sells on a FIFO
+    basis to determine remaining open quantity per symbol.
     basis to determine remaining open quantity per symbol. If sells exceed buys
     the remaining quantity is treated as an open short position.
     The returned dictionaries contain ``symbol``, ``side`` (``"long"`` or
@@ -52,6 +53,15 @@ def get_open_trades(log_path: Path) -> List[Dict]:
         entry_time = row.get("timestamp")
 
         if side == "buy":
+            open_positions.setdefault(symbol, []).append(
+                {
+                    "symbol": symbol,
+                    "side": "buy",
+                    "amount": amount,
+                    "price": price,
+                    "entry_time": entry_time,
+                }
+            )
             qty = amount
             # close existing shorts first
             positions = open_shorts.get(symbol, [])
