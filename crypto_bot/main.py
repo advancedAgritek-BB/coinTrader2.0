@@ -245,6 +245,13 @@ async def _main_impl() -> TelegramNotifier:
     risk_params["volume_threshold_ratio"] = config.get("risk", {}).get(
         "volume_threshold_ratio", 0.1
     )
+    risk_params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
+    risk_params["stop_loss_atr_mult"] = config.get("risk", {}).get(
+        "stop_loss_atr_mult", 2.0
+    )
+    risk_params["take_profit_atr_mult"] = config.get("risk", {}).get(
+        "take_profit_atr_mult", 4.0
+    )
     risk_params["volume_ratio"] = volume_ratio
     risk_config = RiskConfig(**risk_params)
     risk_manager = RiskManager(risk_config)
@@ -609,6 +616,7 @@ async def _main_impl() -> TelegramNotifier:
                         "name": name_sym,
                         "direction": direction_sym,
                         "score": score_sym,
+                        "atr": res.get("atr"),
                     }
                 )
 
@@ -967,9 +975,17 @@ async def _main_impl() -> TelegramNotifier:
                 use_websocket=config.get("use_websocket", False),
                 config=config,
             )
-            stop_price = current_price * (
-                1 - risk_manager.config.stop_loss_pct if trade_side == "buy" else 1 + risk_manager.config.stop_loss_pct
-            )
+            atr_val = candidate.get("atr")
+            if atr_val:
+                stop_price = current_price - atr_val * risk_manager.config.stop_loss_atr_mult if trade_side == "buy" else current_price + atr_val * risk_manager.config.stop_loss_atr_mult
+                take_profit_price = current_price + atr_val * risk_manager.config.take_profit_atr_mult if trade_side == "buy" else current_price - atr_val * risk_manager.config.take_profit_atr_mult
+            else:
+                stop_price = current_price * (
+                    1 - risk_manager.config.stop_loss_pct if trade_side == "buy" else 1 + risk_manager.config.stop_loss_pct
+                )
+                take_profit_price = current_price * (
+                    1 + risk_manager.config.take_profit_pct if trade_side == "buy" else 1 - risk_manager.config.take_profit_pct
+                )
             stop_order = place_stop_order(
                 exchange,
                 candidate["symbol"],
@@ -986,6 +1002,7 @@ async def _main_impl() -> TelegramNotifier:
                 entry_price=current_price,
                 confidence=score,
                 direction=trade_side,
+                take_profit=take_profit_price,
             )
             risk_manager.allocate_capital(name, size)
             if config["execution_mode"] == "dry_run" and paper_wallet:
