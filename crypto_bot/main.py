@@ -764,6 +764,13 @@ async def _main_impl() -> TelegramNotifier:
                 if sell_amount >= pos["size"]:
                     risk_manager.cancel_stop_order(exchange, sym)
                     risk_manager.deallocate_capital(pos["strategy"], sell_amount * pos["entry_price"])
+                if sell_amount >= position_size:
+                    risk_manager.cancel_stop_order(
+                        exchange, open_symbol or config.get("symbol", "")
+                    )
+                    risk_manager.deallocate_capital(
+                        current_strategy, sell_amount * entry_price
+                    )
                     log_performance(
                         {
                             "symbol": sym,
@@ -795,6 +802,16 @@ async def _main_impl() -> TelegramNotifier:
                     risk_manager.deallocate_capital(pos["strategy"], sell_amount * pos["entry_price"])
                     risk_manager.update_stop_order(pos["size"], symbol=sym)
                     latest_balance = await fetch_and_log_balance(exchange, paper_wallet, config)
+                    position_size -= sell_amount
+                    risk_manager.deallocate_capital(
+                        current_strategy, sell_amount * entry_price
+                    )
+                    risk_manager.update_stop_order(
+                        open_symbol or config.get("symbol", ""), position_size
+                    )
+                    latest_balance = await fetch_and_log_balance(
+                        exchange, paper_wallet, config
+                    )
 
         if positions:
             continue
