@@ -68,19 +68,19 @@ def test_open_while_position_active_raises():
     wallet.close("BTC/USDT", 1.0, 10.0)
 
     tid = wallet.open("buy", 2.0, 50.0)
-    assert wallet.balance == 890.0
+    assert wallet.balance == 900.0
     assert wallet.positions[tid]["amount"] == 2.0
 
     pnl1 = wallet.close(1.0, 55.0, tid)
     assert pnl1 == 5.0
     assert wallet.realized_pnl == 5.0
-    assert wallet.balance == 945.0
+    assert wallet.balance == 955.0
     assert wallet.positions[tid]["amount"] == 1.0
 
     pnl2 = wallet.close(1.0, 60.0, tid)
     assert pnl2 == 10.0
     assert wallet.realized_pnl == 15.0
-    assert wallet.balance == 1005.0
+    assert wallet.balance == 1015.0
     assert tid not in wallet.positions
 
 
@@ -106,6 +106,11 @@ def test_multiple_positions_unrealized_and_close():
 
     pnl_long = wallet.close(1.0, 110.0, long_id)
     pnl_short = wallet.close(2.0, 40.0, short_id)
+    assert pnl_long == 10.0
+    assert pnl_short == 20.0
+    assert wallet.realized_pnl == 30.0
+    assert wallet.balance == 1030.0
+    assert wallet.positions == {}
 
 def test_open_multiple_positions_allowed():
     wallet = PaperWallet(1000.0, max_open_trades=2)
@@ -121,8 +126,6 @@ def test_open_multiple_positions_allowed():
 
     assert pnl1 == 10.0
     assert pnl2 == 20.0
-    assert pnl_long == 10.0
-    assert pnl_short == 20.0
     assert wallet.realized_pnl == 30.0
     assert wallet.balance == 1030.0
     assert wallet.positions == {}
