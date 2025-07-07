@@ -78,6 +78,36 @@ def test_grid_levels_env_override(monkeypatch):
     assert score > 0.0
 
 
+def test_breakout_trigger_short(monkeypatch):
+    df = _df_with_price(120.0)
+
+    called = {}
+
+    def fake_breakout_signal(dataframe, config=None):
+        called['called'] = True
+        return 0.6, "short"
+
+    monkeypatch.setattr(grid_bot.breakout_bot, "generate_signal", fake_breakout_signal)
+    score, direction = grid_bot.generate_signal(df)
+    assert called.get('called')
+    assert direction == "short"
+    assert score == 0.6
+
+
+def test_breakout_trigger_long(monkeypatch):
+    df = _df_with_price(80.0)
+
+    called = {}
+
+    def fake_breakout_signal(dataframe, config=None):
+        called['called'] = True
+        return 0.7, "long"
+
+    monkeypatch.setattr(grid_bot.breakout_bot, "generate_signal", fake_breakout_signal)
+    score, direction = grid_bot.generate_signal(df)
+    assert called.get('called')
+    assert direction == "long"
+    assert score == 0.7
 def test_cooldown_blocks_signal(monkeypatch):
     df = _df_with_price(89.0)
     cfg = GridConfig(symbol="BTC/USDT")

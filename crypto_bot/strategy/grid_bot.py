@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+from dataclasses import asdict, dataclass, fields
+from typing import Optional, Tuple, Union
 from dataclasses import dataclass, fields, asdict
 from typing import Optional, Tuple, Union
 from dataclasses import dataclass
@@ -18,6 +20,7 @@ import pandas as pd
 from crypto_bot.volatility_filter import calc_atr
 import ta
 from crypto_bot.utils.volatility import normalize_score_by_volatility
+from . import breakout_bot
 from crypto_bot import grid_state
 
 
@@ -25,6 +28,8 @@ from crypto_bot import grid_state
 class GridConfig:
     """Configuration options for :func:`generate_signal`."""
 
+    num_levels: int = 5
+    breakout_mult: float = 1.5
     cooldown_bars: int = 6
     max_active_legs: int = 4
     symbol: str = ""
@@ -33,6 +38,12 @@ class GridConfig:
     @classmethod
     def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":
         cfg = cfg or {}
+        params = {}
+        for f in fields(cls):
+            if f.name == "num_levels":
+                params[f.name] = int(cfg.get("num_levels", _get_num_levels()))
+            else:
+                params[f.name] = cfg.get(f.name, getattr(cls, f.name))
         params = {f.name: cfg.get(f.name, getattr(cls, f.name)) for f in fields(cls)}
         return cls(**params)
 
@@ -130,6 +141,7 @@ def _get_num_levels() -> int:
 def generate_signal(
     df: pd.DataFrame,
     num_levels: int | None = None,
+    config: ConfigType = None,
     config: Optional[Union[dict, GridConfig]] = None,
     config: ConfigType = None,
 def is_in_trend(df: pd.DataFrame, fast: int, slow: int, side: str) -> bool:
@@ -173,8 +185,11 @@ def generate_signal(
     when price stays around the centre of the grid.
     """
 
+    cfg_dict = _as_dict(config)
+    cfg = GridConfig.from_dict(cfg_dict)
+
     if num_levels is None:
-        num_levels = _get_num_levels()
+        num_levels = cfg.num_levels
 
     cfg_dict = _as_dict(config)
     cfg = GridConfig.from_dict(cfg_dict)
@@ -236,6 +251,11 @@ def generate_signal(
     n = num_levels // 2
     levels = centre + np.arange(-n, n + 1) * grid_step
     half_range = grid_step * n
+
+    # defer to breakout logic when price extends far beyond the grid range
+    breakout_threshold = half_range * cfg.breakout_mult
+    if price > centre + breakout_threshold or price < centre - breakout_threshold:
+        return breakout_bot.generate_signal(df, _as_dict(config))
 
     lower_bound = levels[1]
     upper_bound = levels[-2]
