@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -27,6 +28,10 @@ def test_training_and_prediction(tmp_path, monkeypatch):
     targets = df.loc[features.index, "label"]
     model = ml.train_model(features, targets)
     assert ml.MODEL_PATH.exists()
+    assert ml.REPORT_PATH.exists()
+    report = json.loads(ml.REPORT_PATH.read_text())
+    for key in ["accuracy", "auc", "precision", "recall", "trained_at"]:
+        assert key in report
     pred = ml.predict_signal(df, model=model)
     assert 0.0 <= pred <= 1.0
 
@@ -39,5 +44,9 @@ def test_train_from_csv(tmp_path, monkeypatch):
     monkeypatch.setattr(ml, "REPORT_PATH", tmp_path / "report.json")
     model = ml.train_from_csv(csv)
     assert ml.MODEL_PATH.exists()
+    assert ml.REPORT_PATH.exists()
+    report = json.loads(ml.REPORT_PATH.read_text())
+    for key in ["accuracy", "auc", "precision", "recall", "trained_at"]:
+        assert key in report
     pred = ml.predict_signal(df, model=model)
     assert 0.0 <= pred <= 1.0
