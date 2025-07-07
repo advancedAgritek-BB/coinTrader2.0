@@ -146,29 +146,19 @@ class PaperWallet:
         key = "size" if "size" in pos else "amount"
         amount = min(amount, pos[key])
 
-        if "size" in pos:
-            # symbol-based logic
-            pnl = (price - pos["entry_price"]) * amount if pos["side"] == "buy" else (pos["entry_price"] - price) * amount
-            if pos.get("partial", False) or amount < pos[key]:
-                deposit_price = price
-                self.realized_pnl += pnl
-            else:
-                deposit_price = pos["entry_price"]
-            if pos["side"] == "buy":
-                self.balance += deposit_price * amount
-            else:
-                self.balance -= deposit_price * amount
-            pos[key] -= amount
-            if pos[key] > 0:
-                pos["partial"] = True
+        pnl = (
+            (price - pos["entry_price"]) * amount
+            if pos["side"] == "buy"
+            else (pos["entry_price"] - price) * amount
+        )
+
+        if pos["side"] == "buy":
+            self.balance += amount * price
         else:
-            pnl = (price - pos["entry_price"]) * amount if pos["side"] == "buy" else (pos["entry_price"] - price) * amount
-            if pos["side"] == "buy":
-                self.balance += amount * price
-            else:
-                self.balance -= amount * price
-            pos[key] -= amount
-            self.realized_pnl += pnl
+            self.balance -= amount * price
+
+        pos[key] -= amount
+        self.realized_pnl += pnl
 
         if pos[key] <= 0:
             del self.positions[identifier]
