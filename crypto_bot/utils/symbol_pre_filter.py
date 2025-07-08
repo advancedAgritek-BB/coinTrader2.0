@@ -45,6 +45,15 @@ async def has_enough_history(
             exc_info=True,
         )
         return False
+    if isinstance(data, Exception):
+        logger.warning(
+            "fetch_ohlcv returned error for %s on %s for %d days: %s",
+            symbol,
+            timeframe,
+            days,
+            data,
+        )
+        return False
     if not data or len(data) < candles_needed:
         return False
     return True

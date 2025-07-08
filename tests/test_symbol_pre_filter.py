@@ -152,6 +152,18 @@ def test_has_enough_history_false(monkeypatch):
         mock_fetch_history_short,
     )
     assert not asyncio.run(has_enough_history(None, "BTC/USD", days=10))
+
+
+async def mock_fetch_history_error(exchange, symbol, timeframe="1d", limit=30, **_):
+    return asyncio.TimeoutError()
+
+
+def test_has_enough_history_error(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter.fetch_ohlcv_async",
+        mock_fetch_history_error,
+    )
+    assert not asyncio.run(has_enough_history(None, "BTC/USD", days=10))
 def test_filter_symbols_sorted_by_score(monkeypatch):
     async def fake_fetch_sorted(_):
         return {
