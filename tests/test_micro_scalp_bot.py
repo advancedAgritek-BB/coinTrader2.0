@@ -51,3 +51,40 @@ def test_trend_filter_allows_long_signal():
     score, direction = micro_scalp_bot.generate_signal(df, cfg, higher_df=higher_df)
     assert direction == "long"
     assert score > 0
+
+
+def test_min_momentum_blocks_signal():
+    prices = [10 + i * 0.01 for i in range(10)]
+    volumes = [100] * 10
+    df = _df(prices, volumes)
+    cfg = {"micro_scalp": {"min_momentum_pct": 0.01}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg)
+    assert (score, direction) == (0.0, "none")
+
+
+def test_confirm_bars_blocks_fresh_cross():
+    prices = [1, 2, 3, 4, 5, 6, 7, 8, 9, 1]
+    volumes = [100] * len(prices)
+    df = _df(prices, volumes)
+    cfg = {"micro_scalp": {"confirm_bars": 2}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg)
+    assert (score, direction) == (0.0, "none")
+
+
+def test_fresh_cross_only_signal():
+    prices = [1, 2, 3, 4, 5, 6, 7, 8, 9, 1]
+    volumes = [100] * len(prices)
+    df = _df(prices, volumes)
+    cfg = {"micro_scalp": {"fresh_cross_only": True, "confirm_bars": 1}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg)
+    assert direction == "short"
+    assert score > 0
+
+
+def test_fresh_cross_only_requires_change():
+    prices = [1, 2, 3, 4, 5, 6, 7, 8, 3, 2, 1]
+    volumes = [100] * len(prices)
+    df = _df(prices, volumes)
+    cfg = {"micro_scalp": {"fresh_cross_only": True}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg)
+    assert (score, direction) == (0.0, "none")
