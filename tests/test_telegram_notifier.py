@@ -42,3 +42,10 @@ def test_notify_noop_when_disabled(monkeypatch):
     res = notifier.notify('msg')
     assert called is False
     assert res is None
+
+
+def test_set_admin_ids_accepts_int(monkeypatch):
+    import crypto_bot.utils.telegram as tg
+    tg.set_admin_ids(123)
+    assert tg.is_admin("123")
+    tg.set_admin_ids([])
