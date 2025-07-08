@@ -29,7 +29,8 @@ SAMPLE_CFG = {
 
 
 def test_strategy_for_mapping():
-    cfg = RouterConfig.from_dict(SAMPLE_CFG)
+    data = {"strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"], "commit_lock_intervals": 3}}
+    cfg = RouterConfig.from_dict(data)
     assert strategy_for("trending", cfg) is trend_bot.generate_signal
     assert strategy_for("sideways", cfg) is grid_bot.generate_signal
     assert strategy_for("mean-reverting", cfg) is mean_bot.generate_signal
@@ -81,3 +82,31 @@ def test_route_multi_tf_combo(monkeypatch):
     fn = route({"1m": "breakout", "15m": "trending"}, "cex", cfg)
     score, direction = fn(None)
     assert (score, direction) == (0.1, "long")
+
+
+def test_regime_commit_lock(tmp_path, monkeypatch):
+    orig_path = strategy_router.Path
+
+    def fake_path(p):
+        if p == "last_regime.json":
+            return tmp_path / p
+        return orig_path(p)
+
+    monkeypatch.setattr(strategy_router, "Path", fake_path)
+
+    data = {
+        "strategy_router": {
+            "regimes": SAMPLE_CFG["strategy_router"]["regimes"],
+            "commit_lock_intervals": 3,
+        }
+    }
+    cfg = RouterConfig.from_dict(data)
+    route("trending", "cex", cfg)
+    lock = tmp_path / "last_regime.json"
+    ts = lock.stat().st_mtime
+
+    fn = route("sideways", "cex", cfg)
+
+    assert fn.__name__ == trend_bot.generate_signal.__name__
+    assert lock.stat().st_mtime == ts
+
