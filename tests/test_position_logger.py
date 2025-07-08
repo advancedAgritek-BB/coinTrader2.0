@@ -94,6 +94,7 @@ def test_log_position_with_custom_pnl(tmp_path, monkeypatch):
     )
 
     text = log_file.read_text()
+    lines = log_file.read_text().splitlines()
     assert "$15.00" in text
     assert len(lines) == 2
     assert "pnl $0.00" in lines[0]
