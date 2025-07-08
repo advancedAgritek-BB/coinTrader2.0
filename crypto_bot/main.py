@@ -168,6 +168,53 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
+async def _watch_position(
+    symbol: str,
+    exchange: object,
+    positions: dict,
+    paper_wallet: PaperWallet | None,
+    config: dict,
+    df_cache: dict,
+) -> None:
+    """Live update position PnL and log changes."""
+    use_ws = config.get("use_websocket", False) and hasattr(exchange, "watch_ticker")
+    poll_interval = float(config.get("position_poll_interval", 5))
+
+    while symbol in positions:
+        try:
+            if use_ws:
+                ticker = await exchange.watch_ticker(symbol)
+            else:
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
+                    ticker = await exchange.fetch_ticker(symbol)
+                else:
+                    ticker = await asyncio.to_thread(exchange.fetch_ticker, symbol)
+                await asyncio.sleep(poll_interval)
+
+            price = ticker.get("last") or ticker.get("close") or ticker.get("bid") or ticker.get("ask")
+            if price is None:
+                continue
+
+            pos = positions.get(symbol)
+            if pos is None:
+                continue
+
+            pos["last_price"] = price
+            pos["pnl"] = (
+                (price - pos["entry_price"]) * pos["size"] * (1 if pos["side"] == "buy" else -1)
+            )
+
+            equity = await fetch_and_log_balance(exchange, paper_wallet, config)
+            if paper_wallet:
+                equity = float(paper_wallet.balance + paper_wallet.unrealized(symbol, price))
+            log_position(symbol, pos["side"], pos["size"], pos["entry_price"], price, float(equity))
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:  # pragma: no cover - network or runtime error
+            logger.error("Watcher error for %s: %s", symbol, exc, exc_info=True)
+            await asyncio.sleep(poll_interval)
+
+
 async def _main_impl() -> TelegramNotifier:
     """Implementation for running the trading bot."""
 
@@ -310,6 +357,7 @@ async def _main_impl() -> TelegramNotifier:
     )
 
     positions: dict[str, dict] = {}
+    position_tasks: dict[str, asyncio.Task] = {}
     max_open_trades = config.get("max_open_trades", 1)
     position_guard = OpenPositionGuard(max_open_trades)
     active_strategy = None
@@ -850,6 +898,13 @@ async def _main_impl() -> TelegramNotifier:
                         pos["pnl"],
                     )
                     mark_cooldown(sym, active_strategy or pos.get("strategy", ""))
+                    task = position_tasks.pop(sym, None)
+                    if task:
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
                     positions.pop(sym, None)
                 else:
                     pos["size"] -= sell_amount
@@ -1054,6 +1109,16 @@ async def _main_impl() -> TelegramNotifier:
                 "trailing_stop": 0.0,
                 "highest_price": current_price,
             }
+            position_tasks[candidate["symbol"]] = asyncio.create_task(
+                _watch_position(
+                    candidate["symbol"],
+                    exchange,
+                    positions,
+                    paper_wallet,
+                    config,
+                    df_cache,
+                )
+            )
             active_strategy = name
             if notifier and trade_updates:
                 report_entry(
@@ -1109,6 +1174,14 @@ async def _main_impl() -> TelegramNotifier:
 
     monitor_task.cancel()
     control_task.cancel()
+    for task in list(position_tasks.values()):
+        task.cancel()
+    for task in list(position_tasks.values()):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    position_tasks.clear()
     if telegram_bot:
         telegram_bot.stop()
     try:
