@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from typing import Callable, Dict, List
+from datetime import datetime
 
 import pandas as pd
 
@@ -58,7 +59,11 @@ def _scores_for(regime: str) -> Dict[str, float]:
     data = _load().get(regime, {})
     scores: Dict[str, float] = {}
     for strat, trades in data.items():
-        pnls = [float(t.get("pnl", 0.0)) for t in trades]
+        now = datetime.utcnow()
+        pnls = [
+            float(t["pnl"]) * (0.98 ** (now - datetime.fromisoformat(t["timestamp"])).days)
+            for t in trades
+        ]
         if not pnls:
             continue
         wins = sum(p > 0 for p in pnls)
