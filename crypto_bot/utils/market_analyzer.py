@@ -136,6 +136,11 @@ async def analyze_symbol(
             name = res.get("name", strategy_name(regime, env))
             score = float(res.get("score", 0.0))
             direction = res.get("direction", "none")
+        elif eval_mode == "ensemble":
+            from crypto_bot.strategy_router import evaluate_regime
+
+            score, direction = evaluate_regime(regime, df, cfg)
+            name = "ensemble"
         else:
             strategy_fn = route(regime, env, config, notifier)
             name = strategy_name(regime, env)
