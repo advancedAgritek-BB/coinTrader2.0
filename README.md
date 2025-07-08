@@ -180,7 +180,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **strategy_evaluation_mode** – how the router chooses a strategy.
 * **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
 * **exit_strategy** – partial profit taking and trailing stop logic.
-* **micro_scalp** – EMA and volume settings for the scalp bot.
+* **micro_scalp** – EMA settings plus volume z-score and ATR filters for the scalp bot.
 * **breakout** – Bollinger/Keltner squeeze, volume multiplier, ATR buffer and
   outputs ATR for stop sizing.
 

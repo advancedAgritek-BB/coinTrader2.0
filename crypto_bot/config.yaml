@@ -86,9 +86,12 @@ metrics_backend: csv
 metrics_enabled: true
 metrics_output_file: crypto_bot/logs/metrics.csv
 micro_scalp:
+  atr_period: 14
   ema_fast: 3
   ema_slow: 8
-  volume_threshold: 1.5
+  min_atr_pct: 0.0
+  min_vol_z: 0
+  vol_window: 20
 min_agreeing_votes: 1
 min_confidence_score: 0.1
 min_consistent_agreement: 1

@@ -33,7 +33,9 @@ def generate_signal(
     fast_window = int(params.get("ema_fast", 3))
     slow_window = int(params.get("ema_slow", 8))
     vol_window = int(params.get("volume_window", 20))
-    vol_threshold = float(params.get("volume_threshold", 0))
+    min_vol_z = float(params.get("min_vol_z", 0))
+    atr_period = int(params.get("atr_period", 14))
+    min_atr_pct = float(params.get("min_atr_pct", 0))
     min_momentum_pct = float(params.get("min_momentum_pct", 0))
     confirm_bars = int(params.get("confirm_bars", 1))
     fresh_cross_only = bool(params.get("fresh_cross_only", False))
@@ -44,7 +46,7 @@ def generate_signal(
     if len(df) < slow_window:
         return 0.0, "none"
 
-    lookback = slow_window
+    lookback = max(slow_window, vol_window, atr_period)
     recent = df.iloc[-(lookback + 1) :]
 
     ema_fast = ta.trend.ema_indicator(recent["close"], window=fast_window)
@@ -52,21 +54,35 @@ def generate_signal(
 
     ema_fast = cache_series("ema_fast", df, ema_fast, lookback)
     ema_slow = cache_series("ema_slow", df, ema_slow, lookback)
+    atr_window = min(atr_period, len(recent))
+    atr_series = ta.volatility.average_true_range(
+        recent["high"], recent["low"], recent["close"], window=atr_window
+    )
+    atr_series = cache_series(f"atr_{atr_period}", df, atr_series, lookback)
 
     df = recent.copy()
     df["ema_fast"] = ema_fast
     df["ema_slow"] = ema_slow
+    df["atr"] = atr_series
     df["momentum"] = df["ema_fast"] - df["ema_slow"]
 
     latest = df.iloc[-1]
     if pd.isna(latest["ema_fast"]) or pd.isna(latest["ema_slow"]):
         return 0.0, "none"
 
-    if vol_threshold and "volume" in df.columns:
+    if min_atr_pct and "atr" in df.columns and latest["close"] > 0:
+        if pd.isna(latest["atr"]) or latest["atr"] / latest["close"] < min_atr_pct:
+            return 0.0, "none"
+
+    if min_vol_z and "volume" in df.columns:
         vol_ma_series = df["volume"].rolling(vol_window).mean()
+        vol_std_series = df["volume"].rolling(vol_window).std()
         vol_ma_series = cache_series("volume_ma", df, vol_ma_series, lookback)
-        vol_ma = vol_ma_series.iloc[-1]
-        if pd.isna(vol_ma) or vol_ma == 0 or latest["volume"] < vol_ma * vol_threshold:
+        vol_std_series = cache_series("volume_std", df, vol_std_series, lookback)
+        vol_mean = vol_ma_series.iloc[-1]
+        vol_std = vol_std_series.iloc[-1]
+        vol_z = (latest["volume"] - vol_mean) / vol_std if vol_std > 0 else float("-inf")
+        if pd.isna(vol_z) or vol_z < min_vol_z:
             return 0.0, "none"
 
     trend_fast_val = None
