@@ -181,10 +181,10 @@ class TelegramBotUI:
     ) -> None:
         if not await self._check_cooldown(update, "start"):
             return
-        text = await self.controller.start()
-        await update.message.reply_text(text)
         if not await self._check_admin(update):
             return
+        text = await self.controller.start()
+        await update.message.reply_text(text)
         self.state["running"] = True
         await self._reply(update, "Trading started")
 
@@ -193,10 +193,10 @@ class TelegramBotUI:
     ) -> None:
         if not await self._check_cooldown(update, "stop"):
             return
-        text = await self.controller.stop()
-        await update.message.reply_text(text)
         if not await self._check_admin(update):
             return
+        text = await self.controller.stop()
+        await update.message.reply_text(text)
         self.state["running"] = False
         await self._reply(update, "Trading stopped")
 
