@@ -11,3 +11,13 @@ def test_guard_rejects_at_limit():
     guard = OpenPositionGuard(1)
     positions = {"BTC/USDT": {"side": "buy"}}
     assert not guard.can_open(positions)
+
+
+def test_guard_supports_multiple_symbols():
+    guard = OpenPositionGuard(2)
+    positions = {}
+    positions["BTC/USDT"] = {"side": "buy"}
+    assert guard.can_open(positions)
+    positions["ETH/USDT"] = {"side": "sell"}
+    assert set(positions.keys()) == {"BTC/USDT", "ETH/USDT"}
+    assert not guard.can_open(positions)

@@ -967,7 +967,7 @@ async def _main_impl() -> TelegramNotifier:
                     )
                     latest_balance = await fetch_balance(exchange, paper_wallet, config)
 
-        if positions:
+        if not position_guard.can_open(positions):
             continue
 
         if not filtered_results:
@@ -1204,7 +1204,8 @@ async def _main_impl() -> TelegramNotifier:
                 )
             logger.info("Trade opened at %.4f", current_price)
             trades_executed += 1
-            break
+            if not position_guard.can_open(positions):
+                break
 
         write_scores(scores_file, perf_file)
         write_stats(stats_file, perf_file)
