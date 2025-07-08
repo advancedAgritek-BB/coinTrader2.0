@@ -7,7 +7,11 @@ from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 
-def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
+def generate_signal(
+    df: pd.DataFrame,
+    config: Optional[dict] = None,
+    higher_df: pd.DataFrame | None = None,
+) -> Tuple[float, str]:
     """Return short-term signal using EMA crossover on 1m data.
 
     Parameters
@@ -17,6 +21,10 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     config : dict, optional
         Optional configuration overriding defaults located under
         ``micro_scalp`` in ``config.yaml``.
+    higher_df : pd.DataFrame, optional
+        Higher timeframe OHLCV data used to confirm the trend. When provided
+        the function only returns a signal if ``trend_fast`` is above
+        ``trend_slow`` for longs (and vice versa for shorts).
     """
     if df.empty:
         return 0.0, "none"
@@ -26,6 +34,9 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     slow_window = int(params.get("ema_slow", 8))
     vol_window = int(params.get("volume_window", 20))
     vol_threshold = float(params.get("volume_threshold", 0))
+    trend_fast = int(params.get("trend_fast", 0))
+    trend_slow = int(params.get("trend_slow", 0))
+    _ = params.get("trend_timeframe")
 
     if len(df) < slow_window:
         return 0.0, "none"
@@ -54,6 +65,20 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         if pd.isna(vol_ma) or vol_ma == 0 or latest["volume"] < vol_ma * vol_threshold:
             return 0.0, "none"
 
+    trend_fast_val = None
+    trend_slow_val = None
+    if higher_df is not None and trend_fast and trend_slow:
+        trend_lookback = max(trend_fast, trend_slow)
+        h_recent = higher_df.iloc[-(trend_lookback + 1) :]
+        t_fast = ta.trend.ema_indicator(h_recent["close"], window=trend_fast)
+        t_slow = ta.trend.ema_indicator(h_recent["close"], window=trend_slow)
+        t_fast = cache_series("trend_fast", higher_df, t_fast, trend_lookback)
+        t_slow = cache_series("trend_slow", higher_df, t_slow, trend_lookback)
+        trend_fast_val = t_fast.iloc[-1]
+        trend_slow_val = t_slow.iloc[-1]
+        if pd.isna(trend_fast_val) or pd.isna(trend_slow_val):
+            return 0.0, "none"
+
     momentum = latest["ema_fast"] - latest["ema_slow"]
     if momentum == 0:
         return 0.0, "none"
@@ -63,4 +88,11 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         score = normalize_score_by_volatility(df, score)
 
     direction = "long" if momentum > 0 else "short"
+
+    if trend_fast_val is not None and trend_slow_val is not None:
+        if direction == "long" and trend_fast_val <= trend_slow_val:
+            return 0.0, "none"
+        if direction == "short" and trend_fast_val >= trend_slow_val:
+            return 0.0, "none"
+
     return score, direction
