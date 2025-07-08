@@ -152,6 +152,21 @@ def test_has_enough_history_false(monkeypatch):
         mock_fetch_history_short,
     )
     assert not asyncio.run(has_enough_history(None, "BTC/USD", days=10))
+
+
+async def mock_fetch_history_exception(exchange, symbol, timeframe="1d", limit=30, **_):
+    import ccxt
+    return ccxt.RequestTimeout("timeout")
+
+
+def test_has_enough_history_exception(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter.fetch_ohlcv_async",
+        mock_fetch_history_exception,
+    )
+    assert not asyncio.run(has_enough_history(None, "BTC/USD", days=10))
+    assert any("returned exception" in r.getMessage() for r in caplog.records)
 def test_filter_symbols_sorted_by_score(monkeypatch):
     async def fake_fetch_sorted(_):
         return {
