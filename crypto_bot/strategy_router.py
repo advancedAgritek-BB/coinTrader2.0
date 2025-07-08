@@ -73,6 +73,79 @@ class RouterConfig:
 
 DEFAULT_ROUTER_CFG = RouterConfig.from_dict(DEFAULT_CONFIG)
 
+
+class Selector:
+    """Helper class to select a strategy callable."""
+
+    def __init__(self, config: RouterConfig):
+        self.config = config
+
+    def select(
+        self,
+        df: pd.DataFrame,
+        regime: str,
+        mode: str,
+        notifier=None,
+    ) -> Callable[[pd.DataFrame], Tuple[float, str]]:
+        cfg = self.config
+
+        if (isinstance(cfg, RouterConfig) and cfg.rl_selector) or (
+            not isinstance(cfg, RouterConfig)
+            and cfg.get("rl_selector", {}).get("enabled")
+        ):
+            from .rl import strategy_selector as rl_selector
+
+            strategy_fn = rl_selector.select_strategy(regime)
+            logger.info("RL selector chose %s for %s", strategy_fn.__name__, regime)
+            return strategy_fn
+
+        if (isinstance(cfg, RouterConfig) and cfg.meta_selector) or (
+            not isinstance(cfg, RouterConfig)
+            and cfg.get("meta_selector", {}).get("enabled")
+        ):
+            from . import meta_selector
+
+            strategy_fn = meta_selector.choose_best(regime)
+            logger.info("Meta selector chose %s for %s", strategy_fn.__name__, regime)
+            return strategy_fn
+
+        if (isinstance(cfg, RouterConfig) and cfg.fusion_enabled) or (
+            not isinstance(cfg, RouterConfig)
+            and cfg.get("signal_fusion", {}).get("enabled")
+        ):
+            from . import meta_selector
+            from crypto_bot.signals.signal_fusion import SignalFusionEngine
+
+            pairs_conf = (
+                cfg.strategies
+                if isinstance(cfg, RouterConfig)
+                else cfg.get("signal_fusion", {}).get("strategies", [])
+            )
+            mapping = getattr(meta_selector, "_STRATEGY_FN_MAP", {})
+            strategies: list[
+                tuple[Callable[[pd.DataFrame], Tuple[float, str]], float]
+            ] = []
+            for name, weight in pairs_conf:
+                fn = mapping.get(name)
+                if fn:
+                    strategies.append((fn, float(weight)))
+            if not strategies:
+                strategies.append((strategy_for(regime, cfg), 1.0))
+            engine = SignalFusionEngine(strategies)
+
+            def fused(df: pd.DataFrame, cfg_param=None):
+                return engine.fuse(
+                    df,
+                    cfg.as_dict() if isinstance(cfg, RouterConfig) else cfg_param,
+                )
+
+            logger.info("Routing to signal fusion engine")
+            return fused
+
+        strategy_fn = strategy_for(regime, cfg)
+        logger.info("Routing to %s (%s)", strategy_fn.__name__, mode)
+        return strategy_fn
+
 def get_strategy_by_name(name: str) -> Callable[[pd.DataFrame], Tuple[float, str]] | None:
     """Return strategy callable for ``name`` if available."""
     from . import meta_selector
@@ -242,51 +315,5 @@ def route(
         logger.info("Routing to DEX scalper (onchain)")
         return _wrap(dex_scalper.generate_signal)
 
-    if (isinstance(cfg, RouterConfig) and cfg.rl_selector) or (
-        not isinstance(cfg, RouterConfig) and cfg.get("rl_selector", {}).get("enabled")
-    ):
-        from .rl import strategy_selector as rl_selector
-
-        strategy_fn = rl_selector.select_strategy(regime)
-        logger.info("RL selector chose %s for %s", strategy_fn.__name__, regime)
-        return _wrap(strategy_fn)
-
-    if (isinstance(cfg, RouterConfig) and cfg.meta_selector) or (
-        not isinstance(cfg, RouterConfig) and cfg.get("meta_selector", {}).get("enabled")
-    ):
-        from . import meta_selector
-
-        strategy_fn = meta_selector.choose_best(regime)
-        logger.info("Meta selector chose %s for %s", strategy_fn.__name__, regime)
-        return _wrap(strategy_fn)
-
-    if (isinstance(cfg, RouterConfig) and cfg.fusion_enabled) or (
-        not isinstance(cfg, RouterConfig) and cfg.get("signal_fusion", {}).get("enabled")
-    ):
-        from . import meta_selector
-        from crypto_bot.signals.signal_fusion import SignalFusionEngine
-
-        pairs_conf = (
-            cfg.strategies
-            if isinstance(cfg, RouterConfig)
-            else cfg.get("signal_fusion", {}).get("strategies", [])
-        )
-        mapping = getattr(meta_selector, "_STRATEGY_FN_MAP", {})
-        strategies: list[tuple[Callable[[pd.DataFrame], Tuple[float, str]], float]] = []
-        for name, weight in pairs_conf:
-            fn = mapping.get(name)
-            if fn:
-                strategies.append((fn, float(weight)))
-        if not strategies:
-            strategies.append((strategy_for(regime, cfg), 1.0))
-        engine = SignalFusionEngine(strategies)
-
-        def fused(df: pd.DataFrame, cfg_param=None):
-            return engine.fuse(df, cfg.as_dict() if isinstance(cfg, RouterConfig) else cfg_param)
-
-        logger.info("Routing to signal fusion engine")
-        return _wrap(fused)
-
-    strategy_fn = strategy_for(regime, cfg)
-    logger.info("Routing to %s (%s)", strategy_fn.__name__, mode)
+    strategy_fn = Selector(cfg).select(pd.DataFrame(), regime, mode, notifier)
     return _wrap(strategy_fn)
