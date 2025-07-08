@@ -69,6 +69,41 @@ def get_strategies_for_regime(regime: str, config: Dict | None = None) -> list[C
     return mapping.get(regime, [grid_bot.generate_signal])
 
 
+def evaluate_regime(
+    regime: str,
+    df: pd.DataFrame,
+    config: Dict | None = None,
+) -> Tuple[float, str]:
+    """Evaluate and fuse all strategies assigned to ``regime``."""
+    cfg = config or DEFAULT_CONFIG
+    strategies = get_strategies_for_regime(regime, cfg)
+    fusion_cfg = cfg.get("signal_fusion", {})
+
+    method = fusion_cfg.get("fusion_method", "weight")
+    min_conf = float(fusion_cfg.get("min_confidence", 0.0))
+
+    weights = {}
+    if method == "weight":
+        from crypto_bot.utils.regime_pnl_tracker import compute_weights
+
+        weights = compute_weights(regime)
+
+    pairs: list[Tuple[Callable[[pd.DataFrame], Tuple[float, str]], float]] = []
+    for fn in strategies:
+        w = float(weights.get(fn.__name__, 1.0))
+        if w < min_conf:
+            continue
+        pairs.append((fn, w))
+
+    if not pairs:
+        pairs.append((strategies[0], 1.0))
+
+    from crypto_bot.signals.signal_fusion import SignalFusionEngine
+
+    engine = SignalFusionEngine(pairs)
+    return engine.fuse(df, cfg)
+
+
 def strategy_name(regime: str, mode: str) -> str:
     """Return the name of the strategy for given regime and mode."""
     if mode == "cex":

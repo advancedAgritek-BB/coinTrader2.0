@@ -152,6 +152,11 @@ sentiment_filter:
   bull_sentiment: 60
   min_fng: 0
   min_sentiment: 0
+signal_fusion:
+  enabled: false
+  fusion_method: weight
+  min_confidence: 0.0
+  strategies: []
 signal_threshold: 0.1
 signal_weight_optimizer:
   enabled: false
