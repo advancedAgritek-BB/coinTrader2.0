@@ -10,6 +10,7 @@ import json
 import time
 
 from crypto_bot.utils import timeframe_seconds
+from datetime import datetime
 
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -78,6 +79,9 @@ class RouterConfig:
 
 
 DEFAULT_ROUTER_CFG = RouterConfig.from_dict(DEFAULT_CONFIG)
+
+# Path storing the last selected regime and timestamp
+LAST_REGIME_FILE = Path("crypto_bot/logs/last_regime.json")
 
 
 class Selector:
@@ -338,6 +342,26 @@ def route(
         else:
             lock_file.parent.mkdir(parents=True, exist_ok=True)
             lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
+    tf = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe")
+    tf_minutes = getattr(cfg, "timeframe_minutes", int(pd.Timedelta(tf).total_seconds() // 60))
+
+    LAST_REGIME_FILE.parent.mkdir(parents=True, exist_ok=True)
+    last_data = {}
+    if LAST_REGIME_FILE.exists():
+        try:
+            last_data = json.loads(LAST_REGIME_FILE.read_text())
+        except Exception:
+            last_data = {}
+    last_ts = last_data.get("timestamp")
+    last_regime = last_data.get("regime")
+    if last_ts and last_regime:
+        try:
+            ts = datetime.fromisoformat(last_ts)
+            if (datetime.utcnow() - ts).total_seconds() < tf_minutes * 60 * 3:
+                regime = last_regime
+        except Exception:
+            pass
+    LAST_REGIME_FILE.write_text(json.dumps({"timestamp": datetime.utcnow().isoformat(), "regime": regime}))
 
     if mode == "onchain":
         if regime in {"breakout", "volatile"}:
