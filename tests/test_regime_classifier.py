@@ -27,12 +27,10 @@ def test_classify_regime_returns_unknown_for_short_df():
     regime, probs = classify_regime(df)
     assert regime == "unknown"
     assert isinstance(probs, dict)
+
     regime, info = classify_regime(df)
     assert regime == "unknown"
-    assert isinstance(conf, dict)
     assert isinstance(info, dict)
-    assert isinstance(conf, set)
-    assert isinstance(conf, (float, set))
 
 
 def test_classify_regime_returns_unknown_for_14_rows():
