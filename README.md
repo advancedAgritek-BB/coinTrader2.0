@@ -65,8 +65,8 @@ model if desired.
    When dry-run mode is selected you will be prompted for the starting USDT balance.
    The console now refreshes with your wallet balance and any active
    trades in real time. Profitable positions are shown in green while
-   losing ones appear in red. A second line now lists each open trade with
-   its running profit or loss.
+   losing ones appear in red. The monitor lists open trades on a single
+   line formatted as `Symbol -- entry -- unrealized PnL`.
    The program prints "Bot running..." before the [Monitor] lines.
    Type `start`, `stop` or `quit` in the terminal to control the bot.
    Or launch the web dashboard with:

@@ -26,5 +26,6 @@ def test_multi_trade_stats(tmp_path: Path):
 
     ex = PriceExchange({"BTC/USDT": 120, "ETH/USDT": 55})
     lines = asyncio.run(trade_stats_lines(ex, log_file))
-    assert "BTC/USDT +10.00" in " ".join(lines)
-    assert "ETH/USDT +5.00" in " ".join(lines)
+    joined = " ".join(lines)
+    assert "BTC/USDT -- 100.00 -- +10.00" in joined
+    assert "ETH/USDT -- 60.00 -- +5.00" in joined
