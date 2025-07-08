@@ -4,7 +4,15 @@ from crypto_bot.strategy import micro_scalp_bot
 
 
 def _df(prices, volumes):
-    return pd.DataFrame({"close": prices, "volume": volumes})
+    return pd.DataFrame(
+        {
+            "open": prices,
+            "high": [p + 0.5 for p in prices],
+            "low": [p - 0.5 for p in prices],
+            "close": prices,
+            "volume": volumes,
+        }
+    )
 
 
 def test_micro_scalp_long_signal():
@@ -20,10 +28,19 @@ def test_volume_filter_blocks_signal():
     prices = list(range(1, 11))
     volumes = [1] * 10
     df = _df(prices, volumes)
-    cfg = {"micro_scalp": {"volume_threshold": 2, "volume_window": 5}}
+    cfg = {"micro_scalp": {"min_vol_z": 2, "volume_window": 5}}
     score, direction = micro_scalp_bot.generate_signal(df, cfg)
     assert direction == "none"
     assert score == 0.0
+
+
+def test_atr_filter_blocks_signal():
+    prices = list(range(1, 11))
+    volumes = [100] * 10
+    df = _df(prices, volumes)
+    cfg = {"micro_scalp": {"atr_period": 3, "min_atr_pct": 0.2}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg)
+    assert (score, direction) == (0.0, "none")
 
 
 def test_trend_filter_blocks_long_signal():
