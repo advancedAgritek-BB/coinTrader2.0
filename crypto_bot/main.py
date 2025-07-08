@@ -104,24 +104,33 @@ def notify_balance_change(
     if notifier and enabled and previous is not None and new_balance != previous:
         notifier.notify(f"Balance changed: {new_balance:.2f} USDT")
     return new_balance
-async def fetch_and_log_balance(exchange, paper_wallet, config):
-    """Return the latest wallet balance and log it."""
+
+
+async def fetch_balance(exchange, paper_wallet, config):
+    """Return the latest wallet balance without logging."""
     if config["execution_mode"] != "dry_run":
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
             bal = await exchange.fetch_balance()
         else:
             bal = await asyncio.to_thread(exchange.fetch_balance)
-        latest_balance = (
-            bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
-        )
-    else:
-        latest_balance = paper_wallet.balance if paper_wallet else 0.0
+        return bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
+    return paper_wallet.balance if paper_wallet else 0.0
+
+
+async def fetch_and_log_balance(exchange, paper_wallet, config):
+    """Return the latest wallet balance and log it."""
+    latest_balance = await fetch_balance(exchange, paper_wallet, config)
     log_balance(float(latest_balance))
     return latest_balance
 
 
-def _emit_timing(symbol_t: float, ohlcv_t: float, analyze_t: float,
-                 total_t: float, metrics_path: Path | None = None) -> None:
+def _emit_timing(
+    symbol_t: float,
+    ohlcv_t: float,
+    analyze_t: float,
+    total_t: float,
+    metrics_path: Path | None = None,
+) -> None:
     """Log timing information and optionally append to metrics CSV."""
     logger.info(
         "\u23f1\ufe0f Cycle timing - Symbols: %.2fs, OHLCV: %.2fs, Analyze: %.2fs, Total: %.2fs",
@@ -191,7 +200,12 @@ async def _watch_position(
                     ticker = await asyncio.to_thread(exchange.fetch_ticker, symbol)
                 await asyncio.sleep(poll_interval)
 
-            price = ticker.get("last") or ticker.get("close") or ticker.get("bid") or ticker.get("ask")
+            price = (
+                ticker.get("last")
+                or ticker.get("close")
+                or ticker.get("bid")
+                or ticker.get("ask")
+            )
             if price is None:
                 continue
 
@@ -201,13 +215,18 @@ async def _watch_position(
 
             pos["last_price"] = price
             pos["pnl"] = (
-                (price - pos["entry_price"]) * pos["size"] * (1 if pos["side"] == "buy" else -1)
+                (price - pos["entry_price"])
+                * pos["size"]
+                * (1 if pos["side"] == "buy" else -1)
             )
 
-            equity = await fetch_and_log_balance(exchange, paper_wallet, config)
+            balance = await fetch_balance(exchange, paper_wallet, config)
+            equity = balance
             if paper_wallet:
-                equity = float(paper_wallet.balance + paper_wallet.unrealized(symbol, price))
-            log_position(symbol, pos["side"], pos["size"], pos["entry_price"], price, float(equity))
+                equity = float(
+                    paper_wallet.balance + paper_wallet.unrealized(symbol, price)
+                )
+            pos["equity"] = equity
         except asyncio.CancelledError:
             break
         except Exception as exc:  # pragma: no cover - network or runtime error
@@ -220,7 +239,9 @@ async def _main_impl() -> TelegramNotifier:
 
     logger.info("Starting bot")
     config = load_config()
-    metrics_path = Path(config.get("metrics_csv")) if config.get("metrics_csv") else None
+    metrics_path = (
+        Path(config.get("metrics_csv")) if config.get("metrics_csv") else None
+    )
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
     cooldown_configure(config.get("min_cooldown", 0))
     status_updates = config.get("telegram", {}).get("status_updates", True)
@@ -256,9 +277,7 @@ async def _main_impl() -> TelegramNotifier:
 
     if notifier.token and notifier.chat_id:
         if not send_test_message(notifier.token, notifier.chat_id, "Bot started"):
-            logger.warning(
-                "Telegram test message failed; check your token and chat ID"
-            )
+            logger.warning("Telegram test message failed; check your token and chat ID")
 
     # allow user-configured exchange to override YAML setting
     if user.get("exchange"):
@@ -275,7 +294,9 @@ async def _main_impl() -> TelegramNotifier:
         if discovered:
             config["symbols"] = discovered
         else:
-            logger.error("No symbols discovered during scan; using existing configuration")
+            logger.error(
+                "No symbols discovered during scan; using existing configuration"
+            )
 
     balance_threshold = config.get("balance_change_threshold", 0.01)
     previous_balance = 0.0
@@ -284,9 +305,7 @@ async def _main_impl() -> TelegramNotifier:
         nonlocal previous_balance
         delta = new_balance - previous_balance
         if abs(delta) > balance_threshold and notifier:
-            notifier.notify(
-                f"Balance changed by {delta:.4f} USDT due to {reason}"
-            )
+            notifier.notify(f"Balance changed by {delta:.4f} USDT due to {reason}")
         previous_balance = new_balance
 
     try:
@@ -351,9 +370,7 @@ async def _main_impl() -> TelegramNotifier:
         )
 
     monitor_task = asyncio.create_task(
-        console_monitor.monitor_loop(
-            exchange, paper_wallet, "crypto_bot/logs/bot.log"
-        )
+        console_monitor.monitor_loop(exchange, paper_wallet, "crypto_bot/logs/bot.log")
     )
 
     positions: dict[str, dict] = {}
@@ -403,7 +420,9 @@ async def _main_impl() -> TelegramNotifier:
 
     while True:
         mode = state["mode"]
-        maybe_update_mode(state, base_mode, config, notifier if status_updates else None)
+        maybe_update_mode(
+            state, base_mode, config, notifier if status_updates else None
+        )
 
         cycle_start = time.perf_counter()
         symbol_time = ohlcv_time = analyze_time = 0.0
@@ -469,7 +488,9 @@ async def _main_impl() -> TelegramNotifier:
                 time.time() - last_rotation
                 >= rotator.config.get("interval_days", 7) * 86400
             ):
-                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                if asyncio.iscoroutinefunction(
+                    getattr(exchange, "fetch_balance", None)
+                ):
                     bal = await exchange.fetch_balance()
                 else:
                     bal = await asyncio.to_thread(exchange.fetch_balance)
@@ -503,9 +524,7 @@ async def _main_impl() -> TelegramNotifier:
             symbol_priority_queue = build_priority_queue(symbols)
         ticker_fetch_time = time.perf_counter() - start_filter
         total_available = len(config.get("symbols") or [config.get("symbol")])
-        symbol_filter_ratio = (
-            len(symbols) / total_available if total_available else 1.0
-        )
+        symbol_filter_ratio = len(symbols) / total_available if total_available else 1.0
         global SYMBOL_EVAL_QUEUE
         if not SYMBOL_EVAL_QUEUE:
             SYMBOL_EVAL_QUEUE.extend(sym for sym, _ in symbols)
@@ -615,7 +634,9 @@ async def _main_impl() -> TelegramNotifier:
             results = [mapping.get(r["symbol"], r) for r in results]
             for sym_open in positions:
                 if sym_open in mapping:
-                    current_dfs[sym_open] = df_cache.get(config["timeframe"], {}).get(sym_open)
+                    current_dfs[sym_open] = df_cache.get(config["timeframe"], {}).get(
+                        sym_open
+                    )
 
         analyze_time = time.perf_counter() - analyze_start
 
@@ -681,7 +702,9 @@ async def _main_impl() -> TelegramNotifier:
                     regime_rejections += 1
                 continue
 
-            min_score = config.get("min_confidence_score", config.get("signal_threshold", 0.3))
+            min_score = config.get(
+                "min_confidence_score", config.get("signal_threshold", 0.3)
+            )
             if direction_sym != "none" and score_sym >= min_score:
                 allowed_results.append(
                     {
@@ -699,7 +722,9 @@ async def _main_impl() -> TelegramNotifier:
         allowed_results.sort(key=lambda x: x["score"], reverse=True)
         top_n = config.get("top_n_symbols", 3)
         allowed_results = allowed_results[:top_n]
-        corr_matrix = compute_correlation_matrix({r["symbol"]: r["df"] for r in allowed_results})
+        corr_matrix = compute_correlation_matrix(
+            {r["symbol"]: r["df"] for r in allowed_results}
+        )
         filtered_results: list[dict] = []
         for r in allowed_results:
             keep = True
@@ -736,14 +761,18 @@ async def _main_impl() -> TelegramNotifier:
             if df_current is None:
                 # Fallback to direct fetch if cache is missing
                 try:
-                    if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
+                    if config.get("use_websocket", False) and hasattr(
+                        exchange, "watch_ohlcv"
+                    ):
                         data = await exchange.watch_ohlcv(
                             sym,
                             timeframe=config["timeframe"],
                             limit=100,
                         )
                     else:
-                        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
+                        if asyncio.iscoroutinefunction(
+                            getattr(exchange, "fetch_ohlcv", None)
+                        ):
                             data = await exchange.fetch_ohlcv(
                                 sym,
                                 timeframe=config["timeframe"],
@@ -825,15 +854,7 @@ async def _main_impl() -> TelegramNotifier:
             if paper_wallet:
                 unreal = paper_wallet.unrealized(sym, cur_price)
                 equity += unreal
-            log_balance(float(equity))
-            log_position(
-                sym,
-                pos["side"],
-                pos["size"],
-                pos["entry_price"],
-                cur_price,
-                float(equity),
-            )
+            pos["equity"] = float(equity)
             last_balance = notify_balance_change(
                 notifier,
                 last_balance,
@@ -861,11 +882,15 @@ async def _main_impl() -> TelegramNotifier:
                 if paper_wallet:
                     paper_wallet.close(sym, sell_amount, cur_price)
                 pos["pnl"] = pos.get("pnl", 0.0) + (
-                    (cur_price - pos["entry_price"]) * sell_amount * (1 if pos["side"] == "buy" else -1)
+                    (cur_price - pos["entry_price"])
+                    * sell_amount
+                    * (1 if pos["side"] == "buy" else -1)
                 )
                 if sell_amount >= pos["size"]:
                     risk_manager.cancel_stop_order(exchange, sym)
-                    risk_manager.deallocate_capital(pos["strategy"], sell_amount * pos["entry_price"])
+                    risk_manager.deallocate_capital(
+                        pos["strategy"], sell_amount * pos["entry_price"]
+                    )
                 if sell_amount >= position_size:
                     risk_manager.cancel_stop_order(
                         exchange, open_symbol or config.get("symbol", "")
@@ -897,6 +922,15 @@ async def _main_impl() -> TelegramNotifier:
                         pos.get("strategy", ""),
                         pos["pnl"],
                     )
+                    latest_balance = await fetch_balance(exchange, paper_wallet, config)
+                    log_position(
+                        sym,
+                        pos["side"],
+                        sell_amount,
+                        pos["entry_price"],
+                        cur_price,
+                        float(paper_wallet.balance if paper_wallet else latest_balance),
+                    )
                     mark_cooldown(sym, active_strategy or pos.get("strategy", ""))
                     task = position_tasks.pop(sym, None)
                     if task:
@@ -919,9 +953,11 @@ async def _main_impl() -> TelegramNotifier:
                     )
                 else:
                     pos["size"] -= sell_amount
-                    risk_manager.deallocate_capital(pos["strategy"], sell_amount * pos["entry_price"])
+                    risk_manager.deallocate_capital(
+                        pos["strategy"], sell_amount * pos["entry_price"]
+                    )
                     risk_manager.update_stop_order(pos["size"], symbol=sym)
-                    latest_balance = await fetch_and_log_balance(exchange, paper_wallet, config)
+                    latest_balance = await fetch_balance(exchange, paper_wallet, config)
                     position_size -= sell_amount
                     risk_manager.deallocate_capital(
                         current_strategy, sell_amount * entry_price
@@ -929,9 +965,7 @@ async def _main_impl() -> TelegramNotifier:
                     risk_manager.update_stop_order(
                         open_symbol or config.get("symbol", ""), position_size
                     )
-                    latest_balance = await fetch_and_log_balance(
-                        exchange, paper_wallet, config
-                    )
+                    latest_balance = await fetch_balance(exchange, paper_wallet, config)
 
         if positions:
             continue
@@ -988,7 +1022,9 @@ async def _main_impl() -> TelegramNotifier:
             if config["execution_mode"] != "dry_run":
                 bal = await (
                     exchange.fetch_balance()
-                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None))
+                    if asyncio.iscoroutinefunction(
+                        getattr(exchange, "fetch_balance", None)
+                    )
                     else asyncio.to_thread(exchange.fetch_balance)
                 )
                 balance = bal["USDT"]["free"]
@@ -1024,7 +1060,10 @@ async def _main_impl() -> TelegramNotifier:
                     score_rejections,
                     regime_rejections,
                 )
-                if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
+                if (
+                    config.get("metrics_enabled")
+                    and config.get("metrics_backend") == "csv"
+                ):
                     metrics = {
                         "timestamp": datetime.utcnow().isoformat(),
                         "ticker_fetch_time": ticker_fetch_time,
@@ -1034,7 +1073,9 @@ async def _main_impl() -> TelegramNotifier:
                     }
                     log_metrics_to_csv(
                         metrics,
-                        config.get("metrics_output_file", "crypto_bot/logs/metrics.csv"),
+                        config.get(
+                            "metrics_output_file", "crypto_bot/logs/metrics.csv"
+                        ),
                     )
                 logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
                 await asyncio.sleep(config["loop_interval_minutes"] * 60)
@@ -1053,14 +1094,28 @@ async def _main_impl() -> TelegramNotifier:
             )
             atr_val = candidate.get("atr")
             if atr_val:
-                stop_price = current_price - atr_val * risk_manager.config.stop_loss_atr_mult if trade_side == "buy" else current_price + atr_val * risk_manager.config.stop_loss_atr_mult
-                take_profit_price = current_price + atr_val * risk_manager.config.take_profit_atr_mult if trade_side == "buy" else current_price - atr_val * risk_manager.config.take_profit_atr_mult
+                stop_price = (
+                    current_price - atr_val * risk_manager.config.stop_loss_atr_mult
+                    if trade_side == "buy"
+                    else current_price
+                    + atr_val * risk_manager.config.stop_loss_atr_mult
+                )
+                take_profit_price = (
+                    current_price + atr_val * risk_manager.config.take_profit_atr_mult
+                    if trade_side == "buy"
+                    else current_price
+                    - atr_val * risk_manager.config.take_profit_atr_mult
+                )
             else:
                 stop_price = current_price * (
-                    1 - risk_manager.config.stop_loss_pct if trade_side == "buy" else 1 + risk_manager.config.stop_loss_pct
+                    1 - risk_manager.config.stop_loss_pct
+                    if trade_side == "buy"
+                    else 1 + risk_manager.config.stop_loss_pct
                 )
                 take_profit_price = current_price * (
-                    1 + risk_manager.config.take_profit_pct if trade_side == "buy" else 1 - risk_manager.config.take_profit_pct
+                    1 + risk_manager.config.take_profit_pct
+                    if trade_side == "buy"
+                    else 1 - risk_manager.config.take_profit_pct
                 )
             stop_order = place_stop_order(
                 exchange,
@@ -1082,14 +1137,22 @@ async def _main_impl() -> TelegramNotifier:
             )
             risk_manager.allocate_capital(name, size)
             if config["execution_mode"] == "dry_run" and paper_wallet:
-                paper_wallet.open(candidate["symbol"], trade_side, order_amount, current_price)
+                paper_wallet.open(
+                    candidate["symbol"], trade_side, order_amount, current_price
+                )
                 latest_balance = paper_wallet.balance
             else:
-                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                if asyncio.iscoroutinefunction(
+                    getattr(exchange, "fetch_balance", None)
+                ):
                     bal = await exchange.fetch_balance()
                 else:
                     bal = await asyncio.to_thread(exchange.fetch_balance)
-                latest_balance = bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
+                latest_balance = (
+                    bal["USDT"]["free"]
+                    if isinstance(bal["USDT"], dict)
+                    else bal["USDT"]
+                )
             check_balance_change(float(latest_balance), "trade executed")
             log_balance(float(latest_balance))
             last_balance = notify_balance_change(

@@ -1,5 +1,3 @@
-
-
 import importlib.util
 import sys
 import types
@@ -67,8 +65,9 @@ def test_close_trade_logs_realized_pnl(tmp_path, monkeypatch):
 
     wallet = PaperWallet(1000.0)
     wallet.open("BTC/USDT", "buy", 1.0, 100.0)
-    wallet.close("BTC/USDT", 1.0, 90.0)
+    pl.log_position("BTC/USDT", "buy", 1.0, 100.0, 100.0, wallet.balance)
 
+    wallet.close("BTC/USDT", 1.0, 90.0)
     pl.log_position("BTC/USDT", "buy", 1.0, 100.0, 90.0, wallet.balance)
 
     assert log_file.exists()
@@ -96,3 +95,6 @@ def test_log_position_with_custom_pnl(tmp_path, monkeypatch):
 
     text = log_file.read_text()
     assert "$15.00" in text
+    assert len(lines) == 2
+    assert "pnl $0.00" in lines[0]
+    assert "$-10.00" in lines[1]
