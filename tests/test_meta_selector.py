@@ -95,3 +95,28 @@ def test_scores_floor_at_zero(tmp_path, monkeypatch):
     scores = meta_selector._scores_for("trending")
     assert scores["trend_bot"] == 0.0
 
+
+def test_choose_best_uses_meta_regressor(tmp_path, monkeypatch):
+    ts = datetime.utcnow().isoformat()
+    data = {
+        "trending": {
+            "trend_bot": [{"pnl": 1.0, "timestamp": ts}],
+            "grid_bot": [{"pnl": 0.1, "timestamp": ts}],
+        }
+    }
+    perf = tmp_path / "perf.json"
+    perf.write_text(json.dumps(data))
+    monkeypatch.setattr(meta_selector, "LOG_FILE", perf)
+
+    model_file = tmp_path / "m.txt"
+    model_file.write_text("0")
+    monkeypatch.setattr(meta_selector.MetaRegressor, "MODEL_PATH", model_file)
+
+    def fake_predict(cls, regime, stats):
+        return {"trend_bot": 0.1, "grid_bot": 0.3}
+
+    monkeypatch.setattr(meta_selector.MetaRegressor, "predict_scores", classmethod(fake_predict))
+
+    fn = meta_selector.choose_best("trending")
+    assert fn is meta_selector.grid_bot.generate_signal
+
