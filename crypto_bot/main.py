@@ -65,6 +65,7 @@ from crypto_bot.utils.symbol_utils import get_filtered_symbols
 from crypto_bot.utils.pnl_logger import log_pnl
 from crypto_bot.utils.strategy_analytics import write_scores, write_stats
 from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
+from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 from crypto_bot.utils.trend_confirmation import confirm_multi_tf_trend
 from crypto_bot.utils.correlation import compute_correlation_matrix
 from crypto_bot.regime.regime_classifier import CONFIG
@@ -131,6 +132,33 @@ def _emit_timing(symbol_t: float, ohlcv_t: float, analyze_t: float,
     )
     if metrics_path:
         log_cycle_metrics(symbol_t, ohlcv_t, analyze_t, total_t, metrics_path)
+
+
+def maybe_update_mode(
+    state: dict,
+    base_mode: str,
+    config: dict,
+    notifier: TelegramNotifier | None = None,
+) -> None:
+    """Switch bot mode based on recent win rate."""
+
+    window = int(config.get("mode_degrade_window", 20))
+    threshold = float(config.get("mode_threshold", 0.0))
+    conservative = config.get("conservative_mode", "cex")
+
+    win_rate = get_recent_win_rate(window)
+    if win_rate < threshold:
+        if state.get("mode") != conservative:
+            state["mode"] = conservative
+            if notifier:
+                notifier.notify(
+                    f"Win rate {win_rate:.2f} below {threshold:.2f}; mode set to {conservative}"
+                )
+    else:
+        if state.get("mode") != base_mode:
+            state["mode"] = base_mode
+            if notifier:
+                notifier.notify(f"Win rate recovered; mode set to {base_mode}")
 
 
 def load_config() -> dict:
@@ -323,8 +351,11 @@ async def _main_impl() -> TelegramNotifier:
     if telegram_bot:
         telegram_bot.run_async()
 
+    base_mode = mode
+
     while True:
         mode = state["mode"]
+        maybe_update_mode(state, base_mode, config, notifier if status_updates else None)
 
         cycle_start = time.perf_counter()
         symbol_time = ohlcv_time = analyze_time = 0.0

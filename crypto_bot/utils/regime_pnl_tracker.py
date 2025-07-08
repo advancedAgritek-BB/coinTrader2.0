@@ -62,3 +62,25 @@ def compute_weights(regime: str, path: str | Path = LOG_FILE) -> Dict[str, float
     if not total:
         return {s: 1 / len(scores) for s in scores}
     return {s: sc / total for s, sc in scores.items()}
+
+
+def get_recent_win_rate(window: int = 20, path: str | Path = LOG_FILE) -> float:
+    """Return win rate over the last ``window`` trades.
+
+    Parameters
+    ----------
+    window : int, optional
+        Number of most recent trades to evaluate. Defaults to ``20``.
+    path : str | Path, optional
+        CSV log file path. Defaults to :data:`LOG_FILE`.
+    """
+    file = Path(path)
+    if not file.exists():
+        return 0.0
+    df = pd.read_csv(file)
+    if df.empty:
+        return 0.0
+    recent = df.tail(window)
+    wins = (recent["pnl"] > 0).sum()
+    total = len(recent)
+    return float(wins / total) if total else 0.0

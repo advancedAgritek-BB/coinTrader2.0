@@ -99,6 +99,8 @@ ml_signal_model:
   enabled: true
   weight: 0.4
 mode: auto
+mode_degrade_window: 20
+mode_threshold: 0.4
 ohlcv_snapshot_frequency_minutes: 1440
 ohlcv_snapshot_limit: 500
 ohlcv_timeout: 60
