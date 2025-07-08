@@ -81,7 +81,9 @@ def _scores_for(regime: str) -> Dict[str, float]:
             raw_sharpe = series.mean() / std * (total ** 0.5)
 
         score = win_rate * raw_sharpe / (1 + downside_std + max_dd)
-        scores[strat] = score
+        penalty = 0.5 * max_dd
+        score -= penalty
+        scores[strat] = max(score, 0.0)
     return scores
 
 
