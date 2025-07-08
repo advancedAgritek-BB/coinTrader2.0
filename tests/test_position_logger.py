@@ -18,6 +18,13 @@ spec = importlib.util.spec_from_file_location(
 pl = importlib.util.module_from_spec(spec)
 sys.modules["crypto_bot.utils.position_logger"] = pl
 spec.loader.exec_module(pl)
+spec_pw = importlib.util.spec_from_file_location(
+    "crypto_bot.paper_wallet",
+    Path(__file__).resolve().parents[1] / "crypto_bot/paper_wallet.py",
+)
+pw = importlib.util.module_from_spec(spec_pw)
+sys.modules["crypto_bot.paper_wallet"] = pw
+spec_pw.loader.exec_module(pw)
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.paper_wallet import PaperWallet
 
@@ -68,6 +75,26 @@ def test_close_trade_logs_realized_pnl(tmp_path, monkeypatch):
     assert "$-10.00" in text
     assert "negative" in text
     lines = log_file.read_text().splitlines()
+    assert len(lines) == 1
+
+
+def test_log_position_with_custom_pnl(tmp_path, monkeypatch):
+    log_file = tmp_path / "positions.log"
+    logger = setup_logger("pos_test_custom", str(log_file))
+    monkeypatch.setattr(pl, "logger", logger)
+
+    pl.log_position(
+        "BTC/USDT",
+        "buy",
+        1.0,
+        100.0,
+        105.0,
+        1105.0,
+        pnl=15.0,
+    )
+
+    text = log_file.read_text()
+    assert "$15.00" in text
     assert len(lines) == 2
     assert "pnl $0.00" in lines[0]
     assert "$-10.00" in lines[1]

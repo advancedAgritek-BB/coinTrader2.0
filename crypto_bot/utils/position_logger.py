@@ -22,6 +22,7 @@ def log_position(
     entry_price: float,
     current_price: float,
     balance: float,
+    pnl: float | None = None,
 ) -> None:
     """Write a log entry describing the active position.
 
@@ -39,10 +40,13 @@ def log_position(
         Latest market price. Logged with six decimal places.
     balance : float
         Current wallet balance including unrealized PnL.
+    pnl : float, optional
+        Realized profit or loss to log instead of computing from prices.
     """
-    pnl = (current_price - entry_price) * amount
-    if side == "sell":
-        pnl = -pnl
+    if pnl is None:
+        pnl = (current_price - entry_price) * amount
+        if side == "sell":
+            pnl = -pnl
     status = "positive" if pnl >= 0 else "negative"
     logger.info(
         "Active %s %s %.4f entry %.6f current %.6f pnl $%.2f (%s) balance $%.2f",

@@ -940,6 +940,17 @@ async def _main_impl() -> TelegramNotifier:
                         except asyncio.CancelledError:
                             pass
                     positions.pop(sym, None)
+                    latest_balance = await fetch_and_log_balance(exchange, paper_wallet, config)
+                    equity = paper_wallet.balance if paper_wallet else latest_balance
+                    log_position(
+                        sym,
+                        pos["side"],
+                        pos["size"],
+                        pos["entry_price"],
+                        cur_price,
+                        float(equity),
+                        pnl=pos["pnl"],
+                    )
                 else:
                     pos["size"] -= sell_amount
                     risk_manager.deallocate_capital(
