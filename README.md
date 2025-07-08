@@ -716,7 +716,7 @@ The repository includes an automated test suite. To set up the environment and
 run the tests, execute:
 
 ```bash
-bash codex/setup.sh  # installs system and Python dependencies
+bash codex/setup.sh  # installs system and Python dependencies including numpy
 ```
 
 Alternatively you can install the Python packages manually:
@@ -724,6 +724,10 @@ Alternatively you can install the Python packages manually:
 ```bash
 pip install -r requirements.txt
 ```
+
+The `requirements.txt` file lists all dependencies needed to run the tests,
+including `numpy`. If `pytest` fails with a `ModuleNotFoundError`, make sure the
+packages from this file are installed.
 
 Once the dependencies are installed, run:
 
