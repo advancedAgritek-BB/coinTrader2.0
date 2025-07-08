@@ -668,10 +668,25 @@ async def _main_impl() -> TelegramNotifier:
 
         current_dfs: dict[str, pd.DataFrame] = {}
         current_prices: dict[str, float] = {}
-        for sym in list(positions.keys()):
+
+        open_syms = list(positions.keys())
+        if open_syms:
+            df_cache[config["timeframe"]] = await update_ohlcv_cache(
+                exchange,
+                df_cache.get(config["timeframe"], {}),
+                open_syms,
+                timeframe=config["timeframe"],
+                limit=100,
+                use_websocket=config.get("use_websocket", False),
+                force_websocket_history=config.get("force_websocket_history", False),
+                config=config,
+                max_concurrent=config.get("max_concurrent_ohlcv"),
+            )
+
+        for sym in open_syms:
             df_current = df_cache.get(config["timeframe"], {}).get(sym)
             if df_current is None:
-                # ensure current market data is loaded
+                # Fallback to direct fetch if cache is missing
                 try:
                     if config.get("use_websocket", False) and hasattr(exchange, "watch_ohlcv"):
                         data = await exchange.watch_ohlcv(
@@ -710,6 +725,8 @@ async def _main_impl() -> TelegramNotifier:
                     data,
                     columns=["timestamp", "open", "high", "low", "close", "volume"],
                 )
+                df_cache.setdefault(config["timeframe"], {})[sym] = df_current
+
             current_dfs[sym] = df_current
             current_prices[sym] = df_current["close"].iloc[-1]
 
