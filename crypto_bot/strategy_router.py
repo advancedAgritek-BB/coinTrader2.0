@@ -6,6 +6,10 @@ import pandas as pd
 
 from pathlib import Path
 import yaml
+import json
+import time
+
+from crypto_bot.utils import timeframe_seconds
 
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -41,6 +45,7 @@ class RouterConfig:
     rl_selector: bool = False
     meta_selector: bool = False
     timeframe: str = "1h"
+    commit_lock_intervals: int = 0
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -61,6 +66,7 @@ class RouterConfig:
             rl_selector=bool(data.get("rl_selector", {}).get("enabled", False)),
             meta_selector=bool(data.get("meta_selector", {}).get("enabled", False)),
             timeframe=str(data.get("timeframe", "1h")),
+            commit_lock_intervals=int(router.get("commit_lock_intervals", 0)),
             raw=data,
         )
 
@@ -307,6 +313,31 @@ def route(
         else:
             base = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe")
             regime = regime.get(base, next(iter(regime.values())))
+
+    # commit lock logic
+    intervals = cfg.commit_lock_intervals if isinstance(cfg, RouterConfig) else int(
+        config.get("strategy_router", {}).get("commit_lock_intervals", 0)
+    )
+    if intervals:
+        lock_file = Path("last_regime.json")
+        last_reg = None
+        last_ts = 0.0
+        if lock_file.exists():
+            try:
+                data = json.loads(lock_file.read_text())
+                last_reg = data.get("regime")
+                last_ts = float(data.get("timestamp", 0))
+            except Exception:
+                pass
+
+        tf = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe", "1h")
+        interval = timeframe_seconds(None, tf)
+        now = time.time()
+        if last_reg and regime != last_reg and now - last_ts < interval * intervals:
+            regime = last_reg
+        else:
+            lock_file.parent.mkdir(parents=True, exist_ok=True)
+            lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
 
     if mode == "onchain":
         if regime in {"breakout", "volatile"}:
