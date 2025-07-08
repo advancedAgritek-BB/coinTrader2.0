@@ -151,7 +151,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 ### Market Scanning
 * **symbol_batch_size** – number of symbols processed each cycle.
 * **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
-* **symbol_filter** – volume and spread limits for candidate pairs.
+* **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
 * **symbol_score_weights** – weights for volume, spread, change and age.
 * **min_symbol_age_days** – skip newly listed pairs.
 * **min_symbol_score** – minimum score required for trading.
@@ -164,8 +164,8 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **max_open_trades** – maximum simultaneous open trades.
 * **max_slippage_pct** – slippage tolerance for orders.
 * **liquidity_check**/**liquidity_depth** – verify order book depth.
-* **volatility_filter** – ATR and funding rate thresholds.
-* **sentiment_filter** – fear & greed plus sentiment checks.
+* **volatility_filter** - skips trading when ATR is too low or funding exceeds `max_funding_rate`.
+* **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment to avoid bearish markets.
 * **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
 * **mempool_monitor** – pause or reprice when Solana fees spike.
 * **min_cooldown** – minimum minutes between trades.
@@ -195,6 +195,10 @@ size = risk_manager.position_size(score, balance, lower_df, atr=atr)
 * **twap_enabled**, **twap_slices**, **twap_interval_seconds** – settings for time-weighted order execution.
 * **optimization** – periodic parameter optimisation.
 * **portfolio_rotation** – rotate holdings based on scoring metrics.
+* **scoring_weights** - weighting factors for regime confidence, symbol score and volume metrics.
+* **signal_fusion** - combine scores from multiple strategies via a `fusion_method`.
+* **strategy_router** - maps market regimes to lists of strategy names.
+* **mode_threshold**/**mode_degrade_window** - degrade to manual mode when auto selection underperforms.
 * **meta_selector**/**rl_selector** – experimental strategy routers.
 * **mode** – `auto` or `manual` evaluation of strategies.
 #### Bounce Scalper
