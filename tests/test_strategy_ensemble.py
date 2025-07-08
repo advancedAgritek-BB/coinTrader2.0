@@ -3,6 +3,7 @@ import asyncio
 import pytest
 
 import crypto_bot.strategy_router as sr
+from crypto_bot.strategy_router import RouterConfig
 from crypto_bot.utils.market_analyzer import analyze_symbol
 
 
@@ -21,7 +22,8 @@ def test_evaluate_regime_fuses_scores(monkeypatch):
         "crypto_bot.utils.regime_pnl_tracker.compute_weights",
         lambda r: {"strat_a": 0.75, "strat_b": 0.25},
     )
-    score, direction = sr.evaluate_regime("trending", df, {"signal_fusion": {"fusion_method": "weight"}})
+    cfg = RouterConfig.from_dict({"signal_fusion": {"fusion_method": "weight"}})
+    score, direction = sr.evaluate_regime("trending", df, cfg)
     assert direction == "long"
     assert pytest.approx(score) == 0.65
 
@@ -33,7 +35,7 @@ def test_evaluate_regime_min_conf(monkeypatch):
         "crypto_bot.utils.regime_pnl_tracker.compute_weights",
         lambda r: {"strat_a": 0.2, "strat_b": 0.05},
     )
-    cfg = {"signal_fusion": {"fusion_method": "weight", "min_confidence": 0.1}}
+    cfg = RouterConfig.from_dict({"signal_fusion": {"fusion_method": "weight", "min_confidence": 0.1}})
     score, direction = sr.evaluate_regime("trending", df, cfg)
     assert direction == "long"
     assert score == pytest.approx(0.8)

@@ -11,6 +11,8 @@ from crypto_bot.strategy_router import (
     strategy_name,
     get_strategies_for_regime,
     get_strategy_by_name,
+    RouterConfig,
+    evaluate_regime,
 )
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.signals.signal_scoring import evaluate_async, evaluate_strategies
@@ -39,7 +41,8 @@ async def analyze_symbol(
     notifier : TelegramNotifier | None
         Optional notifier used to send a message when the strategy is invoked.
     """
-    base_tf = config.get("timeframe", "1h")
+    router_cfg = RouterConfig.from_dict(config)
+    base_tf = router_cfg.timeframe
     higher_tf = config.get("higher_timeframe", "1d")
     df = df_map.get(base_tf)
     higher_df = df_map.get("1d")
@@ -131,18 +134,16 @@ async def analyze_symbol(
 
         atr = None
         if eval_mode == "best":
-            strategies = get_strategies_for_regime(regime)
+            strategies = get_strategies_for_regime(regime, router_cfg)
             res = evaluate_strategies(strategies, df, cfg)
             name = res.get("name", strategy_name(regime, env))
             score = float(res.get("score", 0.0))
             direction = res.get("direction", "none")
         elif eval_mode == "ensemble":
-            from crypto_bot.strategy_router import evaluate_regime
-
-            score, direction = evaluate_regime(regime, df, cfg)
+            score, direction = evaluate_regime(regime, df, router_cfg)
             name = "ensemble"
         else:
-            strategy_fn = route(regime, env, config, notifier)
+            strategy_fn = route(regime, env, router_cfg, notifier)
             name = strategy_name(regime, env)
             score, direction, atr = await evaluate_async(strategy_fn, df, cfg)
 
