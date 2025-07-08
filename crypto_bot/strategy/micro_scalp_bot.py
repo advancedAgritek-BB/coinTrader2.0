@@ -34,6 +34,9 @@ def generate_signal(
     slow_window = int(params.get("ema_slow", 8))
     vol_window = int(params.get("volume_window", 20))
     vol_threshold = float(params.get("volume_threshold", 0))
+    min_momentum_pct = float(params.get("min_momentum_pct", 0))
+    confirm_bars = int(params.get("confirm_bars", 1))
+    fresh_cross_only = bool(params.get("fresh_cross_only", False))
     trend_fast = int(params.get("trend_fast", 0))
     trend_slow = int(params.get("trend_slow", 0))
     _ = params.get("trend_timeframe")
@@ -53,6 +56,7 @@ def generate_signal(
     df = recent.copy()
     df["ema_fast"] = ema_fast
     df["ema_slow"] = ema_slow
+    df["momentum"] = df["ema_fast"] - df["ema_slow"]
 
     latest = df.iloc[-1]
     if pd.isna(latest["ema_fast"]) or pd.isna(latest["ema_slow"]):
@@ -79,9 +83,25 @@ def generate_signal(
         if pd.isna(trend_fast_val) or pd.isna(trend_slow_val):
             return 0.0, "none"
 
-    momentum = latest["ema_fast"] - latest["ema_slow"]
+    momentum = df["momentum"].iloc[-1]
     if momentum == 0:
         return 0.0, "none"
+
+    if min_momentum_pct and abs(momentum) / latest["close"] < min_momentum_pct:
+        return 0.0, "none"
+
+    if confirm_bars > 0:
+        if len(df) < confirm_bars:
+            return 0.0, "none"
+        signs = (df["momentum"].iloc[-confirm_bars:].apply(lambda x: 1 if x > 0 else -1 if x < 0 else 0))
+        if signs.abs().min() == 0 or not (signs == signs.iloc[-1]).all():
+            return 0.0, "none"
+        if fresh_cross_only and len(df) >= confirm_bars + 1:
+            prev_sign = 1 if df["momentum"].iloc[-confirm_bars - 1] > 0 else -1 if df["momentum"].iloc[-confirm_bars - 1] < 0 else 0
+            if prev_sign == signs.iloc[-1]:
+                return 0.0, "none"
+        elif fresh_cross_only and len(df) < confirm_bars + 1:
+            return 0.0, "none"
 
     score = min(abs(momentum) / latest["close"], 1.0)
     if config is None or config.get("atr_normalization", True):
