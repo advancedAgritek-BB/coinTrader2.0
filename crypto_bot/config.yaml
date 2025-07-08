@@ -92,6 +92,7 @@ micro_scalp:
   min_atr_pct: 0.0
   min_vol_z: 0
   vol_window: 20
+  wick_pct: 0.0
 min_agreeing_votes: 1
 min_confidence_score: 0.1
 min_consistent_agreement: 1
