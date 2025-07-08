@@ -48,6 +48,10 @@ async def has_enough_history(
     if isinstance(data, Exception):
         logger.warning(
             "fetch_ohlcv returned error for %s on %s for %d days: %s",
+
+    if isinstance(data, Exception):  # pragma: no cover - network
+        logger.warning(
+            "fetch_ohlcv returned exception for %s on %s for %d days: %s",
             symbol,
             timeframe,
             days,
@@ -55,6 +59,11 @@ async def has_enough_history(
         )
         return False
     if not data or len(data) < candles_needed:
+            exc_info=True,
+        )
+        return False
+
+    if not isinstance(data, list) or len(data) < candles_needed:
         return False
     return True
 
