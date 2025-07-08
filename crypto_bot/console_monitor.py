@@ -55,8 +55,7 @@ async def monitor_loop(
                 offset = fh.tell()
 
                 message = f"[Monitor] balance={balance} log='{last_line}'"
-                stats_lines = await trade_stats_lines(exchange)
-                stats = "\n".join(stats_lines)
+                stats = await trade_stats_line(exchange)
 
                 output = message
                 if stats:
@@ -139,7 +138,7 @@ async def trade_stats_lines(exchange: Any, trade_file: Path = TRADE_FILE) -> lis
             pnl = (entry - current) * amount
         else:
             pnl = (current - entry) * amount
-        lines.append(f"{sym} {pnl:+.2f}")
+        lines.append(f"{sym} -- {entry:.2f} -- {pnl:+.2f}")
     return lines
 
 
