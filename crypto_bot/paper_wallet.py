@@ -86,13 +86,17 @@ class PaperWallet:
 
         trade_id = identifier or symbol or str(uuid4())
 
+        cost = amount * price
+        reserved = 0.0
         if side == "buy":
-            cost = amount * price
             if cost > self.balance:
                 raise RuntimeError("Insufficient balance")
             self.balance -= cost
         else:
-            self.balance += amount * price
+            if cost > self.balance:
+                raise RuntimeError("Insufficient balance")
+            self.balance -= cost
+            reserved = cost
 
         if symbol is not None:
             self.positions[trade_id] = {
@@ -100,6 +104,7 @@ class PaperWallet:
                 "side": side,
                 "size": amount,
                 "entry_price": price,
+                "reserved": reserved,
             }
         else:
             self.positions[trade_id] = {
@@ -107,6 +112,7 @@ class PaperWallet:
                 "side": side,
                 "amount": amount,
                 "entry_price": price,
+                "reserved": reserved,
             }
         return trade_id
 
@@ -150,23 +156,25 @@ class PaperWallet:
 
         if "size" in pos:
             # symbol-based logic
-            pnl = (price - pos["entry_price"]) * amount if pos["side"] == "buy" else (
-                pos["entry_price"] - price
-            ) * amount
             if pos["side"] == "buy":
+                pnl = (price - pos["entry_price"]) * amount
                 self.balance += amount * price
             else:
-                self.balance -= amount * price
+                pnl = (pos["entry_price"] - price) * amount
+                release = pos["entry_price"] * amount
+                self.balance += release + pnl
+                pos["reserved"] -= release
             pos[key] -= amount
             self.realized_pnl += pnl
         else:
-            pnl = (price - pos["entry_price"]) * amount if pos["side"] == "buy" else (
-                pos["entry_price"] - price
-            ) * amount
             if pos["side"] == "buy":
+                pnl = (price - pos["entry_price"]) * amount
                 self.balance += amount * price
             else:
-                self.balance -= amount * price
+                pnl = (pos["entry_price"] - price) * amount
+                release = pos["entry_price"] * amount
+                self.balance += release + pnl
+                pos["reserved"] -= release
             pos[key] -= amount
             self.realized_pnl += pnl
 
