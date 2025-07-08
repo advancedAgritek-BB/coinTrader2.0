@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from crypto_bot import meta_selector
 from crypto_bot.strategy import trend_bot, micro_scalp_bot
 from crypto_bot.strategy_router import strategy_for
@@ -6,10 +7,18 @@ from crypto_bot.strategy_router import strategy_for
 
 def test_choose_best_selects_highest(tmp_path, monkeypatch):
     file = tmp_path / "perf.json"
+    ts = datetime.utcnow().isoformat()
     data = {
         "trending": {
-            "trend_bot": [{"pnl": 1.0}, {"pnl": -0.5}, {"pnl": 2.0}],
-            "grid_bot": [{"pnl": 0.5}, {"pnl": -0.2}],
+            "trend_bot": [
+                {"pnl": 1.0, "timestamp": ts},
+                {"pnl": -0.5, "timestamp": ts},
+                {"pnl": 2.0, "timestamp": ts},
+            ],
+            "grid_bot": [
+                {"pnl": 0.5, "timestamp": ts},
+                {"pnl": -0.2, "timestamp": ts},
+            ],
         }
     }
     file.write_text(json.dumps(data))
