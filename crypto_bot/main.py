@@ -6,6 +6,8 @@ from pathlib import Path
 from datetime import datetime
 from collections import deque
 
+import ccxt
+
 import pandas as pd
 import yaml
 from dotenv import dotenv_values
@@ -192,7 +194,20 @@ async def _watch_position(
     while symbol in positions:
         try:
             if use_ws:
-                ticker = await exchange.watch_ticker(symbol)
+                try:
+                    ticker = await exchange.watch_ticker(symbol)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as ws_exc:  # pragma: no cover - websocket error
+                    logger.error(
+                        "WebSocket ticker failed for %s: %s - switching to REST",
+                        symbol,
+                        ws_exc,
+                        exc_info=True,
+                    )
+                    use_ws = False
+                    await asyncio.sleep(poll_interval)
+                    continue
             else:
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
                     ticker = await exchange.fetch_ticker(symbol)
