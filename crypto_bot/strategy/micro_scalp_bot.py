@@ -7,6 +7,30 @@ from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 
+def _wick_ratios(row: pd.Series) -> Tuple[float, float]:
+    """Return lower and upper wick ratios for a candle.
+
+    The ratios are calculated relative to the total candle range.
+    """
+
+    high = row["high"]
+    low = row["low"]
+    open_ = row["open"]
+    close = row["close"]
+
+    rng = high - low
+    if rng <= 0:
+        return 0.0, 0.0
+
+    body_low = min(open_, close)
+    body_high = max(open_, close)
+
+    lower = body_low - low
+    upper = high - body_high
+
+    return lower / rng, upper / rng
+
+
 def generate_signal(
     df: pd.DataFrame,
     config: Optional[dict] = None,
@@ -21,6 +45,8 @@ def generate_signal(
     config : dict, optional
         Optional configuration overriding defaults located under
         ``micro_scalp`` in ``config.yaml``.
+        Supports ``wick_pct`` for a symmetric wick requirement or
+        ``lower_wick_pct``/``upper_wick_pct`` for individual thresholds.
     higher_df : pd.DataFrame, optional
         Higher timeframe OHLCV data used to confirm the trend. When provided
         the function only returns a signal if ``trend_fast`` is above
@@ -37,6 +63,9 @@ def generate_signal(
     atr_period = int(params.get("atr_period", 14))
     min_atr_pct = float(params.get("min_atr_pct", 0))
     min_momentum_pct = float(params.get("min_momentum_pct", 0))
+    wick_pct = float(params.get("wick_pct", 0))
+    lower_wick_pct = float(params.get("lower_wick_pct", wick_pct))
+    upper_wick_pct = float(params.get("upper_wick_pct", wick_pct))
     confirm_bars = int(params.get("confirm_bars", 1))
     fresh_cross_only = bool(params.get("fresh_cross_only", False))
     trend_fast = int(params.get("trend_fast", 0))
@@ -67,6 +96,7 @@ def generate_signal(
     df["momentum"] = df["ema_fast"] - df["ema_slow"]
 
     latest = df.iloc[-1]
+    lower_wick_ratio, upper_wick_ratio = _wick_ratios(latest)
     if pd.isna(latest["ema_fast"]) or pd.isna(latest["ema_slow"]):
         return 0.0, "none"
 
@@ -124,6 +154,11 @@ def generate_signal(
         score = normalize_score_by_volatility(df, score)
 
     direction = "long" if momentum > 0 else "short"
+
+    if direction == "long" and lower_wick_ratio < lower_wick_pct:
+        return 0.0, "none"
+    if direction == "short" and upper_wick_ratio < upper_wick_pct:
+        return 0.0, "none"
 
     if trend_fast_val is not None and trend_slow_val is not None:
         if direction == "long" and trend_fast_val <= trend_slow_val:

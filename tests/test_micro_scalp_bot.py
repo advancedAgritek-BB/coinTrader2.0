@@ -105,3 +105,23 @@ def test_fresh_cross_only_requires_change():
     cfg = {"micro_scalp": {"fresh_cross_only": True}}
     score, direction = micro_scalp_bot.generate_signal(df, cfg)
     assert (score, direction) == (0.0, "none")
+
+
+def test_wick_filter_blocks_long():
+    prices = list(range(1, 11))
+    volumes = [100] * len(prices)
+    df = _df(prices, volumes)
+    df.loc[df.index[-1], "low"] = df["close"].iloc[-1] - 0.05
+    cfg = {"micro_scalp": {"wick_pct": 0.2}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg)
+    assert (score, direction) == (0.0, "none")
+
+
+def test_wick_filter_blocks_short():
+    prices = list(range(10, 0, -1))
+    volumes = [100] * len(prices)
+    df = _df(prices, volumes)
+    df.loc[df.index[-1], "high"] = df["close"].iloc[-1] + 0.05
+    cfg = {"micro_scalp": {"wick_pct": 0.2}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg)
+    assert (score, direction) == (0.0, "none")
