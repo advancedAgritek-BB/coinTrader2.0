@@ -70,11 +70,18 @@ def _scores_for(regime: str) -> Dict[str, float]:
         total = len(pnls)
         win_rate = wins / total if total else 0.0
         series = pd.Series(pnls)
-        sharpe = 0.0
+
+        neg_returns = series[series < 0]
+        downside_std = neg_returns.std(ddof=0) if not neg_returns.empty else 0.0
+        max_dd = (series.cummax() - series).max()
+
+        raw_sharpe = 0.0
         std = series.std()
         if std:
-            sharpe = series.mean() / std * (total ** 0.5)
-        scores[strat] = max(win_rate, sharpe)
+            raw_sharpe = series.mean() / std * (total ** 0.5)
+
+        score = win_rate * raw_sharpe / (1 + downside_std + max_dd)
+        scores[strat] = score
     return scores
 
 
