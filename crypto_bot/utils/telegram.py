@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Any
 import asyncio
 import inspect
 import threading
@@ -17,15 +17,17 @@ logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 _admin_ids: set[str] = set()
 
 
-def set_admin_ids(admins: Iterable[str] | str | None) -> None:
+def set_admin_ids(admins: Iterable[str] | str | Any | None) -> None:
     """Configure allowed Telegram admin chat IDs."""
     global _admin_ids
     if admins is None:
         admins = os.getenv("TELE_CHAT_ADMINS", "")
     if isinstance(admins, str):
         parts = [a.strip() for a in admins.split(",") if a.strip()]
-    else:
+    elif isinstance(admins, Iterable):
         parts = [str(a).strip() for a in admins if str(a).strip()]
+    else:
+        parts = [str(admins).strip()] if str(admins).strip() else []
     _admin_ids = set(parts)
 
 
