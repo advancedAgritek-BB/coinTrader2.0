@@ -87,12 +87,19 @@ metrics_enabled: true
 metrics_output_file: crypto_bot/logs/metrics.csv
 micro_scalp:
   atr_period: 14
+  confirm_bars: 2
   ema_fast: 3
   ema_slow: 8
+  fresh_cross_only: false
   min_atr_pct: 0.0
-  min_vol_z: 0
+  min_momentum_pct: 0.0
+  min_vol_z: 1.5
+  trend_fast: 21
+  trend_slow: 50
+  trend_timeframe: 5m
   vol_window: 20
-  wick_pct: 0.0
+  volume_window: 20
+  wick_pct: 0.2
 min_agreeing_votes: 1
 min_confidence_score: 0.1
 min_consistent_agreement: 1
