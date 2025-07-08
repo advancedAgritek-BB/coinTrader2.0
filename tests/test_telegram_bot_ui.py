@@ -128,6 +128,10 @@ def test_start_stop_toggle(monkeypatch, tmp_path):
     assert state["mode"] == "onchain"
     assert update.message.text == "Mode set to onchain"
 
+    update_status = DummyUpdate()
+    asyncio.run(ui.status_cmd(update_status, DummyContext()))
+    assert "mode: onchain" in update_status.message.text
+
 
 def test_log_and_rotate(monkeypatch, tmp_path):
     monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)

@@ -29,3 +29,14 @@ def test_compute_weights_normalizes(tmp_path, monkeypatch):
     assert set(weights.keys()) == {"scalper", "grid"}
     assert abs(sum(weights.values()) - 1.0) < 1e-6
     assert weights["scalper"] > weights["grid"]
+
+
+def test_recent_win_rate(tmp_path, monkeypatch):
+    log = tmp_path / "pnl.csv"
+    monkeypatch.setattr(rpt, "LOG_FILE", log)
+
+    for pnl in [1.0, -1.0, 0.5]:
+        rpt.log_trade("trending", "trend_bot", pnl)
+
+    rate = rpt.get_recent_win_rate(2, log)
+    assert rate == 0.5
