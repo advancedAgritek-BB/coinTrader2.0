@@ -276,8 +276,9 @@ The built-in Telegram interface is provided by the `TelegramBotUI` class in
 
 #### Troubleshooting
 
-Before running the bot, call `send_test_message` from
-`crypto_bot.utils.telegram` to verify your token and chat ID. If the call fails,
+Before running the bot, run `python tools/test_telegram.py` to send a
+test message using the credentials in `crypto_bot/config.yaml` or the
+`TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID` environment variables. If the call fails,
 check for these common issues:
 
 * **Incorrect token** – the API token was mistyped or revoked.
