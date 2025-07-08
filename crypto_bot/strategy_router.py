@@ -2,6 +2,9 @@ from typing import Callable, Tuple, Dict, Iterable, Union
 
 import pandas as pd
 
+from pathlib import Path
+import yaml
+
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.strategy import (
@@ -17,36 +20,9 @@ from crypto_bot.strategy import (
 
 logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
 
-STRATEGY_MAP: Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]] = {
-    "trending": trend_bot.generate_signal,
-    "sideways": grid_bot.generate_signal,
-    "mean-reverting": mean_bot.generate_signal,
-    "breakout": breakout_bot.generate_signal,
-    "volatile": sniper_bot.generate_signal,
-    "scalp": micro_scalp_bot.generate_signal,
-    "bounce": bounce_scalper.generate_signal,
-}
-
-REGIME_STRATEGIES: Dict[str, list[Callable[[pd.DataFrame], Tuple[float, str]]]] = {
-    "trending": [trend_bot.generate_signal],
-    "sideways": [grid_bot.generate_signal],
-    "mean-reverting": [mean_bot.generate_signal],
-    "breakout": [breakout_bot.generate_signal],
-    "volatile": [sniper_bot.generate_signal],
-    "scalp": [micro_scalp_bot.generate_signal],
-    "bounce": [bounce_scalper.generate_signal],
-}
-
-
-def strategy_for(regime: str) -> Callable[[pd.DataFrame], Tuple[float, str]]:
-    """Return strategy callable for a given regime."""
-    return STRATEGY_MAP.get(regime, grid_bot.generate_signal)
-
-
-def get_strategies_for_regime(regime: str) -> list[Callable[[pd.DataFrame], Tuple[float, str]]]:
-    """Return list of strategies mapped to ``regime``."""
-    return REGIME_STRATEGIES.get(regime, [grid_bot.generate_signal])
-
+CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
+with open(CONFIG_PATH) as f:
+    DEFAULT_CONFIG = yaml.safe_load(f)
 
 def get_strategy_by_name(name: str) -> Callable[[pd.DataFrame], Tuple[float, str]] | None:
     """Return strategy callable for ``name`` if available."""
@@ -57,6 +33,40 @@ def get_strategy_by_name(name: str) -> Callable[[pd.DataFrame], Tuple[float, str
     mapping.update(getattr(meta_selector, "_STRATEGY_FN_MAP", {}))
     mapping.update(getattr(rl_selector, "_STRATEGY_FN_MAP", {}))
     return mapping.get(name)
+
+
+def _build_mappings(config: Dict) -> tuple[
+    Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]],
+    Dict[str, list[Callable[[pd.DataFrame], Tuple[float, str]]]],
+]:
+    """Return mapping dictionaries from configuration."""
+    regimes = config.get("strategy_router", {}).get("regimes", {})
+    strat_map: Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]] = {}
+    regime_map: Dict[str, list[Callable[[pd.DataFrame], Tuple[float, str]]]] = {}
+    for regime, names in regimes.items():
+        if isinstance(names, str):
+            names = [names]
+        funcs = [get_strategy_by_name(n) for n in names]
+        funcs = [f for f in funcs if f]
+        if funcs:
+            strat_map[regime] = funcs[0]
+            regime_map[regime] = funcs
+    return strat_map, regime_map
+
+
+STRATEGY_MAP, REGIME_STRATEGIES = _build_mappings(DEFAULT_CONFIG)
+
+
+def strategy_for(regime: str, config: Dict | None = None) -> Callable[[pd.DataFrame], Tuple[float, str]]:
+    """Return strategy callable for a given regime."""
+    mapping, _ = _build_mappings(config or DEFAULT_CONFIG)
+    return mapping.get(regime, grid_bot.generate_signal)
+
+
+def get_strategies_for_regime(regime: str, config: Dict | None = None) -> list[Callable[[pd.DataFrame], Tuple[float, str]]]:
+    """Return list of strategies mapped to ``regime``."""
+    _, mapping = _build_mappings(config or DEFAULT_CONFIG)
+    return mapping.get(regime, [grid_bot.generate_signal])
 
 
 def strategy_name(regime: str, mode: str) -> str:
@@ -165,7 +175,7 @@ def route(
             if fn:
                 strategies.append((fn, float(weight)))
         if not strategies:
-            strategies.append((strategy_for(regime), 1.0))
+            strategies.append((strategy_for(regime, config), 1.0))
         engine = SignalFusionEngine(strategies)
 
         def fused(df: pd.DataFrame, cfg=None):
@@ -174,7 +184,7 @@ def route(
         logger.info("Routing to signal fusion engine")
         return _wrap(fused)
 
-    strategy_fn = strategy_for(regime)
+    strategy_fn = strategy_for(regime, config)
     logger.info("Routing to %s (%s)", strategy_fn.__name__, mode)
 
     return _wrap(strategy_fn)

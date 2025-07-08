@@ -164,6 +164,22 @@ strategy_allocation:
   sniper_bot: 0.3
   trend_bot: 0.4
 strategy_evaluation_mode: voting
+strategy_router:
+  regimes:
+    bounce:
+    - bounce_scalper
+    breakout:
+    - breakout_bot
+    mean-reverting:
+    - mean_bot
+    scalp:
+    - micro_scalp
+    sideways:
+    - grid
+    trending:
+    - trend
+    volatile:
+    - sniper_bot
 symbol: BTC/USDT
 symbol_batch_size: 10
 symbol_filter:
@@ -183,11 +199,11 @@ tax_tracking:
   enabled: false
   export_path: crypto_bot/logs/tax_trades.csv
 telegram:
+  chat_admins: 827777274
   chat_id: 827777274
   command_cooldown: 5
   enabled: true
   token: your_telegram_token
-  chat_admins: 827777274
   trade_updates: true
 telegram_ctl:
   enabled: false
