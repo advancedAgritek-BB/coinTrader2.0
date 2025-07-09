@@ -274,3 +274,71 @@ def test_execute_swap_no_routes(monkeypatch):
         )
     )
     assert res == {}
+
+
+class DummyMempool:
+    def __init__(self, fee):
+        self.fee = fee
+
+    def fetch_priority_fee(self):
+        return self.fee
+
+    def is_suspicious(self, threshold):
+        return False
+
+
+def test_fee_abort(monkeypatch):
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: EmptySession())
+    monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")
+
+    class KP:
+        public_key = "k"
+
+        @staticmethod
+        def from_secret_key(b):
+            return KP()
+
+        def sign(self, tx):
+            pass
+
+    class Tx:
+        @staticmethod
+        def deserialize(raw):
+            return Tx()
+
+        def sign(self, kp):
+            pass
+
+    class Client:
+        def __init__(self, *a, **k):
+            pass
+
+        def send_transaction(self, tx, kp):
+            return {"result": "h"}
+
+    import sys, types
+    sys.modules.setdefault("solana.keypair", types.ModuleType("solana.keypair"))
+    sys.modules.setdefault("solana.transaction", types.ModuleType("solana.transaction"))
+    sys.modules.setdefault("solana.rpc.api", types.ModuleType("solana.rpc.api"))
+    monkeypatch.setattr(sys.modules["solana.keypair"], "Keypair", KP, raising=False)
+    monkeypatch.setattr(sys.modules["solana.transaction"], "Transaction", Tx, raising=False)
+    monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
+
+    monitor = DummyMempool(0.01)
+    res = asyncio.run(
+        solana_executor.execute_swap(
+            "SOL",
+            "USDC",
+            100,
+            TelegramNotifier("t", "c"),
+            notifier=DummyNotifier(),
+            dry_run=False,
+            mempool_monitor=monitor,
+            mempool_cfg={"enabled": True},
+            config={"take_profit_pct": 0.08},
+        )
+    )
+    assert res == {}

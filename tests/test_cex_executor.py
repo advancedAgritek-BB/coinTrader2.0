@@ -108,6 +108,47 @@ def test_execute_trade_rest_path(monkeypatch):
     assert ex.called
 
 
+class LimitExchange:
+    def __init__(self):
+        self.limit_called = False
+        self.params = None
+
+    def fetch_ticker(self, symbol):
+        return {"bid": 100, "ask": 102}
+
+    def create_limit_order(self, symbol, side, amount, price, params=None):
+        self.limit_called = True
+        self.params = params
+        return {"limit": True, "price": price, "params": params}
+
+    def create_market_order(self, symbol, side, amount):
+        raise AssertionError("market order should not be used")
+
+
+def test_execute_trade_uses_limit(monkeypatch):
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+    ex = LimitExchange()
+    notifier = DummyNotifier()
+    order = cex_executor.execute_trade(
+        ex,
+        None,
+        "BTC/USDT",
+        "buy",
+        1.0,
+        TelegramNotifier("t", "c"),
+        notifier=notifier,
+        dry_run=False,
+        config={"hidden_limit": True},
+        score=0.9,
+    )
+    assert ex.limit_called
+    assert order["params"]["postOnly"] is True
+    assert order["params"].get("hidden") is True
+
+
 def test_execute_trade_ws_path(monkeypatch):
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
