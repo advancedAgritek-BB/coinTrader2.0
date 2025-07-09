@@ -878,6 +878,42 @@ class KrakenWSClient:
 
         self._private_subs = [s for s in self._private_subs if not _matches(s)]
 
+    def subscribe_executions(self) -> None:
+        """Subscribe to private execution (trade fill) updates."""
+
+        self.connect_private()
+        msg = {
+            "method": "subscribe",
+            "params": {"channel": "executions", "token": self.token},
+        }
+        data = json.dumps(msg)
+        self._private_subs.append(data)
+        self.private_ws.send(data)
+
+    def unsubscribe_executions(self) -> None:
+        """Unsubscribe from private execution updates."""
+
+        self.connect_private()
+        msg = {
+            "method": "unsubscribe",
+            "params": {"channel": "executions", "token": self.token},
+        }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+
+        def _matches(sub: str) -> bool:
+            try:
+                parsed = json.loads(sub)
+            except Exception:
+                return False
+            params = parsed.get("params", {}) if isinstance(parsed, dict) else {}
+            return (
+                parsed.get("method") == "subscribe"
+                and params.get("channel") == "executions"
+            )
+
+        self._private_subs = [s for s in self._private_subs if not _matches(s)]
+
     def subscribe_level3(
         self,
         symbol: Union[str, List[str]],
