@@ -138,11 +138,16 @@ telegram:
   trade_updates: true
   status_updates: true
   balance_updates: false
-mempool_monitor:
-  enabled: false
-  suspicious_fee_threshold: 100
-  action: pause
-  reprice_multiplier: 1.05
+  mempool_monitor:
+    enabled: false
+    suspicious_fee_threshold: 100
+    action: pause
+    reprice_multiplier: 1.05
+  bandit:
+    enabled: false
+    alpha0: 1
+    beta0: 1
+    explore_pct: 0.05
 ```
 
 ## Configuration Options
@@ -222,6 +227,7 @@ size = risk_manager.position_size(score, balance, lower_df, atr=atr)
 * **mode_threshold**/**mode_degrade_window** - degrade to manual mode when auto selection underperforms.
 * **meta_selector**/**rl_selector** – experimental strategy routers.
 * **bandit_router** – Thompson sampling router that favors historically profitable strategies.
+* **bandit** – Thompson sampling selector; tune `explore_pct` for exploration.
 * **mode** – `auto` or `manual` evaluation of strategies.
 * **parallel_strategy_workers** – strategies evaluated concurrently when
   ranking candidates.
