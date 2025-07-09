@@ -7,8 +7,11 @@ import os
 import requests
 
 from crypto_bot.utils.logger import setup_logger
+from pathlib import Path
 
-logger = setup_logger(__name__, "crypto_bot/logs/sentiment.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = setup_logger(__name__, LOG_DIR / "sentiment.log")
 
 
 FNG_URL = "https://api.alternative.me/fng/?limit=1"

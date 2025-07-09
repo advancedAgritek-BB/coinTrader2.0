@@ -3,7 +3,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
 
-LOG_FILE = Path("crypto_bot/logs/regime_pnl.csv")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+LOG_FILE = LOG_DIR / "regime_pnl.csv"
 
 
 def log_trade(regime: str, strategy: str, pnl: float) -> None:

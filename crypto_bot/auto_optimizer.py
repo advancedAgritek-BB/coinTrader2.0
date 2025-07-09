@@ -4,15 +4,17 @@ import json
 from pathlib import Path
 from typing import Dict, Iterable
 
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
 import yaml
 
 from crypto_bot.backtest.backtest_runner import BacktestRunner, BacktestConfig
 from crypto_bot.utils.logger import setup_logger
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
-LOG_FILE = Path("crypto_bot/logs/optimized_params.json")
+LOG_FILE = LOG_DIR / "optimized_params.json"
 
-logger = setup_logger(__name__, "crypto_bot/logs/optimizer.log")
+logger = setup_logger(__name__, LOG_DIR / "optimizer.log")
 
 
 def _load_config() -> dict:

@@ -1,12 +1,14 @@
 import json
 from pathlib import Path
 from typing import Dict, Any
+
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 import pandas as pd
 
 # Default location for recorded trade performance. Each trade closed
 # is appended to this JSON file via ``log_performance``.
-STATS_FILE = Path("crypto_bot/logs/strategy_performance.json")
-SCORES_FILE = Path("crypto_bot/logs/strategy_scores.json")
+STATS_FILE = LOG_DIR / "strategy_performance.json"
+SCORES_FILE = LOG_DIR / "strategy_scores.json"
 
 
 def _load(path: Path) -> Dict[str, Any]:

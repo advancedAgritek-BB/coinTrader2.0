@@ -6,12 +6,14 @@ from typing import Dict
 
 from crypto_bot.utils.logger import setup_logger
 
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
 try:
     from cryptography.fernet import Fernet
 except Exception:
     Fernet = None
 
-logger = setup_logger(__name__, "crypto_bot/logs/wallet.log")
+logger = setup_logger(__name__, LOG_DIR / "wallet.log")
 
 CONFIG_FILE = Path(__file__).resolve().parent / 'user_config.yaml'
 

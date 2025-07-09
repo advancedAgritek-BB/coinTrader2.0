@@ -260,6 +260,6 @@ def validate_from_csv(csv_path: Path) -> dict:
 
 
 if __name__ == "__main__":  # pragma: no cover - manual training
-    DEFAULT_CSV = Path("crypto_bot/logs/trades.csv")
+    DEFAULT_CSV = Path(__file__).resolve().parents[1] / "logs" / "trades.csv"
     if DEFAULT_CSV.exists():
         train_from_csv(DEFAULT_CSV)

@@ -14,6 +14,8 @@ from datetime import datetime
 
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
+
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 from crypto_bot.strategy import (
     trend_bot,
     grid_bot,
@@ -25,7 +27,7 @@ from crypto_bot.strategy import (
     bounce_scalper,
 )
 
-logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 with open(CONFIG_PATH) as f:
@@ -81,7 +83,7 @@ class RouterConfig:
 DEFAULT_ROUTER_CFG = RouterConfig.from_dict(DEFAULT_CONFIG)
 
 # Path storing the last selected regime and timestamp
-LAST_REGIME_FILE = Path("crypto_bot/logs/last_regime.json")
+LAST_REGIME_FILE = LOG_DIR / "last_regime.json"
 
 
 class Selector:

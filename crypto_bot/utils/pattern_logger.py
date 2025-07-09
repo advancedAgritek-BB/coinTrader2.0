@@ -4,9 +4,11 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict
 
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
 import pandas as pd
 
-LOG_FILE = Path("crypto_bot/logs/pattern_frequency.csv")
+LOG_FILE = LOG_DIR / "pattern_frequency.csv"
 
 
 def log_patterns(regime: str, patterns: Dict[str, float]) -> None:

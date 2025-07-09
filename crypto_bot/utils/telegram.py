@@ -10,8 +10,11 @@ import os
 from telegram import Bot
 
 from .logger import setup_logger
+from pathlib import Path
 
-logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 # Store allowed Telegram admin IDs parsed from the environment or configuration
 _admin_ids: set[str] = set()

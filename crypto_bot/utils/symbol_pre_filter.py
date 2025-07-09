@@ -17,9 +17,12 @@ from .logger import setup_logger
 from .market_loader import fetch_ohlcv_async
 from .correlation import compute_pairwise_correlation
 from .symbol_scoring import score_symbol
+from pathlib import Path
+
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 
-logger = setup_logger(__name__, "crypto_bot/logs/symbol_filter.log")
+logger = setup_logger(__name__, LOG_DIR / "symbol_filter.log")
 
 API_URL = "https://api.kraken.com/0/public"
 DEFAULT_MIN_VOLUME_USD = 50000

@@ -5,9 +5,12 @@ import ta
 
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.volatility_filter import calc_atr
+from pathlib import Path
+
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 # Use the main bot log for exit messages
-logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 
 def calculate_trailing_stop(

@@ -13,10 +13,12 @@ from crypto_bot.fund_manager import auto_convert_funds
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
 
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
-LOG_FILE = Path("crypto_bot/logs/rotations.json")
-SCORE_FILE = Path("crypto_bot/logs/asset_scores.json")
+LOG_FILE = LOG_DIR / "rotations.json"
+SCORE_FILE = LOG_DIR / "asset_scores.json"
 
 
 class PortfolioRotator:
@@ -28,7 +30,7 @@ class PortfolioRotator:
         self.config = cfg.get("portfolio_rotation", {})
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         SCORE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        self.logger = setup_logger(__name__, "crypto_bot/logs/portfolio_rotation.log")
+        self.logger = setup_logger(__name__, LOG_DIR / "portfolio_rotation.log")
 
     async def score_assets(
         self,

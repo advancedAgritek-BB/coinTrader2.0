@@ -6,8 +6,11 @@ from typing import Optional
 
 from .telegram import TelegramNotifier
 from .logger import setup_logger
+from pathlib import Path
 
-logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 
 def entry_summary(symbol: str, strategy: str, score: float, direction: str) -> str:

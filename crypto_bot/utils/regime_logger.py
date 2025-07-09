@@ -2,9 +2,11 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict
 
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
 """Simple regime logging utilities."""
 
-LOG_FILE = Path("crypto_bot/logs/regime_log.csv")
+LOG_FILE = LOG_DIR / "regime_log.csv"
 
 
 def log_regime(symbol: str, regime: str, future_return: float) -> None:

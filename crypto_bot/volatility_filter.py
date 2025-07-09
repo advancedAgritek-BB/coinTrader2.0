@@ -9,8 +9,11 @@ import requests
 
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils.indicator_cache import cache_series
+from pathlib import Path
 
-logger = setup_logger(__name__, "crypto_bot/logs/volatility.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = setup_logger(__name__, LOG_DIR / "volatility.log")
 
 DEFAULT_FUNDING_URL = "https://funding.example.com"
 

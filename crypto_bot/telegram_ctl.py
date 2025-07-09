@@ -13,7 +13,9 @@ from .utils.logger import setup_logger
 from .utils.open_trades import get_open_trades
 from .utils.telegram import TelegramNotifier
 
-logger = setup_logger(__name__, "crypto_bot/logs/telegram_ctl.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = setup_logger(__name__, LOG_DIR / "telegram_ctl.log")
 
 
 async def _maybe_call(func: Any) -> Any:
@@ -74,9 +76,9 @@ except Exception:  # pragma: no cover - telegram not installed
 from . import console_monitor, log_reader
 from .utils.open_trades import get_open_trades
 
-STRATEGY_FILE = Path("crypto_bot/logs/strategy_stats.json")
-TRADES_FILE = Path("crypto_bot/logs/trades.csv")
-LOG_FILE = Path("crypto_bot/logs/bot.log")
+STRATEGY_FILE = LOG_DIR / "strategy_stats.json"
+TRADES_FILE = LOG_DIR / "trades.csv"
+LOG_FILE = LOG_DIR / "bot.log"
 CONFIG_FILE = Path("crypto_bot/config.yaml")
 
 

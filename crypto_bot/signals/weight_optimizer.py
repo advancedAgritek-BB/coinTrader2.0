@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 from typing import Dict
 
-STATS_FILE = Path("crypto_bot/logs/strategy_stats.json")
-WEIGHTS_FILE = Path("crypto_bot/logs/weights.json")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+STATS_FILE = LOG_DIR / "strategy_stats.json"
+WEIGHTS_FILE = LOG_DIR / "weights.json"
 
 
 class OnlineWeightOptimizer:

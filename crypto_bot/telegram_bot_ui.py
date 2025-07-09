@@ -21,6 +21,8 @@ from telegram.ext import (
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier, is_admin
+
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 from crypto_bot import log_reader, console_monitor
 from .telegram_ctl import BotController
 from crypto_bot.utils.open_trades import get_open_trades
@@ -36,9 +38,9 @@ SIGNALS = "SIGNALS"
 BALANCE = "BALANCE"
 TRADES = "TRADES"
 
-ASSET_SCORES_FILE = Path("crypto_bot/logs/asset_scores.json")
-SIGNALS_FILE = Path("crypto_bot/logs/asset_scores.json")
-TRADES_FILE = Path("crypto_bot/logs/trades.csv")
+ASSET_SCORES_FILE = LOG_DIR / "asset_scores.json"
+SIGNALS_FILE = LOG_DIR / "asset_scores.json"
+TRADES_FILE = LOG_DIR / "trades.csv"
 
 
 class TelegramBotUI:
@@ -65,7 +67,7 @@ class TelegramBotUI:
         self.wallet = wallet
         self.command_cooldown = command_cooldown
         self._last_exec: Dict[tuple[str, str], float] = {}
-        self.logger = setup_logger(__name__, "crypto_bot/logs/telegram_ui.log")
+        self.logger = setup_logger(__name__, LOG_DIR / "telegram_ui.log")
 
         self.app = ApplicationBuilder().token(self.token).build()
         if hasattr(self.app, "bot_data"):
@@ -251,7 +253,7 @@ class TelegramBotUI:
             await self._reply(update, "Rotation failed")
 
     def send_daily_summary(self) -> None:
-        stats = log_reader.trade_summary("crypto_bot/logs/trades.csv")
+        stats = log_reader.trade_summary(str(LOG_DIR / "trades.csv"))
         msg = (
             "Daily Summary\n"
             f"Trades: {stats['num_trades']}\n"

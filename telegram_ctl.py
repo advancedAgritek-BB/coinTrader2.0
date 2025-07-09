@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from typing import Dict, Tuple
 
+LOG_DIR = Path(__file__).resolve().parents[1] / "crypto_bot" / "logs"
+
 try:  # pragma: no cover - optional dependency
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
     from telegram.ext import (
@@ -18,9 +20,9 @@ except Exception:  # pragma: no cover - telegram not installed
     InlineKeyboardButton = InlineKeyboardMarkup = Update = object  # type: ignore
     ApplicationBuilder = CallbackQueryHandler = CommandHandler = ContextTypes = object  # type: ignore
 
-LOG_FILE = Path("crypto_bot/logs/bot.log")
-STRATEGY_FILE = Path("crypto_bot/logs/strategy_scores.json")
-POSITIONS_FILE = Path("crypto_bot/logs/positions.log")
+LOG_FILE = LOG_DIR / "bot.log"
+STRATEGY_FILE = LOG_DIR / "strategy_scores.json"
+POSITIONS_FILE = LOG_DIR / "positions.log"
 
 callback_timeout = 300
 callback_state: Dict[str, Dict[str, Tuple[int, float]]] = {}

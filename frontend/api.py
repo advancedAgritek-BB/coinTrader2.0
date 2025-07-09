@@ -7,10 +7,12 @@ import re
 
 app = FastAPI()
 
-SIGNALS_FILE = Path("crypto_bot/logs/asset_scores.json")
-POSITIONS_FILE = Path("crypto_bot/logs/positions.log")
-PERFORMANCE_FILE = Path("crypto_bot/logs/strategy_performance.json")
-SCORES_FILE = Path("crypto_bot/logs/strategy_scores.json")
+BASE_DIR = Path(__file__).resolve().parents[1]
+LOG_DIR = BASE_DIR / "crypto_bot" / "logs"
+SIGNALS_FILE = LOG_DIR / "asset_scores.json"
+POSITIONS_FILE = LOG_DIR / "positions.log"
+PERFORMANCE_FILE = LOG_DIR / "strategy_performance.json"
+SCORES_FILE = LOG_DIR / "strategy_scores.json"
 
 
 @app.get("/live-signals")

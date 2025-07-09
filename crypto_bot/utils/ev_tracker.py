@@ -3,10 +3,13 @@ from pathlib import Path
 from typing import Any, Dict
 
 from .logger import setup_logger
+from pathlib import Path
 
-logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
-STATS_FILE = Path("crypto_bot/logs/strategy_stats.json")
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
+
+STATS_FILE = LOG_DIR / "strategy_stats.json"
 
 # Track whether we've warned about a missing stats file to avoid spam
 _missing_warning_emitted = False

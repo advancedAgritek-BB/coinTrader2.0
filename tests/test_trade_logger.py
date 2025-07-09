@@ -21,15 +21,8 @@ from crypto_bot.utils.telegram import TelegramNotifier
 def test_log_trade_appends_row(tmp_path, monkeypatch):
     trades = tmp_path / "trades.csv"
     exec_log = tmp_path / "execution.log"
-    orig_path = trade_logger.Path
     monkeypatch.setattr(trade_logger, "dotenv_values", lambda _: {})
-
-    def fake_path(p):
-        if p == "crypto_bot/logs/trades.csv":
-            return trades
-        return orig_path(p)
-
-    monkeypatch.setattr(trade_logger, "Path", fake_path)
+    monkeypatch.setattr(trade_logger, "LOG_DIR", tmp_path)
 
     logger = setup_logger("trade_test", str(exec_log))
     monkeypatch.setattr(trade_logger, "logger", logger)
@@ -46,15 +39,8 @@ def test_execute_trade_async_logs(tmp_path, monkeypatch):
     trades = tmp_path / "trades.csv"
     exec_log = tmp_path / "execution.log"
 
-    orig_path = trade_logger.Path
     monkeypatch.setattr(trade_logger, "dotenv_values", lambda _: {})
-
-    def fake_path(p):
-        if p == "crypto_bot/logs/trades.csv":
-            return trades
-        return orig_path(p)
-
-    monkeypatch.setattr(trade_logger, "Path", fake_path)
+    monkeypatch.setattr(trade_logger, "LOG_DIR", tmp_path)
 
     logger = setup_logger("exec_test", str(exec_log))
     monkeypatch.setattr(cex_executor, "logger", logger)
@@ -92,17 +78,8 @@ def test_stop_order_logged(tmp_path, monkeypatch):
     trades = tmp_path / "trades.csv"
     exec_log = tmp_path / "execution.log"
 
-    orig_path = trade_logger.Path
     monkeypatch.setattr(trade_logger, "dotenv_values", lambda _: {})
-
-    def fake_path(p):
-        if p == "crypto_bot/logs/trades.csv":
-            return trades
-        if p == "crypto_bot/logs/execution.log":
-            return exec_log
-        return orig_path(p)
-
-    monkeypatch.setattr(trade_logger, "Path", fake_path)
+    monkeypatch.setattr(trade_logger, "LOG_DIR", tmp_path)
 
     logger = setup_logger("stop_test", str(exec_log))
     monkeypatch.setattr(trade_logger, "logger", logger)

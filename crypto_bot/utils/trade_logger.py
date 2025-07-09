@@ -7,7 +7,9 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from crypto_bot.utils.logger import setup_logger
 
-logger = setup_logger(__name__, "crypto_bot/logs/execution.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = setup_logger(__name__, LOG_DIR / "execution.log")
 
 
 def log_trade(order: Dict, is_stop: bool = False) -> None:
@@ -30,7 +32,7 @@ def log_trade(order: Dict, is_stop: bool = False) -> None:
         record["stop_price"] = order.get("stop") or order.get("stop_price") or 0.0
 
     df = pd.DataFrame([record])
-    log_file = Path("crypto_bot/logs/trades.csv")
+    log_file = LOG_DIR / "trades.csv"
     log_file.parent.mkdir(parents=True, exist_ok=True)
     # Append rows without a header so repeated logs don't duplicate columns
     df.to_csv(log_file, mode="a", header=False, index=False)

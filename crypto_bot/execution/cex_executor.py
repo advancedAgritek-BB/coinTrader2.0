@@ -3,6 +3,7 @@ import time
 import ccxt
 import asyncio
 from typing import Dict, Optional, Tuple, List
+from pathlib import Path
 
 try:
     import ccxt.pro as ccxtpro  # type: ignore
@@ -16,7 +17,9 @@ from crypto_bot.utils.trade_logger import log_trade
 from crypto_bot import tax_logger
 from crypto_bot.utils.logger import setup_logger
 
-logger = setup_logger(__name__, "crypto_bot/logs/execution.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = setup_logger(__name__, LOG_DIR / "execution.log")
 
 
 def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
