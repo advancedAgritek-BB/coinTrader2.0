@@ -237,6 +237,75 @@ optional references:
 }
 ```
 
+### ✏️ Edit Order via WebSocket
+
+**Endpoint**: `wss://ws-auth.kraken.com/v2`
+
+Send a JSON payload with `"method": "edit_order"` to modify an existing open order. The original order is canceled and replaced with a new one that has a new `order_id`.
+
+**Caveats**
+
+* Triggered stop-loss or take-profit orders are not supported.
+* Orders with conditional close terms attached are not supported.
+* Requests where the executed volume exceeds the newly supplied volume are rejected.
+* `cl_ord_id` is not supported.
+* Existing executions remain associated with the original order.
+* Queue position is not maintained.
+
+#### Request Schema
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `method` | string | Must be `edit_order`. |
+| `order_id` | string | Kraken order identifier to amend. |
+| `symbol` | string | Original trading pair. |
+| `token` | string | WebSocket authentication token. |
+| `order_qty` | float | New order quantity. |
+| `limit_price` | float | Optional limit price. |
+| `display_qty` | float | Iceberg display quantity. |
+| `fee_preference` | string | `base` or `quote` fee currency. |
+| `no_mpp` | boolean | Disable Market Price Protection for market orders. |
+| `post_only` | boolean | Cancel if it would take liquidity. |
+| `reduce_only` | boolean | Reduce existing position only. |
+| `triggers` | object | Trigger price parameters. |
+| `deadline` | string | RFC3339 timestamp after which the order will not match. |
+| `order_userref` | integer | User reference for the amended order. |
+| `validate` | boolean | If `true`, validate only. |
+| `req_id` | integer | Client request identifier echoed back. |
+
+Example request:
+
+```json
+{
+  "method": "edit_order",
+  "params": {
+    "order_id": "ORDERX-IDXXX-XXXXX1",
+    "order_qty": 0.2123456789,
+    "symbol": "BTC/USD",
+    "token": "TxxxxxxxxxOxxxxxxxxxxKxxxxxxxExxxxxxxxN"
+  },
+  "req_id": 1234567890
+}
+```
+
+#### Response
+
+Successful responses return the new `order_id` along with the original one:
+
+```json
+{
+  "method": "edit_order",
+  "req_id": 1234567890,
+  "result": {
+    "order_id": "ORDERX-IDXXX-XXXXX2",
+    "original_order_id": "ORDERX-IDXXX-XXXXX1"
+  },
+  "success": true,
+  "time_in": "2022-07-15T12:56:09.876488Z",
+  "time_out": "2022-07-15T12:56:09.923422Z"
+}
+```
+
 Balance + Trade Events
 Subscribe to private channels after authentication:
 
