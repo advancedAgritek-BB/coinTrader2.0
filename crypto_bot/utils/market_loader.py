@@ -590,6 +590,31 @@ async def fetch_ohlcv_async(
         return exc
 
 
+async def fetch_order_book_async(
+    exchange,
+    symbol: str,
+    depth: int = 2,
+) -> dict | Exception:
+    """Return order book snapshot for ``symbol`` with top ``depth`` levels."""
+
+    if hasattr(exchange, "has") and not exchange.has.get("fetchOrderBook"):
+        return {}
+
+    try:
+        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_order_book", None)):
+            return await asyncio.wait_for(
+                exchange.fetch_order_book(symbol, limit=depth), OHLCV_TIMEOUT
+            )
+        return await asyncio.wait_for(
+            asyncio.to_thread(exchange.fetch_order_book, symbol, depth),
+            OHLCV_TIMEOUT,
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # pragma: no cover - network
+        return exc
+
+
 async def load_ohlcv_parallel(
     exchange,
     symbols: Iterable[str],

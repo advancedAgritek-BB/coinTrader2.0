@@ -7,6 +7,7 @@ import time
 from crypto_bot.utils.market_loader import (
     load_kraken_symbols,
     fetch_ohlcv_async,
+    fetch_order_book_async,
     load_ohlcv_parallel,
     update_ohlcv_cache,
     update_multi_tf_ohlcv_cache,
@@ -145,6 +146,20 @@ class DummySyncExchange:
     has = {"fetchOHLCV": True}
     def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         return [[0, 1, 2, 3, 4, 5]]
+
+
+class DummyBookExchange:
+    has = {"fetchOrderBook": True}
+
+    async def fetch_order_book(self, symbol, limit=2):
+        return {"bids": [[1, 1], [0.9, 2]], "asks": [[1.1, 1], [1.2, 3]]}
+
+
+def test_fetch_order_book_async():
+    ex = DummyBookExchange()
+    data = asyncio.run(fetch_order_book_async(ex, "BTC/USD", depth=2))
+    assert data["bids"] == [[1, 1], [0.9, 2]]
+    assert data["asks"] == [[1.1, 1], [1.2, 3]]
 
 
 def test_load_ohlcv_parallel():

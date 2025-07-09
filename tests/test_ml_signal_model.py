@@ -107,3 +107,14 @@ def test_extract_features_window():
     last_a = ml.extract_features(df).iloc[-1]
     last_b = ml.extract_features(df, window=len(df)).iloc[-1]
     pd.testing.assert_series_equal(last_a, last_b)
+
+
+def test_order_book_imbalance_feature():
+    df = _synthetic_df(60)
+    df["bid_qty_0"] = 1.0
+    df["bid_qty_1"] = 1.0
+    df["ask_qty_0"] = 2.0
+    df["ask_qty_1"] = 2.0
+    feats = ml.extract_features(df)
+    assert "order_book_imbalance" in feats.columns
+    assert "order_book_imbalance_z" in feats.columns

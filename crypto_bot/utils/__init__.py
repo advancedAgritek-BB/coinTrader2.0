@@ -4,6 +4,7 @@ from .eval_queue import compute_batches, build_priority_queue
 from .market_loader import (
     load_kraken_symbols,
     fetch_ohlcv_async,
+    fetch_order_book_async,
     load_ohlcv_parallel,
     update_ohlcv_cache,
     timeframe_seconds,
