@@ -962,6 +962,28 @@ class KrakenWSClient:
         self.private_ws.send(data)
         return msg
 
+    def edit_order(
+        self,
+        order_id: str,
+        symbol: str,
+        order_qty: Optional[float] = None,
+        limit_price: Optional[float] = None,
+        deadline: Optional[str] = None,
+    ) -> dict:
+        """Send an edit_order request via the private websocket."""
+        self.connect_private()
+        params = {"order_id": order_id, "symbol": symbol, "token": self.token}
+        if order_qty is not None:
+            params["order_qty"] = order_qty
+        if limit_price is not None:
+            params["limit_price"] = limit_price
+        if deadline is not None:
+            params["deadline"] = deadline
+        msg = {"method": "edit_order", "params": params}
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+        return msg
+
     def cancel_order(self, txid: str) -> dict:
         self.connect_private()
         msg = {

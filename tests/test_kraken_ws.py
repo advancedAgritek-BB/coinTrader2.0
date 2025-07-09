@@ -386,6 +386,41 @@ def test_open_orders(monkeypatch):
     assert ws.sent == [json.dumps(expected)]
 
 
+def test_edit_order_minimal(monkeypatch):
+    client, ws = _setup_private_client(monkeypatch)
+    msg = client.edit_order("OID", "BTC/USD")
+    expected = {
+        "method": "edit_order",
+        "params": {"order_id": "OID", "symbol": "BTC/USD", "token": "token"},
+    }
+    assert msg == expected
+    assert ws.sent == [json.dumps(expected)]
+
+
+def test_edit_order_with_options(monkeypatch):
+    client, ws = _setup_private_client(monkeypatch)
+    msg = client.edit_order(
+        "OID",
+        "ETH/USD",
+        order_qty=1.2,
+        limit_price=5.0,
+        deadline="2024-01-01T00:00:00Z",
+    )
+    expected = {
+        "method": "edit_order",
+        "params": {
+            "order_id": "OID",
+            "symbol": "ETH/USD",
+            "token": "token",
+            "order_qty": 1.2,
+            "limit_price": 5.0,
+            "deadline": "2024-01-01T00:00:00Z",
+        },
+    }
+    assert msg == expected
+    assert ws.sent[-1] == json.dumps(expected)
+
+
 def test_subscribe_and_unsubscribe_orders(monkeypatch):
     client, ws = _setup_private_client(monkeypatch)
 
