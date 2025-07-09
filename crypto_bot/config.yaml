@@ -1,4 +1,8 @@
 atr_normalization: true
+indicator_lookback: 250
+rsi_overbought_pct: 90
+rsi_oversold_pct: 10
+bb_squeeze_pct: 20
 bounce_scalper:
   atr_normalization: true
   atr_period: 14
