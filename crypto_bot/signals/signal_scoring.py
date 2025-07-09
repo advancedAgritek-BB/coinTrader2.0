@@ -78,7 +78,22 @@ async def evaluate_async(
     else:
         fns = list(strategy_fns)
 
-    tasks = [asyncio.to_thread(evaluate, fn, df, config) for fn in fns]
+    max_parallel = None
+    if config is not None:
+        try:
+            max_parallel = int(config.get("max_parallel", len(fns)))
+        except Exception:
+            max_parallel = len(fns)
+    if max_parallel is None:
+        max_parallel = len(fns)
+
+    sem = asyncio.Semaphore(max_parallel)
+
+    async def run_fn(fn):
+        async with sem:
+            return await asyncio.to_thread(evaluate, fn, df, config)
+
+    tasks = [run_fn(fn) for fn in fns]
     results = await asyncio.gather(*tasks)
     return list(results)
 

@@ -38,7 +38,7 @@ async def run_candidates(
     results: List[Tuple[float, callable, float, str]] = []
     for strat in strategies:
         try:
-            score, direction, _ = await evaluate_async(strat, df, cfg)
+            score, direction, _ = (await evaluate_async([strat], df, cfg))[0]
         except Exception as exc:  # pragma: no cover - safety
             analysis_logger.warning("Strategy %s failed: %s", strat.__name__, exc)
             continue
@@ -174,7 +174,7 @@ async def analyze_symbol(
             score = float(res.get("score", 0.0))
             direction = res.get("direction", "none")
         elif eval_mode == "ensemble":
-            min_conf = float(config.get("ensemble_min_conf", 0.0))
+            min_conf = float(config.get("ensemble_min_conf", 0.15))
             candidates = [strategy_for(regime, router_cfg)]
             extra = meta_selector._scores_for(regime)
             for strat_name, val in extra.items():
