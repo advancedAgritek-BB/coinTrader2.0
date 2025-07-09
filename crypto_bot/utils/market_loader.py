@@ -4,6 +4,8 @@ from typing import Iterable, List, Dict, Any
 import asyncio
 import inspect
 import time
+from pathlib import Path
+import yaml
 import pandas as pd
 
 from .telegram import TelegramNotifier
@@ -19,6 +21,7 @@ MAX_RETRY_DELAY = 3600
 OHLCV_TIMEOUT = 30
 MAX_OHLCV_FAILURES = 3
 MAX_WS_LIMIT = 50
+CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 UNSUPPORTED_SYMBOL = object()
 STATUS_UPDATES = True
 
@@ -49,6 +52,15 @@ def configure(
                 max_failures,
                 MAX_OHLCV_FAILURES,
             )
+    if max_ws_limit is None:
+        try:
+            with open(CONFIG_PATH) as f:
+                cfg = yaml.safe_load(f) or {}
+            cfg_val = cfg.get("max_ws_limit")
+            if cfg_val is not None:
+                max_ws_limit = cfg_val
+        except Exception:
+            pass
     if max_ws_limit is not None:
         try:
             MAX_WS_LIMIT = max(1, int(max_ws_limit))
