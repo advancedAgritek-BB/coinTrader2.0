@@ -37,6 +37,20 @@ async def run_candidates(
 ) -> List[Tuple[callable, float, str]]:
     """Evaluate ``strategies`` and rank them by score times edge."""
 
+    strategy_list = list(strategies)
+    try:
+        evals = await evaluate_async(
+            strategy_list,
+            df,
+            cfg,
+            max_parallel=cfg.get("max_parallel", 4),
+        )
+    except Exception as exc:  # pragma: no cover - safety
+        analysis_logger.warning("Batch evaluation failed: %s", exc)
+        return []
+
+    results: List[Tuple[float, callable, float, str]] = []
+    for strat, (score, direction, _atr) in zip(strategy_list, evals):
     max_parallel = int(cfg.get("max_parallel", 1))
     coef = float(cfg.get("drawdown_penalty_coef", 0.0))
 
@@ -69,7 +83,11 @@ async def run_candidates(
             analysis_logger.warning("Strategy %s failed: %s", strat.__name__, exc)
             continue
         try:
-            gross_edge = perf.edge(strat.__name__, symbol)
+            gross_edge = perf.edge(
+                strat.__name__,
+                symbol,
+                cfg.get("drawdown_penalty_coef", 0.3),
+            )
         except Exception:  # pragma: no cover - if perf fails use neutral edge
             gross_edge = 1.0
         rank = score * gross_edge
@@ -166,7 +184,11 @@ async def analyze_symbol(
         regime, votes = max(regime_counts.items(), key=lambda kv: kv[1])
     else:
         regime, votes = "unknown", 0
-    confidence = votes / max(len(regime_tfs), 1)
+
+    denom = len(regime_tfs)
+    if vote_map:
+        denom *= 2
+    confidence = votes / max(denom, 1)
     confidence *= base_conf
     if votes < min_agree:
         regime = "unknown"
