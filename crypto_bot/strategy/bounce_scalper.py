@@ -164,7 +164,9 @@ def confirm_lower_highs(df: pd.DataFrame, bars: int) -> bool:
 
 
 def generate_signal(
-    df: pd.DataFrame, config: Optional[Union[dict, BounceScalperConfig]] = None
+    df: pd.DataFrame,
+    config: Optional[Union[dict, BounceScalperConfig]] = None,
+    book: Optional[dict] = None,
 ) -> Tuple[float, str]:
     """Identify short-term bounces with volume confirmation."""
     if df.empty:
@@ -325,16 +327,16 @@ def generate_signal(
             score = normalize_score_by_volatility(df, score)
         if symbol:
             mark_cooldown(symbol, strategy)
-        book = cfg_dict.get("order_book")
+        book_data = book or cfg_dict.get("order_book")
         ratio = float(cfg_dict.get("imbalance_ratio", 0))
-        if ratio and isinstance(book, dict):
-            bids = sum(v for _, v in book.get("bids", []))
-            asks = sum(v for _, v in book.get("asks", []))
+        if ratio and isinstance(book_data, dict):
+            bids = sum(v for _, v in book_data.get("bids", []))
+            asks = sum(v for _, v in book_data.get("asks", []))
             if bids and asks:
-                bid_ask = bids / asks
-                if direction == "long" and bid_ask < ratio:
+                imbalance = bids / asks
+                if direction == "long" and imbalance < ratio:
                     return 0.0, "none"
-                if direction == "short" and (1 / bid_ask) < ratio:
+                if direction == "short" and imbalance > ratio:
                     return 0.0, "none"
 
     return score, direction

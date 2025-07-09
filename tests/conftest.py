@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 from pathlib import Path
+from pandas import Series
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -144,6 +145,32 @@ class _FakeTa:
         @staticmethod
         def macd(*args, **kwargs):
             return 0.0
+
+        @staticmethod
+        def ema_indicator(series, window=14):
+            return Series([80.0] * len(series))
+
+    class momentum:
+        @staticmethod
+        def rsi(series, window=14):
+            values = list(series)
+            rsis = [50.0]
+            for i in range(1, len(values)):
+                start = max(0, i - window + 1)
+                window_vals = values[start : i + 1]
+                gains = [max(window_vals[j] - window_vals[j - 1], 0) for j in range(1, len(window_vals))]
+                losses = [max(window_vals[j - 1] - window_vals[j], 0) for j in range(1, len(window_vals))]
+                avg_gain = sum(gains) / max(len(gains), 1)
+                avg_loss = sum(losses) / max(len(losses), 1)
+                rs = avg_gain / avg_loss if avg_loss else 100
+                rsi_val = 100 - 100 / (1 + rs)
+                rsis.append(rsi_val)
+            return Series(rsis)
+
+    class volatility:
+        @staticmethod
+        def average_true_range(high, low, close, window=14):
+            return Series([1.0] * len(close))
 
 sys.modules.setdefault("ta", _FakeTa())
 
