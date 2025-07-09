@@ -1,4 +1,4 @@
-from typing import Tuple, Callable, Optional, Iterable, Dict, Sequence, Union, List
+from typing import Tuple, Callable, Optional, Iterable, Dict, List
 import pandas as pd
 import asyncio
 from crypto_bot.ml_signal_model import predict_signal
@@ -56,31 +56,35 @@ def evaluate(
 
 
 async def evaluate_async(
-    strategy_fns: Union[Sequence[Callable[[pd.DataFrame], Tuple]], Callable[[pd.DataFrame], Tuple]],
+    strategy_fns: List[Callable[[pd.DataFrame], Tuple]],
     df: pd.DataFrame,
     config: Optional[dict] = None,
+    max_parallel: int = 4,
 ) -> List[Tuple[float, str, Optional[float]]]:
-    """Asynchronously evaluate one or more strategy callables.
+    """Asynchronously evaluate strategy callables with limited concurrency.
 
     Parameters
     ----------
-    strategy_fns : Sequence[Callable] or Callable
-        One or multiple strategy functions to evaluate. A single callable is
-        automatically wrapped in a list so that a consistent list of results
-        is always returned.
+    strategy_fns : List[Callable]
+        Strategy functions to evaluate.  Each callable must take a ``DataFrame``
+        and optionally a configuration dictionary and return a tuple containing
+        a score and direction.
     df : pd.DataFrame
         DataFrame containing market data.
     config : Optional[dict]
         Optional configuration passed through to the strategy functions.
+    max_parallel : int, default 4
+        Maximum number of strategies evaluated concurrently.
     """
-    if not isinstance(strategy_fns, Sequence):
-        fns = [strategy_fns]
-    else:
-        fns = list(strategy_fns)
 
-    tasks = [asyncio.to_thread(evaluate, fn, df, config) for fn in fns]
-    results = await asyncio.gather(*tasks)
-    return list(results)
+    results: List[Tuple[float, str, Optional[float]]] = []
+    for i in range(0, len(strategy_fns), max_parallel):
+        batch = strategy_fns[i : i + max_parallel]
+        tasks = [asyncio.to_thread(evaluate, fn, df, config) for fn in batch]
+        batch_results = await asyncio.gather(*tasks)
+        results.extend(batch_results)
+
+    return results
 
 
 def evaluate_strategies(

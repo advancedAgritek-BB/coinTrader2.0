@@ -38,7 +38,7 @@ async def run_candidates(
     results: List[Tuple[float, callable, float, str]] = []
     for strat in strategies:
         try:
-            score, direction, _ = await evaluate_async(strat, df, cfg)
+            score, direction, _ = (await evaluate_async([strat], df, cfg))[0]
         except Exception as exc:  # pragma: no cover - safety
             analysis_logger.warning("Strategy %s failed: %s", strat.__name__, exc)
             continue
