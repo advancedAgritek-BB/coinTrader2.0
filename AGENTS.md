@@ -121,6 +121,23 @@ Use that token in the request payload
   "token": "YOUR_WS_TOKEN"
 }
 ```
+Cancel Order via WebSocket
+Authenticated endpoint:
+
+```
+wss://ws-auth.kraken.com/v2
+```
+
+Use `cancel_order` to close one or more open orders. Provide Kraken
+`order_id` or your own `cl_ord_id` references. Each cancelled order will
+also appear on the `executions` stream.
+
+```json
+{
+    "method": "cancel_order",
+    "params": {
+        "order_id": ["OM5CRX-N2HAL-GFGWE9", "OLUMT4-UTEGU-ZYM7E9"],
+        "token": "YOUR_WS_TOKEN"
 
 ### \U1F4E6 Add Order via WebSocket
 
@@ -177,6 +194,16 @@ Example limit order:
 }
 ```
 
+```json
+{
+  "method": "cancel_order",
+  "req_id": 123456789,
+  "result": {"order_id": "OLUMT4-UTEGU-ZYM7E9"},
+  "success": true,
+  "time_in": "2023-09-21T14:36:57.428972Z",
+  "time_out": "2023-09-21T14:36:57.437952Z"
+}
+```
 Example stop-loss:
 
 ```json
