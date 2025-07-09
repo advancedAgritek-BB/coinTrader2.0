@@ -5,9 +5,7 @@ import subprocess
 import time
 from typing import Optional
 
-import psutil
 import yaml
-import pandas as pd
 
 
 def load_execution_mode(config_file: Path) -> str:
