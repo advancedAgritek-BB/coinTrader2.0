@@ -30,25 +30,49 @@ def set_execution_mode(mode: str, config_file: Path) -> None:
 
 
 def compute_performance(df: pd.DataFrame) -> dict[str, float]:
-    """Return PnL per symbol from the trades dataframe."""
+    """Return realized PnL per symbol from the trades dataframe.
+
+    Both long and short trades are supported. Sells first reduce any open
+    long position and excess amount opens a short. Buys cover shorts before
+    adding to the long side.
+    """
+
     perf: dict[str, float] = {}
-    open_pos: dict[str, list[tuple[float, float]]] = {}
+    open_longs: dict[str, list[tuple[float, float]]] = {}
+    open_shorts: dict[str, list[tuple[float, float]]] = {}
+
     for _, row in df.iterrows():
         symbol = row.get("symbol")
         side = row.get("side")
         price = float(row.get("price", 0))
         amount = float(row.get("amount", 0))
+
         if side == "buy":
-            open_pos.setdefault(symbol, []).append((price, amount))
+            # Close shorts first
+            shorts = open_shorts.setdefault(symbol, [])
+            while amount > 0 and shorts:
+                entry_price, qty = shorts.pop(0)
+                traded = min(qty, amount)
+                perf[symbol] = perf.get(symbol, 0.0) + (entry_price - price) * traded
+                if qty > traded:
+                    shorts.insert(0, (entry_price, qty - traded))
+                amount -= traded
+            if amount > 0:
+                open_longs.setdefault(symbol, []).append((price, amount))
+
         elif side == "sell":
-            lst = open_pos.setdefault(symbol, [])
-            while amount > 0 and lst:
-                entry_price, qty = lst.pop(0)
+            # Close longs first
+            longs = open_longs.setdefault(symbol, [])
+            while amount > 0 and longs:
+                entry_price, qty = longs.pop(0)
                 traded = min(qty, amount)
                 perf[symbol] = perf.get(symbol, 0.0) + (price - entry_price) * traded
                 if qty > traded:
-                    lst.insert(0, (entry_price, qty - traded))
+                    longs.insert(0, (entry_price, qty - traded))
                 amount -= traded
+            if amount > 0:
+                open_shorts.setdefault(symbol, []).append((price, amount))
+
     return perf
 
 
