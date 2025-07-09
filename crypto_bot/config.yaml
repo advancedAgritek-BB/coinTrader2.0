@@ -244,6 +244,7 @@ twap_enabled: true
 twap_interval_seconds: 10
 twap_slices: 4
 use_websocket: true
+ws_ping_interval: 20
 volatility_filter:
   max_funding_rate: 0.05
   min_atr_pct: 0.0

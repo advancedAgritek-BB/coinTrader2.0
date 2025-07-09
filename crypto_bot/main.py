@@ -179,6 +179,24 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
+async def _ws_ping_loop(exchange: object, interval: float) -> None:
+    """Periodically send WebSocket ping messages."""
+    try:
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                if asyncio.iscoroutinefunction(getattr(exchange, "ping", None)):
+                    await exchange.ping()
+                else:
+                    await asyncio.to_thread(exchange.ping)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # pragma: no cover - ping failures
+                logger.error("WebSocket ping failed: %s", exc, exc_info=True)
+    except asyncio.CancelledError:
+        pass
+
+
 async def _watch_position(
     symbol: str,
     exchange: object,
@@ -190,10 +208,16 @@ async def _watch_position(
     """Live update position PnL and log changes."""
     use_ws = config.get("use_websocket", False) and hasattr(exchange, "watch_ticker")
     poll_interval = float(config.get("position_poll_interval", 5))
+    ws_ping_interval = float(config.get("ws_ping_interval", 20))
+    ping_task: asyncio.Task | None = None
 
     while symbol in positions:
         try:
             if use_ws:
+                if ping_task is None:
+                    ping_task = asyncio.create_task(
+                        _ws_ping_loop(exchange, ws_ping_interval)
+                    )
                 try:
                     ticker = await exchange.watch_ticker(symbol)
                 except asyncio.CancelledError:
@@ -206,9 +230,23 @@ async def _watch_position(
                         exc_info=True,
                     )
                     use_ws = False
+                    if ping_task:
+                        ping_task.cancel()
+                        try:
+                            await ping_task
+                        except asyncio.CancelledError:
+                            pass
+                        ping_task = None
                     await asyncio.sleep(poll_interval)
                     continue
             else:
+                if ping_task:
+                    ping_task.cancel()
+                    try:
+                        await ping_task
+                    except asyncio.CancelledError:
+                        pass
+                    ping_task = None
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
                     ticker = await exchange.fetch_ticker(symbol)
                 else:
@@ -247,6 +285,13 @@ async def _watch_position(
         except Exception as exc:  # pragma: no cover - network or runtime error
             logger.error("Watcher error for %s: %s", symbol, exc, exc_info=True)
             await asyncio.sleep(poll_interval)
+
+    if ping_task:
+        ping_task.cancel()
+        try:
+            await ping_task
+        except asyncio.CancelledError:
+            pass
 
 
 async def _main_impl() -> TelegramNotifier:
@@ -955,7 +1000,9 @@ async def _main_impl() -> TelegramNotifier:
                         except asyncio.CancelledError:
                             pass
                     positions.pop(sym, None)
-                    latest_balance = await fetch_and_log_balance(exchange, paper_wallet, config)
+                    latest_balance = await fetch_and_log_balance(
+                        exchange, paper_wallet, config
+                    )
                     equity = paper_wallet.balance if paper_wallet else latest_balance
                     log_position(
                         sym,
