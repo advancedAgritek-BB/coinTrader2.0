@@ -66,7 +66,7 @@ def test_monitor_loop_reads_incremental(monkeypatch, tmp_path):
             outputs.append(text)
 
     async def fake_stats(*_a, **_kw):
-        return "stat1 | stat2"
+        return ["stat1", "stat2"]
 
     call_count = 0
 
@@ -79,7 +79,7 @@ def test_monitor_loop_reads_incremental(monkeypatch, tmp_path):
         if call_count >= 3:
             raise StopLoop
 
-    monkeypatch.setattr(console_monitor, "trade_stats_line", fake_stats)
+    monkeypatch.setattr(console_monitor, "trade_stats_lines", fake_stats)
     monkeypatch.setattr(console_monitor.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr("builtins.print", fake_print)
 
@@ -90,7 +90,7 @@ def test_monitor_loop_reads_incremental(monkeypatch, tmp_path):
 
     assert outputs[0].splitlines()[0].endswith("first'")
     assert outputs[1].splitlines()[0].endswith("second'")
-    assert outputs[0].splitlines()[1:] == ["stat1 | stat2"]
+    assert outputs[0].splitlines()[1:] == ["stat1", "stat2"]
 
 
 def test_monitor_loop_stringio_no_extra_newlines(monkeypatch, tmp_path):
@@ -98,7 +98,7 @@ def test_monitor_loop_stringio_no_extra_newlines(monkeypatch, tmp_path):
     log_file.write_text("start\n")
 
     async def fake_stats(*_a, **_kw):
-        return ""
+        return []
 
     call_count = 0
 
@@ -111,7 +111,7 @@ def test_monitor_loop_stringio_no_extra_newlines(monkeypatch, tmp_path):
         if call_count >= 3:
             raise StopLoop
 
-    monkeypatch.setattr(console_monitor, "trade_stats_line", fake_stats)
+    monkeypatch.setattr(console_monitor, "trade_stats_lines", fake_stats)
     monkeypatch.setattr(console_monitor.asyncio, "sleep", fake_sleep)
 
     buf = io.StringIO()
@@ -161,7 +161,7 @@ def test_monitor_loop_skips_duplicate_lines(monkeypatch, tmp_path):
 
     ex = type("Ex", (), {"fetch_balance": lambda self: {"USDT": {"free": 0}}})()
 
-    monkeypatch.setattr(console_monitor, "trade_stats_line", fake_stats)
+    monkeypatch.setattr(console_monitor, "trade_stats_lines", fake_stats)
     monkeypatch.setattr(console_monitor.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr("builtins.print", fake_print)
     monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
@@ -191,7 +191,7 @@ def test_monitor_loop_async_balance(monkeypatch, tmp_path):
     async def fake_sleep(_):
         raise StopLoop
 
-    monkeypatch.setattr(console_monitor, "trade_stats_line", fake_stats)
+    monkeypatch.setattr(console_monitor, "trade_stats_lines", fake_stats)
     monkeypatch.setattr(console_monitor.asyncio, "sleep", fake_sleep)
 
     ex = AsyncEx()
