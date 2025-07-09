@@ -121,3 +121,23 @@ def test_open_trades_buy_closes_short(tmp_path: Path):
             "entry_time": "b",
         }
     ]
+
+
+def test_open_trades_ignore_stop_rows(tmp_path: Path):
+    log_file = tmp_path / "trades.csv"
+    data = [
+        {"symbol": "BTC/USDT", "side": "buy", "amount": 1, "price": 100, "timestamp": "t1", "is_stop": False},
+        {"symbol": "BTC/USDT", "side": "sell", "amount": 1, "price": 0, "timestamp": "t2", "is_stop": True, "stop_price": 90},
+    ]
+    pd.DataFrame(data).to_csv(log_file, index=False, header=False)
+
+    open_orders = open_trades.get_open_trades(log_file)
+    assert open_orders == [
+        {
+            "symbol": "BTC/USDT",
+            "side": "long",
+            "amount": 1.0,
+            "price": 100.0,
+            "entry_time": "t1",
+        }
+    ]
