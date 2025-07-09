@@ -244,10 +244,13 @@ async def _watch_position(
                         ws_exc,
                     )
                     try:
-                        if asyncio.iscoroutinefunction(getattr(exchange, "close")):
-                            await exchange.close()
+                        close_fn = getattr(exchange, "close")
+                        if asyncio.iscoroutinefunction(close_fn):
+                            await close_fn()
                         else:
-                            await asyncio.to_thread(exchange.close)
+                            await asyncio.to_thread(close_fn)
+                    except AttributeError as attr_err:
+                        logger.warning("Exchange missing close method: %s", attr_err)
                     except Exception as close_err:  # pragma: no cover - cleanup error
                         logger.error("Error closing exchange: %s", close_err, exc_info=True)
                     try:
