@@ -941,20 +941,20 @@ class KrakenWSClient:
         self,
         symbol: Union[str, List[str]],
         side: str,
-        volume: float,
-        ordertype: str = "market",
+        order_qty: float,
+        order_type: str = "market",
     ) -> dict:
         """Send an add_order request via the private websocket."""
         self.connect_private()
-        if isinstance(symbol, str):
-            symbol = [symbol]
+        if isinstance(symbol, list):
+            symbol = symbol[0] if symbol else ""
         msg = {
             "method": "add_order",
             "params": {
                 "symbol": symbol,
-                "type": side,
-                "ordertype": ordertype,
-                "volume": str(volume),
+                "side": side,
+                "order_type": order_type,
+                "order_qty": str(order_qty),
                 "token": self.token,
             },
         }

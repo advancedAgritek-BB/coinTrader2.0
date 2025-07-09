@@ -80,8 +80,8 @@ class DummyWS:
                 "params": {
                     "symbol": symbol,
                     "side": side,
-                    "volume": amount,
-                    "ordertype": ordertype,
+                    "order_qty": amount,
+                    "order_type": ordertype,
                 },
             }
         return {"ws": True}
@@ -131,7 +131,7 @@ def test_execute_trade_ws_path(monkeypatch):
     assert ws.msg["method"] == "add_order"
     assert ws.msg["params"]["symbol"] == "BTC/USDT"
     assert ws.msg["params"]["side"] == "buy"
-    assert ws.msg["params"]["volume"] == 1.0
+    assert ws.msg["params"]["order_qty"] == 1.0
 
 
 def test_execute_trade_ws_missing(monkeypatch):
