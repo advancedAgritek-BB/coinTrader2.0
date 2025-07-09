@@ -23,6 +23,14 @@ def log_performance(record: Dict[str, Any]) -> None:
                         "entry_time": "2024-01-01T00:00:00Z",
                         "exit_time": "2024-01-01T02:00:00Z"
                     }
+                ],
+                "sniper_solana": [
+                    {
+                        "symbol": "SOL/USDC",
+                        "pnl": 0.5,
+                        "entry_time": "2024-01-02T00:00:00Z",
+                        "exit_time": "2024-01-02T01:00:00Z"
+                    }
                 ]
             }
         }
@@ -35,7 +43,9 @@ def log_performance(record: Dict[str, Any]) -> None:
         except Exception:
             data = {}
     regime = record.get("regime", "unknown")
-    strategy = record.get("strategy", "unknown")
+    # Strategy names may come from the router or individual modules. Cast to
+    # ``str`` so new names like ``sniper_solana`` are handled consistently.
+    strategy = str(record.get("strategy", "unknown"))
     data.setdefault(regime, {}).setdefault(strategy, []).append(
         {
             "symbol": record.get("symbol", ""),
@@ -47,6 +57,6 @@ def log_performance(record: Dict[str, Any]) -> None:
     LOG_FILE.write_text(json.dumps(data))
     bandit.update(
         record.get("symbol", ""),
-        record.get("strategy", ""),
+        strategy,
         float(record.get("pnl", 0.0)) > 0,
     )
