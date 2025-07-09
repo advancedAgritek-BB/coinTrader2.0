@@ -1,3 +1,4 @@
+import asyncio
 import pandas as pd
 from typing import Dict, Iterable, Tuple, List
 
@@ -21,6 +22,7 @@ from crypto_bot.strategy_router import (
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot import meta_selector
 from crypto_bot.signals.signal_scoring import evaluate_async, evaluate_strategies
+from crypto_bot.utils.rank_logger import log_second_place
 from crypto_bot.volatility_filter import calc_atr
 
 
@@ -35,7 +37,45 @@ async def run_candidates(
 ) -> List[Tuple[callable, float, str]]:
     """Evaluate ``strategies`` and rank them by score times edge."""
 
+    strategy_list = list(strategies)
+    try:
+        evals = await evaluate_async(
+            strategy_list,
+            df,
+            cfg,
+            max_parallel=cfg.get("max_parallel", 4),
+        )
+    except Exception as exc:  # pragma: no cover - safety
+        analysis_logger.warning("Batch evaluation failed: %s", exc)
+        return []
+
     results: List[Tuple[float, callable, float, str]] = []
+    for strat, (score, direction, _atr) in zip(strategy_list, evals):
+    max_parallel = int(cfg.get("max_parallel", 1))
+    coef = float(cfg.get("drawdown_penalty_coef", 0.0))
+
+    sem = asyncio.Semaphore(max_parallel)
+    results: List[Tuple[float, callable, float, str]] = []
+
+    async def eval_one(strat):
+        async with sem:
+            try:
+                score, direction, _ = await evaluate_async(strat, df, cfg)
+            except Exception as exc:  # pragma: no cover - safety
+                analysis_logger.warning("Strategy %s failed: %s", strat.__name__, exc)
+                return None
+            try:
+                gross_edge = perf.edge(strat.__name__, symbol, coef)
+            except Exception:  # pragma: no cover - if perf fails use neutral edge
+                gross_edge = 1.0
+            rank = score * gross_edge
+            return (rank, strat, score, direction)
+
+    tasks = [eval_one(s) for s in strategies]
+    results_raw = await asyncio.gather(*tasks)
+    for res in results_raw:
+        if res:
+            results.append(res)
     for strat in strategies:
         try:
             score, direction, _ = (await evaluate_async([strat], df, cfg))[0]
@@ -43,7 +83,11 @@ async def run_candidates(
             analysis_logger.warning("Strategy %s failed: %s", strat.__name__, exc)
             continue
         try:
-            gross_edge = perf.edge(strat.__name__, symbol)
+            gross_edge = perf.edge(
+                strat.__name__,
+                symbol,
+                cfg.get("drawdown_penalty_coef", 0.3),
+            )
         except Exception:  # pragma: no cover - if perf fails use neutral edge
             gross_edge = 1.0
         rank = score * gross_edge
@@ -140,7 +184,11 @@ async def analyze_symbol(
         regime, votes = max(regime_counts.items(), key=lambda kv: kv[1])
     else:
         regime, votes = "unknown", 0
-    confidence = votes / max(len(regime_tfs), 1)
+
+    denom = len(regime_tfs)
+    if vote_map:
+        denom *= 2
+    confidence = votes / max(denom, 1)
     confidence *= base_conf
     if votes < min_agree:
         regime = "unknown"
@@ -173,6 +221,13 @@ async def analyze_symbol(
             name = res.get("name", strategy_name(regime, env))
             score = float(res.get("score", 0.0))
             direction = res.get("direction", "none")
+            if len(strategies) > 1:
+                remaining = [s for s in strategies if getattr(s, "__name__", "") != name]
+                if remaining:
+                    second = evaluate_strategies(remaining, df, cfg)
+                    second_score = float(second.get("score", 0.0))
+                    edge = score - second_score
+                    log_second_place(symbol, regime, second.get("name", ""), second_score, edge)
         elif eval_mode == "ensemble":
             min_conf = float(config.get("ensemble_min_conf", 0.15))
             candidates = [strategy_for(regime, router_cfg)]

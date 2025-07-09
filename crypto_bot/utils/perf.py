@@ -9,6 +9,7 @@ def edge(strategy: str, symbol: str) -> float:
     The default implementation provides a neutral edge of ``1.0``.
     """
     return 1.0
+
 import json
 from datetime import datetime, timedelta
 from typing import Sequence
