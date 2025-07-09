@@ -110,3 +110,40 @@ def test_regime_commit_lock(tmp_path, monkeypatch):
     assert fn.__name__ == trend_bot.generate_signal.__name__
     assert lock.stat().st_mtime == ts
 
+import pandas as pd
+from crypto_bot.strategy_router import route
+from crypto_bot.strategy import breakout_bot, trend_bot
+
+
+def make_df(close_vals, vol_vals):
+    idx = pd.date_range("2025-01-01", periods=len(close_vals), freq="T")
+    return pd.DataFrame({"open": close_vals, "high": close_vals, "low": close_vals,
+                         "close": close_vals, "volume": vol_vals}, index=idx)
+
+
+def test_fastpath_breakout(tmp_path, monkeypatch):
+    # config with low max_bandwidth and high volume multiplier
+    cfg = {"strategy_router": {"fast_path": {
+        "breakout_squeeze_window": 3,
+        "breakout_max_bandwidth": 0.1,
+        "breakout_volume_multiplier": 2,
+        "trend_adx_threshold": 1000
+    }}, "regime": {"sideways": ["grid"]}}
+    df = make_df([1,1,1,1], [1,1,1,10])
+    fn = route("sideways", "cex", cfg, None, df)
+    assert fn.__name__ == breakout_bot.generate_signal.__name__
+
+
+def test_fastpath_trend(tmp_path):
+    cfg = {"strategy_router": {"fast_path": {
+        "breakout_squeeze_window": 3,
+        "breakout_max_bandwidth": 0,
+        "breakout_volume_multiplier": 100,
+        "trend_adx_threshold": 5
+    }}, "regime": {"trending": ["trend"]}}
+    # create rising series so ADX > threshold
+    vals = list(range(10))
+    df = make_df(vals, [1]*10)
+    fn = route("trending", "cex", cfg, None, df)
+    assert fn.__name__ == trend_bot.generate_signal.__name__
+
