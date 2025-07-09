@@ -4,9 +4,8 @@ from pathlib import Path
 
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.trade_logger import log_trade
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
 

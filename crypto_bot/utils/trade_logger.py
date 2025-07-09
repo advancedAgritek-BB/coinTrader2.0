@@ -1,13 +1,11 @@
 import pandas as pd
 from typing import Dict
-from pathlib import Path
 from datetime import datetime
 from dotenv import dotenv_values
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
 

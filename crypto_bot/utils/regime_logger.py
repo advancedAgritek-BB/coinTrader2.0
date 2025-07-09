@@ -2,7 +2,8 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+from .logger import LOG_DIR
+
 
 """Simple regime logging utilities."""
 

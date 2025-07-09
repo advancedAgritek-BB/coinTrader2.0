@@ -14,7 +14,7 @@ from dotenv import dotenv_values
 
 from crypto_bot.utils.telegram import TelegramNotifier, send_test_message
 from crypto_bot.utils.trade_reporter import report_entry, report_exit
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.wallet_manager import load_or_create
@@ -73,7 +73,6 @@ from crypto_bot.utils.correlation import compute_correlation_matrix
 from crypto_bot.regime.regime_classifier import CONFIG
 from crypto_bot.utils.metrics_logger import log_metrics_to_csv
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"

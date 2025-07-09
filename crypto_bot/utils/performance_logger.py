@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+from .logger import LOG_DIR
+
 
 LOG_FILE = LOG_DIR / "strategy_performance.json"
 

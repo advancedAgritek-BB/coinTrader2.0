@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 from typing import Dict, List
 
-LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
+from crypto_bot.utils.logger import LOG_DIR
+
 
 import numpy as np
 import pandas as pd

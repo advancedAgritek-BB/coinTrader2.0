@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 from typing import Dict
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+from crypto_bot.utils.logger import LOG_DIR
+
 
 STATS_FILE = LOG_DIR / "strategy_stats.json"
 WEIGHTS_FILE = LOG_DIR / "weights.json"

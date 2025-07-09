@@ -19,10 +19,9 @@ from telegram.ext import (
 )
 
 from crypto_bot.portfolio_rotator import PortfolioRotator
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier, is_admin
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 from crypto_bot import log_reader, console_monitor
 from .telegram_ctl import BotController
 from crypto_bot.utils.open_trades import get_open_trades

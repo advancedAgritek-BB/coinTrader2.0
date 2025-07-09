@@ -6,6 +6,8 @@ process and provides REST API routes used by the UI and tests.
 
 from flask import Flask, render_template, redirect, url_for, request, jsonify
 from pathlib import Path
+
+from crypto_bot.utils.logger import LOG_DIR
 import subprocess
 import json
 import threading
@@ -23,8 +25,6 @@ app = Flask(__name__)
 bot_proc = None
 bot_start_time = None
 watch_thread = None
-BASE_DIR = Path(__file__).resolve().parents[1]
-LOG_DIR = BASE_DIR / 'crypto_bot' / 'logs'
 LOG_FILE = LOG_DIR / 'bot.log'
 STATS_FILE = LOG_DIR / 'strategy_stats.json'
 SCAN_FILE = LOG_DIR / 'asset_scores.json'

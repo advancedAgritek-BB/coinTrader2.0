@@ -10,7 +10,7 @@ import yaml
 
 from .pattern_detector import detect_patterns
 from crypto_bot.utils.pattern_logger import log_patterns
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from pathlib import Path
 
 
@@ -24,7 +24,6 @@ def _load_config(path: Path) -> dict:
 
 CONFIG = _load_config(CONFIG_PATH)
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 

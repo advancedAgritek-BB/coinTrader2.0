@@ -4,10 +4,8 @@ import asyncio
 from crypto_bot.ml_signal_model import predict_signal
 from crypto_bot.indicators.cycle_bias import get_cycle_bias
 from crypto_bot.utils.strategy_utils import compute_drawdown
-from crypto_bot.utils.logger import setup_logger
-from pathlib import Path
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 

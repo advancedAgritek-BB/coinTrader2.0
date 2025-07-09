@@ -2,6 +2,8 @@ import pandas as pd
 import ta
 import numpy as np
 from pathlib import Path
+
+from crypto_bot.utils.logger import LOG_DIR
 import joblib
 from typing import Optional
 import json
@@ -260,6 +262,6 @@ def validate_from_csv(csv_path: Path) -> dict:
 
 
 if __name__ == "__main__":  # pragma: no cover - manual training
-    DEFAULT_CSV = Path(__file__).resolve().parents[1] / "logs" / "trades.csv"
+    DEFAULT_CSV = LOG_DIR / "trades.csv"
     if DEFAULT_CSV.exists():
         train_from_csv(DEFAULT_CSV)

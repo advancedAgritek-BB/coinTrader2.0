@@ -2,10 +2,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-from .logger import setup_logger
-from pathlib import Path
+from .logger import LOG_DIR, setup_logger
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 

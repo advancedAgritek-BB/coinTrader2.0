@@ -7,7 +7,8 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+from crypto_bot.utils.logger import LOG_DIR
+
 
 import yaml
 

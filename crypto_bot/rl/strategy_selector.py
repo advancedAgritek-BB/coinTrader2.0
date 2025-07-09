@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pandas as pd
 from pathlib import Path
+
+from crypto_bot.utils.logger import LOG_DIR
 from typing import Callable, Dict
 
 from crypto_bot.strategy import (
