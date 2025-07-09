@@ -52,7 +52,13 @@ def test_analyze_symbol_ensemble_mode(monkeypatch):
         return "trending", 1.0
 
     monkeypatch.setattr("crypto_bot.utils.market_analyzer.classify_regime_cached", fake_cached)
-    monkeypatch.setattr(sr, "evaluate_regime", lambda r, d, cfg=None: (0.6, "long"))
+    async def fake_run(df_, strategies, symbol, cfg_):
+        return [(strat_a, 0.6, "long")]
+
+    import crypto_bot.utils.market_analyzer as ma
+    monkeypatch.setattr(ma, "run_candidates", fake_run)
+    monkeypatch.setattr(sr, "strategy_for", lambda r, c=None: strat_a)
+    monkeypatch.setattr(ma.meta_selector, "_scores_for", lambda r: {})
 
     async def run():
         cfg = {
