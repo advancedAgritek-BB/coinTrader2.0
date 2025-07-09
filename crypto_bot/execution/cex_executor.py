@@ -86,6 +86,7 @@ def execute_trade(
     dry_run: bool = True,
     use_websocket: bool = False,
     config: Optional[Dict] = None,
+    score: float = 0.0,
 ) -> Dict:
     if notifier is None:
         if isinstance(token, TelegramNotifier):
@@ -119,6 +120,22 @@ def execute_trade(
         if dry_run:
             return {"symbol": symbol, "side": side, "amount": size, "dry_run": True}
         try:
+            if score > 0.8 and hasattr(exchange, "create_limit_order"):
+                price = None
+                try:
+                    t = exchange.fetch_ticker(symbol)
+                    bid = t.get("bid")
+                    ask = t.get("ask")
+                    if bid and ask:
+                        price = (bid + ask) / 2
+                except Exception as err:
+                    logger.warning("Limit price fetch failed: %s", err)
+                if price:
+                    params = {"postOnly": True}
+                    if config.get("hidden_limit"):
+                        params["hidden"] = True
+                    return exchange.create_limit_order(symbol, side, size, price, params)
+
             if ws_client is not None:
                 return ws_client.add_order(symbol, side, size)
             return exchange.create_market_order(symbol, side, size)
@@ -265,6 +282,7 @@ async def execute_trade_async(
     dry_run: bool = True,
     use_websocket: bool = False,
     config: Optional[Dict] = None,
+    score: float = 0.0,
 ) -> Dict:
     """Asynchronous version of :func:`execute_trade`. It supports both
     ``ccxt.pro`` exchanges and the threaded ``KrakenWSClient`` fallback."""
@@ -286,16 +304,51 @@ async def execute_trade_async(
         order = {"symbol": symbol, "side": side, "amount": amount, "dry_run": True}
     else:
         try:
-            if use_websocket and ws_client is not None and not ccxtpro:
-                order = ws_client.add_order(symbol, side, amount)
-            elif asyncio.iscoroutinefunction(
-                getattr(exchange, "create_market_order", None)
-            ):
-                order = await exchange.create_market_order(symbol, side, amount)
+            if score > 0.8 and hasattr(exchange, "create_limit_order"):
+                price = None
+                try:
+                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
+                        t = await exchange.fetch_ticker(symbol)
+                    else:
+                        t = await asyncio.to_thread(exchange.fetch_ticker, symbol)
+                    bid = t.get("bid")
+                    ask = t.get("ask")
+                    if bid and ask:
+                        price = (bid + ask) / 2
+                except Exception as err:
+                    logger.warning("Limit price fetch failed: %s", err)
+                if price:
+                    params = {"postOnly": True}
+                    if config.get("hidden_limit"):
+                        params["hidden"] = True
+                    if asyncio.iscoroutinefunction(getattr(exchange, "create_limit_order", None)):
+                        order = await exchange.create_limit_order(symbol, side, amount, price, params)
+                    else:
+                        order = await asyncio.to_thread(
+                            exchange.create_limit_order, symbol, side, amount, price, params
+                        )
+                else:
+                    if use_websocket and ws_client is not None and not ccxtpro:
+                        order = ws_client.add_order(symbol, side, amount)
+                    elif asyncio.iscoroutinefunction(
+                        getattr(exchange, "create_market_order", None)
+                    ):
+                        order = await exchange.create_market_order(symbol, side, amount)
+                    else:
+                        order = await asyncio.to_thread(
+                            exchange.create_market_order, symbol, side, amount
+                        )
             else:
-                order = await asyncio.to_thread(
-                    exchange.create_market_order, symbol, side, amount
-                )
+                if use_websocket and ws_client is not None and not ccxtpro:
+                    order = ws_client.add_order(symbol, side, amount)
+                elif asyncio.iscoroutinefunction(
+                    getattr(exchange, "create_market_order", None)
+                ):
+                    order = await exchange.create_market_order(symbol, side, amount)
+                else:
+                    order = await asyncio.to_thread(
+                        exchange.create_market_order, symbol, side, amount
+                    )
         except Exception as e:  # pragma: no cover - network
             err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
             if err_msg:
