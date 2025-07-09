@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from .logger import LOG_DIR
+from crypto_bot.selector import bandit
 
 
 LOG_FILE = LOG_DIR / "strategy_performance.json"
@@ -44,3 +45,8 @@ def log_performance(record: Dict[str, Any]) -> None:
         }
     )
     LOG_FILE.write_text(json.dumps(data))
+    bandit.update(
+        record.get("symbol", ""),
+        record.get("strategy", ""),
+        float(record.get("pnl", 0.0)) > 0,
+    )
