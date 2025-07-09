@@ -265,6 +265,7 @@ def route(
     mode: str,
     config: RouterConfig | Mapping[str, Any] | None = None,
     notifier: TelegramNotifier | None = None,
+    df: pd.DataFrame | None = None,
 ) -> Callable[[pd.DataFrame], Tuple[float, str]]:
     """Select a strategy based on market regime and operating mode.
 
@@ -312,26 +313,42 @@ def route(
     cfg = config or DEFAULT_ROUTER_CFG
 
     # === FAST-PATH FOR STRONG SIGNALS ===
-    fp = cfg.raw.get("strategy_router", {}).get("fast_path", {}) \
-          if hasattr(cfg, "raw") else cfg.get("strategy_router", {}).get("fast_path", {})
-    # 1) breakout squeeze + volume spike
-    from ta.volatility import BollingerBands
-    window = int(fp.get("breakout_squeeze_window", 20))
-    max_bw = float(fp.get("breakout_max_bandwidth", 0.05))
-    vol_mult = float(fp.get("breakout_volume_multiplier", 5))
-    bb = BollingerBands(df["close"], window=window)
-    wband = bb.bollinger_wband().iloc[-1]
-    vol_mean = df["volume"].rolling(window).mean().iloc[-1]
-    if wband < max_bw and df["volume"].iloc[-1] > vol_mean * vol_mult:
-        logger.info("FAST-PATH: breakout_bot via ATR squeeze + volume spike")
-        return _wrap(breakout_bot.generate_signal)
-    # 2) ultra-strong trend by ADX
-    from ta.trend import ADXIndicator
-    adx_thr = float(fp.get("trend_adx_threshold", 35))
-    adx_val = ADXIndicator(df["high"], df["low"], df["close"], window=window).adx().iloc[-1]
-    if adx_val > adx_thr:
-        logger.info("FAST-PATH: trend_bot via ADX > %.1f", adx_thr)
-        return _wrap(trend_bot.generate_signal)
+    fp = (
+        cfg.raw.get("strategy_router", {}).get("fast_path", {})
+        if hasattr(cfg, "raw")
+        else cfg.get("strategy_router", {}).get("fast_path", {})
+    )
+    if df is not None:
+        try:
+            # 1) breakout squeeze + volume spike
+            from ta.volatility import BollingerBands
+
+            window = int(fp.get("breakout_squeeze_window", 20))
+            max_bw = float(fp.get("breakout_max_bandwidth", 0.05))
+            vol_mult = float(fp.get("breakout_volume_multiplier", 5))
+            bb = BollingerBands(df["close"], window=window)
+            wband = bb.bollinger_wband().iloc[-1]
+            vol_mean = df["volume"].rolling(window).mean().iloc[-1]
+            if wband < max_bw and df["volume"].iloc[-1] > vol_mean * vol_mult:
+                logger.info(
+                    "FAST-PATH: breakout_bot via ATR squeeze + volume spike"
+                )
+                return _wrap(breakout_bot.generate_signal)
+
+            # 2) ultra-strong trend by ADX
+            from ta.trend import ADXIndicator
+
+            adx_thr = float(fp.get("trend_adx_threshold", 35))
+            adx_val = (
+                ADXIndicator(df["high"], df["low"], df["close"], window=window)
+                .adx()
+                .iloc[-1]
+            )
+            if adx_val > adx_thr:
+                logger.info("FAST-PATH: trend_bot via ADX > %.1f", adx_thr)
+                return _wrap(trend_bot.generate_signal)
+        except Exception:  # pragma: no cover - safety
+            pass
     # === end fast-path ===
 
     if isinstance(regime, dict):
