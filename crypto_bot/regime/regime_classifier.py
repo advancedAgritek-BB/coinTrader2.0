@@ -11,6 +11,7 @@ import yaml
 from .pattern_detector import detect_patterns
 from crypto_bot.utils.pattern_logger import log_patterns
 from crypto_bot.utils.logger import setup_logger
+from pathlib import Path
 
 
 CONFIG_PATH = Path(__file__).with_name("regime_config.yaml")
@@ -23,7 +24,9 @@ def _load_config(path: Path) -> dict:
 
 CONFIG = _load_config(CONFIG_PATH)
 
-logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 _ALL_REGIMES = [
     "trending",

@@ -16,7 +16,9 @@ from crypto_bot.execution.solana_executor import execute_swap
 from crypto_bot.utils.logger import setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
 
-logger = setup_logger(__name__, "crypto_bot/logs/fund_manager.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = setup_logger(__name__, LOG_DIR / "fund_manager.log")
 
 SUPPORTED_FUNDING = ["BTC", "ETH", "XRP"]
 REQUIRED_TOKENS = ["USDC", "SOL"]

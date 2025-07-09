@@ -2,13 +2,15 @@ import json
 from pathlib import Path
 from typing import Dict, List
 
+LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
+
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold, cross_val_score
 import lightgbm as lgb
 import pickle
 
-LOG_FILE = Path("crypto_bot/logs/strategy_performance.json")
+LOG_FILE = LOG_DIR / "strategy_performance.json"
 MODEL_FILE = Path("crypto_bot/models/meta_selector_lgbm.pkl")
 K = 20  # number of trades for label window
 

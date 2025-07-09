@@ -13,11 +13,13 @@ from rich.table import Table
 from .utils.open_trades import get_open_trades
 from . import log_reader
 
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
 
 async def monitor_loop(
     exchange: object,
     paper_wallet: Optional[object] = None,
-    log_file: str | Path = "crypto_bot/logs/bot.log",
+    log_file: str | Path = LOG_DIR / "bot.log",
 ) -> None:
     """Periodically output balance, last log line and open trade stats.
 
@@ -81,7 +83,7 @@ async def monitor_loop(
         # context manager.
         raise
 
-TRADE_FILE = Path("crypto_bot/logs/trades.csv")
+TRADE_FILE = LOG_DIR / "trades.csv"
 
 
 def display_trades(

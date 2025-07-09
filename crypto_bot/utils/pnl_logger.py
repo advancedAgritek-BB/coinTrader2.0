@@ -2,7 +2,9 @@ import pandas as pd
 from pathlib import Path
 from datetime import datetime
 
-LOG_FILE = Path("crypto_bot/logs/strategy_pnl.csv")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+LOG_FILE = LOG_DIR / "strategy_pnl.csv"
 
 
 def log_pnl(

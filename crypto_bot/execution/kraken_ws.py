@@ -7,8 +7,11 @@ from datetime import datetime, timedelta, timezone
 import ccxt
 from websocket import WebSocketApp
 from crypto_bot.utils.logger import setup_logger
+from pathlib import Path
 
-logger = setup_logger(__name__, "crypto_bot/logs/execution.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = setup_logger(__name__, LOG_DIR / "execution.log")
 
 PUBLIC_URL = "wss://ws.kraken.com/v2"
 PRIVATE_URL = "wss://ws-auth.kraken.com/v2"

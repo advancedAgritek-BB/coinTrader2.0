@@ -3,7 +3,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-LOG_FILE = Path("crypto_bot/logs/metrics.csv")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+LOG_FILE = LOG_DIR / "metrics.csv"
 
 
 def log_cycle(symbol_time: float, ohlcv_time: float, analyze_time: float,

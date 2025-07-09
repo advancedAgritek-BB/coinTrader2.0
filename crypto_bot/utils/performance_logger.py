@@ -2,7 +2,9 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-LOG_FILE = Path("crypto_bot/logs/strategy_performance.json")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+LOG_FILE = LOG_DIR / "strategy_performance.json"
 
 
 def log_performance(record: Dict[str, Any]) -> None:

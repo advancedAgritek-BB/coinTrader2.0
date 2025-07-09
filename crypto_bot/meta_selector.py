@@ -17,7 +17,8 @@ from crypto_bot.strategy import (
     bounce_scalper,
 )
 
-LOG_FILE = Path("crypto_bot/logs/strategy_performance.json")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+LOG_FILE = LOG_DIR / "strategy_performance.json"
 MODEL_PATH = Path(__file__).resolve().parent / "models" / "meta_selector_lgbm.txt"
 
 

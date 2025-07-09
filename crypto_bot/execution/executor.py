@@ -1,11 +1,14 @@
 import ccxt
 from typing import Dict
+from pathlib import Path
 
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.trade_logger import log_trade
 from crypto_bot.utils.logger import setup_logger
 
-logger = setup_logger(__name__, "crypto_bot/logs/execution.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = setup_logger(__name__, LOG_DIR / "execution.log")
 
 
 def load_exchange(api_key: str, api_secret: str) -> ccxt.Exchange:

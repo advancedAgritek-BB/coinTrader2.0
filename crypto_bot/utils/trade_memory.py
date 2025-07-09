@@ -7,7 +7,9 @@ import time
 from pathlib import Path
 from typing import Dict, List, Any
 
-LOG_FILE = Path("crypto_bot/logs/trade_memory.json")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+LOG_FILE = LOG_DIR / "trade_memory.json"
 MAX_LOSSES = 3
 SLIPPAGE_THRESHOLD = 0.05
 LOOKBACK_SECONDS = 3600

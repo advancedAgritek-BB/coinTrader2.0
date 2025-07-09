@@ -6,8 +6,11 @@ import os
 import requests
 
 from crypto_bot.utils.logger import setup_logger
+from pathlib import Path
 
-logger = setup_logger(__name__, "crypto_bot/logs/indicators.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = setup_logger(__name__, LOG_DIR / "indicators.log")
 
 DEFAULT_MVRV_URL = "https://api.example.com/mvrv"
 DEFAULT_NUPL_URL = "https://api.example.com/nupl"

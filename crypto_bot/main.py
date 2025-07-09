@@ -73,11 +73,13 @@ from crypto_bot.utils.correlation import compute_correlation_matrix
 from crypto_bot.regime.regime_classifier import CONFIG
 from crypto_bot.utils.metrics_logger import log_metrics_to_csv
 
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENV_PATH = Path(__file__).resolve().parent / ".env"
 
-logger = setup_logger("bot", "crypto_bot/logs/bot.log", to_console=False)
+logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
@@ -476,7 +478,7 @@ async def _main_impl() -> TelegramNotifier:
         )
 
     monitor_task = asyncio.create_task(
-        console_monitor.monitor_loop(exchange, paper_wallet, "crypto_bot/logs/bot.log")
+        console_monitor.monitor_loop(exchange, paper_wallet, LOG_DIR / "bot.log")
     )
 
     positions: dict[str, dict] = {}
@@ -485,10 +487,10 @@ async def _main_impl() -> TelegramNotifier:
     position_guard = OpenPositionGuard(max_open_trades)
     active_strategy = None
     last_balance: float | None = None
-    stats_file = Path("crypto_bot/logs/strategy_stats.json")
+    stats_file = LOG_DIR / "strategy_stats.json"
     # File tracking individual trade performance used for analytics
-    perf_file = Path("crypto_bot/logs/strategy_performance.json")
-    scores_file = Path("crypto_bot/logs/strategy_scores.json")
+    perf_file = LOG_DIR / "strategy_performance.json"
+    scores_file = LOG_DIR / "strategy_scores.json"
 
     rotator = PortfolioRotator()
     last_rotation = 0.0
@@ -509,7 +511,7 @@ async def _main_impl() -> TelegramNotifier:
         TelegramBotUI(
             notifier,
             state,
-            "crypto_bot/logs/bot.log",
+            LOG_DIR / "bot.log",
             rotator,
             exchange,
             user.get("wallet_address", ""),
@@ -772,7 +774,7 @@ async def _main_impl() -> TelegramNotifier:
             if sym not in positions and in_cooldown(sym, name_sym):
                 continue
 
-            params_file = Path("crypto_bot/logs/optimized_params.json")
+            params_file = LOG_DIR / "optimized_params.json"
             if params_file.exists():
                 params = json.loads(params_file.read_text())
                 if name_sym in params:
@@ -1122,7 +1124,7 @@ async def _main_impl() -> TelegramNotifier:
                 }
                 log_metrics_to_csv(
                     metrics,
-                    config.get("metrics_output_file", "crypto_bot/logs/metrics.csv"),
+                    config.get("metrics_output_file", str(LOG_DIR / "metrics.csv")),
                 )
             logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
@@ -1182,7 +1184,7 @@ async def _main_impl() -> TelegramNotifier:
                     log_metrics_to_csv(
                         metrics,
                         config.get(
-                            "metrics_output_file", "crypto_bot/logs/metrics.csv"
+                            "metrics_output_file", str(LOG_DIR / "metrics.csv")
                         ),
                     )
                 logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
@@ -1347,7 +1349,7 @@ async def _main_impl() -> TelegramNotifier:
             }
             log_metrics_to_csv(
                 metrics,
-                config.get("metrics_output_file", "crypto_bot/logs/metrics.csv"),
+                config.get("metrics_output_file", str(LOG_DIR / "metrics.csv")),
             )
         summary = f"Cycle complete: {total_pairs} symbols, {trades_executed} trades"
         if notifier and status_updates:

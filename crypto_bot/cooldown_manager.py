@@ -4,9 +4,11 @@ from datetime import datetime
 from typing import Dict
 
 from crypto_bot.utils.logger import setup_logger
+from pathlib import Path
 
 # Consolidate cooldown logs with the main bot log
-logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 cooldowns: Dict[str, datetime] = {}
 MIN_COOLDOWN = 0

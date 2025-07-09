@@ -10,10 +10,13 @@ import pandas as pd
 
 from .telegram import TelegramNotifier
 from .logger import setup_logger
+from pathlib import Path
+
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 _last_snapshot_time = 0
 
-logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 failed_symbols: Dict[str, Dict[str, Any]] = {}
 RETRY_DELAY = 300

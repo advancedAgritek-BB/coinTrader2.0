@@ -3,8 +3,11 @@ import time
 
 from .logger import setup_logger
 from .symbol_pre_filter import filter_symbols
+from pathlib import Path
 
-logger = setup_logger(__name__, "crypto_bot/logs/bot.log")
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 
 _cached_symbols: list | None = None

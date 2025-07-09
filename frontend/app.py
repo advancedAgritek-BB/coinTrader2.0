@@ -23,14 +23,16 @@ app = Flask(__name__)
 bot_proc = None
 bot_start_time = None
 watch_thread = None
-LOG_FILE = Path('crypto_bot/logs/bot.log')
-STATS_FILE = Path('crypto_bot/logs/strategy_stats.json')
-SCAN_FILE = Path('crypto_bot/logs/asset_scores.json')
+BASE_DIR = Path(__file__).resolve().parents[1]
+LOG_DIR = BASE_DIR / 'crypto_bot' / 'logs'
+LOG_FILE = LOG_DIR / 'bot.log'
+STATS_FILE = LOG_DIR / 'strategy_stats.json'
+SCAN_FILE = LOG_DIR / 'asset_scores.json'
 MODEL_REPORT = Path('crypto_bot/ml_signal_model/models/model_report.json')
-TRADE_FILE = Path('crypto_bot/logs/trades.csv')
-ERROR_FILE = Path('crypto_bot/logs/errors.log')
+TRADE_FILE = LOG_DIR / 'trades.csv'
+ERROR_FILE = LOG_DIR / 'errors.log'
 CONFIG_FILE = Path('crypto_bot/config.yaml')
-REGIME_FILE = Path('crypto_bot/logs/regime_history.txt')
+REGIME_FILE = LOG_DIR / 'regime_history.txt'
 
 
 def watch_bot() -> None:
@@ -229,7 +231,7 @@ def model_page():
 def train_model_route():
     file = request.files.get('csv')
     if file:
-        tmp_path = Path('crypto_bot/logs/upload.csv')
+        tmp_path = LOG_DIR / 'upload.csv'
         file.save(tmp_path)
         ml.train_from_csv(tmp_path)
         tmp_path.unlink()
@@ -241,12 +243,12 @@ def validate_model_route():
     file = request.files.get('csv')
     tmp_path = None
     if file:
-        tmp_path = Path('crypto_bot/logs/validate.csv')
+        tmp_path = LOG_DIR / 'validate.csv'
         file.save(tmp_path)
         metrics = ml.validate_from_csv(tmp_path)
         tmp_path.unlink()
     else:
-        default_csv = Path('crypto_bot/logs/trades.csv')
+        default_csv = LOG_DIR / 'trades.csv'
         if default_csv.exists():
             metrics = ml.validate_from_csv(default_csv)
         else:

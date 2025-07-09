@@ -2,8 +2,10 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict
 
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
-def compute_strategy_weights(path: str = "crypto_bot/logs/strategy_pnl.csv") -> Dict[str, float]:
+
+def compute_strategy_weights(path: str = str(LOG_DIR / "strategy_pnl.csv")) -> Dict[str, float]:
     """Return normalized allocation weights per strategy.
 
     We compute either win rate or Sharpe ratio from the PnL data stored at

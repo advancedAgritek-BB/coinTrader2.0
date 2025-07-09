@@ -253,15 +253,8 @@ def test_ws_client_refreshes_expired_token(monkeypatch):
 def test_execute_trade_dry_run_logs_price(tmp_path, monkeypatch):
     trades = tmp_path / "trades.csv"
 
-    orig_path = trade_logger.Path
     monkeypatch.setattr(trade_logger, "dotenv_values", lambda _: {})
-
-    def fake_path(p):
-        if p == "crypto_bot/logs/trades.csv":
-            return trades
-        return orig_path(p)
-
-    monkeypatch.setattr(trade_logger, "Path", fake_path)
+    monkeypatch.setattr(trade_logger, "LOG_DIR", tmp_path)
 
     class DummyEx:
         def fetch_ticker(self, symbol):
@@ -292,15 +285,8 @@ def test_execute_trade_dry_run_logs_price(tmp_path, monkeypatch):
 def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
     trades = tmp_path / "trades.csv"
 
-    orig_path = trade_logger.Path
     monkeypatch.setattr(trade_logger, "dotenv_values", lambda _: {})
-
-    def fake_path(p):
-        if p == "crypto_bot/logs/trades.csv":
-            return trades
-        return orig_path(p)
-
-    monkeypatch.setattr(trade_logger, "Path", fake_path)
+    monkeypatch.setattr(trade_logger, "LOG_DIR", tmp_path)
 
     class DummyEx:
         async def fetch_ticker(self, symbol):

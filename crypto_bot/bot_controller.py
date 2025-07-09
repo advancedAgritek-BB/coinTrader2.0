@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
 import yaml
 
 from .portfolio_rotator import PortfolioRotator
@@ -20,8 +22,8 @@ class BotController:
     def __init__(
         self,
         config_path: str | Path = "crypto_bot/config.yaml",
-        trades_file: str | Path = "crypto_bot/logs/trades.csv",
-        log_file: str | Path = "crypto_bot/logs/bot.log",
+        trades_file: str | Path = LOG_DIR / "trades.csv",
+        log_file: str | Path = LOG_DIR / "bot.log",
     ) -> None:
         self.config_path = Path(config_path)
         self.trades_file = Path(trades_file)
