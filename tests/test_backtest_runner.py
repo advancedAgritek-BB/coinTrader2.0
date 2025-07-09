@@ -1,5 +1,6 @@
 import pandas as pd
 import ccxt
+import logging
 
 from crypto_bot.backtest import backtest_runner as bt, backtest_runner
 from crypto_bot.backtest.backtest_runner import BacktestConfig, BacktestRunner
@@ -101,3 +102,16 @@ def test_walk_forward_optimize(monkeypatch):
     runner = BacktestRunner(cfg)
     df = runner.run_walk_forward()
     assert {"regime", "train_stop_loss_pct", "train_take_profit_pct"} <= set(df.columns)
+
+
+def test_skip_sniper_solana(caplog):
+    caplog.set_level(logging.INFO)
+    df = bt.backtest(
+        symbol="BTC/USDT",
+        timeframe="1h",
+        since=0,
+        limit=10,
+        strategy="sniper_solana",
+    )
+    assert df.empty
+    assert "Sniper Solana not backtestable" in caplog.text
