@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Dict, Iterable, List, Optional
 
+import logging
+
 import ccxt
 import numpy as np
 import pandas as pd
@@ -17,6 +19,9 @@ import ta
 from crypto_bot.regime.regime_classifier import CONFIG, classify_regime
 from crypto_bot.signals.signal_scoring import evaluate
 from crypto_bot.strategy_router import strategy_for
+
+
+logger = logging.getLogger(__name__)
 
 _REGIMES = [
     "trending",
@@ -412,6 +417,7 @@ def backtest(
     since: int,
     limit: int = 1000,
     mode: str = "cex",
+    strategy: str | None = None,
     stop_loss_range: Iterable[float] | None = None,
     take_profit_range: Iterable[float] | None = None,
     slippage_pct: float = 0.001,
@@ -420,6 +426,9 @@ def backtest(
     seed: Optional[int] = None,
 ) -> pd.DataFrame:
     """Run regime-aware backtests over parameter ranges."""
+    if strategy == "sniper_solana":
+        logger.info("Sniper Solana not backtestable \u2013 run paper mode")
+        return pd.DataFrame()
     config = BacktestConfig(
         symbol=symbol,
         timeframe=timeframe,
