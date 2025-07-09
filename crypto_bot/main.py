@@ -341,6 +341,59 @@ async def _watch_position(
             pass
 
 
+async def initial_scan(
+    exchange: object,
+    config: dict,
+    df_cache: dict[str, dict[str, pd.DataFrame]],
+    regime_cache: dict[str, dict[str, pd.DataFrame]],
+    notifier: TelegramNotifier | None = None,
+) -> tuple[dict[str, dict[str, pd.DataFrame]], dict[str, dict[str, pd.DataFrame]]]:
+    """Populate OHLCV and regime caches before trading begins."""
+
+    symbols = config.get("symbols") or [config.get("symbol")]
+    if not symbols:
+        return df_cache, regime_cache
+
+    batch_size = int(config.get("symbol_batch_size", 10))
+    total = len(symbols)
+    processed = 0
+
+    for i in range(0, total, batch_size):
+        batch = symbols[i : i + batch_size]
+
+        df_cache = await update_multi_tf_ohlcv_cache(
+            exchange,
+            df_cache,
+            batch,
+            config,
+            limit=100,
+            use_websocket=config.get("use_websocket", False),
+            force_websocket_history=config.get("force_websocket_history", False),
+            max_concurrent=config.get("max_concurrent_ohlcv"),
+            notifier=notifier,
+        )
+
+        regime_cache = await update_regime_tf_cache(
+            exchange,
+            regime_cache,
+            batch,
+            config,
+            limit=100,
+            use_websocket=config.get("use_websocket", False),
+            force_websocket_history=config.get("force_websocket_history", False),
+            max_concurrent=config.get("max_concurrent_ohlcv"),
+            notifier=notifier,
+        )
+
+        processed += len(batch)
+        pct = processed / total * 100
+        logger.info("Initial scan %.1f%% complete", pct)
+        if notifier and config.get("telegram", {}).get("status_updates", True):
+            notifier.notify(f"Initial scan {pct:.1f}% complete")
+
+    return df_cache, regime_cache
+
+
 async def _main_impl() -> TelegramNotifier:
     """Implementation for running the trading bot."""
 
@@ -522,6 +575,14 @@ async def _main_impl() -> TelegramNotifier:
 
     if telegram_bot:
         telegram_bot.run_async()
+
+    df_cache, regime_cache = await initial_scan(
+        exchange,
+        config,
+        df_cache,
+        regime_cache,
+        notifier if status_updates else None,
+    )
 
     base_mode = mode
 

@@ -68,6 +68,9 @@ model if desired.
    losing ones appear in red. The monitor lists open trades on a single
    line formatted as `Symbol -- entry -- unrealized PnL`.
    The program prints "Bot running..." before the [Monitor] lines.
+   Before trading begins the bot performs a full market scan to populate
+   its caches. Progress is logged and, when `telegram.status_updates` is
+   enabled, sent to your Telegram chat.
    Type `start`, `stop` or `quit` in the terminal to control the bot.
    Or launch the web dashboard with:
    ```bash
@@ -150,6 +153,8 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 
 ### Market Scanning
 * **symbol_batch_size** – number of symbols processed each cycle.
+  The same batch size controls the initial market scan at startup where
+  progress is logged after each batch.
 * **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
 * **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
 * **symbol_score_weights** – weights for volume, spread, change and age.
