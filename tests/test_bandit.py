@@ -38,6 +38,7 @@ def test_route_uses_bandit(monkeypatch):
     cfg = {
         "timeframe": "1h",
         "strategy_router": {"regimes": {"trending": ["trend", "grid"]}},
+        "bandit": {"enabled": True},
     }
     fn = route("trending", "cex", cfg)
 
