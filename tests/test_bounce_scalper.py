@@ -4,6 +4,18 @@ from crypto_bot.strategy.bounce_scalper import BounceScalperConfig
 from crypto_bot.cooldown_manager import configure, cooldowns
 
 
+def _df(prices, volumes):
+    return pd.DataFrame(
+        {
+            "open": prices,
+            "high": [p + 1 for p in prices],
+            "low": [p - 1 for p in prices],
+            "close": prices,
+            "volume": volumes,
+        }
+    )
+
+
 def test_long_bounce_signal():
     df = pd.DataFrame(
         {
@@ -131,8 +143,26 @@ def test_order_book_imbalance_blocks(monkeypatch):
         "asks": [[30000.2, 5.0]],
     }
 
-    cfg = {"symbol": "BTC/USD", "order_book": snap, "imbalance_ratio": 2.0}
-    score, direction = bounce_scalper.generate_signal(df, cfg)
+    cfg = {"symbol": "BTC/USD", "imbalance_ratio": 2.0}
+    score, direction = bounce_scalper.generate_signal(df, cfg, book=snap)
+    assert direction == "none"
+    assert score == 0.0
+
+
+def test_order_book_imbalance_blocks_short(monkeypatch):
+    prices = list(range(100, 80, -1)) + [82]
+    volumes = [100] * 20 + [300]
+    df = _df(prices, volumes)
+    cfg = BounceScalperConfig(symbol="BTC/USDT")
+
+    snap = {
+        "type": "snapshot",
+        "bids": [[30000.1, 5.0]],
+        "asks": [[30000.2, 1.0]],
+    }
+
+    cfg = {"symbol": "BTC/USD", "imbalance_ratio": 2.0}
+    score, direction = bounce_scalper.generate_signal(df, cfg, book=snap)
     assert direction == "none"
     assert score == 0.0
 
