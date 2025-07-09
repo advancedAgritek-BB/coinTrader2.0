@@ -36,7 +36,13 @@ def get_exchange(config: dict) -> ccxt.Exchange:
 def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
     """Fetch tickers and update the cached liquid pairs list."""
     exchange = get_exchange(config)
-    tickers = exchange.fetch_tickers()
+    try:
+        tickers = exchange.fetch_tickers()
+    except Exception:  # pragma: no cover - network failures
+        if PAIR_FILE.exists():
+            with open(PAIR_FILE) as f:
+                return json.load(f)
+        raise
 
     pairs: list[tuple[str, float]] = []
     for symbol, data in tickers.items():
