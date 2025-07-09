@@ -5,10 +5,8 @@ from __future__ import annotations
 from typing import Optional
 
 from .telegram import TelegramNotifier
-from .logger import setup_logger
-from pathlib import Path
+from .logger import LOG_DIR, setup_logger
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 

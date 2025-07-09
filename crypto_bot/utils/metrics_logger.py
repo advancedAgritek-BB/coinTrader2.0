@@ -3,7 +3,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+from .logger import LOG_DIR
+
 LOG_FILE = LOG_DIR / "metrics.csv"
 
 

@@ -1,6 +1,9 @@
 import logging
 from pathlib import Path
 
+# Shared log directory for all modules
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+
 
 def setup_logger(name: str, log_file: str, to_console: bool = True) -> logging.Logger:
     """Return a logger configured to write to ``log_file`` and optionally stdout."""

@@ -10,10 +10,9 @@ from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.notifier import Notifier
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot import tax_logger
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from pathlib import Path
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
 

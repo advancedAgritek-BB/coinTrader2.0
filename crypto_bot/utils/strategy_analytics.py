@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 from typing import Dict, Any
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+from .logger import LOG_DIR
+
 import pandas as pd
 
 # Default location for recorded trade performance. Each trade closed

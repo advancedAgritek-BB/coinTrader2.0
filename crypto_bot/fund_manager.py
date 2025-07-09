@@ -13,10 +13,9 @@ except Exception:  # pragma: no cover - dependency optional
     TokenAccountOpts = None  # type: ignore
 
 from crypto_bot.execution.solana_executor import execute_swap
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 logger = setup_logger(__name__, LOG_DIR / "fund_manager.log")
 

@@ -7,7 +7,8 @@ import time
 from pathlib import Path
 from typing import Dict, List, Any
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+from .logger import LOG_DIR
+
 
 LOG_FILE = LOG_DIR / "trade_memory.json"
 MAX_LOSSES = 3

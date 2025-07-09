@@ -3,7 +3,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+from .logger import LOG_DIR
+
 
 LOG_FILE = LOG_DIR / "regime_pnl.csv"
 

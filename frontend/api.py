@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
-from pathlib import Path
 import json
 import re
 
-app = FastAPI()
+from crypto_bot.utils.logger import LOG_DIR
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-LOG_DIR = BASE_DIR / "crypto_bot" / "logs"
+app = FastAPI()
 SIGNALS_FILE = LOG_DIR / "asset_scores.json"
 POSITIONS_FILE = LOG_DIR / "positions.log"
 PERFORMANCE_FILE = LOG_DIR / "strategy_performance.json"

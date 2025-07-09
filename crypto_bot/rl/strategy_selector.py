@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pandas as pd
 from pathlib import Path
+
+from crypto_bot.utils.logger import LOG_DIR
 from typing import Callable, Dict
 
 from crypto_bot.strategy import (
@@ -14,7 +16,7 @@ from crypto_bot.strategy import (
 )
 
 # Default log file location
-LOG_FILE = Path("logs/strategy_pnl.csv")
+LOG_FILE = LOG_DIR / "strategy_pnl.csv"
 
 # Map strategy names to generation functions
 _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {

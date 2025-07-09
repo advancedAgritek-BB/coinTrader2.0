@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .logger import setup_logger
+from .logger import LOG_DIR, setup_logger
 
-LOG_FILE = Path(__file__).resolve().parents[1] / "logs" / "positions.log"
+LOG_FILE = LOG_DIR / "positions.log"
 logger = setup_logger(__name__, LOG_FILE)
 
 

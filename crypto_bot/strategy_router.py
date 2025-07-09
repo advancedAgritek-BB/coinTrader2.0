@@ -12,10 +12,9 @@ import time
 from crypto_bot.utils import timeframe_seconds
 from datetime import datetime
 
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 from crypto_bot.strategy import (
     trend_bot,
     grid_bot,
