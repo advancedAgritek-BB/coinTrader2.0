@@ -433,6 +433,31 @@ def test_subscribe_and_unsubscribe_orders(monkeypatch):
     assert client._private_subs == []
 
 
+def test_subscribe_and_unsubscribe_executions(monkeypatch):
+    client, ws = _setup_private_client(monkeypatch)
+
+    client.subscribe_executions()
+    expected_sub = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {"channel": "executions", "token": "token"},
+        }
+    )
+    assert ws.sent == [expected_sub]
+    assert client._private_subs == [expected_sub]
+
+    ws.sent.clear()
+    client.unsubscribe_executions()
+    expected_unsub = json.dumps(
+        {
+            "method": "unsubscribe",
+            "params": {"channel": "executions", "token": "token"},
+        }
+    )
+    assert ws.sent == [expected_unsub]
+    assert client._private_subs == []
+
+
 def test_subscribe_and_unsubscribe_book(monkeypatch):
     client = KrakenWSClient()
     ws = DummyWS()
