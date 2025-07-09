@@ -3,6 +3,7 @@ from typing import Callable, Tuple, Dict, Iterable, Union, Mapping, Any
 from dataclasses import dataclass, field, asdict
 
 import pandas as pd
+import numpy as np
 
 from pathlib import Path
 import yaml
@@ -14,6 +15,7 @@ from datetime import datetime
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
+from crypto_bot.selector import bandit
 
 from crypto_bot.strategy import (
     trend_bot,
@@ -46,6 +48,7 @@ class RouterConfig:
     strategies: list[tuple[str, float]] = field(default_factory=list)
     rl_selector: bool = False
     meta_selector: bool = False
+    bandit_enabled: bool = False
     timeframe: str = "1h"
     commit_lock_intervals: int = 0
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False)
@@ -67,6 +70,7 @@ class RouterConfig:
             strategies=[tuple(x) for x in fusion.get("strategies", [])],
             rl_selector=bool(data.get("rl_selector", {}).get("enabled", False)),
             meta_selector=bool(data.get("meta_selector", {}).get("enabled", False)),
+            bandit_enabled=bool(data.get("bandit", {}).get("enabled", False)),
             timeframe=str(data.get("timeframe", "1h")),
             commit_lock_intervals=int(router.get("commit_lock_intervals", 0)),
             raw=data,
@@ -244,6 +248,41 @@ def evaluate_regime(
 
     engine = SignalFusionEngine(pairs)
     return engine.fuse(df, cfg_dict)
+
+
+def _bandit_context(df: pd.DataFrame, regime: str) -> Dict[str, float]:
+    """Return bandit context features for Thompson sampling."""
+    context: Dict[str, float] = {}
+    for r in [
+        "trending",
+        "sideways",
+        "mean-reverting",
+        "breakout",
+        "volatile",
+        "unknown",
+    ]:
+        context[f"regime_{r}"] = 1.0 if regime == r else 0.0
+
+    try:
+        from crypto_bot.volatility_filter import calc_atr
+        from crypto_bot.utils import stats
+    except Exception:
+        return context
+
+    if df is not None and not df.empty:
+        price = df["close"].iloc[-1]
+        atr = calc_atr(df)
+        context["atr_pct"] = atr / price if price else 0.0
+
+        ts = df.index[-1]
+        if not isinstance(ts, pd.Timestamp):
+            ts = pd.to_datetime(ts)
+        hour = ts.hour + ts.minute / 60
+        context["hour_sin"] = float(np.sin(2 * np.pi * hour / 24))
+        context["hour_cos"] = float(np.cos(2 * np.pi * hour / 24))
+        vol_z = stats.zscore(df["volume"], lookback=20)
+        context["liquidity_z"] = float(vol_z.iloc[-1]) if not vol_z.empty else 0.0
+    return context
 
 
 def strategy_name(regime: str, mode: str) -> str:
@@ -427,6 +466,34 @@ def route(
         except Exception:
             pass
     LAST_REGIME_FILE.write_text(json.dumps({"timestamp": datetime.utcnow().isoformat(), "regime": regime}))
+
+    # Thompson sampling router
+    bandit_active = (
+        cfg.bandit_enabled
+        if isinstance(cfg, RouterConfig)
+        else bool(cfg.get("bandit", {}).get("enabled"))
+    )
+    if bandit_active:
+        strategies = get_strategies_for_regime(regime, cfg)
+        if isinstance(cfg, RouterConfig):
+            arms = list(cfg.regimes.get(regime, []))
+        else:
+            arms = list(
+                cfg.get("strategy_router", {}).get("regimes", {}).get(regime, [])
+            )
+        if not arms:
+            arms = [fn.__name__ for fn in strategies]
+        symbol = ""
+        if isinstance(cfg, RouterConfig):
+            symbol = str(cfg.raw.get("symbol", ""))
+        elif isinstance(cfg, Mapping):
+            symbol = str(cfg.get("symbol", ""))
+        context = _bandit_context(df or pd.DataFrame(), regime)
+        choice = bandit.select(context, arms, symbol)
+        fn = get_strategy_by_name(choice)
+        if fn:
+            logger.info("Bandit selected %s for %s", choice, regime)
+            return _wrap(fn)
 
     if mode == "onchain":
         if regime in {"breakout", "volatile"}:
