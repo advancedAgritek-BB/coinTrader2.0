@@ -6,6 +6,7 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 
 * Regime detection using EMA, ADX, RSI and Bollinger Band width
 * Strategy router that picks the best approach for trending, sideways, breakout or volatile markets
+* Fast-path dispatcher that jumps straight to the breakout or trend bot on strong signals
 * Trend and grid bots for CEXs plus sniper and DEX scalper strategies on Solana
 * Portfolio rotation and auto optimizer utilities
 * Risk management with drawdown limits, cooldown management and volume/volatility filters
@@ -47,6 +48,16 @@ lowered to switch regimes more quickly. The fallback model is bundled in
 By default the ML model only runs when at least **20** candles are available
 (tunable via `ml_min_bars`). You can replace that module with your own encoded
 model if desired.
+
+## Fast-Path Checks
+
+The router performs quick checks for exceptionally strong setups before running
+the full regime classifier. When the Bollinger Band width over a 20 candle
+window drops below **0.05** and volume is more than **5×** the average,
+`breakout_bot` is called immediately. If the ADX from the same window exceeds
+**35**, the router dispatches straight to `trend_bot`. These defaults live under
+`strategy_router.fast_path` in `crypto_bot/config.yaml` and can be tuned as
+needed.
 
 ## Quick Start
 
