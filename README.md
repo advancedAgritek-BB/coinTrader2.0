@@ -388,6 +388,9 @@ adaptive limit keeps history current without waiting for a full response.
 Disable this fallback by setting `force_websocket_history` to `true`.
 Large history requests skip streaming entirely when `limit` exceeds
 `max_ws_limit`.
+Increase this threshold in `crypto_bot/config.yaml` when large history
+requests should still use WebSocket. For example set
+`max_ws_limit: 100` if you regularly request 100 candles.
 
 The client now records heartbeat events and exposes `is_alive(conn_type)` to
 check if a connection has received a heartbeat within the last 10 seconds. Call
