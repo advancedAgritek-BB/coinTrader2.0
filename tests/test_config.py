@@ -13,6 +13,10 @@ def test_load_config_returns_dict():
     assert "risk" in config
     assert "min_cooldown" in config
     assert "atr_normalization" in config
+    assert "indicator_lookback" in config
+    assert "rsi_overbought_pct" in config
+    assert "rsi_oversold_pct" in config
+    assert "bb_squeeze_pct" in config
     assert "top_n_symbols" in config
     assert "min_confidence_score" in config
     assert "signal_fusion" in config

@@ -13,3 +13,4 @@ from .market_loader import (
 # initialization. Import it lazily where required.
 from .symbol_utils import get_filtered_symbols
 from .strategy_analytics import compute_metrics, write_scores, write_stats
+from .stats import zscore

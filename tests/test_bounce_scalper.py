@@ -210,3 +210,35 @@ def test_config_from_dict():
     assert cfg.symbol == "ETH/USDT"
     # ensure defaults applied
     assert cfg.overbought == 70
+
+
+def test_adaptive_rsi_threshold(monkeypatch):
+    df = pd.DataFrame(
+        {
+            "open": [5.0, 5.0, 4.8, 4.5],
+            "high": [5.2, 5.1, 4.9, 5.2],
+            "low": [4.8, 4.8, 4.5, 4.6],
+            "close": [5.0, 4.8, 4.6, 5.0],
+            "volume": [100, 100, 100, 500],
+        }
+    )
+
+    monkeypatch.setattr(
+        bounce_scalper.stats,
+        "zscore",
+        lambda s, lookback=3: pd.Series([0, 0, 0, -2], index=s.index),
+    )
+
+    cfg = {
+        "rsi_window": 3,
+        "vol_window": 3,
+        "down_candles": 1,
+        "up_candles": 2,
+        "lookback": 3,
+        "rsi_oversold_pct": 10,
+        "body_pct": 0.5,
+    }
+    score, direction = bounce_scalper.generate_signal(df, cfg)
+    assert direction == "long"
+    assert score > 0
+
