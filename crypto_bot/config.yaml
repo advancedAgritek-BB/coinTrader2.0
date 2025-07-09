@@ -73,7 +73,7 @@ loop_interval_minutes: 2
 max_age_days: 180
 max_change_pct: 10
 max_concurrent_ohlcv: 50
-max_parallel: 4
+max_parallel: 4  # number of symbols processed concurrently
 max_latency_ms: 1000
 max_ohlcv_failures: 3
 max_open_trades: 3
@@ -108,7 +108,7 @@ micro_scalp:
 min_agreeing_votes: 1
 min_confidence_score: 0.1
 min_consistent_agreement: 1
-ensemble_min_conf: 0.15
+ensemble_min_conf: 0.15  # minimum confidence for ensemble strategies
 min_cooldown: 1
 min_symbol_age_days: 10
 min_symbol_score: 0.2
@@ -170,7 +170,7 @@ scoring_weights:
   strategy_score: 0.4
   symbol_score: 0.1
   volume_score: 0.1
-drawdown_penalty_coef: 0.3
+drawdown_penalty_coef: 0.3  # weight applied to historical drawdown
 sentiment_filter:
   bull_fng: 70
   bull_sentiment: 60
