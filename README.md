@@ -192,13 +192,13 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **default_expected_value** – fallback EV when no stats exist. When unset,
   the expected value check is skipped.
 * **drawdown_penalty_coef** – weight applied to historical drawdown when
-  computing strategy edge.
+  scoring strategies.
 
 ### Strategy and Signals
 * **strategy_allocation** – capital split across strategies.
 * **strategy_evaluation_mode** – how the router chooses a strategy.
-* **ensemble_min_conf** – minimum score required for strategies to
-  participate when using ensemble evaluation.
+* **ensemble_min_conf** – minimum confidence required for a strategy to
+  participate in ensemble evaluation.
 * **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
 * **exit_strategy** – partial profit taking and trailing stop logic.
 * **micro_scalp** – EMA settings plus volume z-score and ATR filters for the scalp bot.
@@ -222,6 +222,18 @@ size = risk_manager.position_size(score, balance, lower_df, atr=atr)
 * **mode_threshold**/**mode_degrade_window** - degrade to manual mode when auto selection underperforms.
 * **meta_selector**/**rl_selector** – experimental strategy routers.
 * **mode** – `auto` or `manual` evaluation of strategies.
+* **parallel_strategy_workers** – strategies evaluated concurrently when
+  ranking candidates.
+* **second_place_csv** – file that records the runner‑up from each
+  parallel evaluation cycle.
+* **ensemble_min_conf** – minimum score required for a strategy to be
+  ranked in ensemble mode.
+
+When `strategy_evaluation_mode` is set to `ensemble`, strategies mapped
+to the current regime are scored concurrently. The helper `run_candidates`
+ranks them by `score × edge` and executes the best result. Details about
+the second‑highest strategy are written to the CSV file defined by
+`second_place_csv`.
 #### Bounce Scalper
 The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry.
 
@@ -230,7 +242,7 @@ The bounce scalper looks for short-term reversals when a volume spike confirms m
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options.
 * **loop_interval_minutes** – delay between trading cycles.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
-* **max_parallel** – maximum number of symbols analyzed concurrently.
+* **max_parallel** – number of markets processed concurrently.
 * **log_to_google** – export trades to Google Sheets.
 * **telegram** – bot token, chat ID and trade notifications. Optional
   **status_updates** and **balance_updates** flags control startup and
@@ -635,6 +647,7 @@ include:
   how many signals fired and how many trades executed.
 - `weights.json` – persistent optimizer weights saved after each update
   at `crypto_bot/logs/weights.json`.
+- `second_place.csv` – the runner‑up strategy from each evaluation cycle.
 
 Example short trade:
 

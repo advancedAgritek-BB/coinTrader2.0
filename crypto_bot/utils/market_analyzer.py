@@ -22,6 +22,7 @@ from crypto_bot.strategy_router import (
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot import meta_selector
 from crypto_bot.signals.signal_scoring import evaluate_async, evaluate_strategies
+from crypto_bot.utils.rank_logger import log_second_place
 from crypto_bot.volatility_filter import calc_atr
 
 
@@ -61,6 +62,18 @@ async def run_candidates(
     for res in results_raw:
         if res:
             results.append(res)
+    for strat in strategies:
+        try:
+            score, direction, _ = (await evaluate_async([strat], df, cfg))[0]
+        except Exception as exc:  # pragma: no cover - safety
+            analysis_logger.warning("Strategy %s failed: %s", strat.__name__, exc)
+            continue
+        try:
+            gross_edge = perf.edge(strat.__name__, symbol)
+        except Exception:  # pragma: no cover - if perf fails use neutral edge
+            gross_edge = 1.0
+        rank = score * gross_edge
+        results.append((rank, strat, score, direction))
 
     results.sort(key=lambda x: x[0], reverse=True)
     return [(s, sc, d) for _r, s, sc, d in results]
@@ -186,6 +199,13 @@ async def analyze_symbol(
             name = res.get("name", strategy_name(regime, env))
             score = float(res.get("score", 0.0))
             direction = res.get("direction", "none")
+            if len(strategies) > 1:
+                remaining = [s for s in strategies if getattr(s, "__name__", "") != name]
+                if remaining:
+                    second = evaluate_strategies(remaining, df, cfg)
+                    second_score = float(second.get("score", 0.0))
+                    edge = score - second_score
+                    log_second_place(symbol, regime, second.get("name", ""), second_score, edge)
         elif eval_mode == "ensemble":
             min_conf = float(config.get("ensemble_min_conf", 0.15))
             candidates = [strategy_for(regime, router_cfg)]
