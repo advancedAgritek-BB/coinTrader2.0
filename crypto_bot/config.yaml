@@ -135,6 +135,10 @@ portfolio_rotation:
   scoring_method: sharpe
   top_assets: 5
 preferred_chain: solana
+refresh_pairs:
+  min_quote_volume_usd: 1000000
+  refresh_interval: 6h
+  top_k: 40
 regime_return_period: 5
 regime_timeframes:
 - 5m
@@ -253,7 +257,6 @@ twap_enabled: true
 twap_interval_seconds: 10
 twap_slices: 4
 use_websocket: true
-ws_ping_interval: 20
 volatility_filter:
   max_funding_rate: 0.05
   min_atr_pct: 0.0
@@ -262,3 +265,4 @@ voting_strategies:
 - momentum
 - mean_reversion
 wallet_address: your_wallet
+ws_ping_interval: 20

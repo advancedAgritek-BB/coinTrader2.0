@@ -8,6 +8,7 @@ import logging
 
 import ccxt
 import yaml
+from crypto_bot.utils import timeframe_seconds
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "crypto_bot" / "config.yaml"
 CACHE_DIR = Path("cache")
@@ -18,6 +19,21 @@ DEFAULT_TOP_K = 40
 DEFAULT_REFRESH_INTERVAL = 6 * 3600  # 6 hours
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_interval(value: str | int | float) -> float:
+    """Return ``value`` in seconds, accepting shorthand like "6h"."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            try:
+                return float(timeframe_seconds(None, value))
+            except Exception:
+                pass
+    return float(DEFAULT_REFRESH_INTERVAL)
 
 
 def load_config() -> dict:
@@ -78,19 +94,24 @@ def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
 
 
 def main() -> None:
+    cfg = load_config()
+    rp_cfg = cfg.get("refresh_pairs", {})
+
     parser = argparse.ArgumentParser(description="Refresh liquid trading pairs")
     parser.add_argument("--once", action="store_true", help="Run once and exit")
-    parser.add_argument("--min-quote-volume-usd", type=float, default=DEFAULT_MIN_VOLUME_USD)
-    parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
+    parser.add_argument(
+        "--min-quote-volume-usd",
+        type=float,
+        default=float(rp_cfg.get("min_quote_volume_usd", DEFAULT_MIN_VOLUME_USD)),
+    )
+    parser.add_argument("--top-k", type=int, default=int(rp_cfg.get("top_k", DEFAULT_TOP_K)))
     parser.add_argument(
         "--refresh-interval",
         type=float,
-        default=DEFAULT_REFRESH_INTERVAL,
+        default=_parse_interval(rp_cfg.get("refresh_interval", DEFAULT_REFRESH_INTERVAL)),
         help="Refresh interval in seconds",
     )
     args = parser.parse_args()
-
-    cfg = load_config()
 
     while True:
         try:
