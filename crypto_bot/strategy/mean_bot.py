@@ -2,7 +2,9 @@ from typing import Optional, Tuple
 
 import pandas as pd
 import ta
+from scipy import stats as scipy_stats
 from crypto_bot.utils.indicator_cache import cache_series
+from crypto_bot.utils import stats
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
@@ -13,10 +15,16 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     if len(df) < 3:
         return 0.0, "none"
 
+    params = config or {}
+    lookback_cfg = int(params.get("indicator_lookback", 250))
+    rsi_overbought_pct = float(params.get("rsi_overbought_pct", 90))
+    rsi_oversold_pct = float(params.get("rsi_oversold_pct", 10))
+
     lookback = 20
     recent = df.iloc[-(lookback + 1) :]
 
     rsi = ta.momentum.rsi(recent["close"], window=14)
+    rsi_z = stats.zscore(rsi, lookback_cfg)
     mean = recent["close"].rolling(20).mean()
     std = recent["close"].rolling(20).std()
     bb_z = (recent["close"] - mean) / std
@@ -33,6 +41,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     vwap_series = vwap.volume_weighted_average_price()
 
     rsi = cache_series("rsi", df, rsi, lookback)
+    rsi_z = cache_series("rsi_z", df, rsi_z, lookback)
     bb_z = cache_series("bb_z", df, bb_z, lookback)
     kc_h = cache_series("kc_h", df, kc_h, lookback)
     kc_l = cache_series("kc_l", df, kc_l, lookback)
@@ -40,6 +49,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
 
     df = recent.copy()
     df["rsi"] = rsi
+    df["rsi_z"] = rsi_z
     df["bb_z"] = bb_z
     df["kc_h"] = kc_h
     df["kc_l"] = kc_l
@@ -50,9 +60,19 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     long_scores = []
     short_scores = []
 
-    if latest["rsi"] < 50:
+    rsi_z_last = df["rsi_z"].iloc[-1]
+    lower_thr = scipy_stats.norm.ppf(rsi_oversold_pct / 100)
+    upper_thr = scipy_stats.norm.ppf(rsi_overbought_pct / 100)
+    oversold_cond = (
+        rsi_z_last < lower_thr if not pd.isna(rsi_z_last) else latest["rsi"] < 50
+    )
+    overbought_cond = (
+        rsi_z_last > upper_thr if not pd.isna(rsi_z_last) else latest["rsi"] > 50
+    )
+
+    if oversold_cond:
         long_scores.append(min((50 - latest["rsi"]) / 20, 1))
-    elif latest["rsi"] > 50:
+    elif overbought_cond:
         short_scores.append(min((latest["rsi"] - 50) / 20, 1))
 
     if not pd.isna(latest["bb_z"]):

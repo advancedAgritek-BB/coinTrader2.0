@@ -100,3 +100,29 @@ def test_higher_timeframe_squeeze_required(direction, breakout_df, higher_squeez
 
     _, got_none = breakout_bot.generate_signal(df, higher_df=no_squeeze_df)
     assert got_none == "none"
+
+
+def test_squeeze_zscore(monkeypatch):
+    prices = [100] * 15 + [103]
+    volumes = [100] * 15 + [300]
+    df = _make_df(prices, volumes)
+
+    monkeypatch.setattr(
+        breakout_bot.stats,
+        "zscore",
+        lambda s, lookback=3: pd.Series([-2] * len(s), index=s.index),
+    )
+
+    cfg = {
+        "indicator_lookback": 3,
+        "bb_squeeze_pct": 20,
+        "breakout": {
+            "bb_length": 3,
+            "kc_length": 3,
+            "dc_length": 3,
+            "volume_window": 3,
+        },
+    }
+    score, direction, _ = breakout_bot.generate_signal(df, cfg)
+    assert direction == "long"
+    assert score > 0

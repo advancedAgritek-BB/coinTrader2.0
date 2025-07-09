@@ -5,7 +5,9 @@ from crypto_bot import cooldown_manager
 
 import pandas as pd
 import ta
+from scipy import stats as scipy_stats
 from crypto_bot.utils.indicator_cache import cache_series
+from crypto_bot.utils import stats
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.cooldown_manager import in_cooldown, mark_cooldown
@@ -24,6 +26,9 @@ class BounceScalperConfig:
     volume_multiple: float = 2.0
     ema_window: int = 50
     atr_window: int = 14
+    lookback: int = 250
+    rsi_overbought_pct: float = 90.0
+    rsi_oversold_pct: float = 10.0
 
     # pattern confirmation
     down_candles: int = 3
@@ -178,12 +183,14 @@ def generate_signal(
         down_candles + 1,
         up_candles + 1,
         2,
+        cfg.lookback,
     )
     if len(df) < lookback:
         return 0.0, "none"
 
     df = df.copy()
     df["rsi"] = ta.momentum.rsi(df["close"], window=rsi_window)
+    df["rsi_z"] = stats.zscore(df["rsi"], cfg.lookback)
     df["vol_ma"] = df["volume"].rolling(window=vol_window).mean()
     df["vol_std"] = df["volume"].rolling(window=vol_window).std()
     df["ema"] = ta.trend.ema_indicator(df["close"], window=ema_window)
@@ -220,6 +227,7 @@ def generate_signal(
 
     df = recent.copy()
     df["rsi"] = rsi_series
+    df["rsi_z"] = stats.zscore(rsi_series, cfg.lookback)
     df["vol_ma"] = vol_ma
 
     latest = df.iloc[-1]
@@ -246,12 +254,26 @@ def generate_signal(
     score = 0.0
     direction = "none"
 
+    rsi_z_last = df["rsi_z"].iloc[-1]
+    lower_thresh = scipy_stats.norm.ppf(cfg.rsi_oversold_pct / 100)
+    upper_thresh = scipy_stats.norm.ppf(cfg.rsi_overbought_pct / 100)
+    oversold_cond = (
+        rsi_z_last < lower_thresh
+        if not pd.isna(rsi_z_last)
+        else latest["rsi"] < oversold
+    )
+    overbought_cond = (
+        rsi_z_last > upper_thresh
+        if not pd.isna(rsi_z_last)
+        else latest["rsi"] > overbought
+    )
+
     if (
         not pd.isna(latest["rsi"])
         and downs
         and latest["close"] > prev_close
         and trend_ok_long
-        and latest["rsi"] < oversold
+        and oversold_cond
         and volume_spike
         and bull_pattern
         and higher_lows
@@ -270,7 +292,7 @@ def generate_signal(
         and ups
         and latest["close"] < prev_close
         and trend_ok_short
-        and latest["rsi"] > overbought
+        and overbought_cond
         and volume_spike
         and bear_pattern
         and lower_highs
