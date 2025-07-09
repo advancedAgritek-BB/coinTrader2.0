@@ -133,6 +133,8 @@ def _emit_timing(
     analyze_t: float,
     total_t: float,
     metrics_path: Path | None = None,
+    ohlcv_fetch_latency: float = 0.0,
+    execution_latency: float = 0.0,
 ) -> None:
     """Log timing information and optionally append to metrics CSV."""
     logger.info(
@@ -143,7 +145,15 @@ def _emit_timing(
         total_t,
     )
     if metrics_path:
-        log_cycle_metrics(symbol_t, ohlcv_t, analyze_t, total_t, metrics_path)
+        log_cycle_metrics(
+            symbol_t,
+            ohlcv_t,
+            analyze_t,
+            total_t,
+            ohlcv_fetch_latency,
+            execution_latency,
+            metrics_path,
+        )
 
 
 def maybe_update_mode(
@@ -600,6 +610,7 @@ async def _main_impl() -> TelegramNotifier:
 
         cycle_start = time.perf_counter()
         symbol_time = ohlcv_time = analyze_time = 0.0
+        execution_latency = 0.0
 
         total_pairs = 0
         signals_generated = 0
@@ -737,6 +748,10 @@ async def _main_impl() -> TelegramNotifier:
         )
         ohlcv_time = time.perf_counter() - t0
         ohlcv_fetch_latency = time.perf_counter() - start_ohlcv
+        if notifier and ohlcv_fetch_latency > 0.5:
+            notifier.notify(
+                f"\u26a0\ufe0f OHLCV latency {ohlcv_fetch_latency*1000:.0f} ms"
+            )
 
         tasks = []
         analyze_start = time.perf_counter()
@@ -1042,6 +1057,7 @@ async def _main_impl() -> TelegramNotifier:
                     if config["exit_strategy"]["scale_out"] and pct > 0
                     else pos["size"]
                 )
+                _start_exec = time.perf_counter()
                 await cex_trade_async(
                     exchange,
                     ws_client,
@@ -1053,6 +1069,10 @@ async def _main_impl() -> TelegramNotifier:
                     use_websocket=config.get("use_websocket", False),
                     config=config,
                 )
+                lat = time.perf_counter() - _start_exec
+                execution_latency = max(execution_latency, lat)
+                if notifier and lat > 0.5:
+                    notifier.notify(f"\u26a0\ufe0f Execution latency {lat*1000:.0f} ms")
                 if paper_wallet:
                     paper_wallet.close(sym, sell_amount, cur_price)
                 pos["pnl"] = pos.get("pnl", 0.0) + (
@@ -1186,6 +1206,7 @@ async def _main_impl() -> TelegramNotifier:
                     "ticker_fetch_time": ticker_fetch_time,
                     "symbol_filter_ratio": symbol_filter_ratio,
                     "ohlcv_fetch_latency": ohlcv_fetch_latency,
+                    "execution_latency": execution_latency,
                     "unknown_regimes": rejected_regime,
                 }
                 log_metrics_to_csv(
@@ -1245,6 +1266,7 @@ async def _main_impl() -> TelegramNotifier:
                         "ticker_fetch_time": ticker_fetch_time,
                         "symbol_filter_ratio": symbol_filter_ratio,
                         "ohlcv_fetch_latency": ohlcv_fetch_latency,
+                        "execution_latency": execution_latency,
                         "unknown_regimes": rejected_regime,
                     }
                     log_metrics_to_csv(
@@ -1257,6 +1279,7 @@ async def _main_impl() -> TelegramNotifier:
                 await asyncio.sleep(config["loop_interval_minutes"] * 60)
                 continue
 
+            _start_exec = time.perf_counter()
             order = await cex_trade_async(
                 exchange,
                 ws_client,
@@ -1268,6 +1291,10 @@ async def _main_impl() -> TelegramNotifier:
                 use_websocket=config.get("use_websocket", False),
                 config=config,
             )
+            lat = time.perf_counter() - _start_exec
+            execution_latency = max(execution_latency, lat)
+            if notifier and lat > 0.5:
+                notifier.notify(f"\u26a0\ufe0f Execution latency {lat*1000:.0f} ms")
             atr_val = candidate.get("atr")
             if atr_val:
                 stop_price = (
@@ -1404,13 +1431,22 @@ async def _main_impl() -> TelegramNotifier:
             regime_rejections,
         )
         total_time = time.perf_counter() - cycle_start
-        _emit_timing(symbol_time, ohlcv_time, analyze_time, total_time, metrics_path)
+        _emit_timing(
+            symbol_time,
+            ohlcv_time,
+            analyze_time,
+            total_time,
+            metrics_path,
+            ohlcv_fetch_latency,
+            execution_latency,
+        )
         if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
             metrics = {
                 "timestamp": datetime.utcnow().isoformat(),
                 "ticker_fetch_time": ticker_fetch_time,
                 "symbol_filter_ratio": symbol_filter_ratio,
                 "ohlcv_fetch_latency": ohlcv_fetch_latency,
+                "execution_latency": execution_latency,
                 "unknown_regimes": rejected_regime,
             }
             log_metrics_to_csv(
