@@ -32,23 +32,46 @@ def set_execution_mode(mode: str, config_file: Path) -> None:
 def compute_performance(df: pd.DataFrame) -> dict[str, float]:
     """Return PnL per symbol from the trades dataframe."""
     perf: dict[str, float] = {}
+    # Track open positions per symbol. Positive quantity represents a long
+    # position while negative quantity represents a short position.  The FIFO
+    # order of the list is preserved for proper PnL calculation.
     open_pos: dict[str, list[tuple[float, float]]] = {}
+
     for _, row in df.iterrows():
         symbol = row.get("symbol")
         side = row.get("side")
         price = float(row.get("price", 0))
         amount = float(row.get("amount", 0))
+
+        positions = open_pos.setdefault(symbol, [])
+
         if side == "buy":
-            open_pos.setdefault(symbol, []).append((price, amount))
+            # Buys first close any existing short positions
+            while amount > 0 and positions and positions[0][1] < 0:
+                entry_price, qty = positions.pop(0)
+                qty = -qty  # convert short quantity to positive
+                traded = min(qty, amount)
+                perf[symbol] = perf.get(symbol, 0.0) + (entry_price - price) * traded
+                if qty > traded:
+                    positions.insert(0, (entry_price, -(qty - traded)))
+                amount -= traded
+            # Remaining amount opens a new long position
+            if amount > 0:
+                positions.append((price, amount))
+
         elif side == "sell":
-            lst = open_pos.setdefault(symbol, [])
-            while amount > 0 and lst:
-                entry_price, qty = lst.pop(0)
+            # Sells first close existing long positions
+            while amount > 0 and positions and positions[0][1] > 0:
+                entry_price, qty = positions.pop(0)
                 traded = min(qty, amount)
                 perf[symbol] = perf.get(symbol, 0.0) + (price - entry_price) * traded
                 if qty > traded:
-                    lst.insert(0, (entry_price, qty - traded))
+                    positions.insert(0, (entry_price, qty - traded))
                 amount -= traded
+            # Excess amount starts a short position
+            if amount > 0:
+                positions.append((price, -amount))
+
     return perf
 
 
