@@ -69,3 +69,25 @@ def test_log_performance_bandit_counter(tmp_path, monkeypatch):
 
     assert b.update_count == 50
     assert b.state_file.exists()
+
+
+def test_log_performance_sniper_solana(tmp_path, monkeypatch):
+    log = tmp_path / "perf.json"
+    monkeypatch.setattr(pl, "LOG_FILE", log)
+
+    dummy_bandit = types.SimpleNamespace(update=lambda *a, **k: None)
+    monkeypatch.setattr(pl, "bandit", dummy_bandit)
+
+    rec = {
+        "symbol": "SOL/USDC",
+        "regime": "volatile",
+        "strategy": "sniper_solana",
+        "pnl": 0.5,
+        "entry_time": "e",
+        "exit_time": "x",
+    }
+
+    pl.log_performance(rec)
+
+    data = json.loads(log.read_text())
+    assert data["volatile"]["sniper_solana"][0]["pnl"] == 0.5
