@@ -21,6 +21,7 @@ from crypto_bot.strategy import (
     trend_bot,
     grid_bot,
     sniper_bot,
+    sniper_solana,
     dex_scalper,
     mean_bot,
     breakout_bot,
@@ -446,8 +447,12 @@ def route(
         else:
             lock_file.parent.mkdir(parents=True, exist_ok=True)
             lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
-    tf = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe")
-    tf_minutes = getattr(cfg, "timeframe_minutes", int(pd.Timedelta(tf).total_seconds() // 60))
+    tf = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe", "1h")
+    tf_minutes = getattr(
+        cfg,
+        "timeframe_minutes",
+        int(pd.Timedelta(tf).total_seconds() // 60),
+    )
 
     LAST_REGIME_FILE.parent.mkdir(parents=True, exist_ok=True)
     last_data = {}
@@ -496,6 +501,17 @@ def route(
             return _wrap(fn)
 
     if mode == "onchain":
+        chain = ""
+        if isinstance(cfg, RouterConfig):
+            chain = str(cfg.raw.get("chain") or cfg.raw.get("preferred_chain", ""))
+        elif isinstance(cfg, Mapping):
+            chain = str(cfg.get("chain") or cfg.get("preferred_chain", ""))
+
+        # Route Solana on-chain mode directly to the Solana sniper bot
+        if chain.lower().startswith("sol"):
+            logger.info("Routing to Solana sniper bot (onchain)")
+            return _wrap(sniper_solana.generate_signal)
+
         if regime in {"breakout", "volatile"}:
             logger.info("Routing to sniper bot (onchain)")
             return _wrap(sniper_bot.generate_signal)
