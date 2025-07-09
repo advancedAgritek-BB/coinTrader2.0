@@ -67,6 +67,7 @@ needed.
    ```
    The optional `rich` package is included and provides colorized
    console output when viewing live positions.
+   Exchange connectivity relies on [ccxt](https://github.com/ccxt/ccxt) which is installed with these requirements.
 2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:
@@ -571,6 +572,21 @@ symbol_filter:
 Pairs passing these checks are then scored with `analyze_symbol` which
 computes a strategy confidence score. Only the highest scoring symbols
 are traded each cycle.
+
+### Liquid Pairs Worker
+
+The `tasks/refresh_pairs.py` script fetches the most liquid markets from the
+configured exchange using `ccxt` and stores them in `cache/liquid_pairs.json`.
+This cache lets the trading bot skip illiquid pairs during market scans.
+By default the worker refreshes the file every **6 hours**. Change the interval
+under `pairs_worker.refresh_interval` in `crypto_bot/config.yaml` and restart the
+worker to apply the new schedule.
+Run it manually whenever needed:
+
+```bash
+python tasks/refresh_pairs.py --once
+```
+Removing the `--once` flag keeps it running on the configured interval.
 
 ## Web UI
 

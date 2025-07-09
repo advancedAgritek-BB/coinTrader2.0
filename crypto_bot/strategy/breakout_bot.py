@@ -2,9 +2,11 @@ from typing import Optional, Tuple
 
 import pandas as pd
 import ta
+from scipy import stats as scipy_stats
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.indicator_cache import cache_series
+from crypto_bot.utils import stats
 
 
 def _squeeze(
@@ -14,10 +16,12 @@ def _squeeze(
     kc_len: int,
     kc_mult: float,
     threshold: float,
+    lookback: int,
+    squeeze_pct: float,
 ) -> Tuple[pd.Series, pd.Series]:
     """Return squeeze boolean series and ATR values."""
-    lookback = max(bb_len, kc_len)
-    recent = df.iloc[-(lookback + 1) :]
+    hist = max(bb_len, kc_len)
+    recent = df.iloc[-(hist + 1) :]
 
     close = recent["close"]
     high = recent["high"]
@@ -30,13 +34,18 @@ def _squeeze(
     atr = ta.volatility.average_true_range(high, low, close, window=kc_len)
     kc_width = 2 * atr * kc_mult
 
-    squeeze = (bb_width / bb_mid < threshold) & (bb_width < kc_width)
+    if len(bb_width) >= lookback:
+        width_z = stats.zscore(bb_width, lookback)
+        thresh = scipy_stats.norm.ppf(squeeze_pct / 100)
+        squeeze = (width_z < thresh) & (bb_width < kc_width)
+    else:
+        squeeze = (bb_width / bb_mid < threshold) & (bb_width < kc_width)
 
-    bb_width = cache_series("bb_width", df, bb_width, lookback)
-    bb_mid = cache_series("bb_mid", df, bb_mid, lookback)
-    atr = cache_series("atr_kc", df, atr, lookback)
-    kc_width = cache_series("kc_width", df, kc_width, lookback)
-    squeeze = cache_series("squeeze", df, squeeze.astype(float), lookback) > 0
+    bb_width = cache_series("bb_width", df, bb_width, hist)
+    bb_mid = cache_series("bb_mid", df, bb_mid, hist)
+    atr = cache_series("atr_kc", df, atr, hist)
+    kc_width = cache_series("kc_width", df, kc_width, hist)
+    squeeze = cache_series("squeeze", df, squeeze.astype(float), hist) > 0
 
     return squeeze, atr
 
@@ -58,7 +67,8 @@ def generate_signal(
     if df is None or df.empty:
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
-    cfg = (config or {}).get("breakout", {})
+    cfg_all = config or {}
+    cfg = cfg_all.get("breakout", {})
     bb_len = int(cfg.get("bb_length", 20))
     bb_std = float(cfg.get("bb_std", 2))
     kc_len = int(cfg.get("kc_length", 20))
@@ -69,6 +79,8 @@ def generate_signal(
     volume_mult = float(cfg.get("volume_mult", 2))
     threshold = float(cfg.get("squeeze_threshold", 0.03))
     momentum_filter = bool(cfg.get("momentum_filter", False))
+    lookback_cfg = int(cfg_all.get("indicator_lookback", 250))
+    squeeze_pct = float(cfg_all.get("bb_squeeze_pct", 20))
 
     lookback = max(bb_len, kc_len, dc_len, vol_window, 14)
     if len(df) < lookback:
@@ -76,7 +88,16 @@ def generate_signal(
 
     recent = df.iloc[-(lookback + 1) :]
 
-    squeeze, atr = _squeeze(recent, bb_len, bb_std, kc_len, kc_mult, threshold)
+    squeeze, atr = _squeeze(
+        recent,
+        bb_len,
+        bb_std,
+        kc_len,
+        kc_mult,
+        threshold,
+        lookback_cfg,
+        squeeze_pct,
+    )
     if pd.isna(squeeze.iloc[-1]) or not squeeze.iloc[-1]:
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
@@ -88,6 +109,8 @@ def generate_signal(
             kc_len,
             kc_mult,
             threshold,
+            lookback_cfg,
+            squeeze_pct,
         )
         if pd.isna(h_sq.iloc[-1]) or not h_sq.iloc[-1]:
             return 0.0, "none"

@@ -330,10 +330,20 @@ def route(
             from ta.volatility import BollingerBands
 
             window = int(fp.get("breakout_squeeze_window", 20))
+            bw_z_thr = float(fp.get("breakout_bandwidth_zscore", -0.84))
             vol_mult = float(fp.get("breakout_volume_multiplier", 5))
             max_bw = float(fp.get("breakout_max_bandwidth", 0.05))
 
             bb = BollingerBands(df["close"], window=window)
+            wband_series = bb.bollinger_wband()
+            wband = wband_series.iloc[-1]
+            w_mean = wband_series.rolling(window).mean().iloc[-1]
+            w_std = wband_series.rolling(window).std().iloc[-1]
+            z = (wband - w_mean) / w_std if w_std > 0 else float("inf")
+            vol_mean = df["volume"].rolling(window).mean().iloc[-1]
+            if z < bw_z_thr and df["volume"].iloc[-1] > vol_mean * vol_mult:
+                logger.info(
+                    "FAST-PATH: breakout_bot via bandwidth z-score and volume spike"
             wband = bb.bollinger_wband()
             z = (wband - wband.rolling(window).mean()) / wband.rolling(window).std()
             vol_ma = df["volume"].rolling(window).mean()

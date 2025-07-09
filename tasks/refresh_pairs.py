@@ -4,9 +4,11 @@ import argparse
 import json
 import time
 from pathlib import Path
+import logging
 
 import ccxt
 import yaml
+from crypto_bot.utils import timeframe_seconds
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "crypto_bot" / "config.yaml"
 CACHE_DIR = Path("cache")
@@ -15,6 +17,23 @@ PAIR_FILE = CACHE_DIR / "liquid_pairs.json"
 DEFAULT_MIN_VOLUME_USD = 1_000_000
 DEFAULT_TOP_K = 40
 DEFAULT_REFRESH_INTERVAL = 6 * 3600  # 6 hours
+
+logger = logging.getLogger(__name__)
+
+
+def _parse_interval(value: str | int | float) -> float:
+    """Return ``value`` in seconds, accepting shorthand like "6h"."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            try:
+                return float(timeframe_seconds(None, value))
+            except Exception:
+                pass
+    return float(DEFAULT_REFRESH_INTERVAL)
 
 
 def load_config() -> dict:
@@ -35,6 +54,16 @@ def get_exchange(config: dict) -> ccxt.Exchange:
 
 def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
     """Fetch tickers and update the cached liquid pairs list."""
+    old_pairs: list[str] = []
+    if PAIR_FILE.exists():
+        try:
+            with open(PAIR_FILE) as f:
+                loaded = json.load(f)
+                if isinstance(loaded, list):
+                    old_pairs = loaded
+        except Exception as exc:  # pragma: no cover - corrupted cache
+            logger.error("Failed to read %s: %s", PAIR_FILE, exc)
+
     exchange = get_exchange(config)
     try:
         tickers = exchange.fetch_tickers()
@@ -43,6 +72,14 @@ def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
             with open(PAIR_FILE) as f:
                 return json.load(f)
         raise
+        if not isinstance(tickers, dict):
+            raise TypeError("fetch_tickers returned invalid data")
+    except Exception as exc:
+        logger.error("Failed to fetch tickers: %s", exc)
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        with open(PAIR_FILE, "w") as f:
+            json.dump(old_pairs, f, indent=2)
+        return old_pairs
 
     pairs: list[tuple[str, float]] = []
     for symbol, data in tickers.items():
@@ -62,19 +99,24 @@ def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
 
 
 def main() -> None:
+    cfg = load_config()
+    rp_cfg = cfg.get("refresh_pairs", {})
+
     parser = argparse.ArgumentParser(description="Refresh liquid trading pairs")
     parser.add_argument("--once", action="store_true", help="Run once and exit")
-    parser.add_argument("--min-quote-volume-usd", type=float, default=DEFAULT_MIN_VOLUME_USD)
-    parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
+    parser.add_argument(
+        "--min-quote-volume-usd",
+        type=float,
+        default=float(rp_cfg.get("min_quote_volume_usd", DEFAULT_MIN_VOLUME_USD)),
+    )
+    parser.add_argument("--top-k", type=int, default=int(rp_cfg.get("top_k", DEFAULT_TOP_K)))
     parser.add_argument(
         "--refresh-interval",
         type=float,
-        default=DEFAULT_REFRESH_INTERVAL,
+        default=_parse_interval(rp_cfg.get("refresh_interval", DEFAULT_REFRESH_INTERVAL)),
         help="Refresh interval in seconds",
     )
     args = parser.parse_args()
-
-    cfg = load_config()
 
     while True:
         try:

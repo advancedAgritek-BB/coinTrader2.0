@@ -2,7 +2,9 @@ from typing import Optional, Tuple
 
 import pandas as pd
 import ta
+from scipy import stats as scipy_stats
 from crypto_bot.utils.indicator_cache import cache_series
+from crypto_bot.utils import stats
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
@@ -14,6 +16,9 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
 
     df = df.copy()
     params = config or {}
+    lookback_cfg = int(params.get("indicator_lookback", 250))
+    rsi_overbought_pct = float(params.get("rsi_overbought_pct", 90))
+    rsi_oversold_pct = float(params.get("rsi_oversold_pct", 10))
     fast_window = int(params.get("trend_ema_fast", 20))
     slow_window = int(params.get("trend_ema_slow", 50))
     atr_period = int(params.get("atr_period", 14))
@@ -22,6 +27,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df["ema_fast"] = ta.trend.ema_indicator(df["close"], window=fast_window)
     df["ema_slow"] = ta.trend.ema_indicator(df["close"], window=slow_window)
     df["rsi"] = ta.momentum.rsi(df["close"], window=14)
+    df["rsi_z"] = stats.zscore(df["rsi"], lookback_cfg)
     df["volume_ma"] = df["volume"].rolling(window=20).mean()
     df["atr"] = ta.volatility.average_true_range(df["high"], df["low"], df["close"], window=atr_period)
     lookback = 50
@@ -41,6 +47,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df["ema20"] = ema20
     df["ema50"] = ema50
     df["rsi"] = rsi
+    df["rsi_z"] = stats.zscore(rsi, lookback_cfg)
     df["volume_ma"] = vol_ma
 
     adx_ind = ta.trend.ADXIndicator(df["high"], df["low"], df["close"], window=14)
@@ -56,17 +63,31 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     dynamic_oversold = 30 + k * atr_pct
     dynamic_overbought = 70 - k * atr_pct
 
+    rsi_z_last = df["rsi_z"].iloc[-1]
+    upper_thr = scipy_stats.norm.ppf(rsi_overbought_pct / 100)
+    lower_thr = scipy_stats.norm.ppf(rsi_oversold_pct / 100)
+    overbought_cond = (
+        rsi_z_last > upper_thr
+        if not pd.isna(rsi_z_last)
+        else latest["rsi"] > dynamic_overbought
+    )
+    oversold_cond = (
+        rsi_z_last < lower_thr
+        if not pd.isna(rsi_z_last)
+        else latest["rsi"] < dynamic_oversold
+    )
+
     long_cond = (
         latest["close"] > latest["ema_fast"]
         and latest["ema_fast"] > latest["ema_slow"]
-        and latest["rsi"] > dynamic_overbought
+        and overbought_cond
         and latest["adx"] > 20
         and latest["volume"] > latest["volume_ma"]
     )
     short_cond = (
         latest["close"] < latest["ema_fast"]
         and latest["ema_fast"] < latest["ema_slow"]
-        and latest["rsi"] < dynamic_oversold
+        and oversold_cond
         and latest["adx"] > 20
         and latest["volume"] > latest["volume_ma"]
     )
