@@ -8,6 +8,7 @@ from crypto_bot.strategy import (
     mean_bot,
     breakout_bot,
     sniper_bot,
+    sniper_solana,
     micro_scalp_bot,
     bounce_scalper,
 )
@@ -150,4 +151,13 @@ def test_fastpath_trend(tmp_path):
     df = make_df(vals, [1]*10)
     fn = route("trending", "cex", cfg, None, df)
     assert fn.__name__ == trend_bot.generate_signal.__name__
+
+
+def test_onchain_solana_route():
+    cfg = {
+        "chain": "sol",
+        "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
+    }
+    fn = route("breakout", "onchain", cfg)
+    assert fn is sniper_solana.generate_signal
 
