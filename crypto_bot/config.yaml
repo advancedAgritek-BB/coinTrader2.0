@@ -183,6 +183,11 @@ strategy_allocation:
   trend_bot: 0.4
 strategy_evaluation_mode: voting
 strategy_router:
+  fast_path:
+    breakout_max_bandwidth: 0.05
+    breakout_squeeze_window: 20
+    breakout_volume_multiplier: 5
+    trend_adx_threshold: 35
   regimes:
     bounce:
     - bounce_scalper
