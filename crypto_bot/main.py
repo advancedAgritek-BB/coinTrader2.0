@@ -190,14 +190,45 @@ async def _watch_position(
     """Live update position PnL and log changes."""
     use_ws = config.get("use_websocket", False) and hasattr(exchange, "watch_ticker")
     poll_interval = float(config.get("position_poll_interval", 5))
+    reconnect_attempts = 0
+    max_reconnect = int(config.get("ws_max_retries", 3))
 
     while symbol in positions:
         try:
             if use_ws:
                 try:
                     ticker = await exchange.watch_ticker(symbol)
+                    reconnect_attempts = 0
                 except asyncio.CancelledError:
                     raise
+                except (asyncio.TimeoutError, ccxt.RequestTimeout) as ws_exc:
+                    logger.warning(
+                        "WebSocket ticker timeout for %s: %s - reconnecting",
+                        symbol,
+                        ws_exc,
+                    )
+                    try:
+                        if asyncio.iscoroutinefunction(getattr(exchange, "close")):
+                            await exchange.close()
+                        else:
+                            await asyncio.to_thread(exchange.close)
+                    except Exception as close_err:  # pragma: no cover - cleanup error
+                        logger.error("Error closing exchange: %s", close_err, exc_info=True)
+                    try:
+                        exchange, _ = get_exchange(config)
+                    except Exception as re_err:
+                        reconnect_attempts += 1
+                        logger.error(
+                            "Reconnection attempt %d failed: %s",
+                            reconnect_attempts,
+                            re_err,
+                            exc_info=True,
+                        )
+                        if reconnect_attempts >= max_reconnect:
+                            logger.error("WebSocket reconnection failed repeatedly; switching to REST")
+                            use_ws = False
+                        await asyncio.sleep(poll_interval)
+                    continue
                 except Exception as ws_exc:  # pragma: no cover - websocket error
                     logger.error(
                         "WebSocket ticker failed for %s: %s - switching to REST",
