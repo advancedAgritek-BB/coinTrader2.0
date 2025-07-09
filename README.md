@@ -282,8 +282,12 @@ The built-in Telegram interface is provided by the `TelegramBotUI` class in
 
 Before running the bot, run `python tools/test_telegram.py` to send a
 test message using the credentials in `crypto_bot/config.yaml` or the
-`TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID` environment variables. If the call fails,
-check for these common issues:
+`TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID` environment variables. The script
+calls `crypto_bot.utils.telegram.send_test_message()` under the hood.
+If the call fails or you do not receive a message, check for these common issues:
+
+* **Invalid config values** – `telegram.token` or `telegram.chat_id` still
+  contain placeholders in `crypto_bot/config.yaml`.
 
 * **Incorrect token** – the API token was mistyped or revoked.
 * **Wrong chat ID** – the bot does not have permission to message that chat.
