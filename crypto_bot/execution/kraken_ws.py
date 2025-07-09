@@ -1,7 +1,7 @@
 import json
 import threading
 import os
-from typing import Optional, Callable, Union, List, Any
+from typing import Optional, Callable, Union, List, Any, Dict
 from datetime import datetime, timedelta, timezone
 
 import ccxt
@@ -988,6 +988,55 @@ class KrakenWSClient:
             "method": "open_orders",
             "params": {"token": self.token},
         }
+        data = json.dumps(msg)
+        self.private_ws.send(data)
+        return msg
+
+    def amend_order(
+        self,
+        *,
+        order_id: Optional[str] = None,
+        cl_ord_id: Optional[str] = None,
+        order_qty: Optional[float] = None,
+        limit_price: Optional[float] = None,
+        display_qty: Optional[float] = None,
+        limit_price_type: Optional[str] = None,
+        post_only: Optional[bool] = None,
+        trigger_price: Optional[float] = None,
+        trigger_price_type: Optional[str] = None,
+        deadline: Optional[str] = None,
+        req_id: Optional[int] = None,
+    ) -> dict:
+        """Send an ``amend_order`` request via the private websocket."""
+
+        self.connect_private()
+
+        params: Dict[str, Any] = {"token": self.token}
+        if order_id is not None:
+            params["order_id"] = order_id
+        if cl_ord_id is not None:
+            params["cl_ord_id"] = cl_ord_id
+        if order_qty is not None:
+            params["order_qty"] = order_qty
+        if limit_price is not None:
+            params["limit_price"] = limit_price
+        if display_qty is not None:
+            params["display_qty"] = display_qty
+        if limit_price_type is not None:
+            params["limit_price_type"] = limit_price_type
+        if post_only is not None:
+            params["post_only"] = post_only
+        if trigger_price is not None:
+            params["trigger_price"] = trigger_price
+        if trigger_price_type is not None:
+            params["trigger_price_type"] = trigger_price_type
+        if deadline is not None:
+            params["deadline"] = deadline
+
+        msg: Dict[str, Any] = {"method": "amend_order", "params": params}
+        if req_id is not None:
+            msg["req_id"] = req_id
+
         data = json.dumps(msg)
         self.private_ws.send(data)
         return msg
