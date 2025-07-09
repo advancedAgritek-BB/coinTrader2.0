@@ -4,6 +4,7 @@ import numpy as np
 from pathlib import Path
 
 from crypto_bot.utils.logger import LOG_DIR
+from crypto_bot.utils import stats
 import joblib
 from typing import Optional
 import json
@@ -57,26 +58,64 @@ def extract_features(
     features = pd.DataFrame(index=df.index)
 
     # Base timeframe indicators
-    features["rsi"] = ta.momentum.rsi(df["close"], window=14)
-    features["ema20"] = ta.trend.ema_indicator(df["close"], window=20)
-    features["ema50"] = ta.trend.ema_indicator(df["close"], window=50)
-    features["atr"] = ta.volatility.average_true_range(df["high"], df["low"], df["close"], window=14)
+    try:
+        features["rsi"] = ta.momentum.rsi(df["close"], window=14)
+    except Exception:
+        features["rsi"] = pd.Series(dtype=float)
+    try:
+        features["ema20"] = ta.trend.ema_indicator(df["close"], window=20)
+    except Exception:
+        features["ema20"] = pd.Series(dtype=float)
+    try:
+        features["ema50"] = ta.trend.ema_indicator(df["close"], window=50)
+    except Exception:
+        features["ema50"] = pd.Series(dtype=float)
+    try:
+        features["atr"] = ta.volatility.average_true_range(
+            df["high"], df["low"], df["close"], window=14
+        )
+    except Exception:
+        features["atr"] = pd.Series(dtype=float)
 
     # Higher timeframe approximations (longer windows)
     rsi_win = max(2, min(full_len // 2, 56))
     ema_win = max(2, min(full_len // 2, 80))
-    features["rsi_4h"] = ta.momentum.rsi(df["close"], window=rsi_win)
-    features["ema20_4h"] = ta.trend.ema_indicator(df["close"], window=ema_win)
-    bb_4h = ta.volatility.BollingerBands(df["close"], window=ema_win)
-    features["bb_width_4h"] = bb_4h.bollinger_wband()
+    try:
+        features["rsi_4h"] = ta.momentum.rsi(df["close"], window=rsi_win)
+    except Exception:
+        features["rsi_4h"] = pd.Series(dtype=float)
+    try:
+        features["ema20_4h"] = ta.trend.ema_indicator(df["close"], window=ema_win)
+    except Exception:
+        features["ema20_4h"] = pd.Series(dtype=float)
+    try:
+        bb_4h = ta.volatility.BollingerBands(df["close"], window=ema_win)
+        features["bb_width_4h"] = bb_4h.bollinger_wband()
+    except Exception:
+        features["bb_width_4h"] = pd.Series(dtype=float)
 
     # Additional engineered features
     features["volume_change_pct"] = df["volume"].pct_change()
-    ema50 = ta.trend.ema_indicator(df["close"], window=50)
+    try:
+        ema50 = ta.trend.ema_indicator(df["close"], window=50)
+    except Exception:
+        ema50 = pd.Series(dtype=float)
     features["price_above_ema"] = df["close"] / ema50
     features["candle_body_ratio"] = (df["close"] - df["open"]).abs() / (df["high"] - df["low"])
     features["upper_shadow"] = df["high"] - df[["close", "open"]].max(axis=1)
     features["lower_shadow"] = df[["close", "open"]].min(axis=1) - df["low"]
+
+    if {
+        "bid_qty_0",
+        "bid_qty_1",
+        "ask_qty_0",
+        "ask_qty_1",
+    }.issubset(df.columns):
+        imbalance = (df["bid_qty_0"] + df["bid_qty_1"]) / (
+            df["ask_qty_0"] + df["ask_qty_1"]
+        )
+        features["order_book_imbalance"] = imbalance
+        features["order_book_imbalance_z"] = stats.zscore(imbalance, 50)
 
     # Market regime as categorical feature
     regimes = []
