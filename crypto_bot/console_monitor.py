@@ -19,11 +19,13 @@ async def monitor_loop(
     paper_wallet: Optional[object] = None,
     log_file: str | Path = "crypto_bot/logs/bot.log",
 ) -> None:
-    """Periodically output balance and last log line.
+    """Periodically output balance, last log line and open trade stats.
 
     This coroutine runs until cancelled and is intentionally lightweight so
     tests can easily patch it. The monitor fetches the current balance from
     ``exchange`` or ``paper_wallet`` and prints the last line of ``log_file``.
+    When open trades exist, a line for each trade showing the PnL is printed
+    below the status line.
     """
     log_path = Path(log_file)
     last_line = ""
@@ -55,11 +57,11 @@ async def monitor_loop(
                 offset = fh.tell()
 
                 message = f"[Monitor] balance={balance} log='{last_line}'"
-                stats = await trade_stats_line(exchange)
+                lines = await trade_stats_lines(exchange)
 
                 output = message
-                if stats:
-                    output += "\n" + stats
+                if lines:
+                    output += "\n" + "\n".join(lines)
 
                 if sys.stdout.isatty():
                     # Clear previously printed lines
