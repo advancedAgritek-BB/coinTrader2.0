@@ -191,12 +191,15 @@ async def _ws_ping_loop(exchange: object, interval: float) -> None:
                     continue
                 is_coro = asyncio.iscoroutinefunction(ping)
                 clients = getattr(exchange, "clients", None)
-                if isinstance(clients, dict) and clients:
-                    for client in clients.values():
-                        if is_coro:
-                            await ping(client)
-                        else:
-                            await asyncio.to_thread(ping, client)
+                if isinstance(clients, dict):
+                    if clients:
+                        for client in clients.values():
+                            if is_coro:
+                                await ping(client)
+                            else:
+                                await asyncio.to_thread(ping, client)
+                    else:
+                        continue
                 else:
                     if is_coro:
                         await ping()

@@ -31,3 +31,22 @@ def test_ws_ping_loop_calls_ping_with_client(monkeypatch):
         asyncio.run(main._ws_ping_loop(ex, 0))
 
     assert ex.pings == list(ex.clients.values())
+
+
+def test_ws_ping_loop_skips_when_no_clients(monkeypatch):
+    ex = DummyExchange()
+    ex.clients = {}
+
+    calls = {"sleep": 0}
+
+    async def fake_sleep(_):
+        calls["sleep"] += 1
+        if calls["sleep"] >= 2:
+            raise StopLoop
+
+    monkeypatch.setattr(main.asyncio, "sleep", fake_sleep)
+
+    with pytest.raises(StopLoop):
+        asyncio.run(main._ws_ping_loop(ex, 0))
+
+    assert ex.pings == []
