@@ -442,8 +442,8 @@ from crypto_bot.execution.kraken_ws import KrakenWSClient
 ws = KrakenWSClient()
 ws.subscribe_orders(["BTC/USD"])  # open_orders channel
 ws.subscribe_book("BTC/USD", depth=10, snapshot=True)
-ws.add_order(["BTC/USD"], "buy", 0.01)
-ws.cancel_order("OABCDEF", ["BTC/USD"])
+ws.add_order("BTC/USD", "buy", qty)
+ws.cancel_order("ORDERID")
 ws.subscribe_instruments()  # stream asset and pair details
 ws.close()  # gracefully close the websockets when done
 ```
