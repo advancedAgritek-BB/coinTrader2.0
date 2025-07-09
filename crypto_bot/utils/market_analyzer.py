@@ -145,7 +145,7 @@ async def analyze_symbol(
         else:
             strategy_fn = route(regime, env, router_cfg, notifier, df=df)
             name = strategy_name(regime, env)
-            score, direction, atr = await evaluate_async(strategy_fn, df, cfg)
+            score, direction, atr = (await evaluate_async([strategy_fn], df, cfg))[0]
 
         atr_period = int(config.get("risk", {}).get("atr_period", 14))
         if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
@@ -177,7 +177,7 @@ async def analyze_symbol(
                 if fn is None:
                     continue
                 try:
-                    _, dir_vote = await evaluate_async(fn, df, cfg)
+                    dir_vote = (await evaluate_async([fn], df, cfg))[0][1]
                 except Exception:  # pragma: no cover - safety
                     continue
                 votes.append(dir_vote)
