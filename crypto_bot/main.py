@@ -185,10 +185,22 @@ async def _ws_ping_loop(exchange: object, interval: float) -> None:
         while True:
             await asyncio.sleep(interval)
             try:
-                if asyncio.iscoroutinefunction(getattr(exchange, "ping", None)):
-                    await exchange.ping()
+                ping = getattr(exchange, "ping", None)
+                if ping is None:
+                    continue
+                is_coro = asyncio.iscoroutinefunction(ping)
+                clients = getattr(exchange, "clients", None)
+                if isinstance(clients, dict) and clients:
+                    for client in clients.values():
+                        if is_coro:
+                            await ping(client)
+                        else:
+                            await asyncio.to_thread(ping, client)
                 else:
-                    await asyncio.to_thread(exchange.ping)
+                    if is_coro:
+                        await ping()
+                    else:
+                        await asyncio.to_thread(ping)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # pragma: no cover - ping failures
