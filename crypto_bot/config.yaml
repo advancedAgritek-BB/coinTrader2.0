@@ -214,6 +214,7 @@ strategy_router:
     - trend
     volatile:
     - sniper_bot
+    - sniper_solana
 symbol: BTC/USDT
 symbol_batch_size: 10
 symbol_filter:
@@ -274,3 +275,16 @@ bandit:
   alpha0: 1
   beta0: 1
   explore_pct: 0.05
+safety:
+  restart_on_error: true
+  max_error_count: 5
+scoring:
+  lookback_bars: 50
+  method: sharpe
+exec:
+  allow_market_orders: false
+  order_retry_interval: 5
+exits:
+  default_tp_pct: 0.05
+  default_sl_pct: 0.02
+  trailing_stop_pct: 0.03
