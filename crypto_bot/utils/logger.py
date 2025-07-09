@@ -1,12 +1,15 @@
 import logging
 from pathlib import Path
 
-# Shared log directory for all modules
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+# Default directory for all log files used across the project
+LOG_DIR = Path(__file__).resolve().parents[2] / "crypto_bot" / "logs"
 
 
 def setup_logger(name: str, log_file: str, to_console: bool = True) -> logging.Logger:
-    """Return a logger configured to write to ``log_file`` and optionally stdout."""
+    """Return a logger configured to write to ``log_file`` within ``LOG_DIR`` and optionally stdout.
+
+    The directory ``LOG_DIR`` is created automatically when the logger is initialized.
+    """
 
     Path(log_file).parent.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger(name)
