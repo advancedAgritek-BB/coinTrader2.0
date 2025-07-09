@@ -12,10 +12,8 @@ import subprocess
 import json
 import threading
 import time
-import psutil
 import yaml
 from crypto_bot import log_reader
-import pandas as pd
 from crypto_bot import ml_signal_model as ml
 from . import utils
 
