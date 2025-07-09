@@ -1,5 +1,6 @@
 import pandas as pd
 import pytest
+import asyncio
 
 import crypto_bot.signals.signal_scoring as sc
 
@@ -46,4 +47,38 @@ def test_evaluate_strategies_selects_best(monkeypatch):
     assert res["direction"] == "short"
     assert res["score"] == 0.6
     assert calls  # ensure compute_drawdown called
+
+
+def test_evaluate_async_max_parallel(monkeypatch):
+    df = pd.DataFrame({"close": [1, 2, 3]})
+
+    def make_strat(val):
+        def strat(_df, cfg=None):
+            return val, "long"
+        return strat
+
+    strategies = [make_strat(i / 10) for i in range(5)]
+
+    running = 0
+    max_seen = 0
+
+    async def fake_to_thread(fn, *args, **kwargs):
+        nonlocal running, max_seen
+        running += 1
+        max_seen = max(max_seen, running)
+        try:
+            await asyncio.sleep(0.01)
+            return fn(*args, **kwargs)
+        finally:
+            running -= 1
+
+    monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+
+    async def run():
+        return await sc.evaluate_async(strategies, df, {"max_parallel": 2})
+
+    res = asyncio.run(run())
+    assert len(res) == 5
+    assert max_seen <= 2
+
 
