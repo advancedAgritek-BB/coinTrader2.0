@@ -1,6 +1,9 @@
 from typing import Dict, Optional, Tuple
 import pandas as pd
 from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.utils.pair_cache import load_liquid_pairs
+
+ALLOWED_PAIRS = load_liquid_pairs() or []
 
 
 def generate_signal(
