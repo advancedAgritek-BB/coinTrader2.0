@@ -226,6 +226,7 @@ size = risk_manager.position_size(score, balance, lower_df, atr=atr)
 * **strategy_router** - maps market regimes to lists of strategy names.
 * **mode_threshold**/**mode_degrade_window** - degrade to manual mode when auto selection underperforms.
 * **meta_selector**/**rl_selector** – experimental strategy routers.
+* **bandit_router** – Thompson sampling router that favors historically profitable strategies.
 * **bandit** – Thompson sampling selector; tune `explore_pct` for exploration.
 * **mode** – `auto` or `manual` evaluation of strategies.
 * **parallel_strategy_workers** – strategies evaluated concurrently when
@@ -234,6 +235,13 @@ size = risk_manager.position_size(score, balance, lower_df, atr=atr)
   parallel evaluation cycle.
 * **ensemble_min_conf** – minimum score required for a strategy to be
   ranked in ensemble mode.
+
+To enable the Thompson sampling router add the following to `crypto_bot/config.yaml`:
+
+```yaml
+bandit_router:
+  enabled: true
+```
 
 When `strategy_evaluation_mode` is set to `ensemble`, strategies mapped
 to the current regime are scored concurrently. The helper `run_candidates`
