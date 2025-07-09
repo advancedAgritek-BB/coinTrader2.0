@@ -143,7 +143,7 @@ async def analyze_symbol(
             score, direction = evaluate_regime(regime, df, router_cfg)
             name = "ensemble"
         else:
-            strategy_fn = route(regime, env, router_cfg, notifier)
+            strategy_fn = route(regime, env, router_cfg, notifier, df=df)
             name = strategy_name(regime, env)
             score, direction, atr = await evaluate_async(strategy_fn, df, cfg)
 
