@@ -311,3 +311,67 @@ Update example:
   "snapshot": false
 }
 ```
+
+## 🔄 Amending Orders via WebSocket
+
+Kraken allows existing orders to be modified in place using the authenticated `amend_order` method. Queue priority is kept where possible and the order identifiers remain the same. If the new quantity is below the already filled amount, the remainder is cancelled.
+
+### Request Fields
+- **order_id** or **cl_ord_id** – identify the order to amend
+- **order_qty** – new base asset quantity
+- **display_qty** – visible portion for iceberg orders (\>= 1/15 of remaining)
+- **limit_price** and **limit_price_type** – updated limit price information
+- **post_only** – reject the amend if it would take liquidity
+- **trigger_price** and **trigger_price_type** – for stop or trailing orders
+- **deadline** – RFC3339 timestamp, max 60s in the future
+- **token** – WebSocket auth token
+- **req_id** – optional client request ID
+
+### Basic Example
+```json
+{
+  "method": "amend_order",
+  "params": {
+    "cl_ord_id": "2c6be801-1f53-4f79-a0bb-4ea1c95dfae9",
+    "limit_price": 490795,
+    "order_qty": 1.2,
+    "token": "PM5Qm0MDrS54l657aQAtb7AhrwN30e2LBg1nUYOd6vU"
+  }
+}
+```
+
+### Advanced Example
+```json
+{
+  "method": "amend_order",
+  "params": {
+    "order_id": "OAIYAU-LGI3M-PFM5VW",
+    "limit_price": 61031.3,
+    "deadline": "2024-07-21T09:53:59.050Z",
+    "post_only": true,
+    "token": "DGB00LiKlPlLI/amQaSKUUr8niqXDb+1zwvtjp34nzk"
+  }
+}
+```
+
+### Response
+Successful requests return a unique `amend_id` and echo the identifiers used. The response also includes timestamps `time_in` and `time_out`.
+```json
+{
+  "method": "amend_order",
+  "result": {
+    "amend_id": "TTW6PD-RC36L-ZZSWNU",
+    "cl_ord_id": "2c6be801-1f53-4f79-a0bb-4ea1c95dfae9"
+  },
+  "success": true,
+  "time_in": "2024-07-26T13:39:04.922699Z",
+  "time_out": "2024-07-26T13:39:04.924912Z"
+}
+```
+
+### Notes
+- Only quantity, display quantity, limit price and trigger price can be changed. Other attributes require cancelling and re-adding the order.
+- Setting `post_only` ensures the order remains passive after the amend.
+- Iceberg display size must be at least 1/15 of the remaining size.
+- Orders with conditional close terms cannot be amended.
+
