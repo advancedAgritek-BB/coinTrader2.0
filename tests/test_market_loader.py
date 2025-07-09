@@ -908,6 +908,16 @@ def test_invalid_symbol_skipped(caplog):
     assert any(
         "Skipping unsupported symbol ETH/USD" in r.getMessage() for r in caplog.records
     )
+
+
+def test_invalid_symbol_marked_disabled():
+    from crypto_bot.utils import market_loader
+
+    ex = SymbolCheckExchange()
+    market_loader.failed_symbols.clear()
+    result = asyncio.run(market_loader.fetch_ohlcv_async(ex, "ETH/USD"))
+    assert result is market_loader.UNSUPPORTED_SYMBOL
+    assert market_loader.failed_symbols["ETH/USD"].get("disabled") is True
 class MissingTFExchange:
     has = {"fetchOHLCV": True}
     timeframes = {"5m": "5m"}

@@ -240,6 +240,12 @@ async def fetch_ohlcv_async(
                     symbol,
                     getattr(exchange, "id", "unknown"),
                 )
+                failed_symbols[symbol] = {
+                    "time": time.time(),
+                    "delay": MAX_RETRY_DELAY,
+                    "count": MAX_OHLCV_FAILURES,
+                    "disabled": True,
+                }
                 return UNSUPPORTED_SYMBOL
         if use_websocket and since is None and limit > MAX_WS_LIMIT and not force_websocket_history:
             logger.info(
