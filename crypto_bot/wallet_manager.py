@@ -138,6 +138,7 @@ def load_or_create() -> dict:
         with open(CONFIG_FILE) as f:
             creds.update(yaml.safe_load(f))
     else:
+        logger.info("user_config.yaml not found; prompting for credentials")
         creds.update(prompt_user())
         logger.info("Creating new user configuration at %s", CONFIG_FILE)
         with open(CONFIG_FILE, "w") as f:
