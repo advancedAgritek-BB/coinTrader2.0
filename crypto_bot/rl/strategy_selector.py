@@ -14,7 +14,7 @@ from crypto_bot.strategy import (
 )
 
 # Default log file location
-LOG_FILE = Path("logs/strategy_pnl.csv")
+LOG_FILE = Path("crypto_bot/logs/strategy_pnl.csv")
 
 # Map strategy names to generation functions
 _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {
