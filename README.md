@@ -198,6 +198,10 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   the expected value check is skipped.
 * **drawdown_penalty_coef** – weight applied to historical drawdown when
   scoring strategies.
+* **safety** – kill switch thresholds and API error limits.
+* **scoring** – windows and weights used to rank strategies.
+* **exec** – advanced order execution settings.
+* **exits** – default take profit and stop loss options.
 
 ### Strategy and Signals
 * **strategy_allocation** – capital split across strategies.
