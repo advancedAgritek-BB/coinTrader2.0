@@ -106,7 +106,7 @@ micro_scalp:
   volume_window: 20
   wick_pct: 0.2
 min_agreeing_votes: 1
-min_confidence_score: 0.1
+min_confidence_score: 0.1  # baseline; actual min = baseline * (1 + bb_width_z/3)
 min_consistent_agreement: 1
 ensemble_min_conf: 0.15  # minimum confidence for ensemble strategies
 min_cooldown: 1

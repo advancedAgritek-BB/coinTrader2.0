@@ -24,6 +24,8 @@ from crypto_bot import meta_selector
 from crypto_bot.signals.signal_scoring import evaluate_async, evaluate_strategies
 from crypto_bot.utils.rank_logger import log_second_place
 from crypto_bot.volatility_filter import calc_atr
+from ta.volatility import BollingerBands
+from crypto_bot.utils import zscore
 
 
 analysis_logger = setup_logger("strategy_rank", LOG_DIR / "strategy_rank.log")
@@ -51,50 +53,15 @@ async def run_candidates(
 
     results: List[Tuple[float, callable, float, str]] = []
     for strat, (score, direction, _atr) in zip(strategy_list, evals):
-    max_parallel = int(cfg.get("max_parallel", 1))
-    coef = float(cfg.get("drawdown_penalty_coef", 0.0))
-
-    sem = asyncio.Semaphore(max_parallel)
-    results: List[Tuple[float, callable, float, str]] = []
-
-    async def eval_one(strat):
-        async with sem:
-            try:
-                score, direction, _ = await evaluate_async(strat, df, cfg)
-            except Exception as exc:  # pragma: no cover - safety
-                analysis_logger.warning("Strategy %s failed: %s", strat.__name__, exc)
-                return None
-            try:
-                gross_edge = perf.edge(strat.__name__, symbol, coef)
-            except Exception:  # pragma: no cover - if perf fails use neutral edge
-                gross_edge = 1.0
-            rank = score * gross_edge
-            return (rank, strat, score, direction)
-
-    tasks = [eval_one(s) for s in strategies]
-    results_raw = await asyncio.gather(*tasks)
-    for res in results_raw:
-        if res:
-            results.append(res)
-    for strat in strategies:
         try:
-            score, direction, _ = (await evaluate_async([strat], df, cfg))[0]
-        except Exception as exc:  # pragma: no cover - safety
-            analysis_logger.warning("Strategy %s failed: %s", strat.__name__, exc)
-            continue
-        try:
-            gross_edge = perf.edge(
-                strat.__name__,
-                symbol,
-                cfg.get("drawdown_penalty_coef", 0.3),
-            )
+            edge = perf.edge(strat.__name__, symbol, cfg.get("drawdown_penalty_coef", 0.0))
         except Exception:  # pragma: no cover - if perf fails use neutral edge
-            gross_edge = 1.0
-        rank = score * gross_edge
+            edge = 1.0
+        rank = score * edge
         results.append((rank, strat, score, direction))
 
     results.sort(key=lambda x: x[0], reverse=True)
-    return [(s, sc, d) for _r, s, sc, d in results]
+    return [(s, sc, d) for (rank, s, sc, d) in results]
 
 
 async def analyze_symbol(
@@ -123,6 +90,20 @@ async def analyze_symbol(
     base_tf = router_cfg.timeframe
     higher_tf = config.get("higher_timeframe", "1d")
     df = df_map.get(base_tf)
+    baseline = float(
+        config.get("min_confidence_score", config.get("signal_threshold", 0.0))
+    )
+    bb_z = 0.0
+    if df is not None and len(df) >= 14:
+        try:
+            bb = BollingerBands(df["close"], window=14)
+            width = bb.bollinger_wband()
+            z = zscore(width, 14)
+            if not z.empty:
+                bb_z = float(z.iloc[-1])
+        except Exception:
+            bb_z = 0.0
+    min_conf_adaptive = baseline * (1 + bb_z / 3)
     higher_df = df_map.get("1d")
     regime, probs = await classify_regime_async(df, higher_df)
     patterns = detect_patterns(df)
@@ -207,6 +188,7 @@ async def analyze_symbol(
         "patterns": patterns,
         "future_return": future_return,
         "confidence": confidence,
+        "min_confidence": min_conf_adaptive,
     }
 
     if regime != "unknown":
