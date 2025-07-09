@@ -4,6 +4,7 @@ import argparse
 import json
 import time
 from pathlib import Path
+import logging
 
 import ccxt
 import yaml
@@ -15,6 +16,8 @@ PAIR_FILE = CACHE_DIR / "liquid_pairs.json"
 DEFAULT_MIN_VOLUME_USD = 1_000_000
 DEFAULT_TOP_K = 40
 DEFAULT_REFRESH_INTERVAL = 6 * 3600  # 6 hours
+
+logger = logging.getLogger(__name__)
 
 
 def load_config() -> dict:
@@ -35,8 +38,27 @@ def get_exchange(config: dict) -> ccxt.Exchange:
 
 def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
     """Fetch tickers and update the cached liquid pairs list."""
+    old_pairs: list[str] = []
+    if PAIR_FILE.exists():
+        try:
+            with open(PAIR_FILE) as f:
+                loaded = json.load(f)
+                if isinstance(loaded, list):
+                    old_pairs = loaded
+        except Exception as exc:  # pragma: no cover - corrupted cache
+            logger.error("Failed to read %s: %s", PAIR_FILE, exc)
+
     exchange = get_exchange(config)
-    tickers = exchange.fetch_tickers()
+    try:
+        tickers = exchange.fetch_tickers()
+        if not isinstance(tickers, dict):
+            raise TypeError("fetch_tickers returned invalid data")
+    except Exception as exc:
+        logger.error("Failed to fetch tickers: %s", exc)
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        with open(PAIR_FILE, "w") as f:
+            json.dump(old_pairs, f, indent=2)
+        return old_pairs
 
     pairs: list[tuple[str, float]] = []
     for symbol, data in tickers.items():
