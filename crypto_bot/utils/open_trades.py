@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List
 
-from crypto_bot import log_reader
+import csv
+import pandas as pd
 
 
 def get_open_trades(log_path: Path | str) -> List[Dict]:
@@ -16,9 +17,22 @@ def get_open_trades(log_path: Path | str) -> List[Dict]:
     opening longs, sells reduce longs before opening shorts, and leftover
     quantity starts a new FIFO position.
     """
-    df = log_reader._read_trades(log_path)
-    if df.empty:
+    path = Path(log_path)
+    if not path.exists():
         return []
+
+    rows = []
+    with path.open("r", encoding="utf-8") as fh:
+        reader = csv.reader(fh)
+        for row in reader:
+            if len(row) >= 6 and str(row[5]).strip().lower() == "true":
+                continue
+            rows.append(row[:5])
+
+    if not rows:
+        return []
+
+    df = pd.DataFrame(rows, columns=["symbol", "side", "amount", "price", "timestamp"])
 
     long_positions: Dict[str, List[Dict]] = {}
     short_positions: Dict[str, List[Dict]] = {}
