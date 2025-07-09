@@ -21,6 +21,7 @@ from crypto_bot.strategy_router import (
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot import meta_selector
 from crypto_bot.signals.signal_scoring import evaluate_async, evaluate_strategies
+from crypto_bot.utils.rank_logger import log_second_place
 from crypto_bot.volatility_filter import calc_atr
 
 
@@ -173,6 +174,13 @@ async def analyze_symbol(
             name = res.get("name", strategy_name(regime, env))
             score = float(res.get("score", 0.0))
             direction = res.get("direction", "none")
+            if len(strategies) > 1:
+                remaining = [s for s in strategies if getattr(s, "__name__", "") != name]
+                if remaining:
+                    second = evaluate_strategies(remaining, df, cfg)
+                    second_score = float(second.get("score", 0.0))
+                    edge = score - second_score
+                    log_second_place(symbol, regime, second.get("name", ""), second_score, edge)
         elif eval_mode == "ensemble":
             min_conf = float(config.get("ensemble_min_conf", 0.0))
             candidates = [strategy_for(regime, router_cfg)]
