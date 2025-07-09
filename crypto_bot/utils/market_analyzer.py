@@ -1,3 +1,4 @@
+import asyncio
 import pandas as pd
 from typing import Dict, Iterable, Tuple, List
 
@@ -36,7 +37,31 @@ async def run_candidates(
 ) -> List[Tuple[callable, float, str]]:
     """Evaluate ``strategies`` and rank them by score times edge."""
 
+    max_parallel = int(cfg.get("max_parallel", 1))
+    coef = float(cfg.get("drawdown_penalty_coef", 0.0))
+
+    sem = asyncio.Semaphore(max_parallel)
     results: List[Tuple[float, callable, float, str]] = []
+
+    async def eval_one(strat):
+        async with sem:
+            try:
+                score, direction, _ = await evaluate_async(strat, df, cfg)
+            except Exception as exc:  # pragma: no cover - safety
+                analysis_logger.warning("Strategy %s failed: %s", strat.__name__, exc)
+                return None
+            try:
+                gross_edge = perf.edge(strat.__name__, symbol, coef)
+            except Exception:  # pragma: no cover - if perf fails use neutral edge
+                gross_edge = 1.0
+            rank = score * gross_edge
+            return (rank, strat, score, direction)
+
+    tasks = [eval_one(s) for s in strategies]
+    results_raw = await asyncio.gather(*tasks)
+    for res in results_raw:
+        if res:
+            results.append(res)
     for strat in strategies:
         try:
             score, direction, _ = (await evaluate_async([strat], df, cfg))[0]
@@ -182,7 +207,7 @@ async def analyze_symbol(
                     edge = score - second_score
                     log_second_place(symbol, regime, second.get("name", ""), second_score, edge)
         elif eval_mode == "ensemble":
-            min_conf = float(config.get("ensemble_min_conf", 0.0))
+            min_conf = float(config.get("ensemble_min_conf", 0.15))
             candidates = [strategy_for(regime, router_cfg)]
             extra = meta_selector._scores_for(regime)
             for strat_name, val in extra.items():
