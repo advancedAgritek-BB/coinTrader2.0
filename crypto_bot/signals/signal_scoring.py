@@ -1,4 +1,4 @@
-from typing import Tuple, Callable, Optional, Iterable, Dict
+from typing import Tuple, Callable, Optional, Iterable, Dict, Sequence, Union, List
 import pandas as pd
 import asyncio
 from crypto_bot.ml_signal_model import predict_signal
@@ -56,12 +56,31 @@ def evaluate(
 
 
 async def evaluate_async(
-    strategy_fn: Callable[[pd.DataFrame], Tuple],
+    strategy_fns: Union[Sequence[Callable[[pd.DataFrame], Tuple]], Callable[[pd.DataFrame], Tuple]],
     df: pd.DataFrame,
     config: Optional[dict] = None,
-) -> Tuple[float, str, Optional[float]]:
-    """Asynchronous wrapper around ``evaluate``."""
-    return await asyncio.to_thread(evaluate, strategy_fn, df, config)
+) -> List[Tuple[float, str, Optional[float]]]:
+    """Asynchronously evaluate one or more strategy callables.
+
+    Parameters
+    ----------
+    strategy_fns : Sequence[Callable] or Callable
+        One or multiple strategy functions to evaluate. A single callable is
+        automatically wrapped in a list so that a consistent list of results
+        is always returned.
+    df : pd.DataFrame
+        DataFrame containing market data.
+    config : Optional[dict]
+        Optional configuration passed through to the strategy functions.
+    """
+    if not isinstance(strategy_fns, Sequence):
+        fns = [strategy_fns]
+    else:
+        fns = list(strategy_fns)
+
+    tasks = [asyncio.to_thread(evaluate, fn, df, config) for fn in fns]
+    results = await asyncio.gather(*tasks)
+    return list(results)
 
 
 def evaluate_strategies(
