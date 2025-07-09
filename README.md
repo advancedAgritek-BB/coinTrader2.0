@@ -191,10 +191,14 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   historical stats.
 * **default_expected_value** – fallback EV when no stats exist. When unset,
   the expected value check is skipped.
+* **drawdown_penalty_coef** – weight applied to historical drawdown when
+  computing strategy edge.
 
 ### Strategy and Signals
 * **strategy_allocation** – capital split across strategies.
 * **strategy_evaluation_mode** – how the router chooses a strategy.
+* **ensemble_min_conf** – minimum score required for strategies to
+  participate when using ensemble evaluation.
 * **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
 * **exit_strategy** – partial profit taking and trailing stop logic.
 * **micro_scalp** – EMA settings plus volume z-score and ATR filters for the scalp bot.
@@ -226,6 +230,7 @@ The bounce scalper looks for short-term reversals when a volume spike confirms m
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options.
 * **loop_interval_minutes** – delay between trading cycles.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
+* **max_parallel** – maximum number of symbols analyzed concurrently.
 * **log_to_google** – export trades to Google Sheets.
 * **telegram** – bot token, chat ID and trade notifications. Optional
   **status_updates** and **balance_updates** flags control startup and
