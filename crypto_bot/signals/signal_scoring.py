@@ -59,27 +59,9 @@ async def evaluate_async(
     strategy_fns: List[Callable[[pd.DataFrame], Tuple]],
     df: pd.DataFrame,
     config: Optional[dict] = None,
-    max_parallel: int | None = None,
-    max_parallel: int = 4,
+    max_parallel: Optional[int] = 4,
 ) -> List[Tuple[float, str, Optional[float]]]:
-    """Asynchronously evaluate strategy callables with limited concurrency.
-
-    Parameters
-    ----------
-    strategy_fns : List[Callable]
-        Strategy functions to evaluate.  Each callable must take a ``DataFrame``
-        and optionally a configuration dictionary and return a tuple containing
-        a score and direction.
-    df : pd.DataFrame
-        DataFrame containing market data.
-    config : Optional[dict]
-        Optional configuration passed through to the strategy functions.
-    max_parallel : int | None
-        Maximum number of strategies evaluated concurrently. ``None`` means no
-        limit.
-    max_parallel : int, default 4
-        Maximum number of strategies evaluated concurrently.
-    """
+    """Asynchronously evaluate strategy callables with limited concurrency."""
 
     max_parallel = None
     if config is not None:
@@ -103,26 +85,15 @@ async def evaluate_async(
             raise ValueError("max_parallel must be a positive integer or None")
         sem = asyncio.Semaphore(max_parallel)
 
-    async def sem_eval(fn):
-        async def _eval():
-            return await asyncio.to_thread(evaluate, fn, df, config)
-
+    async def run(fn):
         if sem:
             async with sem:
-                return await _eval()
-        return await _eval()
+                return await asyncio.to_thread(evaluate, fn, df, config)
+        return await asyncio.to_thread(evaluate, fn, df, config)
 
-    tasks = [asyncio.create_task(sem_eval(fn)) for fn in fns]
+    tasks = [asyncio.create_task(run(fn)) for fn in strategy_fns]
     results = await asyncio.gather(*tasks)
     return list(results)
-    results: List[Tuple[float, str, Optional[float]]] = []
-    for i in range(0, len(strategy_fns), max_parallel):
-        batch = strategy_fns[i : i + max_parallel]
-        tasks = [asyncio.to_thread(evaluate, fn, df, config) for fn in batch]
-        batch_results = await asyncio.gather(*tasks)
-        results.extend(batch_results)
-
-    return results
 
 
 def evaluate_strategies(
