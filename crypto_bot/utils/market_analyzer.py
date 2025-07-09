@@ -1,5 +1,8 @@
 import pandas as pd
-from typing import Dict
+from typing import Dict, Iterable, Tuple, List
+
+from .logger import LOG_DIR, setup_logger
+from . import perf
 
 from crypto_bot.regime.pattern_detector import detect_patterns
 from crypto_bot.regime.regime_classifier import (
@@ -11,12 +14,43 @@ from crypto_bot.strategy_router import (
     strategy_name,
     get_strategies_for_regime,
     get_strategy_by_name,
+    strategy_for,
     RouterConfig,
     evaluate_regime,
 )
 from crypto_bot.utils.telegram import TelegramNotifier
+from crypto_bot import meta_selector
 from crypto_bot.signals.signal_scoring import evaluate_async, evaluate_strategies
 from crypto_bot.volatility_filter import calc_atr
+
+
+analysis_logger = setup_logger("strategy_rank", LOG_DIR / "strategy_rank.log")
+
+
+async def run_candidates(
+    df: pd.DataFrame,
+    strategies: Iterable,
+    symbol: str,
+    cfg: Dict,
+) -> List[Tuple[callable, float, str]]:
+    """Evaluate ``strategies`` and rank them by score times edge."""
+
+    results: List[Tuple[float, callable, float, str]] = []
+    for strat in strategies:
+        try:
+            score, direction, _ = await evaluate_async(strat, df, cfg)
+        except Exception as exc:  # pragma: no cover - safety
+            analysis_logger.warning("Strategy %s failed: %s", strat.__name__, exc)
+            continue
+        try:
+            gross_edge = perf.edge(strat.__name__, symbol)
+        except Exception:  # pragma: no cover - if perf fails use neutral edge
+            gross_edge = 1.0
+        rank = score * gross_edge
+        results.append((rank, strat, score, direction))
+
+    results.sort(key=lambda x: x[0], reverse=True)
+    return [(s, sc, d) for _r, s, sc, d in results]
 
 
 async def analyze_symbol(
@@ -140,8 +174,33 @@ async def analyze_symbol(
             score = float(res.get("score", 0.0))
             direction = res.get("direction", "none")
         elif eval_mode == "ensemble":
-            score, direction = evaluate_regime(regime, df, router_cfg)
-            name = "ensemble"
+            min_conf = float(config.get("ensemble_min_conf", 0.0))
+            candidates = [strategy_for(regime, router_cfg)]
+            extra = meta_selector._scores_for(regime)
+            for strat_name, val in extra.items():
+                if val >= min_conf:
+                    fn = get_strategy_by_name(strat_name)
+                    if fn and fn not in candidates:
+                        candidates.append(fn)
+            ranked = await run_candidates(df, candidates, symbol, cfg)
+            if ranked:
+                best_fn, raw_score, raw_dir = ranked[0]
+                name = best_fn.__name__
+                score = raw_score
+                direction = raw_dir if raw_score >= min_conf else "none"
+                if len(ranked) > 1:
+                    second = ranked[1]
+                    analysis_logger.info(
+                        "%s second %s %.4f %s",
+                        symbol,
+                        second[0].__name__,
+                        second[1],
+                        second[2],
+                    )
+            else:
+                name = strategy_name(regime, env)
+                score = 0.0
+                direction = "none"
         else:
             strategy_fn = route(regime, env, router_cfg, notifier, df=df)
             name = strategy_name(regime, env)
