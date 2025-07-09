@@ -739,6 +739,50 @@ mempool_monitor:
 
 When enabled, `execute_swap` checks the current priority fee and pauses
 or adjusts the trade according to the selected action.
+
+## Solana Meme-Wave Sniper
+
+This module watches for new liquidity pools on Solana and attempts to buy
+into meme tokens before the crowd. Events from a Helius endpoint are
+filtered through safety checks, scored, and executed using Jupiter quotes
+bundled via Jito. A Twitter sentiment score can boost the ranking when the
+tweet volume is high.
+
+### Configuration
+
+Add a `meme_wave_sniper` section to `crypto_bot/config.yaml`:
+
+```yaml
+meme_wave_sniper:
+  enabled: true
+  pool:
+    url: https://api.helius.xyz/v0/pools?api-key=YOUR_KEY
+    interval: 5
+  scoring:
+    weight_liquidity: 1.0
+    weight_tx: 1.0
+    weight_social: 0.5
+  safety:
+    min_liquidity: 10
+  risk:
+    max_concurrent: 3
+    daily_loss_cap: 2
+  execution:
+    dry_run: false
+
+```
+
+### Flow
+
+```text
+PoolWatcher -> Safety -> Score -> RiskTracker -> Executor -> Exit
+```
+
+API requirements: [Helius](https://www.helius.xyz/) for pool data,
+[Jupiter](https://jup.ag/) for quotes, [Jito](https://www.jito.network/) for
+bundle submission, and a [Twitter](https://developer.twitter.com/) token for
+sentiment scores.
+
 ### Backtesting
 
 The `BacktestRunner` class in `crypto_bot.backtest.backtest_runner` can evaluate

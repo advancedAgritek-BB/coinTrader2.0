@@ -85,6 +85,23 @@ mempool_monitor:
   enabled: false
   reprice_multiplier: 1.05
   suspicious_fee_threshold: 100
+meme_wave_sniper:
+  enabled: false
+  pool:
+    url: https://api.helius.xyz/v0/pools?api-key=YOUR_KEY
+    interval: 5
+  scoring:
+    weight_liquidity: 1.0
+    weight_tx: 1.0
+    weight_social: 0.5
+  safety:
+    min_liquidity: 10
+  risk:
+    max_concurrent: 3
+    daily_loss_cap: 2
+  execution:
+    dry_run: true
+  risk_file: crypto_bot/logs/sniper_risk.json
 meta_selector:
   enabled: false
 metrics_backend: csv
