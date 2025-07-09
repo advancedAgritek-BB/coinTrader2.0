@@ -4,9 +4,8 @@ import yaml
 from pathlib import Path
 from typing import Dict
 
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 try:
     from cryptography.fernet import Fernet

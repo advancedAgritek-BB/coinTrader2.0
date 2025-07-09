@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from typing import Optional, Any
+
+from crypto_bot.utils.logger import LOG_DIR
 import sys
 
 from rich.console import Console
@@ -13,7 +15,6 @@ from rich.table import Table
 from .utils.open_trades import get_open_trades
 from . import log_reader
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 
 async def monitor_loop(

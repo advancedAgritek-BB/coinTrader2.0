@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import re
 import time
-from pathlib import Path
 from typing import Dict, Tuple
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "crypto_bot" / "logs"
+from crypto_bot.utils.logger import LOG_DIR
+
 
 try:  # pragma: no cover - optional dependency
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update

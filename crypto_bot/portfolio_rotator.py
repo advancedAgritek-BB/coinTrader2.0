@@ -10,10 +10,9 @@ import pandas as pd
 import yaml
 
 from crypto_bot.fund_manager import auto_convert_funds
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"

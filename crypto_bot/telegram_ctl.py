@@ -9,11 +9,10 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from . import console_monitor, log_reader
-from .utils.logger import setup_logger
+from .utils.logger import LOG_DIR, setup_logger
 from .utils.open_trades import get_open_trades
 from .utils.telegram import TelegramNotifier
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 logger = setup_logger(__name__, LOG_DIR / "telegram_ctl.log")
 

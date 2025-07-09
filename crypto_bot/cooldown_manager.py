@@ -3,11 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict
 
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from pathlib import Path
 
 # Consolidate cooldown logs with the main bot log
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 cooldowns: Dict[str, datetime] = {}

@@ -9,10 +9,9 @@ import yaml
 import pandas as pd
 
 from .telegram import TelegramNotifier
-from .logger import setup_logger
+from .logger import LOG_DIR, setup_logger
 from pathlib import Path
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 _last_snapshot_time = 0
 

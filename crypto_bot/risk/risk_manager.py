@@ -9,12 +9,11 @@ from crypto_bot.capital_tracker import CapitalTracker
 from crypto_bot.sentiment_filter import boost_factor, too_bearish
 from crypto_bot.volatility_filter import too_flat, too_hot, calc_atr
 
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils import trade_memory
 from crypto_bot.utils import ev_tracker
 from pathlib import Path
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 # Log to the main bot file so risk messages are consolidated
 logger = setup_logger(__name__, LOG_DIR / "bot.log")

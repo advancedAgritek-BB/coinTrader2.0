@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
+
+from crypto_bot.utils.logger import LOG_DIR
 from datetime import datetime
 
 import pandas as pd
@@ -17,7 +19,6 @@ from crypto_bot.strategy import (
     bounce_scalper,
 )
 
-LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 LOG_FILE = LOG_DIR / "strategy_performance.json"
 MODEL_PATH = Path(__file__).resolve().parent / "models" / "meta_selector_lgbm.txt"
 
