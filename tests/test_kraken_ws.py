@@ -419,6 +419,26 @@ def test_edit_order_with_options(monkeypatch):
     }
     assert msg == expected
     assert ws.sent[-1] == json.dumps(expected)
+def test_amend_order(monkeypatch):
+    client, ws = _setup_private_client(monkeypatch)
+    msg = client.amend_order(
+        order_id="OID123",
+        order_qty=1.1,
+        limit_price=30000.5,
+        req_id=9,
+    )
+    expected = {
+        "method": "amend_order",
+        "params": {
+            "token": "token",
+            "order_id": "OID123",
+            "order_qty": 1.1,
+            "limit_price": 30000.5,
+        },
+        "req_id": 9,
+    }
+    assert msg == expected
+    assert ws.sent == [json.dumps(expected)]
 
 
 def test_subscribe_and_unsubscribe_orders(monkeypatch):

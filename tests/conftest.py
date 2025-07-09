@@ -137,3 +137,63 @@ sys.modules.setdefault("sklearn.model_selection", _FakeSklearn.model_selection)
 sys.modules.setdefault("sklearn.metrics", _FakeSklearn.metrics)
 sys.modules.setdefault("sklearn.preprocessing", _FakeSklearn.preprocessing)
 sys.modules.setdefault("sklearn.pipeline", _FakeSklearn.pipeline)
+
+# Minimal stub for the optional ``ta`` package used in ML signal models.
+class _FakeTa:
+    class trend:
+        @staticmethod
+        def macd(*args, **kwargs):
+            return 0.0
+
+sys.modules.setdefault("ta", _FakeTa())
+
+# Lightweight stub for PyYAML
+class _FakeYaml:
+    @staticmethod
+    def safe_load(*args, **kwargs):
+        return {}
+
+sys.modules.setdefault("yaml", _FakeYaml())
+
+# Basic stub for aiohttp
+class _FakeAioHttp:
+    class ClientSession:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            pass
+
+        async def get(self, *a, **k):
+            class R:
+                status = 200
+
+                async def json(self):
+                    return {}
+
+                async def text(self):
+                    return ""
+
+            return R()
+
+sys.modules.setdefault("aiohttp", _FakeAioHttp())
+
+# Basic ``requests`` stub
+class _FakeRequests:
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {}
+
+        @property
+        def text(self):
+            return ""
+
+    def get(self, *a, **k):
+        return self.Response()
+
+sys.modules.setdefault("requests", _FakeRequests())
