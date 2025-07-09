@@ -891,9 +891,10 @@ async def _main_impl() -> TelegramNotifier:
                     regime_rejections += 1
                 continue
 
-            min_score = config.get(
+            base_min = config.get(
                 "min_confidence_score", config.get("signal_threshold", 0.3)
             )
+            min_score = res.get("min_confidence", base_min)
             if direction_sym != "none" and score_sym >= min_score:
                 allowed_results.append(
                     {
