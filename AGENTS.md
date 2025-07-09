@@ -121,6 +121,122 @@ Use that token in the request payload
   "token": "YOUR_WS_TOKEN"
 }
 ```
+
+### \U1F4E6 Add Order via WebSocket
+
+**Endpoint**: `wss://ws-auth.kraken.com/v2`
+
+Send a JSON payload with `"method": "add_order"` and the following parameters.
+
+#### Request Schema
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `order_type` | string | Order execution model, e.g. `limit`, `market`, `iceberg`, `stop-loss`, etc. |
+| `side` | string | `buy` or `sell`. |
+| `order_qty` | float | Quantity in base asset. |
+| `symbol` | string | Trading pair like `"BTC/USD"`. |
+| `limit_price` | float | Optional limit price for supported order types. |
+| `limit_price_type` | string | Units for limit price (`static`, `pct`, `quote`). |
+| `triggers` | object | Trigger parameters for stop and trailing orders. |
+| `time_in_force` | string | `gtc`, `gtd`, or `ioc`. |
+| `margin` | boolean | Enable margin funding. |
+| `post_only` | boolean | Only post if it adds liquidity. |
+| `reduce_only` | boolean | Reduce existing position only. |
+| `effective_time` | string | RFC3339 scheduled start time. |
+| `expire_time` | string | RFC3339 expiration time (GTD only). |
+| `deadline` | string | Max lifetime before matching. |
+| `cl_ord_id` | string | Optional client supplied order id. |
+| `order_userref` | integer | Optional numeric order reference. |
+| `conditional` | object | For OTO orders, defines the secondary close order. |
+| `display_qty` | float | Iceberg display quantity. |
+| `fee_preference` | string | `base` or `quote` fee currency. |
+| `no_mpp` | boolean | Disable Market Price Protection for market orders. |
+| `stp_type` | string | Self trade prevention mode. |
+| `cash_order_qty` | float | Quote currency volume for buy market orders. |
+| `validate` | boolean | Validate only without trading. |
+| `sender_sub_id` | string | Sub-account identifier. |
+| `token` | string | WebSocket authentication token. |
+| `req_id` | integer | Optional request identifier echoed back. |
+
+Example limit order:
+
+```json
+{
+    "method": "add_order",
+    "params": {
+        "order_type": "limit",
+        "side": "buy",
+        "limit_price": 26500.4,
+        "order_userref": 100054,
+        "order_qty": 1.2,
+        "symbol": "BTC/USD",
+        "token": "G38a1tGFzqGiUCmnegBcm8d4nfP3tytiNQz6tkCBYXY"
+    },
+    "req_id": 123456789
+}
+```
+
+Example stop-loss:
+
+```json
+{
+    "method": "add_order",
+    "params": {
+        "order_type": "stop-loss",
+        "side": "sell",
+        "order_qty": 100,
+        "symbol": "MATIC/USD",
+        "triggers": {
+            "reference": "last",
+            "price": -2.0,
+            "price_type": "pct"
+        },
+        "token": "G38a1tGFzqGiUCmnegBcm8d4nfP3tytiNQz6tkCBYXY"
+    }
+}
+```
+
+One-Triggers-Other example:
+
+```json
+{
+    "method": "add_order",
+    "params": {
+        "order_type": "limit",
+        "side": "buy",
+        "order_qty": 1.2,
+        "symbol": "BTC/USD",
+        "limit_price": 28440,
+        "conditional": {
+            "order_type": "stop-loss-limit",
+            "trigger_price": 28410,
+            "limit_price": 28400
+        },
+        "token": "G38a1tGFzqGiUCmnegBcm8d4nfP3tytiNQz6tkCBYXY"
+    }
+}
+```
+
+#### Response
+
+Successful responses echo the `req_id` and return `order_id` along with any
+optional references:
+
+```json
+{
+    "method": "add_order",
+    "req_id": 123456789,
+    "result": {
+        "order_id": "AA5JGQ-SBMRC-SCJ7J7",
+        "order_userref": 100054
+    },
+    "success": true,
+    "time_in": "2023-09-21T14:15:07.197274Z",
+    "time_out": "2023-09-21T14:15:07.205301Z"
+}
+```
+
 Balance + Trade Events
 Subscribe to private channels after authentication:
 
