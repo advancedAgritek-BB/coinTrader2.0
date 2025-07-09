@@ -67,7 +67,7 @@ def test_route_notifier(monkeypatch):
     assert msgs == ["\U0001F4C8 Signal: AAA \u2192 LONG | Confidence: 0.50"]
 
 
-def test_route_multi_tf_combo(monkeypatch):
+def test_route_multi_tf_combo(monkeypatch, tmp_path):
     def dummy(df, cfg=None):
         return 0.1, "long"
 
@@ -77,10 +77,12 @@ def test_route_multi_tf_combo(monkeypatch):
         lambda n: dummy if n == "dummy" else None,
     )
 
+    monkeypatch.setattr(strategy_router, "LAST_REGIME_FILE", tmp_path / "last_regime.json")
+
     cfg = RouterConfig.from_dict({"timeframe": "1m", "strategy_router": {"regimes": {"breakout": ["dummy"]}}})
 
     fn = route({"1m": "breakout", "15m": "trending"}, "cex", cfg)
-    score, direction = fn(None)
+    score, direction = fn(pd.DataFrame())
     assert (score, direction) == (0.1, "long")
 
 
@@ -122,14 +124,16 @@ def make_df(close_vals, vol_vals):
 
 
 def test_fastpath_breakout(tmp_path, monkeypatch):
-    # config with low max_bandwidth and high volume multiplier
     cfg = {"strategy_router": {"fast_path": {
-        "breakout_squeeze_window": 3,
-        "breakout_max_bandwidth": 0.1,
+        "breakout_squeeze_window": 5,
+        "breakout_bandwidth_zscore": -0.84,
         "breakout_volume_multiplier": 2,
         "trend_adx_threshold": 1000
     }}, "regime": {"sideways": ["grid"]}}
-    df = make_df([1,1,1,1], [1,1,1,10])
+
+    close = list(range(10))
+    volume = [1] * 9 + [10]
+    df = make_df(close, volume)
     fn = route("sideways", "cex", cfg, None, df)
     assert fn.__name__ == breakout_bot.generate_signal.__name__
 
