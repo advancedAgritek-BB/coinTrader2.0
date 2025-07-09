@@ -344,6 +344,7 @@ def route(
             if z < bw_z_thr and df["volume"].iloc[-1] > vol_mean * vol_mult:
                 logger.info(
                     "FAST-PATH: breakout_bot via bandwidth z-score and volume spike"
+                )
             wband = bb.bollinger_wband()
             z = (wband - wband.rolling(window).mean()) / wband.rolling(window).std()
             vol_ma = df["volume"].rolling(window).mean()

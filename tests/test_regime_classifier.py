@@ -296,12 +296,15 @@ def test_analyze_symbol_best_mode(monkeypatch):
     def strat_b(df, cfg=None):
         return 0.7, "short"
 
-    monkeypatch.setattr(strategy_router, "get_strategies_for_regime", lambda r: [strat_a, strat_b])
+    monkeypatch.setattr(strategy_router, "get_strategies_for_regime", lambda r, c=None: [strat_a, strat_b])
     eval_stub = lambda strats, df_, cfg_: {"score": 0.7, "direction": "short", "name": "strat_b"}
     monkeypatch.setattr(sc, "evaluate_strategies", eval_stub)
     monkeypatch.setattr(strategy_router, "evaluate_strategies", eval_stub, raising=False)
     import crypto_bot.utils.market_analyzer as ma
     monkeypatch.setattr(ma, "evaluate_strategies", eval_stub)
+    monkeypatch.setattr(ma, "get_strategies_for_regime", lambda r, c=None: [strat_a, strat_b])
+    calls = []
+    monkeypatch.setattr(ma, "log_second_place", lambda *a, **k: calls.append(a))
 
     async def run():
         cfg = {
@@ -318,6 +321,7 @@ def test_analyze_symbol_best_mode(monkeypatch):
     assert res["name"] == "strat_b"
     assert res["direction"] == "short"
     assert res["score"] == 0.7
+    assert calls
 
 
 def test_analyze_symbol_accepts_dict_patterns(monkeypatch):
