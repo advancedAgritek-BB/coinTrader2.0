@@ -222,6 +222,18 @@ size = risk_manager.position_size(score, balance, lower_df, atr=atr)
 * **mode_threshold**/**mode_degrade_window** - degrade to manual mode when auto selection underperforms.
 * **meta_selector**/**rl_selector** – experimental strategy routers.
 * **mode** – `auto` or `manual` evaluation of strategies.
+* **parallel_strategy_workers** – strategies evaluated concurrently when
+  ranking candidates.
+* **second_place_csv** – file that records the runner‑up from each
+  parallel evaluation cycle.
+* **ensemble_min_conf** – minimum score required for a strategy to be
+  ranked in ensemble mode.
+
+When `strategy_evaluation_mode` is set to `ensemble`, strategies mapped
+to the current regime are scored concurrently. The helper `run_candidates`
+ranks them by `score × edge` and executes the best result. Details about
+the second‑highest strategy are written to the CSV file defined by
+`second_place_csv`.
 #### Bounce Scalper
 The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry.
 
@@ -635,6 +647,7 @@ include:
   how many signals fired and how many trades executed.
 - `weights.json` – persistent optimizer weights saved after each update
   at `crypto_bot/logs/weights.json`.
+- `second_place.csv` – the runner‑up strategy from each evaluation cycle.
 
 Example short trade:
 
