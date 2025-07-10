@@ -780,7 +780,7 @@ Add a `meme_wave_sniper` section to `crypto_bot/config.yaml`:
 meme_wave_sniper:
   enabled: true
   pool:
-    url: https://api.helius.xyz/v0/pools?api-key=YOUR_KEY
+    url: https://api.helius.xyz/v0/pools?api-key=${HELIUS_KEY}
     interval: 5
   scoring:
     weight_liquidity: 1.0
@@ -795,6 +795,7 @@ meme_wave_sniper:
     dry_run: false
 
 ```
+Set the `HELIUS_KEY` environment variable with your Helius API key.
 
 ### Flow
 
