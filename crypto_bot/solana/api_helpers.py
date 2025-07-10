@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import aiohttp
+from contextlib import asynccontextmanager
 
 # Base endpoints from the blueprint
 # Helius WebSocket: wss://rpc.helius.xyz
@@ -11,13 +12,18 @@ import aiohttp
 # API keys are provided via environment variables HELIUS_KEY and JITO_KEY.
 
 
-async def connect_helius_ws(api_key: str):
-    """Return a websocket connection to Helius RPC."""
+@asynccontextmanager
+async def helius_ws(api_key: str):
+    """Yield a websocket connection to Helius RPC and close the session."""
 
     url = f"wss://rpc.helius.xyz/?api-key={api_key}"
     session = aiohttp.ClientSession()
     ws = await session.ws_connect(url)
-    return ws
+    try:
+        yield ws
+    finally:
+        await ws.close()
+        await session.close()
 
 
 async def fetch_jito_bundle(bundle_id: str, api_key: str, session: aiohttp.ClientSession | None = None):
