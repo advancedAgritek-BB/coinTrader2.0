@@ -1131,6 +1131,196 @@ async def _main_impl() -> TelegramNotifier:
             current_dfs: dict[str, pd.DataFrame] = {}
             current_prices: dict[str, float] = {}
     
+        session_state.df_cache = await update_multi_tf_ohlcv_cache(
+            exchange,
+            session_state.df_cache,
+            current_batch,
+            config,
+            limit=limit,
+            use_websocket=config.get("use_websocket", False),
+            force_websocket_history=config.get("force_websocket_history", False),
+            max_concurrent=config.get("max_concurrent_ohlcv"),
+            notifier=notifier if status_updates else None,
+        )
+
+        session_state.regime_cache = await update_regime_tf_cache(
+            exchange,
+            session_state.regime_cache,
+            current_batch,
+            config,
+            limit=limit,
+            use_websocket=config.get("use_websocket", False),
+            force_websocket_history=config.get("force_websocket_history", False),
+            max_concurrent=config.get("max_concurrent_ohlcv"),
+            notifier=notifier if status_updates else None,
+            df_map=session_state.df_cache,
+        )
+        ohlcv_time = time.perf_counter() - t0
+        ohlcv_fetch_latency = time.perf_counter() - start_ohlcv
+        if notifier and ohlcv_fetch_latency > 0.5:
+            notifier.notify(
+                f"\u26a0\ufe0f OHLCV latency {ohlcv_fetch_latency*1000:.0f} ms"
+            )
+
+        tasks = []
+        analyze_start = time.perf_counter()
+        for sym in current_batch:
+            logger.debug("🔹 Symbol: %s", sym)
+            total_pairs += 1
+            df_map = {tf: c.get(sym) for tf, c in session_state.df_cache.items()}
+            for tf, cache_tf in session_state.regime_cache.items():
+                df_map[tf] = cache_tf.get(sym)
+            df_sym = df_map.get(config["timeframe"])
+            if df_sym is None or df_sym.empty:
+                msg = (
+                    f"OHLCV fetch failed for {sym} on {config['timeframe']} "
+                    f"(limit {limit})"
+                )
+                logger.error(msg)
+                if notifier and status_updates:
+                    notifier.notify(msg)
+                continue
+
+            expected_cols = ["timestamp", "open", "high", "low", "close", "volume"]
+            if not isinstance(df_sym, pd.DataFrame):
+                df_sym = pd.DataFrame(df_sym, columns=expected_cols)
+            elif not set(expected_cols).issubset(df_sym.columns):
+                df_sym = pd.DataFrame(df_sym.to_numpy(), columns=expected_cols)
+            logger.debug("Fetched %d candles for %s", len(df_sym), sym)
+            df_map[config["timeframe"]] = df_sym
+            if sym in session_state.positions:
+                df_current = df_sym
+            tasks.append(analyze_symbol(sym, df_map, mode, config, notifier))
+    
+        results = await asyncio.gather(*tasks)
+
+        scalpers = [
+            r["symbol"]
+            for r in results
+            if r.get("name") in {"micro_scalp", "bounce_scalper"}
+        ]
+        if scalpers:
+            scalp_tf = config.get("scalp_timeframe", "1m")
+            t_sc = time.perf_counter()
+            session_state.df_cache[scalp_tf] = await update_ohlcv_cache(
+                exchange,
+                session_state.df_cache.get(scalp_tf, {}),
+                scalpers,
+                timeframe=scalp_tf,
+                limit=100,
+                use_websocket=config.get("use_websocket", False),
+                force_websocket_history=config.get("force_websocket_history", False),
+                config=config,
+                max_concurrent=config.get("max_concurrent_ohlcv"),
+            )
+            ohlcv_time += time.perf_counter() - t_sc
+            tasks = [
+                analyze_symbol(
+                    sym,
+                    {
+                        **{tf: c.get(sym) for tf, c in session_state.df_cache.items()},
+                        **{tf: c.get(sym) for tf, c in session_state.regime_cache.items()},
+                    },
+                    mode,
+                    config,
+                    notifier,
+                )
+                for sym in scalpers
+            ]
+            scalper_results = await asyncio.gather(*tasks)
+            mapping = {r["symbol"]: r for r in scalper_results}
+            results = [mapping.get(r["symbol"], r) for r in results]
+            for sym_open in session_state.positions:
+                if sym_open in mapping:
+                    current_dfs[sym_open] = session_state.df_cache.get(config["timeframe"], {}).get(
+                        sym_open
+                    )
+
+        analyze_time = time.perf_counter() - analyze_start
+
+        for res in results:
+            sym = res["symbol"]
+            df_sym = res["df"]
+            regime_sym = res["regime"]
+            log_regime(sym, regime_sym, res["future_return"])
+
+            if regime_sym == "unknown":
+                rejected_regime += 1
+                continue
+
+            env_sym = res["env"]
+            name_sym = res["name"]
+            score_sym = res["score"]
+            direction_sym = res["direction"]
+
+            logger.debug("Regime %s -> Strategy %s", regime_sym, name_sym)
+            logger.debug(
+                "Using strategy %s for %s in %s mode",
+                name_sym,
+                sym,
+                env_sym,
+            )
+
+            if sym not in session_state.positions and in_cooldown(sym, name_sym):
+                continue
+
+            params_file = LOG_DIR / "optimized_params.json"
+            if params_file.exists():
+                params = json.loads(params_file.read_text())
+                if name_sym in params:
+                    risk_manager.config.stop_loss_pct = params[name_sym][
+                        "stop_loss_pct"
+                    ]
+                    risk_manager.config.take_profit_pct = params[name_sym][
+                        "take_profit_pct"
+                    ]
+
+            if direction_sym != "none":
+                signals_generated += 1
+
+            allowed, reason = risk_manager.allow_trade(df_sym, name_sym)
+            mean_vol = df_sym["volume"].rolling(20).mean().iloc[-1]
+            last_vol = df_sym["volume"].iloc[-1]
+            logger.debug(
+                f"[TRADE EVAL] {sym} | Signal: {score_sym:.2f} | Volume: {last_vol:.4f}/{mean_vol:.2f} | Allowed: {allowed}"
+            )
+
+            allowed_results.sort(key=lambda x: x["score"], reverse=True)
+            top_n = config.get("top_n_symbols", 3)
+            allowed_results = allowed_results[:top_n]
+            corr_matrix = compute_correlation_matrix(
+            {r["symbol"]: r["df"] for r in allowed_results}
+            )
+            filtered_results: list[dict] = []
+            for r in allowed_results:
+                keep = True
+                for kept in filtered_results:
+                    if not corr_matrix.empty:
+                        corr = corr_matrix.at[r["symbol"], kept["symbol"]]
+                        if abs(corr) > 0.95:
+                            keep = False
+                            break
+                if keep:
+                    filtered_results.append(r)
+
+            best = filtered_results[0] if filtered_results else None
+
+            open_syms = list(session_state.positions.keys())
+            if open_syms:
+                tf_cache = session_state.df_cache.get(config["timeframe"], {})
+                update_syms: list[str] = []
+                for s in open_syms:
+                    ts = None
+                    df_prev = session_state.df_cache.get(config["timeframe"], {}).get(s)
+                    if df_prev is not None and not df_prev.empty:
+                        ts = int(df_prev["timestamp"].iloc[-1])
+                    if ts is None or last_candle_ts.get(s) != ts:
+                        update_syms.append(s)
+                if update_syms:
+                    if not allowed:
+                        logger.debug("Trade not allowed for %s \u2013 %s", sym, reason)
+                        logger.debug(
+                            "Trade rejected for %s: %s, score=%.2f, regime=%s",
             t0 = time.perf_counter()
             symbols = await get_filtered_symbols(exchange, config)
             symbol_time = time.perf_counter() - t0
