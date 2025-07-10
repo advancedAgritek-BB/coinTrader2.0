@@ -124,7 +124,6 @@ def cfg_get(cfg: Mapping[str, Any] | RouterConfig, key: str, default: Any | None
 
 # Path storing the last selected regime and timestamp
 LAST_REGIME_FILE = LOG_DIR / "last_regime.json"
- main
 
 
 class Selector:
