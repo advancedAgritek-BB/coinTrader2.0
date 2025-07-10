@@ -802,6 +802,9 @@ meme_wave_sniper:
 PoolWatcher -> Safety -> Score -> RiskTracker -> Executor -> Exit
 ```
 
+Sniping begins immediately at startup. The initial symbol scan now runs in the
+background so new pools can be acted on without waiting for caches to fill.
+
 API requirements: [Helius](https://www.helius.xyz/) for pool data,
 [Jupiter](https://jup.ag/) for quotes, [Jito](https://www.jito.network/) for
 bundle submission, and a [Twitter](https://developer.twitter.com/) token for
