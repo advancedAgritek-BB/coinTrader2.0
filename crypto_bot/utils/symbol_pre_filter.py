@@ -177,7 +177,7 @@ async def filter_symbols(
             continue
 
         vol_usd, change_pct, spread_pct = _parse_metrics(ticker)
-        logger.info(
+        logger.debug(
             "Ticker %s volume %.2f USD change %.2f%% spread %.2f%%",
             symbol,
             vol_usd,
@@ -209,7 +209,7 @@ async def filter_symbols(
         if min_age > 0:
             enough = await has_enough_history(exchange, sym, min_age, timeframe="1h")
             if not enough:
-                logger.info("Skipping %s due to insufficient history", sym)
+                logger.debug("Skipping %s due to insufficient history", sym)
                 continue
         keep = True
         if df_cache:
@@ -219,6 +219,7 @@ async def filter_symbols(
                     keep = False
                     break
         if keep:
+            logger.info("Selected %s with score %.2f", sym, score)
             result.append((sym, score))
 
     return result
