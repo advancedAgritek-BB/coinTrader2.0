@@ -29,3 +29,4 @@ httpx<0.28
 uvicorn
 rich
 scikit-optimize
+pydantic<2

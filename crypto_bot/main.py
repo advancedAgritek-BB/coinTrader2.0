@@ -11,6 +11,9 @@ import ccxt
 import pandas as pd
 import yaml
 from dotenv import dotenv_values
+from pydantic import ValidationError
+
+from schema.scanner import ScannerConfig
 
 from crypto_bot.utils.telegram import TelegramNotifier, send_test_message
 from crypto_bot.utils.trade_reporter import report_entry, report_exit
@@ -188,7 +191,13 @@ def load_config() -> dict:
     """Load YAML configuration for the bot."""
     with open(CONFIG_PATH) as f:
         logger.info("Loading config from %s", CONFIG_PATH)
-        return yaml.safe_load(f)
+        data = yaml.safe_load(f) or {}
+    try:
+        ScannerConfig.model_validate(data)
+    except ValidationError as exc:
+        print("Invalid configuration:\n", exc)
+        raise SystemExit(1)
+    return data
 
 
 async def _ws_ping_loop(exchange: object, interval: float) -> None:
