@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Any
 
 from .logger import LOG_DIR
 from .metrics_logger import log_metrics_to_csv
@@ -37,3 +37,25 @@ class Telemetry:
 
 
 telemetry = Telemetry()
+
+
+def write_cycle_metrics(metrics: Dict[str, Any], cfg: Dict) -> None:
+    """Write cycle metrics and export telemetry counters.
+
+    Parameters
+    ----------
+    metrics:
+        Mapping of metric names to values.
+    cfg:
+        Bot configuration dictionary providing metric settings.
+    """
+    if cfg.get("metrics_enabled") and cfg.get("metrics_backend") == "csv":
+        log_metrics_to_csv(
+            metrics,
+            cfg.get("metrics_output_file", str(LOG_DIR / "metrics.csv")),
+        )
+        telemetry.export_csv(
+            cfg.get("metrics_output_file", str(LOG_DIR / "telemetry.csv"))
+        )
+
+

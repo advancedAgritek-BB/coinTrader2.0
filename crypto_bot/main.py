@@ -79,8 +79,7 @@ from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 from crypto_bot.utils.trend_confirmation import confirm_multi_tf_trend
 from crypto_bot.utils.correlation import compute_correlation_matrix
 from crypto_bot.regime.regime_classifier import CONFIG
-from crypto_bot.utils.metrics_logger import log_metrics_to_csv
-from crypto_bot.utils.telemetry import telemetry
+from crypto_bot.utils.telemetry import telemetry, write_cycle_metrics
 
 
 
@@ -1422,19 +1421,15 @@ async def _main_impl() -> TelegramNotifier:
                 score_rejections,
                 regime_rejections,
             )
-            if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
-                metrics = {
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "ticker_fetch_time": ticker_fetch_time,
-                    "symbol_filter_ratio": symbol_filter_ratio,
-                    "ohlcv_fetch_latency": ohlcv_fetch_latency,
-                    "execution_latency": execution_latency,
-                    "unknown_regimes": rejected_regime,
-                }
-                log_metrics_to_csv(
-                    metrics,
-                    config.get("metrics_output_file", str(LOG_DIR / "metrics.csv")),
-                )
+            metrics = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "ticker_fetch_time": ticker_fetch_time,
+                "symbol_filter_ratio": symbol_filter_ratio,
+                "ohlcv_fetch_latency": ohlcv_fetch_latency,
+                "execution_latency": execution_latency,
+                "unknown_regimes": rejected_regime,
+            }
+            write_cycle_metrics(metrics, config)
             logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
 
@@ -1494,12 +1489,7 @@ async def _main_impl() -> TelegramNotifier:
                         "execution_latency": execution_latency,
                         "unknown_regimes": rejected_regime,
                     }
-                    log_metrics_to_csv(
-                        metrics,
-                        config.get(
-                            "metrics_output_file", str(LOG_DIR / "metrics.csv")
-                        ),
-                    )
+                    write_cycle_metrics(metrics, config)
                 logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
                 await asyncio.sleep(config["loop_interval_minutes"] * 60)
                 continue
@@ -1674,13 +1664,7 @@ async def _main_impl() -> TelegramNotifier:
                 "execution_latency": execution_latency,
                 "unknown_regimes": rejected_regime,
             }
-            log_metrics_to_csv(
-                metrics,
-                config.get("metrics_output_file", str(LOG_DIR / "metrics.csv")),
-            )
-            telemetry.export_csv(
-                config.get("metrics_output_file", str(LOG_DIR / "telemetry.csv"))
-            )
+            write_cycle_metrics(metrics, config)
         summary = f"Cycle complete: {total_pairs} symbols, {trades_executed} trades"
         if notifier and status_updates:
             notifier.notify(summary)
