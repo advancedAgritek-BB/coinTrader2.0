@@ -10,6 +10,7 @@ spec = importlib.util.spec_from_file_location(
 correlation = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(correlation)
 compute_correlation_matrix = correlation.compute_correlation_matrix
+compute_pairwise_correlation = correlation.compute_pairwise_correlation
 
 
 def test_compute_correlation_matrix_returns_correct_coefficients():
@@ -34,3 +35,22 @@ def test_compute_correlation_matrix_skips_mismatched_lengths():
     }
     mat = compute_correlation_matrix(df_cache)
     assert np.isnan(mat.loc["A", "B"])
+
+
+def test_compute_pairwise_correlation_max_pairs():
+    df_cache = {
+        "A": pd.DataFrame({"close": [1, 2, 3]}),
+        "B": pd.DataFrame({"close": [1, 2, 3]}),
+        "C": pd.DataFrame({"close": [1, 2, 3]}),
+    }
+    result = compute_pairwise_correlation(df_cache, max_pairs=1)
+    assert len(result) == 1
+
+
+def test_compute_pairwise_correlation_zero_pairs():
+    df_cache = {
+        "A": pd.DataFrame({"close": [1, 2]}),
+        "B": pd.DataFrame({"close": [1, 2]}),
+    }
+    result = compute_pairwise_correlation(df_cache, max_pairs=0)
+    assert result == {}

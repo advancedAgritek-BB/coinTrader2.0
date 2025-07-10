@@ -237,6 +237,7 @@ symbol_batch_size: 10
 symbol_filter:
   change_pct_percentile: 0
   max_correlation: 0.85
+  correlation_max_pairs: 100
   max_spread_pct: 3
   min_volume_usd: 1000
 symbol_refresh_minutes: 30

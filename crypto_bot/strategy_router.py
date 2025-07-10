@@ -122,9 +122,9 @@ def cfg_get(cfg: Mapping[str, Any] | RouterConfig, key: str, default: Any | None
         return default
     return cfg.get(key, default)
 
+
 # Path storing the last selected regime and timestamp
 LAST_REGIME_FILE = LOG_DIR / "last_regime.json"
- main
 
 
 class Selector:
@@ -505,15 +505,6 @@ def route(
         cfg_get(cfg, "commit_lock_intervals", 0),
     )
 
-   # commit lock logic
-    intervals = (
-        cfg.commit_lock_intervals
-        if isinstance(cfg, RouterConfig)
-        else int(config.get("strategy_router", {}).get("commit_lock_intervals", 0))
-    )
-            base = cfg_get(cfg, "timeframe")
-            regime = regime.get(base, next(iter(regime.values())))
-
     # commit lock logic
     intervals = int(cfg_get(cfg, "commit_lock_intervals", 0))
     if intervals:
@@ -528,11 +519,6 @@ def route(
             except Exception:
                 pass
 
-        tf = (
-            cfg.timeframe
-            if isinstance(cfg, RouterConfig)
-            else cfg.get("timeframe", "1h")
-        )
         tf = cfg_get(cfg, "timeframe", "1h")
         interval = timeframe_seconds(None, tf)
         now = time.time()
@@ -541,16 +527,12 @@ def route(
         else:
             lock_file.parent.mkdir(parents=True, exist_ok=True)
             lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
+
     tf = cfg_get(cfg, "timeframe", "1h")
-    tf_minutes = getattr(
-        cfg,
-        "timeframe_minutes",
-        int(pd.Timedelta(tf).total_seconds() // 60),
-    tf = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe", "1h")
     tf_minutes = (
         cfg.timeframe_minutes
         if isinstance(cfg, RouterConfig)
-        else int(pd.Timedelta(tf).total_seconds() // 60)
+        else getattr(cfg, "timeframe_minutes", int(pd.Timedelta(tf).total_seconds() // 60))
     )
 
     LAST_REGIME_FILE.parent.mkdir(parents=True, exist_ok=True)

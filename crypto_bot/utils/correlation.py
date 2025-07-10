@@ -3,21 +3,31 @@ import numpy as np
 from scipy.stats import pearsonr
 
 
-def compute_pairwise_correlation(df_cache: dict[str, pd.DataFrame]) -> dict[tuple[str, str], float]:
+def compute_pairwise_correlation(
+    df_cache: dict[str, pd.DataFrame], max_pairs: int | None = None
+) -> dict[tuple[str, str], float]:
     """Return Pearson correlation coefficients for each pair of symbols.
 
     Parameters
     ----------
     df_cache : dict[str, pd.DataFrame]
         Mapping of symbol to OHLCV DataFrame. ``close`` column must be present.
+    max_pairs : int, optional
+        Maximum number of pairwise correlations to compute. When ``None`` all
+        possible pairs are evaluated.
     """
     symbols = list(df_cache.keys())
     correlations: dict[tuple[str, str], float] = {}
+    computed = 0
     for i, sym1 in enumerate(symbols):
+        if max_pairs is not None and computed >= max_pairs:
+            break
         df1 = df_cache.get(sym1)
         if df1 is None or df1.empty or "close" not in df1.columns:
             continue
         for sym2 in symbols[i + 1 :]:
+            if max_pairs is not None and computed >= max_pairs:
+                break
             df2 = df_cache.get(sym2)
             if df2 is None or df2.empty or "close" not in df2.columns:
                 continue
@@ -32,6 +42,7 @@ def compute_pairwise_correlation(df_cache: dict[str, pd.DataFrame]) -> dict[tupl
                 else:
                     corr = float(np.corrcoef(s1, s2)[0, 1])
             correlations[(sym1, sym2)] = corr
+            computed += 1
     return correlations
 
 
@@ -74,7 +85,7 @@ def compute_correlation_matrix(df_cache: dict[str, pd.DataFrame]) -> pd.DataFram
             if np.std(arr1) == 0 or np.std(arr2) == 0:
                 corr = 1.0
             else:
-                corr, _ = pearsonr(arr1, arr2)
+                corr = float(np.corrcoef(arr1, arr2)[0, 1])
             matrix.loc[sym1, sym2] = corr
             matrix.loc[sym2, sym1] = corr
 

@@ -604,6 +604,7 @@ symbol_filter:
   max_spread_pct: 0.5           # skip pairs with wide spreads
   correlation_window: 30        # days of history for correlation
   max_correlation: 0.9          # drop pairs above this threshold
+  correlation_max_pairs: 100    # limit pairwise correlation checks
 ```
 
 Pairs passing these checks are then scored with `analyze_symbol` which

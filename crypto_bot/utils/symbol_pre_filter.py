@@ -46,6 +46,13 @@ async def has_enough_history(
             exc,
             exc_info=True,
         )
+        logger.warning(
+            "fetch_ohlcv returned exception for %s on %s for %d days: %s",
+            symbol,
+            timeframe,
+            days,
+            exc,
+        )
         return False
     if isinstance(data, Exception):  # pragma: no cover - network
         logger.warning(
@@ -202,7 +209,8 @@ async def filter_symbols(
     corr_map: Dict[tuple[str, str], float] = {}
     if df_cache:
         subset = {s: df_cache.get(s) for s, _ in scored}
-        corr_map = compute_pairwise_correlation(subset)
+        max_pairs = sf.get("correlation_max_pairs")
+        corr_map = compute_pairwise_correlation(subset, max_pairs=max_pairs)
 
     result: List[tuple[str, float]] = []
     for sym, score in scored:
