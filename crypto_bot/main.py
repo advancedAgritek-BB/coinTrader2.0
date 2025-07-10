@@ -980,6 +980,17 @@ async def _main_impl() -> TelegramNotifier:
         handle_exits,
     ])
 
+    # Initialize per-cycle state
+    last_weight_update = last_optimize = 0.0
+    loop_count = 0
+    last_candle_ts: dict[str, int] = {}
+    ohlcv_fetch_latency = execution_latency = 0.0
+    ticker_fetch_time = symbol_filter_ratio = 0.0
+    active_strategy = ""
+    scores_file = LOG_DIR / "strategy_scores.json"
+    perf_file = LOG_DIR / "strategy_performance.json"
+    stats_file = LOG_DIR / "strategy_stats.json"
+
     try:
         while True:
             ctx.timing = await runner.run(ctx)
@@ -1405,7 +1416,6 @@ async def _main_impl() -> TelegramNotifier:
                         if df_new is not None and not df_new.empty:
                             last_candle_ts[s] = int(df_new["timestamp"].iloc[-1])
                     session_state.df_cache[config["timeframe"]] = tf_cache
-                    df_cache[config["timeframe"]] = tf_cache
                 session_state.df_cache[config["timeframe"]] = await update_ohlcv_cache(
                     exchange,
                     session_state.df_cache.get(config["timeframe"], {}),
@@ -2027,6 +2037,7 @@ async def _main_impl() -> TelegramNotifier:
                 ctx.timing.get("execution_latency", 0.0),
             )
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
+            loop_count += 1
 
             poll_mod = config.get("balance_poll_mod", 1)
             balance = last_balance if last_balance is not None else 0.0
