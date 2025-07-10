@@ -963,18 +963,41 @@ async def update_regime_tf_cache(
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
+    df_map: Dict[str, Dict[str, pd.DataFrame]] | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for regime detection timeframes."""
     regime_cfg = {**config, "timeframes": config.get("regime_timeframes", [])}
-    logger.info("Updating regime cache for timeframes: %s", regime_cfg["timeframes"])
-    return await update_multi_tf_ohlcv_cache(
-        exchange,
-        cache,
-        symbols,
-        regime_cfg,
-        limit=limit,
-        use_websocket=use_websocket,
-        force_websocket_history=force_websocket_history,
-        max_concurrent=max_concurrent,
-        notifier=notifier,
-    )
+    tfs = regime_cfg["timeframes"]
+    logger.info("Updating regime cache for timeframes: %s", tfs)
+
+    missing_tfs: List[str] = []
+    if df_map is not None:
+        for tf in tfs:
+            tf_data = df_map.get(tf)
+            if tf_data is None:
+                missing_tfs.append(tf)
+                continue
+            tf_cache = cache.setdefault(tf, {})
+            for sym in symbols:
+                df = tf_data.get(sym)
+                if df is not None:
+                    tf_cache[sym] = df
+            cache[tf] = tf_cache
+    else:
+        missing_tfs = tfs
+
+    if missing_tfs:
+        fetch_cfg = {**regime_cfg, "timeframes": missing_tfs}
+        cache = await update_multi_tf_ohlcv_cache(
+            exchange,
+            cache,
+            symbols,
+            fetch_cfg,
+            limit=limit,
+            use_websocket=use_websocket,
+            force_websocket_history=force_websocket_history,
+            max_concurrent=max_concurrent,
+            notifier=notifier,
+        )
+
+    return cache
