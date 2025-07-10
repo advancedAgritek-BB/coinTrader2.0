@@ -277,11 +277,54 @@ async def _watch_position(
                     )
                     WS_PING_TASKS.add(ping_task)
                 try:
-                    ticker = await exchange.watch_ticker(symbol)
+                    ticker = await asyncio.wait_for(
+                        exchange.watch_ticker(symbol), timeout=5
+                    )
                     reconnect_attempts = 0
+                except asyncio.TimeoutError as to_exc:
+                    if to_exc.args:
+                        logger.warning(
+                            "WebSocket ticker timeout for %s: %s - reconnecting",
+                            symbol,
+                            to_exc,
+                        )
+                        close_fn = getattr(exchange, "close", None)
+                        if close_fn is None:
+                            logger.warning("Exchange missing close method")
+                        else:
+                            try:
+                                if asyncio.iscoroutinefunction(close_fn):
+                                    await close_fn()
+                                else:
+                                    await asyncio.to_thread(close_fn)
+                            except Exception as close_err:  # pragma: no cover - cleanup error
+                                logger.error(
+                                    "Exchange close failed: %s", close_err, exc_info=True
+                                )
+                        try:
+                            exchange, _ = get_exchange(config)
+                        except Exception as re_err:
+                            reconnect_attempts += 1
+                            logger.error(
+                                "Reconnection attempt %d failed: %s",
+                                reconnect_attempts,
+                                re_err,
+                                exc_info=True,
+                            )
+                            if reconnect_attempts >= max_reconnect:
+                                logger.error(
+                                    "WebSocket reconnection failed repeatedly; switching to REST"
+                                )
+                                use_ws = False
+                            await asyncio.sleep(poll_interval)
+                        continue
+                    logger.warning(
+                        "Ticker update timed out for %s - dropping", symbol
+                    )
+                    continue
                 except asyncio.CancelledError:
                     raise
-                except (asyncio.TimeoutError, ccxt.RequestTimeout) as ws_exc:
+                except ccxt.RequestTimeout as ws_exc:
                     logger.warning(
                         "WebSocket ticker timeout for %s: %s - reconnecting",
                         symbol,
@@ -886,7 +929,6 @@ async def _main_impl() -> TelegramNotifier:
         limit = int(max(20, tf_minutes * 3))
         limit = int(config.get("cycle_lookback_limit", limit))
 
-        df_cache = await update_multi_tf_ohlcv_cache(
         session_state.df_cache = await update_multi_tf_ohlcv_cache(
             exchange,
             session_state.df_cache,
