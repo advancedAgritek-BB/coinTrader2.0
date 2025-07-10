@@ -809,7 +809,7 @@ async def _main_impl() -> TelegramNotifier:
 
     mode = user.get("mode", config.get("mode", "auto"))
     state = {"running": True, "mode": mode}
-    df_cache: dict[str, dict[str, pd.DataFrame]] = {}
+    # local caches are maintained in the session state
     regime_cache: dict[str, dict[str, pd.DataFrame]] = {}
     last_candle_ts: dict[str, int] = {}
     session_state = SessionState(last_balance=last_balance)
@@ -855,7 +855,7 @@ async def _main_impl() -> TelegramNotifier:
 
     base_mode = mode
     loop_count = 0
-    ctx = BotContext(positions, df_cache, regime_cache, config)
+    ctx = BotContext(session_state.positions, session_state.df_cache, regime_cache, config)
     ctx.exchange = exchange
     ctx.ws_client = ws_client
     runner = PhaseRunner([
@@ -1180,7 +1180,7 @@ async def _main_impl() -> TelegramNotifier:
 
         open_syms = list(session_state.positions.keys())
         if open_syms:
-            tf_cache = df_cache.get(config["timeframe"], {})
+            tf_cache = session_state.df_cache.get(config["timeframe"], {})
             update_syms: list[str] = []
             for s in open_syms:
                 ts = None
@@ -1205,7 +1205,7 @@ async def _main_impl() -> TelegramNotifier:
                     df_new = tf_cache.get(s)
                     if df_new is not None and not df_new.empty:
                         last_candle_ts[s] = int(df_new["timestamp"].iloc[-1])
-                df_cache[config["timeframe"]] = tf_cache
+                session_state.df_cache[config["timeframe"]] = tf_cache
             session_state.df_cache[config["timeframe"]] = await update_ohlcv_cache(
                 exchange,
                 session_state.df_cache.get(config["timeframe"], {}),
@@ -1264,7 +1264,7 @@ async def _main_impl() -> TelegramNotifier:
                     data,
                     columns=["timestamp", "open", "high", "low", "close", "volume"],
                 )
-                update_df_cache(df_cache, config["timeframe"], sym, df_current)
+                update_df_cache(session_state.df_cache, config["timeframe"], sym, df_current)
             if df_current is not None and not df_current.empty:
                 last_candle_ts[sym] = int(df_current["timestamp"].iloc[-1])
                 update_df_cache(
@@ -1407,9 +1407,8 @@ async def _main_impl() -> TelegramNotifier:
                             await task
                         except asyncio.CancelledError:
                             pass
-                    positions.pop(sym, None)
-                    last_candle_ts.pop(sym, None)
                     session_state.positions.pop(sym, None)
+                    last_candle_ts.pop(sym, None)
                     latest_balance = await fetch_and_log_balance(
                         exchange, paper_wallet, config
                     )
