@@ -11,8 +11,13 @@ from . import (
     trend_bot,
 )
 
-# Export Solana sniper strategy under a unified name
-from crypto_bot.solana.sniper_solana import generate_signal as sniper_solana
+# Export Solana sniper strategy module under a unified name
+import importlib
+
+# Import the module so callers can access ``sniper_solana.generate_signal`` just
+# like before. This keeps backwards compatibility after removing the local
+# implementation.
+sniper_solana = importlib.import_module("crypto_bot.solana.sniper_solana")
 
 __all__ = [
     "bounce_scalper",
