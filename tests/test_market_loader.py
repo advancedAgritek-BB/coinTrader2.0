@@ -737,6 +737,8 @@ class StopLoop(Exception):
 
 
 def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
+    import sys, types
+    monkeypatch.setitem(sys.modules, "ccxt", types.SimpleNamespace())
     import crypto_bot.main as main
 
     caplog.set_level(logging.WARNING)
@@ -748,7 +750,13 @@ def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
     cfg = {"symbol": "BTC/USD", "scan_markets": True}
 
     monkeypatch.setattr(main, "load_config", lambda: cfg)
-    monkeypatch.setattr(main, "load_kraken_symbols", fake_loader)
+    calls = {"loader": 0}
+
+    async def loader_wrapper(*a, **k):
+        calls["loader"] += 1
+        return await fake_loader(*a, **k)
+
+    monkeypatch.setattr(main, "load_kraken_symbols", loader_wrapper)
     monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
     monkeypatch.setattr(main, "dotenv_values", lambda path: {})
     monkeypatch.setattr(main, "load_or_create", lambda: {})
@@ -765,6 +773,10 @@ def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
 
     monkeypatch.setattr(main, "RiskConfig", DummyRC)
     monkeypatch.setattr(main, "RiskManager", DummyRM)
+    monkeypatch.setattr(main.asyncio, "sleep", lambda *_a: None)
+    monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_ATTEMPTS", 2)
+    monkeypatch.setattr(main, "SYMBOL_SCAN_RETRY_DELAY", 0)
+    monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_DELAY", 0)
 
     captured = {}
 
@@ -781,7 +793,8 @@ def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
     asyncio.run(main.main())
 
     assert "symbols" not in captured["cfg"]
-    assert any("symbol scan empty" in r.getMessage() for r in caplog.records)
+    assert any("aborting startup" in r.getMessage() for r in caplog.records)
+    assert calls["loader"] == 2
 
 
 class SlowExchange:

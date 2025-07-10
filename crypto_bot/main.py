@@ -90,6 +90,11 @@ symbol_priority_queue: deque[str] = deque()
 # Queue tracking symbols evaluated across cycles
 SYMBOL_EVAL_QUEUE: deque[str] = deque()
 
+# Retry parameters for the initial symbol scan
+MAX_SYMBOL_SCAN_ATTEMPTS = 3
+SYMBOL_SCAN_RETRY_DELAY = 10
+MAX_SYMBOL_SCAN_DELAY = 60
+
 
 def direction_to_side(direction: str) -> str:
     """Translate strategy direction to trade side."""
@@ -473,17 +478,45 @@ async def _main_impl() -> TelegramNotifier:
     exchange, ws_client = get_exchange(config)
 
     if config.get("scan_markets", False) and not config.get("symbols"):
-        discovered = await load_kraken_symbols(
-            exchange,
-            config.get("excluded_symbols", []),
-            config,
-        )
+        attempt = 0
+        delay = SYMBOL_SCAN_RETRY_DELAY
+        discovered: list[str] | None = None
+        while attempt < MAX_SYMBOL_SCAN_ATTEMPTS:
+            discovered = await load_kraken_symbols(
+                exchange,
+                config.get("excluded_symbols", []),
+                config,
+            )
+            if discovered:
+                break
+            attempt += 1
+            if attempt >= MAX_SYMBOL_SCAN_ATTEMPTS:
+                break
+            logger.warning(
+                "Symbol scan empty; retrying in %d seconds (attempt %d/%d)",
+                delay,
+                attempt + 1,
+                MAX_SYMBOL_SCAN_ATTEMPTS,
+            )
+            if status_updates:
+                notifier.notify(
+                    f"Symbol scan failed; retrying in {delay}s (attempt {attempt + 1}/{MAX_SYMBOL_SCAN_ATTEMPTS})"
+                )
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
+
         if discovered:
             config["symbols"] = discovered
         else:
             logger.error(
-                "No symbols discovered during scan; using existing configuration"
+                "No symbols discovered after %d attempts; aborting startup",
+                MAX_SYMBOL_SCAN_ATTEMPTS,
             )
+            if status_updates:
+                notifier.notify(
+                    f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
+                )
+            return notifier
 
     balance_threshold = config.get("balance_change_threshold", 0.01)
     previous_balance = 0.0
