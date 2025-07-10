@@ -174,10 +174,44 @@ async def load_kraken_symbols(
         if not allowed_types:
             allowed_types = {"spot"}
 
-    if asyncio.iscoroutinefunction(getattr(exchange, "load_markets", None)):
-        markets = await exchange.load_markets()
-    else:
-        markets = await asyncio.to_thread(exchange.load_markets)
+    markets = None
+    if getattr(exchange, "has", {}).get("fetchMarketsByType"):
+        fetcher = (
+            getattr(exchange, "fetch_markets_by_type", None)
+            or getattr(exchange, "fetchMarketsByType", None)
+        )
+        if fetcher:
+            markets = {}
+            for m_type in allowed_types:
+                try:
+                    if asyncio.iscoroutinefunction(fetcher):
+                        fetched = await fetcher(m_type)
+                    else:
+                        fetched = await asyncio.to_thread(fetcher, m_type)
+                except TypeError:
+                    params = {"type": m_type}
+                    if asyncio.iscoroutinefunction(fetcher):
+                        fetched = await fetcher(params)
+                    else:
+                        fetched = await asyncio.to_thread(fetcher, params)
+                except Exception as exc:  # pragma: no cover - safety
+                    logger.warning("fetch_markets_by_type failed: %s", exc)
+                    continue
+                if isinstance(fetched, dict):
+                    for sym, info in fetched.items():
+                        info.setdefault("type", m_type)
+                        markets[sym] = info
+                elif isinstance(fetched, list):
+                    for info in fetched:
+                        sym = info.get("symbol")
+                        if sym:
+                            info.setdefault("type", m_type)
+                            markets[sym] = info
+    if markets is None:
+        if asyncio.iscoroutinefunction(getattr(exchange, "load_markets", None)):
+            markets = await exchange.load_markets()
+        else:
+            markets = await asyncio.to_thread(exchange.load_markets)
 
     symbols: List[str] = []
     for symbol, data in markets.items():
