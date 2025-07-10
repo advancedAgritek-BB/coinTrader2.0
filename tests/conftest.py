@@ -224,6 +224,13 @@ class _FakeRequests:
     def get(self, *a, **k):
         return self.Response()
 
+    class Session:
+        def get(self, *a, **k):
+            return _FakeRequests.Response()
+
+        def close(self):
+            pass
+
 sys.modules.setdefault("requests", _FakeRequests())
 
 
