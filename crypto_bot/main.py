@@ -765,6 +765,7 @@ async def _main_impl() -> TelegramNotifier:
     )
 
     base_mode = mode
+    loop_count = 0
     ctx = BotContext(positions, df_cache, regime_cache, config)
     ctx.exchange = exchange
     ctx.ws_client = ws_client
@@ -777,6 +778,7 @@ async def _main_impl() -> TelegramNotifier:
     ])
 
     while True:
+        loop_count += 1
         mode = state["mode"]
         maybe_update_mode(
             state, base_mode, config, notifier if status_updates else None
@@ -1404,18 +1406,21 @@ async def _main_impl() -> TelegramNotifier:
             logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
 
-            if config["execution_mode"] != "dry_run":
-                bal = await (
-                    exchange.fetch_balance()
-                    if asyncio.iscoroutinefunction(
-                        getattr(exchange, "fetch_balance", None)
+            poll_mod = config.get("balance_poll_mod", 1)
+            balance = last_balance if last_balance is not None else 0.0
+            if trades_executed > 0 or loop_count % poll_mod == 0:
+                if config["execution_mode"] != "dry_run":
+                    bal = await (
+                        exchange.fetch_balance()
+                        if asyncio.iscoroutinefunction(
+                            getattr(exchange, "fetch_balance", None)
+                        )
+                        else asyncio.to_thread(exchange.fetch_balance)
                     )
-                    else asyncio.to_thread(exchange.fetch_balance)
-                )
-                balance = bal["USDT"]["free"]
-            else:
-                balance = paper_wallet.balance if paper_wallet else 0.0
-            check_balance_change(float(balance), "external change")
+                    balance = bal["USDT"]["free"]
+                else:
+                    balance = paper_wallet.balance if paper_wallet else 0.0
+                check_balance_change(float(balance), "external change")
 
             size = risk_manager.position_size(
                 score,

@@ -70,6 +70,7 @@ liquidity_check: true
 liquidity_depth: 10
 log_to_google: true
 loop_interval_minutes: 2
+balance_poll_mod: 1
 max_age_days: 180
 max_change_pct: 10
 max_concurrent_ohlcv: 50
