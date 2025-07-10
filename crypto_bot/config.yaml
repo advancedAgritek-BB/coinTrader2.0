@@ -246,6 +246,7 @@ symbol_filter:
   correlation_max_pairs: 100
   max_spread_pct: 3
   min_volume_usd: 1000
+  volume_percentile: 60
 symbol_refresh_minutes: 30
 symbol_score_weights:
   age: 0.05
