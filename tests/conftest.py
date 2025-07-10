@@ -2,6 +2,7 @@ import sys
 import numpy as np
 from pathlib import Path
 from pandas import Series
+import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -224,3 +225,15 @@ class _FakeRequests:
         return self.Response()
 
 sys.modules.setdefault("requests", _FakeRequests())
+
+
+@pytest.fixture(autouse=True)
+def _clear_strategy_router_cache():
+    """Ensure strategy router caches are cleared between tests."""
+    import crypto_bot.strategy_router as sr
+
+    sr._build_mappings_cached.cache_clear()
+    sr._CONFIG_REGISTRY.clear()
+    yield
+    sr._build_mappings_cached.cache_clear()
+    sr._CONFIG_REGISTRY.clear()
