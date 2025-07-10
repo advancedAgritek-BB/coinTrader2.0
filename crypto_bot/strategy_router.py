@@ -124,7 +124,6 @@ def cfg_get(cfg: Mapping[str, Any] | RouterConfig, key: str, default: Any | None
 
 # Path storing the last selected regime and timestamp
 LAST_REGIME_FILE = LOG_DIR / "last_regime.json"
- main
 
 
 class Selector:
@@ -505,14 +504,7 @@ def route(
         cfg_get(cfg, "commit_lock_intervals", 0),
     )
 
-   # commit lock logic
-    intervals = (
-        cfg.commit_lock_intervals
-        if isinstance(cfg, RouterConfig)
-        else int(config.get("strategy_router", {}).get("commit_lock_intervals", 0))
-    )
-            base = cfg_get(cfg, "timeframe")
-            regime = regime.get(base, next(iter(regime.values())))
+
 
     # commit lock logic
     intervals = int(cfg_get(cfg, "commit_lock_intervals", 0))
@@ -546,11 +538,6 @@ def route(
         cfg,
         "timeframe_minutes",
         int(pd.Timedelta(tf).total_seconds() // 60),
-    tf = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe", "1h")
-    tf_minutes = (
-        cfg.timeframe_minutes
-        if isinstance(cfg, RouterConfig)
-        else int(pd.Timedelta(tf).total_seconds() // 60)
     )
 
     LAST_REGIME_FILE.parent.mkdir(parents=True, exist_ok=True)

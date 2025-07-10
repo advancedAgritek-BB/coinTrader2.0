@@ -36,11 +36,32 @@ async def get_filtered_symbols(exchange, config) -> list:
     else:
         scored = await asyncio.to_thread(filter_symbols, exchange, symbols, config)
     if not scored:
+        fallback = config.get("symbol")
+        excluded = [s.upper() for s in config.get("excluded_symbols", [])]
+        if fallback and fallback.upper() in excluded:
+            logger.warning("Fallback symbol %s is excluded", fallback)
+            _cached_symbols = []
+            _last_refresh = now
+            return []
+
+        if asyncio.iscoroutinefunction(filter_symbols):
+            check = await filter_symbols(exchange, [fallback], config)
+        else:
+            check = await asyncio.to_thread(filter_symbols, exchange, [fallback], config)
+
+        if not check:
+            logger.warning(
+                "Fallback symbol %s does not meet volume requirements", fallback
+            )
+            _cached_symbols = []
+            _last_refresh = now
+            return []
+
         logger.warning(
             "No symbols passed filters, falling back to %s",
-            config.get("symbol"),
+            fallback,
         )
-        scored = [(config.get("symbol"), 0.0)]
+        scored = [(fallback, 0.0)]
 
     logger.info("%d symbols passed filtering", len(scored))
 

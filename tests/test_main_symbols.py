@@ -9,14 +9,54 @@ class DummyExchange:
 
 def test_get_filtered_symbols_fallback(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
+
+    calls = []
+
+    async def fake_filter_symbols(ex, syms, cfg):
+        calls.append(syms)
+        if len(calls) == 1:
+            return []
+        return [("BTC/USD", 1.0)]
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    config = {"symbol": "BTC/USD"}
+    result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
+    assert result == [("BTC/USD", 0.0)]
+    assert calls == [config.get("symbols", [config.get("symbol")]), ["BTC/USD"]]
+    assert any("falling back" in r.getMessage() for r in caplog.records)
+
+
+def test_get_filtered_symbols_fallback_excluded(monkeypatch, caplog):
+    caplog.set_level(logging.WARNING)
+
     async def fake_filter_symbols(ex, syms, cfg):
         return []
 
     monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    config = {"symbol": "BTC/USD", "excluded_symbols": ["BTC/USD"]}
+    result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
+    assert result == []
+    assert any("excluded" in r.getMessage() for r in caplog.records)
+
+
+def test_get_filtered_symbols_fallback_volume_fail(monkeypatch, caplog):
+    caplog.set_level(logging.WARNING)
+
+    calls = []
+
+    async def fake_filter_symbols(ex, syms, cfg):
+        calls.append(syms)
+        return []
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
     config = {"symbol": "BTC/USD"}
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
-    assert result == [("BTC/USD", 0.0)]
-    assert any("falling back" in r.getMessage() for r in caplog.records)
+    assert result == []
+    assert calls == [config.get("symbols", [config.get("symbol")]), ["BTC/USD"]]
+    assert any("volume requirements" in r.getMessage() for r in caplog.records)
 
 
 def test_get_filtered_symbols_caching(monkeypatch):
