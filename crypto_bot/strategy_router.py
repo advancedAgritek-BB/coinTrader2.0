@@ -11,8 +11,7 @@ import json
 import time
 from functools import lru_cache
 
-from crypto_bot.utils import timeframe_seconds
-from datetime import datetime
+from crypto_bot.utils import timeframe_seconds, commit_lock
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -92,6 +91,21 @@ class RouterConfig:
 DEFAULT_ROUTER_CFG = RouterConfig.from_dict(DEFAULT_CONFIG)
 
 
+def cfg_get(cfg: RouterConfig | Mapping[str, Any], key: str, default: Any = None) -> Any:
+    """Return configuration value ``key`` from ``cfg``.
+
+    The helper accepts either a :class:`RouterConfig` or a mapping based
+    configuration dictionary.
+    """
+    if isinstance(cfg, RouterConfig):
+        return getattr(cfg, key, default)
+    if isinstance(cfg, Mapping):
+        router = cfg.get("strategy_router", {})
+        if key in router:
+            return router.get(key, default)
+        return cfg.get(key, default)
+    return default
+
 def cfg_get(cfg: Mapping[str, Any] | RouterConfig, key: str, default: Any | None = None) -> Any:
     """Return a configuration value for ``key`` from ``cfg``.
 
@@ -110,6 +124,7 @@ def cfg_get(cfg: Mapping[str, Any] | RouterConfig, key: str, default: Any | None
 
 # Path storing the last selected regime and timestamp
 LAST_REGIME_FILE = LOG_DIR / "last_regime.json"
+ main
 
 
 class Selector:
@@ -480,7 +495,17 @@ def route(
             )
             regime = regime.get(base, next(iter(regime.values())))
 
-    # commit lock logic
+    tf_sec = timeframe_seconds(
+        None,
+        cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe", "1h"),
+    )
+    regime = commit_lock.check_and_update(
+        regime,
+        tf_sec,
+        cfg_get(cfg, "commit_lock_intervals", 0),
+    )
+
+   # commit lock logic
     intervals = (
         cfg.commit_lock_intervals
         if isinstance(cfg, RouterConfig)

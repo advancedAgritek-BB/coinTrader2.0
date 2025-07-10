@@ -78,7 +78,7 @@ def test_route_multi_tf_combo(monkeypatch, tmp_path):
         lambda n: dummy if n == "dummy" else None,
     )
 
-    monkeypatch.setattr(strategy_router, "LAST_REGIME_FILE", tmp_path / "last_regime.json")
+    monkeypatch.setattr(strategy_router.commit_lock, "LOG_DIR", tmp_path)
 
     cfg = RouterConfig.from_dict({"timeframe": "1m", "strategy_router": {"regimes": {"breakout": ["dummy"]}}})
 
@@ -88,14 +88,7 @@ def test_route_multi_tf_combo(monkeypatch, tmp_path):
 
 
 def test_regime_commit_lock(tmp_path, monkeypatch):
-    orig_path = strategy_router.Path
-
-    def fake_path(p):
-        if p == "last_regime.json":
-            return tmp_path / p
-        return orig_path(p)
-
-    monkeypatch.setattr(strategy_router, "Path", fake_path)
+    monkeypatch.setattr(strategy_router.commit_lock, "LOG_DIR", tmp_path)
 
     data = {
         "strategy_router": {
