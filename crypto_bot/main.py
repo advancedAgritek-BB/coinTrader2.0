@@ -819,6 +819,16 @@ async def _main_impl() -> TelegramNotifier:
 
     exchange, ws_client = get_exchange(config)
 
+    if not hasattr(exchange, "load_markets"):
+        logger.error(
+            "The installed ccxt package is missing or a local stub is in use."
+        )
+        if status_updates:
+            notifier.notify(
+                "❌ ccxt library not found or stubbed; check your installation"
+            )
+        return notifier
+
     if config.get("scan_markets", False) and not config.get("symbols"):
         attempt = 0
         delay = SYMBOL_SCAN_RETRY_DELAY
