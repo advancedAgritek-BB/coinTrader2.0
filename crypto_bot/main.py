@@ -1344,7 +1344,6 @@ async def _main_impl() -> TelegramNotifier:
                 if ts is None or last_candle_ts.get(s) != ts:
                     update_syms.append(s)
             if update_syms:
-                tf_cache = await update_ohlcv_cache(
                 if not allowed:
                     logger.debug("Trade not allowed for %s \u2013 %s", sym, reason)
                     logger.debug(
@@ -1427,6 +1426,7 @@ async def _main_impl() -> TelegramNotifier:
                         if df_new is not None and not df_new.empty:
                             last_candle_ts[s] = int(df_new["timestamp"].iloc[-1])
                     session_state.df_cache[config["timeframe"]] = tf_cache
+                    df_cache[config["timeframe"]] = tf_cache
                 session_state.df_cache[config["timeframe"]] = await update_ohlcv_cache(
                     exchange,
                     session_state.df_cache.get(config["timeframe"], {}),
