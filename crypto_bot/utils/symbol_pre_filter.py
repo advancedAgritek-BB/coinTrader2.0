@@ -14,7 +14,7 @@ import pandas as pd
 
 from .logger import LOG_DIR, setup_logger
 from .market_loader import fetch_ohlcv_async
-from .correlation import compute_pairwise_correlation
+from .correlation import incremental_correlation
 from .symbol_scoring import score_symbol
 from .telemetry import telemetry
 from pathlib import Path
@@ -241,9 +241,15 @@ async def filter_symbols(
 
     corr_map: Dict[tuple[str, str], float] = {}
     if df_cache:
-        subset = {s: df_cache.get(s) for s, _ in scored}
+        # only compute correlations for the top N scoring symbols
         max_pairs = sf.get("correlation_max_pairs")
-        corr_map = compute_pairwise_correlation(subset, max_pairs=max_pairs)
+        if max_pairs:
+            top = [s for s, _ in scored[: max_pairs]]
+        else:
+            top = [s for s, _ in scored]
+        subset = {s: df_cache.get(s) for s in top}
+        window = sf.get("correlation_window", 100)
+        corr_map = incremental_correlation(subset, window=window)
 
     result: List[tuple[str, float]] = []
     for sym, score in scored:
