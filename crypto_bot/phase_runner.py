@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Dict, Iterable
 
 
@@ -14,6 +14,16 @@ class BotContext:
     df_cache: dict
     regime_cache: dict
     config: dict
+    exchange: object | None = None
+    ws_client: object | None = None
+    risk_manager: object | None = None
+    notifier: object | None = None
+    paper_wallet: object | None = None
+    position_guard: object | None = None
+    balance: float = 0.0
+    current_batch: list[str] = field(default_factory=list)
+    analysis_results: list | None = field(default_factory=list)
+    timing: dict | None = field(default_factory=dict)
 
 
 class PhaseRunner:
