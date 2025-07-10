@@ -171,7 +171,10 @@ async def filter_symbols(
             telemetry.inc("scan.api_errors")
             raise
 
+    # map of ids returned by Kraken to human readable symbols
     id_map: dict[str, str] = {}
+    request_map = {s.replace("/", "").upper(): s for s in symbols}
+
     if hasattr(exchange, "markets_by_id"):
         if not exchange.markets_by_id and hasattr(exchange, "load_markets"):
             try:
@@ -186,15 +189,27 @@ async def filter_symbols(
             else:
                 id_map[k] = v if isinstance(v, str) else k
 
+    for req_id, sym in request_map.items():
+        id_map.setdefault(req_id, sym)
+
     metrics: List[tuple[str, float, float, float]] = []
     for pair_id, ticker in data.items():
-        symbol = id_map.get(pair_id)
+        symbol = id_map.get(pair_id) or id_map.get(pair_id.upper())
+        norm = pair_id.upper()
+        if not symbol and "/" in pair_id:
+            symbol = pair_id
         if not symbol:
-            for sym in symbols:
-                if pair_id.upper() == sym.replace("/", "").upper():
+            if norm.startswith("X"):
+                norm = norm[1:]
+            norm = norm.replace("ZUSD", "USD").replace("ZUSDT", "USDT")
+            symbol = request_map.get(norm)
+        if not symbol:
+            for req_id, sym in request_map.items():
+                if norm.endswith(req_id):
                     symbol = sym
                     break
         if not symbol:
+            logger.warning("Unable to map ticker id %s to requested symbol", pair_id)
             continue
 
         vol_usd, change_pct, spread_pct = _parse_metrics(ticker)

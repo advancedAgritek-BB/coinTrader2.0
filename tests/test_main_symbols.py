@@ -30,6 +30,9 @@ def test_get_filtered_symbols_fallback(monkeypatch, caplog):
 def test_get_filtered_symbols_fallback_excluded(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
 
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+
     async def fake_filter_symbols(ex, syms, cfg):
         return []
 
@@ -43,6 +46,9 @@ def test_get_filtered_symbols_fallback_excluded(monkeypatch, caplog):
 
 def test_get_filtered_symbols_fallback_volume_fail(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
+
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
 
     calls = []
 
@@ -92,3 +98,17 @@ def test_get_filtered_symbols_caching(monkeypatch):
     result3 = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     assert result3 == [("ETH/USD", 1.0)]
     assert len(calls) == 2
+
+
+def test_get_filtered_symbols_basic(monkeypatch):
+    async def fake_filter_symbols(ex, syms, cfg):
+        return [(syms[0], 0.5)]
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    config = {"symbol": "ETH/USD", "symbols": ["ETH/USD"]}
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+
+    result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
+    assert result == [("ETH/USD", 0.5)]
