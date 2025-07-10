@@ -71,6 +71,8 @@ from crypto_bot import grid_state
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import telemetry, write_cycle_metrics
+from crypto_bot.utils.correlation import compute_correlation_matrix
+from crypto_bot.utils.strategy_analytics import write_scores, write_stats
 from crypto_bot.fund_manager import (
     auto_convert_funds,
     check_wallet_balances,
