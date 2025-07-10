@@ -519,5 +519,5 @@ def route(
         logger.info("Routing to DEX scalper (onchain)")
         return _wrap(dex_scalper.generate_signal)
 
-    strategy_fn = Selector(cfg).select(pd.DataFrame(), regime, mode, notifier)
+    strategy_fn = Selector(cfg).select(df or pd.DataFrame(), regime, mode, notifier)
     return _wrap(strategy_fn)
