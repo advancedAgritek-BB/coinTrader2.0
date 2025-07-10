@@ -53,6 +53,12 @@ def get_exchange(config: dict) -> ccxt.Exchange:
     return getattr(ccxt, name)({"enableRateLimit": True})
 
 
+def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
+    """Fetch tickers and update the cached liquid pairs list.
+
+    Markets whose quote currency is not in ``allowed_quote_currencies`` or whose
+    base asset appears in ``blacklist_assets`` will be skipped.
+    """
 async def _fetch_tickers(exchange: ccxt.Exchange) -> dict:
     """Fetch tickers with a 10 second timeout."""
     return await asyncio.wait_for(exchange.fetch_tickers(), 10)
@@ -81,6 +87,14 @@ async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -
                     old_pairs = loaded
         except Exception as exc:  # pragma: no cover - corrupted cache
             logger.error("Failed to read %s: %s", PAIR_FILE, exc)
+
+    rp_cfg = config.get("refresh_pairs", {}) if isinstance(config, dict) else {}
+    allowed_quotes = {
+        q.upper() for q in rp_cfg.get("allowed_quote_currencies", []) if isinstance(q, str)
+    }
+    blacklist = {
+        a.upper() for a in rp_cfg.get("blacklist_assets", []) if isinstance(a, str)
+    }
 
     exchange = get_exchange(config)
     sec_name = config.get("refresh_pairs", {}).get("secondary_exchange")
@@ -123,6 +137,17 @@ async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -
         vol = data.get("quoteVolume")
         if vol is None:
             continue
+
+        parts = symbol.split("/")
+        if len(parts) != 2:
+            continue
+        base, quote = parts[0].upper(), parts[1].upper()
+
+        if allowed_quotes and quote not in allowed_quotes:
+            continue
+        if base in blacklist:
+            continue
+
         pairs.append((symbol, float(vol)))
 
     pairs.sort(key=lambda x: x[1], reverse=True)

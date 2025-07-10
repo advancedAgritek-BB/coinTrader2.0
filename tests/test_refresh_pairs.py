@@ -54,3 +54,35 @@ def test_refresh_pairs_fallback(monkeypatch, tmp_path):
     pairs = rp.refresh_pairs(1_000_000, 2, {})
     assert pairs == ["OLD/USD"]
     assert json.loads(pair_file.read_text()) == ["OLD/USD"]
+
+
+def test_refresh_pairs_filters_quote(monkeypatch, tmp_path):
+    cache_dir = tmp_path / "cache"
+    pair_file = cache_dir / "liquid_pairs.json"
+    monkeypatch.setattr(rp, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(rp, "PAIR_FILE", pair_file)
+    tickers = {
+        "BTC/EUR": {"quoteVolume": 3_000_000},
+        "ETH/USD": {"quoteVolume": 2_000_000},
+    }
+    monkeypatch.setattr(rp, "get_exchange", lambda _cfg: DummyExchange(tickers))
+    cfg = {"refresh_pairs": {"allowed_quote_currencies": ["USD"]}}
+    pairs = rp.refresh_pairs(1_000_000, 2, cfg)
+    assert pairs == ["ETH/USD"]
+    assert json.loads(pair_file.read_text()) == ["ETH/USD"]
+
+
+def test_refresh_pairs_blacklist(monkeypatch, tmp_path):
+    cache_dir = tmp_path / "cache"
+    pair_file = cache_dir / "liquid_pairs.json"
+    monkeypatch.setattr(rp, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(rp, "PAIR_FILE", pair_file)
+    tickers = {
+        "SCAM/USD": {"quoteVolume": 4_000_000},
+        "BTC/USD": {"quoteVolume": 3_000_000},
+    }
+    monkeypatch.setattr(rp, "get_exchange", lambda _cfg: DummyExchange(tickers))
+    cfg = {"refresh_pairs": {"blacklist_assets": ["SCAM"]}}
+    pairs = rp.refresh_pairs(1_000_000, 2, cfg)
+    assert pairs == ["BTC/USD"]
+    assert json.loads(pair_file.read_text()) == ["BTC/USD"]

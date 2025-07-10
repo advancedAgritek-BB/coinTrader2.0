@@ -158,6 +158,8 @@ refresh_pairs:
   min_quote_volume_usd: 1000000
   refresh_interval: 6h
   top_k: 40
+  allowed_quote_currencies: [USD, USDT]
+  blacklist_assets: []
 regime_return_period: 5
 regime_timeframes:
 - 5m
