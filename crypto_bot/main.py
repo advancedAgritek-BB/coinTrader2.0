@@ -1262,6 +1262,13 @@ async def _main_impl() -> TelegramNotifier:
                     df_new = tf_cache.get(s)
                     if df_new is not None and not df_new.empty:
                         last_candle_ts[s] = int(df_new["timestamp"].iloc[-1])
+                        update_df_cache(
+                            session_state.df_cache,
+                            config["timeframe"],
+                            s,
+                            df_new,
+                        )
+                df_cache[config["timeframe"]] = tf_cache
                 session_state.df_cache[config["timeframe"]] = tf_cache
             session_state.df_cache[config["timeframe"]] = await update_ohlcv_cache(
                 exchange,
