@@ -72,6 +72,7 @@ from crypto_bot.utils.trend_confirmation import confirm_multi_tf_trend
 from crypto_bot.utils.correlation import compute_correlation_matrix
 from crypto_bot.regime.regime_classifier import CONFIG
 from crypto_bot.utils.metrics_logger import log_metrics_to_csv
+from crypto_bot.utils.telemetry import telemetry
 
 
 
@@ -721,6 +722,7 @@ async def _main_impl() -> TelegramNotifier:
             symbol_priority_queue.popleft()
             for _ in range(min(batch_size, len(symbol_priority_queue)))
         ]
+        telemetry.inc("scan.symbols_considered", len(current_batch))
 
         t0 = time.perf_counter()
         start_ohlcv = time.perf_counter()
@@ -1455,6 +1457,9 @@ async def _main_impl() -> TelegramNotifier:
             log_metrics_to_csv(
                 metrics,
                 config.get("metrics_output_file", str(LOG_DIR / "metrics.csv")),
+            )
+            telemetry.export_csv(
+                config.get("metrics_output_file", str(LOG_DIR / "telemetry.csv"))
             )
         summary = f"Cycle complete: {total_pairs} symbols, {trades_executed} trades"
         if notifier and status_updates:
