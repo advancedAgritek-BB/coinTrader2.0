@@ -13,12 +13,11 @@ import aiohttp
 import pandas as pd
 
 from .logger import LOG_DIR, setup_logger
-from .market_loader import fetch_ohlcv_async
+from .market_loader import fetch_ohlcv_async, update_ohlcv_cache
 from .correlation import compute_pairwise_correlation
 from .symbol_scoring import score_symbol
 from .telemetry import telemetry
 from pathlib import Path
-
 
 
 logger = setup_logger(__name__, LOG_DIR / "symbol_filter.log")
@@ -27,16 +26,12 @@ API_URL = "https://api.kraken.com/0/public"
 DEFAULT_MIN_VOLUME_USD = 50000
 
 
-async def has_enough_history(
-    exchange, symbol: str, days: int = 30, timeframe: str = "1d"
-) -> bool:
+async def has_enough_history(exchange, symbol: str, days: int = 30, timeframe: str = "1d") -> bool:
     """Return ``True`` when ``symbol`` has at least ``days`` days of history."""
     seconds = _timeframe_seconds(exchange, timeframe)
     candles_needed = int((days * 86400) / seconds)
     try:
-        data = await fetch_ohlcv_async(
-            exchange, symbol, timeframe=timeframe, limit=candles_needed
-        )
+        data = await fetch_ohlcv_async(exchange, symbol, timeframe=timeframe, limit=candles_needed)
     except Exception as exc:  # pragma: no cover - network
         logger.warning(
             "fetch_ohlcv failed for %s on %s for %d days: %s",
@@ -69,7 +64,6 @@ async def has_enough_history(
     if not isinstance(data, list) or len(data) < candles_needed:
         return False
     return True
-
 
 
 async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
@@ -135,6 +129,12 @@ def _timeframe_seconds(exchange, timeframe: str) -> int:
     raise ValueError(f"Unknown timeframe {timeframe}")
 
 
+def _history_in_cache(df: pd.DataFrame | None, days: int, seconds: int) -> bool:
+    """Return ``True`` when ``df`` has at least ``days`` days of candles."""
+    if df is None or df.empty:
+        return False
+    candles_needed = int((days * 86400) / seconds)
+    return len(df) >= candles_needed
 
 
 async def filter_symbols(
@@ -245,14 +245,29 @@ async def filter_symbols(
         max_pairs = sf.get("correlation_max_pairs")
         corr_map = compute_pairwise_correlation(subset, max_pairs=max_pairs)
 
+    seconds = _timeframe_seconds(exchange, "1h") if min_age > 0 else 0
+    if min_age > 0:
+        missing = [
+            s for s, _ in scored if not _history_in_cache(df_cache.get(s) if df_cache else None, min_age, seconds)
+        ]
+        if missing:
+            if df_cache is None:
+                df_cache = {}
+            df_cache = await update_ohlcv_cache(
+                exchange,
+                df_cache,
+                missing,
+                timeframe="1h",
+                limit=int((min_age * 86400) / seconds),
+                max_concurrent=len(missing),
+            )
+
     result: List[tuple[str, float]] = []
     for sym, score in scored:
-        if min_age > 0:
-            enough = await has_enough_history(exchange, sym, min_age, timeframe="1h")
-            if not enough:
-                logger.debug("Skipping %s due to insufficient history", sym)
-                skipped += 1
-                continue
+        if min_age > 0 and not _history_in_cache(df_cache.get(sym) if df_cache else None, min_age, seconds):
+            logger.debug("Skipping %s due to insufficient history", sym)
+            skipped += 1
+            continue
         keep = True
         if df_cache:
             for kept, _ in result:
