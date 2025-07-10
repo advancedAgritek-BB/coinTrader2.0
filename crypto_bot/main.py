@@ -28,18 +28,13 @@ from crypto_bot.utils.telegram import TelegramNotifier, send_test_message
 from crypto_bot.utils.trade_reporter import report_entry, report_exit
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.portfolio_rotator import PortfolioRotator
-from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.wallet_manager import load_or_create
 from crypto_bot.utils.market_analyzer import analyze_symbol
 from crypto_bot.strategy_router import strategy_for, strategy_name
 from crypto_bot.cooldown_manager import (
-    in_cooldown,
-    mark_cooldown,
     configure as cooldown_configure,
 )
 from crypto_bot.phase_runner import BotContext, PhaseRunner
-from crypto_bot import grid_state
-from crypto_bot.signals.signal_scoring import evaluate_async
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.risk.exit_manager import (
     calculate_trailing_stop,
@@ -49,42 +44,27 @@ from crypto_bot.risk.exit_manager import (
 from crypto_bot.execution.cex_executor import (
     execute_trade_async as cex_trade_async,
     get_exchange,
-    place_stop_order,
 )
-from crypto_bot.execution.solana_executor import execute_swap
-from crypto_bot.fund_manager import (
-    check_wallet_balances,
-    detect_non_trade_tokens,
-    auto_convert_funds,
-)
-from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.open_position_guard import OpenPositionGuard
 from crypto_bot import console_monitor, console_control
 from crypto_bot.utils.performance_logger import log_performance
-from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.utils.position_logger import log_position, log_balance
 from crypto_bot.utils.regime_logger import log_regime
-from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
 from crypto_bot.utils.market_loader import (
     load_kraken_symbols,
-    load_ohlcv_parallel,
     update_ohlcv_cache,
     update_multi_tf_ohlcv_cache,
     update_regime_tf_cache,
-    fetch_ohlcv_async,
     configure as market_loader_configure,
 )
 from crypto_bot.utils.eval_queue import build_priority_queue
-from crypto_bot.utils.symbol_pre_filter import filter_symbols
 from crypto_bot.utils.symbol_utils import get_filtered_symbols
+from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
 from crypto_bot.utils.pnl_logger import log_pnl
-from crypto_bot.utils.strategy_analytics import write_scores, write_stats
 from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 from crypto_bot.utils.trend_confirmation import confirm_multi_tf_trend
-from crypto_bot.utils.correlation import compute_correlation_matrix
 from crypto_bot.regime.regime_classifier import CONFIG
-from crypto_bot.utils.telemetry import telemetry, write_cycle_metrics
 
 
 
@@ -193,16 +173,6 @@ def _emit_timing(
         analyze_t,
         total_t,
     )
-    if metrics_path:
-        log_cycle_metrics(
-            symbol_t,
-            ohlcv_t,
-            analyze_t,
-            total_t,
-            ohlcv_fetch_latency,
-            execution_latency,
-            metrics_path,
-        )
 
 
 def maybe_update_mode(
@@ -943,21 +913,11 @@ async def _main_impl() -> TelegramNotifier:
     position_tasks: dict[str, asyncio.Task] = {}
     max_open_trades = config.get("max_open_trades", 1)
     position_guard = OpenPositionGuard(max_open_trades)
-    active_strategy = None
-    stats_file = LOG_DIR / "strategy_stats.json"
-    # File tracking individual trade performance used for analytics
-    perf_file = LOG_DIR / "strategy_performance.json"
-    scores_file = LOG_DIR / "strategy_scores.json"
-
     rotator = PortfolioRotator()
-    last_optimize = 0.0
-    last_weight_update = 0.0
 
     mode = user.get("mode", config.get("mode", "auto"))
     state = {"running": True, "mode": mode}
     # Caches for OHLCV and regime data are stored on the session_state
-    # object so they can be shared across tasks.
-    last_candle_ts: dict[str, int] = {}
     session_state = SessionState(last_balance=last_balance)
 
     control_task = asyncio.create_task(console_control.control_loop(state))
@@ -999,8 +959,6 @@ async def _main_impl() -> TelegramNotifier:
         notifier if status_updates else None,
     )
 
-    base_mode = mode
-    loop_count = 0
     ctx = BotContext(
         positions=session_state.positions,
         df_cache=session_state.df_cache,
@@ -1024,6 +982,7 @@ async def _main_impl() -> TelegramNotifier:
 
     try:
         while True:
+            ctx.timing = await runner.run(ctx)
             cycle_start = time.perf_counter()
             symbol_time = ohlcv_time = analyze_time = 0.0
             ctx.timing = await runner.run(ctx)
