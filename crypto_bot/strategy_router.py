@@ -505,6 +505,7 @@ def route(
     )
 
 
+
     # commit lock logic
     intervals = int(cfg_get(cfg, "commit_lock_intervals", 0))
     if intervals:
@@ -530,6 +531,10 @@ def route(
                 json.dumps({"regime": regime, "timestamp": now})
             )
     tf = cfg_get(cfg, "timeframe", "1h")
+    tf_minutes = getattr(
+        cfg,
+        "timeframe_minutes",
+        int(pd.Timedelta(tf).total_seconds() // 60),
     tf_minutes = (
         cfg.timeframe_minutes
         if isinstance(cfg, RouterConfig)
