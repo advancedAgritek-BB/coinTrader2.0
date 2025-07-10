@@ -9,7 +9,12 @@ from typing import Dict, Iterable, List, Optional
 
 import logging
 
-import ccxt
+try:
+    import ccxt  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    import types
+
+    ccxt = types.SimpleNamespace()
 import numpy as np
 import pandas as pd
 from numpy.random import default_rng, Generator

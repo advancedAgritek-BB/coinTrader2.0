@@ -1,6 +1,11 @@
 import os
 import time
-import ccxt
+try:
+    import ccxt  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    import types
+
+    ccxt = types.SimpleNamespace()
 import asyncio
 from typing import Dict, Optional, Tuple, List
 from pathlib import Path

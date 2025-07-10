@@ -531,14 +531,6 @@ def route(
             lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
 
     tf = cfg_get(cfg, "timeframe", "1h")
-            lock_file.write_text(
-                json.dumps({"regime": regime, "timestamp": now})
-            )
-    tf = cfg_get(cfg, "timeframe", "1h")
-    tf_minutes = getattr(
-        cfg,
-        "timeframe_minutes",
-        int(pd.Timedelta(tf).total_seconds() // 60),
     tf_minutes = (
         cfg.timeframe_minutes
         if isinstance(cfg, RouterConfig)

@@ -4,7 +4,12 @@ import os
 from typing import Optional, Callable, Union, List, Any, Dict
 from datetime import datetime, timedelta, timezone
 
-import ccxt
+try:
+    import ccxt  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    import types
+
+    ccxt = types.SimpleNamespace()
 from websocket import WebSocketApp
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from pathlib import Path
