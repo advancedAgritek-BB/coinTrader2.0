@@ -215,6 +215,8 @@ async def load_kraken_symbols(
 
     df = pd.DataFrame.from_dict(markets, orient="index")
     df.index.name = "symbol"
+    if "symbol" in df.columns:
+        df.drop(columns=["symbol"], inplace=True)
     df.reset_index(inplace=True)
 
     df["active"] = df.get("active", True).fillna(True)
