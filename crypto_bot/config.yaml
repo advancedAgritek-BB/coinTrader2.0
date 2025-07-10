@@ -234,6 +234,7 @@ strategy_router:
     - sniper_solana
 symbol: BTC/USDT
 symbol_batch_size: 10
+scan_lookback_limit: 50
 symbol_filter:
   change_pct_percentile: 0
   max_correlation: 0.85

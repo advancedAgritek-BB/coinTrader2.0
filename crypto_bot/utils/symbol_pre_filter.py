@@ -154,7 +154,14 @@ async def filter_symbols(
     min_score = float(cfg.get("min_symbol_score", 0.0))
 
     pairs = [s.replace("/", "") for s in symbols]
-    data = (await _fetch_ticker_async(pairs)).get("result", {})
+    if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
+        try:
+            data = await exchange.fetch_tickers(symbols)
+        except Exception as exc:  # pragma: no cover - network
+            logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
+            data = {}
+    else:
+        data = (await _fetch_ticker_async(pairs)).get("result", {})
 
     id_map: dict[str, str] = {}
     if hasattr(exchange, "markets_by_id"):
@@ -172,7 +179,6 @@ async def filter_symbols(
                 id_map[k] = v if isinstance(v, str) else k
 
     metrics: List[tuple[str, float, float, float]] = []
-    allowed: List[tuple[str, float]] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id)
         if not symbol:
@@ -184,7 +190,7 @@ async def filter_symbols(
             continue
 
         vol_usd, change_pct, spread_pct = _parse_metrics(ticker)
-        logger.info(
+        logger.debug(
             "Ticker %s volume %.2f USD change %.2f%% spread %.2f%%",
             symbol,
             vol_usd,
@@ -217,7 +223,7 @@ async def filter_symbols(
         if min_age > 0:
             enough = await has_enough_history(exchange, sym, min_age, timeframe="1h")
             if not enough:
-                logger.info("Skipping %s due to insufficient history", sym)
+                logger.debug("Skipping %s due to insufficient history", sym)
                 continue
         keep = True
         if df_cache:
@@ -227,6 +233,7 @@ async def filter_symbols(
                     keep = False
                     break
         if keep:
+            logger.info("Selected %s with score %.2f", sym, score)
             result.append((sym, score))
 
     return result

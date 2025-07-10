@@ -57,6 +57,32 @@ def test_filter_symbols(monkeypatch):
     assert symbols == [("BTC/USD", 0.6)]
 
 
+class FetchTickersExchange(DummyExchange):
+    def __init__(self):
+        self.has = {"fetchTickers": True}
+        self.markets_by_id = DummyExchange.markets_by_id
+
+    async def fetch_tickers(self, symbols):
+        assert symbols == ["ETH/USD", "BTC/USD"]
+        data = (await fake_fetch(None))["result"]
+        return {"ETH/USD": data["XETHZUSD"], "BTC/USD": data["XXBTZUSD"]}
+
+
+def test_filter_symbols_fetch_tickers(monkeypatch):
+    async def raise_if_called(_):
+        raise AssertionError("_fetch_ticker_async should not be called")
+
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", raise_if_called
+    )
+
+    ex = FetchTickersExchange()
+
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
+
+    assert symbols == [("BTC/USD", 0.6)]
+
+
 class DummyExchangeList:
     # markets_by_id values may be lists of market dictionaries
     markets_by_id = {"XETHZUSD": [{"symbol": "ETH/USD"}]}
