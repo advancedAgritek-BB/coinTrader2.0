@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 
 from crypto_bot.solana import watcher
 from crypto_bot.solana.watcher import PoolWatcher, NewPoolEvent
@@ -82,6 +83,16 @@ def test_watcher_yields_event(monkeypatch):
     assert event.tx_count == 3
 
 
+def test_env_substitution(monkeypatch):
+    monkeypatch.setenv("HELIUS_KEY", "ABC")
+    w = PoolWatcher("https://api.helius.xyz/v0/pools?api-key=YOUR_KEY", interval=0)
+    assert w.url.endswith("api-key=ABC")
+
+
+def test_env_missing(monkeypatch):
+    monkeypatch.delenv("HELIUS_KEY", raising=False)
+    with pytest.raises(ValueError):
+        PoolWatcher("https://api.helius.xyz/v0/pools?api-key=YOUR_KEY", interval=0)
 def test_watcher_continues_after_error(monkeypatch):
     data_ok = {
         "pools": [

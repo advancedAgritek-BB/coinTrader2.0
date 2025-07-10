@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncGenerator, Optional
+import os
 
 import aiohttp
 import logging
@@ -45,6 +46,18 @@ class PoolWatcher:
                 url = pool_cfg.get("url", "")
             if interval is None:
                 interval = float(pool_cfg.get("interval", 5))
+        key = os.getenv("HELIUS_KEY")
+        if not url or "YOUR_KEY" in url or url.endswith("api-key="):
+            if not key:
+                raise ValueError(
+                    "Helius API key missing. Set HELIUS_KEY or update pool.url"
+                )
+            if not url:
+                url = f"https://api.helius.xyz/v0/pools?api-key={key}"
+            else:
+                url = url.replace("YOUR_KEY", key)
+                if url.endswith("api-key="):
+                    url += key
         self.url = url
         self.interval = interval
         self._running = False
