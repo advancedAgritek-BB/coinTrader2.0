@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import time
 from pathlib import Path
 import logging
 
-import ccxt
+import ccxt.async_support as ccxt
 import yaml
 from crypto_bot.utils import timeframe_seconds
 
@@ -58,6 +59,25 @@ def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
     Markets whose quote currency is not in ``allowed_quote_currencies`` or whose
     base asset appears in ``blacklist_assets`` will be skipped.
     """
+async def _fetch_tickers(exchange: ccxt.Exchange) -> dict:
+    """Fetch tickers with a 10 second timeout."""
+    return await asyncio.wait_for(exchange.fetch_tickers(), 10)
+
+
+async def _close_exchange(exchange: ccxt.Exchange) -> None:
+    close = getattr(exchange, "close", None)
+    if close:
+        try:
+            if asyncio.iscoroutinefunction(close):
+                await close()
+            else:
+                close()
+        except Exception:  # pragma: no cover - best effort
+            pass
+
+
+async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
+    """Fetch tickers and update the cached liquid pairs list."""
     old_pairs: list[str] = []
     if PAIR_FILE.exists():
         try:
@@ -77,17 +97,40 @@ def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
     }
 
     exchange = get_exchange(config)
+    sec_name = config.get("refresh_pairs", {}).get("secondary_exchange")
+    secondary = get_exchange({"exchange": sec_name}) if sec_name else None
     try:
-        tickers = exchange.fetch_tickers()
+        tasks = [_fetch_tickers(exchange)]
+        if secondary:
+            tasks.append(_fetch_tickers(secondary))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        primary_res = results[0]
+        if isinstance(primary_res, Exception):
+            raise primary_res
+        tickers = primary_res
+        if not isinstance(tickers, dict):
+            raise TypeError("fetch_tickers returned invalid data")
+        if secondary:
+            sec_res = results[1]
+            if not isinstance(sec_res, Exception) and isinstance(sec_res, dict):
+                for sym, data in sec_res.items():
+                    vol2 = data.get("quoteVolume")
+                    if sym in tickers:
+                        vol1 = tickers[sym].get("quoteVolume")
+                        if vol2 is not None and (vol1 is None or float(vol2) > float(vol1)):
+                            tickers[sym] = data
+                    else:
+                        tickers[sym] = data
     except Exception as exc:  # pragma: no cover - network failures
         logger.error("Failed to fetch tickers: %s", exc)
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         with open(PAIR_FILE, "w") as f:
             json.dump(old_pairs, f, indent=2)
         return old_pairs
-    else:
-        if not isinstance(tickers, dict):
-            raise TypeError("fetch_tickers returned invalid data")
+    finally:
+        await _close_exchange(exchange)
+        if secondary:
+            await _close_exchange(secondary)
 
     pairs: list[tuple[str, float]] = []
     for symbol, data in tickers.items():
@@ -115,6 +158,11 @@ def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
         json.dump(top_pairs, f, indent=2)
 
     return top_pairs
+
+
+def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
+    """Synchronous wrapper for :func:`refresh_pairs_async`."""
+    return asyncio.run(refresh_pairs_async(min_volume_usd, top_k, config))
 
 
 def main() -> None:

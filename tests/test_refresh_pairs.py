@@ -1,9 +1,11 @@
 import json
 import sys
 import types
+import asyncio
 import pytest
 
 sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
+sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
 yaml_mod = types.ModuleType("yaml")
 yaml_mod.safe_load = lambda *_a, **_k: {}
 sys.modules.setdefault("yaml", yaml_mod)
@@ -15,12 +17,12 @@ class DummyExchange:
     def __init__(self, tickers):
         self.tickers = tickers
 
-    def fetch_tickers(self):
+    async def fetch_tickers(self):
         return self.tickers
 
 
 class FailingExchange:
-    def fetch_tickers(self):
+    async def fetch_tickers(self):
         raise Exception("boom")
 
 
