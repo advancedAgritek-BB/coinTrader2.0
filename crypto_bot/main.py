@@ -4,7 +4,7 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime
-from collections import deque
+from collections import deque, OrderedDict
 from dataclasses import dataclass, field
 
 # Track WebSocket ping tasks
@@ -100,6 +100,9 @@ MAX_SYMBOL_SCAN_ATTEMPTS = 3
 SYMBOL_SCAN_RETRY_DELAY = 10
 MAX_SYMBOL_SCAN_DELAY = 60
 
+# Maximum number of symbols per timeframe to keep in the OHLCV cache
+DF_CACHE_MAX_SIZE = 500
+
 
 @dataclass
 class SessionState:
@@ -109,6 +112,24 @@ class SessionState:
     df_cache: dict[str, dict[str, pd.DataFrame]] = field(default_factory=dict)
     regime_cache: dict[str, dict[str, pd.DataFrame]] = field(default_factory=dict)
     last_balance: float | None = None
+
+
+def update_df_cache(
+    cache: dict[str, dict[str, pd.DataFrame]],
+    timeframe: str,
+    symbol: str,
+    df: pd.DataFrame,
+    max_size: int = DF_CACHE_MAX_SIZE,
+) -> None:
+    """Update an OHLCV cache with LRU eviction."""
+    tf_cache = cache.setdefault(timeframe, OrderedDict())
+    if not isinstance(tf_cache, OrderedDict):
+        tf_cache = OrderedDict(tf_cache)
+        cache[timeframe] = tf_cache
+    tf_cache[symbol] = df
+    tf_cache.move_to_end(symbol)
+    if len(tf_cache) > max_size:
+        tf_cache.popitem(last=False)
 
 
 def direction_to_side(direction: str) -> str:
@@ -886,7 +907,6 @@ async def _main_impl() -> TelegramNotifier:
         limit = int(max(20, tf_minutes * 3))
         limit = int(config.get("cycle_lookback_limit", limit))
 
-        df_cache = await update_multi_tf_ohlcv_cache(
         session_state.df_cache = await update_multi_tf_ohlcv_cache(
             exchange,
             session_state.df_cache,
@@ -1183,10 +1203,15 @@ async def _main_impl() -> TelegramNotifier:
                     data,
                     columns=["timestamp", "open", "high", "low", "close", "volume"],
                 )
-                df_cache.setdefault(config["timeframe"], {})[sym] = df_current
+                update_df_cache(df_cache, config["timeframe"], sym, df_current)
             if df_current is not None and not df_current.empty:
                 last_candle_ts[sym] = int(df_current["timestamp"].iloc[-1])
-                session_state.df_cache.setdefault(config["timeframe"], {})[sym] = df_current
+                update_df_cache(
+                    session_state.df_cache,
+                    config["timeframe"],
+                    sym,
+                    df_current,
+                )
 
             current_dfs[sym] = df_current
             current_prices[sym] = df_current["close"].iloc[-1]
