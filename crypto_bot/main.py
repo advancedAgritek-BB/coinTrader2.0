@@ -542,7 +542,7 @@ async def update_caches(ctx: BotContext) -> None:
     start = time.perf_counter()
     tf_minutes = int(pd.Timedelta(ctx.config.get("timeframe", "1h")).total_seconds() // 60)
     limit = int(max(20, tf_minutes * 3))
-    limit = int(ctx.config.get("cycle_lookback_limit", limit))
+    limit = int(ctx.config.get("cycle_lookback_limit") or limit)
 
     ctx.df_cache = await update_multi_tf_ohlcv_cache(
         ctx.exchange,
@@ -1168,7 +1168,7 @@ async def _main_impl() -> TelegramNotifier:
             pd.Timedelta(config.get("timeframe", "1h")).total_seconds() // 60
             )
             limit = int(max(20, tf_minutes * 3))
-            limit = int(config.get("cycle_lookback_limit", limit))
+            limit = int(config.get("cycle_lookback_limit") or limit)
 
             session_state.df_cache = await update_multi_tf_ohlcv_cache(
             exchange,
@@ -1201,9 +1201,9 @@ async def _main_impl() -> TelegramNotifier:
                 f"\u26a0\ufe0f OHLCV latency {ohlcv_fetch_latency*1000:.0f} ms"
             )
             limit = int(max(20, tf_minutes * 3))
-            limit = int(config.get("cycle_lookback_limit", limit))
+            limit = int(config.get("cycle_lookback_limit") or limit)
         limit = int(max(20, tf_minutes * 3))
-        limit = int(config.get("cycle_lookback_limit", limit))
+        limit = int(config.get("cycle_lookback_limit") or limit)
     
             session_state.df_cache = await update_multi_tf_ohlcv_cache(
                 exchange,
