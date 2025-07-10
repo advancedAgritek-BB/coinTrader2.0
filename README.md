@@ -170,6 +170,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **solana_slippage_bps** – slippage tolerance for on-chain conversions.
 * **symbol**/**symbols** – pairs to trade when not scanning automatically.
 * **scan_markets** – load all exchange pairs when `symbols` is empty.
+* **scan_in_background** – start the initial scan in the background so trading can begin immediately.
 * **excluded_symbols** – markets to skip during scanning.
 
 ### Market Scanning
@@ -570,10 +571,13 @@ Binance.US is not recommended because of API limitations.
 When `scan_markets` is set to `true` and the `symbols` list is empty, the bot
 loads all active Kraken trading pairs at startup. Pairs listed under
 `excluded_symbols` are skipped. Disable this behaviour by setting
-`scan_markets` to `false`.
+`scan_markets` to `false`. When `scan_in_background` is `true` the scan runs as
+a background task so trading phases start immediately. Set it to `false` to
+wait for scanning to complete before trading begins.
 
 ```yaml
 scan_markets: true
+scan_in_background: true
 symbols: []            # automatically populated
 excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
