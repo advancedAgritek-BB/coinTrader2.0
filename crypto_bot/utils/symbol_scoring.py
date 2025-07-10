@@ -19,6 +19,7 @@ except Exception:  # pragma: no cover - numba missing
             return fn
 
         return wrap
+import pandas as pd
 
 # Cache of computed symbol ages
 _age_cache: Dict[Tuple[str, str], Tuple[float, float]] = {}
@@ -267,5 +268,42 @@ async def score_symbol(
         + latency_norm * weights.get("latency", 0)
     )
 
+    return score / total
+
+
+def score_vectorised(df: pd.DataFrame, config: Mapping[str, object]) -> pd.Series:
+    """Return normalized scores for each row in ``df``.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Must contain ``vol`` (volume USD), ``chg`` (percent change) and
+        ``spr`` (spread percent) columns.
+    config : Mapping[str, object]
+        Configuration with ``symbol_score_weights`` and limit values.
+    """
+
+    weights = dict(DEFAULT_WEIGHTS)
+    weights.update(config.get("symbol_score_weights", {}))
+    total = sum(weights.values())
+    if total <= 0:
+        raise ValueError("symbol_score_weights must sum to a positive value")
+
+    max_vol = float(config.get("max_vol", 1_000_000))
+    max_change = float(config.get("max_change_pct", 10))
+    max_spread = float(config.get("max_spread_pct", 2))
+
+    volume_norm = np.minimum(df["vol"] / max_vol, 1.0)
+    change_norm = np.minimum(df["chg"].abs() / max_change, 1.0)
+    spread_norm = 1.0 - np.minimum(df["spr"] / max_spread, 1.0)
+
+    score = (
+        volume_norm * weights.get("volume", 0)
+        + change_norm * weights.get("change", 0)
+        + spread_norm * weights.get("spread", 0)
+    )
+
+    # Age and latency are ignored by the vectorised implementation. Set the
+    # weights to zero or fall back to :func:`score_symbol` for full scoring.
     return score / total
 

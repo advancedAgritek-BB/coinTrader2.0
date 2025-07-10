@@ -616,7 +616,7 @@ undesirable markets before strategies run:
 
 ```yaml
 symbol_filter:
-  min_volume_usd: 50000         # minimum 24h volume in USD
+  volume_percentile: 60         # keep pairs above this volume percentile
   change_pct_percentile: 70     # require 24h change in the top 30%
   max_spread_pct: 0.5           # skip pairs with wide spreads
   correlation_window: 30        # days of history for correlation
@@ -632,7 +632,9 @@ are traded each cycle.
 
 The `tasks/refresh_pairs.py` script fetches the most liquid markets from the
 configured exchange using `ccxt` and stores them in `cache/liquid_pairs.json`.
-This cache lets the trading bot skip illiquid pairs during market scans.
+The file now contains a mapping of symbol to the timestamp when it last passed
+the liquidity screen. This cache lets the trading bot skip illiquid pairs during
+market scans.
 By default the worker refreshes the file every **6 hours**. Change the interval
 under `pairs_worker.refresh_interval` in `crypto_bot/config.yaml` and restart the
 worker to apply the new schedule.
@@ -653,6 +655,7 @@ Run it manually whenever needed:
 python tasks/refresh_pairs.py --once
 ```
 Removing the `--once` flag keeps it running on the configured interval.
+Delete `cache/liquid_pairs.json` to force a full rebuild on the next run.
 
 ## Web UI
 

@@ -938,6 +938,7 @@ async def update_ohlcv_cache(
             cache[sym] = df_new
             changed = True
         if changed:
+            cache[sym]["return"] = cache[sym]["close"].pct_change()
             clear_regime_cache(sym, timeframe)
     logger.info("Completed OHLCV update for timeframe %s", timeframe)
     return cache
