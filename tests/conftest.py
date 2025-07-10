@@ -1,10 +1,27 @@
 import sys
+import importlib.util
 import numpy as np
 from pathlib import Path
 from pandas import Series
 import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(config, items):
+    """Skip network tests when HTTP libraries are unavailable."""
+    def _has_module(name: str) -> bool:
+        try:
+            return importlib.util.find_spec(name) is not None
+        except Exception:
+            return name in sys.modules
+
+    if not _has_module("requests") and not _has_module("aiohttp"):
+        skip_net = pytest.mark.skip(reason="network dependencies not installed")
+        for item in items:
+            if "network" in item.keywords:
+                item.add_marker(skip_net)
 
 
 # Provide a minimal stub for the optional ``telegram`` package so modules that
@@ -210,28 +227,31 @@ class _FakeAioHttp:
 sys.modules.setdefault("aiohttp", _FakeAioHttp())
 
 # Basic ``requests`` stub
-class _FakeRequests:
-    class Response:
-        status_code = 200
+try:  # pragma: no cover - optional dependency
+    import requests  # type: ignore  # noqa: F401
+except Exception:  # pragma: no cover - requests not installed
+    class _FakeRequests:
+        class Response:
+            status_code = 200
 
-        def json(self):
-            return {}
+            def json(self):
+                return {}
 
-        @property
-        def text(self):
-            return ""
+            @property
+            def text(self):
+                return ""
 
-    def get(self, *a, **k):
-        return self.Response()
-
-    class Session:
         def get(self, *a, **k):
-            return _FakeRequests.Response()
+            return self.Response()
 
-        def close(self):
-            pass
+        class Session:
+            def get(self, *a, **k):
+                return _FakeRequests.Response()
 
-sys.modules.setdefault("requests", _FakeRequests())
+            def close(self):
+                pass
+
+    sys.modules.setdefault("requests", _FakeRequests())
 
 
 @pytest.fixture(autouse=True)
