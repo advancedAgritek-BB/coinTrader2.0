@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from datetime import datetime
 from collections import deque
+from dataclasses import dataclass, field
 
 import ccxt
 
@@ -28,6 +29,7 @@ from crypto_bot.cooldown_manager import (
     mark_cooldown,
     configure as cooldown_configure,
 )
+from crypto_bot.phase_runner import BotContext, PhaseRunner
 from crypto_bot import grid_state
 from crypto_bot.signals.signal_scoring import evaluate_async
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
@@ -94,6 +96,16 @@ SYMBOL_EVAL_QUEUE: deque[str] = deque()
 MAX_SYMBOL_SCAN_ATTEMPTS = 3
 SYMBOL_SCAN_RETRY_DELAY = 10
 MAX_SYMBOL_SCAN_DELAY = 60
+
+
+@dataclass
+class SessionState:
+    """Runtime session state shared across tasks."""
+
+    positions: dict[str, dict] = field(default_factory=dict)
+    df_cache: dict[str, dict[str, pd.DataFrame]] = field(default_factory=dict)
+    regime_cache: dict[str, dict[str, pd.DataFrame]] = field(default_factory=dict)
+    last_balance: float | None = None
 
 
 def direction_to_side(direction: str) -> str:
@@ -241,10 +253,9 @@ async def _ws_ping_loop(exchange: object, interval: float) -> None:
 async def _watch_position(
     symbol: str,
     exchange: object,
-    positions: dict,
+    state: SessionState,
     paper_wallet: PaperWallet | None,
     config: dict,
-    df_cache: dict,
 ) -> None:
     """Live update position PnL and log changes."""
     use_ws = config.get("use_websocket", False) and hasattr(exchange, "watch_ticker")
@@ -254,7 +265,7 @@ async def _watch_position(
     reconnect_attempts = 0
     max_reconnect = int(config.get("ws_max_retries", 3))
 
-    while symbol in positions:
+    while symbol in state.positions:
         try:
             if use_ws:
                 if ping_task is None:
@@ -340,7 +351,7 @@ async def _watch_position(
             if price is None:
                 continue
 
-            pos = positions.get(symbol)
+            pos = state.positions.get(symbol)
             if pos is None:
                 continue
 
@@ -375,15 +386,14 @@ async def _watch_position(
 async def initial_scan(
     exchange: object,
     config: dict,
-    df_cache: dict[str, dict[str, pd.DataFrame]],
-    regime_cache: dict[str, dict[str, pd.DataFrame]],
+    state: SessionState,
     notifier: TelegramNotifier | None = None,
-) -> tuple[dict[str, dict[str, pd.DataFrame]], dict[str, dict[str, pd.DataFrame]]]:
+) -> None:
     """Populate OHLCV and regime caches before trading begins."""
 
     symbols = config.get("symbols") or [config.get("symbol")]
     if not symbols:
-        return df_cache, regime_cache
+        return
 
     batch_size = int(config.get("symbol_batch_size", 10))
     total = len(symbols)
@@ -392,9 +402,9 @@ async def initial_scan(
     for i in range(0, total, batch_size):
         batch = symbols[i : i + batch_size]
 
-        df_cache = await update_multi_tf_ohlcv_cache(
+        state.df_cache = await update_multi_tf_ohlcv_cache(
             exchange,
-            df_cache,
+            state.df_cache,
             batch,
             config,
             limit=config.get("scan_lookback_limit", 50),
@@ -404,9 +414,9 @@ async def initial_scan(
             notifier=notifier,
         )
 
-        regime_cache = await update_regime_tf_cache(
+        state.regime_cache = await update_regime_tf_cache(
             exchange,
-            regime_cache,
+            state.regime_cache,
             batch,
             config,
             limit=config.get("scan_lookback_limit", 50),
@@ -414,7 +424,7 @@ async def initial_scan(
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
             notifier=notifier,
-            df_map=df_cache,
+            df_map=state.df_cache,
         )
 
         processed += len(batch)
@@ -423,7 +433,109 @@ async def initial_scan(
         if notifier and config.get("telegram", {}).get("status_updates", True):
             notifier.notify(f"Initial scan {pct:.1f}% complete")
 
-    return df_cache, regime_cache
+    return
+
+
+async def fetch_candidates(ctx: BotContext) -> None:
+    """Fetch and store the current symbol batch."""
+    symbols = await get_filtered_symbols(ctx.exchange, ctx.config)
+    batch_size = ctx.config.get("symbol_batch_size", 10)
+    ctx.current_batch = [s for s, _ in symbols][:batch_size]
+
+
+async def update_caches(ctx: BotContext) -> None:
+    """Update OHLCV and regime caches for the current batch."""
+    batch = getattr(ctx, "current_batch", [])
+    if not batch:
+        return
+    ctx.df_cache = await update_multi_tf_ohlcv_cache(
+        ctx.exchange,
+        ctx.df_cache,
+        batch,
+        ctx.config,
+        limit=100,
+        use_websocket=ctx.config.get("use_websocket", False),
+        force_websocket_history=ctx.config.get("force_websocket_history", False),
+        max_concurrent=ctx.config.get("max_concurrent_ohlcv"),
+        notifier=None,
+    )
+    ctx.regime_cache = await update_regime_tf_cache(
+        ctx.exchange,
+        ctx.regime_cache,
+        batch,
+        ctx.config,
+        limit=100,
+        use_websocket=ctx.config.get("use_websocket", False),
+        force_websocket_history=ctx.config.get("force_websocket_history", False),
+        max_concurrent=ctx.config.get("max_concurrent_ohlcv"),
+        notifier=None,
+        df_map=ctx.df_cache,
+    )
+
+
+async def analyse_batch(ctx: BotContext) -> None:
+    """Analyse the cached data for trading signals."""
+    batch = getattr(ctx, "current_batch", [])
+    if not batch:
+        ctx.analysis_results = []
+        return
+    tasks = [
+        analyze_symbol(
+            sym,
+            {tf: c.get(sym) for tf, c in ctx.df_cache.items()},
+            "cex",
+            ctx.config,
+            None,
+        )
+        for sym in batch
+    ]
+    ctx.analysis_results = await asyncio.gather(*tasks)
+
+
+async def execute_signals(ctx: BotContext) -> None:
+    """Placeholder for executing trade signals."""
+    ctx.executed = True
+
+
+async def handle_exits(ctx: BotContext) -> None:
+    """Placeholder for handling exit logic."""
+    return
+
+
+async def _rotation_loop(
+    rotator: PortfolioRotator,
+    exchange: object,
+    wallet: str,
+    state: dict,
+    notifier: TelegramNotifier | None,
+    check_balance_change: callable,
+) -> None:
+    """Periodically rotate portfolio holdings."""
+
+    interval = rotator.config.get("interval_days", 7) * 86400
+    while True:
+        try:
+            if state.get("running") and rotator.config.get("enabled"):
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                    bal = await exchange.fetch_balance()
+                else:
+                    bal = await asyncio.to_thread(exchange.fetch_balance)
+                current_balance = (
+                    bal.get("USDT", {}).get("free", 0)
+                    if isinstance(bal.get("USDT"), dict)
+                    else bal.get("USDT", 0)
+                )
+                check_balance_change(float(current_balance), "external change")
+                holdings = {
+                    k: (v.get("total") if isinstance(v, dict) else v)
+                    for k, v in bal.items()
+                }
+                await rotator.rotate(exchange, wallet, holdings, notifier)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:  # pragma: no cover - rotation errors
+            logger.error("Rotation loop error: %s", exc, exc_info=True)
+        await asyncio.sleep(interval)
 
 
 async def _main_impl() -> TelegramNotifier:
@@ -593,19 +705,16 @@ async def _main_impl() -> TelegramNotifier:
         console_monitor.monitor_loop(exchange, paper_wallet, LOG_DIR / "bot.log")
     )
 
-    positions: dict[str, dict] = {}
     position_tasks: dict[str, asyncio.Task] = {}
     max_open_trades = config.get("max_open_trades", 1)
     position_guard = OpenPositionGuard(max_open_trades)
     active_strategy = None
-    last_balance: float | None = None
     stats_file = LOG_DIR / "strategy_stats.json"
     # File tracking individual trade performance used for analytics
     perf_file = LOG_DIR / "strategy_performance.json"
     scores_file = LOG_DIR / "strategy_scores.json"
 
     rotator = PortfolioRotator()
-    last_rotation = 0.0
     last_optimize = 0.0
     last_weight_update = 0.0
 
@@ -614,8 +723,19 @@ async def _main_impl() -> TelegramNotifier:
     df_cache: dict[str, dict[str, pd.DataFrame]] = {}
     regime_cache: dict[str, dict[str, pd.DataFrame]] = {}
     last_candle_ts: dict[str, int] = {}
+    session_state = SessionState(last_balance=last_balance)
 
     control_task = asyncio.create_task(console_control.control_loop(state))
+    rotation_task = asyncio.create_task(
+        _rotation_loop(
+            rotator,
+            exchange,
+            user.get("wallet_address", ""),
+            state,
+            notifier,
+            check_balance_change,
+        )
+    )
     print("Bot running. Type 'stop' to pause, 'start' to resume, 'quit' to exit.")
 
     from crypto_bot.telegram_bot_ui import TelegramBotUI
@@ -637,15 +757,24 @@ async def _main_impl() -> TelegramNotifier:
     if telegram_bot:
         telegram_bot.run_async()
 
-    df_cache, regime_cache = await initial_scan(
+    await initial_scan(
         exchange,
         config,
-        df_cache,
-        regime_cache,
+        session_state,
         notifier if status_updates else None,
     )
 
     base_mode = mode
+    ctx = BotContext(positions, df_cache, regime_cache, config)
+    ctx.exchange = exchange
+    ctx.ws_client = ws_client
+    runner = PhaseRunner([
+        fetch_candidates,
+        update_caches,
+        analyse_batch,
+        execute_signals,
+        handle_exits,
+    ])
 
     while True:
         mode = state["mode"]
@@ -654,7 +783,7 @@ async def _main_impl() -> TelegramNotifier:
         )
 
         cycle_start = time.perf_counter()
-        symbol_time = ohlcv_time = analyze_time = 0.0
+        ctx.timing = await runner.run(ctx)
         execution_latency = 0.0
 
         total_pairs = 0
@@ -713,34 +842,7 @@ async def _main_impl() -> TelegramNotifier:
             )
             check_balance_change(float(bal_val), "funds converted")
 
-        if rotator.config.get("enabled"):
-            if (
-                time.time() - last_rotation
-                >= rotator.config.get("interval_days", 7) * 86400
-            ):
-                if asyncio.iscoroutinefunction(
-                    getattr(exchange, "fetch_balance", None)
-                ):
-                    bal = await exchange.fetch_balance()
-                else:
-                    bal = await asyncio.to_thread(exchange.fetch_balance)
-                current_balance = (
-                    bal.get("USDT", {}).get("free", 0)
-                    if isinstance(bal.get("USDT"), dict)
-                    else bal.get("USDT", 0)
-                )
-                check_balance_change(float(current_balance), "external change")
-                holdings = {
-                    k: (v.get("total") if isinstance(v, dict) else v)
-                    for k, v in bal.items()
-                }
-                await rotator.rotate(
-                    exchange,
-                    user.get("wallet_address", ""),
-                    holdings,
-                    notifier,
-                )
-                last_rotation = time.time()
+
 
         allowed_results: list[dict] = []
         df_current = None
@@ -769,9 +871,9 @@ async def _main_impl() -> TelegramNotifier:
 
         t0 = time.perf_counter()
         start_ohlcv = time.perf_counter()
-        df_cache = await update_multi_tf_ohlcv_cache(
+        session_state.df_cache = await update_multi_tf_ohlcv_cache(
             exchange,
-            df_cache,
+            session_state.df_cache,
             current_batch,
             config,
             limit=100,
@@ -781,9 +883,9 @@ async def _main_impl() -> TelegramNotifier:
             notifier=notifier if status_updates else None,
         )
 
-        regime_cache = await update_regime_tf_cache(
+        session_state.regime_cache = await update_regime_tf_cache(
             exchange,
-            regime_cache,
+            session_state.regime_cache,
             current_batch,
             config,
             limit=100,
@@ -791,7 +893,7 @@ async def _main_impl() -> TelegramNotifier:
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
             notifier=notifier if status_updates else None,
-            df_map=df_cache,
+            df_map=session_state.df_cache,
         )
         ohlcv_time = time.perf_counter() - t0
         ohlcv_fetch_latency = time.perf_counter() - start_ohlcv
@@ -805,8 +907,8 @@ async def _main_impl() -> TelegramNotifier:
         for sym in current_batch:
             logger.info("🔹 Symbol: %s", sym)
             total_pairs += 1
-            df_map = {tf: c.get(sym) for tf, c in df_cache.items()}
-            for tf, cache_tf in regime_cache.items():
+            df_map = {tf: c.get(sym) for tf, c in session_state.df_cache.items()}
+            for tf, cache_tf in session_state.regime_cache.items():
                 df_map[tf] = cache_tf.get(sym)
             df_sym = df_map.get(config["timeframe"])
             if df_sym is None or df_sym.empty:
@@ -826,7 +928,7 @@ async def _main_impl() -> TelegramNotifier:
                 df_sym = pd.DataFrame(df_sym.to_numpy(), columns=expected_cols)
             logger.info("Fetched %d candles for %s", len(df_sym), sym)
             df_map[config["timeframe"]] = df_sym
-            if sym in positions:
+            if sym in session_state.positions:
                 df_current = df_sym
             tasks.append(analyze_symbol(sym, df_map, mode, config, notifier))
 
@@ -840,9 +942,9 @@ async def _main_impl() -> TelegramNotifier:
         if scalpers:
             scalp_tf = config.get("scalp_timeframe", "1m")
             t_sc = time.perf_counter()
-            df_cache[scalp_tf] = await update_ohlcv_cache(
+            session_state.df_cache[scalp_tf] = await update_ohlcv_cache(
                 exchange,
-                df_cache.get(scalp_tf, {}),
+                session_state.df_cache.get(scalp_tf, {}),
                 scalpers,
                 timeframe=scalp_tf,
                 limit=100,
@@ -856,8 +958,8 @@ async def _main_impl() -> TelegramNotifier:
                 analyze_symbol(
                     sym,
                     {
-                        **{tf: c.get(sym) for tf, c in df_cache.items()},
-                        **{tf: c.get(sym) for tf, c in regime_cache.items()},
+                        **{tf: c.get(sym) for tf, c in session_state.df_cache.items()},
+                        **{tf: c.get(sym) for tf, c in session_state.regime_cache.items()},
                     },
                     mode,
                     config,
@@ -868,9 +970,9 @@ async def _main_impl() -> TelegramNotifier:
             scalper_results = await asyncio.gather(*tasks)
             mapping = {r["symbol"]: r for r in scalper_results}
             results = [mapping.get(r["symbol"], r) for r in results]
-            for sym_open in positions:
+            for sym_open in session_state.positions:
                 if sym_open in mapping:
-                    current_dfs[sym_open] = df_cache.get(config["timeframe"], {}).get(
+                    current_dfs[sym_open] = session_state.df_cache.get(config["timeframe"], {}).get(
                         sym_open
                     )
 
@@ -899,7 +1001,7 @@ async def _main_impl() -> TelegramNotifier:
                 env_sym,
             )
 
-            if sym not in positions and in_cooldown(sym, name_sym):
+            if sym not in session_state.positions and in_cooldown(sym, name_sym):
                 continue
 
             params_file = LOG_DIR / "optimized_params.json"
@@ -979,7 +1081,7 @@ async def _main_impl() -> TelegramNotifier:
         current_dfs: dict[str, pd.DataFrame] = {}
         current_prices: dict[str, float] = {}
 
-        open_syms = list(positions.keys())
+        open_syms = list(session_state.positions.keys())
         if open_syms:
             tf_cache = df_cache.get(config["timeframe"], {})
             update_syms: list[str] = []
@@ -1007,9 +1109,20 @@ async def _main_impl() -> TelegramNotifier:
                     if df_new is not None and not df_new.empty:
                         last_candle_ts[s] = int(df_new["timestamp"].iloc[-1])
                 df_cache[config["timeframe"]] = tf_cache
+            session_state.df_cache[config["timeframe"]] = await update_ohlcv_cache(
+                exchange,
+                session_state.df_cache.get(config["timeframe"], {}),
+                open_syms,
+                timeframe=config["timeframe"],
+                limit=100,
+                use_websocket=config.get("use_websocket", False),
+                force_websocket_history=config.get("force_websocket_history", False),
+                config=config,
+                max_concurrent=config.get("max_concurrent_ohlcv"),
+            )
 
         for sym in open_syms:
-            df_current = df_cache.get(config["timeframe"], {}).get(sym)
+            df_current = session_state.df_cache.get(config["timeframe"], {}).get(sym)
             if df_current is None:
                 # Fallback to direct fetch if cache is missing
                 try:
@@ -1057,6 +1170,7 @@ async def _main_impl() -> TelegramNotifier:
                 df_cache.setdefault(config["timeframe"], {})[sym] = df_current
             if df_current is not None and not df_current.empty:
                 last_candle_ts[sym] = int(df_current["timestamp"].iloc[-1])
+                session_state.df_cache.setdefault(config["timeframe"], {})[sym] = df_current
 
             current_dfs[sym] = df_current
             current_prices[sym] = df_current["close"].iloc[-1]
@@ -1080,7 +1194,7 @@ async def _main_impl() -> TelegramNotifier:
             direction = "none"
             trade_side = None
 
-        for sym, pos in list(positions.items()):
+        for sym, pos in list(session_state.positions.items()):
             cur_price = current_prices.get(sym)
             df_cur = current_dfs.get(sym)
             if cur_price is None or df_cur is None:
@@ -1109,9 +1223,9 @@ async def _main_impl() -> TelegramNotifier:
                 unreal = paper_wallet.unrealized(sym, cur_price)
                 equity += unreal
             pos["equity"] = float(equity)
-            last_balance = notify_balance_change(
+            session_state.last_balance = notify_balance_change(
                 notifier,
-                last_balance,
+                session_state.last_balance,
                 float(equity),
                 balance_updates,
             )
@@ -1200,6 +1314,7 @@ async def _main_impl() -> TelegramNotifier:
                             pass
                     positions.pop(sym, None)
                     last_candle_ts.pop(sym, None)
+                    session_state.positions.pop(sym, None)
                     latest_balance = await fetch_and_log_balance(
                         exchange, paper_wallet, config
                     )
@@ -1229,20 +1344,20 @@ async def _main_impl() -> TelegramNotifier:
                     )
                     latest_balance = await fetch_balance(exchange, paper_wallet, config)
 
-        if not position_guard.can_open(positions):
+        if not position_guard.can_open(session_state.positions):
             continue
 
         if not filtered_results:
             continue
 
         for candidate in filtered_results:
-            if candidate["symbol"] in positions:
+            if candidate["symbol"] in session_state.positions:
                 logger.info(
                     "Existing position on %s still open – skipping new trade",
                     candidate["symbol"],
                 )
                 continue
-            if not position_guard.can_open(positions):
+            if not position_guard.can_open(session_state.positions):
                 break
             score = candidate["score"]
             direction = candidate["direction"]
@@ -1424,9 +1539,9 @@ async def _main_impl() -> TelegramNotifier:
                 )
             check_balance_change(float(latest_balance), "trade executed")
             log_balance(float(latest_balance))
-            last_balance = notify_balance_change(
+            session_state.last_balance = notify_balance_change(
                 notifier,
-                last_balance,
+                session_state.last_balance,
                 float(latest_balance),
                 balance_updates,
             )
@@ -1440,7 +1555,7 @@ async def _main_impl() -> TelegramNotifier:
             )
             if strategy_name(regime, env).startswith("grid"):
                 grid_state.record_fill(candidate["symbol"])
-            positions[candidate["symbol"]] = {
+            session_state.positions[candidate["symbol"]] = {
                 "side": trade_side,
                 "entry_price": current_price,
                 "entry_time": datetime.utcnow().isoformat(),
@@ -1456,10 +1571,9 @@ async def _main_impl() -> TelegramNotifier:
                 _watch_position(
                     candidate["symbol"],
                     exchange,
-                    positions,
+                    session_state,
                     paper_wallet,
                     config,
-                    df_cache,
                 )
             )
             active_strategy = name
@@ -1473,7 +1587,7 @@ async def _main_impl() -> TelegramNotifier:
                 )
             logger.info("Trade opened at %.4f", current_price)
             trades_executed += 1
-            if not position_guard.can_open(positions):
+            if not position_guard.can_open(session_state.positions):
                 break
 
         write_scores(scores_file, perf_file)
@@ -1497,10 +1611,11 @@ async def _main_impl() -> TelegramNotifier:
             regime_rejections,
         )
         total_time = time.perf_counter() - cycle_start
+        timing = getattr(ctx, "timing", {})
         _emit_timing(
-            symbol_time,
-            ohlcv_time,
-            analyze_time,
+            timing.get("fetch_candidates", symbol_time),
+            timing.get("update_caches", ohlcv_time),
+            timing.get("analyse_batch", analyze_time),
             total_time,
             metrics_path,
             ohlcv_fetch_latency,
@@ -1530,6 +1645,7 @@ async def _main_impl() -> TelegramNotifier:
 
     monitor_task.cancel()
     control_task.cancel()
+    rotation_task.cancel()
     for task in list(position_tasks.values()):
         task.cancel()
     for task in list(position_tasks.values()):
@@ -1542,6 +1658,10 @@ async def _main_impl() -> TelegramNotifier:
         telegram_bot.stop()
     try:
         await monitor_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await rotation_task
     except asyncio.CancelledError:
         pass
     try:
