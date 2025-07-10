@@ -525,69 +525,203 @@ async def initial_scan(
 
 
 async def fetch_candidates(ctx: BotContext) -> None:
-    """Fetch and store the current symbol batch."""
+    """Gather symbols for this cycle and build the evaluation batch."""
+    t0 = time.perf_counter()
     symbols = await get_filtered_symbols(ctx.exchange, ctx.config)
+    ctx.timing["symbol_time"] = time.perf_counter() - t0
+
+    total_available = len(ctx.config.get("symbols") or [ctx.config.get("symbol")])
+    ctx.timing["symbol_filter_ratio"] = (
+        len(symbols) / total_available if total_available else 1.0
+    )
+
+    global symbol_priority_queue
+    if not symbol_priority_queue:
+        symbol_priority_queue = build_priority_queue(symbols)
+
     batch_size = ctx.config.get("symbol_batch_size", 10)
-    ctx.current_batch = [s for s, _ in symbols][:batch_size]
+    if len(symbol_priority_queue) < batch_size:
+        symbol_priority_queue.extend(build_priority_queue(symbols))
+
+    ctx.current_batch = [
+        symbol_priority_queue.popleft()
+        for _ in range(min(batch_size, len(symbol_priority_queue)))
+    ]
 
 
 async def update_caches(ctx: BotContext) -> None:
-    """Update OHLCV and regime caches for the current batch."""
-    batch = getattr(ctx, "current_batch", [])
+    """Update OHLCV and regime caches for the current symbol batch."""
+    batch = ctx.current_batch
     if not batch:
         return
+
+    start = time.perf_counter()
+    tf_minutes = int(pd.Timedelta(ctx.config.get("timeframe", "1h")).total_seconds() // 60)
+    limit = int(max(20, tf_minutes * 3))
+    limit = int(ctx.config.get("cycle_lookback_limit", limit))
+
     ctx.df_cache = await update_multi_tf_ohlcv_cache(
         ctx.exchange,
         ctx.df_cache,
         batch,
         ctx.config,
-        limit=100,
+        limit=limit,
         use_websocket=ctx.config.get("use_websocket", False),
         force_websocket_history=ctx.config.get("force_websocket_history", False),
         max_concurrent=ctx.config.get("max_concurrent_ohlcv"),
-        notifier=None,
+        notifier=ctx.notifier if ctx.config.get("telegram", {}).get("status_updates", True) else None,
     )
+
     ctx.regime_cache = await update_regime_tf_cache(
         ctx.exchange,
         ctx.regime_cache,
         batch,
         ctx.config,
-        limit=100,
+        limit=limit,
         use_websocket=ctx.config.get("use_websocket", False),
         force_websocket_history=ctx.config.get("force_websocket_history", False),
         max_concurrent=ctx.config.get("max_concurrent_ohlcv"),
-        notifier=None,
+        notifier=ctx.notifier if ctx.config.get("telegram", {}).get("status_updates", True) else None,
         df_map=ctx.df_cache,
     )
 
+    ctx.timing["ohlcv_fetch_latency"] = time.perf_counter() - start
+
 
 async def analyse_batch(ctx: BotContext) -> None:
-    """Analyse the cached data for trading signals."""
-    batch = getattr(ctx, "current_batch", [])
+    """Run signal analysis on the current batch."""
+    batch = ctx.current_batch
     if not batch:
         ctx.analysis_results = []
         return
-    tasks = [
-        analyze_symbol(
-            sym,
-            {tf: c.get(sym) for tf, c in ctx.df_cache.items()},
-            "cex",
-            ctx.config,
-            None,
-        )
-        for sym in batch
-    ]
+
+    tasks = []
+    mode = ctx.config.get("mode", "cex")
+    for sym in batch:
+        df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
+        for tf, cache in ctx.regime_cache.items():
+            df_map[tf] = cache.get(sym)
+        tasks.append(analyze_symbol(sym, df_map, mode, ctx.config, ctx.notifier))
+
     ctx.analysis_results = await asyncio.gather(*tasks)
 
 
 async def execute_signals(ctx: BotContext) -> None:
-    """Placeholder for executing trade signals."""
-    ctx.executed = True
+    """Open trades for qualified analysis results."""
+    results = getattr(ctx, "analysis_results", [])
+    if not results:
+        return
+
+    # Prioritize by score
+    results = [r for r in results if r.get("direction") != "none"]
+    results.sort(key=lambda x: x.get("score", 0), reverse=True)
+    top_n = ctx.config.get("top_n_symbols", 3)
+
+    for candidate in results[:top_n]:
+        if not ctx.position_guard or not ctx.position_guard.can_open(ctx.positions):
+            break
+        sym = candidate["symbol"]
+        if sym in ctx.positions:
+            continue
+
+        df = candidate["df"]
+        price = df["close"].iloc[-1]
+        score = candidate.get("score", 0.0)
+        strategy = candidate.get("name", "")
+        allowed, _ = ctx.risk_manager.allow_trade(df, strategy)
+        if not allowed:
+            continue
+
+        size = ctx.risk_manager.position_size(
+            score,
+            ctx.balance,
+            df,
+            atr=candidate.get("atr"),
+            price=price,
+        )
+
+        if not ctx.risk_manager.can_allocate(strategy, size, ctx.balance):
+            continue
+
+        amount = size / price if price > 0 else 0.0
+        start_exec = time.perf_counter()
+        await cex_trade_async(
+            ctx.exchange,
+            ctx.ws_client,
+            sym,
+            direction_to_side(candidate["direction"]),
+            amount,
+            ctx.notifier,
+            dry_run=ctx.config.get("execution_mode") == "dry_run",
+            use_websocket=ctx.config.get("use_websocket", False),
+            config=ctx.config,
+        )
+        ctx.timing["execution_latency"] = max(
+            ctx.timing.get("execution_latency", 0.0),
+            time.perf_counter() - start_exec,
+        )
+
+        ctx.risk_manager.allocate_capital(strategy, size)
+        if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
+            ctx.paper_wallet.open(sym, direction_to_side(candidate["direction"]), amount, price)
+            ctx.balance = ctx.paper_wallet.balance
+        ctx.positions[sym] = {
+            "side": direction_to_side(candidate["direction"]),
+            "entry_price": price,
+            "entry_time": datetime.utcnow().isoformat(),
+            "regime": candidate.get("regime"),
+            "strategy": strategy,
+            "confidence": score,
+            "pnl": 0.0,
+            "size": amount,
+            "trailing_stop": 0.0,
+            "highest_price": price,
+        }
 
 
 async def handle_exits(ctx: BotContext) -> None:
-    """Placeholder for handling exit logic."""
-    return
+    """Check open positions for exit conditions."""
+    tf = ctx.config.get("timeframe", "1h")
+    tf_cache = ctx.df_cache.get(tf, {})
+    for sym, pos in list(ctx.positions.items()):
+        df = tf_cache.get(sym)
+        if df is None or df.empty:
+            continue
+        current_price = float(df["close"].iloc[-1])
+        pnl_pct = (
+            (current_price - pos["entry_price"]) / pos["entry_price"]
+        ) * (1 if pos["side"] == "buy" else -1)
+        if pnl_pct >= ctx.config.get("exit_strategy", {}).get("min_gain_to_trail", 0):
+            if current_price > pos.get("highest_price", pos["entry_price"]):
+                pos["highest_price"] = current_price
+            pos["trailing_stop"] = calculate_trailing_stop(
+                pd.Series([pos.get("highest_price", current_price)]),
+                ctx.config.get("exit_strategy", {}).get("trailing_stop_pct", 0.1),
+            )
+        exit_signal, new_stop = should_exit(
+            df,
+            current_price,
+            pos.get("trailing_stop", 0.0),
+            ctx.config,
+            ctx.risk_manager,
+        )
+        pos["trailing_stop"] = new_stop
+        if exit_signal:
+            await cex_trade_async(
+                ctx.exchange,
+                ctx.ws_client,
+                sym,
+                opposite_side(pos["side"]),
+                pos["size"],
+                ctx.notifier,
+                dry_run=ctx.config.get("execution_mode") == "dry_run",
+                use_websocket=ctx.config.get("use_websocket", False),
+                config=ctx.config,
+            )
+            ctx.risk_manager.deallocate_capital(
+                pos.get("strategy", ""), pos["size"] * pos["entry_price"]
+            )
+            ctx.positions.pop(sym, None)
 
 
 async def _rotation_loop(
@@ -875,6 +1009,11 @@ async def _main_impl() -> TelegramNotifier:
     )
     ctx.exchange = exchange
     ctx.ws_client = ws_client
+    ctx.risk_manager = risk_manager
+    ctx.notifier = notifier
+    ctx.paper_wallet = paper_wallet
+    ctx.position_guard = position_guard
+    ctx.balance = last_balance
     runner = PhaseRunner([
         fetch_candidates,
         update_caches,
@@ -885,12 +1024,6 @@ async def _main_impl() -> TelegramNotifier:
 
     try:
         while True:
-            loop_count += 1
-            mode = state["mode"]
-            maybe_update_mode(
-                state, base_mode, config, notifier if status_updates else None
-            )
-
             cycle_start = time.perf_counter()
             ctx.timing = await runner.run(ctx)
             execution_latency = 0.0
@@ -954,40 +1087,6 @@ async def _main_impl() -> TelegramNotifier:
     
     
     
-            allowed_results: list[dict] = []
-            df_current = None
-            current_dfs: dict[str, pd.DataFrame] = {}
-            current_prices: dict[str, float] = {}
-    
-            t0 = time.perf_counter()
-            symbols = await get_filtered_symbols(exchange, config)
-            symbol_time = time.perf_counter() - t0
-            start_filter = time.perf_counter()
-            global symbol_priority_queue
-            if not symbol_priority_queue:
-                symbol_priority_queue = build_priority_queue(symbols)
-            ticker_fetch_time = time.perf_counter() - start_filter
-            total_available = len(config.get("symbols") or [config.get("symbol")])
-            symbol_filter_ratio = len(symbols) / total_available if total_available else 1.0
-            global SYMBOL_EVAL_QUEUE
-            if not SYMBOL_EVAL_QUEUE:
-                SYMBOL_EVAL_QUEUE.extend(sym for sym, _ in symbols)
-            batch_size = config.get("symbol_batch_size", 10)
-            if len(symbol_priority_queue) < batch_size:
-                symbol_priority_queue.extend(build_priority_queue(symbols))
-            current_batch = [
-                symbol_priority_queue.popleft()
-                for _ in range(min(batch_size, len(symbol_priority_queue)))
-            ]
-            telemetry.inc("scan.symbols_considered", len(current_batch))
-    
-            t0 = time.perf_counter()
-            start_ohlcv = time.perf_counter()
-            tf_minutes = int(
-                pd.Timedelta(config.get("timeframe", "1h")).total_seconds() // 60
-            )
-            session_state.last_balance = bal_val
-            check_balance_change(float(bal_val), "funds converted")
 
 
 
@@ -1055,8 +1154,9 @@ async def _main_impl() -> TelegramNotifier:
             if notifier and ohlcv_fetch_latency > 0.5:
             notifier.notify(
                 f"\u26a0\ufe0f OHLCV latency {ohlcv_fetch_latency*1000:.0f} ms"
-            limit = int(max(20, tf_minutes * 3))
-            limit = int(config.get("cycle_lookback_limit", limit))
+            )
+        limit = int(max(20, tf_minutes * 3))
+        limit = int(config.get("cycle_lookback_limit", limit))
     
             session_state.df_cache = await update_multi_tf_ohlcv_cache(
                 exchange,
@@ -1244,7 +1344,6 @@ async def _main_impl() -> TelegramNotifier:
                 if ts is None or last_candle_ts.get(s) != ts:
                     update_syms.append(s)
             if update_syms:
-                tf_cache = await update_ohlcv_cache(
                 if not allowed:
                     logger.debug("Trade not allowed for %s \u2013 %s", sym, reason)
                     logger.debug(
@@ -1327,6 +1426,7 @@ async def _main_impl() -> TelegramNotifier:
                         if df_new is not None and not df_new.empty:
                             last_candle_ts[s] = int(df_new["timestamp"].iloc[-1])
                     session_state.df_cache[config["timeframe"]] = tf_cache
+                    df_cache[config["timeframe"]] = tf_cache
                 session_state.df_cache[config["timeframe"]] = await update_ohlcv_cache(
                     exchange,
                     session_state.df_cache.get(config["timeframe"], {}),
@@ -1938,30 +2038,15 @@ async def _main_impl() -> TelegramNotifier:
                 regime_rejections,
             )
             total_time = time.perf_counter() - cycle_start
-            timing = getattr(ctx, "timing", {})
             _emit_timing(
-                timing.get("fetch_candidates", symbol_time),
-                timing.get("update_caches", ohlcv_time),
-                timing.get("analyse_batch", analyze_time),
+                ctx.timing.get("fetch_candidates", 0.0),
+                ctx.timing.get("update_caches", 0.0),
+                ctx.timing.get("analyse_batch", 0.0),
                 total_time,
                 metrics_path,
-                ohlcv_fetch_latency,
-                execution_latency,
+                ctx.timing.get("ohlcv_fetch_latency", 0.0),
+                ctx.timing.get("execution_latency", 0.0),
             )
-            if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
-                metrics = {
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "ticker_fetch_time": ticker_fetch_time,
-                    "symbol_filter_ratio": symbol_filter_ratio,
-                    "ohlcv_fetch_latency": ohlcv_fetch_latency,
-                    "execution_latency": execution_latency,
-                    "unknown_regimes": rejected_regime,
-                }
-                write_cycle_metrics(metrics, config)
-            summary = f"Cycle complete: {total_pairs} symbols, {trades_executed} trades"
-            if notifier and status_updates:
-                notifier.notify(summary)
-            logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
 
             poll_mod = config.get("balance_poll_mod", 1)
@@ -2203,6 +2288,7 @@ async def _main_impl() -> TelegramNotifier:
             notifier.notify(summary)
             logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
+    
     finally:
         monitor_task.cancel()
         control_task.cancel()
