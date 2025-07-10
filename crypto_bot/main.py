@@ -10,7 +10,12 @@ from dataclasses import dataclass, field
 # Track WebSocket ping tasks
 WS_PING_TASKS: set[asyncio.Task] = set()
 
-import ccxt
+try:
+    import ccxt  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    import types
+
+    ccxt = types.SimpleNamespace()
 
 import pandas as pd
 import yaml
@@ -857,6 +862,7 @@ async def _main_impl() -> TelegramNotifier:
 
     base_mode = mode
     loop_count = 0
+    ctx = BotContext(positions, session_state.df_cache, regime_cache, config)
     ctx = BotContext(session_state.positions, session_state.df_cache, regime_cache, config)
     ctx = BotContext(session_state.positions, df_cache, regime_cache, config)
     ctx = BotContext(
@@ -1224,6 +1230,7 @@ async def _main_impl() -> TelegramNotifier:
     
             open_syms = list(session_state.positions.keys())
             if open_syms:
+                tf_cache = session_state.df_cache.get(config["timeframe"], {})
                 tf_cache = df_cache.get(config["timeframe"], {})
                 update_syms: list[str] = []
                 for s in open_syms:
@@ -1249,6 +1256,7 @@ async def _main_impl() -> TelegramNotifier:
                         df_new = tf_cache.get(s)
                         if df_new is not None and not df_new.empty:
                             last_candle_ts[s] = int(df_new["timestamp"].iloc[-1])
+                    session_state.df_cache[config["timeframe"]] = tf_cache
                     df_cache[config["timeframe"]] = tf_cache
                 session_state.df_cache[config["timeframe"]] = await update_ohlcv_cache(
                     exchange,
@@ -1347,6 +1355,12 @@ async def _main_impl() -> TelegramNotifier:
                     df_current = pd.DataFrame(
                         data,
                         columns=["timestamp", "open", "high", "low", "close", "volume"],
+                    )
+                    update_df_cache(
+                        session_state.df_cache,
+                        config["timeframe"],
+                        sym,
+                        df_current,
                     )
                     update_df_cache(df_cache, config["timeframe"], sym, df_current)
                 if df_current is not None and not df_current.empty:
