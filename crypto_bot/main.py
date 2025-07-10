@@ -190,6 +190,16 @@ def _emit_timing(
         analyze_t,
         total_t,
     )
+    if metrics_path:
+        log_cycle_metrics(
+            symbol_t,
+            ohlcv_t,
+            analyze_t,
+            total_t,
+            ohlcv_fetch_latency,
+            execution_latency,
+            metrics_path,
+        )
 
 
 def maybe_update_mode(
