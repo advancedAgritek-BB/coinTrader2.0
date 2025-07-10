@@ -53,12 +53,6 @@ def get_exchange(config: dict) -> ccxt.Exchange:
     return getattr(ccxt, name)({"enableRateLimit": True})
 
 
-def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
-    """Fetch tickers and update the cached liquid pairs list.
-
-    Markets whose quote currency is not in ``allowed_quote_currencies`` or whose
-    base asset appears in ``blacklist_assets`` will be skipped.
-    """
 async def _fetch_tickers(exchange: ccxt.Exchange) -> dict:
     """Fetch tickers with a 10 second timeout."""
     return await asyncio.wait_for(exchange.fetch_tickers(), 10)
