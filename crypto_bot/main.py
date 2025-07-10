@@ -1376,25 +1376,6 @@ async def _main_impl() -> TelegramNotifier:
                         }
                     )
     
-            allowed_results.sort(key=lambda x: x["score"], reverse=True)
-            top_n = config.get("top_n_symbols", 3)
-            allowed_results = allowed_results[:top_n]
-            corr_matrix = compute_correlation_matrix(
-                {r["symbol"]: r["df"] for r in allowed_results}
-            )
-            filtered_results: list[dict] = []
-            for r in allowed_results:
-                keep = True
-                for kept in filtered_results:
-                    if not corr_matrix.empty:
-                        corr = corr_matrix.at[r["symbol"], kept["symbol"]]
-                        if abs(corr) > 0.95:
-                            keep = False
-                            break
-                if keep:
-                    filtered_results.append(r)
-    
-            best = filtered_results[0] if filtered_results else None
     
             open_syms = list(session_state.positions.keys())
             if open_syms:
