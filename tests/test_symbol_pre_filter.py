@@ -369,7 +369,9 @@ def test_filter_symbols_correlation(monkeypatch):
         fake_fetch,
     )
     df1 = pd.DataFrame({"close": [1, 2, 3, 4, 5]})
+    df1["return"] = df1["close"].pct_change()
     df2 = pd.DataFrame({"close": [2, 4, 6, 8, 10]})
+    df2["return"] = df2["close"].pct_change()
     cache = {"ETH/USD": df1, "BTC/USD": df2}
 
     cfg = {
@@ -381,6 +383,32 @@ def test_filter_symbols_correlation(monkeypatch):
     assert symbols == [("ETH/USD", 0.8)]
 
 
+def test_correlation_pair_limit(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async",
+        fake_fetch,
+    )
+    df1 = pd.DataFrame({"close": [1, 2, 3]})
+    df1["return"] = df1["close"].pct_change()
+    df2 = pd.DataFrame({"close": [2, 4, 6]})
+    df2["return"] = df2["close"].pct_change()
+    cache = {"ETH/USD": df1, "BTC/USD": df2}
+
+    cfg = {
+        **CONFIG,
+        "symbol_filter": {
+            "min_volume_usd": 50000,
+            "max_spread_pct": 2.0,
+            "change_pct_percentile": 0,
+            "correlation_max_pairs": 1,
+        },
+    }
+    symbols = asyncio.run(
+        filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg, df_cache=cache)
+    )
+
+    # second symbol is not pruned because correlation checks are limited to 1 pair
+    assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 async def fake_fetch_wide_spread(_):
     return {
         "result": {
