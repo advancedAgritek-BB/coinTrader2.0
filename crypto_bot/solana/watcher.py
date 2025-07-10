@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 import aiohttp
+import logging
 import yaml
 
 
@@ -26,6 +27,9 @@ class NewPoolEvent:
 
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
+
+
+logger = logging.getLogger(__name__)
 
 
 class PoolWatcher:
@@ -51,9 +55,14 @@ class PoolWatcher:
         self._running = True
         async with aiohttp.ClientSession() as session:
             while self._running:
-                async with session.get(self.url, timeout=10) as resp:
-                    resp.raise_for_status()
-                    data = await resp.json()
+                try:
+                    async with session.get(self.url, timeout=10) as resp:
+                        resp.raise_for_status()
+                        data = await resp.json()
+                except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
+                    logger.error("PoolWatcher error: %s", e)
+                    await asyncio.sleep(self.interval)
+                    continue
 
                 pools = data.get("pools") or data.get("data") or data
                 for item in pools:
