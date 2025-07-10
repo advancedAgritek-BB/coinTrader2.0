@@ -78,19 +78,6 @@ from crypto_bot.fund_manager import (
 )
 from crypto_bot.regime.regime_classifier import CONFIG
 
-from crypto_bot.paper_wallet import PaperWallet
-from crypto_bot.utils.telemetry import telemetry, write_cycle_metrics
-from crypto_bot.utils.strategy_utils import compute_strategy_weights
-from crypto_bot.auto_optimizer import optimize_strategies
-from crypto_bot import grid_state
-from crypto_bot.execution.cex_executor import place_stop_order
-from crypto_bot.fund_manager import (
-    detect_non_trade_tokens,
-    auto_convert_funds,
-    check_wallet_balances,
-)
-from crypto_bot.utils.strategy_analytics import write_scores, write_stats
-
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
@@ -103,6 +90,9 @@ symbol_priority_queue: deque[str] = deque()
 
 # Queue tracking symbols evaluated across cycles
 SYMBOL_EVAL_QUEUE: deque[str] = deque()
+
+# Protects shared queues for future multi-tasking scenarios
+QUEUE_LOCK = asyncio.Lock()
 
 # Retry parameters for the initial symbol scan
 MAX_SYMBOL_SCAN_ATTEMPTS = 3
@@ -531,17 +521,16 @@ async def fetch_candidates(ctx: BotContext) -> None:
     )
 
     global symbol_priority_queue
-    if not symbol_priority_queue:
-        symbol_priority_queue = build_priority_queue(symbols)
-
     batch_size = ctx.config.get("symbol_batch_size", 10)
-    if len(symbol_priority_queue) < batch_size:
-        symbol_priority_queue.extend(build_priority_queue(symbols))
-
-    ctx.current_batch = [
-        symbol_priority_queue.popleft()
-        for _ in range(min(batch_size, len(symbol_priority_queue)))
-    ]
+    async with QUEUE_LOCK:
+        if not symbol_priority_queue:
+            symbol_priority_queue = build_priority_queue(symbols)
+        if len(symbol_priority_queue) < batch_size:
+            symbol_priority_queue.extend(build_priority_queue(symbols))
+        ctx.current_batch = [
+            symbol_priority_queue.popleft()
+            for _ in range(min(batch_size, len(symbol_priority_queue)))
+        ]
 
 
 async def update_caches(ctx: BotContext) -> None:
@@ -1098,6 +1087,18 @@ async def _main_impl() -> TelegramNotifier:
             total_available = len(config.get("symbols") or [config.get("symbol")])
             symbol_filter_ratio = len(symbols) / total_available if total_available else 1.0
             global SYMBOL_EVAL_QUEUE
+            batch_size = config.get("symbol_batch_size", 10)
+            async with QUEUE_LOCK:
+                if not SYMBOL_EVAL_QUEUE:
+                    SYMBOL_EVAL_QUEUE.extend(sym for sym, _ in symbols)
+                if not symbol_priority_queue:
+                    symbol_priority_queue = build_priority_queue(symbols)
+                if len(symbol_priority_queue) < batch_size:
+                    symbol_priority_queue.extend(build_priority_queue(symbols))
+                current_batch = [
+                    symbol_priority_queue.popleft()
+                    for _ in range(min(batch_size, len(symbol_priority_queue)))
+                ]
             if not SYMBOL_EVAL_QUEUE:
                 SYMBOL_EVAL_QUEUE.extend(sym for sym, _ in symbols)
             batch_size = config.get("symbol_batch_size", 10)
@@ -1128,21 +1129,22 @@ async def _main_impl() -> TelegramNotifier:
         symbol_time = time.perf_counter() - t0
         start_filter = time.perf_counter()
         global symbol_priority_queue
-        if not symbol_priority_queue:
-            symbol_priority_queue = build_priority_queue(symbols)
         ticker_fetch_time = time.perf_counter() - start_filter
         total_available = len(config.get("symbols") or [config.get("symbol")])
         symbol_filter_ratio = len(symbols) / total_available if total_available else 1.0
         global SYMBOL_EVAL_QUEUE
-        if not SYMBOL_EVAL_QUEUE:
-            SYMBOL_EVAL_QUEUE.extend(sym for sym, _ in symbols)
         batch_size = config.get("symbol_batch_size", 10)
-        if len(symbol_priority_queue) < batch_size:
-            symbol_priority_queue.extend(build_priority_queue(symbols))
-        current_batch = [
-            symbol_priority_queue.popleft()
-            for _ in range(min(batch_size, len(symbol_priority_queue)))
-        ]
+        async with QUEUE_LOCK:
+            if not SYMBOL_EVAL_QUEUE:
+                SYMBOL_EVAL_QUEUE.extend(sym for sym, _ in symbols)
+            if not symbol_priority_queue:
+                symbol_priority_queue = build_priority_queue(symbols)
+            if len(symbol_priority_queue) < batch_size:
+                symbol_priority_queue.extend(build_priority_queue(symbols))
+            current_batch = [
+                symbol_priority_queue.popleft()
+                for _ in range(min(batch_size, len(symbol_priority_queue)))
+            ]
         telemetry.inc("scan.symbols_considered", len(current_batch))
 
         t0 = time.perf_counter()
