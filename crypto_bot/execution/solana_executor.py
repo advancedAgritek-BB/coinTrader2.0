@@ -19,6 +19,7 @@ logger = setup_logger(__name__, LOG_DIR / "execution.log")
 
 JUPITER_QUOTE_URL = "https://quote-api.jup.ag/v6/quote"
 JUPITER_SWAP_URL = "https://quote-api.jup.ag/v6/swap"
+JITO_BUNDLE_URL = "https://mainnet.block-engine.jito.wtf/api/v1/bundles"
 
 
 async def execute_swap(
@@ -33,6 +34,7 @@ async def execute_swap(
     mempool_monitor: Optional[SolanaMempoolMonitor] = None,
     mempool_cfg: Optional[Dict] = None,
     config: Optional[Dict] = None,
+    jito_key: Optional[str] = None,
 ) -> Dict:
     """Execute a swap on Solana using the Jupiter aggregator."""
 
@@ -179,14 +181,32 @@ async def execute_swap(
     raw_tx = base64.b64decode(swap_tx)
     tx = Transaction.deserialize(raw_tx)
     tx.sign(keypair)
-    send_res = client.send_transaction(tx, keypair)
-    tx_hash = send_res["result"]
+
+    if jito_key is None:
+        jito_key = os.getenv("JITO_KEY")
+
+    if jito_key:
+        signed_tx = base64.b64encode(tx.serialize()).decode()
+        async with aiohttp.ClientSession() as jito_session:
+            async with jito_session.post(
+                JITO_BUNDLE_URL,
+                json={"transactions": [signed_tx]},
+                headers={"Authorization": f"Bearer {jito_key}"},
+                timeout=10,
+            ) as bundle_resp:
+                bundle_resp.raise_for_status()
+                bundle_data = await bundle_resp.json()
+        tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
+    else:
+        send_res = client.send_transaction(tx, keypair)
+        tx_hash = send_res["result"]
 
     result = {
         "token_in": token_in,
         "token_out": token_out,
         "amount": amount,
         "tx_hash": tx_hash,
+        "route": route,
     }
     err = notifier.notify(f"Swap executed: {result}")
     if err:
