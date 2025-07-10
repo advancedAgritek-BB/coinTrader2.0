@@ -6,7 +6,6 @@ import asyncio
 from typing import Iterable, List, Dict
 import json
 import os
-from typing import Iterable, List
 
 import numpy as np
 
@@ -17,6 +16,7 @@ from .logger import LOG_DIR, setup_logger
 from .market_loader import fetch_ohlcv_async
 from .correlation import compute_pairwise_correlation
 from .symbol_scoring import score_symbol
+from .telemetry import telemetry
 from pathlib import Path
 
 
@@ -153,15 +153,23 @@ async def filter_symbols(
     min_age = cfg.get("min_symbol_age_days", 0)
     min_score = float(cfg.get("min_symbol_score", 0.0))
 
+    telemetry.inc("scan.symbols_considered", len(list(symbols)))
+    skipped = 0
+
     pairs = [s.replace("/", "") for s in symbols]
     if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
         try:
             data = await exchange.fetch_tickers(symbols)
         except Exception as exc:  # pragma: no cover - network
             logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
+            telemetry.inc("scan.api_errors")
             data = {}
     else:
-        data = (await _fetch_ticker_async(pairs)).get("result", {})
+        try:
+            data = (await _fetch_ticker_async(pairs)).get("result", {})
+        except Exception:  # pragma: no cover - network
+            telemetry.inc("scan.api_errors")
+            raise
 
     id_map: dict[str, str] = {}
     if hasattr(exchange, "markets_by_id"):
@@ -199,6 +207,8 @@ async def filter_symbols(
         )
         if vol_usd >= min_volume and spread_pct <= max_spread:
             metrics.append((symbol, vol_usd, change_pct, spread_pct))
+        else:
+            skipped += 1
 
     if metrics and pct:
         threshold = np.percentile([abs(m[2]) for m in metrics], pct)
@@ -209,6 +219,8 @@ async def filter_symbols(
         score = await score_symbol(exchange, sym, vol, chg, spr, cfg)
         if score >= min_score:
             scored.append((sym, score))
+        else:
+            skipped += 1
 
     scored.sort(key=lambda x: x[1], reverse=True)
 
@@ -224,6 +236,7 @@ async def filter_symbols(
             enough = await has_enough_history(exchange, sym, min_age, timeframe="1h")
             if not enough:
                 logger.debug("Skipping %s due to insufficient history", sym)
+                skipped += 1
                 continue
         keep = True
         if df_cache:
@@ -235,5 +248,8 @@ async def filter_symbols(
         if keep:
             logger.info("Selected %s with score %.2f", sym, score)
             result.append((sym, score))
+        else:
+            skipped += 1
 
+    telemetry.inc("scan.symbols_skipped", skipped)
     return result

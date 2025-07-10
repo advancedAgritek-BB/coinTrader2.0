@@ -17,3 +17,4 @@ from .symbol_utils import get_filtered_symbols
 from .strategy_analytics import compute_metrics, write_scores, write_stats
 from .stats import zscore
 from .commit_lock import check_and_update
+from .telemetry import telemetry

@@ -3,6 +3,13 @@ import json
 import pandas as pd
 import pytest
 import crypto_bot.utils.symbol_scoring as sc
+from crypto_bot.utils.telemetry import telemetry
+
+
+@pytest.fixture(autouse=True)
+def reset_telemetry():
+    telemetry.reset()
+    yield
 
 from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_history
 
