@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 import json
 import time
+from functools import lru_cache
 
 from crypto_bot.utils import timeframe_seconds
 from datetime import datetime
@@ -195,18 +196,41 @@ def _build_mappings(config: Mapping[str, Any] | RouterConfig) -> tuple[
     return strat_map, regime_map
 
 
-STRATEGY_MAP, REGIME_STRATEGIES = _build_mappings(DEFAULT_ROUTER_CFG)
+_CONFIG_REGISTRY: Dict[int, Mapping[str, Any] | RouterConfig] = {}
+
+
+def _register_config(cfg: Mapping[str, Any] | RouterConfig) -> int:
+    """Register config and return its id for cache lookups."""
+    cid = id(cfg)
+    _CONFIG_REGISTRY[cid] = cfg
+    return cid
+
+
+@lru_cache(maxsize=8)
+def _build_mappings_cached(config_id: int) -> tuple[
+    Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]],
+    Dict[str, list[Callable[[pd.DataFrame], Tuple[float, str]]]],
+]:
+    cfg = _CONFIG_REGISTRY.get(config_id, DEFAULT_ROUTER_CFG)
+    return _build_mappings(cfg)
+
+_register_config(DEFAULT_ROUTER_CFG)
+STRATEGY_MAP, REGIME_STRATEGIES = _build_mappings_cached(id(DEFAULT_ROUTER_CFG))
 
 
 def strategy_for(regime: str, config: RouterConfig | Mapping[str, Any] | None = None) -> Callable[[pd.DataFrame], Tuple[float, str]]:
     """Return strategy callable for a given regime."""
-    mapping, _ = _build_mappings(config or DEFAULT_ROUTER_CFG)
+    cfg = config or DEFAULT_ROUTER_CFG
+    _register_config(cfg)
+    mapping, _ = _build_mappings_cached(id(cfg))
     return mapping.get(regime, grid_bot.generate_signal)
 
 
 def get_strategies_for_regime(regime: str, config: RouterConfig | Mapping[str, Any] | None = None) -> list[Callable[[pd.DataFrame], Tuple[float, str]]]:
     """Return list of strategies mapped to ``regime``."""
-    _, mapping = _build_mappings(config or DEFAULT_ROUTER_CFG)
+    cfg = config or DEFAULT_ROUTER_CFG
+    _register_config(cfg)
+    _, mapping = _build_mappings_cached(id(cfg))
     return mapping.get(regime, [grid_bot.generate_signal])
 
 
