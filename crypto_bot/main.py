@@ -986,8 +986,7 @@ async def _main_impl() -> TelegramNotifier:
             tf_minutes = int(
                 pd.Timedelta(config.get("timeframe", "1h")).total_seconds() // 60
             )
-            session_state.last_balance = bal_val
-            check_balance_change(float(bal_val), "funds converted")
+            # already logged in the convert-funds loop – nothing to do here
 
 
 
