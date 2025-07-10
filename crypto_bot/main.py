@@ -1233,7 +1233,9 @@ async def _main_impl() -> TelegramNotifier:
                         )
     
             analyze_time = time.perf_counter() - analyze_start
-    
+            allowed: bool = False
+            reason: str = ""
+
             for res in results:
                 sym = res["symbol"]
                 df_sym = res["df"]
