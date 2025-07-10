@@ -17,6 +17,7 @@ def test_load_config_returns_dict():
     assert "rsi_overbought_pct" in config
     assert "rsi_oversold_pct" in config
     assert "bb_squeeze_pct" in config
+    assert "scan_lookback_limit" in config
     assert "top_n_symbols" in config
     assert "min_confidence_score" in config
     assert "signal_fusion" in config

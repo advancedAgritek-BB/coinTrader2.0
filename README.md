@@ -172,6 +172,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **symbol_batch_size** – number of symbols processed each cycle.
   The same batch size controls the initial market scan at startup where
   progress is logged after each batch.
+* **scan_lookback_limit** – candles of history loaded during the initial scan.
 * **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
 * **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
 * **symbol_score_weights** – weights for volume, spread, change and age.
@@ -569,6 +570,7 @@ excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 10          # skip pairs with less history
 symbol_batch_size: 10            # symbols processed per cycle
+scan_lookback_limit: 50          # candles loaded during startup
 max_spread_pct: 1.0              # skip pairs with wider spreads
 ```
 
