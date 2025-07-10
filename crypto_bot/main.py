@@ -943,7 +943,7 @@ async def _main_impl() -> TelegramNotifier:
         tasks = []
         analyze_start = time.perf_counter()
         for sym in current_batch:
-            logger.info("🔹 Symbol: %s", sym)
+            logger.debug("🔹 Symbol: %s", sym)
             total_pairs += 1
             df_map = {tf: c.get(sym) for tf, c in session_state.df_cache.items()}
             for tf, cache_tf in session_state.regime_cache.items():
@@ -964,7 +964,7 @@ async def _main_impl() -> TelegramNotifier:
                 df_sym = pd.DataFrame(df_sym, columns=expected_cols)
             elif not set(expected_cols).issubset(df_sym.columns):
                 df_sym = pd.DataFrame(df_sym.to_numpy(), columns=expected_cols)
-            logger.info("Fetched %d candles for %s", len(df_sym), sym)
+            logger.debug("Fetched %d candles for %s", len(df_sym), sym)
             df_map[config["timeframe"]] = df_sym
             if sym in session_state.positions:
                 df_current = df_sym
@@ -1031,8 +1031,8 @@ async def _main_impl() -> TelegramNotifier:
             score_sym = res["score"]
             direction_sym = res["direction"]
 
-            logger.info("Regime %s -> Strategy %s", regime_sym, name_sym)
-            logger.info(
+            logger.debug("Regime %s -> Strategy %s", regime_sym, name_sym)
+            logger.debug(
                 "Using strategy %s for %s in %s mode",
                 name_sym,
                 sym,
@@ -1059,12 +1059,12 @@ async def _main_impl() -> TelegramNotifier:
             allowed, reason = risk_manager.allow_trade(df_sym, name_sym)
             mean_vol = df_sym["volume"].rolling(20).mean().iloc[-1]
             last_vol = df_sym["volume"].iloc[-1]
-            logger.info(
+            logger.debug(
                 f"[TRADE EVAL] {sym} | Signal: {score_sym:.2f} | Volume: {last_vol:.4f}/{mean_vol:.2f} | Allowed: {allowed}"
             )
             if not allowed:
-                logger.info("Trade not allowed for %s \u2013 %s", sym, reason)
-                logger.info(
+                logger.debug("Trade not allowed for %s \u2013 %s", sym, reason)
+                logger.debug(
                     "Trade rejected for %s: %s, score=%.2f, regime=%s",
                     sym,
                     reason,
