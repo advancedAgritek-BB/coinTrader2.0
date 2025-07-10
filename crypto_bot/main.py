@@ -768,12 +768,18 @@ async def _main_impl() -> TelegramNotifier:
 
         t0 = time.perf_counter()
         start_ohlcv = time.perf_counter()
+        tf_minutes = int(
+            pd.Timedelta(config.get("timeframe", "1h")).total_seconds() // 60
+        )
+        limit = int(max(20, tf_minutes * 3))
+        limit = int(config.get("cycle_lookback_limit", limit))
+
         df_cache = await update_multi_tf_ohlcv_cache(
             exchange,
             df_cache,
             current_batch,
             config,
-            limit=100,
+            limit=limit,
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
@@ -785,7 +791,7 @@ async def _main_impl() -> TelegramNotifier:
             regime_cache,
             current_batch,
             config,
-            limit=100,
+            limit=limit,
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
@@ -811,7 +817,7 @@ async def _main_impl() -> TelegramNotifier:
             if df_sym is None or df_sym.empty:
                 msg = (
                     f"OHLCV fetch failed for {sym} on {config['timeframe']} "
-                    f"(limit {100})"
+                    f"(limit {limit})"
                 )
                 logger.error(msg)
                 if notifier and status_updates:
