@@ -7,11 +7,8 @@ import numpy as np
 
 from pathlib import Path
 import yaml
-import json
-import time
 
-from crypto_bot.utils import timeframe_seconds
-from datetime import datetime
+from crypto_bot.utils import timeframe_seconds, commit_lock
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -86,8 +83,22 @@ class RouterConfig:
 
 DEFAULT_ROUTER_CFG = RouterConfig.from_dict(DEFAULT_CONFIG)
 
-# Path storing the last selected regime and timestamp
-LAST_REGIME_FILE = LOG_DIR / "last_regime.json"
+
+def cfg_get(cfg: RouterConfig | Mapping[str, Any], key: str, default: Any = None) -> Any:
+    """Return configuration value ``key`` from ``cfg``.
+
+    The helper accepts either a :class:`RouterConfig` or a mapping based
+    configuration dictionary.
+    """
+    if isinstance(cfg, RouterConfig):
+        return getattr(cfg, key, default)
+    if isinstance(cfg, Mapping):
+        router = cfg.get("strategy_router", {})
+        if key in router:
+            return router.get(key, default)
+        return cfg.get(key, default)
+    return default
+
 
 
 class Selector:
@@ -423,54 +434,15 @@ def route(
             base = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe")
             regime = regime.get(base, next(iter(regime.values())))
 
-    # commit lock logic
-    intervals = cfg.commit_lock_intervals if isinstance(cfg, RouterConfig) else int(
-        config.get("strategy_router", {}).get("commit_lock_intervals", 0)
+    tf_sec = timeframe_seconds(
+        None,
+        cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe", "1h"),
     )
-    if intervals:
-        lock_file = Path("last_regime.json")
-        last_reg = None
-        last_ts = 0.0
-        if lock_file.exists():
-            try:
-                data = json.loads(lock_file.read_text())
-                last_reg = data.get("regime")
-                last_ts = float(data.get("timestamp", 0))
-            except Exception:
-                pass
-
-        tf = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe", "1h")
-        interval = timeframe_seconds(None, tf)
-        now = time.time()
-        if last_reg and regime != last_reg and now - last_ts < interval * intervals:
-            regime = last_reg
-        else:
-            lock_file.parent.mkdir(parents=True, exist_ok=True)
-            lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
-    tf = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe", "1h")
-    tf_minutes = getattr(
-        cfg,
-        "timeframe_minutes",
-        int(pd.Timedelta(tf).total_seconds() // 60),
+    regime = commit_lock.check_and_update(
+        regime,
+        tf_sec,
+        cfg_get(cfg, "commit_lock_intervals", 0),
     )
-
-    LAST_REGIME_FILE.parent.mkdir(parents=True, exist_ok=True)
-    last_data = {}
-    if LAST_REGIME_FILE.exists():
-        try:
-            last_data = json.loads(LAST_REGIME_FILE.read_text())
-        except Exception:
-            last_data = {}
-    last_ts = last_data.get("timestamp")
-    last_regime = last_data.get("regime")
-    if last_ts and last_regime:
-        try:
-            ts = datetime.fromisoformat(last_ts)
-            if (datetime.utcnow() - ts).total_seconds() < tf_minutes * 60 * 3:
-                regime = last_regime
-        except Exception:
-            pass
-    LAST_REGIME_FILE.write_text(json.dumps({"timestamp": datetime.utcnow().isoformat(), "regime": regime}))
 
     # Thompson sampling router
     bandit_active = (
