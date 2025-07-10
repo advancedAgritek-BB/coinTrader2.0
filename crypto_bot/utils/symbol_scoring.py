@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
-from typing import Mapping
+from typing import Mapping, Tuple, Dict
 import asyncio
 import inspect
 import time
+
+# Cache of computed symbol ages
+_age_cache: Dict[Tuple[str, str], Tuple[float, float]] = {}
+
+# Cache of latency measurements keyed by exchange hostname
+_latency_cache: Dict[str, Tuple[float, float]] = {}
+
+# refresh intervals
+_AGE_REFRESH = 24 * 3600  # 24 hours in seconds
+_LATENCY_REFRESH = 10 * 60  # 10 minutes in seconds
 
 DEFAULT_WEIGHTS = {
     "volume": 0.4,
@@ -17,7 +27,13 @@ DEFAULT_WEIGHTS = {
 
 
 def get_symbol_age(exchange, symbol: str) -> float:
-    """Return age of ``symbol`` in days using ``exchange.markets``."""
+    """Return age of ``symbol`` in days using ``exchange.markets`` with caching."""
+
+    key = (getattr(exchange, "id", exchange.__class__.__name__), symbol)
+    now_s = time.time()
+    cached = _age_cache.get(key)
+    if cached and now_s - cached[1] < _AGE_REFRESH:
+        return cached[0]
 
     try:
         markets = getattr(exchange, "markets", None)
@@ -25,31 +41,40 @@ def get_symbol_age(exchange, symbol: str) -> float:
             markets = exchange.load_markets()
         market = markets.get(symbol) if markets else None
         if not market:
-            return 0.0
-
-        ts = market.get("created")
-        if not ts:
-            ts = market.get("timestamp")
-        if not ts:
-            ts = market.get("info", {}).get("listed")
-        if not ts:
-            ts = market.get("info", {}).get("launch")
-        if not ts:
-            return 0.0
-
-        now = (
-            exchange.milliseconds() if hasattr(exchange, "milliseconds") else int(time.time() * 1000)
-        )
-        return max(0.0, (now - int(ts)) / 86400000)
+            age = 0.0
+        else:
+            ts = market.get("created")
+            if not ts:
+                ts = market.get("timestamp")
+            if not ts:
+                ts = market.get("info", {}).get("listed")
+            if not ts:
+                ts = market.get("info", {}).get("launch")
+            if not ts:
+                age = 0.0
+            else:
+                now_ms = (
+                    exchange.milliseconds() if hasattr(exchange, "milliseconds") else int(time.time() * 1000)
+                )
+                age = max(0.0, (now_ms - int(ts)) / 86400000)
     except Exception:  # pragma: no cover - best effort
-        return 0.0
+        age = 0.0
+
+    _age_cache[key] = (age, now_s)
+    return age
 
 
 async def get_latency(exchange, symbol: str) -> float:
-    """Return recent API latency for ``symbol`` in milliseconds."""
+    """Return recent API latency for ``symbol`` in milliseconds using a cache."""
 
     if not hasattr(exchange, "fetch_ticker"):
         return 0.0
+
+    host = getattr(exchange, "hostname", getattr(exchange, "id", ""))
+    now_s = time.time()
+    cached = _latency_cache.get(host)
+    if cached and now_s - cached[1] < _LATENCY_REFRESH:
+        return cached[0]
 
     start = time.perf_counter()
     try:
@@ -61,7 +86,10 @@ async def get_latency(exchange, symbol: str) -> float:
     except Exception:  # pragma: no cover - best effort
         pass
     end = time.perf_counter()
-    return (end - start) * 1000.0
+    latency = (end - start) * 1000.0
+
+    _latency_cache[host] = (latency, now_s)
+    return latency
 
 
 async def score_symbol(
