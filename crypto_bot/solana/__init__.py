@@ -4,13 +4,13 @@ from .watcher import NewPoolEvent, PoolWatcher
 from .meme_wave_runner import start_runner
 from .sniper_solana import score_new_pool
 from .runner import run
-from .api_helpers import connect_helius_ws, fetch_jito_bundle
+from .api_helpers import helius_ws, fetch_jito_bundle
 
 __all__ = [
     "NewPoolEvent",
     "PoolWatcher",
     "run",
-    "connect_helius_ws",
+    "helius_ws",
     "fetch_jito_bundle",
     "start_runner",
     "score_new_pool",
