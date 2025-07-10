@@ -15,7 +15,7 @@ from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_histor
 
 CONFIG = {
     "symbol_filter": {
-        "min_volume_usd": 50000,
+        "volume_percentile": 0,
         "max_spread_pct": 2.0,
         "correlation_max_pairs": 10,
     },
@@ -262,7 +262,7 @@ def test_filter_symbols_sorted_by_score(monkeypatch):
 
     cfg = {
         **CONFIG,
-        "symbol_filter": {"min_volume_usd": 50000, "change_pct_percentile": 0, "max_spread_pct": 2.0},
+        "symbol_filter": {"volume_percentile": 0, "change_pct_percentile": 0, "max_spread_pct": 2.0},
     }
     symbols = asyncio.run(
         filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg)
@@ -279,7 +279,7 @@ def test_filter_symbols_min_score(monkeypatch):
     cfg = {
         **CONFIG,
         "min_symbol_score": 0.7,
-        "symbol_filter": {"min_volume_usd": 50000, "change_pct_percentile": 0},
+        "symbol_filter": {"volume_percentile": 0, "change_pct_percentile": 0},
     }
     symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg))
     assert symbols == [("ETH/USD", 0.8)]
@@ -323,7 +323,7 @@ def test_filter_symbols_correlation(monkeypatch):
 
     cfg = {
         **CONFIG,
-        "symbol_filter": {"min_volume_usd": 50000, "max_spread_pct": 2.0, "change_pct_percentile": 0},
+        "symbol_filter": {"volume_percentile": 0, "max_spread_pct": 2.0, "change_pct_percentile": 0},
     }
     symbols = asyncio.run(
         filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg, df_cache=cache)
@@ -350,7 +350,7 @@ def test_filter_symbols_spread(monkeypatch):
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async",
         fake_fetch_wide_spread,
     )
-    cfg = {"symbol_filter": {"min_volume_usd": 50000, "max_spread_pct": 1.0}}
+    cfg = {"symbol_filter": {"volume_percentile": 0, "max_spread_pct": 1.0}}
     symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD"], cfg))
     assert symbols == []
 def test_percentile_selects_top_movers(monkeypatch):

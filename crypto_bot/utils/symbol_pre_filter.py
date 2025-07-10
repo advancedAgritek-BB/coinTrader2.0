@@ -25,6 +25,7 @@ logger = setup_logger(__name__, LOG_DIR / "symbol_filter.log")
 
 API_URL = "https://api.kraken.com/0/public"
 DEFAULT_MIN_VOLUME_USD = 50000
+DEFAULT_VOLUME_PERCENTILE = 60
 
 
 async def has_enough_history(
@@ -147,7 +148,7 @@ async def filter_symbols(
 
     cfg = config or {}
     sf = cfg.get("symbol_filter", {})
-    min_volume = sf.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
+    vol_pct = sf.get("volume_percentile", DEFAULT_VOLUME_PERCENTILE)
     max_spread = sf.get("max_spread_pct", 1.0)
     pct = sf.get("change_pct_percentile", 80)
     min_age = cfg.get("min_symbol_age_days", 0)
@@ -192,7 +193,8 @@ async def filter_symbols(
     for req_id, sym in request_map.items():
         id_map.setdefault(req_id, sym)
 
-    metrics: List[tuple[str, float, float, float]] = []
+    raw: List[tuple[str, float, float, float]] = []
+    volumes: List[float] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id) or id_map.get(pair_id.upper())
         norm = pair_id.upper()
@@ -220,8 +222,15 @@ async def filter_symbols(
             change_pct,
             spread_pct,
         )
-        if vol_usd >= min_volume and spread_pct <= max_spread:
-            metrics.append((symbol, vol_usd, change_pct, spread_pct))
+        volumes.append(vol_usd)
+        raw.append((symbol, vol_usd, change_pct, spread_pct))
+
+    vol_cut = np.percentile(volumes, vol_pct) if volumes else 0
+
+    metrics: List[tuple[str, float, float, float]] = []
+    for sym, vol_usd, change_pct, spread_pct in raw:
+        if vol_usd >= vol_cut and spread_pct <= max_spread:
+            metrics.append((sym, vol_usd, change_pct, spread_pct))
         else:
             skipped += 1
 
