@@ -66,6 +66,19 @@ from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 from crypto_bot.utils.trend_confirmation import confirm_multi_tf_trend
 from crypto_bot.regime.regime_classifier import CONFIG
 
+from crypto_bot.paper_wallet import PaperWallet
+from crypto_bot.utils.telemetry import telemetry, write_cycle_metrics
+from crypto_bot.utils.strategy_utils import compute_strategy_weights
+from crypto_bot.auto_optimizer import optimize_strategies
+from crypto_bot import grid_state
+from crypto_bot.execution.cex_executor import place_stop_order
+from crypto_bot.fund_manager import (
+    detect_non_trade_tokens,
+    auto_convert_funds,
+    check_wallet_balances,
+)
+from crypto_bot.utils.strategy_analytics import write_scores, write_stats
+
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
