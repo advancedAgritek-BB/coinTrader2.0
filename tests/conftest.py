@@ -11,7 +11,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 # depend on it can be imported without the real dependency. If the real package
 # is installed we prefer to use it so related tests can run.
 try:  # pragma: no cover - optional dependency
-    import telegram  # type: ignore
+    import telegram  # type: ignore  # noqa: F401
 except Exception:  # pragma: no cover - telegram not installed
     class _FakeTelegram:
         class Bot:
@@ -240,6 +240,7 @@ def _clear_strategy_router_cache():
     try:
         import crypto_bot.strategy_router as sr
     except Exception:
+        # Module may not be importable in minimal test environments
         yield
         return
 
