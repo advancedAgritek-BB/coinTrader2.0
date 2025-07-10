@@ -44,3 +44,27 @@ def test_route_uses_bandit(monkeypatch):
 
     assert calls.get("arms") == ["trend", "grid"]
     assert fn.__name__ == grid_bot.generate_signal.__name__
+
+
+def test_route_filters_missing_strategies(monkeypatch):
+    calls = {}
+
+    def fake_select(ctx, arms, symbol):
+        calls["arms"] = list(arms)
+        return arms[0]
+
+    from crypto_bot import selector
+
+    monkeypatch.setattr(selector.bandit, "enabled", True, raising=False)
+    monkeypatch.setattr(selector.bandit, "select", fake_select)
+
+    cfg = {
+        "timeframe": "1h",
+        "strategy_router": {"regimes": {"trending": ["does_not_exist"]}},
+        "bandit": {"enabled": True},
+    }
+
+    fn = route("trending", "cex", cfg)
+
+    assert calls.get("arms") == ["generate_signal"]
+    assert fn.__name__ == grid_bot.generate_signal.__name__
