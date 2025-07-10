@@ -7,11 +7,15 @@ import numpy as np
 
 from pathlib import Path
 import yaml
+import json
+import time
+from functools import lru_cache
 
 from crypto_bot.utils import timeframe_seconds, commit_lock
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
+from crypto_bot.utils.cache_helpers import cache_by_id
 from crypto_bot.selector import bandit
 
 from crypto_bot.strategy import (
@@ -48,6 +52,7 @@ class RouterConfig:
     meta_selector: bool = False
     bandit_enabled: bool = False
     timeframe: str = "1h"
+    timeframe_minutes: int = 60
     commit_lock_intervals: int = 0
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
@@ -56,6 +61,7 @@ class RouterConfig:
         """Create ``RouterConfig`` from a dictionary (e.g. YAML)."""
         router = data.get("strategy_router", {})
         fusion = data.get("signal_fusion", {})
+        tf = str(data.get("timeframe", "1h"))
         return cls(
             regimes=router.get("regimes", {}),
             min_score=float(
@@ -69,7 +75,8 @@ class RouterConfig:
             rl_selector=bool(data.get("rl_selector", {}).get("enabled", False)),
             meta_selector=bool(data.get("meta_selector", {}).get("enabled", False)),
             bandit_enabled=bool(data.get("bandit", {}).get("enabled", False)),
-            timeframe=str(data.get("timeframe", "1h")),
+            timeframe=tf,
+            timeframe_minutes=int(pd.Timedelta(tf).total_seconds() // 60),
             commit_lock_intervals=int(router.get("commit_lock_intervals", 0)),
             raw=data,
         )
@@ -99,6 +106,25 @@ def cfg_get(cfg: RouterConfig | Mapping[str, Any], key: str, default: Any = None
         return cfg.get(key, default)
     return default
 
+def cfg_get(cfg: Mapping[str, Any] | RouterConfig, key: str, default: Any | None = None) -> Any:
+    """Return a configuration value for ``key`` from ``cfg``.
+
+    When ``cfg`` is a :class:`RouterConfig` the lookup is performed on
+    ``cfg.raw``. Keys missing at the top level are looked up under the
+    ``"strategy_router"`` section.  Otherwise ``dict.get`` is used on ``cfg``
+    directly.
+    """
+    if isinstance(cfg, RouterConfig):
+        if isinstance(cfg.raw, Mapping):
+            if key in cfg.raw:
+                return cfg.raw.get(key, default)
+            return cfg.raw.get("strategy_router", {}).get(key, default)
+        return default
+    return cfg.get(key, default)
+
+# Path storing the last selected regime and timestamp
+LAST_REGIME_FILE = LOG_DIR / "last_regime.json"
+ main
 
 
 class Selector:
@@ -173,7 +199,10 @@ class Selector:
         logger.info("Routing to %s (%s)", strategy_fn.__name__, mode)
         return strategy_fn
 
-def get_strategy_by_name(name: str) -> Callable[[pd.DataFrame], Tuple[float, str]] | None:
+
+def get_strategy_by_name(
+    name: str,
+) -> Callable[[pd.DataFrame], Tuple[float, str]] | None:
     """Return strategy callable for ``name`` if available."""
     from . import meta_selector
     from .rl import strategy_selector as rl_selector
@@ -184,6 +213,7 @@ def get_strategy_by_name(name: str) -> Callable[[pd.DataFrame], Tuple[float, str
     return mapping.get(name)
 
 
+@cache_by_id
 def _build_mappings(config: Mapping[str, Any] | RouterConfig) -> tuple[
     Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]],
     Dict[str, list[Callable[[pd.DataFrame], Tuple[float, str]]]],
@@ -206,18 +236,45 @@ def _build_mappings(config: Mapping[str, Any] | RouterConfig) -> tuple[
     return strat_map, regime_map
 
 
-STRATEGY_MAP, REGIME_STRATEGIES = _build_mappings(DEFAULT_ROUTER_CFG)
+_CONFIG_REGISTRY: Dict[int, Mapping[str, Any] | RouterConfig] = {}
 
 
-def strategy_for(regime: str, config: RouterConfig | Mapping[str, Any] | None = None) -> Callable[[pd.DataFrame], Tuple[float, str]]:
+def _register_config(cfg: Mapping[str, Any] | RouterConfig) -> int:
+    """Register config and return its id for cache lookups."""
+    cid = id(cfg)
+    _CONFIG_REGISTRY[cid] = cfg
+    return cid
+
+
+@lru_cache(maxsize=8)
+def _build_mappings_cached(config_id: int) -> tuple[
+    Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]],
+    Dict[str, list[Callable[[pd.DataFrame], Tuple[float, str]]]],
+]:
+    cfg = _CONFIG_REGISTRY.get(config_id, DEFAULT_ROUTER_CFG)
+    return _build_mappings(cfg)
+
+_register_config(DEFAULT_ROUTER_CFG)
+STRATEGY_MAP, REGIME_STRATEGIES = _build_mappings_cached(id(DEFAULT_ROUTER_CFG))
+
+
+def strategy_for(
+    regime: str, config: RouterConfig | Mapping[str, Any] | None = None
+) -> Callable[[pd.DataFrame], Tuple[float, str]]:
     """Return strategy callable for a given regime."""
-    mapping, _ = _build_mappings(config or DEFAULT_ROUTER_CFG)
+    cfg = config or DEFAULT_ROUTER_CFG
+    _register_config(cfg)
+    mapping, _ = _build_mappings_cached(id(cfg))
     return mapping.get(regime, grid_bot.generate_signal)
 
 
-def get_strategies_for_regime(regime: str, config: RouterConfig | Mapping[str, Any] | None = None) -> list[Callable[[pd.DataFrame], Tuple[float, str]]]:
+def get_strategies_for_regime(
+    regime: str, config: RouterConfig | Mapping[str, Any] | None = None
+) -> list[Callable[[pd.DataFrame], Tuple[float, str]]]:
     """Return list of strategies mapped to ``regime``."""
-    _, mapping = _build_mappings(config or DEFAULT_ROUTER_CFG)
+    cfg = config or DEFAULT_ROUTER_CFG
+    _register_config(cfg)
+    _, mapping = _build_mappings_cached(id(cfg))
     return mapping.get(regime, [grid_bot.generate_signal])
 
 
@@ -342,6 +399,7 @@ def route(
     Callable[[pd.DataFrame], Tuple[float, str]]
         Strategy function returning a score and trade direction.
     """
+
     def _wrap(fn: Callable[[pd.DataFrame], Tuple[float, str]]):
         if notifier is None:
             return fn
@@ -359,7 +417,7 @@ def route(
             if isinstance(cfg, dict):
                 symbol = cfg.get("symbol", "")
             notifier.notify(
-                f"\U0001F4C8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
+                f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
             )
             return score, direction
 
@@ -397,13 +455,14 @@ def route(
                     "FAST-PATH: breakout_bot via bandwidth z-score and volume spike"
                 )
                 return _wrap(breakout_bot.generate_signal)
-            wband = bb.bollinger_wband()
-            z = (wband - wband.rolling(window).mean()) / wband.rolling(window).std()
+            z_series = (
+                wband_series - wband_series.rolling(window).mean()
+            ) / wband_series.rolling(window).std()
             vol_ma = df["volume"].rolling(window).mean()
 
             if (
-                z.iloc[-1] < -0.84
-                and wband.iloc[-1] < max_bw
+                z_series.iloc[-1] < -0.84
+                and wband < max_bw
                 and df["volume"].iloc[-1] > vol_ma.iloc[-1] * vol_mult
             ):
                 logger.info(
@@ -431,7 +490,9 @@ def route(
         if regime.get("1m") == "breakout" and regime.get("15m") == "trending":
             regime = "breakout"
         else:
-            base = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe")
+            base = (
+                cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe")
+            )
             regime = regime.get(base, next(iter(regime.values())))
 
     tf_sec = timeframe_seconds(
@@ -442,6 +503,74 @@ def route(
         regime,
         tf_sec,
         cfg_get(cfg, "commit_lock_intervals", 0),
+    )
+
+   # commit lock logic
+    intervals = (
+        cfg.commit_lock_intervals
+        if isinstance(cfg, RouterConfig)
+        else int(config.get("strategy_router", {}).get("commit_lock_intervals", 0))
+    )
+            base = cfg_get(cfg, "timeframe")
+            regime = regime.get(base, next(iter(regime.values())))
+
+    # commit lock logic
+    intervals = int(cfg_get(cfg, "commit_lock_intervals", 0))
+    if intervals:
+        lock_file = Path("last_regime.json")
+        last_reg = None
+        last_ts = 0.0
+        if lock_file.exists():
+            try:
+                data = json.loads(lock_file.read_text())
+                last_reg = data.get("regime")
+                last_ts = float(data.get("timestamp", 0))
+            except Exception:
+                pass
+
+        tf = (
+            cfg.timeframe
+            if isinstance(cfg, RouterConfig)
+            else cfg.get("timeframe", "1h")
+        )
+        tf = cfg_get(cfg, "timeframe", "1h")
+        interval = timeframe_seconds(None, tf)
+        now = time.time()
+        if last_reg and regime != last_reg and now - last_ts < interval * intervals:
+            regime = last_reg
+        else:
+            lock_file.parent.mkdir(parents=True, exist_ok=True)
+            lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
+    tf = cfg_get(cfg, "timeframe", "1h")
+    tf_minutes = getattr(
+        cfg,
+        "timeframe_minutes",
+        int(pd.Timedelta(tf).total_seconds() // 60),
+    tf = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe", "1h")
+    tf_minutes = (
+        cfg.timeframe_minutes
+        if isinstance(cfg, RouterConfig)
+        else int(pd.Timedelta(tf).total_seconds() // 60)
+    )
+
+    LAST_REGIME_FILE.parent.mkdir(parents=True, exist_ok=True)
+    last_data = {}
+    if LAST_REGIME_FILE.exists():
+        try:
+            last_data = json.loads(LAST_REGIME_FILE.read_text())
+        except Exception:
+            last_data = {}
+    last_ts = last_data.get("timestamp")
+    last_regime = last_data.get("regime")
+    if last_ts and last_regime:
+        try:
+            ts = datetime.fromisoformat(last_ts)
+            if (datetime.utcnow() - ts).total_seconds() < tf_minutes * 60 * 3:
+                regime = last_regime
+        except Exception:
+            pass
+    LAST_REGIME_FILE.write_text(
+        json.dumps({"timestamp": datetime.utcnow().isoformat(), "regime": regime})
     )
 
     # Thompson sampling router
@@ -458,6 +587,7 @@ def route(
             arms = list(
                 cfg.get("strategy_router", {}).get("regimes", {}).get(regime, [])
             )
+        arms = [a for a in arms if get_strategy_by_name(a)]
         if not arms:
             arms = [fn.__name__ for fn in strategies]
         symbol = ""
@@ -490,5 +620,5 @@ def route(
         logger.info("Routing to DEX scalper (onchain)")
         return _wrap(dex_scalper.generate_signal)
 
-    strategy_fn = Selector(cfg).select(pd.DataFrame(), regime, mode, notifier)
+    strategy_fn = Selector(cfg).select(df or pd.DataFrame(), regime, mode, notifier)
     return _wrap(strategy_fn)
