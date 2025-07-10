@@ -13,6 +13,7 @@ class ScannerConfig(BaseModel):
     min_symbol_age_days: int = 0
     symbol_batch_size: int = 10
     scan_lookback_limit: int = 50
+    cycle_lookback_limit: int | None = None
     max_spread_pct: float = 1.0
 
     class Config:
@@ -35,9 +36,9 @@ class ScannerConfig(BaseModel):
             raise ValueError(f"invalid market type: {v}")
         return v
 
-    @validator("symbol_batch_size", "scan_lookback_limit")
+    @validator("symbol_batch_size", "scan_lookback_limit", "cycle_lookback_limit")
     def _positive_int(cls, v, field):
-        if v <= 0:
+        if v is not None and v <= 0:
             raise ValueError(f"{field.name} must be > 0")
         return v
 
