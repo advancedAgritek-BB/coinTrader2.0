@@ -669,3 +669,168 @@ node nft-portfolio.js
 ```
 
 This prints a summary of NFTs in the wallet, including collection info and compression status.
+
+## \ud83d\udce1 Helius Data Streaming \u2013 Quickstart Guide
+
+Helius offers multiple real-time data streaming options for the Solana blockchain, each tailored for different use cases depending on your performance, filtering, and integration needs. Below is a complete breakdown of the streaming methods available:
+
+### \u2705 Overview of Streaming Methods
+
+| Method | Use Case | Latency | Plan | Best For |
+|-------|----------|---------|------|---------|
+| **Standard WebSockets** | General-purpose streaming with native support | Good | Free | Simple apps, existing Solana WebSocket integrations |
+| **Enhanced WebSockets** | High-performance filters and fast response | Fast | Business | dApps, wallets, high-frequency event processing |
+| **LaserStream (gRPC)** | Ultra-low latency with historical replay | Fastest | Professional | HFT systems, block explorers, serious infra |
+| **Webhooks** | Server-side integrations via HTTP callbacks | Variable | Free | Notifications, backend systems, Discord bots, etc. |
+
+### \ud83d\udd0c Standard WebSockets
+
+Endpoint: `wss://rpc.helius.xyz`
+
+Features:
+
+- Works with any Solana-compatible WebSocket client.
+- Direct drop-in replacement for `solana/web3.js` `onAccountChange`.
+- Use your Helius API key in the endpoint.
+
+Example:
+
+```javascript
+import { Connection, clusterApiUrl, PublicKey } from "@solana/web3.js";
+
+const connection = new Connection("wss://rpc.helius.xyz/?api-key=<YOUR_API_KEY>");
+
+connection.onAccountChange(
+  new PublicKey("TARGET_PUBLIC_KEY"),
+  (updatedAccountInfo) => {
+    console.log("Account Updated", updatedAccountInfo);
+  }
+);
+```
+
+### \u26a1 Enhanced WebSockets
+
+Endpoint: `wss://stream.helius.xyz/v0/transactions`
+
+Features:
+
+- Real-time transaction streaming.
+- Filters by accounts, transaction types, and more.
+- Supports dynamic subscriptions.
+
+Subscription Schema:
+
+```json
+{
+  "apiKey": "<YOUR_API_KEY>",
+  "type": "subscribe",
+  "topic": "transactions",
+  "id": "unique-subscription-id",
+  "accounts": ["<ACCOUNT_1>", "<ACCOUNT_2>"]
+}
+```
+
+Example Response:
+
+```json
+{
+  "type": "transaction",
+  "data": {
+    "signature": "...",
+    "slot": 123456,
+    "timestamp": 1712345678
+  }
+}
+```
+
+### \ud83d\ude80 LaserStream (gRPC)
+
+Endpoint: `https://grpc.helius.xyz`
+
+Features:
+
+- Built using gRPC.
+- Supports historical data replay.
+- Multi-node failover.
+- Filtered transaction streams.
+- Ultra-low latency.
+- Advanced error handling.
+
+Requirements:
+
+- gRPC client (e.g. Go, Rust, Node.js)
+- Protobufs available in the Helius GitHub.
+
+Example Use Case:
+
+```pseudo
+client.SubscribeTransactions(account: "TARGET_PUBKEY", filters: [...])
+```
+
+Ideal for:
+
+- Market makers
+- Indexers
+- Block explorers
+- Bots requiring sub-second latency
+
+### \ud83d\udcec Webhooks
+
+Endpoint: `https://api.helius.xyz/v0/webhooks`
+
+Types:
+
+- Wallet Activity (deposits, transfers)
+- NFT Sales
+- Token Events
+- Custom Programs
+
+Features:
+
+- Push-based (no persistent connection required).
+- Works with any backend.
+- Reliable retries.
+- Filter on accounts, program IDs, etc.
+
+Webhook Payload Example:
+
+```json
+{
+  "eventType": "TRANSFER",
+  "signature": "...",
+  "source": "SourceWallet",
+  "destination": "DestinationWallet",
+  "amount": 1000
+}
+```
+
+Setup:
+
+1. Create a webhook via the Helius Dashboard or API.
+2. Configure target URL, filters, and secret key.
+3. Handle incoming POST requests.
+
+### \ud83e\udde0 Choosing the Right Stream
+
+| App Type | Recommended Method |
+|----------|-------------------|
+| Frontend dApp | Standard or Enhanced WS |
+| HFT Bot | LaserStream |
+| Backend App | Webhooks or LaserStream |
+| Indexing System | LaserStream |
+| Discord Alerts | Webhooks |
+
+### \ud83d\udd27 Getting Started
+
+1. Sign up at: <https://www.helius.xyz>
+2. Generate an API Key in your dashboard.
+3. Pick your stream method based on your app needs.
+4. Integrate using the examples above.
+
+### \ud83d\udcda Docs & Resources
+
+- [Helius Docs Homepage](https://docs.helius.xyz)
+- [Data Streaming Overview](https://docs.helius.xyz/data-streaming)
+- [gRPC Protocol Buffers](https://github.com/helius-labs/helius-sdk-protobufs)
+- [Enhanced WebSocket Blog](https://www.helius.dev/blog/enhanced-websockets)
+
