@@ -426,6 +426,42 @@ async def initial_scan(
     return df_cache, regime_cache
 
 
+async def _rotation_loop(
+    rotator: PortfolioRotator,
+    exchange: object,
+    wallet: str,
+    state: dict,
+    notifier: TelegramNotifier | None,
+    check_balance_change: callable,
+) -> None:
+    """Periodically rotate portfolio holdings."""
+
+    interval = rotator.config.get("interval_days", 7) * 86400
+    while True:
+        try:
+            if state.get("running") and rotator.config.get("enabled"):
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                    bal = await exchange.fetch_balance()
+                else:
+                    bal = await asyncio.to_thread(exchange.fetch_balance)
+                current_balance = (
+                    bal.get("USDT", {}).get("free", 0)
+                    if isinstance(bal.get("USDT"), dict)
+                    else bal.get("USDT", 0)
+                )
+                check_balance_change(float(current_balance), "external change")
+                holdings = {
+                    k: (v.get("total") if isinstance(v, dict) else v)
+                    for k, v in bal.items()
+                }
+                await rotator.rotate(exchange, wallet, holdings, notifier)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:  # pragma: no cover - rotation errors
+            logger.error("Rotation loop error: %s", exc, exc_info=True)
+        await asyncio.sleep(interval)
+
+
 async def _main_impl() -> TelegramNotifier:
     """Implementation for running the trading bot."""
 
@@ -605,7 +641,6 @@ async def _main_impl() -> TelegramNotifier:
     scores_file = LOG_DIR / "strategy_scores.json"
 
     rotator = PortfolioRotator()
-    last_rotation = 0.0
     last_optimize = 0.0
     last_weight_update = 0.0
 
@@ -615,6 +650,16 @@ async def _main_impl() -> TelegramNotifier:
     regime_cache: dict[str, dict[str, pd.DataFrame]] = {}
 
     control_task = asyncio.create_task(console_control.control_loop(state))
+    rotation_task = asyncio.create_task(
+        _rotation_loop(
+            rotator,
+            exchange,
+            user.get("wallet_address", ""),
+            state,
+            notifier,
+            check_balance_change,
+        )
+    )
     print("Bot running. Type 'stop' to pause, 'start' to resume, 'quit' to exit.")
 
     from crypto_bot.telegram_bot_ui import TelegramBotUI
@@ -712,34 +757,7 @@ async def _main_impl() -> TelegramNotifier:
             )
             check_balance_change(float(bal_val), "funds converted")
 
-        if rotator.config.get("enabled"):
-            if (
-                time.time() - last_rotation
-                >= rotator.config.get("interval_days", 7) * 86400
-            ):
-                if asyncio.iscoroutinefunction(
-                    getattr(exchange, "fetch_balance", None)
-                ):
-                    bal = await exchange.fetch_balance()
-                else:
-                    bal = await asyncio.to_thread(exchange.fetch_balance)
-                current_balance = (
-                    bal.get("USDT", {}).get("free", 0)
-                    if isinstance(bal.get("USDT"), dict)
-                    else bal.get("USDT", 0)
-                )
-                check_balance_change(float(current_balance), "external change")
-                holdings = {
-                    k: (v.get("total") if isinstance(v, dict) else v)
-                    for k, v in bal.items()
-                }
-                await rotator.rotate(
-                    exchange,
-                    user.get("wallet_address", ""),
-                    holdings,
-                    notifier,
-                )
-                last_rotation = time.time()
+
 
         allowed_results: list[dict] = []
         df_current = None
@@ -1511,6 +1529,7 @@ async def _main_impl() -> TelegramNotifier:
 
     monitor_task.cancel()
     control_task.cancel()
+    rotation_task.cancel()
     for task in list(position_tasks.values()):
         task.cancel()
     for task in list(position_tasks.values()):
@@ -1523,6 +1542,10 @@ async def _main_impl() -> TelegramNotifier:
         telegram_bot.stop()
     try:
         await monitor_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await rotation_task
     except asyncio.CancelledError:
         pass
     try:
