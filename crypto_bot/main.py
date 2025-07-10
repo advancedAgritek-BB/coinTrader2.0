@@ -1192,6 +1192,8 @@ async def _main_impl() -> TelegramNotifier:
             notifier.notify(
                 f"\u26a0\ufe0f OHLCV latency {ohlcv_fetch_latency*1000:.0f} ms"
             )
+            limit = int(max(20, tf_minutes * 3))
+            limit = int(config.get("cycle_lookback_limit", limit))
         limit = int(max(20, tf_minutes * 3))
         limit = int(config.get("cycle_lookback_limit", limit))
     
