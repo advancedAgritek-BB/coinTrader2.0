@@ -1116,6 +1116,24 @@ async def _main_impl() -> TelegramNotifier:
                     symbol_priority_queue.popleft()
                     for _ in range(min(batch_size, len(symbol_priority_queue)))
                 ]
+                scalper_results = await asyncio.gather(*tasks)
+                mapping = {r["symbol"]: r for r in scalper_results}
+                results = [mapping.get(r["symbol"], r) for r in results]
+                for sym_open in session_state.positions:
+                    if sym_open in mapping:
+                        current_dfs[sym_open] = session_state.df_cache.get(config["timeframe"], {}).get(
+                            sym_open
+                        )
+    
+            analyze_time = time.perf_counter() - analyze_start
+            allowed: bool = False
+            reason: str = ""
+
+            for res in results:
+                sym = res["symbol"]
+                df_sym = res["df"]
+                regime_sym = res["regime"]
+                log_regime(sym, regime_sym, res["future_return"])
             telemetry.inc("scan.symbols_considered", len(current_batch))
     
             t0 = time.perf_counter()
