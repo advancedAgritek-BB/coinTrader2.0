@@ -53,7 +53,11 @@ def get_exchange(config: dict) -> ccxt.Exchange:
 
 
 def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
-    """Fetch tickers and update the cached liquid pairs list."""
+    """Fetch tickers and update the cached liquid pairs list.
+
+    Markets whose quote currency is not in ``allowed_quote_currencies`` or whose
+    base asset appears in ``blacklist_assets`` will be skipped.
+    """
     old_pairs: list[str] = []
     if PAIR_FILE.exists():
         try:
@@ -63,6 +67,14 @@ def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
                     old_pairs = loaded
         except Exception as exc:  # pragma: no cover - corrupted cache
             logger.error("Failed to read %s: %s", PAIR_FILE, exc)
+
+    rp_cfg = config.get("refresh_pairs", {}) if isinstance(config, dict) else {}
+    allowed_quotes = {
+        q.upper() for q in rp_cfg.get("allowed_quote_currencies", []) if isinstance(q, str)
+    }
+    blacklist = {
+        a.upper() for a in rp_cfg.get("blacklist_assets", []) if isinstance(a, str)
+    }
 
     exchange = get_exchange(config)
     try:
@@ -82,6 +94,17 @@ def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
         vol = data.get("quoteVolume")
         if vol is None:
             continue
+
+        parts = symbol.split("/")
+        if len(parts) != 2:
+            continue
+        base, quote = parts[0].upper(), parts[1].upper()
+
+        if allowed_quotes and quote not in allowed_quotes:
+            continue
+        if base in blacklist:
+            continue
+
         pairs.append((symbol, float(vol)))
 
     pairs.sort(key=lambda x: x[1], reverse=True)

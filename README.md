@@ -621,6 +621,17 @@ This cache lets the trading bot skip illiquid pairs during market scans.
 By default the worker refreshes the file every **6 hours**. Change the interval
 under `pairs_worker.refresh_interval` in `crypto_bot/config.yaml` and restart the
 worker to apply the new schedule.
+You can also limit the markets saved in the cache by defining
+`allowed_quote_currencies` and `blacklist_assets` under `refresh_pairs`:
+
+```yaml
+refresh_pairs:
+  min_quote_volume_usd: 1000000
+  refresh_interval: 6h
+  top_k: 40
+  allowed_quote_currencies: [USD, USDT]
+  blacklist_assets: []
+```
 Run it manually whenever needed:
 
 ```bash
