@@ -7,7 +7,11 @@ import crypto_bot.utils.symbol_scoring as sc
 from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_history
 
 CONFIG = {
-    "symbol_filter": {"min_volume_usd": 50000, "max_spread_pct": 2.0},
+    "symbol_filter": {
+        "min_volume_usd": 50000,
+        "max_spread_pct": 2.0,
+        "correlation_max_pairs": 10,
+    },
     "symbol_score_weights": {"volume": 1, "change": 0, "spread": 0, "age": 0, "latency": 0},
     "max_vol": 100000,
     "min_symbol_score": 0.0,

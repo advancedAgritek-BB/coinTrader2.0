@@ -122,6 +122,7 @@ def cfg_get(cfg: Mapping[str, Any] | RouterConfig, key: str, default: Any | None
         return default
     return cfg.get(key, default)
 
+
 # Path storing the last selected regime and timestamp
 LAST_REGIME_FILE = LOG_DIR / "last_regime.json"
 
@@ -527,6 +528,9 @@ def route(
             regime = last_reg
         else:
             lock_file.parent.mkdir(parents=True, exist_ok=True)
+            lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
+
+    tf = cfg_get(cfg, "timeframe", "1h")
             lock_file.write_text(
                 json.dumps({"regime": regime, "timestamp": now})
             )
@@ -538,7 +542,7 @@ def route(
     tf_minutes = (
         cfg.timeframe_minutes
         if isinstance(cfg, RouterConfig)
-        else int(pd.Timedelta(tf).total_seconds() // 60)
+        else getattr(cfg, "timeframe_minutes", int(pd.Timedelta(tf).total_seconds() // 60))
     )
 
     LAST_REGIME_FILE.parent.mkdir(parents=True, exist_ok=True)
