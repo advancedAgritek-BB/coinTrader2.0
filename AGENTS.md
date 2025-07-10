@@ -587,3 +587,85 @@ Successful requests return a unique `amend_id` and echo the identifiers used. Th
 - Iceberg display size must be at least 1/15 of the remaining size.
 - Orders with conditional close terms cannot be amended.
 
+
+## 🚀 Helius API Quickstart
+
+The Helius Dashboard provides a free tier with 100,000 DAS API calls per month. After creating an account, navigate to **API Keys** and copy your key. This key grants access to RPC nodes, the DAS API, and enhanced transaction data.
+
+### 📟 Fetching NFTs by Owner
+
+Helius' `getAssetsByOwner` method returns compressed and standard NFTs with a single request. The call structure is:
+
+```json
+POST https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "method": "getAssetsByOwner",
+  "params": {
+    "ownerAddress": "WALLET_ADDRESS",
+    "page": 1,
+    "limit": 10,
+    "displayOptions": {
+      "showFungible": false,
+      "showNativeBalance": false
+    }
+  }
+}
+```
+
+The response includes the NFT ID, metadata (name, symbol, description), content files (such as image URLs), and ownership details.
+
+### 🛠️ Example Portfolio Viewer
+
+Below is a minimal Node.js script that prints an NFT portfolio summary. Install `node-fetch` and replace `YOUR_API_KEY` with the key from your dashboard.
+
+```bash
+mkdir solana-nft-viewer
+cd solana-nft-viewer
+npm init -y
+npm install node-fetch
+```
+
+Create `nft-portfolio.js`:
+
+```javascript
+const fetch = require('node-fetch');
+
+class NFTPortfolioViewer {
+  constructor(apiKey) {
+    this.apiKey = apiKey;
+    this.baseUrl = 'https://mainnet.helius-rpc.com';
+  }
+
+  async fetchNFTsByOwner(ownerAddress, limit = 10) {
+    const res = await fetch(`${this.baseUrl}/?api-key=${this.apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'getAssetsByOwner',
+        params: { ownerAddress, page: 1, limit,
+          displayOptions: { showFungible: false, showNativeBalance: false } }
+      })
+    });
+    return res.json();
+  }
+}
+
+(async () => {
+  const viewer = new NFTPortfolioViewer('YOUR_API_KEY');
+  const wallet = '86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY';
+  const portfolio = await viewer.fetchNFTsByOwner(wallet);
+  console.log(JSON.stringify(portfolio, null, 2));
+})();
+```
+
+Run the viewer with:
+
+```bash
+node nft-portfolio.js
+```
+
+This prints a summary of NFTs in the wallet, including collection info and compression status.
