@@ -267,6 +267,7 @@ The bounce scalper looks for short-term reversals when a volume spike confirms m
   **status_updates** and **balance_updates** flags control startup and
   balance alerts.
 * **balance_change_threshold** – delta for Telegram balance alerts.
+* **balance_poll_mod** – how often to poll balance between trades.
 * **tax_tracking** – CSV export of executed trades.
 * **metrics_enabled**, **metrics_backend**, **metrics_output_file** – cycle metrics output.
 * **testing_mode** – indicates a sandbox environment.
