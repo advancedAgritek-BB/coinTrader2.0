@@ -17,7 +17,7 @@ from .utils.open_trades import get_open_trades
 from .execution.cex_executor import get_exchange, execute_trade_async
 
 
-class BotController:
+class TradingBotController:
     """High level controller exposing simple async methods."""
 
     def __init__(
