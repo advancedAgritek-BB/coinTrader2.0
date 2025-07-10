@@ -382,7 +382,7 @@ async def initial_scan(
             df_cache,
             batch,
             config,
-            limit=100,
+            limit=config.get("scan_lookback_limit", 50),
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
@@ -394,11 +394,12 @@ async def initial_scan(
             regime_cache,
             batch,
             config,
-            limit=100,
+            limit=config.get("scan_lookback_limit", 50),
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
             notifier=notifier,
+            df_map=df_cache,
         )
 
         processed += len(batch)
@@ -745,6 +746,7 @@ async def _main_impl() -> TelegramNotifier:
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
             notifier=notifier if status_updates else None,
+            df_map=df_cache,
         )
         ohlcv_time = time.perf_counter() - t0
         ohlcv_fetch_latency = time.perf_counter() - start_ohlcv

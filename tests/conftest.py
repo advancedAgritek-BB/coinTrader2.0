@@ -11,7 +11,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 # depend on it can be imported without the real dependency. If the real package
 # is installed we prefer to use it so related tests can run.
 try:  # pragma: no cover - optional dependency
-    import telegram  # type: ignore
+    import telegram  # type: ignore  # noqa: F401
 except Exception:  # pragma: no cover - telegram not installed
     class _FakeTelegram:
         class Bot:
@@ -224,13 +224,25 @@ class _FakeRequests:
     def get(self, *a, **k):
         return self.Response()
 
+    class Session:
+        def get(self, *a, **k):
+            return _FakeRequests.Response()
+
+        def close(self):
+            pass
+
 sys.modules.setdefault("requests", _FakeRequests())
 
 
 @pytest.fixture(autouse=True)
 def _clear_strategy_router_cache():
     """Ensure strategy router caches are cleared between tests."""
-    import crypto_bot.strategy_router as sr
+    try:
+        import crypto_bot.strategy_router as sr
+    except Exception:
+        # Module may not be importable in minimal test environments
+        yield
+        return
 
     sr._build_mappings_cached.cache_clear()
     sr._CONFIG_REGISTRY.clear()

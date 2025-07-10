@@ -520,11 +520,6 @@ def route(
             except Exception:
                 pass
 
-        tf = (
-            cfg.timeframe
-            if isinstance(cfg, RouterConfig)
-            else cfg.get("timeframe", "1h")
-        )
         tf = cfg_get(cfg, "timeframe", "1h")
         interval = timeframe_seconds(None, tf)
         now = time.time()
@@ -532,12 +527,18 @@ def route(
             regime = last_reg
         else:
             lock_file.parent.mkdir(parents=True, exist_ok=True)
-            lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
+            lock_file.write_text(
+                json.dumps({"regime": regime, "timestamp": now})
+            )
     tf = cfg_get(cfg, "timeframe", "1h")
     tf_minutes = getattr(
         cfg,
         "timeframe_minutes",
         int(pd.Timedelta(tf).total_seconds() // 60),
+    tf_minutes = (
+        cfg.timeframe_minutes
+        if isinstance(cfg, RouterConfig)
+        else int(pd.Timedelta(tf).total_seconds() // 60)
     )
 
     LAST_REGIME_FILE.parent.mkdir(parents=True, exist_ok=True)
