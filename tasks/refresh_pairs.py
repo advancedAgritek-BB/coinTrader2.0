@@ -67,19 +67,15 @@ def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
     exchange = get_exchange(config)
     try:
         tickers = exchange.fetch_tickers()
-    except Exception:  # pragma: no cover - network failures
-        if PAIR_FILE.exists():
-            with open(PAIR_FILE) as f:
-                return json.load(f)
-        raise
-        if not isinstance(tickers, dict):
-            raise TypeError("fetch_tickers returned invalid data")
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover - network failures
         logger.error("Failed to fetch tickers: %s", exc)
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         with open(PAIR_FILE, "w") as f:
             json.dump(old_pairs, f, indent=2)
         return old_pairs
+    else:
+        if not isinstance(tickers, dict):
+            raise TypeError("fetch_tickers returned invalid data")
 
     pairs: list[tuple[str, float]] = []
     for symbol, data in tickers.items():
