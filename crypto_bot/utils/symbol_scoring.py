@@ -6,6 +6,19 @@ from typing import Mapping, Tuple, Dict
 import asyncio
 import inspect
 import time
+import numpy as np
+
+try:  # pragma: no cover - optional dependency
+    from numba import njit
+    HAS_NUMBA = True
+except Exception:  # pragma: no cover - numba missing
+    HAS_NUMBA = False
+
+    def njit(*_a, **_k):  # type: ignore
+        def wrap(fn):
+            return fn
+
+        return wrap
 
 # Cache of computed symbol ages
 _age_cache: Dict[Tuple[str, str], Tuple[float, float]] = {}
@@ -90,6 +103,132 @@ async def get_latency(exchange, symbol: str) -> float:
 
     _latency_cache[host] = (latency, now_s)
     return latency
+
+
+def _score_vectorised_py(
+    volume_usd: np.ndarray,
+    change_pct: np.ndarray,
+    spread_pct: np.ndarray,
+    age_days: np.ndarray,
+    latency_ms: np.ndarray,
+    weights: np.ndarray,
+    max_vals: np.ndarray,
+    total: float,
+) -> np.ndarray:
+    volume_norm = np.minimum(volume_usd / max_vals[0], 1.0)
+    change_norm = np.minimum(np.abs(change_pct) / max_vals[1], 1.0)
+    spread_norm = 1.0 - np.minimum(spread_pct / max_vals[2], 1.0)
+    age_norm = np.minimum(age_days / max_vals[3], 1.0)
+    latency_norm = 1.0 - np.minimum(latency_ms / max_vals[4], 1.0)
+    score = (
+        volume_norm * weights[0]
+        + change_norm * weights[1]
+        + spread_norm * weights[2]
+        + age_norm * weights[3]
+        + latency_norm * weights[4]
+    )
+    return score / total
+
+
+@njit(cache=True)
+def _score_vectorised_numba(
+    volume_usd,
+    change_pct,
+    spread_pct,
+    age_days,
+    latency_ms,
+    weights,
+    max_vals,
+    total,
+):  # pragma: no cover - compiled
+    n = len(volume_usd)
+    out = np.empty(n)
+    for i in range(n):
+        v_norm = volume_usd[i] / max_vals[0]
+        if v_norm > 1.0:
+            v_norm = 1.0
+        c_norm = abs(change_pct[i]) / max_vals[1]
+        if c_norm > 1.0:
+            c_norm = 1.0
+        s_norm = 1.0 - spread_pct[i] / max_vals[2]
+        if s_norm < 0.0:
+            s_norm = 0.0
+        a_norm = age_days[i] / max_vals[3]
+        if a_norm > 1.0:
+            a_norm = 1.0
+        l_norm = 1.0 - latency_ms[i] / max_vals[4]
+        if l_norm < 0.0:
+            l_norm = 0.0
+        val = (
+            v_norm * weights[0]
+            + c_norm * weights[1]
+            + s_norm * weights[2]
+            + a_norm * weights[3]
+            + l_norm * weights[4]
+        )
+        out[i] = val / total
+    return out
+
+
+def score_vectorised(
+    volume_usd: np.ndarray,
+    change_pct: np.ndarray,
+    spread_pct: np.ndarray,
+    age_days: np.ndarray,
+    latency_ms: np.ndarray,
+    config: Mapping[str, object],
+) -> np.ndarray:
+    """Vectorised symbol scoring with optional numba acceleration."""
+
+    weights_dict = dict(DEFAULT_WEIGHTS)
+    weights_dict.update(config.get("symbol_score_weights", {}))
+    weight_arr = np.array(
+        [
+            weights_dict.get("volume", 0.0),
+            weights_dict.get("change", 0.0),
+            weights_dict.get("spread", 0.0),
+            weights_dict.get("age", 0.0),
+            weights_dict.get("latency", 0.0),
+        ],
+        dtype=np.float64,
+    )
+    total = float(weight_arr.sum())
+    if total <= 0:
+        raise ValueError("symbol_score_weights must sum to a positive value")
+
+    max_vals = np.array(
+        [
+            float(config.get("max_vol", 1_000_000)),
+            float(config.get("max_change_pct", 10)),
+            float(config.get("max_spread_pct", 2)),
+            float(config.get("max_age_days", 180)),
+            float(config.get("max_latency_ms", 1000)),
+        ],
+        dtype=np.float64,
+    )
+
+    use_numba = bool(config.get("use_numba_scoring"))
+    if use_numba and HAS_NUMBA:
+        return _score_vectorised_numba(
+            volume_usd,
+            change_pct,
+            spread_pct,
+            age_days,
+            latency_ms,
+            weight_arr,
+            max_vals,
+            total,
+        )
+    return _score_vectorised_py(
+        volume_usd,
+        change_pct,
+        spread_pct,
+        age_days,
+        latency_ms,
+        weight_arr,
+        max_vals,
+        total,
+    )
 
 
 async def score_symbol(
