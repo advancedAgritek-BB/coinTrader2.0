@@ -876,6 +876,8 @@ async def _main_impl() -> TelegramNotifier:
 
         allowed_results: list[dict] = []
         df_current = None
+        current_dfs: dict[str, pd.DataFrame] = {}
+        current_prices: dict[str, float] = {}
 
         t0 = time.perf_counter()
         symbols = await get_filtered_symbols(exchange, config)
@@ -1113,9 +1115,6 @@ async def _main_impl() -> TelegramNotifier:
                 filtered_results.append(r)
 
         best = filtered_results[0] if filtered_results else None
-
-        current_dfs: dict[str, pd.DataFrame] = {}
-        current_prices: dict[str, float] = {}
 
         open_syms = list(session_state.positions.keys())
         if open_syms:
