@@ -980,8 +980,14 @@ async def _main_impl() -> TelegramNotifier:
         handle_exits,
     ])
 
+    loop_count = 0
+    last_weight_update = 0.0
+    last_optimize = 0.0
+    last_candle_ts: dict[str, int] = {}
+
     try:
         while True:
+            loop_count += 1
             ctx.timing = await runner.run(ctx)
             cycle_start = time.perf_counter()
             symbol_time = ohlcv_time = analyze_time = 0.0
