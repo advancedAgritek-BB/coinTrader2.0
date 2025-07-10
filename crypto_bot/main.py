@@ -855,6 +855,7 @@ async def _main_impl() -> TelegramNotifier:
 
     base_mode = mode
     loop_count = 0
+    ctx = BotContext(session_state.positions, df_cache, regime_cache, config)
     ctx = BotContext(
         session_state.positions,
         session_state.df_cache,
@@ -882,6 +883,7 @@ async def _main_impl() -> TelegramNotifier:
             cycle_start = time.perf_counter()
             ctx.timing = await runner.run(ctx)
             execution_latency = 0.0
+    
 
             total_pairs = 0
             signals_generated = 0
