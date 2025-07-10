@@ -1,6 +1,10 @@
 import json
 import logging
+import sys
+import types
 
+sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
+sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
 import tasks.refresh_pairs as rp
 
 
@@ -11,7 +15,7 @@ def test_refresh_pairs_error_keeps_old_cache(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(rp, "PAIR_FILE", file)
 
     class DummyExchange:
-        def fetch_tickers(self):
+        async def fetch_tickers(self):
             raise RuntimeError("boom")
 
     monkeypatch.setattr(rp, "get_exchange", lambda cfg: DummyExchange())
