@@ -183,6 +183,7 @@ rl_selector:
   enabled: false
 scalp_timeframe: 1m
 scan_markets: true
+scan_in_background: true
 scoring_weights:
   regime_confidence: 0.2
   spread_penalty: -0.1

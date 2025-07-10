@@ -114,6 +114,7 @@ class SessionState:
     df_cache: dict[str, dict[str, pd.DataFrame]] = field(default_factory=dict)
     regime_cache: dict[str, dict[str, pd.DataFrame]] = field(default_factory=dict)
     last_balance: float | None = None
+    scan_task: asyncio.Task | None = None
 
 
 def update_df_cache(
@@ -799,12 +800,22 @@ async def _main_impl() -> TelegramNotifier:
 
         sniper_task = asyncio.create_task(sniper_run(sniper_cfg))
 
-    await initial_scan(
-        exchange,
-        config,
-        session_state,
-        notifier if status_updates else None,
-    )
+    if config.get("scan_in_background", True):
+        session_state.scan_task = asyncio.create_task(
+            initial_scan(
+                exchange,
+                config,
+                session_state,
+                notifier if status_updates else None,
+            )
+        )
+    else:
+        await initial_scan(
+            exchange,
+            config,
+            session_state,
+            notifier if status_updates else None,
+        )
 
     ctx = BotContext(
         positions=session_state.positions,
@@ -937,6 +948,12 @@ async def _main_impl() -> TelegramNotifier:
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
     
     finally:
+        if session_state.scan_task:
+            session_state.scan_task.cancel()
+            try:
+                await session_state.scan_task
+            except asyncio.CancelledError:
+                pass
         monitor_task.cancel()
         control_task.cancel()
         rotation_task.cancel()
