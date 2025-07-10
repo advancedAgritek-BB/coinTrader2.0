@@ -615,7 +615,7 @@ undesirable markets before strategies run:
 
 ```yaml
 symbol_filter:
-  min_volume_usd: 50000         # minimum 24h volume in USD
+  volume_percentile: 60         # keep pairs above this volume percentile
   change_pct_percentile: 70     # require 24h change in the top 30%
   max_spread_pct: 0.5           # skip pairs with wide spreads
   correlation_window: 30        # days of history for correlation

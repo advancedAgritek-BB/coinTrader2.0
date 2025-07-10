@@ -27,6 +27,8 @@ def get_open_trades(log_path: Path | str) -> List[Dict]:
         for row in reader:
             if len(row) >= 6 and str(row[5]).strip().lower() == "true":
                 continue
+            if len(row) < 5:
+                row = row + [None] * (5 - len(row))
             rows.append(row[:5])
 
     if not rows:
