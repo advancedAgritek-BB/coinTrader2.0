@@ -114,23 +114,39 @@ async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
 def _parse_metrics(symbol: str, ticker: dict) -> tuple[float, float, float]:
     """Return volume USD, percent change and spread percentage using cache."""
 
-    last = float(ticker["c"][0])
-    open_price = float(ticker.get("o", last))
-    change_pct = ((last - open_price) / open_price) * 100 if open_price else 0.0
-
-    try:
-        volume_usd, spread_pct = liq_cache[symbol]
-    except KeyError:
+    if "c" in ticker and isinstance(ticker["c"], (list, tuple)):
+        # Raw Kraken format
+        last = float(ticker["c"][0])
+        open_price = float(ticker.get("o", last))
         volume = float(ticker["v"][1])
         vwap = float(ticker["p"][1])
         ask = float(ticker["a"][0])
         bid = float(ticker["b"][0])
-
         volume_usd = volume * vwap
+    else:
+        # CCXT normalized ticker
+        last = float(ticker.get("last") or ticker.get("close") or 0.0)
+        open_price = float(ticker.get("open", last))
+        ask = float(ticker.get("ask", 0.0))
+        bid = float(ticker.get("bid", 0.0))
+        vwap = float(ticker.get("vwap", last))
+        if ticker.get("quoteVolume") is not None:
+            volume_usd = float(ticker.get("quoteVolume"))
+        elif ticker.get("baseVolume") is not None:
+            volume_usd = float(ticker.get("baseVolume")) * vwap
+        else:
+            volume_usd = 0.0
+
+    change_pct = ((last - open_price) / open_price) * 100 if open_price else 0.0
+
+    try:
+        volume_usd_cache, spread_pct = liq_cache[symbol]
+    except KeyError:
         spread_pct = abs(ask - bid) / last * 100 if last else 0.0
         liq_cache[symbol] = (volume_usd, spread_pct)
+        volume_usd_cache = volume_usd
 
-    return volume_usd, change_pct, spread_pct
+    return volume_usd_cache, change_pct, spread_pct
 
 
 async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
@@ -148,14 +164,15 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                 telemetry.inc("scan.api_errors")
                 data = {}
             for sym, ticker in data.items():
-                ticker_cache[sym] = ticker
+                ticker_cache[sym] = ticker.get("info", ticker)
                 ticker_ts[sym] = now
         result = {s: ticker_cache[s] for s in symbols if s in ticker_cache}
         return result
 
     if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
         try:
-            return await exchange.fetch_tickers(list(symbols))
+            fetched = await exchange.fetch_tickers(list(symbols))
+            return {s: t.get("info", t) for s, t in fetched.items()}
         except Exception as exc:  # pragma: no cover - network
             logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
             telemetry.inc("scan.api_errors")

@@ -94,6 +94,44 @@ def test_filter_symbols_fetch_tickers(monkeypatch):
     assert symbols == [("BTC/USD", 0.6)]
 
 
+class NormalizedFetchTickersExchange(DummyExchange):
+    def __init__(self):
+        self.has = {"fetchTickers": True}
+        self.markets_by_id = DummyExchange.markets_by_id
+
+    async def fetch_tickers(self, symbols):
+        assert symbols == ["ETH/USD", "BTC/USD"]
+        data = (await fake_fetch(None))["result"]
+        def to_normalized(t):
+            return {
+                "info": t,
+                "bid": float(t["b"][0]),
+                "ask": float(t["a"][0]),
+                "last": float(t["c"][0]),
+                "open": float(t["o"]),
+                "vwap": float(t["p"][1]),
+                "baseVolume": float(t["v"][1]),
+            }
+
+        return {
+            "ETH/USD": to_normalized(data["XETHZUSD"]),
+            "BTC/USD": to_normalized(data["XXBTZUSD"]),
+        }
+
+
+def test_filter_symbols_fetch_tickers_normalized(monkeypatch):
+    async def raise_if_called(_):
+        raise AssertionError("_fetch_ticker_async should not be called")
+
+    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", raise_if_called)
+
+    ex = NormalizedFetchTickersExchange()
+
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
+
+    assert symbols == [("ETH/USD", 0.8)]
+
+
 class WatchTickersExchange(DummyExchange):
     def __init__(self):
         self.has = {"watchTickers": True}
