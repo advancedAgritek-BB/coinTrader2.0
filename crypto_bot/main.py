@@ -680,19 +680,13 @@ async def _main_impl() -> TelegramNotifier:
         )
         log_balance(float(init_bal))
         last_balance = float(init_bal)
+        previous_balance = float(init_bal)
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)
         if status_updates:
             err = notifier.notify(f"API error: {exc}")
             if err:
                 logger.error("Failed to notify user: %s", err)
-        return
-        previous_balance = float(init_bal)
-    except Exception as exc:  # pragma: no cover - network
-        logger.error("Exchange API setup failed: %s", exc)
-        err = notifier.notify(f"API error: {exc}")
-        if err:
-            logger.error("Failed to notify user: %s", err)
         return notifier
     risk_params = {**config.get("risk", {})}
     risk_params.update(config.get("sentiment_filter", {}))
