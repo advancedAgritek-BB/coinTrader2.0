@@ -805,12 +805,13 @@ async def _main_impl() -> TelegramNotifier:
         handle_exits,
     ])
 
-    while True:
-        loop_count += 1
-        mode = state["mode"]
-        maybe_update_mode(
-            state, base_mode, config, notifier if status_updates else None
-        )
+    try:
+        while True:
+            loop_count += 1
+            mode = state["mode"]
+            maybe_update_mode(
+                state, base_mode, config, notifier if status_updates else None
+            )
 
         cycle_start = time.perf_counter()
         ctx.timing = await runner.run(ctx)
@@ -1686,45 +1687,45 @@ async def _main_impl() -> TelegramNotifier:
             notifier.notify(summary)
         logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
         await asyncio.sleep(config["loop_interval_minutes"] * 60)
-
-    monitor_task.cancel()
-    control_task.cancel()
-    rotation_task.cancel()
-    for task in list(position_tasks.values()):
-        task.cancel()
-    for task in list(position_tasks.values()):
+    finally:
+        monitor_task.cancel()
+        control_task.cancel()
+        rotation_task.cancel()
+        for task in list(position_tasks.values()):
+            task.cancel()
+        for task in list(position_tasks.values()):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        position_tasks.clear()
+        if telegram_bot:
+            telegram_bot.stop()
         try:
-            await task
+            await monitor_task
         except asyncio.CancelledError:
             pass
-    position_tasks.clear()
-    if telegram_bot:
-        telegram_bot.stop()
-    try:
-        await monitor_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await rotation_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await control_task
-    except asyncio.CancelledError:
-        pass
-    for task in list(WS_PING_TASKS):
-        task.cancel()
-    for task in list(WS_PING_TASKS):
         try:
-            await task
+            await rotation_task
         except asyncio.CancelledError:
             pass
-    WS_PING_TASKS.clear()
-    if hasattr(exchange, "close"):
-        if asyncio.iscoroutinefunction(getattr(exchange, "close")):
-            await exchange.close()
-        else:
-            await asyncio.to_thread(exchange.close)
+        try:
+            await control_task
+        except asyncio.CancelledError:
+            pass
+        for task in list(WS_PING_TASKS):
+            task.cancel()
+        for task in list(WS_PING_TASKS):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        WS_PING_TASKS.clear()
+        if hasattr(exchange, "close"):
+            if asyncio.iscoroutinefunction(getattr(exchange, "close")):
+                await exchange.close()
+            else:
+                await asyncio.to_thread(exchange.close)
 
     return notifier
 
