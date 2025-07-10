@@ -386,13 +386,14 @@ def route(
                     "FAST-PATH: breakout_bot via bandwidth z-score and volume spike"
                 )
                 return _wrap(breakout_bot.generate_signal)
-            wband = bb.bollinger_wband()
-            z = (wband - wband.rolling(window).mean()) / wband.rolling(window).std()
+            z_series = (
+                wband_series - wband_series.rolling(window).mean()
+            ) / wband_series.rolling(window).std()
             vol_ma = df["volume"].rolling(window).mean()
 
             if (
-                z.iloc[-1] < -0.84
-                and wband.iloc[-1] < max_bw
+                z_series.iloc[-1] < -0.84
+                and wband < max_bw
                 and df["volume"].iloc[-1] > vol_ma.iloc[-1] * vol_mult
             ):
                 logger.info(
