@@ -15,7 +15,7 @@ import pandas as pd
 from .logger import LOG_DIR, setup_logger
 from .market_loader import fetch_ohlcv_async
 from .correlation import compute_pairwise_correlation
-from .symbol_scoring import score_symbol
+from .symbol_scoring import score_symbol, score_vectorised
 from .telemetry import telemetry
 from pathlib import Path
 
@@ -229,15 +229,17 @@ async def filter_symbols(
         threshold = np.percentile([abs(m[2]) for m in metrics], pct)
         metrics = [m for m in metrics if abs(m[2]) >= threshold]
 
-    scored: List[tuple[str, float]] = []
-    for sym, vol, chg, spr in metrics:
-        score = await score_symbol(exchange, sym, vol, chg, spr, cfg)
-        if score >= min_score:
-            scored.append((sym, score))
-        else:
-            skipped += 1
-
-    scored.sort(key=lambda x: x[1], reverse=True)
+    if metrics:
+        df = pd.DataFrame(metrics, columns=["sym", "vol", "chg", "spr"])
+        df["score"] = score_vectorised(df, cfg)
+        before = len(df)
+        df = df[df["score"] >= min_score]
+        skipped += before - len(df)
+        df.sort_values("score", ascending=False, inplace=True)
+        top_n = int(cfg.get("top_n_symbols", len(df)))
+        scored = list(df.head(top_n)[["sym", "score"]].itertuples(index=False, name=None))
+    else:
+        scored = []
 
     corr_map: Dict[tuple[str, str], float] = {}
     if df_cache:
