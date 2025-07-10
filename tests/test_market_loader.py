@@ -97,6 +97,22 @@ def test_load_kraken_symbols_fetch_markets_by_type():
     assert set(ex.called) == {"spot", "future"}
 
 
+class DummySymbolFieldExchange:
+    exchange_market_types = {"spot"}
+
+    def load_markets(self):
+        return {
+            "BTC/USD": {"symbol": "BTC/USD", "active": True, "type": "spot"},
+            "ETH/USD": {"symbol": "ETH/USD", "active": False, "type": "spot"},
+        }
+
+
+def test_load_kraken_symbols_handles_symbol_column():
+    ex = DummySymbolFieldExchange()
+    symbols = asyncio.run(load_kraken_symbols(ex))
+    assert symbols == ["BTC/USD"]
+
+
 class DummyAsyncExchange:
     has = {"fetchOHLCV": True}
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
