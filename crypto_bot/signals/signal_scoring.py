@@ -63,33 +63,24 @@ async def evaluate_async(
 ) -> List[Tuple[float, str, Optional[float]]]:
     """Asynchronously evaluate strategy callables with limited concurrency."""
 
-    max_parallel = None
     if config is not None:
-        try:
-            max_parallel = int(config.get("max_parallel", len(fns)))
-        except Exception:
-            max_parallel = len(fns)
-    if max_parallel is None:
-        max_parallel = len(fns)
+        cfg_mp = config.get("max_parallel")
+        if cfg_mp is not None:
+            try:
+                max_parallel = int(cfg_mp)
+            except Exception:
+                pass
 
-    sem = asyncio.Semaphore(max_parallel)
-
-    async def run_fn(fn):
-        async with sem:
-            return await asyncio.to_thread(evaluate, fn, df, config)
-
-    tasks = [run_fn(fn) for fn in fns]
-    sem = None
     if max_parallel is not None:
         if not isinstance(max_parallel, int) or max_parallel < 1:
             raise ValueError("max_parallel must be a positive integer or None")
         sem = asyncio.Semaphore(max_parallel)
+    else:
+        sem = asyncio.Semaphore(len(strategy_fns))
 
-    async def run(fn):
-        if sem:
-            async with sem:
-                return await asyncio.to_thread(evaluate, fn, df, config)
-        return await asyncio.to_thread(evaluate, fn, df, config)
+    async def run(fn: Callable[[pd.DataFrame], Tuple]):
+        async with sem:
+            return await asyncio.to_thread(evaluate, fn, df, config)
 
     tasks = [asyncio.create_task(run(fn)) for fn in strategy_fns]
     results = await asyncio.gather(*tasks)

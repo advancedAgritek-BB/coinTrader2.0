@@ -82,3 +82,36 @@ def test_evaluate_async_max_parallel(monkeypatch):
     assert max_seen <= 2
 
 
+def test_evaluate_async_param_parallel(monkeypatch):
+    df = pd.DataFrame({"close": [1, 2, 3]})
+
+    def make_strat(val):
+        def strat(_df, cfg=None):
+            return val, "long"
+        return strat
+
+    strategies = [make_strat(i / 10) for i in range(6)]
+
+    running = 0
+    max_seen = 0
+
+    async def fake_to_thread(fn, *args, **kwargs):
+        nonlocal running, max_seen
+        running += 1
+        max_seen = max(max_seen, running)
+        try:
+            await asyncio.sleep(0.01)
+            return fn(*args, **kwargs)
+        finally:
+            running -= 1
+
+    monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
+
+    async def run():
+        return await sc.evaluate_async(strategies, df, None, max_parallel=3)
+
+    res = asyncio.run(run())
+    assert len(res) == 6
+    assert max_seen <= 3
+
+
