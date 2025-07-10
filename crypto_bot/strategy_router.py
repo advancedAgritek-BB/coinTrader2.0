@@ -51,6 +51,7 @@ class RouterConfig:
     meta_selector: bool = False
     bandit_enabled: bool = False
     timeframe: str = "1h"
+    timeframe_minutes: int = 60
     commit_lock_intervals: int = 0
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
@@ -59,6 +60,7 @@ class RouterConfig:
         """Create ``RouterConfig`` from a dictionary (e.g. YAML)."""
         router = data.get("strategy_router", {})
         fusion = data.get("signal_fusion", {})
+        tf = str(data.get("timeframe", "1h"))
         return cls(
             regimes=router.get("regimes", {}),
             min_score=float(
@@ -72,7 +74,8 @@ class RouterConfig:
             rl_selector=bool(data.get("rl_selector", {}).get("enabled", False)),
             meta_selector=bool(data.get("meta_selector", {}).get("enabled", False)),
             bandit_enabled=bool(data.get("bandit", {}).get("enabled", False)),
-            timeframe=str(data.get("timeframe", "1h")),
+            timeframe=tf,
+            timeframe_minutes=int(pd.Timedelta(tf).total_seconds() // 60),
             commit_lock_intervals=int(router.get("commit_lock_intervals", 0)),
             raw=data,
         )
@@ -449,10 +452,10 @@ def route(
             lock_file.parent.mkdir(parents=True, exist_ok=True)
             lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
     tf = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe", "1h")
-    tf_minutes = getattr(
-        cfg,
-        "timeframe_minutes",
-        int(pd.Timedelta(tf).total_seconds() // 60),
+    tf_minutes = (
+        cfg.timeframe_minutes
+        if isinstance(cfg, RouterConfig)
+        else int(pd.Timedelta(tf).total_seconds() // 60)
     )
 
     LAST_REGIME_FILE.parent.mkdir(parents=True, exist_ok=True)
