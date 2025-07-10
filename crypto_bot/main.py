@@ -225,7 +225,10 @@ def load_config() -> dict:
         logger.info("Loading config from %s", CONFIG_PATH)
         data = yaml.safe_load(f) or {}
     try:
-        ScannerConfig.model_validate(data)
+        if hasattr(ScannerConfig, "model_validate"):
+            ScannerConfig.model_validate(data)
+        else:  # pragma: no cover - for Pydantic < 2
+            ScannerConfig.parse_obj(data)
     except ValidationError as exc:
         print("Invalid configuration:\n", exc)
         raise SystemExit(1)
