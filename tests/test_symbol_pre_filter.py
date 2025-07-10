@@ -18,6 +18,14 @@ def reset_semaphore():
     sp.SEMA = asyncio.Semaphore(1)
     yield
 
+def clear_ticker_cache():
+    sp.ticker_cache.clear()
+    sp.ticker_ts.clear()
+    yield
+    sp.ticker_cache.clear()
+    sp.ticker_ts.clear()
+
+from crypto_bot.utils import symbol_pre_filter as sp
 from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_history
 
 CONFIG = {
@@ -95,6 +103,37 @@ def test_filter_symbols_fetch_tickers(monkeypatch):
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
 
     assert symbols == [("BTC/USD", 0.6)]
+
+
+class WatchTickersExchange(DummyExchange):
+    def __init__(self):
+        self.has = {"watchTickers": True}
+        self.calls = 0
+        self.markets_by_id = DummyExchange.markets_by_id
+
+    async def watch_tickers(self, symbols):
+        self.calls += 1
+        data = (await fake_fetch(None))["result"]
+        return {"ETH/USD": data["XETHZUSD"], "BTC/USD": data["XXBTZUSD"]}
+
+
+def test_watch_tickers_cache(monkeypatch):
+    ex = WatchTickersExchange()
+
+    t = {"now": 0}
+
+    monkeypatch.setattr(sp.time, "time", lambda: t["now"])
+
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
+    assert ex.calls == 1
+    assert symbols == [("BTC/USD", 0.6)]
+
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
+    assert ex.calls == 1
+
+    t["now"] += 6
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
+    assert ex.calls == 2
 
 
 class DummyExchangeList:

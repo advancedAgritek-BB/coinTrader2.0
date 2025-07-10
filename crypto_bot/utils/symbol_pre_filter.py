@@ -6,6 +6,7 @@ import asyncio
 from typing import Iterable, List, Dict
 import json
 import os
+import time
 
 import numpy as np
 
@@ -34,6 +35,10 @@ logger = setup_logger(__name__, LOG_DIR / "symbol_filter.log")
 
 API_URL = "https://api.kraken.com/0/public"
 DEFAULT_MIN_VOLUME_USD = 50000
+
+# cache for ticker data when using watchTickers
+ticker_cache: dict[str, dict] = {}
+ticker_ts: dict[str, float] = {}
 
 
 async def has_enough_history(
@@ -106,6 +111,42 @@ async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
             combined["result"].update(data.get("result", {}))
 
     return combined
+
+
+async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
+    """Return ticker data using WS if available with a small cache."""
+
+    now = time.time()
+    if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers"):
+        to_fetch = [s for s in symbols if now - ticker_ts.get(s, 0) > 5 or s not in ticker_cache]
+        data = {}
+        if to_fetch:
+            try:
+                data = await exchange.watch_tickers(to_fetch)
+            except Exception as exc:  # pragma: no cover - network
+                logger.warning("watch_tickers failed: %s", exc, exc_info=True)
+                telemetry.inc("scan.api_errors")
+                data = {}
+            for sym, ticker in data.items():
+                ticker_cache[sym] = ticker
+                ticker_ts[sym] = now
+        result = {s: ticker_cache[s] for s in symbols if s in ticker_cache}
+        return result
+
+    if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
+        try:
+            return await exchange.fetch_tickers(list(symbols))
+        except Exception as exc:  # pragma: no cover - network
+            logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
+            telemetry.inc("scan.api_errors")
+            return {}
+
+    try:
+        pairs = [s.replace("/", "") for s in symbols]
+        return (await _fetch_ticker_async(pairs)).get("result", {})
+    except Exception:  # pragma: no cover - network
+        telemetry.inc("scan.api_errors")
+        raise
 
 
 def _parse_metrics(ticker: dict) -> tuple[float, float, float]:
@@ -182,19 +223,10 @@ async def filter_symbols(
     skipped = 0
 
     pairs = [s.replace("/", "") for s in symbols]
-    if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
-        try:
-            data = await exchange.fetch_tickers(symbols)
-        except Exception as exc:  # pragma: no cover - network
-            logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
-            telemetry.inc("scan.api_errors")
-            data = {}
-    else:
-        try:
-            data = (await _fetch_ticker_async(pairs)).get("result", {})
-        except Exception:  # pragma: no cover - network
-            telemetry.inc("scan.api_errors")
-            raise
+    try:
+        data = await _refresh_tickers(exchange, symbols)
+    except Exception:
+        raise
 
     # map of ids returned by Kraken to human readable symbols
     id_map: dict[str, str] = {}
