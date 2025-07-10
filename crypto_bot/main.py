@@ -1630,7 +1630,7 @@ async def _main_impl() -> TelegramNotifier:
                     risk_manager,
                 )
                 pos["trailing_stop"] = new_stop
-                equity = paper_wallet.balance if paper_wallet else latest_balance
+                equity = paper_wallet.balance if paper_wallet else session_state.last_balance
                 if paper_wallet:
                     unreal = paper_wallet.unrealized(sym, cur_price)
                     equity += unreal
@@ -1700,14 +1700,14 @@ async def _main_impl() -> TelegramNotifier:
                             pos.get("strategy", ""),
                             pos["pnl"],
                         )
-                        latest_balance = await fetch_balance(exchange, paper_wallet, config)
+                        session_state.last_balance = await fetch_balance(exchange, paper_wallet, config)
                         log_position(
                             sym,
                             pos["side"],
                             sell_amount,
                             pos["entry_price"],
                             cur_price,
-                            float(paper_wallet.balance if paper_wallet else latest_balance),
+                            float(paper_wallet.balance if paper_wallet else session_state.last_balance),
                         )
                         mark_cooldown(sym, active_strategy or pos.get("strategy", ""))
                         task = position_tasks.pop(sym, None)
@@ -1719,10 +1719,10 @@ async def _main_impl() -> TelegramNotifier:
                                 pass
                         session_state.positions.pop(sym, None)
                         last_candle_ts.pop(sym, None)
-                        latest_balance = await fetch_and_log_balance(
+                        session_state.last_balance = await fetch_and_log_balance(
                             exchange, paper_wallet, config
                         )
-                        equity = paper_wallet.balance if paper_wallet else latest_balance
+                        equity = paper_wallet.balance if paper_wallet else session_state.last_balance
                         log_position(
                             sym,
                             pos["side"],
@@ -1738,8 +1738,8 @@ async def _main_impl() -> TelegramNotifier:
                             pos["strategy"], sell_amount * pos["entry_price"]
                         )
                         risk_manager.update_stop_order(pos["size"], symbol=sym)
-                        latest_balance = await fetch_balance(exchange, paper_wallet, config)
-                        latest_balance = await fetch_balance(exchange, paper_wallet, config)
+                        session_state.last_balance = await fetch_balance(exchange, paper_wallet, config)
+                        session_state.last_balance = await fetch_balance(exchange, paper_wallet, config)
     
             if not position_guard.can_open(session_state.positions):
                 continue
@@ -1934,7 +1934,7 @@ async def _main_impl() -> TelegramNotifier:
                     session_state.positions.pop(sym, None)
                     session_state.last_balance = await fetch_and_log_balance(
                     last_candle_ts.pop(sym, None)
-                    latest_balance = await fetch_and_log_balance(
+                    session_state.last_balance = await fetch_and_log_balance(
                         exchange, paper_wallet, config
                     take_profit_price = current_price * (
                         1 + risk_manager.config.take_profit_pct
@@ -1973,7 +1973,7 @@ async def _main_impl() -> TelegramNotifier:
                     paper_wallet.open(
                         candidate["symbol"], trade_side, order_amount, current_price
                     )
-                    latest_balance = paper_wallet.balance
+                    session_state.last_balance = paper_wallet.balance
                 else:
                     if asyncio.iscoroutinefunction(
                         getattr(exchange, "fetch_balance", None)
@@ -1981,7 +1981,7 @@ async def _main_impl() -> TelegramNotifier:
                         bal = await exchange.fetch_balance()
                     else:
                         bal = await asyncio.to_thread(exchange.fetch_balance)
-                    latest_balance = (
+                    session_state.last_balance = (
                         bal["USDT"]["free"]
                         if isinstance(bal["USDT"], dict)
                         else bal["USDT"]
@@ -2000,12 +2000,12 @@ async def _main_impl() -> TelegramNotifier:
             if candidate["symbol"] in session_state.positions:
                 logger.info(
                     "Existing position on %s still open – skipping new trade",
-                check_balance_change(float(latest_balance), "trade executed")
-                log_balance(float(latest_balance))
+                check_balance_change(float(session_state.last_balance), "trade executed")
+                log_balance(float(session_state.last_balance))
                 session_state.last_balance = notify_balance_change(
                     notifier,
                     session_state.last_balance,
-                    float(latest_balance),
+                    float(session_state.last_balance),
                     balance_updates,
                 )
                 log_position(
@@ -2014,7 +2014,7 @@ async def _main_impl() -> TelegramNotifier:
                     order_amount,
                     current_price,
                     current_price,
-                    float(latest_balance),
+                    float(session_state.last_balance),
                 )
                 if strategy_name(regime, env).startswith("grid"):
                     grid_state.record_fill(candidate["symbol"])
