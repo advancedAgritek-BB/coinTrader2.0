@@ -9,8 +9,10 @@ from crypto_bot.utils.telemetry import telemetry
 @pytest.fixture(autouse=True)
 def reset_telemetry():
     telemetry.reset()
+    sp.liq_cache.clear()
     yield
 
+import crypto_bot.utils.symbol_pre_filter as sp
 from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_history
 
 CONFIG = {
@@ -406,3 +408,24 @@ def test_get_latency(monkeypatch):
     monkeypatch.setattr(sc.time, "perf_counter", fake_counter)
     latency = asyncio.run(sc.get_latency(LatencyExchange(), "BTC/USD"))
     assert latency == pytest.approx(200.0)
+
+
+def test_liq_cache_skips_api(monkeypatch):
+    sp.liq_cache.clear()
+    sp.liq_cache["ETH/USD"] = (60000.0, 0.5)
+
+    class DummyExchange:
+        has = {"fetchTickers": True}
+        markets_by_id = {"XETHZUSD": {"symbol": "ETH/USD"}}
+
+        async def fetch_tickers(self, symbols):
+            raise AssertionError("fetch_tickers should not be called")
+
+    async def fake_score_symbol(*_a, **_k):
+        return 1.0
+
+    monkeypatch.setattr(sp, "score_symbol", fake_score_symbol)
+
+    cfg = {"symbol_filter": {"min_volume_usd": 50000, "max_spread_pct": 1.0, "change_pct_percentile": 0}}
+    result = asyncio.run(sp.filter_symbols(DummyExchange(), ["ETH/USD"], cfg))
+    assert result == [("ETH/USD", 1.0)]
