@@ -6,6 +6,7 @@ import asyncio
 from typing import Iterable, List, Dict
 import json
 import os
+import time
 
 import numpy as np
 
@@ -18,6 +19,7 @@ from .correlation import compute_pairwise_correlation
 from .symbol_scoring import score_symbol
 from .telemetry import telemetry
 from pathlib import Path
+from .pair_cache import PAIR_FILE, load_liquid_map
 
 
 
@@ -153,6 +155,9 @@ async def filter_symbols(
     min_age = cfg.get("min_symbol_age_days", 0)
     min_score = float(cfg.get("min_symbol_score", 0.0))
 
+    cache_map = load_liquid_map() or {}
+    cache_changed = False
+
     telemetry.inc("scan.symbols_considered", len(list(symbols)))
     skipped = 0
 
@@ -220,8 +225,14 @@ async def filter_symbols(
             change_pct,
             spread_pct,
         )
+        if symbol not in cache_map and vol_usd < min_volume * 2:
+            skipped += 1
+            continue
         if vol_usd >= min_volume and spread_pct <= max_spread:
             metrics.append((symbol, vol_usd, change_pct, spread_pct))
+            if symbol not in cache_map:
+                cache_map[symbol] = time.time()
+                cache_changed = True
         else:
             skipped += 1
 
@@ -267,4 +278,11 @@ async def filter_symbols(
             skipped += 1
 
     telemetry.inc("scan.symbols_skipped", skipped)
+    if cache_changed:
+        try:
+            Path(PAIR_FILE).parent.mkdir(parents=True, exist_ok=True)
+            with open(PAIR_FILE, "w") as f:
+                json.dump(cache_map, f, indent=2)
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.warning("Failed to update %s: %s", PAIR_FILE, exc)
     return result

@@ -406,3 +406,31 @@ def test_get_latency(monkeypatch):
     monkeypatch.setattr(sc.time, "perf_counter", fake_counter)
     latency = asyncio.run(sc.get_latency(LatencyExchange(), "BTC/USD"))
     assert latency == pytest.approx(200.0)
+
+
+def test_symbol_skipped_when_missing_from_cache(monkeypatch, tmp_path):
+    pair_file = tmp_path / "liquid_pairs.json"
+    pair_file.write_text(json.dumps({"ETH/USD": 0}))
+    import crypto_bot.utils.symbol_pre_filter as sp
+    import crypto_bot.utils.pair_cache as pc
+
+    monkeypatch.setattr(pc, "PAIR_FILE", pair_file)
+    monkeypatch.setattr(sp, "PAIR_FILE", pair_file)
+
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
+
+    calls = []
+
+    async def fake_history(*_a, **_k):
+        calls.append(_a[1])
+        return True
+
+    monkeypatch.setattr(sp, "has_enough_history", fake_history)
+
+    cfg = {**CONFIG, "min_symbol_age_days": 1}
+    result = asyncio.run(sp.filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg))
+
+    assert result == [("ETH/USD", 0.8)]
+    assert calls == ["ETH/USD"]
