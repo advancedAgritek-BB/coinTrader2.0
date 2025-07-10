@@ -809,6 +809,8 @@ async def _main_impl() -> TelegramNotifier:
 
     mode = user.get("mode", config.get("mode", "auto"))
     state = {"running": True, "mode": mode}
+    # local caches are maintained in the session state
+    regime_cache: dict[str, dict[str, pd.DataFrame]] = {}
     # Caches for OHLCV and regime data are stored on the session_state
     # object so they can be shared across tasks.
     last_candle_ts: dict[str, int] = {}
@@ -855,6 +857,7 @@ async def _main_impl() -> TelegramNotifier:
 
     base_mode = mode
     loop_count = 0
+    ctx = BotContext(session_state.positions, session_state.df_cache, regime_cache, config)
     ctx = BotContext(session_state.positions, df_cache, regime_cache, config)
     ctx = BotContext(
         session_state.positions,
@@ -1385,6 +1388,7 @@ async def _main_impl() -> TelegramNotifier:
                 pnl_pct = ((cur_price - pos["entry_price"]) / pos["entry_price"]) * (
                     1 if pos["side"] == "buy" else -1
                 )
+                update_df_cache(session_state.df_cache, config["timeframe"], sym, df_current)
             if df_current is not None and not df_current.empty:
                 last_candle_ts[sym] = int(df_current["timestamp"].iloc[-1])
                 update_df_cache(
@@ -1677,6 +1681,7 @@ async def _main_impl() -> TelegramNotifier:
                             pass
                     last_candle_ts.pop(sym, None)
                     session_state.positions.pop(sym, None)
+                    last_candle_ts.pop(sym, None)
                     latest_balance = await fetch_and_log_balance(
                         exchange, paper_wallet, config
                     take_profit_price = current_price * (
