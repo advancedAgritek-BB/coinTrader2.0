@@ -6,7 +6,8 @@ from crypto_bot.solana import api_helpers
 
 
 class DummyWS:
-    pass
+    async def close(self):
+        pass
 
 
 class DummyResp:
@@ -30,6 +31,7 @@ class DummySession:
     def __init__(self):
         self.ws_url = None
         self.http_url = None
+        self.closed = False
 
     async def ws_connect(self, url):
         self.ws_url = url
@@ -40,15 +42,22 @@ class DummySession:
         return DummyResp({"bundle": "ok"})
 
     async def close(self):
-        pass
+        self.closed = True
 
 
-def test_connect_helius_ws(monkeypatch):
+def test_helius_ws(monkeypatch):
     session = DummySession()
-    monkeypatch.setattr(api_helpers, "aiohttp", type("M", (), {"ClientSession": lambda: session}))
-    ws = asyncio.run(api_helpers.connect_helius_ws("k"))
-    assert isinstance(ws, DummyWS)
+    monkeypatch.setattr(
+        api_helpers, "aiohttp", type("M", (), {"ClientSession": lambda: session})
+    )
+
+    async def _run():
+        async with api_helpers.helius_ws("k") as ws:
+            assert isinstance(ws, DummyWS)
+
+    asyncio.run(_run())
     assert session.ws_url.endswith("k")
+    assert session.closed
 
 
 def test_fetch_jito_bundle(monkeypatch):

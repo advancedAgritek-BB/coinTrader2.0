@@ -776,6 +776,9 @@ tweet volume is high.
 
 Add a `meme_wave_sniper` section to `crypto_bot/config.yaml`:
 
+Set `HELIUS_KEY` in `crypto_bot/.env` or as an environment variable. The pool
+URL should reference this key so Helius can authorize the requests:
+
 ```yaml
 meme_wave_sniper:
   enabled: true
