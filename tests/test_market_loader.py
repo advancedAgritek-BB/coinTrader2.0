@@ -70,6 +70,33 @@ def test_market_type_filter():
     assert symbols == ["ETH/USD"]
 
 
+class DummySliceExchange:
+    has = {"fetchMarketsByType": True}
+
+    def __init__(self):
+        self.called: list[str] = []
+
+    def fetch_markets_by_type(self, market_type):
+        self.called.append(market_type)
+        data = {
+            "spot": [
+                {"symbol": "BTC/USD", "active": True, "type": "spot"},
+            ],
+            "future": [
+                {"symbol": "XBT/USD-PERP", "active": True, "type": "future"},
+            ],
+        }
+        return data.get(market_type, [])
+
+
+def test_load_kraken_symbols_fetch_markets_by_type():
+    ex = DummySliceExchange()
+    ex.exchange_market_types = {"spot", "future"}
+    symbols = asyncio.run(load_kraken_symbols(ex))
+    assert set(symbols) == {"BTC/USD", "XBT/USD-PERP"}
+    assert set(ex.called) == {"spot", "future"}
+
+
 class DummyAsyncExchange:
     has = {"fetchOHLCV": True}
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
