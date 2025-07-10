@@ -179,34 +179,28 @@ async def load_kraken_symbols(
     else:
         markets = await asyncio.to_thread(exchange.load_markets)
 
+    df = pd.DataFrame.from_dict(markets, orient="index")
+    df.index.name = "symbol"
+    df.reset_index(inplace=True)
+
+    df["active"] = df.get("active", True).fillna(True)
+    df["reason"] = None
+    df.loc[~df["active"], "reason"] = "inactive"
+
+    mask_type = df.apply(lambda r: is_symbol_type(r.to_dict(), allowed_types), axis=1)
+    df.loc[df["reason"].isna() & ~mask_type, "reason"] = (
+        "type mismatch (" + df.get("type", "unknown").fillna("unknown").astype(str) + ")"
+    )
+
+    df.loc[df["reason"].isna() & df["symbol"].isin(exclude_set), "reason"] = "excluded"
+
     symbols: List[str] = []
-    for symbol, data in markets.items():
-        reason = None
-        if not data.get("active", True):
-            reason = "inactive"
-        elif not is_symbol_type(data, allowed_types):
-            m_t = data.get("type") or "unknown"
-            reason = f"type mismatch ({m_t})"
-        elif symbol in exclude_set:
-            reason = "excluded"
-        elif allowed_types:
-            m_type = data.get("type")
-            if m_type is None:
-                if data.get("spot"):
-                    m_type = "spot"
-                elif data.get("margin"):
-                    m_type = "margin"
-                elif data.get("future") or data.get("futures"):
-                    m_type = "futures"
-            if m_type not in allowed_types:
-                reason = f"type {m_type} not allowed"
-
-        if reason:
-            logger.debug("Skipping symbol %s: %s", symbol, reason)
-            continue
-
-        logger.debug("Including symbol %s", symbol)
-        symbols.append(symbol)
+    for row in df.itertuples():
+        if row.reason:
+            logger.debug("Skipping symbol %s: %s", row.symbol, row.reason)
+        else:
+            logger.debug("Including symbol %s", row.symbol)
+            symbols.append(row.symbol)
 
     if not symbols:
         logger.warning("No active trading pairs were discovered")
