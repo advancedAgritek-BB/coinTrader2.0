@@ -1076,6 +1076,16 @@ async def _main_impl() -> TelegramNotifier:
 
 
 
+            total_time = time.perf_counter() - cycle_start
+            timing = getattr(ctx, "timing", {})
+            _emit_timing(
+                timing.get("fetch_candidates", 0.0),
+                timing.get("update_caches", 0.0),
+                timing.get("analyse_batch", 0.0),
+                total_time,
+                metrics_path,
+                timing.get("ohlcv_fetch_latency", 0.0),
+                timing.get("execution_latency", 0.0),
             allowed_results: list[dict] = []
             df_current = None
             current_dfs: dict[str, pd.DataFrame] = {}
@@ -1780,255 +1790,19 @@ async def _main_impl() -> TelegramNotifier:
                 float(equity),
                 balance_updates,
             )
-            if exit_signal:
-                pct = get_partial_exit_percent(pnl_pct * 100)
-                sell_amount = (
-                    pos["size"] * (pct / 100)
-                    if config["exit_strategy"]["scale_out"] and pct > 0
-                    else pos["size"]
+            if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
                 metrics = {
                     "timestamp": datetime.utcnow().isoformat(),
-                    "ticker_fetch_time": ticker_fetch_time,
-                    "symbol_filter_ratio": symbol_filter_ratio,
-                    "ohlcv_fetch_latency": ohlcv_fetch_latency,
-                    "execution_latency": execution_latency,
+                    "ticker_fetch_time": timing.get("fetch_candidates", 0.0),
+                    "symbol_filter_ratio": timing.get("symbol_filter_ratio", 1.0),
+                    "ohlcv_fetch_latency": timing.get("ohlcv_fetch_latency", 0.0),
+                    "execution_latency": timing.get("execution_latency", 0.0),
                     "unknown_regimes": rejected_regime,
                 }
                 write_cycle_metrics(metrics, config)
-                logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
-                await asyncio.sleep(config["loop_interval_minutes"] * 60)
-    
-                poll_mod = config.get("balance_poll_mod", 1)
-                balance = last_balance if last_balance is not None else 0.0
-                if trades_executed > 0 or loop_count % poll_mod == 0:
-                    if config["execution_mode"] != "dry_run":
-                        bal = await (
-                            exchange.fetch_balance()
-                            if asyncio.iscoroutinefunction(
-                                getattr(exchange, "fetch_balance", None)
-                            )
-                            else asyncio.to_thread(exchange.fetch_balance)
-                        )
-                        balance = bal["USDT"]["free"]
-                    else:
-                        balance = paper_wallet.balance if paper_wallet else 0.0
-                    check_balance_change(float(balance), "external change")
-    
-                size = risk_manager.position_size(
-                    score,
-                    balance,
-                    df_for_size,
-                    atr=candidate.get("atr"),
-                    price=current_price,
-                )
-                order_amount = size / current_price if current_price > 0 else 0.0
-    
-                if not risk_manager.can_allocate(name, size, balance):
-                    logger.info("Capital cap reached for %s, skipping", name)
-                    logger.info(
-                        "Loop Summary: %s evaluated | %s trades | %s volume fails | %s score fails | %s unknown regime",
-                        total_pairs,
-                        trades_executed,
-                        rejected_volume,
-                        rejected_score,
-                        rejected_regime,
-                    )
-                    logger.info(
-                        "Cycle Summary: %s pairs evaluated, %s signals, %s trades executed, %s rejected volume, %s rejected score, %s rejected regime.",
-                        total_pairs,
-                        signals_generated,
-                        trades_executed,
-                        volume_rejections,
-                        score_rejections,
-                        regime_rejections,
-                    )
-                    if (
-                        config.get("metrics_enabled")
-                        and config.get("metrics_backend") == "csv"
-                    ):
-                        metrics = {
-                            "timestamp": datetime.utcnow().isoformat(),
-                            "ticker_fetch_time": ticker_fetch_time,
-                            "symbol_filter_ratio": symbol_filter_ratio,
-                            "ohlcv_fetch_latency": ohlcv_fetch_latency,
-                            "execution_latency": execution_latency,
-                            "unknown_regimes": rejected_regime,
-                        }
-                        write_cycle_metrics(metrics, config)
-                    logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
-                    await asyncio.sleep(config["loop_interval_minutes"] * 60)
-                    continue
-    
-                _start_exec = time.perf_counter()
-                order = await cex_trade_async(
-                    exchange,
-                    ws_client,
-                    candidate["symbol"],
-                    trade_side,
-                    order_amount,
-                    notifier,
-                    dry_run=config["execution_mode"] == "dry_run",
-                    use_websocket=config.get("use_websocket", False),
-                    config=config,
-                )
-                lat = time.perf_counter() - _start_exec
-                execution_latency = max(execution_latency, lat)
-                if notifier and lat > 0.5:
-                    notifier.notify(f"\u26a0\ufe0f Execution latency {lat*1000:.0f} ms")
-                atr_val = candidate.get("atr")
-                if atr_val:
-                    stop_price = (
-                        current_price - atr_val * risk_manager.config.stop_loss_atr_mult
-                        if trade_side == "buy"
-                        else current_price
-                        + atr_val * risk_manager.config.stop_loss_atr_mult
-                    )
-                    take_profit_price = (
-                        current_price + atr_val * risk_manager.config.take_profit_atr_mult
-                        if trade_side == "buy"
-                        else current_price
-                        - atr_val * risk_manager.config.take_profit_atr_mult
-                    )
-                    session_state.last_balance = await fetch_balance(exchange, paper_wallet, config)
-                    log_position(
-                        sym,
-                        pos["side"],
-                        sell_amount,
-                        pos["entry_price"],
-                        cur_price,
-                        float(paper_wallet.balance if paper_wallet else session_state.last_balance),
-                else:
-                    stop_price = current_price * (
-                        1 - risk_manager.config.stop_loss_pct
-                        if trade_side == "buy"
-                        else 1 + risk_manager.config.stop_loss_pct
-                    )
-                    mark_cooldown(sym, active_strategy or pos.get("strategy", ""))
-                    task = position_tasks.pop(sym, None)
-                    if task:
-                        task.cancel()
-                        try:
-                            await task
-                        except asyncio.CancelledError:
-                            pass
-                    last_candle_ts.pop(sym, None)
-                    session_state.positions.pop(sym, None)
-                    session_state.last_balance = await fetch_and_log_balance(
-                    last_candle_ts.pop(sym, None)
-                    session_state.last_balance = await fetch_and_log_balance(
-                        exchange, paper_wallet, config
-                    take_profit_price = current_price * (
-                        1 + risk_manager.config.take_profit_pct
-                        if trade_side == "buy"
-                        else 1 - risk_manager.config.take_profit_pct
-                    )
-                    equity = paper_wallet.balance if paper_wallet else session_state.last_balance
-                    log_position(
-                        sym,
-                        pos["side"],
-                        pos["size"],
-                        pos["entry_price"],
-                        cur_price,
-                        float(equity),
-                        pnl=pos["pnl"],
-                stop_order = place_stop_order(
-                    exchange,
-                    candidate["symbol"],
-                    "sell" if trade_side == "buy" else "buy",
-                    order_amount,
-                    stop_price,
-                    notifier=notifier,
-                    dry_run=config["execution_mode"] == "dry_run",
-                )
-                risk_manager.register_stop_order(
-                    stop_order,
-                    strategy=strategy_name(regime, env),
-                    symbol=candidate["symbol"],
-                    entry_price=current_price,
-                    confidence=score,
-                    direction=trade_side,
-                    take_profit=take_profit_price,
-                )
-                risk_manager.allocate_capital(name, size)
-                if config["execution_mode"] == "dry_run" and paper_wallet:
-                    paper_wallet.open(
-                        candidate["symbol"], trade_side, order_amount, current_price
-                    )
-                    session_state.last_balance = paper_wallet.balance
-                else:
-                    if asyncio.iscoroutinefunction(
-                        getattr(exchange, "fetch_balance", None)
-                    ):
-                        bal = await exchange.fetch_balance()
-                    else:
-                        bal = await asyncio.to_thread(exchange.fetch_balance)
-                    session_state.last_balance = (
-                        bal["USDT"]["free"]
-                        if isinstance(bal["USDT"], dict)
-                        else bal["USDT"]
-                    )
-                    risk_manager.update_stop_order(pos["size"], symbol=sym)
-                    session_state.last_balance = await fetch_balance(exchange, paper_wallet, config)
-                    session_state.last_balance = await fetch_balance(exchange, paper_wallet, config)
-
-            active_strategy = name
-            if notifier and trade_updates:
-                report_entry(
-                    notifier,
-                    candidate["symbol"],
-                    strategy_name(regime, env),
-                    score,
-                    direction,
-                )
-            logger.info("Trade opened at %.4f", current_price)
-            trades_executed += 1
-            if not position_guard.can_open(session_state.positions):
-                break
-
-            write_scores(scores_file, perf_file)
-            write_stats(stats_file, perf_file)
-
-            logger.info(
-            "Loop Summary: %s evaluated | %s trades | %s volume fails | %s score fails | %s unknown regime",
-            total_pairs,
-            trades_executed,
-            rejected_volume,
-            rejected_score,
-            rejected_regime,
-            )
-            logger.info(
-            "Cycle Summary: %s pairs evaluated, %s signals, %s trades executed, %s rejected volume, %s rejected score, %s rejected regime.",
-            total_pairs,
-            signals_generated,
-            trades_executed,
-            volume_rejections,
-            score_rejections,
-            regime_rejections,
-            )
-            total_time = time.perf_counter() - cycle_start
-            timing = getattr(ctx, "timing", {})
-            _emit_timing(
-            timing.get("fetch_candidates", symbol_time),
-            timing.get("update_caches", ohlcv_time),
-            timing.get("analyse_batch", analyze_time),
-            total_time,
-            metrics_path,
-            ohlcv_fetch_latency,
-            execution_latency,
-            )
-            if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
-            metrics = {
-                "timestamp": datetime.utcnow().isoformat(),
-                "ticker_fetch_time": ticker_fetch_time,
-                "symbol_filter_ratio": symbol_filter_ratio,
-                "ohlcv_fetch_latency": ohlcv_fetch_latency,
-                "execution_latency": execution_latency,
-                "unknown_regimes": rejected_regime,
-            }
-            write_cycle_metrics(metrics, config)
             summary = f"Cycle complete: {total_pairs} symbols, {trades_executed} trades"
             if notifier and status_updates:
-            notifier.notify(summary)
+                notifier.notify(summary)
             logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
             await asyncio.sleep(config["loop_interval_minutes"] * 60)
     
