@@ -121,6 +121,25 @@ def test_load_markets_when_missing(monkeypatch):
     assert symbols == [("ETH/USD", 0.8)]
 
 
+class FailLoadExchange:
+    def __init__(self):
+        self.markets_by_id = {}
+
+    def load_markets(self):
+        raise RuntimeError("boom")
+
+
+def test_load_markets_failure_fallback(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+    ex = FailLoadExchange()
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], CONFIG))
+    assert symbols == [("ETH/USD", 0.8)]
+    assert any("load_markets failed" in r.getMessage() for r in caplog.records)
+
+
 def test_non_dict_market_entry(monkeypatch):
     class BadExchange:
         markets_by_id = {"XETHZUSD": ["ETH/USD"]}
