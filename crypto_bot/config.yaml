@@ -307,6 +307,7 @@ safety:
 scoring:
   lookback_bars: 50
   method: sharpe
+  use_numba_scoring: false
 exec:
   allow_market_orders: false
   order_retry_interval: 5

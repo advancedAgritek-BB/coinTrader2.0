@@ -30,4 +30,5 @@ uvicorn
 rich
 scikit-optimize
 pydantic<2
+numba
 cachetools
