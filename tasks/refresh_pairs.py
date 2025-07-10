@@ -73,12 +73,16 @@ async def _close_exchange(exchange: ccxt.Exchange) -> None:
 async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
     """Fetch tickers and update the cached liquid pairs list."""
     old_pairs: list[str] = []
+    old_map: dict[str, float] = {}
     if PAIR_FILE.exists():
         try:
             with open(PAIR_FILE) as f:
                 loaded = json.load(f)
                 if isinstance(loaded, list):
                     old_pairs = loaded
+                elif isinstance(loaded, dict):
+                    old_pairs = list(loaded)
+                    old_map = {k: float(v) for k, v in loaded.items()}
         except Exception as exc:  # pragma: no cover - corrupted cache
             logger.error("Failed to read %s: %s", PAIR_FILE, exc)
 
@@ -119,7 +123,7 @@ async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -
         logger.error("Failed to fetch tickers: %s", exc)
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         with open(PAIR_FILE, "w") as f:
-            json.dump(old_pairs, f, indent=2)
+            json.dump(old_map or {p: time.time() for p in old_pairs}, f, indent=2)
         return old_pairs
     finally:
         await _close_exchange(exchange)
@@ -145,13 +149,14 @@ async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -
         pairs.append((symbol, float(vol)))
 
     pairs.sort(key=lambda x: x[1], reverse=True)
-    top_pairs = [sym for sym, vol in pairs if vol >= min_volume_usd][:top_k]
+    top_list = [sym for sym, vol in pairs if vol >= min_volume_usd][:top_k]
+    top_map = {sym: time.time() for sym in top_list}
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     with open(PAIR_FILE, "w") as f:
-        json.dump(top_pairs, f, indent=2)
+        json.dump(top_map, f, indent=2)
 
-    return top_pairs
+    return top_list
 
 
 def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
