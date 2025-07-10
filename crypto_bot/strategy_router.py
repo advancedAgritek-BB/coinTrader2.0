@@ -90,6 +90,23 @@ class RouterConfig:
 
 DEFAULT_ROUTER_CFG = RouterConfig.from_dict(DEFAULT_CONFIG)
 
+
+def cfg_get(cfg: Mapping[str, Any] | RouterConfig, key: str, default: Any | None = None) -> Any:
+    """Return a configuration value for ``key`` from ``cfg``.
+
+    When ``cfg`` is a :class:`RouterConfig` the lookup is performed on
+    ``cfg.raw``. Keys missing at the top level are looked up under the
+    ``"strategy_router"`` section.  Otherwise ``dict.get`` is used on ``cfg``
+    directly.
+    """
+    if isinstance(cfg, RouterConfig):
+        if isinstance(cfg.raw, Mapping):
+            if key in cfg.raw:
+                return cfg.raw.get(key, default)
+            return cfg.raw.get("strategy_router", {}).get(key, default)
+        return default
+    return cfg.get(key, default)
+
 # Path storing the last selected regime and timestamp
 LAST_REGIME_FILE = LOG_DIR / "last_regime.json"
 
@@ -448,13 +465,11 @@ def route(
         if regime.get("1m") == "breakout" and regime.get("15m") == "trending":
             regime = "breakout"
         else:
-            base = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe")
+            base = cfg_get(cfg, "timeframe")
             regime = regime.get(base, next(iter(regime.values())))
 
     # commit lock logic
-    intervals = cfg.commit_lock_intervals if isinstance(cfg, RouterConfig) else int(
-        config.get("strategy_router", {}).get("commit_lock_intervals", 0)
-    )
+    intervals = int(cfg_get(cfg, "commit_lock_intervals", 0))
     if intervals:
         lock_file = Path("last_regime.json")
         last_reg = None
@@ -467,7 +482,7 @@ def route(
             except Exception:
                 pass
 
-        tf = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe", "1h")
+        tf = cfg_get(cfg, "timeframe", "1h")
         interval = timeframe_seconds(None, tf)
         now = time.time()
         if last_reg and regime != last_reg and now - last_ts < interval * intervals:
@@ -475,6 +490,11 @@ def route(
         else:
             lock_file.parent.mkdir(parents=True, exist_ok=True)
             lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
+    tf = cfg_get(cfg, "timeframe", "1h")
+    tf_minutes = getattr(
+        cfg,
+        "timeframe_minutes",
+        int(pd.Timedelta(tf).total_seconds() // 60),
     tf = cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe", "1h")
     tf_minutes = (
         cfg.timeframe_minutes
