@@ -853,11 +853,15 @@ pytest -q
 
 ## Testing
 
-The repository includes an automated test suite. To set up the environment and
-run the tests, execute:
+The repository includes an automated test suite. Some tests rely on optional
+packages such as `rich` and `pandas`.  Lightweight stubs allow the suite to run
+in very small environments, but the **full** set of tests requires the
+dependencies listed in `requirements.txt`.
+
+Set up the environment by running the provided script:
 
 ```bash
-bash codex/setup.sh  # installs system and Python dependencies including numpy
+bash codex/setup.sh  # installs system and Python dependencies
 ```
 
 Alternatively you can install the Python packages manually:
@@ -866,11 +870,8 @@ Alternatively you can install the Python packages manually:
 pip install -r requirements.txt
 ```
 
-The `requirements.txt` file lists all dependencies needed to run the tests,
-including `numpy`. If `pytest` fails with a `ModuleNotFoundError`, make sure the
-packages from this file are installed.
-
-Once the dependencies are installed, run:
+If `pytest` fails with a `ModuleNotFoundError`, ensure the packages from the
+requirements file are installed.  After the dependencies are available, execute
 
 ```bash
 pytest -q
