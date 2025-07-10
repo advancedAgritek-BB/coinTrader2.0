@@ -238,6 +238,7 @@ strategy_router:
 symbol: BTC/USDT
 symbol_batch_size: 10
 scan_lookback_limit: 50
+cycle_lookback_limit: null
 symbol_filter:
   change_pct_percentile: 0
   max_correlation: 0.85
