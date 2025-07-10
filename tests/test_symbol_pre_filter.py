@@ -13,21 +13,13 @@ def reset_telemetry():
     sp.liq_cache.clear()
     yield
 
-import crypto_bot.utils.symbol_pre_filter as sp
 
 @pytest.fixture(autouse=True)
 def reset_semaphore():
     sp.SEMA = asyncio.Semaphore(1)
     yield
 
-def clear_ticker_cache():
-    sp.ticker_cache.clear()
-    sp.ticker_ts.clear()
-    yield
-    sp.ticker_cache.clear()
-    sp.ticker_ts.clear()
 
-from crypto_bot.utils import symbol_pre_filter as sp
 from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_history
 
 CONFIG = {
