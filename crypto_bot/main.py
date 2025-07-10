@@ -33,6 +33,8 @@ from crypto_bot.utils.market_analyzer import analyze_symbol
 from crypto_bot.strategy_router import strategy_for, strategy_name
 from crypto_bot.cooldown_manager import (
     configure as cooldown_configure,
+    in_cooldown,
+    mark_cooldown,
 )
 from crypto_bot.phase_runner import BotContext, PhaseRunner
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
@@ -44,6 +46,7 @@ from crypto_bot.risk.exit_manager import (
 from crypto_bot.execution.cex_executor import (
     execute_trade_async as cex_trade_async,
     get_exchange,
+    place_stop_order,
 )
 from crypto_bot.open_position_guard import OpenPositionGuard
 from crypto_bot import console_monitor, console_control
@@ -63,7 +66,16 @@ from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
 from crypto_bot.utils.pnl_logger import log_pnl
 from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
-from crypto_bot.utils.trend_confirmation import confirm_multi_tf_trend
+from crypto_bot.paper_wallet import PaperWallet
+from crypto_bot import grid_state
+from crypto_bot.utils.strategy_utils import compute_strategy_weights
+from crypto_bot.auto_optimizer import optimize_strategies
+from crypto_bot.utils.telemetry import telemetry, write_cycle_metrics
+from crypto_bot.fund_manager import (
+    auto_convert_funds,
+    check_wallet_balances,
+    detect_non_trade_tokens,
+)
 from crypto_bot.regime.regime_classifier import CONFIG
 
 
