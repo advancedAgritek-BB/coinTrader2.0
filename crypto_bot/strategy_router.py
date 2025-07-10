@@ -16,6 +16,7 @@ from datetime import datetime
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
+from crypto_bot.utils.cache_helpers import cache_by_id
 from crypto_bot.selector import bandit
 
 from crypto_bot.strategy import (
@@ -183,7 +184,10 @@ class Selector:
         logger.info("Routing to %s (%s)", strategy_fn.__name__, mode)
         return strategy_fn
 
-def get_strategy_by_name(name: str) -> Callable[[pd.DataFrame], Tuple[float, str]] | None:
+
+def get_strategy_by_name(
+    name: str,
+) -> Callable[[pd.DataFrame], Tuple[float, str]] | None:
     """Return strategy callable for ``name`` if available."""
     from . import meta_selector
     from .rl import strategy_selector as rl_selector
@@ -194,6 +198,7 @@ def get_strategy_by_name(name: str) -> Callable[[pd.DataFrame], Tuple[float, str
     return mapping.get(name)
 
 
+@cache_by_id
 def _build_mappings(config: Mapping[str, Any] | RouterConfig) -> tuple[
     Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]],
     Dict[str, list[Callable[[pd.DataFrame], Tuple[float, str]]]],
@@ -238,7 +243,9 @@ _register_config(DEFAULT_ROUTER_CFG)
 STRATEGY_MAP, REGIME_STRATEGIES = _build_mappings_cached(id(DEFAULT_ROUTER_CFG))
 
 
-def strategy_for(regime: str, config: RouterConfig | Mapping[str, Any] | None = None) -> Callable[[pd.DataFrame], Tuple[float, str]]:
+def strategy_for(
+    regime: str, config: RouterConfig | Mapping[str, Any] | None = None
+) -> Callable[[pd.DataFrame], Tuple[float, str]]:
     """Return strategy callable for a given regime."""
     cfg = config or DEFAULT_ROUTER_CFG
     _register_config(cfg)
@@ -246,7 +253,9 @@ def strategy_for(regime: str, config: RouterConfig | Mapping[str, Any] | None = 
     return mapping.get(regime, grid_bot.generate_signal)
 
 
-def get_strategies_for_regime(regime: str, config: RouterConfig | Mapping[str, Any] | None = None) -> list[Callable[[pd.DataFrame], Tuple[float, str]]]:
+def get_strategies_for_regime(
+    regime: str, config: RouterConfig | Mapping[str, Any] | None = None
+) -> list[Callable[[pd.DataFrame], Tuple[float, str]]]:
     """Return list of strategies mapped to ``regime``."""
     cfg = config or DEFAULT_ROUTER_CFG
     _register_config(cfg)
@@ -375,6 +384,7 @@ def route(
     Callable[[pd.DataFrame], Tuple[float, str]]
         Strategy function returning a score and trade direction.
     """
+
     def _wrap(fn: Callable[[pd.DataFrame], Tuple[float, str]]):
         if notifier is None:
             return fn
@@ -392,7 +402,7 @@ def route(
             if isinstance(cfg, dict):
                 symbol = cfg.get("symbol", "")
             notifier.notify(
-                f"\U0001F4C8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
+                f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
             )
             return score, direction
 
@@ -465,6 +475,17 @@ def route(
         if regime.get("1m") == "breakout" and regime.get("15m") == "trending":
             regime = "breakout"
         else:
+            base = (
+                cfg.timeframe if isinstance(cfg, RouterConfig) else cfg.get("timeframe")
+            )
+            regime = regime.get(base, next(iter(regime.values())))
+
+    # commit lock logic
+    intervals = (
+        cfg.commit_lock_intervals
+        if isinstance(cfg, RouterConfig)
+        else int(config.get("strategy_router", {}).get("commit_lock_intervals", 0))
+    )
             base = cfg_get(cfg, "timeframe")
             regime = regime.get(base, next(iter(regime.values())))
 
@@ -482,6 +503,11 @@ def route(
             except Exception:
                 pass
 
+        tf = (
+            cfg.timeframe
+            if isinstance(cfg, RouterConfig)
+            else cfg.get("timeframe", "1h")
+        )
         tf = cfg_get(cfg, "timeframe", "1h")
         interval = timeframe_seconds(None, tf)
         now = time.time()
@@ -518,7 +544,9 @@ def route(
                 regime = last_regime
         except Exception:
             pass
-    LAST_REGIME_FILE.write_text(json.dumps({"timestamp": datetime.utcnow().isoformat(), "regime": regime}))
+    LAST_REGIME_FILE.write_text(
+        json.dumps({"timestamp": datetime.utcnow().isoformat(), "regime": regime})
+    )
 
     # Thompson sampling router
     bandit_active = (
