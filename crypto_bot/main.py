@@ -1412,6 +1412,7 @@ async def _main_impl() -> TelegramNotifier:
             if score < config["signal_threshold"]:
                 rejected_score += 1
                 score_rejections += 1
+                continue
             logger.info(
                 "Cycle Summary: %s pairs evaluated, %s signals, %s trades executed, %s rejected volume, %s rejected score, %s rejected regime.",
                 total_pairs,
