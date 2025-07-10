@@ -613,6 +613,7 @@ async def _main_impl() -> TelegramNotifier:
     state = {"running": True, "mode": mode}
     df_cache: dict[str, dict[str, pd.DataFrame]] = {}
     regime_cache: dict[str, dict[str, pd.DataFrame]] = {}
+    last_candle_ts: dict[str, int] = {}
 
     control_task = asyncio.create_task(console_control.control_loop(state))
     print("Bot running. Type 'stop' to pause, 'start' to resume, 'quit' to exit.")
@@ -980,17 +981,32 @@ async def _main_impl() -> TelegramNotifier:
 
         open_syms = list(positions.keys())
         if open_syms:
-            df_cache[config["timeframe"]] = await update_ohlcv_cache(
-                exchange,
-                df_cache.get(config["timeframe"], {}),
-                open_syms,
-                timeframe=config["timeframe"],
-                limit=100,
-                use_websocket=config.get("use_websocket", False),
-                force_websocket_history=config.get("force_websocket_history", False),
-                config=config,
-                max_concurrent=config.get("max_concurrent_ohlcv"),
-            )
+            tf_cache = df_cache.get(config["timeframe"], {})
+            update_syms: list[str] = []
+            for s in open_syms:
+                ts = None
+                df_prev = tf_cache.get(s)
+                if df_prev is not None and not df_prev.empty:
+                    ts = int(df_prev["timestamp"].iloc[-1])
+                if ts is None or last_candle_ts.get(s) != ts:
+                    update_syms.append(s)
+            if update_syms:
+                tf_cache = await update_ohlcv_cache(
+                    exchange,
+                    tf_cache,
+                    update_syms,
+                    timeframe=config["timeframe"],
+                    limit=100,
+                    use_websocket=config.get("use_websocket", False),
+                    force_websocket_history=config.get("force_websocket_history", False),
+                    config=config,
+                    max_concurrent=config.get("max_concurrent_ohlcv"),
+                )
+                for s in update_syms:
+                    df_new = tf_cache.get(s)
+                    if df_new is not None and not df_new.empty:
+                        last_candle_ts[s] = int(df_new["timestamp"].iloc[-1])
+                df_cache[config["timeframe"]] = tf_cache
 
         for sym in open_syms:
             df_current = df_cache.get(config["timeframe"], {}).get(sym)
@@ -1039,6 +1055,8 @@ async def _main_impl() -> TelegramNotifier:
                     columns=["timestamp", "open", "high", "low", "close", "volume"],
                 )
                 df_cache.setdefault(config["timeframe"], {})[sym] = df_current
+            if df_current is not None and not df_current.empty:
+                last_candle_ts[sym] = int(df_current["timestamp"].iloc[-1])
 
             current_dfs[sym] = df_current
             current_prices[sym] = df_current["close"].iloc[-1]
@@ -1181,6 +1199,7 @@ async def _main_impl() -> TelegramNotifier:
                         except asyncio.CancelledError:
                             pass
                     positions.pop(sym, None)
+                    last_candle_ts.pop(sym, None)
                     latest_balance = await fetch_and_log_balance(
                         exchange, paper_wallet, config
                     )

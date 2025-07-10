@@ -431,6 +431,8 @@ the exchange API.
 The updater automatically determines how many candles are missing from the
 cache, so even when `limit` is large it only requests the data required to fill
 the gap, avoiding needless delays.
+The bot caches the last candle timestamp for open positions and skips updating
+their history until a new bar appears.
 The `metrics` section enables recording of cycle summaries to the specified CSV
 file for later analysis.
 `scalp_timeframe` sets the candle interval specifically for the micro_scalp
