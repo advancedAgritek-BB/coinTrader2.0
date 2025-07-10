@@ -6,6 +6,7 @@ import asyncio
 from typing import Iterable, List, Dict
 import json
 import os
+from cachetools import TTLCache
 import time
 
 import numpy as np
@@ -42,6 +43,9 @@ DEFAULT_VOLUME_PERCENTILE = 60
 # cache for ticker data when using watchTickers
 ticker_cache: dict[str, dict] = {}
 ticker_ts: dict[str, float] = {}
+
+# Cache of recent liquidity metrics per symbol
+liq_cache = TTLCache(maxsize=2000, ttl=900)
 
 
 async def has_enough_history(exchange, symbol: str, days: int = 30, timeframe: str = "1d") -> bool:
@@ -114,6 +118,8 @@ async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
     return combined
 
 
+def _parse_metrics(symbol: str, ticker: dict) -> tuple[float, float, float]:
+    """Return volume USD, percent change and spread percentage using cache."""
 async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
     """Return ticker data using WS if available with a small cache."""
 
@@ -160,10 +166,25 @@ def _parse_metrics(ticker: dict) -> tuple[float, float, float]:
     ask = float(ticker["a"][0])
     bid = float(ticker["b"][0])
 
-    volume_usd = volume * vwap
-    change_pct = ((last - open_price) / open_price) * 100 if open_price else 0.0
-    spread_pct = abs(ask - bid) / last * 100 if last else 0.0
-    return volume_usd, change_pct, spread_pct
+    try:
+        cached_vol, cached_spread = liq_cache[symbol]
+        last = float(ticker["c"][0])
+        open_price = float(ticker.get("o", last))
+        change_pct = ((last - open_price) / open_price) * 100 if open_price else 0.0
+        return cached_vol, change_pct, cached_spread
+    except KeyError:
+        last = float(ticker["c"][0])
+        open_price = float(ticker.get("o", last))
+        volume = float(ticker["v"][1])
+        vwap = float(ticker["p"][1])
+        ask = float(ticker["a"][0])
+        bid = float(ticker["b"][0])
+
+        volume_usd = volume * vwap
+        change_pct = ((last - open_price) / open_price) * 100 if open_price else 0.0
+        spread_pct = abs(ask - bid) / last * 100 if last else 0.0
+        liq_cache[symbol] = (volume_usd, spread_pct)
+        return volume_usd, change_pct, spread_pct
 
 
 def _timeframe_seconds(exchange, timeframe: str) -> int:
@@ -229,6 +250,31 @@ async def filter_symbols(
     telemetry.inc("scan.symbols_considered", len(list(symbols)))
     skipped = 0
 
+    cached_data: dict[str, tuple[float, float]] = {}
+    to_fetch: list[str] = []
+    for sym in symbols:
+        if sym in liq_cache:
+            cached_data[sym] = liq_cache[sym]
+        else:
+            to_fetch.append(sym)
+
+    pairs = [s.replace("/", "") for s in to_fetch]
+    if to_fetch:
+        if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
+            try:
+                data = await exchange.fetch_tickers(to_fetch)
+            except Exception as exc:  # pragma: no cover - network
+                logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
+                telemetry.inc("scan.api_errors")
+                data = {}
+        else:
+            try:
+                data = (await _fetch_ticker_async(pairs)).get("result", {})
+            except Exception:  # pragma: no cover - network
+                telemetry.inc("scan.api_errors")
+                raise
+    else:
+        data = {}
     pairs = [s.replace("/", "") for s in symbols]
     try:
         data = await _refresh_tickers(exchange, symbols)
@@ -256,6 +302,13 @@ async def filter_symbols(
     for req_id, sym in request_map.items():
         id_map.setdefault(req_id, sym)
 
+    metrics: List[tuple[str, float, float, float]] = []
+    for sym, (vol, spr) in cached_data.items():
+        if vol >= min_volume and spr <= max_spread:
+            metrics.append((sym, vol, 0.0, spr))
+        else:
+            skipped += 1
+
     raw: List[tuple[str, float, float, float]] = []
     volumes: List[float] = []
     for pair_id, ticker in data.items():
@@ -277,7 +330,7 @@ async def filter_symbols(
             logger.warning("Unable to map ticker id %s to requested symbol", pair_id)
             continue
 
-        vol_usd, change_pct, spread_pct = _parse_metrics(ticker)
+        vol_usd, change_pct, spread_pct = _parse_metrics(symbol, ticker)
         logger.debug(
             "Ticker %s volume %.2f USD change %.2f%% spread %.2f%%",
             symbol,
