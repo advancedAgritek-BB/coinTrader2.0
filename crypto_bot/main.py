@@ -546,7 +546,7 @@ async def update_caches(ctx: BotContext) -> None:
 
     start = time.perf_counter()
     tf_minutes = int(pd.Timedelta(ctx.config.get("timeframe", "1h")).total_seconds() // 60)
-    limit = int(max(20, tf_minutes * 3))
+    limit = max(20, tf_minutes * 3)
     limit = int(ctx.config.get("cycle_lookback_limit") or limit)
 
     ctx.df_cache = await update_multi_tf_ohlcv_cache(
@@ -1123,7 +1123,7 @@ async def _main_impl() -> TelegramNotifier:
         tf_minutes = int(
             pd.Timedelta(config.get("timeframe", "1h")).total_seconds() // 60
         )
-        limit = int(max(20, tf_minutes * 3))
+        limit = max(20, tf_minutes * 3)
         limit = int(config.get("cycle_lookback_limit") or limit)
 
     
