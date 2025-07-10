@@ -241,6 +241,18 @@ def load_config() -> dict:
     return data
 
 
+def _flatten_config(data: dict, parent: str = "") -> dict:
+    """Flatten nested config keys to ENV_STYLE names."""
+    flat: dict[str, str] = {}
+    for key, value in data.items():
+        new_key = f"{parent}_{key}" if parent else key
+        if isinstance(value, dict):
+            flat.update(_flatten_config(value, new_key))
+        else:
+            flat[new_key.upper()] = value
+    return flat
+
+
 async def _ws_ping_loop(exchange: object, interval: float) -> None:
     """Periodically send WebSocket ping messages."""
     try:
@@ -584,6 +596,19 @@ async def _main_impl() -> TelegramNotifier:
         status_updates,
     )
     secrets = dotenv_values(ENV_PATH)
+    flat_cfg = _flatten_config(config)
+    for key, val in secrets.items():
+        if key in flat_cfg:
+            if flat_cfg[key] != val:
+                logger.info(
+                    "Overriding %s from .env (config.yaml value: %s)",
+                    key,
+                    flat_cfg[key],
+                )
+            else:
+                logger.info("Using %s from .env (matches config.yaml)", key)
+        else:
+            logger.info("Setting %s from .env", key)
     os.environ.update(secrets)
 
     user = load_or_create()
