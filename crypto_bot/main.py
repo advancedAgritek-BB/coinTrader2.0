@@ -4,7 +4,7 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime
-from collections import deque, OrderedDict
+from collections import deque, OrderedDict, defaultdict
 from dataclasses import dataclass, field
 
 # Track WebSocket ping tasks
@@ -1001,7 +1001,7 @@ async def _main_impl() -> TelegramNotifier:
 
     loop_count = 0
     last_weight_update = last_optimize = 0.0
-    last_candle_ts: dict[str, int] = {}
+    last_candle_ts: dict[str, int] = defaultdict(int)
     active_strategy = ""
     ohlcv_fetch_latency = execution_latency = 0.0
     ticker_fetch_time = symbol_filter_ratio = 0.0
