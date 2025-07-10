@@ -174,7 +174,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   progress is logged after each batch.
 * **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
 * **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
-* **symbol_score_weights** – weights for volume, spread, change and age.
+* **symbol_score_weights** – weights for volume, spread, change and age. The weights must sum to a positive value.
 * **min_symbol_age_days** – skip newly listed pairs.
 * **min_symbol_score** – minimum score required for trading.
 * **top_n_symbols** – maximum number of active markets.
@@ -589,7 +589,7 @@ Each candidate pair is also assigned a score based on volume, recent price
 change, bid/ask spread, age and API latency. The weights and limits for this
 calculation can be tuned via `symbol_score_weights`, `max_vol`,
 `max_change_pct`, `max_spread_pct`, `max_age_days` and `max_latency_ms` in
-`config.yaml`. Only symbols with a score above `min_symbol_score` are included
+`config.yaml`. All scoring weights must sum to a positive value. Only symbols with a score above `min_symbol_score` are included
 in trading rotations.
 ## Symbol Filtering
 

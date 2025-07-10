@@ -76,7 +76,9 @@ async def score_symbol(
 
     weights = dict(DEFAULT_WEIGHTS)
     weights.update(config.get("symbol_score_weights", {}))
-    total = sum(weights.values()) or 1.0
+    total = sum(weights.values())
+    if total <= 0:
+        raise ValueError("symbol_score_weights must sum to a positive value")
 
     max_vol = float(config.get("max_vol", 1_000_000))
     max_change = float(config.get("max_change_pct", 10))
