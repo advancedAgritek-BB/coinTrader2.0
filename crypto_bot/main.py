@@ -623,7 +623,13 @@ async def _rotation_loop(
             break
         except Exception as exc:  # pragma: no cover - rotation errors
             logger.error("Rotation loop error: %s", exc, exc_info=True)
-        await asyncio.sleep(interval)
+        sleep_remaining = interval
+        while sleep_remaining > 0:
+            sleep_chunk = min(60, sleep_remaining)
+            await asyncio.sleep(sleep_chunk)
+            sleep_remaining -= sleep_chunk
+            if not (rotator.config.get("enabled") and state.get("running")):
+                break
 
 
 async def _main_impl() -> TelegramNotifier:
