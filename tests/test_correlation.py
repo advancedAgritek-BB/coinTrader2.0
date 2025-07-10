@@ -10,7 +10,7 @@ spec = importlib.util.spec_from_file_location(
 correlation = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(correlation)
 compute_correlation_matrix = correlation.compute_correlation_matrix
-compute_pairwise_correlation = correlation.compute_pairwise_correlation
+incremental_correlation = correlation.incremental_correlation
 
 
 def test_compute_correlation_matrix_returns_correct_coefficients():
@@ -37,20 +37,21 @@ def test_compute_correlation_matrix_skips_mismatched_lengths():
     assert np.isnan(mat.loc["A", "B"])
 
 
-def test_compute_pairwise_correlation_max_pairs():
+def test_incremental_correlation_computes_values():
     df_cache = {
-        "A": pd.DataFrame({"close": [1, 2, 3]}),
-        "B": pd.DataFrame({"close": [1, 2, 3]}),
-        "C": pd.DataFrame({"close": [1, 2, 3]}),
+        "A": pd.DataFrame({"return": [0.1, 0.2, 0.3]}),
+        "B": pd.DataFrame({"return": [0.1, 0.2, 0.3]}),
+        "C": pd.DataFrame({"return": [0.3, 0.2, 0.1]}),
     }
-    result = compute_pairwise_correlation(df_cache, max_pairs=1)
-    assert len(result) == 1
+    result = incremental_correlation(df_cache, window=3)
+    assert result[("A", "B")] == pytest.approx(1.0)
+    assert result[("A", "C")] == pytest.approx(-1.0)
 
 
-def test_compute_pairwise_correlation_zero_pairs():
+def test_incremental_correlation_handles_short_series():
     df_cache = {
-        "A": pd.DataFrame({"close": [1, 2]}),
-        "B": pd.DataFrame({"close": [1, 2]}),
+        "A": pd.DataFrame({"return": [0.1]}),
+        "B": pd.DataFrame({"return": [0.1]}),
     }
-    result = compute_pairwise_correlation(df_cache, max_pairs=0)
-    assert result == {}
+    result = incremental_correlation(df_cache, window=5)
+    assert result[("A", "B")] == 0.0

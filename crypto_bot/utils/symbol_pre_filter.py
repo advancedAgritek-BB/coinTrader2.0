@@ -6,6 +6,7 @@ import asyncio
 from typing import Iterable, List, Dict
 import json
 import os
+from cachetools import TTLCache
 import time
 
 import numpy as np
@@ -15,30 +16,49 @@ import pandas as pd
 
 from .logger import LOG_DIR, setup_logger
 from .market_loader import fetch_ohlcv_async
-from .correlation import compute_pairwise_correlation
+from .correlation import incremental_correlation
 from .symbol_scoring import score_symbol
+from .market_loader import fetch_ohlcv_async, update_ohlcv_cache
+from .correlation import compute_pairwise_correlation
+from .symbol_scoring import score_symbol, score_vectorised
 from .telemetry import telemetry
 from pathlib import Path
 from .pair_cache import PAIR_FILE, load_liquid_map
+import yaml
 
+CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
+try:
+    with open(CONFIG_PATH) as f:
+        cfg = yaml.safe_load(f) or {}
+except Exception:
+    cfg = {}
+SEMA = asyncio.Semaphore(cfg.get("max_concurrent_ohlcv", 8))
 
 
 logger = setup_logger(__name__, LOG_DIR / "symbol_filter.log")
 
 API_URL = "https://api.kraken.com/0/public"
 DEFAULT_MIN_VOLUME_USD = 50000
+DEFAULT_VOLUME_PERCENTILE = 60
+
+# cache for ticker data when using watchTickers
+ticker_cache: dict[str, dict] = {}
+ticker_ts: dict[str, float] = {}
+
+# Cache of recent liquidity metrics per symbol
+liq_cache = TTLCache(maxsize=2000, ttl=900)
 
 
-async def has_enough_history(
-    exchange, symbol: str, days: int = 30, timeframe: str = "1d"
-) -> bool:
+async def has_enough_history(exchange, symbol: str, days: int = 30, timeframe: str = "1d") -> bool:
     """Return ``True`` when ``symbol`` has at least ``days`` days of history."""
     seconds = _timeframe_seconds(exchange, timeframe)
     candles_needed = int((days * 86400) / seconds)
     try:
-        data = await fetch_ohlcv_async(
-            exchange, symbol, timeframe=timeframe, limit=candles_needed
-        )
+        data = await fetch_ohlcv_async(exchange, symbol, timeframe=timeframe, limit=candles_needed)
+        async with SEMA:
+            data = await fetch_ohlcv_async(
+                exchange, symbol, timeframe=timeframe, limit=candles_needed
+            )
     except Exception as exc:  # pragma: no cover - network
         logger.warning(
             "fetch_ohlcv failed for %s on %s for %d days: %s",
@@ -73,7 +93,6 @@ async def has_enough_history(
     return True
 
 
-
 async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
     """Return ticker data for ``pairs`` in batches of 20 using aiohttp."""
 
@@ -100,6 +119,44 @@ async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
     return combined
 
 
+def _parse_metrics(symbol: str, ticker: dict) -> tuple[float, float, float]:
+    """Return volume USD, percent change and spread percentage using cache."""
+async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
+    """Return ticker data using WS if available with a small cache."""
+
+    now = time.time()
+    if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers"):
+        to_fetch = [s for s in symbols if now - ticker_ts.get(s, 0) > 5 or s not in ticker_cache]
+        data = {}
+        if to_fetch:
+            try:
+                data = await exchange.watch_tickers(to_fetch)
+            except Exception as exc:  # pragma: no cover - network
+                logger.warning("watch_tickers failed: %s", exc, exc_info=True)
+                telemetry.inc("scan.api_errors")
+                data = {}
+            for sym, ticker in data.items():
+                ticker_cache[sym] = ticker
+                ticker_ts[sym] = now
+        result = {s: ticker_cache[s] for s in symbols if s in ticker_cache}
+        return result
+
+    if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
+        try:
+            return await exchange.fetch_tickers(list(symbols))
+        except Exception as exc:  # pragma: no cover - network
+            logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
+            telemetry.inc("scan.api_errors")
+            return {}
+
+    try:
+        pairs = [s.replace("/", "") for s in symbols]
+        return (await _fetch_ticker_async(pairs)).get("result", {})
+    except Exception:  # pragma: no cover - network
+        telemetry.inc("scan.api_errors")
+        raise
+
+
 def _parse_metrics(ticker: dict) -> tuple[float, float, float]:
     """Return volume USD, percent change and spread percentage."""
 
@@ -110,10 +167,25 @@ def _parse_metrics(ticker: dict) -> tuple[float, float, float]:
     ask = float(ticker["a"][0])
     bid = float(ticker["b"][0])
 
-    volume_usd = volume * vwap
-    change_pct = ((last - open_price) / open_price) * 100 if open_price else 0.0
-    spread_pct = abs(ask - bid) / last * 100 if last else 0.0
-    return volume_usd, change_pct, spread_pct
+    try:
+        cached_vol, cached_spread = liq_cache[symbol]
+        last = float(ticker["c"][0])
+        open_price = float(ticker.get("o", last))
+        change_pct = ((last - open_price) / open_price) * 100 if open_price else 0.0
+        return cached_vol, change_pct, cached_spread
+    except KeyError:
+        last = float(ticker["c"][0])
+        open_price = float(ticker.get("o", last))
+        volume = float(ticker["v"][1])
+        vwap = float(ticker["p"][1])
+        ask = float(ticker["a"][0])
+        bid = float(ticker["b"][0])
+
+        volume_usd = volume * vwap
+        change_pct = ((last - open_price) / open_price) * 100 if open_price else 0.0
+        spread_pct = abs(ask - bid) / last * 100 if last else 0.0
+        liq_cache[symbol] = (volume_usd, spread_pct)
+        return volume_usd, change_pct, spread_pct
 
 
 def _timeframe_seconds(exchange, timeframe: str) -> int:
@@ -137,6 +209,27 @@ def _timeframe_seconds(exchange, timeframe: str) -> int:
     raise ValueError(f"Unknown timeframe {timeframe}")
 
 
+def _history_in_cache(df: pd.DataFrame | None, days: int, seconds: int) -> bool:
+    """Return ``True`` when ``df`` has at least ``days`` days of candles."""
+    if df is None or df.empty:
+        return False
+    candles_needed = int((days * 86400) / seconds)
+    return len(df) >= candles_needed
+async def _bounded_score(
+    exchange,
+    symbol: str,
+    volume_usd: float,
+    change_pct: float,
+    spread_pct: float,
+    cfg: dict,
+) -> tuple[str, float]:
+    """Return ``(symbol, score)`` using the global semaphore."""
+
+    async with SEMA:
+        score = await score_symbol(exchange, symbol, volume_usd, change_pct, spread_pct, cfg)
+    return symbol, score
+
+
 
 
 async def filter_symbols(
@@ -149,7 +242,7 @@ async def filter_symbols(
 
     cfg = config or {}
     sf = cfg.get("symbol_filter", {})
-    min_volume = sf.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
+    vol_pct = sf.get("volume_percentile", DEFAULT_VOLUME_PERCENTILE)
     max_spread = sf.get("max_spread_pct", 1.0)
     pct = sf.get("change_pct_percentile", 80)
     min_age = cfg.get("min_symbol_age_days", 0)
@@ -161,20 +254,36 @@ async def filter_symbols(
     telemetry.inc("scan.symbols_considered", len(list(symbols)))
     skipped = 0
 
-    pairs = [s.replace("/", "") for s in symbols]
-    if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
-        try:
-            data = await exchange.fetch_tickers(symbols)
-        except Exception as exc:  # pragma: no cover - network
-            logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
-            telemetry.inc("scan.api_errors")
-            data = {}
+    cached_data: dict[str, tuple[float, float]] = {}
+    to_fetch: list[str] = []
+    for sym in symbols:
+        if sym in liq_cache:
+            cached_data[sym] = liq_cache[sym]
+        else:
+            to_fetch.append(sym)
+
+    pairs = [s.replace("/", "") for s in to_fetch]
+    if to_fetch:
+        if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
+            try:
+                data = await exchange.fetch_tickers(to_fetch)
+            except Exception as exc:  # pragma: no cover - network
+                logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
+                telemetry.inc("scan.api_errors")
+                data = {}
+        else:
+            try:
+                data = (await _fetch_ticker_async(pairs)).get("result", {})
+            except Exception:  # pragma: no cover - network
+                telemetry.inc("scan.api_errors")
+                raise
     else:
-        try:
-            data = (await _fetch_ticker_async(pairs)).get("result", {})
-        except Exception:  # pragma: no cover - network
-            telemetry.inc("scan.api_errors")
-            raise
+        data = {}
+    pairs = [s.replace("/", "") for s in symbols]
+    try:
+        data = await _refresh_tickers(exchange, symbols)
+    except Exception:
+        raise
 
     # map of ids returned by Kraken to human readable symbols
     id_map: dict[str, str] = {}
@@ -198,6 +307,14 @@ async def filter_symbols(
         id_map.setdefault(req_id, sym)
 
     metrics: List[tuple[str, float, float, float]] = []
+    for sym, (vol, spr) in cached_data.items():
+        if vol >= min_volume and spr <= max_spread:
+            metrics.append((sym, vol, 0.0, spr))
+        else:
+            skipped += 1
+
+    raw: List[tuple[str, float, float, float]] = []
+    volumes: List[float] = []
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id) or id_map.get(pair_id.upper())
         norm = pair_id.upper()
@@ -217,7 +334,7 @@ async def filter_symbols(
             logger.warning("Unable to map ticker id %s to requested symbol", pair_id)
             continue
 
-        vol_usd, change_pct, spread_pct = _parse_metrics(ticker)
+        vol_usd, change_pct, spread_pct = _parse_metrics(symbol, ticker)
         logger.debug(
             "Ticker %s volume %.2f USD change %.2f%% spread %.2f%%",
             symbol,
@@ -233,6 +350,15 @@ async def filter_symbols(
             if symbol not in cache_map:
                 cache_map[symbol] = time.time()
                 cache_changed = True
+        volumes.append(vol_usd)
+        raw.append((symbol, vol_usd, change_pct, spread_pct))
+
+    vol_cut = np.percentile(volumes, vol_pct) if volumes else 0
+
+    metrics: List[tuple[str, float, float, float]] = []
+    for sym, vol_usd, change_pct, spread_pct in raw:
+        if vol_usd >= vol_cut and spread_pct <= max_spread:
+            metrics.append((sym, vol_usd, change_pct, spread_pct))
         else:
             skipped += 1
 
@@ -240,30 +366,68 @@ async def filter_symbols(
         threshold = np.percentile([abs(m[2]) for m in metrics], pct)
         metrics = [m for m in metrics if abs(m[2]) >= threshold]
 
+    if metrics:
+        df = pd.DataFrame(metrics, columns=["sym", "vol", "chg", "spr"])
+        df["score"] = score_vectorised(df, cfg)
+        before = len(df)
+        df = df[df["score"] >= min_score]
+        skipped += before - len(df)
+        df.sort_values("score", ascending=False, inplace=True)
+        top_n = int(cfg.get("top_n_symbols", len(df)))
+        scored = list(df.head(top_n)[["sym", "score"]].itertuples(index=False, name=None))
+    else:
+        scored = []
     scored: List[tuple[str, float]] = []
-    for sym, vol, chg, spr in metrics:
-        score = await score_symbol(exchange, sym, vol, chg, spr, cfg)
-        if score >= min_score:
-            scored.append((sym, score))
-        else:
-            skipped += 1
+    if metrics:
+        results = await asyncio.gather(
+            *[
+                _bounded_score(exchange, sym, vol, chg, spr, cfg)
+                for sym, vol, chg, spr in metrics
+            ]
+        )
+        for sym, score in results:
+            if score >= min_score:
+                scored.append((sym, score))
+            else:
+                skipped += 1
 
     scored.sort(key=lambda x: x[1], reverse=True)
 
     corr_map: Dict[tuple[str, str], float] = {}
     if df_cache:
-        subset = {s: df_cache.get(s) for s, _ in scored}
+        # only compute correlations for the top N scoring symbols
         max_pairs = sf.get("correlation_max_pairs")
-        corr_map = compute_pairwise_correlation(subset, max_pairs=max_pairs)
+        if max_pairs:
+            top = [s for s, _ in scored[: max_pairs]]
+        else:
+            top = [s for s, _ in scored]
+        subset = {s: df_cache.get(s) for s in top}
+        window = sf.get("correlation_window", 100)
+        corr_map = incremental_correlation(subset, window=window)
+
+    seconds = _timeframe_seconds(exchange, "1h") if min_age > 0 else 0
+    if min_age > 0:
+        missing = [
+            s for s, _ in scored if not _history_in_cache(df_cache.get(s) if df_cache else None, min_age, seconds)
+        ]
+        if missing:
+            if df_cache is None:
+                df_cache = {}
+            df_cache = await update_ohlcv_cache(
+                exchange,
+                df_cache,
+                missing,
+                timeframe="1h",
+                limit=int((min_age * 86400) / seconds),
+                max_concurrent=len(missing),
+            )
 
     result: List[tuple[str, float]] = []
     for sym, score in scored:
-        if min_age > 0:
-            enough = await has_enough_history(exchange, sym, min_age, timeframe="1h")
-            if not enough:
-                logger.debug("Skipping %s due to insufficient history", sym)
-                skipped += 1
-                continue
+        if min_age > 0 and not _history_in_cache(df_cache.get(sym) if df_cache else None, min_age, seconds):
+            logger.debug("Skipping %s due to insufficient history", sym)
+            skipped += 1
+            continue
         keep = True
         if df_cache:
             for kept, _ in result:
