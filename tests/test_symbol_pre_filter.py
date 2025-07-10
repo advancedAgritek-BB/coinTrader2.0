@@ -3,6 +3,7 @@ import json
 import pandas as pd
 import pytest
 import crypto_bot.utils.symbol_scoring as sc
+import crypto_bot.utils.symbol_pre_filter as sp
 from crypto_bot.utils.telemetry import telemetry
 
 
@@ -13,6 +14,10 @@ def reset_telemetry():
 
 
 @pytest.fixture(autouse=True)
+def reset_semaphore():
+    sp.SEMA = asyncio.Semaphore(1)
+    yield
+
 def clear_ticker_cache():
     sp.ticker_cache.clear()
     sp.ticker_ts.clear()

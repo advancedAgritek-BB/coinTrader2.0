@@ -19,6 +19,15 @@ from .correlation import compute_pairwise_correlation
 from .symbol_scoring import score_symbol
 from .telemetry import telemetry
 from pathlib import Path
+import yaml
+
+CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
+try:
+    with open(CONFIG_PATH) as f:
+        cfg = yaml.safe_load(f) or {}
+except Exception:
+    cfg = {}
+SEMA = asyncio.Semaphore(cfg.get("max_concurrent_ohlcv", 8))
 
 
 
@@ -39,9 +48,10 @@ async def has_enough_history(
     seconds = _timeframe_seconds(exchange, timeframe)
     candles_needed = int((days * 86400) / seconds)
     try:
-        data = await fetch_ohlcv_async(
-            exchange, symbol, timeframe=timeframe, limit=candles_needed
-        )
+        async with SEMA:
+            data = await fetch_ohlcv_async(
+                exchange, symbol, timeframe=timeframe, limit=candles_needed
+            )
     except Exception as exc:  # pragma: no cover - network
         logger.warning(
             "fetch_ohlcv failed for %s on %s for %d days: %s",
@@ -176,6 +186,21 @@ def _timeframe_seconds(exchange, timeframe: str) -> int:
     raise ValueError(f"Unknown timeframe {timeframe}")
 
 
+async def _bounded_score(
+    exchange,
+    symbol: str,
+    volume_usd: float,
+    change_pct: float,
+    spread_pct: float,
+    cfg: dict,
+) -> tuple[str, float]:
+    """Return ``(symbol, score)`` using the global semaphore."""
+
+    async with SEMA:
+        score = await score_symbol(exchange, symbol, volume_usd, change_pct, spread_pct, cfg)
+    return symbol, score
+
+
 
 
 async def filter_symbols(
@@ -262,12 +287,18 @@ async def filter_symbols(
         metrics = [m for m in metrics if abs(m[2]) >= threshold]
 
     scored: List[tuple[str, float]] = []
-    for sym, vol, chg, spr in metrics:
-        score = await score_symbol(exchange, sym, vol, chg, spr, cfg)
-        if score >= min_score:
-            scored.append((sym, score))
-        else:
-            skipped += 1
+    if metrics:
+        results = await asyncio.gather(
+            *[
+                _bounded_score(exchange, sym, vol, chg, spr, cfg)
+                for sym, vol, chg, spr in metrics
+            ]
+        )
+        for sym, score in results:
+            if score >= min_score:
+                scored.append((sym, score))
+            else:
+                skipped += 1
 
     scored.sort(key=lambda x: x[1], reverse=True)
 
