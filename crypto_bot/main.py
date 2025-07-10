@@ -1012,6 +1012,9 @@ async def _main_impl() -> TelegramNotifier:
 
     try:
         while True:
+            cycle_start = time.perf_counter()
+            ctx.timing = await runner.run(ctx)
+            symbol_time = ohlcv_time = analyze_time = 0.0
             loop_count += 1
             ctx.timing = await runner.run(ctx)
             cycle_start = time.perf_counter()
