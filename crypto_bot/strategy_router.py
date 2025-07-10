@@ -487,6 +487,7 @@ def route(
             arms = list(
                 cfg.get("strategy_router", {}).get("regimes", {}).get(regime, [])
             )
+        arms = [a for a in arms if get_strategy_by_name(a)]
         if not arms:
             arms = [fn.__name__ for fn in strategies]
         symbol = ""
