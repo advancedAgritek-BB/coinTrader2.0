@@ -1249,7 +1249,6 @@ async def _main_impl() -> TelegramNotifier:
                 if ts is None or last_candle_ts.get(s) != ts:
                     update_syms.append(s)
             if update_syms:
-                tf_cache = await update_ohlcv_cache(
                 if not allowed:
                     logger.debug("Trade not allowed for %s \u2013 %s", sym, reason)
                     logger.debug(
@@ -1334,40 +1333,6 @@ async def _main_impl() -> TelegramNotifier:
                             last_candle_ts[s] = int(df_new["timestamp"].iloc[-1])
                     session_state.df_cache[config["timeframe"]] = tf_cache
                     df_cache[config["timeframe"]] = tf_cache
-                session_state.df_cache[config["timeframe"]] = await update_ohlcv_cache(
-                    exchange,
-                    session_state.df_cache.get(config["timeframe"], {}),
-                    open_syms,
-                    timeframe=config["timeframe"],
-                    limit=100,
-                    use_websocket=config.get("use_websocket", False),
-                    force_websocket_history=config.get("force_websocket_history", False),
-                    config=config,
-                    max_concurrent=config.get("max_concurrent_ohlcv"),
-                )
-                for s in update_syms:
-                    df_new = tf_cache.get(s)
-                    if df_new is not None and not df_new.empty:
-                        last_candle_ts[s] = int(df_new["timestamp"].iloc[-1])
-                        update_df_cache(
-                            session_state.df_cache,
-                            config["timeframe"],
-                            s,
-                            df_new,
-                        )
-                df_cache[config["timeframe"]] = tf_cache
-                session_state.df_cache[config["timeframe"]] = tf_cache
-            session_state.df_cache[config["timeframe"]] = await update_ohlcv_cache(
-                exchange,
-                session_state.df_cache.get(config["timeframe"], {}),
-                open_syms,
-                timeframe=config["timeframe"],
-                limit=100,
-                use_websocket=config.get("use_websocket", False),
-                force_websocket_history=config.get("force_websocket_history", False),
-                config=config,
-                max_concurrent=config.get("max_concurrent_ohlcv"),
-            )
 
         for sym in open_syms:
             df_current = session_state.df_cache.get(config["timeframe"], {}).get(sym)
