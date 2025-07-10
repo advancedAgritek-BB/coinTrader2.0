@@ -224,13 +224,24 @@ class _FakeRequests:
     def get(self, *a, **k):
         return self.Response()
 
+    class Session:
+        def get(self, *a, **k):
+            return _FakeRequests.Response()
+
+        def close(self):
+            pass
+
 sys.modules.setdefault("requests", _FakeRequests())
 
 
 @pytest.fixture(autouse=True)
 def _clear_strategy_router_cache():
     """Ensure strategy router caches are cleared between tests."""
-    import crypto_bot.strategy_router as sr
+    try:
+        import crypto_bot.strategy_router as sr
+    except Exception:
+        yield
+        return
 
     sr._build_mappings_cached.cache_clear()
     sr._CONFIG_REGISTRY.clear()

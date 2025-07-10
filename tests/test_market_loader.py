@@ -483,6 +483,8 @@ def test_update_regime_tf_cache():
     ex = DummyMultiTFExchange()
     cache: dict[str, dict[str, pd.DataFrame]] = {}
     config = {"regime_timeframes": ["5m", "15m", "1h"]}
+    df = pd.DataFrame([[0, 1, 2, 3, 4, 5]], columns=["timestamp", "open", "high", "low", "close", "volume"])
+    df_map = {"5m": {"BTC/USD": df}, "1h": {"BTC/USD": df}}
     cache = asyncio.run(
         update_regime_tf_cache(
             ex,
@@ -491,12 +493,13 @@ def test_update_regime_tf_cache():
             config,
             limit=1,
             max_concurrent=2,
+            df_map=df_map,
         )
     )
     assert set(cache.keys()) == {"5m", "15m", "1h"}
     for tf in config["regime_timeframes"]:
         assert "BTC/USD" in cache[tf]
-    assert set(ex.calls) == {"5m", "15m", "1h"}
+    assert set(ex.calls) == {"15m"}
 class FailOnceExchange:
     has = {"fetchOHLCV": True}
     def __init__(self):

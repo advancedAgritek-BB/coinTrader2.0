@@ -213,34 +213,28 @@ async def load_kraken_symbols(
         else:
             markets = await asyncio.to_thread(exchange.load_markets)
 
+    df = pd.DataFrame.from_dict(markets, orient="index")
+    df.index.name = "symbol"
+    df.reset_index(inplace=True)
+
+    df["active"] = df.get("active", True).fillna(True)
+    df["reason"] = None
+    df.loc[~df["active"], "reason"] = "inactive"
+
+    mask_type = df.apply(lambda r: is_symbol_type(r.to_dict(), allowed_types), axis=1)
+    df.loc[df["reason"].isna() & ~mask_type, "reason"] = (
+        "type mismatch (" + df.get("type", "unknown").fillna("unknown").astype(str) + ")"
+    )
+
+    df.loc[df["reason"].isna() & df["symbol"].isin(exclude_set), "reason"] = "excluded"
+
     symbols: List[str] = []
-    for symbol, data in markets.items():
-        reason = None
-        if not data.get("active", True):
-            reason = "inactive"
-        elif not is_symbol_type(data, allowed_types):
-            m_t = data.get("type") or "unknown"
-            reason = f"type mismatch ({m_t})"
-        elif symbol in exclude_set:
-            reason = "excluded"
-        elif allowed_types:
-            m_type = data.get("type")
-            if m_type is None:
-                if data.get("spot"):
-                    m_type = "spot"
-                elif data.get("margin"):
-                    m_type = "margin"
-                elif data.get("future") or data.get("futures"):
-                    m_type = "futures"
-            if m_type not in allowed_types:
-                reason = f"type {m_type} not allowed"
-
-        if reason:
-            logger.debug("Skipping symbol %s: %s", symbol, reason)
-            continue
-
-        logger.debug("Including symbol %s", symbol)
-        symbols.append(symbol)
+    for row in df.itertuples():
+        if row.reason:
+            logger.debug("Skipping symbol %s: %s", row.symbol, row.reason)
+        else:
+            logger.debug("Including symbol %s", row.symbol)
+            symbols.append(row.symbol)
 
     if not symbols:
         logger.warning("No active trading pairs were discovered")
@@ -997,18 +991,41 @@ async def update_regime_tf_cache(
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
+    df_map: Dict[str, Dict[str, pd.DataFrame]] | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for regime detection timeframes."""
     regime_cfg = {**config, "timeframes": config.get("regime_timeframes", [])}
-    logger.info("Updating regime cache for timeframes: %s", regime_cfg["timeframes"])
-    return await update_multi_tf_ohlcv_cache(
-        exchange,
-        cache,
-        symbols,
-        regime_cfg,
-        limit=limit,
-        use_websocket=use_websocket,
-        force_websocket_history=force_websocket_history,
-        max_concurrent=max_concurrent,
-        notifier=notifier,
-    )
+    tfs = regime_cfg["timeframes"]
+    logger.info("Updating regime cache for timeframes: %s", tfs)
+
+    missing_tfs: List[str] = []
+    if df_map is not None:
+        for tf in tfs:
+            tf_data = df_map.get(tf)
+            if tf_data is None:
+                missing_tfs.append(tf)
+                continue
+            tf_cache = cache.setdefault(tf, {})
+            for sym in symbols:
+                df = tf_data.get(sym)
+                if df is not None:
+                    tf_cache[sym] = df
+            cache[tf] = tf_cache
+    else:
+        missing_tfs = tfs
+
+    if missing_tfs:
+        fetch_cfg = {**regime_cfg, "timeframes": missing_tfs}
+        cache = await update_multi_tf_ohlcv_cache(
+            exchange,
+            cache,
+            symbols,
+            fetch_cfg,
+            limit=limit,
+            use_websocket=use_websocket,
+            force_websocket_history=force_websocket_history,
+            max_concurrent=max_concurrent,
+            notifier=notifier,
+        )
+
+    return cache
