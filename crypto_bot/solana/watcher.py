@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 from typing import AsyncGenerator, Optional
+
+import aiohttp
+import yaml
 
 
 @dataclass
@@ -21,27 +25,65 @@ class NewPoolEvent:
     timestamp: float = 0.0
 
 
+CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
+
+
 class PoolWatcher:
     """Async engine that polls for new pools and yields :class:`NewPoolEvent`."""
 
-    def __init__(self, url: str, interval: float = 5.0) -> None:
+    def __init__(self, url: str | None = None, interval: float | None = None) -> None:
+        if url is None or interval is None:
+            with open(CONFIG_PATH) as f:
+                cfg = yaml.safe_load(f) or {}
+            sniper_cfg = cfg.get("meme_wave_sniper", {})
+            pool_cfg = sniper_cfg.get("pool", {})
+            if url is None:
+                url = pool_cfg.get("url", "")
+            if interval is None:
+                interval = float(pool_cfg.get("interval", 5))
         self.url = url
         self.interval = interval
         self._running = False
+        self._seen: set[str] = set()
 
     async def watch(self) -> AsyncGenerator[NewPoolEvent, None]:
         """Yield :class:`NewPoolEvent` objects as they are discovered."""
         self._running = True
-        while self._running:
-            await asyncio.sleep(self.interval)
-            # Placeholder event - in a real implementation this would query an
-            # RPC or indexer for pool creations.
-            yield NewPoolEvent(
-                pool_address="DEMO",
-                token_mint="DEMO",
-                creator="DEMO",
-                liquidity=0.0,
-            )
+        async with aiohttp.ClientSession() as session:
+            while self._running:
+                async with session.get(self.url, timeout=10) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json()
+
+                pools = data.get("pools") or data.get("data") or data
+                for item in pools:
+                    addr = (
+                        item.get("address")
+                        or item.get("poolAddress")
+                        or item.get("pool_address")
+                        or ""
+                    )
+                    if not addr or addr in self._seen:
+                        continue
+                    self._seen.add(addr)
+                    yield NewPoolEvent(
+                        pool_address=addr,
+                        token_mint=item.get("tokenMint")
+                        or item.get("token_mint")
+                        or "",
+                        creator=item.get("creator", ""),
+                        liquidity=float(item.get("liquidity", 0.0)),
+                        tx_count=int(item.get("txCount", item.get("tx_count", 0))),
+                        freeze_authority=item.get("freezeAuthority")
+                        or item.get("freeze_authority")
+                        or "",
+                        mint_authority=item.get("mintAuthority")
+                        or item.get("mint_authority")
+                        or "",
+                        timestamp=float(item.get("timestamp", 0.0)),
+                    )
+
+                await asyncio.sleep(self.interval)
 
     def stop(self) -> None:
         """Stop the watcher loop."""
