@@ -88,6 +88,10 @@ needed.
    ```bash
    python -m frontend.app
    ```
+5. Run the meme-wave sniper separately:
+   ```bash
+   python -m crypto_bot.solana.runner
+   ```
 
 Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
 

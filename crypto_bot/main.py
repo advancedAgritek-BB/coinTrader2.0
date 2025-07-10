@@ -792,6 +792,12 @@ async def _main_impl() -> TelegramNotifier:
     if config.get("meme_wave_sniper", {}).get("enabled"):
         from crypto_bot.solana import start_runner
         meme_wave_task = start_runner(config.get("meme_wave_sniper", {}))
+    sniper_cfg = config.get("meme_wave_sniper", {})
+    sniper_task = None
+    if sniper_cfg.get("enabled"):
+        from crypto_bot.solana.runner import run as sniper_run
+
+        sniper_task = asyncio.create_task(sniper_run(sniper_cfg))
 
     await initial_scan(
         exchange,
@@ -934,6 +940,8 @@ async def _main_impl() -> TelegramNotifier:
         monitor_task.cancel()
         control_task.cancel()
         rotation_task.cancel()
+        if sniper_task:
+            sniper_task.cancel()
         for task in list(position_tasks.values()):
             task.cancel()
         for task in list(position_tasks.values()):
@@ -958,6 +966,11 @@ async def _main_impl() -> TelegramNotifier:
             await rotation_task
         except asyncio.CancelledError:
             pass
+        if sniper_task:
+            try:
+                await sniper_task
+            except asyncio.CancelledError:
+                pass
         try:
             await control_task
         except asyncio.CancelledError:
