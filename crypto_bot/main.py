@@ -28,6 +28,7 @@ from crypto_bot.cooldown_manager import (
     mark_cooldown,
     configure as cooldown_configure,
 )
+from crypto_bot.phase_runner import BotContext, PhaseRunner
 from crypto_bot import grid_state
 from crypto_bot.signals.signal_scoring import evaluate_async
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
@@ -426,6 +427,72 @@ async def initial_scan(
     return df_cache, regime_cache
 
 
+async def fetch_candidates(ctx: BotContext) -> None:
+    """Fetch and store the current symbol batch."""
+    symbols = await get_filtered_symbols(ctx.exchange, ctx.config)
+    batch_size = ctx.config.get("symbol_batch_size", 10)
+    ctx.current_batch = [s for s, _ in symbols][:batch_size]
+
+
+async def update_caches(ctx: BotContext) -> None:
+    """Update OHLCV and regime caches for the current batch."""
+    batch = getattr(ctx, "current_batch", [])
+    if not batch:
+        return
+    ctx.df_cache = await update_multi_tf_ohlcv_cache(
+        ctx.exchange,
+        ctx.df_cache,
+        batch,
+        ctx.config,
+        limit=100,
+        use_websocket=ctx.config.get("use_websocket", False),
+        force_websocket_history=ctx.config.get("force_websocket_history", False),
+        max_concurrent=ctx.config.get("max_concurrent_ohlcv"),
+        notifier=None,
+    )
+    ctx.regime_cache = await update_regime_tf_cache(
+        ctx.exchange,
+        ctx.regime_cache,
+        batch,
+        ctx.config,
+        limit=100,
+        use_websocket=ctx.config.get("use_websocket", False),
+        force_websocket_history=ctx.config.get("force_websocket_history", False),
+        max_concurrent=ctx.config.get("max_concurrent_ohlcv"),
+        notifier=None,
+        df_map=ctx.df_cache,
+    )
+
+
+async def analyse_batch(ctx: BotContext) -> None:
+    """Analyse the cached data for trading signals."""
+    batch = getattr(ctx, "current_batch", [])
+    if not batch:
+        ctx.analysis_results = []
+        return
+    tasks = [
+        analyze_symbol(
+            sym,
+            {tf: c.get(sym) for tf, c in ctx.df_cache.items()},
+            "cex",
+            ctx.config,
+            None,
+        )
+        for sym in batch
+    ]
+    ctx.analysis_results = await asyncio.gather(*tasks)
+
+
+async def execute_signals(ctx: BotContext) -> None:
+    """Placeholder for executing trade signals."""
+    ctx.executed = True
+
+
+async def handle_exits(ctx: BotContext) -> None:
+    """Placeholder for handling exit logic."""
+    return
+
+
 async def _main_impl() -> TelegramNotifier:
     """Implementation for running the trading bot."""
 
@@ -645,6 +712,16 @@ async def _main_impl() -> TelegramNotifier:
     )
 
     base_mode = mode
+    ctx = BotContext(positions, df_cache, regime_cache, config)
+    ctx.exchange = exchange
+    ctx.ws_client = ws_client
+    runner = PhaseRunner([
+        fetch_candidates,
+        update_caches,
+        analyse_batch,
+        execute_signals,
+        handle_exits,
+    ])
 
     while True:
         mode = state["mode"]
@@ -653,7 +730,7 @@ async def _main_impl() -> TelegramNotifier:
         )
 
         cycle_start = time.perf_counter()
-        symbol_time = ohlcv_time = analyze_time = 0.0
+        ctx.timing = await runner.run(ctx)
         execution_latency = 0.0
 
         total_pairs = 0
@@ -1478,10 +1555,11 @@ async def _main_impl() -> TelegramNotifier:
             regime_rejections,
         )
         total_time = time.perf_counter() - cycle_start
+        timing = getattr(ctx, "timing", {})
         _emit_timing(
-            symbol_time,
-            ohlcv_time,
-            analyze_time,
+            timing.get("fetch_candidates", symbol_time),
+            timing.get("update_caches", ohlcv_time),
+            timing.get("analyse_batch", analyze_time),
             total_time,
             metrics_path,
             ohlcv_fetch_latency,
