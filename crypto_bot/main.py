@@ -6,6 +6,9 @@ from pathlib import Path
 from datetime import datetime
 from collections import deque
 
+# Track WebSocket ping tasks
+WS_PING_TASKS: set[asyncio.Task] = set()
+
 import ccxt
 
 import pandas as pd
@@ -261,6 +264,7 @@ async def _watch_position(
                     ping_task = asyncio.create_task(
                         _ws_ping_loop(exchange, ws_ping_interval)
                     )
+                    WS_PING_TASKS.add(ping_task)
                 try:
                     ticker = await exchange.watch_ticker(symbol)
                     reconnect_attempts = 0
@@ -314,6 +318,7 @@ async def _watch_position(
                             await ping_task
                         except asyncio.CancelledError:
                             pass
+                        WS_PING_TASKS.discard(ping_task)
                         ping_task = None
                     await asyncio.sleep(poll_interval)
                     continue
@@ -324,6 +329,7 @@ async def _watch_position(
                         await ping_task
                     except asyncio.CancelledError:
                         pass
+                    WS_PING_TASKS.discard(ping_task)
                     ping_task = None
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
                     ticker = await exchange.fetch_ticker(symbol)
@@ -370,6 +376,7 @@ async def _watch_position(
             await ping_task
         except asyncio.CancelledError:
             pass
+        WS_PING_TASKS.discard(ping_task)
 
 
 async def initial_scan(
@@ -1529,6 +1536,14 @@ async def _main_impl() -> TelegramNotifier:
         await control_task
     except asyncio.CancelledError:
         pass
+    for task in list(WS_PING_TASKS):
+        task.cancel()
+    for task in list(WS_PING_TASKS):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    WS_PING_TASKS.clear()
     if hasattr(exchange, "close"):
         if asyncio.iscoroutinefunction(getattr(exchange, "close")):
             await exchange.close()
