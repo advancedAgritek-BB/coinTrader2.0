@@ -546,7 +546,7 @@ async def update_caches(ctx: BotContext) -> None:
 
     start = time.perf_counter()
     tf_minutes = int(pd.Timedelta(ctx.config.get("timeframe", "1h")).total_seconds() // 60)
-    limit = int(max(20, tf_minutes * 3))
+    limit = max(20, tf_minutes * 3)
     limit = int(ctx.config.get("cycle_lookback_limit") or limit)
 
     ctx.df_cache = await update_multi_tf_ohlcv_cache(
@@ -1090,6 +1090,42 @@ async def _main_impl() -> TelegramNotifier:
                 timing.get("ohlcv_fetch_latency", 0.0),
                 timing.get("execution_latency", 0.0),
             )
+        allowed_results: list[dict] = []
+        df_current = None
+        current_dfs: dict[str, pd.DataFrame] = {}
+        current_prices: dict[str, float] = {}
+
+        t0 = time.perf_counter()
+        symbols = await get_filtered_symbols(exchange, config)
+        symbol_time = time.perf_counter() - t0
+        start_filter = time.perf_counter()
+        global symbol_priority_queue
+        ticker_fetch_time = time.perf_counter() - start_filter
+        total_available = len(config.get("symbols") or [config.get("symbol")])
+        symbol_filter_ratio = len(symbols) / total_available if total_available else 1.0
+        global SYMBOL_EVAL_QUEUE
+        batch_size = config.get("symbol_batch_size", 10)
+        async with QUEUE_LOCK:
+            if not SYMBOL_EVAL_QUEUE:
+                SYMBOL_EVAL_QUEUE.extend(sym for sym, _ in symbols)
+            if not symbol_priority_queue:
+                symbol_priority_queue = build_priority_queue(symbols)
+            if len(symbol_priority_queue) < batch_size:
+                symbol_priority_queue.extend(build_priority_queue(symbols))
+            current_batch = [
+                symbol_priority_queue.popleft()
+                for _ in range(min(batch_size, len(symbol_priority_queue)))
+            ]
+        telemetry.inc("scan.symbols_considered", len(current_batch))
+
+        t0 = time.perf_counter()
+        start_ohlcv = time.perf_counter()
+        tf_minutes = int(
+            pd.Timedelta(config.get("timeframe", "1h")).total_seconds() // 60
+        )
+        limit = max(20, tf_minutes * 3)
+        limit = int(config.get("cycle_lookback_limit") or limit)
+
             allowed_results: list[dict] = []
             df_current = None
             current_dfs: dict[str, pd.DataFrame] = {}
