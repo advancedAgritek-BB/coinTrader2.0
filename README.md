@@ -827,6 +827,31 @@ The resulting statistics are written automatically to
 `crypto_bot/logs/strategy_stats.json`. The home page indicates whether the bot
 is running so you can quickly see if it has stopped.
 
+## PhaseRunner
+
+`PhaseRunner` orchestrates the main trading cycle by executing a list of async
+phases in sequence. Each phase receives a shared `BotContext` object so they can
+exchange data as the run progresses. The loop inside `crypto_bot.main` relies on
+this runner to fetch candidates, update caches, analyse opportunities, execute
+orders and manage exits on every iteration.
+
+```python
+from crypto_bot.phase_runner import PhaseRunner, BotContext
+
+async def fetch(ctx):
+    ...  # gather symbols or data
+
+async def analyse(ctx):
+    ...  # compute signals
+
+async def trade(ctx):
+    ...  # place orders
+
+runner = PhaseRunner([fetch, analyse, trade])
+ctx = BotContext(positions={}, df_cache={}, regime_cache={}, config={})
+await runner.run(ctx)
+```
+
 ## ML Signal Model
 
 Strategy scores can be blended with predictions from an optional machine
