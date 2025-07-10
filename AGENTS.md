@@ -834,3 +834,129 @@ Setup:
 - [gRPC Protocol Buffers](https://github.com/helius-labs/helius-sdk-protobufs)
 - [Enhanced WebSocket Blog](https://www.helius.dev/blog/enhanced-websockets)
 
+
+## ⚓ Helius Standard WebSocket Methods
+### \u2693 WebSocket Connection
+
+Endpoint:
+- **Mainnet:** `wss://mainnet.helius-rpc.com/?api-key=<API_KEY>`
+- **Devnet:** `wss://devnet.helius-rpc.com/?api-key=<API_KEY>`
+
+Connections idle for 10 minutes. Send periodic pings (e.g., every minute) to keep the socket alive.
+
+### accountSubscribe / accountUnsubscribe
+**Params**
+- `pubkey` (string) – account public key (base-58)
+- `config` (object)
+  - `encoding`: `"base58"`, `"base64"`, `"base64+zstd"`, or `"jsonParsed"`
+  - `commitment`: `"processed"`, `"confirmed"`, or `"finalized"`
+
+**Result**
+- integer `subscriptionId`
+
+**Notification**
+```json
+{
+  "jsonrpc":"2.0",
+  "method":"accountNotification",
+  "params":{
+    "subscription":<id>,
+    "result":{
+      "context":{"slot":<number>},
+      "value":{
+        "data":[<data>,<encoding>],
+        "executable":<bool>,
+        "lamports":<number>,
+        "owner":<pubkey>,
+        "rentEpoch":<number>
+      }
+    }
+  }
+}
+```
+
+Unsubscribe via `accountUnsubscribe([subscriptionId])` → returns `{ "result": true }` on success.
+
+### programSubscribe / programUnsubscribe
+**Params**
+- `programId` (string) – program public key (base-58)
+- `config` (object)
+  - `encoding`
+  - `commitment`
+  - optional `filters` (e.g., `{ "dataSize": 80 }`)
+
+**Result**
+- integer `subscriptionId`
+
+**Notification**
+Same structure as `getProgramAccounts`, triggered when account lamports or data change.
+
+Unsubscribe via `programUnsubscribe(subscriptionId)` → returns `{ "result": true }`.
+
+### logsSubscribe / logsUnsubscribe
+**Params**
+- `filter`: `"all"`, `"allWithVotes"`, or `{ "mentions": [<pubkey>] }`
+- `config`
+  - `commitment`
+
+**Result**
+- integer `subscriptionId`
+
+**Notification**
+```json
+{"value":{"signature":<string>,"err":<object|null>,"logs":[<string>,...]}}
+```
+
+Unsubscribe with `logsUnsubscribe(subscriptionId)`.
+
+### blockSubscribe / blockUnsubscribe
+No params. Returns a `subscriptionId`. Notification is empty for new block confirmations. Unsubscribe with `blockUnsubscribe(subscriptionId)`.
+
+### slotSubscribe / slotUnsubscribe
+No params. Returns a `subscriptionId`.
+Notification example:
+```json
+{"parent":<u64>,"root":<u64>,"slot":<u64>}
+```
+Unsubscribe with `slotUnsubscribe(subscriptionId)`.
+
+### slotsUpdatesSubscribe / slotsUpdatesUnsubscribe
+No params. Provides detailed slot lifecycle events. Unsubscribe with `slotsUpdatesUnsubscribe(subscriptionId)`.
+
+### rootSubscribe / rootUnsubscribe
+No params. Returns a `subscriptionId`. Notification indicates a new finalized root slot. Unsubscribe with `rootUnsubscribe(subscriptionId)`.
+
+### signatureSubscribe / signatureUnsubscribe
+**Params**
+1. `signature` (string)
+2. `config` with `commitment`
+
+Result is a `subscriptionId`. Notification delivers confirmation status.
+Unsubscribe with `signatureUnsubscribe(subscriptionId)`.
+
+### voteSubscribe / voteUnsubscribe
+No params. Returns a `subscriptionId`. Notification reports new vote activity. Unsubscribe with `voteUnsubscribe(subscriptionId)`.
+
+### Unsubscribe Pattern
+All unsub methods follow:
+```json
+{"jsonrpc":"2.0","id":1,"method":"unsubscribe","params":[<subscriptionId>]}
+```
+If successful, the response is `{ "result": true }`.
+
+### \u2728 Enhanced WebSockets (Beta)
+Helius also offers **Enhanced WebSockets** via `atlas-mainnet.helius-rpc.com` and `atlas-devnet.helius-rpc.com` for Business/Professional plans. These use the same subscription semantics but with Geyser-enhanced delivery.
+
+### \u2705 Summary Table
+| Method | Params | Event Data |
+|-------|-------|------------|
+| accountSubscribe | pubkey, config | Account data changes |
+| programSubscribe | programId, filters, config | Owned-account changes |
+| logsSubscribe | filter, config | Transaction log messages |
+| signatureSubscribe | signature, config | Transaction status/confirmation |
+| blockSubscribe | none | New block notification |
+| slotSubscribe | none | Slot processed notification |
+| slotsUpdatesSubscribe | none | Detailed slot lifecycle events |
+| rootSubscribe | none | New finalized root notification |
+| voteSubscribe | none | Vote events observed in the network |
+
