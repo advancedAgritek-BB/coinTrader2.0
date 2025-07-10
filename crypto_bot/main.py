@@ -58,6 +58,7 @@ from crypto_bot.utils.market_loader import (
     update_ohlcv_cache,
     update_multi_tf_ohlcv_cache,
     update_regime_tf_cache,
+    timeframe_seconds,
     configure as market_loader_configure,
 )
 from crypto_bot.utils.eval_queue import build_priority_queue
@@ -753,6 +754,7 @@ async def _main_impl() -> TelegramNotifier:
     state = {"running": True, "mode": mode}
     # Caches for OHLCV and regime data are stored on the session_state
     session_state = SessionState(last_balance=last_balance)
+    last_candle_ts: dict[str, int] = {}
 
     control_task = asyncio.create_task(console_control.control_loop(state))
     rotation_task = asyncio.create_task(
@@ -868,11 +870,33 @@ async def _main_impl() -> TelegramNotifier:
                     else bal.get("USDT", 0)
                 )
                 check_balance_change(float(bal_val), "funds converted")
-    
-    
-    
 
-
+            # Refresh OHLCV for open positions if a new candle has formed
+            tf = config.get("timeframe", "1h")
+            tf_sec = timeframe_seconds(None, tf)
+            open_syms: list[str] = []
+            for sym in ctx.positions:
+                last_ts = last_candle_ts.get(sym, 0)
+                if time.time() - last_ts >= tf_sec:
+                    open_syms.append(sym)
+            if open_syms:
+                tf_cache = ctx.df_cache.get(tf, {})
+                tf_cache = await update_ohlcv_cache(
+                    exchange,
+                    tf_cache,
+                    open_syms,
+                    timeframe=tf,
+                    limit=2,
+                    use_websocket=config.get("use_websocket", False),
+                    force_websocket_history=config.get("force_websocket_history", False),
+                    max_concurrent=config.get("max_concurrent_ohlcv"),
+                )
+                ctx.df_cache[tf] = tf_cache
+                session_state.df_cache[tf] = tf_cache
+                for sym in open_syms:
+                    df = tf_cache.get(sym)
+                    if df is not None and not df.empty:
+                        last_candle_ts[sym] = int(df["timestamp"].iloc[-1])
 
             total_time = time.perf_counter() - cycle_start
             timing = getattr(ctx, "timing", {})
