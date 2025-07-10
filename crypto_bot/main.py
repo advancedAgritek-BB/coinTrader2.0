@@ -1088,54 +1088,7 @@ async def _main_impl() -> TelegramNotifier:
                 metrics_path,
                 timing.get("ohlcv_fetch_latency", 0.0),
                 timing.get("execution_latency", 0.0),
-            allowed_results: list[dict] = []
-            df_current = None
-            current_dfs: dict[str, pd.DataFrame] = {}
-            current_prices: dict[str, float] = {}
-
-            t0 = time.perf_counter()
-            symbols = await get_filtered_symbols(exchange, config)
-            symbol_time = time.perf_counter() - t0
-            start_filter = time.perf_counter()
-            global symbol_priority_queue
-            if not symbol_priority_queue:
-                symbol_priority_queue = build_priority_queue(symbols)
-            ticker_fetch_time = time.perf_counter() - start_filter
-            total_available = len(config.get("symbols") or [config.get("symbol")])
-            symbol_filter_ratio = len(symbols) / total_available if total_available else 1.0
-            global SYMBOL_EVAL_QUEUE
-            batch_size = config.get("symbol_batch_size", 10)
-            async with QUEUE_LOCK:
-                if not SYMBOL_EVAL_QUEUE:
-                    SYMBOL_EVAL_QUEUE.extend(sym for sym, _ in symbols)
-                if not symbol_priority_queue:
-                    symbol_priority_queue = build_priority_queue(symbols)
-                if len(symbol_priority_queue) < batch_size:
-                    symbol_priority_queue.extend(build_priority_queue(symbols))
-                current_batch = [
-                    symbol_priority_queue.popleft()
-                    for _ in range(min(batch_size, len(symbol_priority_queue)))
-                ]
-            if not SYMBOL_EVAL_QUEUE:
-                SYMBOL_EVAL_QUEUE.extend(sym for sym, _ in symbols)
-            batch_size = config.get("symbol_batch_size", 10)
-            if len(symbol_priority_queue) < batch_size:
-                symbol_priority_queue.extend(build_priority_queue(symbols))
-            current_batch = [
-                symbol_priority_queue.popleft()
-                for _ in range(min(batch_size, len(symbol_priority_queue)))
-            ]
-            telemetry.inc("scan.symbols_considered", len(current_batch))
-
-            t0 = time.perf_counter()
-            start_ohlcv = time.perf_counter()
-            tf_minutes = int(
-                pd.Timedelta(config.get("timeframe", "1h")).total_seconds() // 60
             )
-            # already logged in the convert-funds loop – nothing to do here
-
-
-
         allowed_results: list[dict] = []
         df_current = None
         current_dfs: dict[str, pd.DataFrame] = {}
@@ -1168,11 +1121,12 @@ async def _main_impl() -> TelegramNotifier:
         start_ohlcv = time.perf_counter()
         tf_minutes = int(
             pd.Timedelta(config.get("timeframe", "1h")).total_seconds() // 60
-            )
-            limit = int(max(20, tf_minutes * 3))
-            limit = int(config.get("cycle_lookback_limit") or limit)
+        )
+        limit = int(max(20, tf_minutes * 3))
+        limit = int(config.get("cycle_lookback_limit") or limit)
 
-            session_state.df_cache = await update_multi_tf_ohlcv_cache(
+    
+        session_state.df_cache = await update_multi_tf_ohlcv_cache(
             exchange,
             session_state.df_cache,
             current_batch,
@@ -1182,9 +1136,9 @@ async def _main_impl() -> TelegramNotifier:
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
             notifier=notifier if status_updates else None,
-            )
+        )
 
-            session_state.regime_cache = await update_regime_tf_cache(
+        session_state.regime_cache = await update_regime_tf_cache(
             exchange,
             session_state.regime_cache,
             current_batch,
@@ -1195,78 +1149,43 @@ async def _main_impl() -> TelegramNotifier:
             max_concurrent=config.get("max_concurrent_ohlcv"),
             notifier=notifier if status_updates else None,
             df_map=session_state.df_cache,
-            )
-            ohlcv_time = time.perf_counter() - t0
-            ohlcv_fetch_latency = time.perf_counter() - start_ohlcv
-            if notifier and ohlcv_fetch_latency > 0.5:
+        )
+        ohlcv_time = time.perf_counter() - t0
+        ohlcv_fetch_latency = time.perf_counter() - start_ohlcv
+        if notifier and ohlcv_fetch_latency > 0.5:
             notifier.notify(
                 f"\u26a0\ufe0f OHLCV latency {ohlcv_fetch_latency*1000:.0f} ms"
             )
-            limit = int(max(20, tf_minutes * 3))
-            limit = int(config.get("cycle_lookback_limit") or limit)
-        limit = int(max(20, tf_minutes * 3))
-        limit = int(config.get("cycle_lookback_limit") or limit)
-    
-            session_state.df_cache = await update_multi_tf_ohlcv_cache(
-                exchange,
-                session_state.df_cache,
-                current_batch,
-                config,
-                limit=limit,
-                use_websocket=config.get("use_websocket", False),
-                force_websocket_history=config.get("force_websocket_history", False),
-                max_concurrent=config.get("max_concurrent_ohlcv"),
-                notifier=notifier if status_updates else None,
-            )
-    
-            session_state.regime_cache = await update_regime_tf_cache(
-                exchange,
-                session_state.regime_cache,
-                current_batch,
-                config,
-                limit=limit,
-                use_websocket=config.get("use_websocket", False),
-                force_websocket_history=config.get("force_websocket_history", False),
-                max_concurrent=config.get("max_concurrent_ohlcv"),
-                notifier=notifier if status_updates else None,
-                df_map=session_state.df_cache,
-            )
-            ohlcv_time = time.perf_counter() - t0
-            ohlcv_fetch_latency = time.perf_counter() - start_ohlcv
-            if notifier and ohlcv_fetch_latency > 0.5:
-                notifier.notify(
-                    f"\u26a0\ufe0f OHLCV latency {ohlcv_fetch_latency*1000:.0f} ms"
+
+        tasks = []
+        analyze_start = time.perf_counter()
+        for sym in current_batch:
+            logger.debug("🔹 Symbol: %s", sym)
+            total_pairs += 1
+            df_map = {tf: c.get(sym) for tf, c in session_state.df_cache.items()}
+            for tf, cache_tf in session_state.regime_cache.items():
+                df_map[tf] = cache_tf.get(sym)
+            df_sym = df_map.get(config["timeframe"])
+            if df_sym is None or df_sym.empty:
+                msg = (
+                    f"OHLCV fetch failed for {sym} on {config['timeframe']} "
+                    f"(limit {limit})"
                 )
-    
-            tasks = []
-            analyze_start = time.perf_counter()
-            for sym in current_batch:
-                logger.debug("🔹 Symbol: %s", sym)
-                total_pairs += 1
-                df_map = {tf: c.get(sym) for tf, c in session_state.df_cache.items()}
-                for tf, cache_tf in session_state.regime_cache.items():
-                    df_map[tf] = cache_tf.get(sym)
-                df_sym = df_map.get(config["timeframe"])
-                if df_sym is None or df_sym.empty:
-                    msg = (
-                        f"OHLCV fetch failed for {sym} on {config['timeframe']} "
-                        f"(limit {limit})"
-                    )
-                    logger.error(msg)
-                    if notifier and status_updates:
-                        notifier.notify(msg)
-                    continue
-    
-                expected_cols = ["timestamp", "open", "high", "low", "close", "volume"]
-                if not isinstance(df_sym, pd.DataFrame):
-                    df_sym = pd.DataFrame(df_sym, columns=expected_cols)
-                elif not set(expected_cols).issubset(df_sym.columns):
-                    df_sym = pd.DataFrame(df_sym.to_numpy(), columns=expected_cols)
-                logger.debug("Fetched %d candles for %s", len(df_sym), sym)
-                df_map[config["timeframe"]] = df_sym
-                if sym in session_state.positions:
-                    df_current = df_sym
-                tasks.append(analyze_symbol(sym, df_map, mode, config, notifier))
+                logger.error(msg)
+                if notifier and status_updates:
+                    notifier.notify(msg)
+                continue
+
+            expected_cols = ["timestamp", "open", "high", "low", "close", "volume"]
+            if not isinstance(df_sym, pd.DataFrame):
+                df_sym = pd.DataFrame(df_sym, columns=expected_cols)
+            elif not set(expected_cols).issubset(df_sym.columns):
+                df_sym = pd.DataFrame(df_sym.to_numpy(), columns=expected_cols)
+            logger.debug("Fetched %d candles for %s", len(df_sym), sym)
+            df_map[config["timeframe"]] = df_sym
+            if sym in session_state.positions:
+                df_current = df_sym
+            tasks.append(analyze_symbol(sym, df_map, mode, config, notifier))
     
             results = await asyncio.gather(*tasks)
     
@@ -1369,39 +1288,39 @@ async def _main_impl() -> TelegramNotifier:
             )
             filtered_results: list[dict] = []
             for r in allowed_results:
-            keep = True
-            for kept in filtered_results:
-                if not corr_matrix.empty:
-                    corr = corr_matrix.at[r["symbol"], kept["symbol"]]
-                    if abs(corr) > 0.95:
-                        keep = False
-                        break
-            if keep:
-                filtered_results.append(r)
+                keep = True
+                for kept in filtered_results:
+                    if not corr_matrix.empty:
+                        corr = corr_matrix.at[r["symbol"], kept["symbol"]]
+                        if abs(corr) > 0.95:
+                            keep = False
+                            break
+                if keep:
+                    filtered_results.append(r)
 
             best = filtered_results[0] if filtered_results else None
 
             open_syms = list(session_state.positions.keys())
             if open_syms:
-            tf_cache = session_state.df_cache.get(config["timeframe"], {})
-            update_syms: list[str] = []
-            for s in open_syms:
-                ts = None
-                df_prev = session_state.df_cache.get(config["timeframe"], {}).get(s)
-                if df_prev is not None and not df_prev.empty:
-                    ts = int(df_prev["timestamp"].iloc[-1])
-                if ts is None or last_candle_ts.get(s) != ts:
-                    update_syms.append(s)
-            if update_syms:
-                if not allowed:
-                    logger.debug("Trade not allowed for %s \u2013 %s", sym, reason)
-                    logger.debug(
-                        "Trade rejected for %s: %s, score=%.2f, regime=%s",
-                        sym,
-                        reason,
-                        score_sym,
-                        regime_sym,
-                    )
+                tf_cache = session_state.df_cache.get(config["timeframe"], {})
+                update_syms: list[str] = []
+                for s in open_syms:
+                    ts = None
+                    df_prev = session_state.df_cache.get(config["timeframe"], {}).get(s)
+                    if df_prev is not None and not df_prev.empty:
+                        ts = int(df_prev["timestamp"].iloc[-1])
+                    if ts is None or last_candle_ts.get(s) != ts:
+                        update_syms.append(s)
+                if update_syms:
+                    if not allowed:
+                        logger.debug("Trade not allowed for %s \u2013 %s", sym, reason)
+                        logger.debug(
+                            "Trade rejected for %s: %s, score=%.2f, regime=%s",
+                            sym,
+                            reason,
+                            score_sym,
+                            regime_sym,
+                        )
                     if "Volume" in reason:
                         rejected_volume += 1
                         volume_rejections += 1
@@ -1490,22 +1409,6 @@ async def _main_impl() -> TelegramNotifier:
                 max_concurrent=config.get("max_concurrent_ohlcv"),
             )
 
-            for sym in open_syms:
-            df_current = session_state.df_cache.get(config["timeframe"], {}).get(sym)
-            if df_current is None:
-                # Fallback to direct fetch if cache is missing
-                try:
-                    if config.get("use_websocket", False) and hasattr(
-                        exchange, "watch_ohlcv"
-                    ):
-                        data = await exchange.watch_ohlcv(
-                            sym,
-                            timeframe=config["timeframe"],
-                            limit=100,
-                        )
-                    else:
-                        if asyncio.iscoroutinefunction(
-                            getattr(exchange, "fetch_ohlcv", None)
     
             for sym in open_syms:
                 df_current = session_state.df_cache.get(config["timeframe"], {}).get(sym)
@@ -1607,6 +1510,7 @@ async def _main_impl() -> TelegramNotifier:
                     config["timeframe"],
                     sym,
                     df_current,
+                )
                 if pnl_pct >= config["exit_strategy"]["min_gain_to_trail"]:
                     if cur_price > pos.get("highest_price", pos["entry_price"]):
                         pos["highest_price"] = cur_price
