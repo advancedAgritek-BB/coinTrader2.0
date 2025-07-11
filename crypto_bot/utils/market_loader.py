@@ -22,8 +22,10 @@ failed_symbols: Dict[str, Dict[str, Any]] = {}
 RETRY_DELAY = 300
 MAX_RETRY_DELAY = 3600
 OHLCV_TIMEOUT = 30
-WS_OHLCV_TIMEOUT = OHLCV_TIMEOUT
-REST_OHLCV_TIMEOUT = OHLCV_TIMEOUT
+# Default timeout when fetching OHLCV data over WebSocket
+WS_OHLCV_TIMEOUT = 30
+# REST requests occasionally face Cloudflare delays up to a minute
+REST_OHLCV_TIMEOUT = 120
 MAX_OHLCV_FAILURES = 3
 MAX_WS_LIMIT = 50
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
