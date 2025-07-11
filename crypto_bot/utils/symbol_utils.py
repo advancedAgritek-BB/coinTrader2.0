@@ -38,8 +38,6 @@ async def get_filtered_symbols(exchange, config) -> list:
         excluded = [s.upper() for s in config.get("excluded_symbols", [])]
         if fallback and fallback.upper() in excluded:
             logger.warning("Fallback symbol %s is excluded", fallback)
-            _cached_symbols = []
-            _last_refresh = now
             return []
 
         if asyncio.iscoroutinefunction(filter_symbols):
@@ -51,8 +49,6 @@ async def get_filtered_symbols(exchange, config) -> list:
             logger.warning(
                 "Fallback symbol %s does not meet volume requirements", fallback
             )
-            _cached_symbols = []
-            _last_refresh = now
             return []
 
         logger.warning(
@@ -63,6 +59,8 @@ async def get_filtered_symbols(exchange, config) -> list:
 
     logger.info("%d symbols passed filtering", len(scored))
 
-    _cached_symbols = scored
-    _last_refresh = now
+    if scored:
+        _cached_symbols = scored
+        _last_refresh = now
+
     return scored
