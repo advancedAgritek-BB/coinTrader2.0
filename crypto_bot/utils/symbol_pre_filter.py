@@ -162,8 +162,19 @@ def _parse_metrics(symbol: str, ticker: dict) -> tuple[float, float, float]:
     return cached_vol, change_pct, cached_spread
 
 
-async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
+async def _refresh_tickers(
+    exchange,
+    symbols: Iterable[str],
+    config: dict | None = None,
+) -> dict:
     """Return ticker data using WS/HTTP and fall back to per-symbol fetch."""
+
+    cfg = config or {}
+    sf = cfg.get("symbol_filter", {})
+    attempts = int(sf.get("ticker_retry_attempts", 3))
+    if attempts < 1:
+        attempts = 1
+    log_exc = sf.get("log_ticker_exceptions", False)
 
     now = time.time()
     markets = getattr(exchange, "markets", None)
@@ -194,7 +205,7 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
             try:
                 data = await exchange.watch_tickers(to_fetch)
             except Exception as exc:  # pragma: no cover - network
-                logger.warning("watch_tickers failed: %s", exc, exc_info=True)
+                logger.warning("watch_tickers failed: %s", exc, exc_info=log_exc)
                 logger.info("watch_tickers failed, falling back to HTTP fetch")
                 telemetry.inc("scan.api_errors")
                 try_ws = False
@@ -209,7 +220,7 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
     if try_http:
         if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
             data = {}
-            for attempt in range(3):
+            for attempt in range(attempts):
                 try:
                     fetched = await exchange.fetch_tickers(list(symbols))
                     data = {s: t.get("info", t) for s, t in fetched.items()}
@@ -223,13 +234,13 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                     telemetry.inc("scan.api_errors")
                     return {}
                 except (ccxt.ExchangeError, ccxt.NetworkError) as exc:  # pragma: no cover - network
-                    if getattr(exc, "http_status", None) in (520, 522) and attempt < 2:
+                    if getattr(exc, "http_status", None) in (520, 522) and attempt < attempts - 1:
                         await asyncio.sleep(2 ** attempt)
                         continue
                     logger.warning(
                         "fetch_tickers failed: %s \u2013 falling back to Kraken REST /Ticker",
                         exc,
-                        exc_info=True,
+                        exc_info=log_exc,
                     )
                     telemetry.inc("scan.api_errors")
                     data = {}
@@ -238,7 +249,7 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                     logger.warning(
                         "fetch_tickers failed: %s \u2013 falling back to Kraken REST /Ticker",
                         exc,
-                        exc_info=True,
+                        exc_info=log_exc,
                     )
                     telemetry.inc("scan.api_errors")
                     data = {}
@@ -311,7 +322,7 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                 logger.warning("fetch_ticker BadSymbol for %s: %s", sym, exc)
                 telemetry.inc("scan.api_errors")
             except Exception as exc:  # pragma: no cover - network
-                logger.warning("fetch_ticker failed for %s: %s", sym, exc, exc_info=True)
+                logger.warning("fetch_ticker failed for %s: %s", sym, exc, exc_info=log_exc)
                 telemetry.inc("scan.api_errors")
     if result:
         for sym, ticker in result.items():
@@ -394,7 +405,7 @@ async def filter_symbols(
             cached_data[sym] = liq_cache[sym]
 
     try:
-        data = await _refresh_tickers(exchange, symbols)
+        data = await _refresh_tickers(exchange, symbols, cfg)
     except Exception:
         raise
 
