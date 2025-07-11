@@ -90,6 +90,19 @@ async def analyze_symbol(
     base_tf = router_cfg.timeframe
     higher_tf = config.get("higher_timeframe", "1d")
     df = df_map.get(base_tf)
+
+    if df is None or df.empty:
+        analysis_logger.info("Skipping %s: no data for %s", symbol, base_tf)
+        return {
+            "symbol": symbol,
+            "df": df,
+            "regime": "unknown",
+            "patterns": {},
+            "future_return": 0.0,
+            "confidence": 0.0,
+            "min_confidence": 0.0,
+            "direction": "none",
+        }
     baseline = float(
         config.get("min_confidence_score", config.get("signal_threshold", 0.0))
     )

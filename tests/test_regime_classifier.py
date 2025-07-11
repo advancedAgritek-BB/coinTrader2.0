@@ -344,6 +344,20 @@ def test_analyze_symbol_accepts_dict_patterns(monkeypatch):
     assert isinstance(res["patterns"], dict)
 
 
+def test_analyze_symbol_handles_missing_df():
+    df = _make_trending_df()
+
+    async def run():
+        cfg = {"timeframe": "1h"}
+        df_map = {"5m": df}
+        return await analyze_symbol("AAA", df_map, "cex", cfg, None)
+
+    res = asyncio.run(run())
+    assert res["regime"] == "unknown"
+    assert res["confidence"] == 0.0
+    assert res["direction"] == "none"
+
+
 def test_voting_direction_override(monkeypatch):
     df = _make_trending_df()
 
