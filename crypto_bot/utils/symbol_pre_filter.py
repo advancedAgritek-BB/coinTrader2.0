@@ -253,30 +253,6 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                         for sym, (_, ticker) in zip(symbols, raw.items()):
                             data[sym] = ticker
                     else:
-                        if len(raw) == len(symbols):
-                            data = {
-                                sym: ticker
-                                for sym, (_, ticker) in zip(symbols, raw.items())
-                            }
-                        else:
-                            data = {}
-                            extra = iter(raw.values())
-                            for sym, pair in zip(symbols, pairs):
-                                ticker = raw.get(pair) or raw.get(pair.upper())
-                                if ticker is None:
-                                    pu = pair.upper()
-                                    for k, v in raw.items():
-                                        if pu in k.upper():
-                                            ticker = v
-                                            break
-                                if ticker is None:
-                                    ticker = next(extra, None)
-                                if ticker is not None:
-                                    data[sym] = ticker
-                    if len(raw) == len(symbols):
-                        data = {sym: ticker for sym, (_, ticker) in zip(symbols, raw.items())}
-                    else:
-                        data = {}
                         extra = iter(raw.values())
                         for sym, pair in zip(symbols, pairs):
                             ticker = raw.get(pair) or raw.get(pair.upper())
