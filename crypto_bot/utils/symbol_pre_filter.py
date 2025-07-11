@@ -238,7 +238,11 @@ async def _refresh_tickers(
                 chunk_data: dict | None = None
                 for attempt in range(3):
                     try:
-                        fetched = await exchange.fetch_tickers(chunk)
+                        fetcher = getattr(exchange, "fetch_tickers", None)
+                        if asyncio.iscoroutinefunction(fetcher):
+                            fetched = await fetcher(chunk)
+                        else:
+                            fetched = await asyncio.to_thread(fetcher, chunk)
                         chunk_data = {s: t.get("info", t) for s, t in fetched.items()}
                         break
                     except ccxt.BadSymbol as exc:  # pragma: no cover - network
@@ -273,7 +277,11 @@ async def _refresh_tickers(
                 if chunk_data is None:
                     for attempt in range(attempts):
                         try:
-                            fetched = await exchange.fetch_tickers(list(symbols))
+                            fetcher = getattr(exchange, "fetch_tickers", None)
+                            if asyncio.iscoroutinefunction(fetcher):
+                                fetched = await fetcher(list(symbols))
+                            else:
+                                fetched = await asyncio.to_thread(fetcher, list(symbols))
                             data = {s: t.get("info", t) for s, t in fetched.items()}
                             break
                         except ccxt.BadSymbol as exc:  # pragma: no cover - network
@@ -377,7 +385,11 @@ async def _refresh_tickers(
     if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTicker"):
         for sym in symbols:
             try:
-                ticker = await exchange.fetch_ticker(sym)
+                fetcher = getattr(exchange, "fetch_ticker", None)
+                if asyncio.iscoroutinefunction(fetcher):
+                    ticker = await fetcher(sym)
+                else:
+                    ticker = await asyncio.to_thread(fetcher, sym)
                 result[sym] = ticker.get("info", ticker)
             except ccxt.BadSymbol as exc:  # pragma: no cover - network
                 logger.warning("fetch_ticker BadSymbol for %s: %s", sym, exc)
