@@ -179,7 +179,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   progress is logged after each batch.
 * **scan_lookback_limit** – candles of history loaded during the initial scan.
 * **cycle_lookback_limit** – candles fetched each cycle. Defaults to
-  `max(20, timeframe_minutes × 3)`.
+  `min(150, timeframe_minutes × 2)`.
 * **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
 * **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
 * **symbol_score_weights** – weights for volume, spread, change and age. The weights must sum to a positive value.
@@ -586,7 +586,7 @@ exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 2           # skip pairs with less history
 symbol_batch_size: 20            # symbols processed per cycle
 scan_lookback_limit: 50          # candles loaded during startup
-cycle_lookback_limit: null       # override per-cycle candle load
+cycle_lookback_limit: null       # override per-cycle candle load (default min(150, timeframe_minutes × 2))
 max_spread_pct: 3.0              # skip pairs with wide spreads
 ```
 
