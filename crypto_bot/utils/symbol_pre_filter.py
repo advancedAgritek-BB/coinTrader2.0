@@ -248,11 +248,6 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                 try:
                     pairs = [s.replace("/", "") for s in symbols]
                     raw = (await _fetch_ticker_async(pairs)).get("result", {})
-                    data = {}
-                    if len(raw) == len(symbols):
-                        for sym, (_, ticker) in zip(symbols, raw.items()):
-                            data[sym] = ticker
-                    else:
                     if len(raw) == len(symbols):
                         data = {sym: ticker for sym, (_, ticker) in zip(symbols, raw.items())}
                     else:
