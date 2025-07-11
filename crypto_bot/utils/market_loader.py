@@ -27,6 +27,7 @@ MAX_WS_LIMIT = 50
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 UNSUPPORTED_SYMBOL = object()
 STATUS_UPDATES = True
+SEMA: asyncio.Semaphore | None = None
 
 
 def configure(
@@ -34,9 +35,10 @@ def configure(
     max_failures: int | None = None,
     max_ws_limit: int | None = None,
     status_updates: bool | None = None,
+    max_concurrent: int | None = None,
 ) -> None:
     """Configure module-wide settings."""
-    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES
+    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES, SEMA
     if ohlcv_timeout is not None:
         try:
             OHLCV_TIMEOUT = max(1, int(ohlcv_timeout))
@@ -75,6 +77,26 @@ def configure(
             )
     if status_updates is not None:
         STATUS_UPDATES = bool(status_updates)
+    if max_concurrent is None:
+        try:
+            with open(CONFIG_PATH) as f:
+                cfg = yaml.safe_load(f) or {}
+            cfg_val = cfg.get("max_concurrent_ohlcv")
+            if cfg_val is not None:
+                max_concurrent = cfg_val
+        except Exception:
+            pass
+    if max_concurrent is not None:
+        try:
+            val = int(max_concurrent)
+            if val < 1:
+                raise ValueError
+            SEMA = asyncio.Semaphore(val)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid max_concurrent %s; disabling semaphore", max_concurrent
+            )
+            SEMA = None
 
 
 def is_symbol_type(pair_info: dict, allowed: List[str]) -> bool:
@@ -731,6 +753,8 @@ async def load_ohlcv_parallel(
         if not isinstance(max_concurrent, int) or max_concurrent < 1:
             raise ValueError("max_concurrent must be a positive integer or None")
         sem = asyncio.Semaphore(max_concurrent)
+    elif SEMA is not None:
+        sem = SEMA
     else:
         sem = None
 
