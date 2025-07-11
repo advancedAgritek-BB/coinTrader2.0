@@ -840,6 +840,8 @@ def test_fetch_ohlcv_async_timeout(monkeypatch):
 
     ex = SlowExchange()
     monkeypatch.setattr(market_loader, "OHLCV_TIMEOUT", 0.01)
+    monkeypatch.setattr(market_loader, "WS_OHLCV_TIMEOUT", 0.01)
+    monkeypatch.setattr(market_loader, "REST_OHLCV_TIMEOUT", 0.01)
 
     res = asyncio.run(market_loader.fetch_ohlcv_async(ex, "BTC/USD"))
     assert isinstance(res, asyncio.TimeoutError)
@@ -851,6 +853,8 @@ def test_load_ohlcv_parallel_timeout(monkeypatch):
     ex = SlowExchange()
     market_loader.failed_symbols.clear()
     monkeypatch.setattr(market_loader, "OHLCV_TIMEOUT", 0.01)
+    monkeypatch.setattr(market_loader, "WS_OHLCV_TIMEOUT", 0.01)
+    monkeypatch.setattr(market_loader, "REST_OHLCV_TIMEOUT", 0.01)
 
     result = asyncio.run(
         market_loader.load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1)
@@ -864,6 +868,8 @@ def test_fetch_ohlcv_async_timeout_fallback(monkeypatch):
 
     ex = SlowWSExchange()
     monkeypatch.setattr(market_loader, "OHLCV_TIMEOUT", 0.01)
+    monkeypatch.setattr(market_loader, "WS_OHLCV_TIMEOUT", 0.01)
+    monkeypatch.setattr(market_loader, "REST_OHLCV_TIMEOUT", 0.01)
 
     data = asyncio.run(
         market_loader.fetch_ohlcv_async(
@@ -882,6 +888,8 @@ def test_load_ohlcv_parallel_timeout_fallback(monkeypatch):
     ex = SlowWSExchange()
     market_loader.failed_symbols.clear()
     monkeypatch.setattr(market_loader, "OHLCV_TIMEOUT", 0.01)
+    monkeypatch.setattr(market_loader, "WS_OHLCV_TIMEOUT", 0.01)
+    monkeypatch.setattr(market_loader, "REST_OHLCV_TIMEOUT", 0.01)
 
     result = asyncio.run(
         market_loader.load_ohlcv_parallel(
