@@ -203,8 +203,6 @@ async def _refresh_tickers(
     try_ws = (
         getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
         and exchange.options.get("ws_scan", True)
-    try_ws = getattr(getattr(exchange, "has", {}), "get", lambda _k: False)(
-        "watchTickers"
     )
     try_http = True
     data: dict = {}
@@ -273,47 +271,50 @@ async def _refresh_tickers(
                         chunk_data = None
                         break
                 if chunk_data is None:
-            for attempt in range(attempts):
-                try:
-                    fetched = await exchange.fetch_tickers(list(symbols))
-                    data = {s: t.get("info", t) for s, t in fetched.items()}
-                    break
-                except ccxt.BadSymbol as exc:  # pragma: no cover - network
-                    logger.warning(
-                        "fetch_tickers BadSymbol for %s: %s",
-                        ", ".join(symbols),
-                        exc,
-                    )
-                    telemetry.inc("scan.api_errors")
-                    return {}
-                except (
-                    ccxt.ExchangeError,
-                    ccxt.NetworkError,
-                ) as exc:  # pragma: no cover - network
-                    if getattr(exc, "http_status", None) in (520, 522) and attempt < 2:
-                        await asyncio.sleep(2**attempt)
-                except (ccxt.ExchangeError, ccxt.NetworkError) as exc:  # pragma: no cover - network
-                    if getattr(exc, "http_status", None) in (520, 522) and attempt < attempts - 1:
-                        await asyncio.sleep(2 ** attempt)
-                        continue
-                    logger.warning(
-                        "fetch_tickers failed: %s \u2013 falling back to Kraken REST /Ticker",
-                        exc,
-                        exc_info=log_exc,
-                    )
-                    telemetry.inc("scan.api_errors")
-                    data = {}
-                    break
-                except Exception as exc:  # pragma: no cover - network
-                    logger.warning(
-                        "fetch_tickers failed: %s \u2013 falling back to Kraken REST /Ticker",
-                        exc,
-                        exc_info=log_exc,
-                    )
-                    telemetry.inc("scan.api_errors")
-                    data = {}
-                    break
-                data.update(chunk_data)
+                    for attempt in range(attempts):
+                        try:
+                            fetched = await exchange.fetch_tickers(list(symbols))
+                            data = {s: t.get("info", t) for s, t in fetched.items()}
+                            break
+                        except ccxt.BadSymbol as exc:  # pragma: no cover - network
+                            logger.warning(
+                                "fetch_tickers BadSymbol for %s: %s",
+                                ", ".join(symbols),
+                                exc,
+                            )
+                            telemetry.inc("scan.api_errors")
+                            return {}
+                        except (
+                            ccxt.ExchangeError,
+                            ccxt.NetworkError,
+                        ) as exc:  # pragma: no cover - network
+                            if getattr(exc, "http_status", None) in (520, 522) and attempt < 2:
+                                await asyncio.sleep(2**attempt)
+                        except (ccxt.ExchangeError, ccxt.NetworkError) as exc:  # pragma: no cover - network
+                            if getattr(exc, "http_status", None) in (520, 522) and attempt < attempts - 1:
+                                await asyncio.sleep(2 ** attempt)
+                                continue
+                            logger.warning(
+                                "fetch_tickers failed: %s \u2013 falling back to Kraken REST /Ticker",
+                                exc,
+                                exc_info=log_exc,
+                            )
+                            telemetry.inc("scan.api_errors")
+                            data = {}
+                            break
+                        except Exception as exc:  # pragma: no cover - network
+                            logger.warning(
+                                "fetch_tickers failed: %s \u2013 falling back to Kraken REST /Ticker",
+                                exc,
+                                exc_info=log_exc,
+                            )
+                            telemetry.inc("scan.api_errors")
+                            data = {}
+                            break
+                    else:
+                        data = {}
+                else:
+                    data.update(chunk_data)
 
             if not data:
                 try:
