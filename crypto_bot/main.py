@@ -419,7 +419,7 @@ async def execute_signals(ctx: BotContext) -> None:
         return
 
     # Prioritize by score
-    results = [r for r in results if r.get("direction") != "none"]
+    results = [r for r in results if not r.get("skip") and r.get("direction") != "none"]
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
     top_n = ctx.config.get("top_n_symbols", 3)
 

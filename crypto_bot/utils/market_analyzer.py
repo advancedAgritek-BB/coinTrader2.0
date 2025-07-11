@@ -90,8 +90,10 @@ async def analyze_symbol(
     base_tf = router_cfg.timeframe
     higher_tf = config.get("higher_timeframe", "1d")
     df = df_map.get(base_tf)
+    if df is None:
+        return {"symbol": symbol, "skip": "no_ohlcv"}
 
-    if df is None or df.empty:
+    if df.empty:
         analysis_logger.info("Skipping %s: no data for %s", symbol, base_tf)
         return {
             "symbol": symbol,
