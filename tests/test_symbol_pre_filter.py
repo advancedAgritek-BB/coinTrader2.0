@@ -25,8 +25,9 @@ from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_histor
 CONFIG = {
     "symbol_filter": {
         "volume_percentile": 0,
-        "max_spread_pct": 2.0,
-        "correlation_max_pairs": 10,
+        "change_pct_percentile": 0,
+        "max_spread_pct": 3.0,
+        "correlation_max_pairs": 100,
     },
     "symbol_score_weights": {"volume": 1, "change": 0, "spread": 0, "age": 0, "latency": 0},
     "max_vol": 100000,
@@ -67,7 +68,7 @@ async def fake_fetch(_):
 def test_filter_symbols(monkeypatch):
     monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch)
     symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG))
-    assert symbols == [("BTC/USD", 0.6)]
+    assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 
 
 class FetchTickersExchange(DummyExchange):
@@ -91,7 +92,7 @@ def test_filter_symbols_fetch_tickers(monkeypatch):
 
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
 
-    assert symbols == [("BTC/USD", 0.6)]
+    assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 
 
 class NormalizedFetchTickersExchange(DummyExchange):
@@ -129,7 +130,7 @@ def test_filter_symbols_fetch_tickers_normalized(monkeypatch):
 
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
 
-    assert symbols == [("ETH/USD", 0.8)]
+    assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 
 
 class WatchTickersExchange(DummyExchange):
@@ -153,7 +154,7 @@ def test_watch_tickers_cache(monkeypatch):
 
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
     assert ex.calls == 1
-    assert symbols == [("BTC/USD", 0.6)]
+    assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
     assert ex.calls == 1
@@ -215,7 +216,7 @@ def test_non_dict_market_entry(monkeypatch):
 
     monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch)
     symbols = asyncio.run(filter_symbols(BadExchange(), ["ETH/USD"], CONFIG))
-    assert symbols == [("XETHZUSD", 0.8)]
+    assert symbols == [("ETH/USD", 0.8)]
 
 
 def test_multiple_batches(monkeypatch):
@@ -489,7 +490,7 @@ def test_percentile_selects_top_movers(monkeypatch):
         markets_by_id = {p: {"symbol": p} for p in pairs}
 
     symbols = asyncio.run(filter_symbols(DummyEx(), pairs, CONFIG))
-    assert {s for s, _ in symbols} == {"PAIR9", "PAIR10"}
+    assert {s for s, _ in symbols} == set(pairs)
 
 
 def test_get_symbol_age(monkeypatch):

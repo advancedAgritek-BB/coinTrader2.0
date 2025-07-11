@@ -582,11 +582,11 @@ scan_in_background: true
 symbols: []            # automatically populated
 excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
-min_symbol_age_days: 10          # skip pairs with less history
-symbol_batch_size: 10            # symbols processed per cycle
+min_symbol_age_days: 2           # skip pairs with less history
+symbol_batch_size: 20            # symbols processed per cycle
 scan_lookback_limit: 50          # candles loaded during startup
 cycle_lookback_limit: null       # override per-cycle candle load
-max_spread_pct: 1.0              # skip pairs with wider spreads
+max_spread_pct: 3.0              # skip pairs with wide spreads
 ```
 
 `exchange_market_types` filters the discovered pairs by market class. The bot
@@ -616,11 +616,12 @@ undesirable markets before strategies run:
 
 ```yaml
 symbol_filter:
-  volume_percentile: 60         # keep pairs above this volume percentile
-  change_pct_percentile: 70     # require 24h change in the top 30%
-  max_spread_pct: 0.5           # skip pairs with wide spreads
+  min_volume_usd: 1000
+  volume_percentile: 0          # keep pairs above this volume percentile
+  change_pct_percentile: 0      # no 24h change requirement
+  max_spread_pct: 3             # allow wider spreads
   correlation_window: 30        # days of history for correlation
-  max_correlation: 0.9          # drop pairs above this threshold
+  max_correlation: 0.85         # drop pairs above this threshold
   correlation_max_pairs: 100    # limit pairwise correlation checks
 ```
 
