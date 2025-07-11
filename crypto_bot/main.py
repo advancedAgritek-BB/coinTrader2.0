@@ -588,6 +588,7 @@ async def _main_impl() -> TelegramNotifier:
         config.get("max_ohlcv_failures", 3),
         config.get("max_ws_limit", 50),
         status_updates,
+        max_concurrent=config.get("max_concurrent_ohlcv"),
     )
     secrets = dotenv_values(ENV_PATH)
     flat_cfg = _flatten_config(config)
