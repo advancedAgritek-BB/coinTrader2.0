@@ -62,7 +62,7 @@ from crypto_bot.utils.market_loader import (
     configure as market_loader_configure,
 )
 from crypto_bot.utils.eval_queue import build_priority_queue
-from crypto_bot.utils.symbol_utils import get_filtered_symbols
+from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
 from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
 from crypto_bot.utils.pnl_logger import log_pnl
 from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
@@ -203,15 +203,6 @@ def _emit_timing(
             metrics_path,
         )
 
-
-
-def _fix_symbol(sym: str) -> str:
-    """Normalize different notations of Bitcoin."""
-    if not isinstance(sym, str):
-        return sym
-    return sym.replace("XBT/", "BTC/").replace("XBT", "BTC")
-
-
 def load_config() -> dict:
     """Load YAML configuration for the bot."""
     with open(CONFIG_PATH) as f:
@@ -219,9 +210,9 @@ def load_config() -> dict:
         data = yaml.safe_load(f) or {}
 
     if "symbol" in data:
-        data["symbol"] = _fix_symbol(data["symbol"])
+        data["symbol"] = fix_symbol(data["symbol"])
     if "symbols" in data:
-        data["symbols"] = [_fix_symbol(s) for s in data.get("symbols", [])]
+        data["symbols"] = [fix_symbol(s) for s in data.get("symbols", [])]
     try:
         if hasattr(ScannerConfig, "model_validate"):
             ScannerConfig.model_validate(data)
