@@ -988,6 +988,52 @@ def test_refresh_tickers_public_api_fallback(monkeypatch):
     assert set(result) == {"ETH/USD", "BTC/USD"}
 
 
+def test_refresh_tickers_batches(monkeypatch):
+    class BatchExchange(DummyExchange):
+        def __init__(self):
+            self.has = {"fetchTickers": True}
+            self.calls: list[list[str]] = []
+            self.markets = {f"PAIR{i}/USD": {} for i in range(5)}
+
+        async def fetch_tickers(self, symbols):
+            self.calls.append(list(symbols))
+            return {s: {} for s in symbols}
+
+    ex = BatchExchange()
+    monkeypatch.setattr(sp, "cfg", {"symbol_filter": {"kraken_batch_size": 2, "http_timeout": 10}})
+
+    result = asyncio.run(sp._refresh_tickers(ex, list(ex.markets)))
+
+    assert ex.calls == [["PAIR0/USD", "PAIR1/USD"], ["PAIR2/USD", "PAIR3/USD"], ["PAIR4/USD"]]
+    assert set(result) == set(ex.markets)
+
+
+def test_fetch_ticker_async_timeout(monkeypatch):
+    calls: list[int | None] = []
+
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+
+        async def json(self):
+            return {}
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            pass
+
+        async def get(self, url, timeout=None):
+            calls.append(timeout)
+            return FakeResp()
+
+    monkeypatch.setattr(sp.aiohttp, "ClientSession", lambda: FakeSession())
+
+    asyncio.run(sp._fetch_ticker_async(["XBTUSD"], timeout=5))
+
+    assert calls == [5]
 def test_ticker_retry_attempts(monkeypatch):
     class RetryExchange(DummyExchange):
         def __init__(self):

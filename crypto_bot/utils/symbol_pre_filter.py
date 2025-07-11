@@ -105,7 +105,7 @@ async def has_enough_history(
     return True
 
 
-async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
+async def _fetch_ticker_async(pairs: Iterable[str], timeout: int = 10) -> dict:
     """Return ticker data for ``pairs`` in batches of 20 using aiohttp."""
 
     mock = os.getenv("MOCK_KRAKEN_TICKER")
@@ -119,7 +119,7 @@ async def _fetch_ticker_async(pairs: Iterable[str]) -> dict:
         for i in range(0, len(pairs_list), 20):
             chunk = pairs_list[i : i + 20]
             url = f"{API_URL}/Ticker?pair={','.join(chunk)}"
-            tasks.append(session.get(url, timeout=10))
+            tasks.append(session.get(url, timeout=timeout))
 
         responses = await asyncio.gather(*tasks)
         for resp in responses:
@@ -180,6 +180,8 @@ async def _refresh_tickers(
     log_exc = sf.get("log_ticker_exceptions", False)
 
     now = time.time()
+    batch = cfg.get("symbol_filter", {}).get("kraken_batch_size", 100)
+    timeout = cfg.get("symbol_filter", {}).get("http_timeout", 10)
     markets = getattr(exchange, "markets", None)
     if markets is not None:
         if not markets and hasattr(exchange, "load_markets"):
@@ -198,6 +200,9 @@ async def _refresh_tickers(
                 ", ".join(missing),
             )
 
+    try_ws = (
+        getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
+        and exchange.options.get("ws_scan", True)
     try_ws = getattr(getattr(exchange, "has", {}), "get", lambda _k: False)(
         "watchTickers"
     )
@@ -229,6 +234,45 @@ async def _refresh_tickers(
             "fetchTickers"
         ):
             data = {}
+            symbols_list = list(symbols)
+            for i in range(0, len(symbols_list), batch):
+                chunk = symbols_list[i : i + batch]
+                chunk_data: dict | None = None
+                for attempt in range(3):
+                    try:
+                        fetched = await exchange.fetch_tickers(chunk)
+                        chunk_data = {s: t.get("info", t) for s, t in fetched.items()}
+                        break
+                    except ccxt.BadSymbol as exc:  # pragma: no cover - network
+                        logger.warning(
+                            "fetch_tickers BadSymbol for %s: %s",
+                            ", ".join(chunk),
+                            exc,
+                        )
+                        telemetry.inc("scan.api_errors")
+                        return {}
+                    except (ccxt.ExchangeError, ccxt.NetworkError) as exc:  # pragma: no cover - network
+                        if getattr(exc, "http_status", None) in (520, 522) and attempt < 2:
+                            await asyncio.sleep(2 ** attempt)
+                            continue
+                        logger.warning(
+                            "fetch_tickers failed: %s \u2013 falling back to Kraken REST /Ticker",
+                            exc,
+                            exc_info=True,
+                        )
+                        telemetry.inc("scan.api_errors")
+                        chunk_data = None
+                        break
+                    except Exception as exc:  # pragma: no cover - network
+                        logger.warning(
+                            "fetch_tickers failed: %s \u2013 falling back to Kraken REST /Ticker",
+                            exc,
+                            exc_info=True,
+                        )
+                        telemetry.inc("scan.api_errors")
+                        chunk_data = None
+                        break
+                if chunk_data is None:
             for attempt in range(attempts):
                 try:
                     fetched = await exchange.fetch_tickers(list(symbols))
@@ -269,11 +313,12 @@ async def _refresh_tickers(
                     telemetry.inc("scan.api_errors")
                     data = {}
                     break
+                data.update(chunk_data)
 
             if not data:
                 try:
                     pairs = [s.replace("/", "") for s in symbols]
-                    raw = (await _fetch_ticker_async(pairs)).get("result", {})
+                    raw = (await _fetch_ticker_async(pairs, timeout=timeout)).get("result", {})
                     data = {}
                     if len(raw) == len(symbols):
                         for sym, (_, ticker) in zip(symbols, raw.items()):
@@ -298,7 +343,7 @@ async def _refresh_tickers(
         else:
             try:
                 pairs = [s.replace("/", "") for s in symbols]
-                raw = (await _fetch_ticker_async(pairs)).get("result", {})
+                raw = (await _fetch_ticker_async(pairs, timeout=timeout)).get("result", {})
                 data = {}
                 if len(raw) == len(symbols):
                     for sym, (_, ticker) in zip(symbols, raw.items()):

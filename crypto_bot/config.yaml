@@ -248,6 +248,8 @@ symbol_filter:
   min_volume_usd: 100
   uncached_volume_multiplier: 2
   volume_percentile: 30
+  kraken_batch_size: 100     # max symbols per fetch_tickers call
+  http_timeout: 10           # seconds for fallback /Ticker requests
   ticker_retry_attempts: 3
   log_ticker_exceptions: false
 symbol_refresh_minutes: 30

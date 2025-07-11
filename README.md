@@ -629,6 +629,9 @@ symbol_filter:
   correlation_window: 30        # days of history for correlation
   max_correlation: 0.85         # drop pairs above this threshold
   correlation_max_pairs: 100    # limit pairwise correlation checks
+  kraken_batch_size: 100        # max symbols per fetch_tickers call
+  http_timeout: 10              # seconds for fallback /Ticker requests
+```
   ticker_retry_attempts: 3      # number of fetch_tickers retries
   log_ticker_exceptions: false  # include stack traces when true
 ```
