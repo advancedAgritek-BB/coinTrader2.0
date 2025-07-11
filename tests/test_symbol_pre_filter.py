@@ -506,9 +506,9 @@ def test_filter_symbols_correlation(monkeypatch):
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async",
         fake_fetch,
     )
-    df1 = pd.DataFrame({"close": [1, 2, 3, 4, 5]})
+    df1 = pd.DataFrame({"close": list(range(1, 32))})
     df1["return"] = df1["close"].pct_change()
-    df2 = pd.DataFrame({"close": [2, 4, 6, 8, 10]})
+    df2 = pd.DataFrame({"close": [2 * i for i in range(1, 32)]})
     df2["return"] = df2["close"].pct_change()
     cache = {"ETH/USD": df1, "BTC/USD": df2}
 
@@ -547,6 +547,28 @@ def test_correlation_pair_limit(monkeypatch):
     )
 
     # second symbol is not pruned because correlation checks are limited to 1 pair
+    assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
+
+
+def test_correlation_skipped_when_insufficient_history(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async",
+        fake_fetch,
+    )
+    df1 = pd.DataFrame({"close": [1, 2, 3, 4, 5]})
+    df1["return"] = df1["close"].pct_change()
+    df2 = pd.DataFrame({"close": [2, 4, 6, 8, 10]})
+    df2["return"] = df2["close"].pct_change()
+    cache = {"ETH/USD": df1, "BTC/USD": df2}
+
+    cfg = {
+        **CONFIG,
+        "symbol_filter": {"volume_percentile": 0, "max_spread_pct": 2.0, "change_pct_percentile": 0},
+    }
+    symbols = asyncio.run(
+        filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg, df_cache=cache)
+    )
+
     assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 async def fake_fetch_wide_spread(_):
     return {
@@ -639,10 +661,7 @@ def test_symbol_skipped_when_missing_from_cache(monkeypatch, tmp_path):
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
     )
 
-    calls = []
-
     async def fake_history(*_a, **_k):
-        calls.append(_a[1])
         return True
 
     monkeypatch.setattr(sp, "has_enough_history", fake_history)
@@ -652,14 +671,18 @@ def test_symbol_skipped_when_missing_from_cache(monkeypatch, tmp_path):
         return cache
     monkeypatch.setattr(sp, "update_ohlcv_cache", fake_update)
 
-    cfg = {**CONFIG, "min_symbol_age_days": 1}
+    cfg = {
+        **CONFIG,
+        "min_symbol_age_days": 1,
+        "symbol_filter": {**CONFIG["symbol_filter"], "uncached_volume_multiplier": 1},
+    }
     ex = DummyExchange()
     ex.has = {}
     result = asyncio.run(sp.filter_symbols(ex, ["ETH/USD", "BTC/USD"], cfg))
 
     assert result == [("ETH/USD", 0.8)]
     assert calls == []
-    assert calls == ["ETH/USD"]
+    assert result == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 
 
 def test_uncached_multiplier_allows_symbol(monkeypatch, tmp_path):

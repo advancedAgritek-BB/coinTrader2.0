@@ -13,9 +13,18 @@ def load_liquid_map() -> dict[str, float] | None:
         try:
             data = json.loads(PAIR_FILE.read_text())
             if isinstance(data, list):
-                return {p: 0.0 for p in data}
-            if isinstance(data, dict):
-                return {str(k): float(v) for k, v in data.items()}
+                data = {p: 0.0 for p in data}
+            elif isinstance(data, dict):
+                data = {str(k): float(v) for k, v in data.items()}
+            else:
+                data = {}
+            if not data:
+                logger.warning(
+                    "%s is empty. Run tasks/refresh_pairs.py or adjust symbol_filter.uncached_volume_multiplier",
+                    PAIR_FILE,
+                )
+                return None
+            return data
         except Exception as exc:  # pragma: no cover - best effort
             logger.warning("Failed to read %s: %s", PAIR_FILE, exc)
     return None

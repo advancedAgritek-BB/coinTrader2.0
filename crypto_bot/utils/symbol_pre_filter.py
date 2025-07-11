@@ -342,10 +342,12 @@ async def filter_symbols(
     max_spread = sf.get("max_spread_pct", 1.0)
     pct = sf.get("change_pct_percentile", DEFAULT_CHANGE_PCT_PERCENTILE)
     vol_mult = sf.get("uncached_volume_multiplier", 2)
+    pct = sf.get("change_pct_percentile", 80)
+    cache_map = load_liquid_map()
+    vol_mult_default = 1 if cache_map is None else 2
+    vol_mult = sf.get("uncached_volume_multiplier", vol_mult_default)
     min_age = cfg.get("min_symbol_age_days", 0)
     min_score = float(cfg.get("min_symbol_score", 0.0))
-
-    cache_map = load_liquid_map()
     cache_changed = False
 
     telemetry.inc("scan.symbols_considered", len(list(symbols)))
@@ -445,7 +447,7 @@ async def filter_symbols(
             change_pct,
             spread_pct,
         )
-        if cache_map is not None and symbol not in cache_map and vol_usd < min_volume * vol_mult:
+        if cache_map and vol_usd < min_volume * vol_mult:
             skipped += 1
             continue
         if vol_usd >= min_volume and spread_pct <= max_spread:
@@ -493,8 +495,15 @@ async def filter_symbols(
         else:
             top = [s for s, _ in scored]
         subset = {s: df_cache.get(s) for s in top}
-        window = sf.get("correlation_window", 100)
-        corr_map = incremental_correlation(subset, window=window)
+        window = sf.get("correlation_window", 30)
+        have_history = all(
+            isinstance(df, pd.DataFrame) and len(df) >= window
+            for df in subset.values()
+        )
+        if have_history:
+            corr_map = incremental_correlation(subset, window=window)
+        else:
+            corr_map = {}
 
     seconds = _timeframe_seconds(exchange, "1h") if min_age > 0 else 0
     if min_age > 0:
