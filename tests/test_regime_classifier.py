@@ -56,6 +56,12 @@ def test_classify_regime_returns_unknown_for_14_rows():
     assert isinstance(label, str)
 
 
+def test_classify_regime_handles_none_df():
+    label, probs = classify_regime(None)
+    assert label == "unknown"
+    assert probs == {"unknown": 0.0}
+
+
 def test_classify_regime_returns_unknown_between_15_and_19_rows():
     for rows in range(15, 20):
         data = {
