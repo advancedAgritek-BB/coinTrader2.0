@@ -3,6 +3,14 @@ import time
 
 from .logger import LOG_DIR, setup_logger
 from .symbol_pre_filter import filter_symbols
+
+
+def fix_symbol(sym: str) -> str:
+    """Normalize different notations of Bitcoin."""
+    if not isinstance(sym, str):
+        return sym
+    return sym.replace("XBT/", "BTC/").replace("XBT", "BTC")
+
 logger = setup_logger("bot", LOG_DIR / "bot.log")
 
 

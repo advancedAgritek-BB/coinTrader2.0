@@ -12,6 +12,7 @@ from crypto_bot.utils.logger import LOG_DIR
 
 import yaml
 from . import main
+from crypto_bot.utils.symbol_utils import fix_symbol
 
 from .portfolio_rotator import PortfolioRotator
 from .utils.open_trades import get_open_trades
@@ -58,9 +59,9 @@ class TradingBotController:
             data = {}
 
         if "symbol" in data:
-            data["symbol"] = main._fix_symbol(data["symbol"])
+            data["symbol"] = fix_symbol(data["symbol"])
         if "symbols" in data:
-            data["symbols"] = [main._fix_symbol(s) for s in data.get("symbols", [])]
+            data["symbols"] = [fix_symbol(s) for s in data.get("symbols", [])]
         return data
 
     async def start_trading(self) -> Dict[str, object]:
