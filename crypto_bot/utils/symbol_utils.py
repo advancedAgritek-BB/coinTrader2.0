@@ -3,7 +3,7 @@ import time
 
 from .logger import LOG_DIR, setup_logger
 from .symbol_pre_filter import filter_symbols
-logger = setup_logger(__name__, LOG_DIR / "bot.log")
+logger = setup_logger("bot", LOG_DIR / "bot.log")
 
 
 _cached_symbols: list | None = None

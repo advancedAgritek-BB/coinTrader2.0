@@ -620,11 +620,14 @@ symbol_filter:
   volume_percentile: 0          # keep pairs above this volume percentile
   change_pct_percentile: 0      # no 24h change requirement
   max_spread_pct: 3             # allow wider spreads
+  min_volume_usd: 100          # ignore very tiny markets
+  volume_percentile: 40        # keep pairs above this volume percentile
+  change_pct_percentile: 50    # require 24h change in the top half
+  max_spread_pct: 5            # allow spreads up to 5%
   correlation_window: 30        # days of history for correlation
   max_correlation: 0.85         # drop pairs above this threshold
   correlation_max_pairs: 100    # limit pairwise correlation checks
 ```
-
 Pairs passing these checks are then scored with `analyze_symbol` which
 computes a strategy confidence score. Only the highest scoring symbols
 are traded each cycle.
