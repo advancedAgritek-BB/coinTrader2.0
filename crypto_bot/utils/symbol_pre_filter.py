@@ -30,7 +30,7 @@ try:
         cfg = yaml.safe_load(f) or {}
 except Exception:
     cfg = {}
-SEMA = asyncio.Semaphore(cfg.get("max_concurrent_ohlcv", 8))
+SEMA = asyncio.Semaphore(cfg.get("max_concurrent_ohlcv", 4))
 
 
 logger = setup_logger(__name__, LOG_DIR / "symbol_filter.log")
