@@ -54,6 +54,7 @@ def _norm_symbol(sym: str) -> str:
         return sym[:-4] + "/USDT"
     return sym
 
+
 # cache for ticker data when using watchTickers
 ticker_cache: dict[str, dict] = {}
 ticker_ts: dict[str, float] = {}
@@ -62,7 +63,9 @@ ticker_ts: dict[str, float] = {}
 liq_cache = TTLCache(maxsize=2000, ttl=900)
 
 
-async def has_enough_history(exchange, symbol: str, days: int = 30, timeframe: str = "1d") -> bool:
+async def has_enough_history(
+    exchange, symbol: str, days: int = 30, timeframe: str = "1d"
+) -> bool:
     """Return ``True`` when ``symbol`` has at least ``days`` days of history."""
     seconds = _timeframe_seconds(exchange, timeframe)
     candles_needed = int((days * 86400) / seconds)
@@ -184,12 +187,16 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                 ", ".join(missing),
             )
 
-    try_ws = getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
+    try_ws = getattr(getattr(exchange, "has", {}), "get", lambda _k: False)(
+        "watchTickers"
+    )
     try_http = True
     data: dict = {}
 
     if try_ws:
-        to_fetch = [s for s in symbols if now - ticker_ts.get(s, 0) > 5 or s not in ticker_cache]
+        to_fetch = [
+            s for s in symbols if now - ticker_ts.get(s, 0) > 5 or s not in ticker_cache
+        ]
         if to_fetch:
             try:
                 data = await exchange.watch_tickers(to_fetch)
@@ -207,7 +214,9 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
             return {s: t.get("info", t) for s, t in result.items()}
 
     if try_http:
-        if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
+        if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)(
+            "fetchTickers"
+        ):
             data = {}
             for attempt in range(3):
                 try:
@@ -222,9 +231,12 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                     )
                     telemetry.inc("scan.api_errors")
                     return {}
-                except (ccxt.ExchangeError, ccxt.NetworkError) as exc:  # pragma: no cover - network
+                except (
+                    ccxt.ExchangeError,
+                    ccxt.NetworkError,
+                ) as exc:  # pragma: no cover - network
                     if getattr(exc, "http_status", None) in (520, 522) and attempt < 2:
-                        await asyncio.sleep(2 ** attempt)
+                        await asyncio.sleep(2**attempt)
                         continue
                     logger.warning(
                         "fetch_tickers failed: %s \u2013 falling back to Kraken REST /Ticker",
@@ -311,7 +323,9 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                 logger.warning("fetch_ticker BadSymbol for %s: %s", sym, exc)
                 telemetry.inc("scan.api_errors")
             except Exception as exc:  # pragma: no cover - network
-                logger.warning("fetch_ticker failed for %s: %s", sym, exc, exc_info=True)
+                logger.warning(
+                    "fetch_ticker failed for %s: %s", sym, exc, exc_info=True
+                )
                 telemetry.inc("scan.api_errors")
     if result:
         for sym, ticker in result.items():
@@ -347,6 +361,8 @@ def _history_in_cache(df: pd.DataFrame | None, days: int, seconds: int) -> bool:
         return False
     candles_needed = int((days * 86400) / seconds)
     return len(df) >= candles_needed
+
+
 async def _bounded_score(
     exchange,
     symbol: str,
@@ -358,10 +374,10 @@ async def _bounded_score(
     """Return ``(symbol, score)`` using the global semaphore."""
 
     async with SEMA:
-        score = await score_symbol(exchange, symbol, volume_usd, change_pct, spread_pct, cfg)
+        score = await score_symbol(
+            exchange, symbol, volume_usd, change_pct, spread_pct, cfg
+        )
     return symbol, score
-
-
 
 
 async def filter_symbols(
@@ -400,9 +416,7 @@ async def filter_symbols(
 
     # map of ids returned by Kraken to human readable symbols
     id_map: dict[str, str] = {}
-    request_map = {
-        _norm_symbol(s.replace("/", "")): _norm_symbol(s) for s in symbols
-    }
+    request_map = {_norm_symbol(s.replace("/", "")): _norm_symbol(s) for s in symbols}
 
     if hasattr(exchange, "markets_by_id"):
         if not exchange.markets_by_id and hasattr(exchange, "load_markets"):
@@ -441,14 +455,10 @@ async def filter_symbols(
         id_map.setdefault(req_id, sym)
 
     metrics: List[tuple[str, float, float, float]] = []
-    for sym, (vol, spr) in cached_data.items():
-        if vol >= min_volume and spr <= max_spread:
-            metrics.append((sym, vol, 0.0, spr))
-        else:
-            skipped += 1
 
     raw: List[tuple[str, float, float, float]] = []
     volumes: List[float] = []
+    seen: set[str] = set()
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id) or id_map.get(pair_id.upper())
         norm = pair_id.upper()
@@ -479,6 +489,7 @@ async def filter_symbols(
             change_pct,
             spread_pct,
         )
+        seen.add(symbol)
         if cache_map and vol_usd < min_volume * vol_mult:
             skipped += 1
             continue
@@ -489,6 +500,27 @@ async def filter_symbols(
                 cache_changed = True
         volumes.append(vol_usd)
         raw.append((symbol, vol_usd, change_pct, spread_pct))
+
+    for sym in symbols:
+        norm_sym = _norm_symbol(sym)
+        if norm_sym in seen:
+            continue
+        cached = cached_data.get(sym) or cached_data.get(norm_sym)
+        if cached is None:
+            skipped += 1
+            continue
+        vol_usd, spread_pct = cached
+        seen.add(norm_sym)
+        if cache_map and vol_usd < min_volume * vol_mult:
+            skipped += 1
+            continue
+        if vol_usd >= min_volume and spread_pct <= max_spread:
+            metrics.append((norm_sym, vol_usd, 0.0, spread_pct))
+            if cache_map is not None and norm_sym not in cache_map:
+                cache_map[norm_sym] = time.time()
+                cache_changed = True
+        volumes.append(vol_usd)
+        raw.append((norm_sym, vol_usd, 0.0, spread_pct))
 
     vol_cut = np.percentile(volumes, vol_pct) if volumes else 0
 
@@ -523,14 +555,13 @@ async def filter_symbols(
         # only compute correlations for the top N scoring symbols
         max_pairs = sf.get("correlation_max_pairs")
         if max_pairs:
-            top = [s for s, _ in scored[: max_pairs]]
+            top = [s for s, _ in scored[:max_pairs]]
         else:
             top = [s for s, _ in scored]
         subset = {s: df_cache.get(s) for s in top}
         window = sf.get("correlation_window", 30)
         have_history = all(
-            isinstance(df, pd.DataFrame) and len(df) >= window
-            for df in subset.values()
+            isinstance(df, pd.DataFrame) and len(df) >= window for df in subset.values()
         )
         if have_history:
             corr_map = incremental_correlation(subset, window=window)
@@ -540,7 +571,11 @@ async def filter_symbols(
     seconds = _timeframe_seconds(exchange, "1h") if min_age > 0 else 0
     if min_age > 0:
         missing = [
-            s for s, _ in scored if not _history_in_cache(df_cache.get(s) if df_cache else None, min_age, seconds)
+            s
+            for s, _ in scored
+            if not _history_in_cache(
+                df_cache.get(s) if df_cache else None, min_age, seconds
+            )
         ]
         if missing:
             if df_cache is None:
@@ -556,7 +591,9 @@ async def filter_symbols(
 
     result: List[tuple[str, float]] = []
     for sym, score in scored:
-        if min_age > 0 and not _history_in_cache(df_cache.get(sym) if df_cache else None, min_age, seconds):
+        if min_age > 0 and not _history_in_cache(
+            df_cache.get(sym) if df_cache else None, min_age, seconds
+        ):
             logger.debug("Skipping %s due to insufficient history", sym)
             skipped += 1
             continue
