@@ -590,6 +590,10 @@ cycle_lookback_limit: null       # override per-cycle candle load
 max_spread_pct: 3.0              # skip pairs with wide spreads
 ```
 
+To avoid loading every market on startup, populate `symbols` with the
+top 200 pairs by volume from `tasks/refresh_pairs.py`. Only set
+`scan_markets: true` when you need to evaluate the entire exchange.
+
 `exchange_market_types` filters the discovered pairs by market class. The bot
 also skips newly listed pairs using `min_symbol_age_days`.
 Symbols are queued by score using a priority deque and processed in
@@ -623,7 +627,7 @@ symbol_filter:
   max_spread_pct: 3             # allow wider spreads
   min_volume_usd: 100          # ignore very tiny markets
   volume_percentile: 40        # keep pairs above this volume percentile
-  uncached_volume_multiplier: 2 # extra volume when not cached
+  uncached_volume_multiplier: 5 # extra volume when not cached
   change_pct_percentile: 50    # require 24h change in the top half
   max_spread_pct: 5            # allow spreads up to 5%
   correlation_window: 30        # days of history for correlation
@@ -675,6 +679,11 @@ Run it manually whenever needed:
 python tasks/refresh_pairs.py --once
 ```
 Removing the `--once` flag keeps it running on the configured interval.
+To automate updates you can run the script periodically via cron:
+
+```cron
+0 * * * * cd /path/to/coinTrader2.0 && /usr/bin/python3 tasks/refresh_pairs.py
+```
 Delete `cache/liquid_pairs.json` to force a full rebuild on the next run.
 
 ## Web UI

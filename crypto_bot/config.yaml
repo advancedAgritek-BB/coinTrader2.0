@@ -246,7 +246,7 @@ symbol_filter:
   correlation_max_pairs: 100
   max_spread_pct: 5
   min_volume_usd: 100
-  uncached_volume_multiplier: 2
+  uncached_volume_multiplier: 5
   volume_percentile: 30
   kraken_batch_size: 100     # max symbols per fetch_tickers call
   http_timeout: 10           # seconds for fallback /Ticker requests
