@@ -13,6 +13,13 @@ from crypto_bot.strategy_router import strategy_for
 import crypto_bot.strategy_router as strategy_router
 from crypto_bot.signals.signal_scoring import evaluate_async
 import crypto_bot.signals.signal_scoring as sc
+from crypto_bot.utils.telemetry import telemetry
+
+
+@pytest.fixture(autouse=True)
+def reset_telemetry():
+    telemetry.reset()
+    yield
 
 
 def test_classify_regime_returns_unknown_for_short_df():
@@ -354,6 +361,7 @@ def test_analyze_symbol_handles_missing_df():
 
     res = asyncio.run(run())
     assert res == {"symbol": "AAA", "skip": "no_ohlcv"}
+    assert telemetry.snapshot().get("analysis.skipped_no_df", 0) == 1
 
 
 def test_voting_direction_override(monkeypatch):

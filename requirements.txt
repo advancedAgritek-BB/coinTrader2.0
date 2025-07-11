@@ -32,3 +32,4 @@ scikit-optimize
 pydantic<2
 numba
 cachetools
+prometheus-client

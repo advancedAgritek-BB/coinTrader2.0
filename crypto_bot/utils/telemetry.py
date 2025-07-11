@@ -5,10 +5,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any
 
+from prometheus_client import Counter
+
 from .logger import LOG_DIR
 from .metrics_logger import log_metrics_to_csv
 
 LOG_FILE = LOG_DIR / "telemetry.csv"
+
+# Prometheus counters keyed by telemetry name
+PROM_COUNTERS: Dict[str, Counter] = {
+    "analysis.skipped_no_df": Counter(
+        "analysis_skipped_no_df",
+        "Number of symbols skipped due to missing OHLCV data",
+    )
+}
 
 
 class Telemetry:
@@ -20,6 +30,9 @@ class Telemetry:
     def inc(self, name: str, value: int = 1) -> None:
         """Increment ``name`` by ``value``."""
         self._counters[name] += value
+        counter = PROM_COUNTERS.get(name)
+        if counter is not None:
+            counter.inc(value)
 
     def snapshot(self) -> Dict[str, int]:
         """Return a copy of all counters."""
