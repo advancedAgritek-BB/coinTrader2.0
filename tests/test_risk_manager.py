@@ -163,17 +163,17 @@ def test_allow_trade_rejects_on_volatility_drop():
 
 def test_stop_order_management():
     manager = RiskManager(RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01))
-    order = {"id": "1", "symbol": "BTC/USDT", "side": "sell", "amount": 1, "dry_run": True}
-    manager.register_stop_order(order, symbol="BTC/USDT")
-    assert manager.stop_orders["BTC/USDT"]["amount"] == 1
-    manager.update_stop_order(0.5, symbol="BTC/USDT")
-    assert manager.stop_orders["BTC/USDT"]["amount"] == 0.5
+    order = {"id": "1", "symbol": "XBT/USDT", "side": "sell", "amount": 1, "dry_run": True}
+    manager.register_stop_order(order, symbol="XBT/USDT")
+    assert manager.stop_orders["XBT/USDT"]["amount"] == 1
+    manager.update_stop_order(0.5, symbol="XBT/USDT")
+    assert manager.stop_orders["XBT/USDT"]["amount"] == 0.5
     manager = RiskManager(
         RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
     )
     order1 = {
         "id": "1",
-        "symbol": "BTC/USDT",
+        "symbol": "XBT/USDT",
         "side": "sell",
         "amount": 1,
         "dry_run": True,
@@ -189,13 +189,13 @@ def test_stop_order_management():
     manager.register_stop_order(order1)
     manager.register_stop_order(order2)
 
-    assert manager.stop_orders["BTC/USDT"]["amount"] == 1
+    assert manager.stop_orders["XBT/USDT"]["amount"] == 1
     assert manager.stop_orders["ETH/USDT"]["amount"] == 2
 
-    manager.update_stop_order(0.5, symbol="BTC/USDT")
+    manager.update_stop_order(0.5, symbol="XBT/USDT")
     manager.update_stop_order(1.5, symbol="ETH/USDT")
 
-    assert manager.stop_orders["BTC/USDT"]["amount"] == 0.5
+    assert manager.stop_orders["XBT/USDT"]["amount"] == 0.5
     assert manager.stop_orders["ETH/USDT"]["amount"] == 1.5
 
     class DummyEx:
@@ -206,11 +206,11 @@ def test_stop_order_management():
             self.cancelled = True
 
     ex = DummyEx()
-    manager.cancel_stop_order(ex, symbol="BTC/USDT")
-    assert "BTC/USDT" not in manager.stop_orders
+    manager.cancel_stop_order(ex, symbol="XBT/USDT")
+    assert "XBT/USDT" not in manager.stop_orders
     ex1 = DummyEx()
-    manager.cancel_stop_order(ex1, symbol="BTC/USDT")
-    assert "BTC/USDT" not in manager.stop_orders
+    manager.cancel_stop_order(ex1, symbol="XBT/USDT")
+    assert "XBT/USDT" not in manager.stop_orders
 
     ex2 = DummyEx()
     manager.cancel_stop_order(ex2, symbol="ETH/USDT")
@@ -362,13 +362,13 @@ def test_allow_trade_blocks_when_memory_hits_threshold(tmp_path, monkeypatch):
     monkeypatch.setattr(trade_memory, "LOG_FILE", mem)
     trade_memory.configure(max_losses=1, slippage_threshold=0.5, lookback_seconds=3600)
     trade_memory.clear()
-    trade_memory.record_loss("BTC/USDT", 0.01)
+    trade_memory.record_loss("XBT/USDT", 0.01)
 
     cfg = RiskConfig(
         max_drawdown=1,
         stop_loss_pct=0.01,
         take_profit_pct=0.01,
-        symbol="BTC/USDT",
+        symbol="XBT/USDT",
     )
     allowed, reason = RiskManager(cfg).allow_trade(df)
     assert not allowed

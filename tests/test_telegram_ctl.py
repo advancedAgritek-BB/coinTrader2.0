@@ -135,7 +135,7 @@ class DummyController:
         return "running"
 
     def list_positions(self):
-        return ["BTC/USDT long"]
+        return ["XBT/USDT long"]
 
 
 class DummyNotifier(TelegramNotifier):
@@ -166,4 +166,4 @@ def test_status_loop_sends_summary(monkeypatch):
 
     assert notifier.sent
     assert "running" in notifier.sent[0]
-    assert "BTC/USDT" in notifier.sent[0]
+    assert "XBT/USDT" in notifier.sent[0]

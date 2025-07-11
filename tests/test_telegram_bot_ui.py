@@ -167,7 +167,7 @@ def test_menu_signals_balance_trades(monkeypatch, tmp_path):
     monkeypatch.setattr(telegram_bot_ui, "ASSET_SCORES_FILE", sig_file)
 
     trades_file = tmp_path / "trades.csv"
-    trades_file.write_text("BTC/USDT,buy,1,100\n")
+    trades_file.write_text("XBT/USDT,buy,1,100\n")
     monkeypatch.setattr(telegram_bot_ui, "TRADES_FILE", trades_file)
 
     update = DummyUpdate()
@@ -201,12 +201,12 @@ def test_commands_require_admin(monkeypatch, tmp_path):
     tg.set_admin_ids([])
 
     trades_file = tmp_path / "trades.csv"
-    trades_file.write_text("BTC/USDT,buy,1,100\n")
+    trades_file.write_text("XBT/USDT,buy,1,100\n")
     monkeypatch.setattr(telegram_bot_ui, "TRADES_FILE", trades_file)
 
     update = DummyUpdate()
     asyncio.run(ui.show_trades(update, DummyContext()))
-    assert "BTC/USDT" in update.message.text
+    assert "XBT/USDT" in update.message.text
 
 
 def test_unauthorized_start_stop(monkeypatch, tmp_path):
@@ -236,9 +236,9 @@ def test_menu_callbacks(monkeypatch, tmp_path):
         DummyBuilder,
     )
     asset_file = tmp_path / "scores.json"
-    asset_file.write_text('{"BTC/USDT": 0.5}')
+    asset_file.write_text('{"XBT/USDT": 0.5}')
     trades_file = tmp_path / "trades.csv"
-    trades_file.write_text("BTC/USDT,buy,1,100,t1\n")
+    trades_file.write_text("XBT/USDT,buy,1,100,t1\n")
 
     state = {"running": True, "mode": "cex"}
     ui, _ = make_ui(tmp_path, state, exchange=DummyExchange())
@@ -252,7 +252,7 @@ def test_menu_callbacks(monkeypatch, tmp_path):
     update = DummyCallbackUpdate()
     update.callback_query.data = SIGNALS
     asyncio.run(ui.show_signals(update, DummyContext()))
-    assert "BTC/USDT" in update.callback_query.message.text
+    assert "XBT/USDT" in update.callback_query.message.text
 
     update = DummyCallbackUpdate()
     update.callback_query.data = BALANCE

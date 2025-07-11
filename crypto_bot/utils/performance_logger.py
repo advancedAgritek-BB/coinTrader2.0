@@ -18,7 +18,7 @@ def log_performance(record: Dict[str, Any]) -> None:
             "trending": {
                 "trend_bot": [
                     {
-                        "symbol": "BTC/USDT",
+                        "symbol": "XBT/USDT",
                         "pnl": 1.2,
                         "entry_time": "2024-01-01T00:00:00Z",
                         "exit_time": "2024-01-01T02:00:00Z"

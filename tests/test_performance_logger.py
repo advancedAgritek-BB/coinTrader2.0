@@ -56,7 +56,7 @@ def test_log_performance_bandit_counter(tmp_path, monkeypatch):
     monkeypatch.setattr(pl, "bandit", b)
 
     rec = {
-        "symbol": "BTC/USDT",
+        "symbol": "XBT/USDT",
         "regime": "trending",
         "strategy": "trend_bot",
         "pnl": 1.0,

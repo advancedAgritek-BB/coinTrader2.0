@@ -27,7 +27,7 @@ def test_log_trade_appends_row(tmp_path, monkeypatch):
     logger = setup_logger("trade_test", str(exec_log))
     monkeypatch.setattr(trade_logger, "logger", logger)
 
-    order = {"symbol": "BTC/USDT", "side": "buy", "amount": 1}
+    order = {"symbol": "XBT/USDT", "side": "buy", "amount": 1}
     trade_logger.log_trade(order)
 
     rows = trades.read_text().strip().splitlines()
@@ -58,7 +58,7 @@ def test_execute_trade_async_logs(tmp_path, monkeypatch):
         cex_executor.execute_trade_async(
             object(),
             None,
-            "BTC/USDT",
+            "XBT/USDT",
             "buy",
             1.0,
             TelegramNotifier("t", "c"),
@@ -84,7 +84,7 @@ def test_stop_order_logged(tmp_path, monkeypatch):
     logger = setup_logger("stop_test", str(exec_log))
     monkeypatch.setattr(trade_logger, "logger", logger)
 
-    order = {"symbol": "BTC/USDT", "side": "sell", "amount": 1, "stop": 9000}
+    order = {"symbol": "XBT/USDT", "side": "sell", "amount": 1, "stop": 9000}
     trade_logger.log_trade(order, is_stop=True)
 
     rows = trades.read_text().strip().splitlines()

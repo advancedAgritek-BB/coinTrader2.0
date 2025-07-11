@@ -3,7 +3,7 @@ from frontend import app
 
 def test_dashboard_route(tmp_path, monkeypatch):
     trade_file = tmp_path / "trades.csv"
-    trade_file.write_text("BTC/USDT,buy,1,100\nBTC/USDT,sell,1,110")
+    trade_file.write_text("XBT/USDT,buy,1,100\nXBT/USDT,sell,1,110")
     monkeypatch.setattr(app, "TRADE_FILE", trade_file)
     cfg = tmp_path / "config.yaml"
     cfg.write_text("strategy_allocation:\n  trend_bot: 0.5\n  grid_bot: 0.5")

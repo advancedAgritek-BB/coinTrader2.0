@@ -29,7 +29,7 @@ def log_position(
     Parameters
     ----------
     symbol : str
-        Trading pair symbol, e.g. ``"BTC/USDT"``.
+        Trading pair symbol, e.g. ``"XBT/USDT"``.
     side : str
         ``"buy"`` or ``"sell"``.
     amount : float

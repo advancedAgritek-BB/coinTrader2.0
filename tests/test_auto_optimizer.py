@@ -34,7 +34,7 @@ def test_optimize_strategies_writes_best_params(tmp_path, monkeypatch):
     monkeypatch.setattr(auto_optimizer, "BacktestRunner", FakeRunner)
 
     cfg = {
-        "symbol": "BTC/USDT",
+        "symbol": "XBT/USDT",
         "timeframe": "1h",
         "mode": "cex",
         "risk": {"stop_loss_pct": 0.02, "take_profit_pct": 0.04},

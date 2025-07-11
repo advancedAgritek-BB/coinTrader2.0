@@ -6,7 +6,7 @@ def test_log_pnl_creates_csv(tmp_path, monkeypatch):
     log_file = tmp_path / "pnl.csv"
     monkeypatch.setattr(pnl_logger, "LOG_FILE", log_file)
 
-    pnl_logger.log_pnl("trend_bot", "BTC/USDT", 100.0, 110.0, 10.0, 0.8, "buy")
+    pnl_logger.log_pnl("trend_bot", "XBT/USDT", 100.0, 110.0, 10.0, 0.8, "buy")
 
     assert log_file.exists()
     df = pd.read_csv(log_file)

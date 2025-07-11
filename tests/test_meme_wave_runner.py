@@ -32,7 +32,7 @@ async def test_watch_starts_before_initial_scan(monkeypatch):
 
     task = meme_wave_runner.start_runner({"enabled": True, "pool": {"url": "u", "interval": 0.001}})
     assert isinstance(task, asyncio.Task)
-    await initial_scan(DummyExchange(), {"symbols": ["BTC/USDT"], "timeframes": ["1h"]}, SessionState())
+    await initial_scan(DummyExchange(), {"symbols": ["XBT/USDT"], "timeframes": ["1h"]}, SessionState())
     task.cancel()
     try:
         await task
@@ -54,7 +54,7 @@ async def test_trading_phases_start_before_scan_finishes(monkeypatch):
     monkeypatch.setattr("crypto_bot.main.update_regime_tf_cache", lambda *a, **k: {})
 
     state = SessionState()
-    config = {"symbols": ["BTC/USDT"], "timeframes": ["1h"], "scan_in_background": True}
+    config = {"symbols": ["XBT/USDT"], "timeframes": ["1h"], "scan_in_background": True}
 
     state.scan_task = asyncio.create_task(slow_scan(DummyExchange(), config, state))
 

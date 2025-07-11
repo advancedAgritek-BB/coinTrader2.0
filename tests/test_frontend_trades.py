@@ -5,7 +5,7 @@ import pandas as pd
 def test_trades_data_route(tmp_path, monkeypatch):
     path = tmp_path / "trades.csv"
     df = pd.DataFrame([
-        {"symbol": "BTC/USDT", "side": "buy", "amount": 1, "price": 100, "timestamp": "t"},
+        {"symbol": "XBT/USDT", "side": "buy", "amount": 1, "price": 100, "timestamp": "t"},
         {"symbol": "ETH/USDT", "side": "sell", "amount": 2, "price": 200, "timestamp": "t2"},
     ])
     df.to_csv(path, index=False, header=False)
@@ -15,4 +15,4 @@ def test_trades_data_route(tmp_path, monkeypatch):
     assert resp.status_code == 200
     data = resp.get_json()
     assert len(data) == 2
-    assert data[0]["symbol"] == "BTC/USDT"
+    assert data[0]["symbol"] == "XBT/USDT"

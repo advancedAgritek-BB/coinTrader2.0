@@ -38,7 +38,7 @@ def test_place_stop_order_dry_run(monkeypatch):
     notifier = DummyNotifier()
     order = place_stop_order(
         DummyExchange(),
-        "BTC/USDT",
+        "XBT/USDT",
         "sell",
         1,
         9000,
@@ -97,7 +97,7 @@ def test_execute_trade_rest_path(monkeypatch):
     order = cex_executor.execute_trade(
         ex,
         None,
-        "BTC/USDT",
+        "XBT/USDT",
         "buy",
         1.0,
         TelegramNotifier("t", "c"),
@@ -135,7 +135,7 @@ def test_execute_trade_uses_limit(monkeypatch):
     order = cex_executor.execute_trade(
         ex,
         None,
-        "BTC/USDT",
+        "XBT/USDT",
         "buy",
         1.0,
         TelegramNotifier("t", "c"),
@@ -159,7 +159,7 @@ def test_execute_trade_ws_path(monkeypatch):
     order = cex_executor.execute_trade(
         object(),
         ws,
-        "BTC/USDT",
+        "XBT/USDT",
         "buy",
         1.0,
         TelegramNotifier("t", "c"),
@@ -170,7 +170,7 @@ def test_execute_trade_ws_path(monkeypatch):
     assert order == {"ws": True}
     assert ws.called
     assert ws.msg["method"] == "add_order"
-    assert ws.msg["params"]["symbol"] == "BTC/USDT"
+    assert ws.msg["params"]["symbol"] == "XBT/USDT"
     assert ws.msg["params"]["side"] == "buy"
     assert ws.msg["params"]["order_qty"] == 1.0
 
@@ -184,7 +184,7 @@ def test_execute_trade_ws_missing(monkeypatch):
         cex_executor.execute_trade(
             object(),
             None,
-            "BTC/USDT",
+            "XBT/USDT",
             "buy",
             1.0,
             TelegramNotifier("t", "c"),
@@ -258,7 +258,7 @@ def test_execute_trade_skips_on_slippage(monkeypatch):
     order = cex_executor.execute_trade(
         SlippageExchange(),
         None,
-        "BTC/USDT",
+        "XBT/USDT",
         "buy",
         1.0,
         TelegramNotifier("t", "c"),
@@ -303,7 +303,7 @@ def test_execute_trade_dry_run_logs_price(tmp_path, monkeypatch):
 
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
 
-    cex_executor.execute_trade(DummyEx(), None, "BTC/USDT", "buy", 1.0, TelegramNotifier("t", "c"), dry_run=True)
+    cex_executor.execute_trade(DummyEx(), None, "XBT/USDT", "buy", 1.0, TelegramNotifier("t", "c"), dry_run=True)
     monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     notifier = DummyNotifier()
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
@@ -311,7 +311,7 @@ def test_execute_trade_dry_run_logs_price(tmp_path, monkeypatch):
     cex_executor.execute_trade(
         DummyEx(),
         None,
-        "BTC/USDT",
+        "XBT/USDT",
         "buy",
         1.0,
         notifier=notifier,
@@ -337,7 +337,7 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
 
     asyncio.run(
         cex_executor.execute_trade_async(
-            DummyEx(), None, "BTC/USDT", "buy", 1.0, TelegramNotifier("t", "c"), dry_run=True
+            DummyEx(), None, "XBT/USDT", "buy", 1.0, TelegramNotifier("t", "c"), dry_run=True
         )
     )
     monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
@@ -346,7 +346,7 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
 
     asyncio.run(
         cex_executor.execute_trade_async(
-            DummyEx(), None, "BTC/USDT", "buy", 1.0, notifier=notifier, dry_run=True
+            DummyEx(), None, "XBT/USDT", "buy", 1.0, notifier=notifier, dry_run=True
         )
     )
 
@@ -368,7 +368,7 @@ def test_execute_trade_no_message_when_disabled(monkeypatch):
 
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     cex_executor.execute_trade(
-        DummyExchange(), None, "BTC/USDT", "buy", 1.0,
+        DummyExchange(), None, "XBT/USDT", "buy", 1.0,
         notifier=TelegramNotifier(False, "t", "c"), dry_run=True
     )
 

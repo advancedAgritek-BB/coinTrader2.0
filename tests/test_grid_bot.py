@@ -114,7 +114,7 @@ def test_breakout_trigger_long(monkeypatch):
 
 def test_cooldown_blocks_signal(monkeypatch):
     df = _df_with_price(89.0)
-    cfg = GridConfig(symbol="BTC/USDT")
+    cfg = GridConfig(symbol="XBT/USDT")
     grid_state.clear()
     monkeypatch.setattr(grid_bot.grid_state, "in_cooldown", lambda s, b: True)
     score, direction = grid_bot.generate_signal(df, config=cfg)
@@ -130,7 +130,7 @@ def test_volume_filter_blocks_short_signal():
 
 def test_respects_active_leg_limit(monkeypatch):
     df = _df_with_price(89.0)
-    cfg = GridConfig(symbol="BTC/USDT")
+    cfg = GridConfig(symbol="XBT/USDT")
     grid_state.clear()
     monkeypatch.setattr(grid_bot.grid_state, "active_leg_count", lambda s: 5)
     score, direction = grid_bot.generate_signal(df, config=cfg)
