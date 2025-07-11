@@ -260,7 +260,7 @@ async def filter_symbols(
     min_age = cfg.get("min_symbol_age_days", 0)
     min_score = float(cfg.get("min_symbol_score", 0.0))
 
-    cache_map = load_liquid_map() or {}
+    cache_map = load_liquid_map()
     cache_changed = False
 
     telemetry.inc("scan.symbols_considered", len(list(symbols)))
@@ -291,7 +291,22 @@ async def filter_symbols(
                 logger.warning("load_markets failed: %s", exc)
         for k, v in exchange.markets_by_id.items():
             if isinstance(v, dict):
-                id_map[k] = v.get("symbol", k)
+                symbol = v.get("symbol", k)
+                id_map[k] = symbol
+                alt = (
+                    v.get("altname")
+                    or v.get("wsname")
+                    or v.get("info", {}).get("altname")
+                    or v.get("info", {}).get("wsname")
+                )
+                if alt:
+                    alt_id = alt.replace("/", "").upper()
+                    id_map[alt] = symbol
+                    id_map[alt_id] = symbol
+                    if len(alt_id) in (6, 7):
+                        id_map.setdefault(f"{alt_id[:-3]}/{alt_id[-3:]}", symbol)
+                    elif len(alt_id) == 8 and alt_id[0] in "XZ" and alt_id[4] in "XZ":
+                        id_map.setdefault(f"{alt_id[1:4]}/{alt_id[5:]}", symbol)
             elif isinstance(v, list) and v and isinstance(v[0], dict):
                 id_map[k] = v[0].get("symbol", k)
             else:
@@ -336,12 +351,12 @@ async def filter_symbols(
             change_pct,
             spread_pct,
         )
-        if cache_map and symbol not in cache_map and vol_usd < min_volume * 2:
+        if cache_map is not None and symbol not in cache_map and vol_usd < min_volume * 2:
             skipped += 1
             continue
         if vol_usd >= min_volume and spread_pct <= max_spread:
             metrics.append((symbol, vol_usd, change_pct, spread_pct))
-            if symbol not in cache_map:
+            if cache_map is not None and symbol not in cache_map:
                 cache_map[symbol] = time.time()
                 cache_changed = True
         volumes.append(vol_usd)
@@ -424,7 +439,7 @@ async def filter_symbols(
             skipped += 1
 
     telemetry.inc("scan.symbols_skipped", skipped)
-    if cache_changed:
+    if cache_changed and cache_map is not None:
         try:
             Path(PAIR_FILE).parent.mkdir(parents=True, exist_ok=True)
             with open(PAIR_FILE, "w") as f:

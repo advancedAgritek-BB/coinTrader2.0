@@ -134,6 +134,33 @@ def test_filter_symbols_fetch_tickers_normalized(monkeypatch):
     assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 
 
+class AltnameMappingExchange:
+    def __init__(self):
+        self.has = {"fetchTickers": True}
+        self.markets_by_id = {
+            "XXBTZUSD": {"symbol": "XBT/USDT", "altname": "XBTUSDT"}
+        }
+
+    async def fetch_tickers(self, symbols):
+        assert symbols == ["XBT/USDT"]
+        data = (await fake_fetch(None))["result"]
+        return {"XBT/USDT": data["XXBTZUSD"]}
+
+
+def test_altname_mapping(monkeypatch):
+    async def raise_if_called(_):
+        raise AssertionError("_fetch_ticker_async should not be called")
+
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", raise_if_called
+    )
+
+    ex = AltnameMappingExchange()
+    symbols = asyncio.run(filter_symbols(ex, ["XBT/USDT"], CONFIG))
+
+    assert symbols == [("XBT/USDT", 0.6)]
+
+
 class WatchTickersExchange(DummyExchange):
     def __init__(self):
         self.has = {"watchTickers": True}
