@@ -1,5 +1,6 @@
 import os
 import asyncio
+import contextlib
 import json
 import time
 from pathlib import Path
@@ -1012,18 +1013,11 @@ async def _main_impl() -> TelegramNotifier:
         WS_PING_TASKS.clear()
         if hasattr(exchange, "close"):
             if asyncio.iscoroutinefunction(getattr(exchange, "close")):
-                try:
+                with contextlib.suppress(Exception):
                     await exchange.close()
-                except AttributeError as exc:
-                    if "_abort" in str(exc):
-                        logger.warning(
-                            "Exchange close failed due to missing _abort attribute: %s",
-                            exc,
-                        )
-                    else:
-                        raise
             else:
-                await asyncio.to_thread(exchange.close)
+                with contextlib.suppress(Exception):
+                    await asyncio.to_thread(exchange.close)
 
     return notifier
 
