@@ -629,6 +629,8 @@ symbol_filter:
   correlation_window: 30        # days of history for correlation
   max_correlation: 0.85         # drop pairs above this threshold
   correlation_max_pairs: 100    # limit pairwise correlation checks
+  ticker_retry_attempts: 3      # number of fetch_tickers retries
+  log_ticker_exceptions: false  # include stack traces when true
 ```
 Pairs passing these checks are then scored with `analyze_symbol` which
 computes a strategy confidence score. Only the highest scoring symbols
