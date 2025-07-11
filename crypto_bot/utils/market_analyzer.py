@@ -26,6 +26,7 @@ from crypto_bot.utils.rank_logger import log_second_place
 from crypto_bot.volatility_filter import calc_atr
 from ta.volatility import BollingerBands
 from crypto_bot.utils import zscore
+from crypto_bot.utils.telemetry import telemetry
 
 
 analysis_logger = setup_logger("strategy_rank", LOG_DIR / "strategy_rank.log")
@@ -91,9 +92,11 @@ async def analyze_symbol(
     higher_tf = config.get("higher_timeframe", "1d")
     df = df_map.get(base_tf)
     if df is None:
+        telemetry.inc("analysis.skipped_no_df")
         return {"symbol": symbol, "skip": "no_ohlcv"}
 
     if df.empty:
+        telemetry.inc("analysis.skipped_no_df")
         analysis_logger.info("Skipping %s: no data for %s", symbol, base_tf)
         return {
             "symbol": symbol,
