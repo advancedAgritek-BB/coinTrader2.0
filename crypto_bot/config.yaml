@@ -74,7 +74,7 @@ loop_interval_minutes: 2
 balance_poll_mod: 1
 max_age_days: 180
 max_change_pct: 10
-max_concurrent_ohlcv: 20
+max_concurrent_ohlcv: 8
 max_parallel: 4  # number of symbols processed concurrently
 max_latency_ms: 1000
 max_ohlcv_failures: 3
