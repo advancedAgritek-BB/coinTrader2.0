@@ -120,10 +120,10 @@ def _parse_metrics(symbol: str, ticker: dict) -> tuple[float, float, float]:
         # Raw Kraken format
         last = float(ticker["c"][0])
         open_price = float(ticker.get("o", last))
-        volume = float(ticker["v"][1])
-        vwap = float(ticker["p"][1])
-        ask = float(ticker["a"][0])
-        bid = float(ticker["b"][0])
+        ask = float(ticker.get("a", [0])[0])
+        bid = float(ticker.get("b", [0])[0])
+        vwap = float(ticker.get("p", [last, last])[1])
+        volume = float(ticker.get("v", [0, 0])[1])
         volume_usd = volume * vwap
     else:
         # CCXT normalized ticker
@@ -134,21 +134,17 @@ def _parse_metrics(symbol: str, ticker: dict) -> tuple[float, float, float]:
         vwap = float(ticker.get("vwap", last))
         if ticker.get("quoteVolume") is not None:
             volume_usd = float(ticker.get("quoteVolume"))
-        elif ticker.get("baseVolume") is not None:
-            volume_usd = float(ticker.get("baseVolume")) * vwap
         else:
-            volume_usd = 0.0
+            base_vol = float(ticker.get("baseVolume", 0.0))
+            volume_usd = base_vol * vwap
 
     change_pct = ((last - open_price) / open_price) * 100 if open_price else 0.0
 
-    try:
-        volume_usd_cache, spread_pct = liq_cache[symbol]
-    except KeyError:
-        spread_pct = abs(ask - bid) / last * 100 if last else 0.0
-        liq_cache[symbol] = (volume_usd, spread_pct)
-        volume_usd_cache = volume_usd
+    spread_pct = abs(ask - bid) / last * 100 if last else 0.0
+    liq_cache[symbol] = (volume_usd, spread_pct)
 
-    return volume_usd_cache, change_pct, spread_pct
+    cached_vol, cached_spread = liq_cache[symbol]
+    return cached_vol, change_pct, cached_spread
 
 
 async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
@@ -176,7 +172,7 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                 ticker_cache[sym] = ticker.get("info", ticker)
                 ticker_ts[sym] = now
         result = {s: ticker_cache[s] for s in symbols if s in ticker_cache}
-        return result
+        return {s: t.get("info", t) for s, t in result.items()}
 
     if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
         try:
