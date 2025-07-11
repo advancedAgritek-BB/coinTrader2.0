@@ -291,7 +291,7 @@ trend:
 twap_enabled: true
 twap_interval_seconds: 10
 twap_slices: 4
-use_websocket: true
+use_websocket: false          # (<- only for OHLCV; you can still use ws for tickers)
 hidden_limit: false
 volatility_filter:
   max_funding_rate: 0.05

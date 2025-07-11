@@ -338,6 +338,9 @@ async def fetch_ohlcv_async(
         logger.warning("Timeframe %s not supported on %s", timeframe, ex_id)
         return []
 
+    if timeframe in ("1h", "4h", "1d"):
+        use_websocket = False
+
     try:
         if hasattr(exchange, "symbols"):
             if not exchange.symbols and hasattr(exchange, "load_markets"):
