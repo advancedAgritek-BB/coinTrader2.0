@@ -208,7 +208,7 @@ def _classify_all(
         return labels
 
     if df is None:
-        raise ValueError("df must be provided when df_map is None")
+        return "unknown", {"unknown": 0.0}, {}
 
     regime = _classify_core(df, cfg, higher_df)
     patterns = detect_patterns(df)
