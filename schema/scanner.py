@@ -13,7 +13,10 @@ class ScannerConfig(BaseModel):
     min_symbol_age_days: int = 0
     symbol_batch_size: int = 10
     scan_lookback_limit: int = 50
-    cycle_lookback_limit: int | None = None
+    cycle_lookback_limit: int | None = Field(
+        default=None,
+        description="Override per-cycle candle load (default min(150, timeframe_minutes * 2))",
+    )
     max_spread_pct: float = 1.0
 
     class Config:
