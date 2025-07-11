@@ -208,6 +208,7 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
 
     if try_http:
         if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
+            data = {}
             for attempt in range(3):
                 try:
                     fetched = await exchange.fetch_tickers(list(symbols))
@@ -242,6 +243,7 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                     telemetry.inc("scan.api_errors")
                     data = {}
                     break
+
             if not data:
                 try:
                     pairs = [s.replace("/", "") for s in symbols]
@@ -251,6 +253,10 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                         for sym, (_, ticker) in zip(symbols, raw.items()):
                             data[sym] = ticker
                     else:
+                    if len(raw) == len(symbols):
+                        data = {sym: ticker for sym, (_, ticker) in zip(symbols, raw.items())}
+                    else:
+                        data = {}
                         extra = iter(raw.values())
                         for sym, pair in zip(symbols, pairs):
                             ticker = raw.get(pair) or raw.get(pair.upper())

@@ -869,7 +869,10 @@ def test_refresh_tickers_single_fallback(monkeypatch):
             mapping = {"ETH/USD": "XETHZUSD", "BTC/USD": "XXBTZUSD"}
             return data[mapping[symbol]]
 
-    async def raise_fetch_async(_pairs):
+    calls: list[list[str]] = []
+
+    async def raise_fetch_async(pairs):
+        calls.append(list(pairs))
         raise RuntimeError("boom")
 
     monkeypatch.setattr(sp, "_fetch_ticker_async", raise_fetch_async)
@@ -878,5 +881,33 @@ def test_refresh_tickers_single_fallback(monkeypatch):
     result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"]))
 
     assert ex.bulk_calls == 1
+    assert calls == [["ETHUSD", "BTCUSD"]]
     assert ex.single_calls == ["ETH/USD", "BTC/USD"]
+    assert set(result) == {"ETH/USD", "BTC/USD"}
+
+
+def test_refresh_tickers_public_api_fallback(monkeypatch):
+    class FailingExchange(DummyExchange):
+        def __init__(self):
+            self.has = {"fetchTickers": True}
+            self.bulk_calls = 0
+            self.markets = {"ETH/USD": {}, "BTC/USD": {}}
+
+        async def fetch_tickers(self, symbols):
+            self.bulk_calls += 1
+            raise RuntimeError("boom")
+
+    calls: list[list[str]] = []
+
+    async def fake_public(pairs):
+        calls.append(list(pairs))
+        return await fake_fetch(None)
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", fake_public)
+
+    ex = FailingExchange()
+    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"]))
+
+    assert ex.bulk_calls == 1
+    assert calls == [["ETHUSD", "BTCUSD"]]
     assert set(result) == {"ETH/USD", "BTC/USD"}
