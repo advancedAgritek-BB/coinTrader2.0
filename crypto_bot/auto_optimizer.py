@@ -37,7 +37,7 @@ def optimize_strategies() -> Dict[str, Dict[str, float]]:
         tp_range: Iterable[float] = ranges.get("take_profit", [])
 
         config = BacktestConfig(
-            symbol=bot_cfg.get("symbol", "BTC/USDT"),
+            symbol=bot_cfg.get("symbol", "XBT/USDT"),
             timeframe=bot_cfg.get("timeframe", "1h"),
             since=0,
             limit=1000,

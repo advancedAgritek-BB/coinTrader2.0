@@ -16,14 +16,14 @@ def test_live_signals_endpoint(tmp_path, monkeypatch):
 def test_positions_endpoint(tmp_path, monkeypatch):
     log = tmp_path / "pos.log"
     log.write_text(
-        "2023-01-01 00:00:00 - INFO - Active BTC/USDT buy 1 entry 100 current 110 pnl $10 (positive) balance $1100\n"
+        "2023-01-01 00:00:00 - INFO - Active XBT/USDT buy 1 entry 100 current 110 pnl $10 (positive) balance $1100\n"
     )
     monkeypatch.setattr(api, "POSITIONS_FILE", log)
     client = TestClient(api.app)
     resp = client.get("/positions")
     assert resp.status_code == 200
     data = resp.json()
-    assert data[0]["symbol"] == "BTC/USDT"
+    assert data[0]["symbol"] == "XBT/USDT"
     assert data[0]["pnl"] == 10
 
 

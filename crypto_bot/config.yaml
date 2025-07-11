@@ -236,7 +236,7 @@ strategy_router:
     volatile:
     - sniper_bot
     - sniper_solana
-symbol: BTC/USDT
+symbol: XBT/USDT
 symbol_batch_size: 10
 scan_lookback_limit: 50
 cycle_lookback_limit: null

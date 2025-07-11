@@ -92,7 +92,7 @@ def test_respects_cooldown(monkeypatch):
     prices = list(range(100, 80, -1)) + [82]
     volumes = [100] * 20 + [300]
     df = _df(prices, volumes)
-    cfg = BounceScalperConfig(symbol="BTC/USDT")
+    cfg = BounceScalperConfig(symbol="XBT/USDT")
     score, direction = bounce_scalper.generate_signal(df, cfg)
     assert direction == "long"
     assert score > 0
@@ -112,7 +112,7 @@ def test_mark_cooldown_called(monkeypatch):
     prices = list(range(100, 80, -1)) + [82]
     volumes = [100] * 20 + [300]
     df = _df(prices, volumes)
-    cfg = BounceScalperConfig(symbol="BTC/USDT")
+    cfg = BounceScalperConfig(symbol="XBT/USDT")
     score, direction = bounce_scalper.generate_signal(df, cfg)
     assert direction == "short"
     assert score > 0
@@ -135,7 +135,7 @@ def test_order_book_imbalance_blocks(monkeypatch):
     prices = list(range(100, 80, -1)) + [82]
     volumes = [100] * 20 + [300]
     df = _df(prices, volumes)
-    cfg = BounceScalperConfig(symbol="BTC/USDT")
+    cfg = BounceScalperConfig(symbol="XBT/USDT")
 
     snap = {
         "type": "snapshot",
@@ -153,7 +153,7 @@ def test_order_book_imbalance_blocks_short(monkeypatch):
     prices = list(range(100, 80, -1)) + [82]
     volumes = [100] * 20 + [300]
     df = _df(prices, volumes)
-    cfg = BounceScalperConfig(symbol="BTC/USDT")
+    cfg = BounceScalperConfig(symbol="XBT/USDT")
 
     snap = {
         "type": "snapshot",
@@ -174,7 +174,7 @@ def test_trend_filter_blocks_signals(monkeypatch):
 
     # Force EMA above the last close so long signal should be blocked
     monkeypatch.setattr(bounce_scalper.ta.trend, "ema_indicator", lambda s, window=50: pd.Series([90]*len(s)))
-    score, direction = bounce_scalper.generate_signal(df, BounceScalperConfig(symbol="BTC/USDT"))
+    score, direction = bounce_scalper.generate_signal(df, BounceScalperConfig(symbol="XBT/USDT"))
     assert direction == "none"
     assert score == 0.0
 
@@ -198,7 +198,7 @@ def test_dynamic_rsi_thresholds(monkeypatch):
         lambda s, window=14: pd.Series([30.0]*len(s)),
     )
 
-    score, direction = bounce_scalper.generate_signal(df, BounceScalperConfig(symbol="BTC/USDT"))
+    score, direction = bounce_scalper.generate_signal(df, BounceScalperConfig(symbol="XBT/USDT"))
     # Threshold should drop below 30, preventing a signal
     assert direction == "none"
     assert score == 0.0
@@ -213,7 +213,7 @@ def test_volume_zscore_spike(monkeypatch):
     # Provide realistic EMA below last close
     monkeypatch.setattr(bounce_scalper.ta.trend, "ema_indicator", lambda s, window=50: pd.Series([80]*len(s)))
 
-    score, direction = bounce_scalper.generate_signal(df, BounceScalperConfig(symbol="BTC/USDT"))
+    score, direction = bounce_scalper.generate_signal(df, BounceScalperConfig(symbol="XBT/USDT"))
     assert direction == "long"
     assert score > 0
 
@@ -226,7 +226,7 @@ def test_cooldown_blocks_successive_signals(monkeypatch):
     df = _df(prices, volumes)
 
     monkeypatch.setattr(bounce_scalper.ta.trend, "ema_indicator", lambda s, window=50: pd.Series([80]*len(s)))
-    cfg = BounceScalperConfig(symbol="BTC/USDT")
+    cfg = BounceScalperConfig(symbol="XBT/USDT")
     first = bounce_scalper.generate_signal(df, cfg)
     second = bounce_scalper.generate_signal(df, cfg)
 

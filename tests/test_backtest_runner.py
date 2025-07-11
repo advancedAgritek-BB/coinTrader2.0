@@ -32,13 +32,13 @@ def test_backtest_tracks_switches(monkeypatch):
 
     monkeypatch.setattr(bt, "classify_regime", fake_classify)
     monkeypatch.setattr(bt, "strategy_for", lambda r: _constant_strategy)
-    fake_data = FakeExchange().fetch_ohlcv("BTC/USDT", "1h", 0, 120)
+    fake_data = FakeExchange().fetch_ohlcv("XBT/USDT", "1h", 0, 120)
     monkeypatch.setattr(BacktestRunner, "_fetch_data", lambda self: fake_data)
     monkeypatch.setattr(backtest_runner, "classify_regime", fake_classify)
     monkeypatch.setattr(backtest_runner, "strategy_for", lambda r: _constant_strategy)
 
     cfg = BacktestConfig(
-        symbol="BTC/USDT",
+        symbol="XBT/USDT",
         timeframe="1h",
         since=0,
         limit=120,
@@ -61,11 +61,11 @@ def test_backtest_misclassification(monkeypatch):
     monkeypatch.setattr(bt, "strategy_for", lambda r: _constant_strategy)
     monkeypatch.setattr(backtest_runner, "classify_regime", lambda df: ("trending", {}))
     monkeypatch.setattr(backtest_runner, "strategy_for", lambda r: _constant_strategy)
-    fake_data = FakeExchange().fetch_ohlcv("BTC/USDT", "1h", 0, 80)
+    fake_data = FakeExchange().fetch_ohlcv("XBT/USDT", "1h", 0, 80)
     monkeypatch.setattr(BacktestRunner, "_fetch_data", lambda self: fake_data)
 
     cfg = BacktestConfig(
-        symbol="BTC/USDT",
+        symbol="XBT/USDT",
         timeframe="1h",
         since=0,
         limit=80,
@@ -86,11 +86,11 @@ def test_walk_forward_optimize(monkeypatch):
     monkeypatch.setattr(bt, "strategy_for", lambda r: _constant_strategy)
     monkeypatch.setattr(backtest_runner, "classify_regime", lambda df: ("trending", {}))
     monkeypatch.setattr(backtest_runner, "strategy_for", lambda r: _constant_strategy)
-    fake_data = FakeExchange().fetch_ohlcv("BTC/USDT", "1h", 0, 60)
+    fake_data = FakeExchange().fetch_ohlcv("XBT/USDT", "1h", 0, 60)
     monkeypatch.setattr(BacktestRunner, "_fetch_data", lambda self: fake_data)
 
     cfg = BacktestConfig(
-        symbol="BTC/USDT",
+        symbol="XBT/USDT",
         timeframe="1h",
         since=0,
         limit=60,
@@ -107,7 +107,7 @@ def test_walk_forward_optimize(monkeypatch):
 def test_skip_sniper_solana(caplog):
     caplog.set_level(logging.INFO)
     df = bt.backtest(
-        symbol="BTC/USDT",
+        symbol="XBT/USDT",
         timeframe="1h",
         since=0,
         limit=10,

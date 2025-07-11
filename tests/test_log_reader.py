@@ -5,8 +5,8 @@ from crypto_bot import log_reader
 def test_trade_summary(tmp_path):
     path = tmp_path / "trades.csv"
     data = [
-        {"symbol": "BTC/USDT", "side": "buy", "amount": 1, "price": 100},
-        {"symbol": "BTC/USDT", "side": "sell", "amount": 1, "price": 110},
+        {"symbol": "XBT/USDT", "side": "buy", "amount": 1, "price": 100},
+        {"symbol": "XBT/USDT", "side": "sell", "amount": 1, "price": 110},
         {"symbol": "ETH/USDT", "side": "buy", "amount": 2, "price": 200},
     ]
     pd.DataFrame(data).to_csv(path, index=False, header=False)
@@ -21,8 +21,8 @@ def test_trade_summary(tmp_path):
 def test_trade_summary_handles_bad_rows(tmp_path):
     path = tmp_path / "trades.csv"
     data = [
-        {"symbol": "BTC/USDT", "side": "buy", "amount": "x", "price": 100},
-        {"symbol": "BTC/USDT", "side": "sell", "amount": 1, "price": "bad"},
+        {"symbol": "XBT/USDT", "side": "buy", "amount": "x", "price": 100},
+        {"symbol": "XBT/USDT", "side": "sell", "amount": 1, "price": "bad"},
     ]
     pd.DataFrame(data).to_csv(path, index=False, header=False)
 
@@ -34,9 +34,9 @@ def test_trade_summary_handles_bad_rows(tmp_path):
 def test_trade_summary_short_positions(tmp_path):
     path = tmp_path / "trades.csv"
     data = [
-        {"symbol": "BTC/USDT", "side": "sell", "amount": 1, "price": 100},
-        {"symbol": "BTC/USDT", "side": "buy", "amount": 0.5, "price": 90},
-        {"symbol": "BTC/USDT", "side": "buy", "amount": 0.5, "price": 110},
+        {"symbol": "XBT/USDT", "side": "sell", "amount": 1, "price": 100},
+        {"symbol": "XBT/USDT", "side": "buy", "amount": 0.5, "price": 90},
+        {"symbol": "XBT/USDT", "side": "buy", "amount": 0.5, "price": 110},
     ]
     pd.DataFrame(data).to_csv(path, index=False, header=False)
 
@@ -50,9 +50,9 @@ def test_trade_summary_short_positions(tmp_path):
 def test_trade_summary_closes_and_opens_short(tmp_path):
     path = tmp_path / "trades.csv"
     data = [
-        {"symbol": "BTC/USDT", "side": "buy", "amount": 1, "price": 100},
-        {"symbol": "BTC/USDT", "side": "sell", "amount": 2, "price": 110},
-        {"symbol": "BTC/USDT", "side": "buy", "amount": 1, "price": 100},
+        {"symbol": "XBT/USDT", "side": "buy", "amount": 1, "price": 100},
+        {"symbol": "XBT/USDT", "side": "sell", "amount": 2, "price": 110},
+        {"symbol": "XBT/USDT", "side": "buy", "amount": 1, "price": 100},
     ]
     pd.DataFrame(data).to_csv(path, index=False, header=False)
 

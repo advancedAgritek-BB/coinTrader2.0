@@ -705,8 +705,8 @@ Example short trade:
 
 ```csv
 symbol,side,amount,price,timestamp
-BTC/USDT,sell,0.1,25000,2024-05-01T00:00:00Z
-BTC/USDT,buy,0.1,24000,2024-05-02T00:00:00Z
+XBT/USDT,sell,0.1,25000,2024-05-01T00:00:00Z
+XBT/USDT,buy,0.1,24000,2024-05-02T00:00:00Z
 ```
 
 This opens a short at 25,000 and covers at 24,000 for a profit of
@@ -722,7 +722,7 @@ strategy. Example snippet:
   "trending": {
     "trend_bot": [
       {
-        "symbol": "BTC/USDT",
+        "symbol": "XBT/USDT",
         "pnl": 1.2,
         "entry_time": "2024-01-01T00:00:00Z",
         "exit_time": "2024-01-01T02:00:00Z"
@@ -751,7 +751,7 @@ Other helpers create logs like `execution.log` in the same directory when enable
 
 ```text
 2024-02-12 15:04:01 - INFO - Starting bot
-2024-02-12 15:04:02 - INFO - Strategy router selected grid_bot for BTC/USDT
+2024-02-12 15:04:02 - INFO - Strategy router selected grid_bot for XBT/USDT
 2024-02-12 15:04:10 - INFO - Placing buy order amount 0.1 price 22000
 2024-02-12 15:04:15 - INFO - Decision: take profit triggered at 22400
 ```
@@ -831,7 +831,7 @@ maximum drawdown and Sharpe ratio for each combination.
 ```python
 from crypto_bot.backtest.backtest_runner import BacktestRunner
 
-runner = BacktestRunner('BTC/USDT', '1h', since=0)
+runner = BacktestRunner('XBT/USDT', '1h', since=0)
 results = runner.run_grid(
     stop_loss_range=[0.01, 0.02],
     take_profit_range=[0.02, 0.04],

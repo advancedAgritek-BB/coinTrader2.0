@@ -23,8 +23,8 @@ def test_monitor_pnl_refresh(monkeypatch, tmp_path):
     async def fake_stats(*_a, **_kw):
         call_counts["stats"] += 1
         if call_counts["stats"] == 1:
-            return ["BTC/USDT -- 100.00 -- +0.00"]
-        return ["BTC/USDT -- 100.00 -- +10.00"]
+            return ["XBT/USDT -- 100.00 -- +0.00"]
+        return ["XBT/USDT -- 100.00 -- +10.00"]
 
     async def fake_sleep(_):
         call_counts["sleep"] += 1
@@ -43,6 +43,6 @@ def test_monitor_pnl_refresh(monkeypatch, tmp_path):
     first_lines = outputs[0].splitlines()
     second_lines = outputs[1].splitlines()
 
-    assert first_lines[1:] == ["BTC/USDT -- 100.00 -- +0.00"]
-    assert second_lines[1:] == ["BTC/USDT -- 100.00 -- +10.00"]
+    assert first_lines[1:] == ["XBT/USDT -- 100.00 -- +0.00"]
+    assert second_lines[1:] == ["XBT/USDT -- 100.00 -- +10.00"]
     assert first_lines != second_lines
