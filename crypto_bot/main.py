@@ -584,7 +584,7 @@ async def _main_impl() -> TelegramNotifier:
     cooldown_configure(config.get("min_cooldown", 0))
     status_updates = config.get("telegram", {}).get("status_updates", True)
     market_loader_configure(
-        config.get("ohlcv_timeout", 60),
+        config.get("ohlcv_timeout", 120),
         config.get("max_ohlcv_failures", 3),
         config.get("max_ws_limit", 50),
         status_updates,

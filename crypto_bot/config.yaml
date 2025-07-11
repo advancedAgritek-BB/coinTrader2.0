@@ -73,7 +73,7 @@ loop_interval_minutes: 2
 balance_poll_mod: 1
 max_age_days: 180
 max_change_pct: 10
-max_concurrent_ohlcv: 50
+max_concurrent_ohlcv: 20
 max_parallel: 4  # number of symbols processed concurrently
 max_latency_ms: 1000
 max_ohlcv_failures: 3
@@ -138,7 +138,7 @@ mode_degrade_window: 20
 mode_threshold: 0.4
 ohlcv_snapshot_frequency_minutes: 1440
 ohlcv_snapshot_limit: 500
-ohlcv_timeout: 60
+ohlcv_timeout: 120
 optimization:
   enabled: true
   interval_days: 5
