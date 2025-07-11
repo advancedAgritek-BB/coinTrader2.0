@@ -580,7 +580,8 @@ def route(
             symbol = str(cfg.raw.get("symbol", ""))
         elif isinstance(cfg, Mapping):
             symbol = str(cfg.get("symbol", ""))
-        context = _bandit_context(df or pd.DataFrame(), regime)
+        context_df = df if df is not None else pd.DataFrame()
+        context = _bandit_context(context_df, regime)
         choice = bandit.select(context, arms, symbol)
         fn = get_strategy_by_name(choice)
         if fn:
@@ -605,5 +606,6 @@ def route(
         logger.info("Routing to DEX scalper (onchain)")
         return _wrap(dex_scalper.generate_signal)
 
-    strategy_fn = Selector(cfg).select(df or pd.DataFrame(), regime, mode, notifier)
+    select_df = df if df is not None else pd.DataFrame()
+    strategy_fn = Selector(cfg).select(select_df, regime, mode, notifier)
     return _wrap(strategy_fn)
