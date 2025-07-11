@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 import logging
 import time
+import ccxt
 
 from crypto_bot.utils.market_loader import (
     load_kraken_symbols,
@@ -1009,6 +1010,68 @@ def test_fetch_ohlcv_async_skips_unsupported_timeframe():
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", timeframe="1m"))
     assert data == []
     assert ex.called is False
+
+
+def test_fetch_ohlcv_retry_520(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    class RetryExchange:
+        has = {"fetchOHLCV": True}
+
+        def __init__(self):
+            self.calls = 0
+
+        async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+            self.calls += 1
+            if self.calls == 1:
+                err = ccxt.ExchangeError("boom")
+                err.http_status = 520
+                raise err
+            return [[1] * 6]
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(secs):
+        sleeps.append(secs)
+
+    ex = RetryExchange()
+    monkeypatch.setattr(market_loader.asyncio, "sleep", fake_sleep)
+    data = asyncio.run(market_loader.fetch_ohlcv_async(ex, "BTC/USD"))
+
+    assert ex.calls == 2
+    assert sleeps == [1]
+    assert data == [[1] * 6]
+
+
+def test_fetch_ohlcv_retry_520_network(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    class RetryExchange:
+        has = {"fetchOHLCV": True}
+
+        def __init__(self):
+            self.calls = 0
+
+        async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+            self.calls += 1
+            if self.calls == 1:
+                err = ccxt.NetworkError("boom")
+                err.http_status = 520
+                raise err
+            return [[1] * 6]
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(secs):
+        sleeps.append(secs)
+
+    ex = RetryExchange()
+    monkeypatch.setattr(market_loader.asyncio, "sleep", fake_sleep)
+    data = asyncio.run(market_loader.fetch_ohlcv_async(ex, "BTC/USD"))
+
+    assert ex.calls == 2
+    assert sleeps == [1]
+    assert data == [[1] * 6]
 
 
 class CancelWSExchange:
