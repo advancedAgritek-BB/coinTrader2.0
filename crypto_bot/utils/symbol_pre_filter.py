@@ -37,7 +37,8 @@ logger = setup_logger(__name__, LOG_DIR / "symbol_filter.log")
 
 API_URL = "https://api.kraken.com/0/public"
 DEFAULT_MIN_VOLUME_USD = 50000
-DEFAULT_VOLUME_PERCENTILE = 60
+DEFAULT_VOLUME_PERCENTILE = 30
+DEFAULT_CHANGE_PCT_PERCENTILE = 50
 
 # Mapping of exchange specific symbols to standardized forms
 _ALIASES = {"XBT": "BTC", "XBTUSDT": "BTC/USDT"}
@@ -339,6 +340,8 @@ async def filter_symbols(
     min_volume = sf.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
     vol_pct = sf.get("volume_percentile", DEFAULT_VOLUME_PERCENTILE)
     max_spread = sf.get("max_spread_pct", 1.0)
+    pct = sf.get("change_pct_percentile", DEFAULT_CHANGE_PCT_PERCENTILE)
+    vol_mult = sf.get("uncached_volume_multiplier", 2)
     pct = sf.get("change_pct_percentile", 80)
     cache_map = load_liquid_map()
     vol_mult_default = 1 if cache_map is None else 2

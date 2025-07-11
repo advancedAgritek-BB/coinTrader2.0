@@ -241,13 +241,13 @@ symbol_batch_size: 10
 scan_lookback_limit: 50
 cycle_lookback_limit: null
 symbol_filter:
-  change_pct_percentile: 0
+  change_pct_percentile: 50
   max_correlation: 0.85
   correlation_max_pairs: 100
   max_spread_pct: 5
   min_volume_usd: 100
   uncached_volume_multiplier: 2
-  volume_percentile: 40
+  volume_percentile: 30
 symbol_refresh_minutes: 30
 symbol_score_weights:
   age: 0.05
