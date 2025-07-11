@@ -220,7 +220,7 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                     )
                     telemetry.inc("scan.api_errors")
                     return {}
-                except ccxt.ExchangeError as exc:  # pragma: no cover - network
+                except (ccxt.ExchangeError, ccxt.NetworkError) as exc:  # pragma: no cover - network
                     if getattr(exc, "http_status", None) in (520, 522) and attempt < 2:
                         await asyncio.sleep(2 ** attempt)
                         continue
