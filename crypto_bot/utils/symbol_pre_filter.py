@@ -151,8 +151,18 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
     """Return ticker data using WS if available with a small cache."""
 
     now = time.time()
-    if getattr(exchange, "markets", None):
-        missing = [s for s in symbols if s not in exchange.markets]
+    markets = getattr(exchange, "markets", None)
+    if markets is not None:
+        if not markets and hasattr(exchange, "load_markets"):
+            try:
+                if asyncio.iscoroutinefunction(exchange.load_markets):
+                    await exchange.load_markets()
+                else:
+                    await asyncio.to_thread(exchange.load_markets)
+                markets = getattr(exchange, "markets", markets)
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.warning("load_markets failed: %s", exc)
+        missing = [s for s in symbols if s not in markets]
         if missing:
             logger.warning(
                 "Symbols not in exchange.markets: %s",
