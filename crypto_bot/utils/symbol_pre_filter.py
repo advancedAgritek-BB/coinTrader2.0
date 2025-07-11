@@ -291,6 +291,7 @@ async def filter_symbols(
     vol_pct = sf.get("volume_percentile", DEFAULT_VOLUME_PERCENTILE)
     max_spread = sf.get("max_spread_pct", 1.0)
     pct = sf.get("change_pct_percentile", 80)
+    vol_mult = sf.get("uncached_volume_multiplier", 2)
     min_age = cfg.get("min_symbol_age_days", 0)
     min_score = float(cfg.get("min_symbol_score", 0.0))
 
@@ -385,7 +386,7 @@ async def filter_symbols(
             change_pct,
             spread_pct,
         )
-        if cache_map is not None and symbol not in cache_map and vol_usd < min_volume * 2:
+        if cache_map is not None and symbol not in cache_map and vol_usd < min_volume * vol_mult:
             skipped += 1
             continue
         if vol_usd >= min_volume and spread_pct <= max_spread:
