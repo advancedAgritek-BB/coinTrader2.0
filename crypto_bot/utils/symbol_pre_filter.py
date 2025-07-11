@@ -39,6 +39,20 @@ API_URL = "https://api.kraken.com/0/public"
 DEFAULT_MIN_VOLUME_USD = 50000
 DEFAULT_VOLUME_PERCENTILE = 60
 
+# Mapping of exchange specific symbols to standardized forms
+_ALIASES = {"XBT": "BTC", "XBTUSDT": "BTC/USDT"}
+
+
+def _norm_symbol(sym: str) -> str:
+    """Return ``sym`` normalized for consistent lookups."""
+
+    sym = sym.upper().replace("XBT", "BTC")
+    if sym in _ALIASES:
+        return _ALIASES[sym]
+    if "/" not in sym and sym.endswith("USDT"):
+        return sym[:-4] + "/USDT"
+    return sym
+
 # cache for ticker data when using watchTickers
 ticker_cache: dict[str, dict] = {}
 ticker_ts: dict[str, float] = {}
@@ -315,7 +329,9 @@ async def filter_symbols(
 
     # map of ids returned by Kraken to human readable symbols
     id_map: dict[str, str] = {}
-    request_map = {s.replace("/", "").upper(): s for s in symbols}
+    request_map = {
+        _norm_symbol(s.replace("/", "")): _norm_symbol(s) for s in symbols
+    }
 
     if hasattr(exchange, "markets_by_id"):
         if not exchange.markets_by_id and hasattr(exchange, "load_markets"):
@@ -325,7 +341,7 @@ async def filter_symbols(
                 logger.warning("load_markets failed: %s", exc)
         for k, v in exchange.markets_by_id.items():
             if isinstance(v, dict):
-                symbol = v.get("symbol", k)
+                symbol = _norm_symbol(v.get("symbol", k))
                 id_map[k] = symbol
                 alt = (
                     v.get("altname")
@@ -338,13 +354,17 @@ async def filter_symbols(
                     id_map[alt] = symbol
                     id_map[alt_id] = symbol
                     if len(alt_id) in (6, 7):
-                        id_map.setdefault(f"{alt_id[:-3]}/{alt_id[-3:]}", symbol)
+                        id_map.setdefault(
+                            _norm_symbol(f"{alt_id[:-3]}/{alt_id[-3:]}"), symbol
+                        )
                     elif len(alt_id) == 8 and alt_id[0] in "XZ" and alt_id[4] in "XZ":
-                        id_map.setdefault(f"{alt_id[1:4]}/{alt_id[5:]}", symbol)
+                        id_map.setdefault(
+                            _norm_symbol(f"{alt_id[1:4]}/{alt_id[5:]}"), symbol
+                        )
             elif isinstance(v, list) and v and isinstance(v[0], dict):
-                id_map[k] = v[0].get("symbol", k)
+                id_map[k] = _norm_symbol(v[0].get("symbol", k))
             else:
-                id_map[k] = v if isinstance(v, str) else k
+                id_map[k] = _norm_symbol(v if isinstance(v, str) else k)
 
     for req_id, sym in request_map.items():
         id_map.setdefault(req_id, sym)
@@ -361,12 +381,15 @@ async def filter_symbols(
     for pair_id, ticker in data.items():
         symbol = id_map.get(pair_id) or id_map.get(pair_id.upper())
         norm = pair_id.upper()
-        if not symbol and "/" in pair_id:
-            symbol = pair_id
         if not symbol:
             if norm.startswith("X"):
                 norm = norm[1:]
             norm = norm.replace("ZUSD", "USD").replace("ZUSDT", "USDT")
+            norm = _norm_symbol(norm)
+            symbol = id_map.get(norm)
+        if not symbol and "/" in pair_id:
+            symbol = _norm_symbol(pair_id)
+        if not symbol:
             symbol = request_map.get(norm)
         if not symbol:
             for req_id, sym in request_map.items():
