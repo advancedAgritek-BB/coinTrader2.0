@@ -76,6 +76,8 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
     else:
         raise ValueError(f"Unsupported exchange: {exchange_name}")
 
+    exchange.options["ws_scan"] = config.get("use_websocket", False)
+
     return exchange, ws_client
 
 
