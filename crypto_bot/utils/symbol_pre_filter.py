@@ -413,12 +413,9 @@ async def filter_symbols(
     skipped = 0
 
     cached_data: dict[str, tuple[float, float]] = {}
-    to_fetch: list[str] = []
     for sym in symbols:
         if sym in liq_cache:
             cached_data[sym] = liq_cache[sym]
-        else:
-            to_fetch.append(sym)
 
     try:
         data = await _refresh_tickers(exchange, symbols)
