@@ -39,7 +39,8 @@ def configure(
     status_updates: bool | None = None,
     ws_ohlcv_timeout: int | float | None = None,
     rest_ohlcv_timeout: int | float | None = None,
-
+    max_concurrent: int | None = None,
+) -> None:
     """Configure module-wide settings."""
     global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES, SEMA
     if ohlcv_timeout is not None:
