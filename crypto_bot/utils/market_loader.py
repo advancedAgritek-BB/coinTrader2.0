@@ -22,6 +22,8 @@ failed_symbols: Dict[str, Dict[str, Any]] = {}
 RETRY_DELAY = 300
 MAX_RETRY_DELAY = 3600
 OHLCV_TIMEOUT = 30
+WS_OHLCV_TIMEOUT = OHLCV_TIMEOUT
+REST_OHLCV_TIMEOUT = OHLCV_TIMEOUT
 MAX_OHLCV_FAILURES = 3
 MAX_WS_LIMIT = 50
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
@@ -35,18 +37,40 @@ def configure(
     max_failures: int | None = None,
     max_ws_limit: int | None = None,
     status_updates: bool | None = None,
-    max_concurrent: int | None = None,
-) -> None:
+    ws_ohlcv_timeout: int | float | None = None,
+    rest_ohlcv_timeout: int | float | None = None,
+
     """Configure module-wide settings."""
     global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES, SEMA
     if ohlcv_timeout is not None:
         try:
-            OHLCV_TIMEOUT = max(1, int(ohlcv_timeout))
+            val = max(1, int(ohlcv_timeout))
+            OHLCV_TIMEOUT = val
+            WS_OHLCV_TIMEOUT = val
+            REST_OHLCV_TIMEOUT = val
         except (TypeError, ValueError):
             logger.warning(
                 "Invalid ohlcv_timeout %s; using default %s",
                 ohlcv_timeout,
                 OHLCV_TIMEOUT,
+            )
+    if ws_ohlcv_timeout is not None:
+        try:
+            WS_OHLCV_TIMEOUT = max(1, int(ws_ohlcv_timeout))
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid WS_OHLCV_TIMEOUT %s; using default %s",
+                ws_ohlcv_timeout,
+                WS_OHLCV_TIMEOUT,
+            )
+    if rest_ohlcv_timeout is not None:
+        try:
+            REST_OHLCV_TIMEOUT = max(1, int(rest_ohlcv_timeout))
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid REST_OHLCV_TIMEOUT %s; using default %s",
+                rest_ohlcv_timeout,
+                REST_OHLCV_TIMEOUT,
             )
     if max_failures is not None:
         try:
@@ -369,7 +393,7 @@ async def fetch_ohlcv_async(
                     pass
             try:
                 data = await _call_with_retry(
-                    exchange.watch_ohlcv, timeout=OHLCV_TIMEOUT, **kwargs
+                    exchange.watch_ohlcv, timeout=WS_OHLCV_TIMEOUT, **kwargs
                 )
             except asyncio.CancelledError:
                 raise
@@ -391,7 +415,7 @@ async def fetch_ohlcv_async(
                     try:
                         data = await _call_with_retry(
                             exchange.fetch_ohlcv,
-                            timeout=OHLCV_TIMEOUT,
+                            timeout=REST_OHLCV_TIMEOUT,
                             **kwargs_f,
                         )
                     except asyncio.CancelledError:
@@ -421,7 +445,7 @@ async def fetch_ohlcv_async(
                         asyncio.to_thread,
                         exchange.fetch_ohlcv,
                         **kwargs_f,
-                        timeout=OHLCV_TIMEOUT,
+                        timeout=REST_OHLCV_TIMEOUT,
                     )
                 except asyncio.CancelledError:
                     raise
@@ -463,7 +487,7 @@ async def fetch_ohlcv_async(
                             try:
                                 data_r = await _call_with_retry(
                                     exchange.fetch_ohlcv,
-                                    timeout=OHLCV_TIMEOUT,
+                                    timeout=REST_OHLCV_TIMEOUT,
                                     **kwargs_r,
                                 )
                             except asyncio.CancelledError:
@@ -474,7 +498,7 @@ async def fetch_ohlcv_async(
                                     asyncio.to_thread,
                                     exchange.fetch_ohlcv,
                                     **kwargs_r,
-                                    timeout=OHLCV_TIMEOUT,
+                                    timeout=REST_OHLCV_TIMEOUT,
                                 )
                             except asyncio.CancelledError:
                                 raise
@@ -491,7 +515,7 @@ async def fetch_ohlcv_async(
             try:
                 data = await _call_with_retry(
                     exchange.fetch_ohlcv,
-                    timeout=OHLCV_TIMEOUT,
+                    timeout=REST_OHLCV_TIMEOUT,
                     **kwargs_f,
                 )
             except asyncio.CancelledError:
@@ -517,7 +541,7 @@ async def fetch_ohlcv_async(
                         try:
                             data_r = await _call_with_retry(
                                 exchange.fetch_ohlcv,
-                                timeout=OHLCV_TIMEOUT,
+                                timeout=REST_OHLCV_TIMEOUT,
                                 **kwargs_r,
                             )
                         except asyncio.CancelledError:
@@ -536,7 +560,7 @@ async def fetch_ohlcv_async(
                 asyncio.to_thread,
                 exchange.fetch_ohlcv,
                 **kwargs_f,
-                timeout=OHLCV_TIMEOUT,
+                timeout=REST_OHLCV_TIMEOUT,
             )
         except asyncio.CancelledError:
             raise
@@ -563,7 +587,7 @@ async def fetch_ohlcv_async(
                             asyncio.to_thread,
                             exchange.fetch_ohlcv,
                             **kwargs_r,
-                            timeout=OHLCV_TIMEOUT,
+                            timeout=REST_OHLCV_TIMEOUT,
                         )
                     except asyncio.CancelledError:
                         raise
@@ -612,7 +636,7 @@ async def fetch_ohlcv_async(
                     try:
                         return await _call_with_retry(
                             exchange.fetch_ohlcv,
-                            timeout=OHLCV_TIMEOUT,
+                            timeout=REST_OHLCV_TIMEOUT,
                             **kwargs_f,
                         )
                     except asyncio.CancelledError:
@@ -626,7 +650,7 @@ async def fetch_ohlcv_async(
                         asyncio.to_thread,
                         exchange.fetch_ohlcv,
                         **kwargs_f,
-                        timeout=OHLCV_TIMEOUT,
+                        timeout=REST_OHLCV_TIMEOUT,
                     )
                 except asyncio.CancelledError:
                     raise
@@ -664,7 +688,7 @@ async def fetch_ohlcv_async(
                     try:
                         return await _call_with_retry(
                             exchange.fetch_ohlcv,
-                            timeout=OHLCV_TIMEOUT,
+                            timeout=REST_OHLCV_TIMEOUT,
                             **kwargs_f,
                         )
                     except asyncio.CancelledError:
@@ -678,7 +702,7 @@ async def fetch_ohlcv_async(
                         asyncio.to_thread,
                         exchange.fetch_ohlcv,
                         **kwargs_f,
-                        timeout=OHLCV_TIMEOUT,
+                        timeout=REST_OHLCV_TIMEOUT,
                     )
                 except asyncio.CancelledError:
                     raise
