@@ -206,7 +206,9 @@ async def _call_with_retry(func, *args, timeout=None, **kwargs):
     for attempt in range(attempts):
         try:
             if timeout is not None:
-                return await asyncio.wait_for(func(*args, **kwargs), timeout)
+                return await asyncio.wait_for(
+                    asyncio.shield(func(*args, **kwargs)), timeout
+                )
             return await func(*args, **kwargs)
         except asyncio.CancelledError:
             raise
