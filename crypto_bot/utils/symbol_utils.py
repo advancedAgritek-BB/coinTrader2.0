@@ -19,6 +19,13 @@ _last_refresh: float = 0.0
 _sym_lock = asyncio.Lock()
 
 
+def fix_symbol(sym: str) -> str:
+    """Normalize different notations of Bitcoin."""
+    if not isinstance(sym, str):
+        return sym
+    return sym.replace("XBT/", "BTC/").replace("XBT", "BTC")
+
+
 async def get_filtered_symbols(exchange, config) -> list:
     """Return user symbols filtered by liquidity/volatility or fallback.
 
