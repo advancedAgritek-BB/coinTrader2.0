@@ -796,6 +796,38 @@ def test_refresh_tickers_retry_520(monkeypatch):
     assert set(result) == {"ETH/USD", "BTC/USD"}
 
 
+def test_refresh_tickers_retry_520_network(monkeypatch):
+    class RetryExchange(DummyExchange):
+        def __init__(self):
+            self.has = {"fetchTickers": True}
+            self.calls = 0
+            self.markets = {"ETH/USD": {}, "BTC/USD": {}}
+
+        async def fetch_tickers(self, symbols):
+            self.calls += 1
+            if self.calls == 1:
+                err = ccxt.ExchangeNotAvailable("boom")
+                err.http_status = 520
+                raise err
+            data = (await fake_fetch(None))["result"]
+            return {"ETH/USD": data["XETHZUSD"], "BTC/USD": data["XXBTZUSD"]}
+
+    sleeps = []
+
+    async def fake_sleep(secs):
+        sleeps.append(secs)
+
+    monkeypatch.setattr(sp.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(sp, "_fetch_ticker_async", lambda _p: {"result": {}})
+
+    ex = RetryExchange()
+    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"]))
+
+    assert ex.calls == 2
+    assert sleeps == [1]
+    assert set(result) == {"ETH/USD", "BTC/USD"}
+
+
 def test_refresh_tickers_single_fallback(monkeypatch):
     class FailBothExchange(DummyExchange):
         def __init__(self):
