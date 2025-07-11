@@ -318,6 +318,7 @@ async def fetch_ohlcv_async(
                 MAX_WS_LIMIT,
             )
             use_websocket = False
+            limit = min(limit, MAX_WS_LIMIT)
         if use_websocket and since is not None:
             try:
                 seconds = timeframe_seconds(exchange, timeframe)

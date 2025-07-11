@@ -345,7 +345,7 @@ def test_watch_ohlcv_skipped_when_limit_exceeds(monkeypatch):
     )
     assert ex.ws_called is False
     assert ex.fetch_called is True
-    assert len(data) == 100
+    assert len(data) == 50
 
 
 def test_force_websocket_history_ignores_max_ws_limit(monkeypatch):

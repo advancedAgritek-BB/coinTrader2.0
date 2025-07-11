@@ -53,6 +53,7 @@ exit_strategy:
   trailing_stop_factor: 2.0
   trailing_stop_pct: 0.07
 force_websocket_history: false
+max_ws_limit: 50
 grid_bot:
   atr_normalization: true
   atr_period: 14
