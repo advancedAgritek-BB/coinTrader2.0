@@ -165,6 +165,52 @@ def test_watch_tickers_cache(monkeypatch):
     assert ex.calls == 2
 
 
+class FailingWatchExchange(DummyExchange):
+    def __init__(self):
+        self.has = {"watchTickers": True, "fetchTickers": True}
+        self.watch_calls = 0
+        self.fetch_calls = 0
+        self.markets_by_id = DummyExchange.markets_by_id
+
+    async def watch_tickers(self, symbols):
+        self.watch_calls += 1
+        raise RuntimeError("ws boom")
+
+    async def fetch_tickers(self, symbols):
+        self.fetch_calls += 1
+        data = (await fake_fetch(None))["result"]
+        return {"ETH/USD": data["XETHZUSD"], "BTC/USD": data["XXBTZUSD"]}
+
+
+def test_watch_tickers_fallback(monkeypatch, caplog, tmp_path):
+    caplog.set_level("INFO")
+    import crypto_bot.utils.pair_cache as pc
+
+    pair_file = tmp_path / "liquid_pairs.json"
+    monkeypatch.setattr(pc, "PAIR_FILE", pair_file)
+    monkeypatch.setattr(sp, "PAIR_FILE", pair_file)
+
+    async def raise_if_called(_pairs):
+        raise AssertionError("_fetch_ticker_async should not be called")
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", raise_if_called)
+
+    ex = FailingWatchExchange()
+
+    t = {"now": 0}
+    monkeypatch.setattr(sp.time, "time", lambda: t["now"])
+
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
+    assert ex.watch_calls == 1
+    assert ex.fetch_calls == 1
+    assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
+    assert any("falling back" in r.getMessage() for r in caplog.records)
+
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
+    assert ex.watch_calls == 1
+    assert ex.fetch_calls == 1
+
+
 class DummyExchangeList:
     # markets_by_id values may be lists of market dictionaries
     markets_by_id = {"XETHZUSD": [{"symbol": "ETH/USD"}]}
