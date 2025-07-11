@@ -11,6 +11,7 @@ from crypto_bot.utils.logger import LOG_DIR
 
 
 import yaml
+from . import main
 
 from .portfolio_rotator import PortfolioRotator
 from .utils.open_trades import get_open_trades
@@ -52,8 +53,15 @@ class TradingBotController:
     def _load_config(self) -> dict:
         if self.config_path.exists():
             with open(self.config_path) as f:
-                return yaml.safe_load(f) or {}
-        return {}
+                data = yaml.safe_load(f) or {}
+        else:
+            data = {}
+
+        if "symbol" in data:
+            data["symbol"] = main._fix_symbol(data["symbol"])
+        if "symbols" in data:
+            data["symbols"] = [main._fix_symbol(s) for s in data.get("symbols", [])]
+        return data
 
     async def start_trading(self) -> Dict[str, object]:
         """Launch ``crypto_bot.main`` as a subprocess if not already running."""

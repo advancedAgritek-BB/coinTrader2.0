@@ -10,6 +10,7 @@ import logging
 import ccxt.async_support as ccxt
 import yaml
 from crypto_bot.utils import timeframe_seconds
+from crypto_bot import main
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "crypto_bot" / "config.yaml"
 CACHE_DIR = Path("cache")
@@ -41,8 +42,15 @@ def load_config() -> dict:
     """Load YAML configuration if available."""
     if CONFIG_PATH.exists():
         with open(CONFIG_PATH) as f:
-            return yaml.safe_load(f) or {}
-    return {}
+            data = yaml.safe_load(f) or {}
+    else:
+        data = {}
+
+    if "symbol" in data:
+        data["symbol"] = main._fix_symbol(data["symbol"])
+    if "symbols" in data:
+        data["symbols"] = [main._fix_symbol(s) for s in data.get("symbols", [])]
+    return data
 
 
 def get_exchange(config: dict) -> ccxt.Exchange:
