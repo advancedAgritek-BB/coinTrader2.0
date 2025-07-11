@@ -208,6 +208,7 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
 
     if try_http:
         if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
+            data = {}
             for attempt in range(3):
                 try:
                     fetched = await exchange.fetch_tickers(list(symbols))
@@ -232,6 +233,31 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                     logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
                     telemetry.inc("scan.api_errors")
                     break
+
+            if not data:
+                try:
+                    pairs = [s.replace("/", "") for s in symbols]
+                    raw = (await _fetch_ticker_async(pairs)).get("result", {})
+                    if len(raw) == len(symbols):
+                        data = {sym: ticker for sym, (_, ticker) in zip(symbols, raw.items())}
+                    else:
+                        data = {}
+                        extra = iter(raw.values())
+                        for sym, pair in zip(symbols, pairs):
+                            ticker = raw.get(pair) or raw.get(pair.upper())
+                            if ticker is None:
+                                pu = pair.upper()
+                                for k, v in raw.items():
+                                    if pu in k.upper():
+                                        ticker = v
+                                        break
+                            if ticker is None:
+                                ticker = next(extra, None)
+                            if ticker is not None:
+                                data[sym] = ticker
+                except Exception:  # pragma: no cover - network
+                    telemetry.inc("scan.api_errors")
+                    data = {}
         else:
             try:
                 pairs = [s.replace("/", "") for s in symbols]
