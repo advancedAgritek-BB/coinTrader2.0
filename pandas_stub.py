@@ -12,6 +12,10 @@ class DataFrame(dict):
     def __len__(self):
         return len(next(iter(self.data.values()), []))
 
+    @property
+    def empty(self):
+        return len(self) == 0
+
     class _ILoc:
         def __init__(self, outer):
             self.outer = outer
@@ -27,6 +31,9 @@ class DataFrame(dict):
 
     def pct_change(self):
         return self
+
+    def to_numpy(self):
+        return [list(v) for v in zip(*self.data.values())] if self.data else []
 
     def dropna(self):
         return self
@@ -44,6 +51,9 @@ class DataFrame(dict):
 class Series(list):
     def tail(self, n):
         return Series(self[-n:])
+
+    def to_numpy(self):
+        return list(self)
 
     def std(self):
         return 0.0
