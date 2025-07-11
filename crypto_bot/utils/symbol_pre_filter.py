@@ -248,6 +248,31 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                 try:
                     pairs = [s.replace("/", "") for s in symbols]
                     raw = (await _fetch_ticker_async(pairs)).get("result", {})
+                    data = {}
+                    if len(raw) == len(symbols):
+                        for sym, (_, ticker) in zip(symbols, raw.items()):
+                            data[sym] = ticker
+                    else:
+                        if len(raw) == len(symbols):
+                            data = {
+                                sym: ticker
+                                for sym, (_, ticker) in zip(symbols, raw.items())
+                            }
+                        else:
+                            data = {}
+                            extra = iter(raw.values())
+                            for sym, pair in zip(symbols, pairs):
+                                ticker = raw.get(pair) or raw.get(pair.upper())
+                                if ticker is None:
+                                    pu = pair.upper()
+                                    for k, v in raw.items():
+                                        if pu in k.upper():
+                                            ticker = v
+                                            break
+                                if ticker is None:
+                                    ticker = next(extra, None)
+                                if ticker is not None:
+                                    data[sym] = ticker
                     if len(raw) == len(symbols):
                         data = {sym: ticker for sym, (_, ticker) in zip(symbols, raw.items())}
                     else:
@@ -377,8 +402,6 @@ async def filter_symbols(
     vol_pct = sf.get("volume_percentile", DEFAULT_VOLUME_PERCENTILE)
     max_spread = sf.get("max_spread_pct", 1.0)
     pct = sf.get("change_pct_percentile", DEFAULT_CHANGE_PCT_PERCENTILE)
-    vol_mult = sf.get("uncached_volume_multiplier", 2)
-    pct = sf.get("change_pct_percentile", 80)
     cache_map = load_liquid_map()
     vol_mult_default = 1 if cache_map is None else 2
     vol_mult = sf.get("uncached_volume_multiplier", vol_mult_default)
