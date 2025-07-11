@@ -11,6 +11,7 @@ from crypto_bot.utils.logger import LOG_DIR
 
 
 import yaml
+from . import main
 from crypto_bot.utils.symbol_utils import fix_symbol
 
 from .portfolio_rotator import PortfolioRotator
