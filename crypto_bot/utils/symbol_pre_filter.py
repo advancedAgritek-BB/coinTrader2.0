@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 from typing import Iterable, List, Dict
 
+import ccxt
+
 import aiohttp
 import numpy as np
 import pandas as pd
@@ -153,6 +155,13 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
     """Return ticker data using WS if available with a small cache."""
 
     now = time.time()
+    if getattr(exchange, "markets", None):
+        missing = [s for s in symbols if s not in exchange.markets]
+        if missing:
+            logger.warning(
+                "Symbols not in exchange.markets: %s",
+                ", ".join(missing),
+            )
     if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers"):
         to_fetch = [s for s in symbols if now - ticker_ts.get(s, 0) > 5 or s not in ticker_cache]
         data = {}
@@ -173,6 +182,14 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
         try:
             fetched = await exchange.fetch_tickers(list(symbols))
             return {s: t.get("info", t) for s, t in fetched.items()}
+        except ccxt.BadSymbol as exc:  # pragma: no cover - network
+            logger.warning(
+                "fetch_tickers BadSymbol for %s: %s",
+                ", ".join(symbols),
+                exc,
+            )
+            telemetry.inc("scan.api_errors")
+            return {}
         except Exception as exc:  # pragma: no cover - network
             logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
             telemetry.inc("scan.api_errors")

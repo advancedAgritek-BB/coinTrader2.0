@@ -2,6 +2,7 @@ import asyncio
 import json
 import pandas as pd
 import pytest
+import ccxt
 import crypto_bot.utils.symbol_scoring as sc
 import crypto_bot.utils.symbol_pre_filter as sp
 from crypto_bot.utils.telemetry import telemetry
@@ -564,3 +565,39 @@ def test_liq_cache_skips_api(monkeypatch):
     cfg = {"symbol_filter": {"min_volume_usd": 50000, "max_spread_pct": 1.0, "change_pct_percentile": 0}}
     result = asyncio.run(sp.filter_symbols(DummyExchange(), ["ETH/USD"], cfg))
     assert result == [("ETH/USD", 1.0)]
+
+
+def test_refresh_tickers_warns_missing_market(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+
+    class DummyExchange:
+        has = {}
+        markets = {"ETH/USD": {}}
+
+    async def fake_fetch(_pairs):
+        return {"result": {}}
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch)
+
+    asyncio.run(sp._refresh_tickers(DummyExchange(), ["ETH/USD", "BTC/USD"]))
+
+    assert any("BTC/USD" in r.getMessage() for r in caplog.records)
+
+
+def test_refresh_tickers_bad_symbol(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+
+    class BadSymbolExchange:
+        has = {"fetchTickers": True}
+        markets = {"ETH/USD": {}, "BTC/USD": {}}
+
+        async def fetch_tickers(self, symbols):
+            raise ccxt.BadSymbol("bad symbol")
+
+    result = asyncio.run(
+        sp._refresh_tickers(BadSymbolExchange(), ["ETH/USD", "BTC/USD"])
+    )
+
+    assert result == {}
+    assert any("BadSymbol" in r.getMessage() for r in caplog.records)
+    assert any("BTC/USD" in r.getMessage() for r in caplog.records)
