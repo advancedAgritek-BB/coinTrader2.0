@@ -340,11 +340,11 @@ async def filter_symbols(
     vol_pct = sf.get("volume_percentile", DEFAULT_VOLUME_PERCENTILE)
     max_spread = sf.get("max_spread_pct", 1.0)
     pct = sf.get("change_pct_percentile", 80)
-    vol_mult = sf.get("uncached_volume_multiplier", 2)
+    cache_map = load_liquid_map()
+    vol_mult_default = 1 if cache_map is None else 2
+    vol_mult = sf.get("uncached_volume_multiplier", vol_mult_default)
     min_age = cfg.get("min_symbol_age_days", 0)
     min_score = float(cfg.get("min_symbol_score", 0.0))
-
-    cache_map = load_liquid_map()
     cache_changed = False
 
     telemetry.inc("scan.symbols_considered", len(list(symbols)))
