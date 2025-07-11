@@ -20,7 +20,7 @@ solana
 boto3
 hvac
 psutil
-aiohttp
+aiohttp>=3.9.4
 cryptography
 schedule
 fastapi==0.97.0
