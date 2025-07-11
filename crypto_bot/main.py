@@ -82,6 +82,10 @@ from crypto_bot.fund_manager import (
 from crypto_bot.regime.regime_classifier import CONFIG
 
 
+def _fix_symbol(sym: str) -> str:
+    """Internal wrapper for tests to normalize symbols."""
+    return fix_symbol(sym)
+
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENV_PATH = Path(__file__).resolve().parent / ".env"

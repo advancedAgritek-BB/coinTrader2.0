@@ -225,13 +225,48 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                     if getattr(exc, "http_status", None) in (520, 522) and attempt < 2:
                         await asyncio.sleep(2 ** attempt)
                         continue
-                    logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
+                    logger.warning(
+                        "fetch_tickers failed: %s \u2013 falling back to Kraken REST /Ticker",
+                        exc,
+                        exc_info=True,
+                    )
                     telemetry.inc("scan.api_errors")
+                    data = {}
                     break
                 except Exception as exc:  # pragma: no cover - network
-                    logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
+                    logger.warning(
+                        "fetch_tickers failed: %s \u2013 falling back to Kraken REST /Ticker",
+                        exc,
+                        exc_info=True,
+                    )
                     telemetry.inc("scan.api_errors")
+                    data = {}
                     break
+            if not data:
+                try:
+                    pairs = [s.replace("/", "") for s in symbols]
+                    raw = (await _fetch_ticker_async(pairs)).get("result", {})
+                    data = {}
+                    if len(raw) == len(symbols):
+                        for sym, (_, ticker) in zip(symbols, raw.items()):
+                            data[sym] = ticker
+                    else:
+                        extra = iter(raw.values())
+                        for sym, pair in zip(symbols, pairs):
+                            ticker = raw.get(pair) or raw.get(pair.upper())
+                            if ticker is None:
+                                pu = pair.upper()
+                                for k, v in raw.items():
+                                    if pu in k.upper():
+                                        ticker = v
+                                        break
+                            if ticker is None:
+                                ticker = next(extra, None)
+                            if ticker is not None:
+                                data[sym] = ticker
+                except Exception:  # pragma: no cover - network
+                    telemetry.inc("scan.api_errors")
+                    data = {}
         else:
             try:
                 pairs = [s.replace("/", "") for s in symbols]
