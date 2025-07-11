@@ -444,7 +444,7 @@ async def filter_symbols(
             change_pct,
             spread_pct,
         )
-        if cache_map is not None and symbol not in cache_map and vol_usd < min_volume * vol_mult:
+        if cache_map and vol_usd < min_volume * vol_mult:
             skipped += 1
             continue
         if vol_usd >= min_volume and spread_pct <= max_spread:

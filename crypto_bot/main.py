@@ -205,11 +205,23 @@ def _emit_timing(
 
 
 
+def _fix_symbol(sym: str) -> str:
+    """Normalize different notations of Bitcoin."""
+    if not isinstance(sym, str):
+        return sym
+    return sym.replace("XBT/", "BTC/").replace("XBT", "BTC")
+
+
 def load_config() -> dict:
     """Load YAML configuration for the bot."""
     with open(CONFIG_PATH) as f:
         logger.info("Loading config from %s", CONFIG_PATH)
         data = yaml.safe_load(f) or {}
+
+    if "symbol" in data:
+        data["symbol"] = _fix_symbol(data["symbol"])
+    if "symbols" in data:
+        data["symbols"] = [_fix_symbol(s) for s in data.get("symbols", [])]
     try:
         if hasattr(ScannerConfig, "model_validate"):
             ScannerConfig.model_validate(data)
