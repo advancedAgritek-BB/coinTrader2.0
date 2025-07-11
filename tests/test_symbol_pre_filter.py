@@ -30,7 +30,13 @@ CONFIG = {
         "max_spread_pct": 3.0,
         "correlation_max_pairs": 100,
     },
-    "symbol_score_weights": {"volume": 1, "change": 0, "spread": 0, "age": 0, "latency": 0},
+    "symbol_score_weights": {
+        "volume": 1,
+        "change": 0,
+        "spread": 0,
+        "age": 0,
+        "latency": 0,
+    },
     "max_vol": 100000,
     "min_symbol_score": 0.0,
 }
@@ -67,8 +73,12 @@ async def fake_fetch(_):
 
 
 def test_filter_symbols(monkeypatch):
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch)
-    symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG))
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
+    symbols = asyncio.run(
+        filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG)
+    )
     assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 
 
@@ -87,7 +97,9 @@ def test_filter_symbols_fetch_tickers(monkeypatch):
     async def raise_if_called(_):
         raise AssertionError("_fetch_ticker_async should not be called")
 
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", raise_if_called)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", raise_if_called
+    )
 
     ex = FetchTickersExchange()
 
@@ -104,6 +116,7 @@ class NormalizedFetchTickersExchange(DummyExchange):
     async def fetch_tickers(self, symbols):
         assert symbols == ["ETH/USD", "BTC/USD"]
         data = (await fake_fetch(None))["result"]
+
         def to_normalized(t):
             return {
                 "info": t,
@@ -125,7 +138,9 @@ def test_filter_symbols_fetch_tickers_normalized(monkeypatch):
     async def raise_if_called(_):
         raise AssertionError("_fetch_ticker_async should not be called")
 
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", raise_if_called)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", raise_if_called
+    )
 
     ex = NormalizedFetchTickersExchange()
 
@@ -137,9 +152,7 @@ def test_filter_symbols_fetch_tickers_normalized(monkeypatch):
 class AltnameMappingExchange:
     def __init__(self):
         self.has = {"fetchTickers": True}
-        self.markets_by_id = {
-            "XXBTZUSD": {"symbol": "XBT/USDT", "altname": "XBTUSDT"}
-        }
+        self.markets_by_id = {"XXBTZUSD": {"symbol": "XBT/USDT", "altname": "XBTUSDT"}}
 
     async def fetch_tickers(self, symbols):
         assert symbols == ["XBT/USDT"]
@@ -164,9 +177,7 @@ def test_altname_mapping(monkeypatch):
 class RawIdMappingExchange:
     def __init__(self):
         self.has = {"fetchTickers": True}
-        self.markets_by_id = {
-            "XXBTZUSD": {"symbol": "XBT/USDT", "altname": "XBTUSDT"}
-        }
+        self.markets_by_id = {"XXBTZUSD": {"symbol": "XBT/USDT", "altname": "XBTUSDT"}}
 
     async def fetch_tickers(self, symbols):
         assert symbols == ["XBTUSDT"]
@@ -275,7 +286,9 @@ class DummyExchangeList:
 
 
 def test_filter_symbols_handles_list_values(monkeypatch):
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
     symbols = asyncio.run(filter_symbols(DummyExchangeList(), ["ETH/USD"], CONFIG))
     assert symbols == [("ETH/USD", 0.8)]
 
@@ -292,7 +305,9 @@ class EmptyExchange:
 
 def test_load_markets_when_missing(monkeypatch):
     ex = EmptyExchange()
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], CONFIG))
     assert ex.called is True
     assert symbols == [("ETH/USD", 0.8)]
@@ -309,7 +324,9 @@ class FailLoadExchange:
 def test_load_markets_failure_fallback(monkeypatch, caplog):
     caplog.set_level("WARNING")
     ex = FailLoadExchange()
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], CONFIG))
     assert symbols == [("ETH/USD", 0.8)]
     assert any("load_markets failed" in r.getMessage() for r in caplog.records)
@@ -319,7 +336,9 @@ def test_non_dict_market_entry(monkeypatch):
     class BadExchange:
         markets_by_id = {"XETHZUSD": ["ETH/USD"]}
 
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
     symbols = asyncio.run(filter_symbols(BadExchange(), ["ETH/USD"], CONFIG))
     assert symbols == [("ETH/USD", 0.8)]
 
@@ -344,7 +363,9 @@ def test_multiple_batches(monkeypatch):
             combined["result"].update({p: ticker for p in chunk})
         return combined
 
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch_multi)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch_multi
+    )
 
     pairs = [f"PAIR{i}" for i in range(25)]
 
@@ -432,11 +453,17 @@ def test_filter_symbols_sorted_by_score(monkeypatch):
             }
         }
 
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch_sorted)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch_sorted
+    )
 
     cfg = {
         **CONFIG,
-        "symbol_filter": {"volume_percentile": 0, "change_pct_percentile": 0, "max_spread_pct": 2.0},
+        "symbol_filter": {
+            "volume_percentile": 0,
+            "change_pct_percentile": 0,
+            "max_spread_pct": 2.0,
+        },
     }
     symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg))
 
@@ -444,7 +471,9 @@ def test_filter_symbols_sorted_by_score(monkeypatch):
 
 
 def test_filter_symbols_min_score(monkeypatch):
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
 
     cfg = {
         **CONFIG,
@@ -465,7 +494,9 @@ class HistoryExchange:
 
 
 def test_filter_symbols_min_age_skips(monkeypatch):
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
     cfg = {**CONFIG, "min_symbol_age_days": 2}
     ex = HistoryExchange(24)
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], cfg))
@@ -473,7 +504,9 @@ def test_filter_symbols_min_age_skips(monkeypatch):
 
 
 def test_filter_symbols_min_age_allows(monkeypatch):
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
     cfg = {**CONFIG, "min_symbol_age_days": 2}
     ex = HistoryExchange(48)
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD"], cfg))
@@ -481,7 +514,9 @@ def test_filter_symbols_min_age_allows(monkeypatch):
 
 
 def test_filter_symbols_min_age_uses_cache(monkeypatch):
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
 
     called = False
 
@@ -490,7 +525,9 @@ def test_filter_symbols_min_age_uses_cache(monkeypatch):
         called = True
         return cache
 
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter.update_ohlcv_cache", fake_update)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter.update_ohlcv_cache", fake_update
+    )
 
     cfg = {**CONFIG, "min_symbol_age_days": 2}
     ex = HistoryExchange(10)
@@ -514,9 +551,15 @@ def test_filter_symbols_correlation(monkeypatch):
 
     cfg = {
         **CONFIG,
-        "symbol_filter": {"volume_percentile": 0, "max_spread_pct": 2.0, "change_pct_percentile": 0},
+        "symbol_filter": {
+            "volume_percentile": 0,
+            "max_spread_pct": 2.0,
+            "change_pct_percentile": 0,
+        },
     }
-    symbols = asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg, df_cache=cache))
+    symbols = asyncio.run(
+        filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg, df_cache=cache)
+    )
 
     assert symbols == [("ETH/USD", 0.8)]
 
@@ -563,13 +606,19 @@ def test_correlation_skipped_when_insufficient_history(monkeypatch):
 
     cfg = {
         **CONFIG,
-        "symbol_filter": {"volume_percentile": 0, "max_spread_pct": 2.0, "change_pct_percentile": 0},
+        "symbol_filter": {
+            "volume_percentile": 0,
+            "max_spread_pct": 2.0,
+            "change_pct_percentile": 0,
+        },
     }
     symbols = asyncio.run(
         filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg, df_cache=cache)
     )
 
     assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
+
+
 async def fake_fetch_wide_spread(_):
     return {
         "result": {
@@ -610,7 +659,9 @@ def test_percentile_selects_top_movers(monkeypatch):
             }
         return {"result": result}
 
-    monkeypatch.setattr("crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch_pct)
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch_pct
+    )
 
     pairs = [f"PAIR{i}" for i in range(1, 11)]
 
@@ -665,10 +716,12 @@ def test_symbol_skipped_when_missing_from_cache(monkeypatch, tmp_path):
         return True
 
     monkeypatch.setattr(sp, "has_enough_history", fake_history)
+
     async def fake_update(exchange, cache, symbols, **_):
         for s in symbols:
             cache[s] = pd.DataFrame({"close": range(48)})
         return cache
+
     monkeypatch.setattr(sp, "update_ohlcv_cache", fake_update)
 
     cfg = {
@@ -680,8 +733,6 @@ def test_symbol_skipped_when_missing_from_cache(monkeypatch, tmp_path):
     ex.has = {}
     result = asyncio.run(sp.filter_symbols(ex, ["ETH/USD", "BTC/USD"], cfg))
 
-    assert result == [("ETH/USD", 0.8)]
-    assert calls == []
     assert result == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 
 
@@ -722,6 +773,8 @@ def test_uncached_multiplier_allows_symbol(monkeypatch, tmp_path):
     )
 
     assert result == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
+
+
 def test_liq_cache_skips_api(monkeypatch):
     sp.liq_cache.clear()
     sp.liq_cache["ETH/USD"] = (60000.0, 0.5)
@@ -739,9 +792,31 @@ def test_liq_cache_skips_api(monkeypatch):
     monkeypatch.setattr(sp, "score_symbol", fake_score_symbol)
     monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch)
 
-    cfg = {"symbol_filter": {"min_volume_usd": 50000, "max_spread_pct": 1.0, "change_pct_percentile": 0}}
+    cfg = {
+        "symbol_filter": {
+            "min_volume_usd": 50000,
+            "max_spread_pct": 1.0,
+            "change_pct_percentile": 0,
+        }
+    }
     result = asyncio.run(sp.filter_symbols(DummyExchange(), ["ETH/USD"], cfg))
     assert result == [("ETH/USD", 1.0)]
+
+
+def test_stale_cache_not_counted_as_skipped(monkeypatch):
+    sp.liq_cache.clear()
+    sp.liq_cache["ETH/USD"] = (10000.0, 0.5)
+
+    class DummyExchange:
+        has = {}
+        markets_by_id = {"XETHZUSD": {"symbol": "ETH/USD"}}
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch)
+
+    result = asyncio.run(sp.filter_symbols(DummyExchange(), ["ETH/USD"], CONFIG))
+
+    assert result == [("ETH/USD", 0.8)]
+    assert telemetry.snapshot().get("scan.symbols_skipped", 0) == 0
 
 
 def test_refresh_tickers_warns_missing_market(monkeypatch, caplog):
@@ -959,3 +1034,53 @@ def test_fetch_ticker_async_timeout(monkeypatch):
     asyncio.run(sp._fetch_ticker_async(["XBTUSD"], timeout=5))
 
     assert calls == [5]
+def test_ticker_retry_attempts(monkeypatch):
+    class RetryExchange(DummyExchange):
+        def __init__(self):
+            self.has = {"fetchTickers": True}
+            self.calls = 0
+            self.markets = {"ETH/USD": {}, "BTC/USD": {}}
+
+        async def fetch_tickers(self, symbols):
+            self.calls += 1
+            raise ccxt.ExchangeError("boom")
+
+    sleeps = []
+
+    async def fake_sleep(secs):
+        sleeps.append(secs)
+
+    monkeypatch.setattr(sp.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(sp, "_fetch_ticker_async", lambda _p: {"result": {}})
+
+    ex = RetryExchange()
+    cfg = {"symbol_filter": {"ticker_retry_attempts": 1}}
+    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"], cfg))
+
+    assert ex.calls == 1
+    assert sleeps == []
+    assert result == {}
+
+
+def test_log_ticker_exceptions(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+
+    class FailingExchange(DummyExchange):
+        def __init__(self):
+            self.has = {"fetchTickers": True}
+            self.markets = {"ETH/USD": {}, "BTC/USD": {}}
+
+        async def fetch_tickers(self, symbols):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", lambda _p: {"result": {}})
+
+    ex = FailingExchange()
+    cfg = {"symbol_filter": {"log_ticker_exceptions": True}}
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    assert any(r.exc_info for r in caplog.records)
+
+    caplog.clear()
+    cfg["symbol_filter"]["log_ticker_exceptions"] = False
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    assert not any(r.exc_info for r in caplog.records)
