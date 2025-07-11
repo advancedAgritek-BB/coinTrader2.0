@@ -248,6 +248,8 @@ symbol_filter:
   min_volume_usd: 100
   uncached_volume_multiplier: 2
   volume_percentile: 30
+  ticker_retry_attempts: 3
+  log_ticker_exceptions: false
 symbol_refresh_minutes: 30
 symbol_score_weights:
   age: 0.05

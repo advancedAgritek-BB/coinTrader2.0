@@ -733,8 +733,6 @@ def test_symbol_skipped_when_missing_from_cache(monkeypatch, tmp_path):
     ex.has = {}
     result = asyncio.run(sp.filter_symbols(ex, ["ETH/USD", "BTC/USD"], cfg))
 
-    assert result == [("ETH/USD", 0.8)]
-    assert calls == []
     assert result == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 
 
@@ -988,3 +986,55 @@ def test_refresh_tickers_public_api_fallback(monkeypatch):
     assert ex.bulk_calls == 1
     assert calls == [["ETHUSD", "BTCUSD"]]
     assert set(result) == {"ETH/USD", "BTC/USD"}
+
+
+def test_ticker_retry_attempts(monkeypatch):
+    class RetryExchange(DummyExchange):
+        def __init__(self):
+            self.has = {"fetchTickers": True}
+            self.calls = 0
+            self.markets = {"ETH/USD": {}, "BTC/USD": {}}
+
+        async def fetch_tickers(self, symbols):
+            self.calls += 1
+            raise ccxt.ExchangeError("boom")
+
+    sleeps = []
+
+    async def fake_sleep(secs):
+        sleeps.append(secs)
+
+    monkeypatch.setattr(sp.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(sp, "_fetch_ticker_async", lambda _p: {"result": {}})
+
+    ex = RetryExchange()
+    cfg = {"symbol_filter": {"ticker_retry_attempts": 1}}
+    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"], cfg))
+
+    assert ex.calls == 1
+    assert sleeps == []
+    assert result == {}
+
+
+def test_log_ticker_exceptions(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+
+    class FailingExchange(DummyExchange):
+        def __init__(self):
+            self.has = {"fetchTickers": True}
+            self.markets = {"ETH/USD": {}, "BTC/USD": {}}
+
+        async def fetch_tickers(self, symbols):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", lambda _p: {"result": {}})
+
+    ex = FailingExchange()
+    cfg = {"symbol_filter": {"log_ticker_exceptions": True}}
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    assert any(r.exc_info for r in caplog.records)
+
+    caplog.clear()
+    cfg["symbol_filter"]["log_ticker_exceptions"] = False
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    assert not any(r.exc_info for r in caplog.records)

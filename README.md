@@ -629,7 +629,18 @@ symbol_filter:
   correlation_window: 30        # days of history for correlation
   max_correlation: 0.85         # drop pairs above this threshold
   correlation_max_pairs: 100    # limit pairwise correlation checks
+  ticker_retry_attempts: 3      # number of fetch_tickers retries
+  log_ticker_exceptions: false  # include stack traces when true
 ```
+WebSocket streaming is enabled by default when scanning. Set
+`use_websocket: false` to force REST polling instead. You can disable
+WebSocket just for ticker scanning by adding
+`exchange.options.ws_scan: false` to your configuration while leaving
+`use_websocket: true` for trading. When using the REST fallback the bot
+requests tickers in batches controlled by
+`symbol_filter.kraken_batch_size` to avoid Kraken's occasional `520`
+errors. The public `/Ticker` calls also obey
+`symbol_filter.http_timeout`.
 Pairs passing these checks are then scored with `analyze_symbol` which
 computes a strategy confidence score. Only the highest scoring symbols
 are traded each cycle.
