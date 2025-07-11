@@ -46,3 +46,22 @@ def test_load_config_returns_dict():
 
     assert "telegram" in config
     assert "command_cooldown" in config["telegram"]
+
+
+def test_load_config_normalizes_symbol(tmp_path, monkeypatch):
+    path = tmp_path / "config.yaml"
+    path.write_text("scan_markets: true\nsymbol: XBT/USDT\n")
+    import types, crypto_bot.main as main
+
+    def _simple_yaml(f):
+        data = {}
+        for line in f.read().splitlines():
+            if ":" in line:
+                k, v = line.split(":", 1)
+                data[k.strip()] = v.strip()
+        return data
+
+    monkeypatch.setattr(main, "CONFIG_PATH", path)
+    monkeypatch.setattr(main, "yaml", types.SimpleNamespace(safe_load=_simple_yaml))
+    loaded = main.load_config()
+    assert loaded["symbol"] == "BTC/USDT"
