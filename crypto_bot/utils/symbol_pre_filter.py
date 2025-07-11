@@ -492,8 +492,15 @@ async def filter_symbols(
         else:
             top = [s for s, _ in scored]
         subset = {s: df_cache.get(s) for s in top}
-        window = sf.get("correlation_window", 100)
-        corr_map = incremental_correlation(subset, window=window)
+        window = sf.get("correlation_window", 30)
+        have_history = all(
+            isinstance(df, pd.DataFrame) and len(df) >= window
+            for df in subset.values()
+        )
+        if have_history:
+            corr_map = incremental_correlation(subset, window=window)
+        else:
+            corr_map = {}
 
     seconds = _timeframe_seconds(exchange, "1h") if min_age > 0 else 0
     if min_age > 0:
