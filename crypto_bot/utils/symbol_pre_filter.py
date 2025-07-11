@@ -162,7 +162,7 @@ def _parse_metrics(symbol: str, ticker: dict) -> tuple[float, float, float]:
 
 
 async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
-    """Return ticker data using WS if available with a small cache."""
+    """Return ticker data using WS/HTTP and fall back to per-symbol fetch."""
 
     now = time.time()
     markets = getattr(exchange, "markets", None)
@@ -182,9 +182,13 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                 "Symbols not in exchange.markets: %s",
                 ", ".join(missing),
             )
-    if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers"):
+
+    try_ws = getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
+    try_http = True
+    data: dict = {}
+
+    if try_ws:
         to_fetch = [s for s in symbols if now - ticker_ts.get(s, 0) > 5 or s not in ticker_cache]
-        data = {}
         if to_fetch:
             try:
                 data = await exchange.watch_tickers(to_fetch)
@@ -192,59 +196,90 @@ async def _refresh_tickers(exchange, symbols: Iterable[str]) -> dict:
                 logger.warning("watch_tickers failed: %s", exc, exc_info=True)
                 logger.info("watch_tickers failed, falling back to HTTP fetch")
                 telemetry.inc("scan.api_errors")
-                if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)(
-                    "fetchTickers"
-                ):
-                    try:
-                        data = await exchange.fetch_tickers(to_fetch)
-                    except ccxt.BadSymbol as exc2:  # pragma: no cover - network
-                        logger.warning(
-                            "fetch_tickers BadSymbol for %s: %s",
-                            ", ".join(to_fetch),
-                            exc2,
-                        )
-                        telemetry.inc("scan.api_errors")
-                        data = {}
-                    except Exception as exc2:  # pragma: no cover - network
-                        logger.warning("fetch_tickers failed: %s", exc2, exc_info=True)
-                        telemetry.inc("scan.api_errors")
-                        data = {}
+                try_ws = False
+                try_http = True
+        for sym, ticker in data.items():
+            ticker_cache[sym] = ticker.get("info", ticker)
+            ticker_ts[sym] = now
+        result = {s: ticker_cache[s] for s in symbols if s in ticker_cache}
+        if result:
+            return {s: t.get("info", t) for s, t in result.items()}
+
+    if try_http:
+        if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
+            for attempt in range(3):
+                try:
+                    fetched = await exchange.fetch_tickers(list(symbols))
+                    data = {s: t.get("info", t) for s, t in fetched.items()}
+                    break
+                except ccxt.BadSymbol as exc:  # pragma: no cover - network
+                    logger.warning(
+                        "fetch_tickers BadSymbol for %s: %s",
+                        ", ".join(symbols),
+                        exc,
+                    )
+                    telemetry.inc("scan.api_errors")
+                    return {}
+                except ccxt.ExchangeError as exc:  # pragma: no cover - network
+                    if getattr(exc, "http_status", None) in (520, 522) and attempt < 2:
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
+                    telemetry.inc("scan.api_errors")
+                    break
+                except Exception as exc:  # pragma: no cover - network
+                    logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
+                    telemetry.inc("scan.api_errors")
+                    break
+        else:
+            try:
+                pairs = [s.replace("/", "") for s in symbols]
+                raw = (await _fetch_ticker_async(pairs)).get("result", {})
+                data = {}
+                if len(raw) == len(symbols):
+                    for sym, (_, ticker) in zip(symbols, raw.items()):
+                        data[sym] = ticker
                 else:
-                    try:
-                        pairs = [s.replace("/", "") for s in to_fetch]
-                        data = (await _fetch_ticker_async(pairs)).get("result", {})
-                    except Exception:  # pragma: no cover - network
-                        telemetry.inc("scan.api_errors")
-                        raise
+                    extra = iter(raw.values())
+                    for sym, pair in zip(symbols, pairs):
+                        ticker = raw.get(pair) or raw.get(pair.upper())
+                        if ticker is None:
+                            pu = pair.upper()
+                            for k, v in raw.items():
+                                if pu in k.upper():
+                                    ticker = v
+                                    break
+                        if ticker is None:
+                            ticker = next(extra, None)
+                        if ticker is not None:
+                            data[sym] = ticker
+            except Exception:  # pragma: no cover - network
+                telemetry.inc("scan.api_errors")
+                data = {}
+
+        if data:
             for sym, ticker in data.items():
                 ticker_cache[sym] = ticker.get("info", ticker)
                 ticker_ts[sym] = now
-        result = {s: ticker_cache[s] for s in symbols if s in ticker_cache}
-        return {s: t.get("info", t) for s, t in result.items()}
+            return {s: t.get("info", t) for s, t in data.items()}
 
-    if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTickers"):
-        try:
-            fetched = await exchange.fetch_tickers(list(symbols))
-            return {s: t.get("info", t) for s, t in fetched.items()}
-        except ccxt.BadSymbol as exc:  # pragma: no cover - network
-            logger.warning(
-                "fetch_tickers BadSymbol for %s: %s",
-                ", ".join(symbols),
-                exc,
-            )
-            telemetry.inc("scan.api_errors")
-            return {}
-        except Exception as exc:  # pragma: no cover - network
-            logger.warning("fetch_tickers failed: %s", exc, exc_info=True)
-            telemetry.inc("scan.api_errors")
-            return {}
-
-    try:
-        pairs = [s.replace("/", "") for s in symbols]
-        return (await _fetch_ticker_async(pairs)).get("result", {})
-    except Exception:  # pragma: no cover - network
-        telemetry.inc("scan.api_errors")
-        raise
+    result: dict[str, dict] = {}
+    if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTicker"):
+        for sym in symbols:
+            try:
+                ticker = await exchange.fetch_ticker(sym)
+                result[sym] = ticker.get("info", ticker)
+            except ccxt.BadSymbol as exc:  # pragma: no cover - network
+                logger.warning("fetch_ticker BadSymbol for %s: %s", sym, exc)
+                telemetry.inc("scan.api_errors")
+            except Exception as exc:  # pragma: no cover - network
+                logger.warning("fetch_ticker failed for %s: %s", sym, exc, exc_info=True)
+                telemetry.inc("scan.api_errors")
+    if result:
+        for sym, ticker in result.items():
+            ticker_cache[sym] = ticker
+            ticker_ts[sym] = now
+    return result
 
 
 def _timeframe_seconds(exchange, timeframe: str) -> int:
