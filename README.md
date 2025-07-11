@@ -183,6 +183,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
 * **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
 * **symbol_score_weights** – weights for volume, spread, change and age. The weights must sum to a positive value.
+* **uncached_volume_multiplier** – extra volume factor applied when a pair is missing from `cache/liquid_pairs.json`.
 * **min_symbol_age_days** – skip newly listed pairs.
 * **min_symbol_score** – minimum score required for trading.
 * **top_n_symbols** – maximum number of active markets.
@@ -622,6 +623,7 @@ symbol_filter:
   max_spread_pct: 3             # allow wider spreads
   min_volume_usd: 100          # ignore very tiny markets
   volume_percentile: 40        # keep pairs above this volume percentile
+  uncached_volume_multiplier: 2 # extra volume when not cached
   change_pct_percentile: 50    # require 24h change in the top half
   max_spread_pct: 5            # allow spreads up to 5%
   correlation_window: 30        # days of history for correlation

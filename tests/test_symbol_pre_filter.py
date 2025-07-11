@@ -158,7 +158,34 @@ def test_altname_mapping(monkeypatch):
     ex = AltnameMappingExchange()
     symbols = asyncio.run(filter_symbols(ex, ["XBT/USDT"], CONFIG))
 
-    assert symbols == [("XBT/USDT", 0.6)]
+    assert symbols == [("BTC/USDT", 0.6)]
+
+
+class RawIdMappingExchange:
+    def __init__(self):
+        self.has = {"fetchTickers": True}
+        self.markets_by_id = {
+            "XXBTZUSD": {"symbol": "XBT/USDT", "altname": "XBTUSDT"}
+        }
+
+    async def fetch_tickers(self, symbols):
+        assert symbols == ["XBTUSDT"]
+        data = (await fake_fetch(None))["result"]
+        return {"XBTUSDT": data["XXBTZUSD"]}
+
+
+def test_raw_id_mapping(monkeypatch):
+    async def raise_if_called(_):
+        raise AssertionError("_fetch_ticker_async should not be called")
+
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", raise_if_called
+    )
+
+    ex = RawIdMappingExchange()
+    symbols = asyncio.run(filter_symbols(ex, ["XBTUSDT"], CONFIG))
+
+    assert symbols == [("BTC/USDT", 0.6)]
 
 
 class WatchTickersExchange(DummyExchange):
@@ -632,6 +659,46 @@ def test_symbol_skipped_when_missing_from_cache(monkeypatch, tmp_path):
 
     assert result == [("ETH/USD", 0.8)]
     assert calls == []
+    assert calls == ["ETH/USD"]
+
+
+def test_uncached_multiplier_allows_symbol(monkeypatch, tmp_path):
+    pair_file = tmp_path / "liquid_pairs.json"
+    pair_file.write_text(json.dumps({"ETH/USD": 0}))
+
+    import crypto_bot.utils.symbol_pre_filter as sp
+    import crypto_bot.utils.pair_cache as pc
+
+    monkeypatch.setattr(pc, "PAIR_FILE", pair_file)
+    monkeypatch.setattr(sp, "PAIR_FILE", pair_file)
+
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
+    )
+
+    async def fake_history(*_a, **_k):
+        return True
+
+    monkeypatch.setattr(sp, "has_enough_history", fake_history)
+
+    async def fake_update(exchange, cache, symbols, **_):
+        return {s: pd.DataFrame({"close": [0] * 48}) for s in symbols}
+
+    monkeypatch.setattr(sp, "update_ohlcv_cache", fake_update)
+
+    cfg = {
+        **CONFIG,
+        "min_symbol_age_days": 1,
+        "symbol_filter": {
+            **CONFIG["symbol_filter"],
+            "uncached_volume_multiplier": 1,
+        },
+    }
+    result = asyncio.run(
+        sp.filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], cfg)
+    )
+
+    assert result == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 def test_liq_cache_skips_api(monkeypatch):
     sp.liq_cache.clear()
     sp.liq_cache["ETH/USD"] = (60000.0, 0.5)
