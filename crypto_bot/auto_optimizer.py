@@ -6,7 +6,7 @@ from typing import Dict, Iterable
 
 
 import yaml
-from . import main
+from crypto_bot.utils.symbol_utils import fix_symbol
 
 from crypto_bot.backtest.backtest_runner import BacktestRunner, BacktestConfig
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
@@ -21,9 +21,9 @@ def _load_config() -> dict:
     with open(CONFIG_PATH) as f:
         data = yaml.safe_load(f) or {}
     if "symbol" in data:
-        data["symbol"] = main._fix_symbol(data["symbol"])
+        data["symbol"] = fix_symbol(data["symbol"])
     if "symbols" in data:
-        data["symbols"] = [main._fix_symbol(s) for s in data.get("symbols", [])]
+        data["symbols"] = [fix_symbol(s) for s in data.get("symbols", [])]
     return data
 
 
