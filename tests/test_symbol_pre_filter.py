@@ -573,16 +573,23 @@ def test_refresh_tickers_warns_missing_market(monkeypatch, caplog):
 
     class DummyExchange:
         has = {}
-        markets = {"ETH/USD": {}}
+        markets = {}
+        called = False
+
+        def load_markets(self):
+            self.called = True
+            self.markets = {"ETH/USD": {}}
 
     async def fake_fetch(_pairs):
         return {"result": {}}
 
     monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch)
 
-    asyncio.run(sp._refresh_tickers(DummyExchange(), ["ETH/USD", "BTC/USD"]))
+    ex = DummyExchange()
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"]))
 
     assert any("BTC/USD" in r.getMessage() for r in caplog.records)
+    assert ex.called is True
 
 
 def test_refresh_tickers_bad_symbol(monkeypatch, caplog):
