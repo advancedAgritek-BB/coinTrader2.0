@@ -15,6 +15,10 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     if df.empty:
         return 0.0, "none"
 
+    symbol = config.get("symbol") if config else ""
+    if symbol and ALLOWED_PAIRS and symbol not in ALLOWED_PAIRS:
+        return 0.0, "none"
+
     params = config.get("dex_scalper", {}) if config else {}
     fast_window = params.get("ema_fast", 5)
     slow_window = params.get("ema_slow", 20)

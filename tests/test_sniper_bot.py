@@ -58,6 +58,14 @@ def test_direction_override_short():
     assert score > 0.8
 
 
+def test_sniper_blocks_disallowed_pair(monkeypatch):
+    df = _df_with_volume_and_price(
+        [1.0, 1.05, 1.1, 1.2],
+        [10, 12, 11, 200]
+    )
+    monkeypatch.setattr(sniper_bot, 'ALLOWED_PAIRS', ['ETH/USD'])
+    score, direction = sniper_bot.generate_signal(df, {'symbol': 'BTC/USD'})
+    assert (score, direction) == (0.0, 'none')
 def test_high_freq_mode():
     df = _df_with_volume_and_price(
         [1.0, 1.05, 1.1, 1.2],
