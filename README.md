@@ -14,6 +14,7 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 * Balance change alerts when USDT funds move
 * Capital tracker, sentiment filter and tax logger helpers
 * Solana mempool monitor to avoid swaps when fees spike
+* Hourly new listing scanner using x_semantic_search
 * Paper trading wallet for dry-run simulation
 * Live trading or dry-run simulation
 * Web dashboard with watchdog thread and realtime log view
@@ -851,6 +852,24 @@ API requirements: [Helius](https://www.helius.xyz/) for pool data,
 [Jupiter](https://jup.ag/) for quotes, [Jito](https://www.jito.network/) for
 bundle submission, and a [Twitter](https://developer.twitter.com/) token for
 sentiment scores.
+
+## New Listing Scanner
+
+The ``new_listing_scanner`` module queries X once per hour for tweets
+about "new crypto listing" using the ``x_semantic_search`` package. Symbols
+with quote volume greater than five times their baseline are passed to
+``sniper_bot.generate_signal`` for scoring. Enable the scanner in
+``crypto_bot/config.yaml``:
+
+```yaml
+new_listing_scanner:
+  enabled: true
+  interval_minutes: 60
+  volume_multiple: 5.0
+```
+
+When active, matching symbols appear in the logs with their score and trade
+direction.
 
 ### Backtesting
 
