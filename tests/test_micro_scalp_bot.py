@@ -1,7 +1,56 @@
 import pandas as pd
 import pytest
 
-from crypto_bot.strategy import micro_scalp_bot
+import importlib.util
+import pathlib
+import types
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+crypto_bot = types.ModuleType("crypto_bot")
+strategy_pkg = types.ModuleType("crypto_bot.strategy")
+execution_pkg = types.ModuleType("crypto_bot.execution")
+utils_pkg = types.ModuleType("crypto_bot.utils")
+sys.modules.setdefault("crypto_bot", crypto_bot)
+sys.modules.setdefault("crypto_bot.strategy", strategy_pkg)
+sys.modules.setdefault("crypto_bot.execution", execution_pkg)
+sys.modules.setdefault("crypto_bot.utils", utils_pkg)
+
+spec = importlib.util.spec_from_file_location(
+    "crypto_bot.execution.solana_mempool",
+    ROOT / "crypto_bot/execution/solana_mempool.py",
+)
+sol_mempool = importlib.util.module_from_spec(spec)
+sys.modules["crypto_bot.execution.solana_mempool"] = sol_mempool
+spec.loader.exec_module(sol_mempool)
+
+# Minimal stubs for utility functions used by the strategy
+ind_cache = types.ModuleType("crypto_bot.utils.indicator_cache")
+ind_cache.cache_series = lambda *a, **k: a[2]
+vol_mod = types.ModuleType("crypto_bot.utils.volatility")
+vol_mod.normalize_score_by_volatility = lambda _df, s: s
+vol_filter = types.ModuleType("crypto_bot.volatility_filter")
+vol_filter.calc_atr = lambda df, window=14: df["high"].sub(df["low"]).rolling(window).mean().iloc[-1]
+sys.modules["crypto_bot.utils.indicator_cache"] = ind_cache
+sys.modules["crypto_bot.utils.volatility"] = vol_mod
+sys.modules["crypto_bot.volatility_filter"] = vol_filter
+
+for mod_name in ["indicator_cache", "volatility"]:
+    m_spec = importlib.util.spec_from_file_location(
+        f"crypto_bot.utils.{mod_name}", ROOT / f"crypto_bot/utils/{mod_name}.py"
+    )
+    module = importlib.util.module_from_spec(m_spec)
+    sys.modules[f"crypto_bot.utils.{mod_name}"] = module
+    m_spec.loader.exec_module(module)
+
+spec = importlib.util.spec_from_file_location(
+    "crypto_bot.strategy.micro_scalp_bot",
+    ROOT / "crypto_bot/strategy/micro_scalp_bot.py",
+)
+micro_scalp_bot = importlib.util.module_from_spec(spec)
+sys.modules["crypto_bot.strategy.micro_scalp_bot"] = micro_scalp_bot
+spec.loader.exec_module(micro_scalp_bot)
 
 
 @pytest.fixture
@@ -206,3 +255,26 @@ def test_book_imbalance_penalty_reduces_score(make_df):
 def test_filters_return_none(make_df, prices, volumes, cfg):
     df = make_df(prices, volumes)
     assert micro_scalp_bot.generate_signal(df, cfg) == (0.0, "none")
+
+
+def test_mempool_blocks_signal(make_df):
+    prices = list(range(1, 11))
+    volumes = [100] * 10
+    df = make_df(prices, volumes)
+    cfg = {
+        "micro_scalp": {"fresh_cross_only": False},
+        "mempool_monitor": {"enabled": True, "suspicious_fee_threshold": 100},
+    }
+
+    class DummyMonitor:
+        def is_suspicious(self, threshold):
+            assert threshold == 100
+            return True
+
+    score, direction = micro_scalp_bot.generate_signal(
+        df,
+        cfg,
+        mempool_monitor=DummyMonitor(),
+        mempool_cfg=cfg["mempool_monitor"],
+    )
+    assert (score, direction) == (0.0, "none")

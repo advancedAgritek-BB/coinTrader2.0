@@ -812,6 +812,23 @@ mempool_monitor:
 When enabled, `execute_swap` checks the current priority fee and pauses
 or adjusts the trade according to the selected action.
 
+You can also pass the monitor to strategy `generate_signal` functions to
+skip issuing a signal when fees are high:
+
+```python
+monitor = SolanaMempoolMonitor()
+cfg = {
+    "micro_scalp": {"fresh_cross_only": False},
+    "mempool_monitor": {"enabled": True, "suspicious_fee_threshold": 100},
+}
+score, direction = micro_scalp_bot.generate_signal(
+    df,
+    cfg,
+    mempool_monitor=monitor,
+    mempool_cfg=cfg["mempool_monitor"],
+)
+```
+
 ## Solana Meme-Wave Sniper
 
 This module watches for new liquidity pools on Solana and attempts to buy
