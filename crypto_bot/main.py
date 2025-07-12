@@ -256,6 +256,8 @@ def _cast_to_type(value: str, example: object) -> object:
 
 
 async def _ws_ping_loop(exchange: object, interval: float) -> None:
+    pass
+async def _ws_ping_loop(exchange: ccxt.Exchange, interval: float) -> None:
     """Periodically send WebSocket ping messages."""
     try:
         while True:
@@ -963,6 +965,70 @@ async def _main_impl() -> TelegramNotifier:
                     use_websocket=config.get("use_websocket", False),
                     force_websocket_history=config.get("force_websocket_history", False),
                     max_concurrent=config.get("max_concurrent_ohlcv"),
+                )
+                balances = await asyncio.to_thread(
+                    check_wallet_balances, user.get("wallet_address", "")
+                )
+                for token in detect_non_trade_tokens(balances):
+                    amount = balances[token]
+                    logger.info("Converting %s %s to USDC", amount, token)
+                    await auto_convert_funds(
+                        user.get("wallet_address", ""),
+                        token,
+                        "USDC",
+                        amount,
+                        dry_run=config["execution_mode"] == "dry_run",
+                        slippage_bps=config.get("solana_slippage_bps", 50),
+                        notifier=notifier,
+                    )
+                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                        bal = await exchange.fetch_balance()
+                    else:
+                        bal = await asyncio.to_thread(exchange.fetch_balance)
+                    bal_val = (
+                        bal.get("USDT", {}).get("free", 0)
+                        if isinstance(bal.get("USDT"), dict)
+                        else bal.get("USDT", 0)
+                    )
+                    check_balance_change(float(bal_val), "funds converted")
+
+                # Refresh OHLCV for open positions if a new candle has formed
+                tf = config.get("timeframe", "1h")
+                tf_sec = timeframe_seconds(None, tf)
+                open_syms: list[str] = []
+                for sym in ctx.positions:
+                    last_ts = last_candle_ts.get(sym, 0)
+                    if time.time() - last_ts >= tf_sec:
+                        open_syms.append(sym)
+                if open_syms:
+                    tf_cache = ctx.df_cache.get(tf, {})
+                    tf_cache = await update_ohlcv_cache(
+                        exchange,
+                        tf_cache,
+                        open_syms,
+                        timeframe=tf,
+                        limit=2,
+                        use_websocket=config.get("use_websocket", False),
+                        force_websocket_history=config.get("force_websocket_history", False),
+                        max_concurrent=config.get("max_concurrent_ohlcv"),
+                    )
+                    ctx.df_cache[tf] = tf_cache
+                    session_state.df_cache[tf] = tf_cache
+                    for sym in open_syms:
+                        df = tf_cache.get(sym)
+                        if df is not None and not df.empty:
+                            last_candle_ts[sym] = int(df["timestamp"].iloc[-1])
+
+                total_time = time.perf_counter() - cycle_start
+                timing = getattr(ctx, "timing", {})
+                _emit_timing(
+                    timing.get("fetch_candidates", 0.0),
+                    timing.get("update_caches", 0.0),
+                    timing.get("analyse_batch", 0.0),
+                    total_time,
+                    metrics_path,
+                    timing.get("ohlcv_fetch_latency", 0.0),
+                    timing.get("execution_latency", 0.0),
                 )
                 ctx.df_cache[tf] = tf_cache
                 session_state.df_cache[tf] = tf_cache
