@@ -106,6 +106,12 @@ meme_wave_sniper:
   execution:
     dry_run: true
   risk_file: crypto_bot/logs/sniper_risk.json
+new_listing_scanner:
+  enabled: false
+  interval_minutes: 60
+  volume_multiple: 5.0
+  timeframe: 1m
+  history_limit: 20
 meta_selector:
   enabled: false
 metrics_backend: csv
