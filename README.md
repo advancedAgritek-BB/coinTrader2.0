@@ -919,6 +919,18 @@ and caps the result between 0 and 1.
 pip install -r requirements.txt
 ```
 
+The requirements file includes core packages like
+[`ccxt`](https://github.com/ccxt/ccxt) for exchange connectivity,
+[`python-dotenv`](https://pypi.org/project/python-dotenv/) to load
+environment variables and [`cachetools`](https://pypi.org/project/cachetools/)
+for in-memory caching.
+
+If you plan to run the test suite install the development extras as well:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
 2. Run the test suite to verify your environment:
 
 ```bash
