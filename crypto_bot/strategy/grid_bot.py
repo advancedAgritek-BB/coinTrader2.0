@@ -109,8 +109,12 @@ def compute_vwap(df: pd.DataFrame, window: int) -> pd.Series:
         return pd.Series(index=df.index, dtype=float)
     typical = (df["high"] + df["low"] + df["close"]) / 3
     pv = typical * df["volume"]
-    vwap = pv.rolling(window).sum() / df["volume"].rolling(window).sum()
-    return vwap
+    vol_sum = df["volume"].rolling(window).sum()
+    price_sum = pv.rolling(window).sum()
+    rolling_mean = typical.rolling(window, min_periods=1).mean()
+    vwap = price_sum / vol_sum
+    vwap = vwap.where(vol_sum != 0, rolling_mean)
+    return vwap.fillna(rolling_mean)
 
 
 def is_in_trend(df: pd.DataFrame, fast: int, slow: int, side: str) -> bool:
