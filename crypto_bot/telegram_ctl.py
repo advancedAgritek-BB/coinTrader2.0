@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
-from typing import Any, Dict, Sequence
+from typing import Any, Dict, Sequence, Tuple
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -23,6 +24,73 @@ from .utils.telegram import TelegramNotifier
 
 
 logger = setup_logger(__name__, LOG_DIR / "telegram_ctl.log")
+
+
+# ---------------------------------------------------------------------------
+# Paging helpers used by the Telegram UI tests
+# ---------------------------------------------------------------------------
+
+callback_timeout = 300
+callback_state: Dict[str, Dict[str, Tuple[int, float]]] = {}
+CALLBACK_ITEMS_PER_PAGE = 5
+
+
+def _cleanup(chat_id: str) -> None:
+    now = time.time()
+    store = callback_state.get(chat_id)
+    if not store:
+        return
+    for key in list(store):
+        _, ts = store[key]
+        if now - ts > callback_timeout:
+            del store[key]
+    if not store:
+        callback_state.pop(chat_id, None)
+
+
+def set_page(chat_id: str | int, key: str, value: int) -> None:
+    cid = str(chat_id)
+    _cleanup(cid)
+    store = callback_state.setdefault(cid, {})
+    store[key] = (value, time.time())
+
+
+def get_page(chat_id: str | int, key: str) -> int:
+    cid = str(chat_id)
+    _cleanup(cid)
+    store = callback_state.get(cid)
+    if not store:
+        return 0
+    val = store.get(key)
+    if val is None:
+        return 0
+    page, ts = val
+    if time.time() - ts > callback_timeout:
+        del store[key]
+        if not store:
+            callback_state.pop(cid, None)
+        return 0
+    return page
+
+
+def _paginate(
+    lines: list[str], page: int
+) -> tuple[str, InlineKeyboardMarkup | None]:
+    total_pages = max(1, (len(lines) + CALLBACK_ITEMS_PER_PAGE - 1) // CALLBACK_ITEMS_PER_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * CALLBACK_ITEMS_PER_PAGE
+    end = start + CALLBACK_ITEMS_PER_PAGE
+    page_lines = lines[start:end]
+    keyboard = []
+    if total_pages > 1:
+        buttons = []
+        if page > 0:
+            buttons.append(InlineKeyboardButton("Prev", callback_data="prev"))
+        if page < total_pages - 1:
+            buttons.append(InlineKeyboardButton("Next", callback_data="next"))
+        keyboard.append(buttons)
+    markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+    return "\n".join(page_lines) or "(empty)", markup
 
 
 async def _maybe_call(func: Any) -> Any:
@@ -229,10 +297,10 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(text)
 
 
-ITEMS_PER_PAGE = 20
+TEXT_ITEMS_PER_PAGE = 20
 
 
-def _paginate(text: str, lines_per_page: int = ITEMS_PER_PAGE) -> list[str]:
+def paginate_text(text: str, lines_per_page: int = TEXT_ITEMS_PER_PAGE) -> list[str]:
     """Return ``text`` split into pages of ``lines_per_page`` lines."""
     lines = text.splitlines()
     return [
@@ -304,8 +372,12 @@ class TelegramCtl:
         self._heartbeat = asyncio.create_task(_loop())
         return self._heartbeat
 
-    def stop_heartbeat(self) -> None:
+    async def stop_heartbeat(self) -> None:
         if self._heartbeat:
             self._heartbeat.cancel()
+            try:
+                await self._heartbeat
+            except asyncio.CancelledError:
+                pass
 
 
