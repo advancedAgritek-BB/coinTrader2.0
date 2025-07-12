@@ -8,6 +8,17 @@ from typing import Optional, Any
 
 from crypto_bot.utils.logger import LOG_DIR
 import sys
+import logging
+
+try:  # pragma: no cover - optional dependency
+    import ccxt  # type: ignore
+    from ccxt.base.errors import NetworkError, ExchangeError
+except Exception:  # pragma: no cover - optional dependency
+    import types
+
+    ccxt = types.SimpleNamespace(NetworkError=Exception, ExchangeError=Exception)
+
+logger = logging.getLogger(__name__)
 
 from rich.console import Console
 from rich.table import Table
@@ -50,6 +61,14 @@ async def monitor_loop(
                         else:
                             bal = await asyncio.to_thread(exchange.fetch_balance)
                         balance = bal.get("USDT", {}).get("free", 0) if isinstance(bal.get("USDT"), dict) else bal.get("USDT", 0)
+                except ccxt.NetworkError as exc:
+                    logger.warning("Network error: %s; retrying shortly", exc)
+                    await asyncio.sleep(5)
+                    continue
+                except ccxt.ExchangeError as exc:
+                    logger.error("Exchange error: %s", exc)
+                    await asyncio.sleep(5)
+                    continue
                 except Exception:
                     pass
 
