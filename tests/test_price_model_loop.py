@@ -25,7 +25,7 @@ def test_price_model_training_loop(monkeypatch):
     calls = {"train": 0, "sleep": 0}
     monkeypatch.setitem(
         sys.modules,
-        "crypto_bot.torch_price_model",
+        "crypto_bot.models.torch_price_model",
         types.SimpleNamespace(train_model=lambda c: calls.__setitem__("train", calls["train"] + 1)),
     )
 
