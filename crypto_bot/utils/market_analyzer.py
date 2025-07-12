@@ -288,6 +288,15 @@ async def analyze_symbol(
             "atr": atr,
         })
 
+        price_cfg = config.get("ml_price_predictor", {})
+        if price_cfg.get("enabled"):
+            try:
+                from crypto_bot.models.price_predictor import predict_score as _pred
+
+                result["price_score"] = float(_pred(df))
+            except Exception:  # pragma: no cover - best effort
+                result["price_score"] = 0.0
+
         votes = []
         voting = config.get("voting_strategies", [])
         if isinstance(voting, list):

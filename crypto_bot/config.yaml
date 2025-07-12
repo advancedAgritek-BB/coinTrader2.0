@@ -161,6 +161,8 @@ ml_signal_model:
 torch_signal_model:
   enabled: false
   weight: 0.3
+ml_price_predictor:
+  enabled: false
 mode: auto
 mode_degrade_window: 20
 mode_threshold: 0.4
