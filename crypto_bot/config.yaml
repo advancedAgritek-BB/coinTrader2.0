@@ -35,6 +35,7 @@ breakout:
   squeeze_threshold: 0.03
   volume_mult: 2
   volume_window: 20
+  pump_dump_exit_drop_pct: 0.5
 cycle_bias:
   enabled: false
   mvrv_url: https://api.example.com/mvrv
