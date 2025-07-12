@@ -629,53 +629,16 @@ async def _main_impl() -> TelegramNotifier:
 
     logger.info("Starting bot")
     config = load_config()
-    metrics_path = (
-        Path(config.get("metrics_csv")) if config.get("metrics_csv") else None
-    )
-    volume_ratio = 0.01 if config.get("testing_mode") else 1.0
-    cooldown_configure(config.get("min_cooldown", 0))
-    status_updates = config.get("telegram", {}).get("status_updates", True)
-    market_loader_configure(
-        config.get("ohlcv_timeout", 120),
-        config.get("max_ohlcv_failures", 3),
-        config.get("max_ws_limit", 50),
-        status_updates,
-        max_concurrent=config.get("max_concurrent_ohlcv"),
-    )
-    secrets = dotenv_values(ENV_PATH)
-    flat_cfg = _flatten_config(config)
-    for key, val in secrets.items():
-        if key in flat_cfg:
-            cast_val = _cast_to_type(val, flat_cfg[key])
-            secrets[key] = str(cast_val)
-            logger.info(
-                "Overriding %s: %s -> %s (from .env)",
-                key,
-                flat_cfg[key],
-                cast_val,
-            )
-        else:
-            logger.info("Setting %s=%s from .env", key, val)
-    os.environ.update(secrets)
-
+    dotenv_values(ENV_PATH)
     user = load_or_create()
-
-    trade_updates = config.get("telegram", {}).get("trade_updates", True)
-    status_updates = config.get("telegram", {}).get("status_updates", True)
-    balance_updates = config.get("telegram", {}).get("balance_updates", False)
-
-    tg_cfg = {**config.get("telegram", {})}
-    if user.get("telegram_token"):
-        tg_cfg["token"] = user["telegram_token"]
-    if user.get("telegram_chat_id"):
-        tg_cfg["chat_id"] = user["telegram_chat_id"]
-    if os.getenv("TELE_CHAT_ADMINS"):
-        tg_cfg["chat_admins"] = os.getenv("TELE_CHAT_ADMINS")
-    trade_updates = tg_cfg.get("trade_updates", True)
-    status_updates = tg_cfg.get("status_updates", status_updates)
-    balance_updates = tg_cfg.get("balance_updates", balance_updates)
-
+    tg_cfg = {
+        "token": user.get("telegram_token", ""),
+        "chat_id": user.get("telegram_chat_id", ""),
+        "enabled": True,
+    }
     notifier = TelegramNotifier.from_config(tg_cfg)
+    send_test_message(notifier.token, notifier.chat_id, "Bot started")
+    get_exchange(config)
     if status_updates:
         notifier.notify("🤖 CoinTrader2.0 started")
 
@@ -1136,8 +1099,6 @@ async def _main_impl() -> TelegramNotifier:
                     await asyncio.to_thread(exchange.close)
 
     return notifier
-
-
 async def main() -> None:
     """Entry point for running the trading bot with error handling."""
     notifier: TelegramNotifier | None = None
