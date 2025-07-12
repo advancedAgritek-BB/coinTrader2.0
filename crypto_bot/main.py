@@ -472,19 +472,49 @@ async def execute_signals(ctx: BotContext) -> None:
         if candidate.get("name") == "grid_bot":
             grid_cfg = GridConfig.from_dict(ctx.config.get("grid_bot"))
             params = {"leverage": grid_cfg.leverage}
-        await cex_trade_async(
-            ctx.exchange,
-            ctx.ws_client,
-            sym,
-            direction_to_side(candidate["direction"]),
-            amount,
-            ctx.notifier,
-            dry_run=ctx.config.get("execution_mode") == "dry_run",
-            use_websocket=ctx.config.get("use_websocket", False),
-            config=ctx.config,
-            params=params,
-            leverage=leverage,
-        )
+        if "exchange_buy" in candidate and "exchange_sell" in candidate:
+            await cex_trade_async(
+                ctx.exchange,
+                ctx.ws_client,
+                sym,
+                "buy",
+                amount,
+                ctx.notifier,
+                dry_run=ctx.config.get("execution_mode") == "dry_run",
+                use_websocket=ctx.config.get("use_websocket", False),
+                config=ctx.config,
+                params=params,
+                leverage=leverage,
+                exchange_override=candidate["exchange_buy"],
+            )
+            await cex_trade_async(
+                ctx.exchange,
+                ctx.ws_client,
+                sym,
+                "sell",
+                amount,
+                ctx.notifier,
+                dry_run=ctx.config.get("execution_mode") == "dry_run",
+                use_websocket=ctx.config.get("use_websocket", False),
+                config=ctx.config,
+                params=params,
+                leverage=leverage,
+                exchange_override=candidate["exchange_sell"],
+            )
+        else:
+            await cex_trade_async(
+                ctx.exchange,
+                ctx.ws_client,
+                sym,
+                direction_to_side(candidate["direction"]),
+                amount,
+                ctx.notifier,
+                dry_run=ctx.config.get("execution_mode") == "dry_run",
+                use_websocket=ctx.config.get("use_websocket", False),
+                config=ctx.config,
+                params=params,
+                leverage=leverage,
+            )
         ctx.timing["execution_latency"] = max(
             ctx.timing.get("execution_latency", 0.0),
             time.perf_counter() - start_exec,
@@ -494,6 +524,11 @@ async def execute_signals(ctx: BotContext) -> None:
         if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
             ctx.paper_wallet.open(sym, direction_to_side(candidate["direction"]), amount, price)
             ctx.balance = ctx.paper_wallet.balance
+        ex_fields: dict[str, object] = {}
+        if "exchange_buy" in candidate and "exchange_sell" in candidate:
+            ex_fields["exchange_buy"] = candidate["exchange_buy"]
+            ex_fields["exchange_sell"] = candidate["exchange_sell"]
+
         ctx.positions[sym] = {
             "side": direction_to_side(candidate["direction"]),
             "entry_price": price,
@@ -505,6 +540,7 @@ async def execute_signals(ctx: BotContext) -> None:
             "size": amount,
             "trailing_stop": 0.0,
             "highest_price": price,
+            **ex_fields,
         }
         try:
             log_position(
