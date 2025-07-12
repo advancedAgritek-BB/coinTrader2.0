@@ -177,3 +177,37 @@ def test_range_window_config(cfg):
     score, direction = grid_bot.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0.0
+
+
+def test_dynamic_grid_updates_when_atr_spikes(monkeypatch):
+    symbol = "XBT/USDT"
+    cfg = GridConfig(symbol=symbol, dynamic_grid=True, atr_normalization=False)
+    grid_state.clear()
+    df = _df_with_price(105.0)
+
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 2.0)
+    grid_bot.generate_signal(df, config=cfg)
+    step1 = grid_state.get_grid_step(symbol)
+
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 4.0)
+    grid_bot.generate_signal(df, config=cfg)
+    step2 = grid_state.get_grid_step(symbol)
+
+    assert step2 > step1
+
+
+def test_dynamic_grid_ignores_small_atr_change(monkeypatch):
+    symbol = "XBT/USDT"
+    cfg = GridConfig(symbol=symbol, dynamic_grid=True, atr_normalization=False)
+    grid_state.clear()
+    df = _df_with_price(105.0)
+
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 2.0)
+    grid_bot.generate_signal(df, config=cfg)
+    step1 = grid_state.get_grid_step(symbol)
+
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 2.2)
+    grid_bot.generate_signal(df, config=cfg)
+    step2 = grid_state.get_grid_step(symbol)
+
+    assert step2 == step1

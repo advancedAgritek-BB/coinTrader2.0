@@ -14,6 +14,8 @@ from crypto_bot import grid_state
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.volatility_filter import calc_atr
+
+DYNAMIC_THRESHOLD = 1.5
 from . import breakout_bot
 
 
@@ -36,6 +38,8 @@ class GridConfig:
     spacing_factor: float = 0.75
     trend_ema_fast: int = 50
     trend_ema_slow: int = 200
+
+    dynamic_grid: bool = False
 
     range_window: int = 20
 
@@ -197,7 +201,20 @@ def generate_signal(
 
     atr = calc_atr(recent, window=atr_period)
     range_step = (high - low) / max(num_levels - 1, 1)
-    grid_step = min(atr * cfg.spacing_factor, range_step)
+    computed_step = min(atr * cfg.spacing_factor, range_step)
+    grid_step = computed_step
+    if cfg.dynamic_grid and symbol:
+        prev_step = grid_state.get_grid_step(symbol)
+        prev_atr = grid_state.get_last_atr(symbol)
+        grid_state.set_last_atr(symbol, atr)
+        if prev_step is not None and prev_atr is not None and prev_atr > 0:
+            ratio = max(atr / prev_atr, prev_atr / atr)
+            if ratio >= DYNAMIC_THRESHOLD:
+                grid_state.set_grid_step(symbol, computed_step)
+            else:
+                grid_step = prev_step
+        else:
+            grid_state.set_grid_step(symbol, computed_step)
     if not grid_step:
         return 0.0, "none"
 

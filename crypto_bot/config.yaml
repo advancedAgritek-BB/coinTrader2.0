@@ -66,6 +66,7 @@ grid_bot:
   spacing_factor: 0.75
   trend_ema_fast: 50
   trend_ema_slow: 200
+  dynamic_grid: false
   vol_zscore_threshold: 2.0
   volume_ma_window: 20
   volume_multiple: 1.5
