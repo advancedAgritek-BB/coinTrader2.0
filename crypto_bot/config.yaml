@@ -62,8 +62,9 @@ grid_bot:
   breakout_mult: 1.5
   cooldown_bars: 6
   max_active_legs: 4
+  num_levels: 10
   range_window: 20
-  spacing_factor: 0.75
+  spacing_factor: 0.5
   trend_ema_fast: 50
   trend_ema_slow: 200
   vol_zscore_threshold: 2.0

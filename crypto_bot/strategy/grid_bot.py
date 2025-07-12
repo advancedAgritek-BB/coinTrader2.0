@@ -21,7 +21,7 @@ from . import breakout_bot
 class GridConfig:
     """Configuration options for :func:`generate_signal`."""
 
-    num_levels: int = 5
+    num_levels: int = 10
     breakout_mult: float = 1.5
     cooldown_bars: int = 6
     max_active_legs: int = 4
@@ -33,7 +33,7 @@ class GridConfig:
     vol_zscore_threshold: float = 2.0
 
     atr_period: int = 14
-    spacing_factor: float = 0.75
+    spacing_factor: float = 0.5
     trend_ema_fast: int = 50
     trend_ema_slow: int = 200
 
@@ -68,12 +68,12 @@ def _as_dict(cfg: ConfigType) -> dict:
 
 
 def _get_num_levels() -> int:
-    """Return grid levels from ``GRID_LEVELS`` env var or default of 5."""
+    """Return grid levels from ``GRID_LEVELS`` env var or default of 10."""
     env = os.getenv("GRID_LEVELS")
     try:
-        return int(env) if env else 5
+        return int(env) if env else 10
     except ValueError:  # pragma: no cover - invalid env
-        return 5
+        return 10
 
 
 def volume_ok(series: pd.Series, window: int, mult: float, z_thresh: float) -> bool:
