@@ -287,6 +287,10 @@ cross_arbitrage:
   threshold: 0.005
 ```
 
+#### Cross Chain Arbitrage
+`cross_chain_arbitrage` compares average CEX prices with the Solana DEX quote
+via Jupiter. Configure the API keys and threshold in `config.yaml` and pass your
+exchange instances at runtime.
 #### Cross-Chain Arbitrage
 Tracks spreads between a centralized exchange and a Solana DEX. A trade is
 triggered when the difference covers bridge costs and exceeds ``threshold``.
@@ -294,6 +298,11 @@ triggered when the difference covers bridge costs and exceeds ``threshold``.
 ```yaml
 cross_chain_arbitrage:
   enabled: true
+  threshold: 0.005
+  helius_key: YOUR_KEY
+  jupiter_url: https://quote-api.jup.ag/v6/quote
+```
+
   cex: kraken
   dex: jupiter
   symbol: SOL/USDC
