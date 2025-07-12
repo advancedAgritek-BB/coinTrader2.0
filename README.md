@@ -14,6 +14,7 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 * Balance change alerts when USDT funds move
 * Capital tracker, sentiment filter and tax logger helpers
 * Solana mempool monitor to avoid swaps when fees spike
+* Hourly new listing scanner using x_semantic_search
 * Paper trading wallet for dry-run simulation
 * Live trading or dry-run simulation
 * Web dashboard with watchdog thread and realtime log view
@@ -92,6 +93,9 @@ needed.
    ```bash
    python -m crypto_bot.solana.runner
    ```
+6. Enable high frequency sniping by setting ``sniper_bot.high_freq`` to ``true``
+   in ``crypto_bot/config.yaml``. When ``meme_wave_sniper.candle_capture`` is
+   configured the runner automatically records 1m candles for new pools.
 
 Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
 
@@ -270,6 +274,7 @@ The bounce scalper looks for short-term reversals when a volume spike confirms m
 
 ### Data and Logging
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
+* **sniper_bot.high_freq** – switch the listing sniper to 1m candles.
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options.
 * **loop_interval_minutes** – delay between trading cycles.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
@@ -666,7 +671,7 @@ By default the worker refreshes the file every **6 hours**. Change the interval
 under `pairs_worker.refresh_interval` in `crypto_bot/config.yaml` and restart the
 worker to apply the new schedule.
 You can also limit the markets saved in the cache by defining
-`allowed_quote_currencies` and `blacklist_assets` under `refresh_pairs`:
+`allowed_quote_currencies` and `blocklist_assets` under `refresh_pairs`:
 
 ```yaml
 refresh_pairs:
@@ -674,7 +679,7 @@ refresh_pairs:
   refresh_interval: 6h
   top_k: 40
   allowed_quote_currencies: [USD, USDT]
-  blacklist_assets: []
+  blocklist_assets: []
 ```
 Run it manually whenever needed:
 
@@ -688,6 +693,8 @@ To automate updates you can run the script periodically via cron:
 0 * * * * cd /path/to/coinTrader2.0 && /usr/bin/python3 tasks/refresh_pairs.py
 ```
 Delete `cache/liquid_pairs.json` to force a full rebuild on the next run.
+If the cache file is missing or empty the sniper and DEX scalper
+strategies fall back to trading `BTC/USD` and `ETH/USD`.
 
 ## Web UI
 
@@ -836,6 +843,9 @@ meme_wave_sniper:
     daily_loss_cap: 2
   execution:
     dry_run: false
+  candle_capture:
+    url: https://api.helius.xyz/v0/markets/{mint}/candles?resolution=1m&limit=1
+    minutes: 15
 
 ```
 Set the `HELIUS_KEY` environment variable with your Helius API key.
@@ -853,6 +863,24 @@ API requirements: [Helius](https://www.helius.xyz/) for pool data,
 [Jupiter](https://jup.ag/) for quotes, [Jito](https://www.jito.network/) for
 bundle submission, and a [Twitter](https://developer.twitter.com/) token for
 sentiment scores.
+
+## New Listing Scanner
+
+The ``new_listing_scanner`` module queries X once per hour for tweets
+about "new crypto listing" using the ``x_semantic_search`` package. Symbols
+with quote volume greater than five times their baseline are passed to
+``sniper_bot.generate_signal`` for scoring. Enable the scanner in
+``crypto_bot/config.yaml``:
+
+```yaml
+new_listing_scanner:
+  enabled: true
+  interval_minutes: 60
+  volume_multiple: 5.0
+```
+
+When active, matching symbols appear in the logs with their score and trade
+direction.
 
 ### Backtesting
 
@@ -919,6 +947,18 @@ and caps the result between 0 and 1.
 
 ```bash
 pip install -r requirements.txt
+```
+
+The requirements file includes core packages like
+[`ccxt`](https://github.com/ccxt/ccxt) for exchange connectivity,
+[`python-dotenv`](https://pypi.org/project/python-dotenv/) to load
+environment variables and [`cachetools`](https://pypi.org/project/cachetools/)
+for in-memory caching.
+
+If you plan to run the test suite install the development extras as well:
+
+```bash
+pip install -r requirements-dev.txt
 ```
 
 2. Run the test suite to verify your environment:
