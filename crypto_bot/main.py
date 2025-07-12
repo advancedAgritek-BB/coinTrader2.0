@@ -484,6 +484,17 @@ async def execute_signals(ctx: BotContext) -> None:
             "trailing_stop": 0.0,
             "highest_price": price,
         }
+        try:
+            log_position(
+                sym,
+                direction_to_side(candidate["direction"]),
+                amount,
+                price,
+                price,
+                ctx.balance,
+            )
+        except Exception:
+            pass
 
 
 async def handle_exits(ctx: BotContext) -> None:
@@ -525,10 +536,27 @@ async def handle_exits(ctx: BotContext) -> None:
                 use_websocket=ctx.config.get("use_websocket", False),
                 config=ctx.config,
             )
+            if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
+                try:
+                    ctx.paper_wallet.close(sym, pos["size"], current_price)
+                    ctx.balance = ctx.paper_wallet.balance
+                except Exception:
+                    pass
             ctx.risk_manager.deallocate_capital(
                 pos.get("strategy", ""), pos["size"] * pos["entry_price"]
             )
             ctx.positions.pop(sym, None)
+            try:
+                log_position(
+                    sym,
+                    pos["side"],
+                    pos["size"],
+                    pos["entry_price"],
+                    current_price,
+                    ctx.balance,
+                )
+            except Exception:
+                pass
 
 
 async def _rotation_loop(
