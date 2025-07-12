@@ -184,7 +184,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **scan_lookback_limit** – candles of history loaded during the initial scan.
 * **cycle_lookback_limit** – candles fetched each cycle. Defaults to
   `min(150, timeframe_minutes × 2)`.
-* **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
+* **symbol_refresh_minutes** – minutes before the symbol queue is refreshed (defaults to 5).
 * **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
 * **symbol_score_weights** – weights for volume, spread, change and age. The weights must sum to a positive value.
 * **uncached_volume_multiplier** – extra volume factor applied when a pair is missing from `cache/liquid_pairs.json`.
