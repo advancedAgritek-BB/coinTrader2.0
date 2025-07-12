@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional, Any
 
 from crypto_bot.utils.logger import LOG_DIR
+from crypto_bot.utils.balance import get_usdt_balance
 import sys
 import logging
 
@@ -56,6 +57,7 @@ async def monitor_loop(
                     if paper_wallet is not None:
                         balance = getattr(paper_wallet, "balance", None)
                     elif hasattr(exchange, "fetch_balance"):
+                        balance = await get_usdt_balance(exchange, {})
                         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance")):
                             bal = await exchange.fetch_balance()
                         else:

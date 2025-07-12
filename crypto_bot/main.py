@@ -79,6 +79,7 @@ from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import telemetry, write_cycle_metrics
 from crypto_bot.utils.correlation import compute_correlation_matrix
 from crypto_bot.utils.strategy_analytics import write_scores, write_stats
+from crypto_bot.utils.balance import get_usdt_balance
 from crypto_bot.fund_manager import (
     auto_convert_funds,
     check_wallet_balances,
@@ -169,11 +170,7 @@ def notify_balance_change(
 async def fetch_balance(exchange, paper_wallet, config):
     """Return the latest wallet balance without logging."""
     if config["execution_mode"] != "dry_run":
-        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-            bal = await exchange.fetch_balance()
-        else:
-            bal = await asyncio.to_thread(exchange.fetch_balance)
-        return bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
+        return await get_usdt_balance(exchange, config)
     return paper_wallet.balance if paper_wallet else 0.0
 
 
@@ -582,15 +579,11 @@ async def _rotation_loop(
     while True:
         try:
             if state.get("running") and rotator.config.get("enabled"):
+                current_balance = await get_usdt_balance(exchange, rotator.config)
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
                     bal = await exchange.fetch_balance()
                 else:
                     bal = await asyncio.to_thread(exchange.fetch_balance)
-                current_balance = (
-                    bal.get("USDT", {}).get("free", 0)
-                    if isinstance(bal.get("USDT"), dict)
-                    else bal.get("USDT", 0)
-                )
                 check_balance_change(float(current_balance), "external change")
                 holdings = {
                     k: (v.get("total") if isinstance(v, dict) else v)
@@ -745,15 +738,7 @@ async def _main_impl() -> TelegramNotifier:
         previous_balance = new_balance
 
     try:
-        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-            bal = await exchange.fetch_balance()
-        else:
-            bal = await asyncio.to_thread(exchange.fetch_balance)
-        init_bal = (
-            bal.get("USDT", {}).get("free", 0)
-            if isinstance(bal.get("USDT"), dict)
-            else bal.get("USDT", 0)
-        )
+        init_bal = await get_usdt_balance(exchange, config)
         log_balance(float(init_bal))
         last_balance = float(init_bal)
         previous_balance = float(init_bal)
@@ -925,6 +910,43 @@ async def _main_impl() -> TelegramNotifier:
                     await asyncio.sleep(1)
                     continue
     
+            balances = await asyncio.to_thread(
+                check_wallet_balances, user.get("wallet_address", "")
+            )
+            for token in detect_non_trade_tokens(balances):
+                amount = balances[token]
+                logger.info("Converting %s %s to USDC", amount, token)
+                await auto_convert_funds(
+                    user.get("wallet_address", ""),
+                    token,
+                    "USDC",
+                    amount,
+                    dry_run=config["execution_mode"] == "dry_run",
+                    slippage_bps=config.get("solana_slippage_bps", 50),
+                    notifier=notifier,
+                )
+                bal_val = await get_usdt_balance(exchange, config)
+                check_balance_change(float(bal_val), "funds converted")
+
+            # Refresh OHLCV for open positions if a new candle has formed
+            tf = config.get("timeframe", "1h")
+            tf_sec = timeframe_seconds(None, tf)
+            open_syms: list[str] = []
+            for sym in ctx.positions:
+                last_ts = last_candle_ts.get(sym, 0)
+                if time.time() - last_ts >= tf_sec:
+                    open_syms.append(sym)
+            if open_syms:
+                tf_cache = ctx.df_cache.get(tf, {})
+                tf_cache = await update_ohlcv_cache(
+                    exchange,
+                    tf_cache,
+                    open_syms,
+                    timeframe=tf,
+                    limit=2,
+                    use_websocket=config.get("use_websocket", False),
+                    force_websocket_history=config.get("force_websocket_history", False),
+                    max_concurrent=config.get("max_concurrent_ohlcv"),
                 balances = await asyncio.to_thread(
                     check_wallet_balances, user.get("wallet_address", "")
                 )
