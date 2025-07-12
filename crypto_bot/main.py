@@ -255,7 +255,6 @@ def _cast_to_type(value: str, example: object) -> object:
         return value
 
 
-async def _ws_ping_loop(exchange: object, interval: float) -> None:
 async def _ws_ping_loop(exchange: ccxt.Exchange, interval: float) -> None:
     """Periodically send WebSocket ping messages."""
     try:
