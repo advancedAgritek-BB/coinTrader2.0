@@ -5,7 +5,8 @@ import pandas as pd
 
 try:
     import torch
-    from torch import nn
+    from torch import nn, optim
+    from torch.utils.data import DataLoader, TensorDataset
 except Exception:  # pragma: no cover - torch optional
     torch = None  # type: ignore
 
@@ -26,6 +27,36 @@ class PriceNet(nn.Module):  # pragma: no cover - tiny network
 
 
 _model: Optional[nn.Module] = None
+
+
+def train_model(df: pd.DataFrame, epochs: int = 20) -> Optional[nn.Module]:
+    """Train ``PriceNet`` on OHLC data."""
+    if torch is None:
+        return None
+    if df.empty:
+        return None
+    features = df[["open", "high", "low", "close"]].iloc[:-1]
+    targets = df["close"].shift(-1).dropna()
+    X = torch.tensor(features.values, dtype=torch.float32)
+    y = torch.tensor(targets.values, dtype=torch.float32).unsqueeze(1)
+    ds = TensorDataset(X, y)
+    loader = DataLoader(ds, batch_size=32, shuffle=True)
+    model = PriceNet()
+    if not hasattr(model, "parameters"):
+        return None
+    opt = optim.Adam(model.parameters(), lr=0.01)
+    loss_fn = nn.MSELoss()
+    for _ in range(epochs):  # pragma: no cover - simple loop
+        for xb, yb in loader:
+            opt.zero_grad()
+            out = model(xb)
+            loss = loss_fn(out, yb)
+            loss.backward()
+            opt.step()
+    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(model.state_dict(), MODEL_PATH)
+    model.eval()
+    return model
 
 
 def load_model() -> nn.Module:
