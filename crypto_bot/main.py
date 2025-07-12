@@ -81,7 +81,7 @@ from crypto_bot.fund_manager import (
     check_wallet_balances,
     detect_non_trade_tokens,
 )
-from crypto_bot.utils.balance import get_usdt_balance
+from crypto_bot.utils.balance import get_usdt_balance, get_btc_balance
 from crypto_bot.regime.regime_classifier import CONFIG
 
 
@@ -632,21 +632,25 @@ async def handle_fund_conversions(
     user_wallet: str,
     check_balance_change: callable,
 ) -> None:
-    """Convert unsupported funding tokens to USDC and update balance."""
+    """Convert unsupported funding tokens to BTC and update balance."""
 
     balances = await asyncio.to_thread(check_wallet_balances, user_wallet)
     for token in detect_non_trade_tokens(balances):
         amount = balances[token]
-        logger.info("Converting %s %s to USDC", amount, token)
+        logger.info("Converting %s %s to BTC", amount, token)
         await auto_convert_funds(
             user_wallet,
             token,
-            "USDC",
+            "BTC",
             amount,
             dry_run=config.get("execution_mode") == "dry_run",
             slippage_bps=config.get("solana_slippage_bps", 50),
             notifier=notifier,
         )
+        bal_val = await get_btc_balance(exchange, config)
+        check_balance_change(float(bal_val), "funds converted", currency="BTC")
+        if notifier:
+            notifier.notify(f"Converted to {bal_val:.6f} BTC")
         bal_val = await get_usdt_balance(exchange, config)
         check_balance_change("BTC", float(bal_val), "funds converted")
 
@@ -768,6 +772,14 @@ async def _main_impl() -> TelegramNotifier:
             return notifier
 
     balance_threshold = config.get("balance_change_threshold", 0.01)
+    previous_balance: dict[str, float] = {"USDT": 0.0}
+
+    def check_balance_change(
+        new_balance: float,
+        reason: str,
+        *,
+        currency: str = "USDT",
+    ) -> None:
     previous_balance: dict[str, float] = {}
 
     def check_balance_change(currency: str, new_balance: float, reason: str) -> None:
@@ -792,6 +804,7 @@ async def _main_impl() -> TelegramNotifier:
         )
         log_balance(float(init_bal))
         last_balance = float(init_bal)
+        previous_balance = {"USDT": float(init_bal)}
         previous_balance["USDT"] = float(init_bal)
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)

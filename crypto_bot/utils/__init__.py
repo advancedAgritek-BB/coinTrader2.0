@@ -18,4 +18,4 @@ from .strategy_analytics import compute_metrics, write_scores, write_stats
 from .stats import zscore
 from .commit_lock import check_and_update
 from .telemetry import telemetry
-from .balance import get_usdt_balance
+from .balance import get_usdt_balance, get_btc_balance
