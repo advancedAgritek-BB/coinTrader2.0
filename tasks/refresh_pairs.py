@@ -6,6 +6,7 @@ import json
 import time
 from pathlib import Path
 import logging
+import warnings
 
 import ccxt.async_support as ccxt
 import yaml
@@ -98,9 +99,15 @@ async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -
     allowed_quotes = {
         q.upper() for q in rp_cfg.get("allowed_quote_currencies", []) if isinstance(q, str)
     }
-    blacklist = {
-        a.upper() for a in rp_cfg.get("blacklist_assets", []) if isinstance(a, str)
-    }
+    blocklist_values = list(rp_cfg.get("blocklist_assets", []))
+    if not blocklist_values and rp_cfg.get("blacklist_assets"):
+        warnings.warn(
+            "refresh_pairs.blacklist_assets is deprecated; use blocklist_assets",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        blocklist_values = list(rp_cfg.get("blacklist_assets", []))
+    blocklist = {a.upper() for a in blocklist_values if isinstance(a, str)}
 
     exchange = get_exchange(config)
     sec_name = config.get("refresh_pairs", {}).get("secondary_exchange")
@@ -151,7 +158,7 @@ async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -
 
         if allowed_quotes and quote not in allowed_quotes:
             continue
-        if base in blacklist:
+        if base in blocklist:
             continue
 
         pairs.append((symbol, float(vol)))
