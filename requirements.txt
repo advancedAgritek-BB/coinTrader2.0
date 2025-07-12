@@ -14,6 +14,7 @@ PyYAML
 python-telegram-bot
 Flask
 pytest
+pytest-asyncio
 websocket-client
 requests
 solana
