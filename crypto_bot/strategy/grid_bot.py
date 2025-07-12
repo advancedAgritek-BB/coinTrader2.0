@@ -38,6 +38,7 @@ class GridConfig:
     trend_ema_slow: int = 200
 
     range_window: int = 20
+    min_range_pct: float = 0.001
 
     @classmethod
     def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":
@@ -172,6 +173,18 @@ def generate_signal(
     if recent.empty:
         return 0.0, "none"
 
+    range_slice = df.tail(range_window)
+    high = range_slice["high"].max()
+    low = range_slice["low"].min()
+
+    if high == low:
+        return 0.0, "none"
+
+    price = recent["close"].iloc[-1]
+    range_size = high - low
+    if range_size < price * cfg.min_range_pct:
+        return 0.0, "none"
+
     atr_series = ta.volatility.average_true_range(
         recent["high"], recent["low"], recent["close"], window=atr_period
     )
@@ -186,14 +199,6 @@ def generate_signal(
     if not vwap_series.isna().all():
         recent["vwap"] = vwap_series
 
-    range_slice = df.tail(range_window)
-    high = range_slice["high"].max()
-    low = range_slice["low"].min()
-
-    if high == low:
-        return 0.0, "none"
-
-    price = recent["close"].iloc[-1]
     if "vwap" in recent.columns and not pd.isna(recent["vwap"].iloc[-1]):
         centre = recent["vwap"].iloc[-1]
     else:

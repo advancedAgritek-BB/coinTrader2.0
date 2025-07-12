@@ -44,6 +44,16 @@ def _df_range_change() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
+def _df_narrow_range() -> pd.DataFrame:
+    data = {
+        "high": [100.05] * 20,
+        "low": [100.0] * 20,
+        "close": [100.02] * 20,
+        "volume": [100.0] * 19 + [300.0],
+    }
+    return pd.DataFrame(data)
+
+
 def test_short_signal_above_upper_grid(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
     df = _df_with_price(111.0)
@@ -177,3 +187,10 @@ def test_range_window_config(cfg):
     score, direction = grid_bot.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0.0
+
+
+def test_narrow_range_blocks_signal(monkeypatch):
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    df = _df_narrow_range()
+    score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
+    assert (score, direction) == (0.0, "none")
