@@ -49,3 +49,13 @@ def test_direction_override_short():
     score, direction = sniper_bot.generate_signal(df, config)
     assert direction == "short"
     assert score > 0.8
+
+
+def test_high_freq_mode():
+    df = _df_with_volume_and_price(
+        [1.0, 1.05, 1.1, 1.2],
+        [10, 12, 11, 200],
+    )
+    score, direction = sniper_bot.generate_signal(df, high_freq=True)
+    assert direction == "long"
+    assert score > 0.8

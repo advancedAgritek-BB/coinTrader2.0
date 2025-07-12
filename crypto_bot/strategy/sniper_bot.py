@@ -16,6 +16,7 @@ def generate_signal(
     initial_window: int = 3,
     min_volume: float = 100.0,
     direction: str = "auto",
+    high_freq: bool = False,
 ) -> Tuple[float, str]:
     """Detect pumps for newly listed tokens using early price and volume action.
 
@@ -38,6 +39,10 @@ def generate_signal(
         Minimum trade volume for the latest candle to consider a signal.
     direction : {"auto", "long", "short"}, optional
         Force a trade direction or infer automatically.
+    high_freq : bool, optional
+        When ``True`` the function expects 1m candles and shortens
+        ``max_history`` and ``initial_window`` so signals can trigger
+        right after a listing.
 
     Returns
     -------
@@ -51,6 +56,10 @@ def generate_signal(
         initial_window = config.get("initial_window", initial_window)
         min_volume = config.get("min_volume", min_volume)
         direction = config.get("direction", direction)
+
+    if high_freq:
+        max_history = min(max_history, 20)
+        initial_window = max(1, initial_window // 2)
 
     if len(df) < initial_window:
         return 0.0, "none"
