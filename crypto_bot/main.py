@@ -101,8 +101,6 @@ logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
 
-# Queue tracking symbols evaluated across cycles
-SYMBOL_EVAL_QUEUE: deque[str] = deque()
 
 # Protects shared queues for future multi-tasking scenarios
 QUEUE_LOCK = asyncio.Lock()
