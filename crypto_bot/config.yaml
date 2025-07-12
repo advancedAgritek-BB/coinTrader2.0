@@ -239,6 +239,8 @@ signal_weight_optimizer:
   min_weight: 0.05
 sl_pct: 0.03
 solana_slippage_bps: 50
+solana_retry_attempts: 3
+solana_retry_delay: 1
 strategy_allocation:
   grid_bot: 0.3
   sniper_bot: 0.3
