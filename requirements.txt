@@ -35,3 +35,4 @@ numba
 cachetools
 prometheus-client
 aiolimiter
+torch

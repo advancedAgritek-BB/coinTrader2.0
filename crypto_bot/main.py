@@ -81,7 +81,7 @@ from crypto_bot.fund_manager import (
     check_wallet_balances,
     detect_non_trade_tokens,
 )
-from crypto_bot.utils.balance import get_usdt_balance
+from crypto_bot.utils.balance import get_usdt_balance, get_btc_balance
 from crypto_bot.regime.regime_classifier import CONFIG
 
 
@@ -558,6 +558,9 @@ async def handle_exits(ctx: BotContext) -> None:
                 use_websocket=ctx.config.get("use_websocket", False),
                 config=ctx.config,
             )
+            profit = (current_price - pos["entry_price"]) * pos["size"]
+            if pos["side"] == "sell":
+                profit = -profit
             if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
                 try:
                     ctx.paper_wallet.close(sym, pos["size"], current_price)
@@ -568,6 +571,25 @@ async def handle_exits(ctx: BotContext) -> None:
                 pos.get("strategy", ""), pos["size"] * pos["entry_price"]
             )
             ctx.positions.pop(sym, None)
+            if profit > 0 and getattr(ctx, "user_wallet", None):
+                await auto_convert_funds(
+                    ctx.user_wallet,
+                    "USDT",
+                    "BTC",
+                    profit,
+                    dry_run=ctx.config.get("execution_mode") == "dry_run",
+                    slippage_bps=ctx.config.get("solana_slippage_bps", 50),
+                    notifier=ctx.notifier,
+                )
+                try:
+                    tf_price = ctx.df_cache.get(tf, {}).get("BTC/USDT") or ctx.df_cache.get(tf, {}).get("XBT/USDT")
+                    if tf_price is not None and not tf_price.empty:
+                        btc_price = float(tf_price["close"].iloc[-1])
+                        btc_amt = profit / btc_price
+                        if ctx.notifier:
+                            await ctx.notifier.send_message(f"Added {btc_amt:.6f} BTC to wallet")
+                except Exception:
+                    pass
             try:
                 log_position(
                     sym,
@@ -604,7 +626,9 @@ async def _rotation_loop(
                     if isinstance(bal.get("USDT"), dict)
                     else bal.get("USDT", 0)
                 )
-                check_balance_change(float(current_balance), "external change")
+                check_balance_change(
+                    "USDT", float(current_balance), "external change"
+                )
                 holdings = {
                     k: (v.get("total") if isinstance(v, dict) else v)
                     for k, v in bal.items()
@@ -630,23 +654,27 @@ async def handle_fund_conversions(
     user_wallet: str,
     check_balance_change: callable,
 ) -> None:
-    """Convert unsupported funding tokens to USDC and update balance."""
+    """Convert unsupported funding tokens to BTC and update balance."""
 
     balances = await asyncio.to_thread(check_wallet_balances, user_wallet)
     for token in detect_non_trade_tokens(balances):
         amount = balances[token]
-        logger.info("Converting %s %s to USDC", amount, token)
+        logger.info("Converting %s %s to BTC", amount, token)
         await auto_convert_funds(
             user_wallet,
             token,
-            "USDC",
+            "BTC",
             amount,
             dry_run=config.get("execution_mode") == "dry_run",
             slippage_bps=config.get("solana_slippage_bps", 50),
             notifier=notifier,
         )
+        bal_val = await get_btc_balance(exchange, config)
+        check_balance_change(float(bal_val), "funds converted", currency="BTC")
+        if notifier:
+            notifier.notify(f"Converted to {bal_val:.6f} BTC")
         bal_val = await get_usdt_balance(exchange, config)
-        check_balance_change(float(bal_val), "funds converted")
+        check_balance_change("BTC", float(bal_val), "funds converted")
 
 
 async def refresh_open_position_data(
@@ -766,14 +794,25 @@ async def _main_impl() -> TelegramNotifier:
             return notifier
 
     balance_threshold = config.get("balance_change_threshold", 0.01)
-    previous_balance = 0.0
+    previous_balance: dict[str, float] = {"USDT": 0.0}
 
-    def check_balance_change(new_balance: float, reason: str) -> None:
+    def check_balance_change(
+        new_balance: float,
+        reason: str,
+        *,
+        currency: str = "USDT",
+    ) -> None:
+    previous_balance: dict[str, float] = {}
+
+    def check_balance_change(currency: str, new_balance: float, reason: str) -> None:
         nonlocal previous_balance
-        delta = new_balance - previous_balance
+        prev = previous_balance.get(currency, 0.0)
+        delta = new_balance - prev
         if abs(delta) > balance_threshold and notifier:
-            notifier.notify(f"Balance changed by {delta:.4f} USDT due to {reason}")
-        previous_balance = new_balance
+            notifier.notify(
+                f"Balance changed by {delta:.4f} {currency} due to {reason}"
+            )
+        previous_balance[currency] = new_balance
 
     try:
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
@@ -787,7 +826,8 @@ async def _main_impl() -> TelegramNotifier:
         )
         log_balance(float(init_bal))
         last_balance = float(init_bal)
-        previous_balance = float(init_bal)
+        previous_balance = {"USDT": float(init_bal)}
+        previous_balance["USDT"] = float(init_bal)
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)
         if status_updates:

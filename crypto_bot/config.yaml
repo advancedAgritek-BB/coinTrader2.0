@@ -146,6 +146,13 @@ micro_scalp:
   vol_window: 20
   volume_window: 20
   wick_pct: 0.2
+solana_scalping:
+  rsi_window: 14
+  oversold: 30
+  overbought: 70
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
 sniper_bot:
   high_freq: false
 cross_chain_arbitrage:
@@ -167,6 +174,8 @@ torch_signal_model:
   enabled: false
   weight: 0.3
 ml_price_predictor:
+  enabled: false
+torch_price_model:
   enabled: false
 mode: auto
 mode_degrade_window: 20
@@ -268,6 +277,8 @@ strategy_router:
     - mean_bot
     scalp:
     - micro_scalp
+    sol_scalp:
+    - solana_scalping
     sideways:
     - grid
     trending:
