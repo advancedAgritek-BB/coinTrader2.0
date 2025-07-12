@@ -88,6 +88,8 @@ def test_no_signal_without_volume_spike():
         "body_pct": 0.5,
         "lookback": 3,
     }
+    # rolling std should be zero on the last bar
+    assert df["volume"].rolling(3).std().iloc[-1] == 0.0
     score, direction = bounce_scalper.generate_signal(df, cfg)
     assert direction == "none"
     assert score == 0.0
@@ -188,6 +190,25 @@ def test_order_book_imbalance_blocks_short(monkeypatch):
     score, direction = bounce_scalper.generate_signal(df, cfg, book=snap)
     assert direction == "none"
     assert score == 0.0
+
+
+def test_order_book_penalty_reduces_score(monkeypatch):
+    prices = list(range(100, 80, -1)) + [82]
+    volumes = [100] * 20 + [300]
+    df = _df(prices, volumes)
+    base_score, base_dir = bounce_scalper.generate_signal(
+        df, BounceScalperConfig(symbol="XBT/USDT")
+    )
+
+    snap = {
+        "bids": [[30000.1, 1.0]],
+        "asks": [[30000.2, 5.0]],
+    }
+
+    cfg = {"symbol": "BTC/USD", "imbalance_ratio": 2.0, "imbalance_penalty": 0.5}
+    score, direction = bounce_scalper.generate_signal(df, cfg, book=snap)
+    assert direction == base_dir
+    assert 0 < score < base_score
 
 
 def test_trend_filter_blocks_signals(monkeypatch):
@@ -298,6 +319,7 @@ def test_config_from_dict():
     assert cfg.symbol == "ETH/USDT"
     # ensure defaults applied
     assert cfg.overbought == 70
+    assert cfg.down_candles == 2
 
 
 def test_adaptive_rsi_threshold(monkeypatch):
