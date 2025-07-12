@@ -1,6 +1,13 @@
+import importlib.util
 import pandas as pd
+from pathlib import Path
 
-from crypto_bot.strategy import sniper_bot
+spec = importlib.util.spec_from_file_location(
+    "sniper_bot",
+    Path(__file__).resolve().parents[1] / "crypto_bot" / "strategy" / "sniper_bot.py",
+)
+sniper_bot = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(sniper_bot)
 
 
 def _df_with_volume_and_price(close_list, volume_list):
@@ -58,4 +65,11 @@ def test_high_freq_mode():
     )
     score, direction = sniper_bot.generate_signal(df, high_freq=True)
     assert direction == "long"
+def test_sniper_detects_dump():
+    df = _df_with_volume_and_price(
+        [1.0, 0.95, 0.9, 0.8],
+        [10, 12, 11, 200],
+    )
+    score, direction = sniper_bot.generate_signal(df)
+    assert direction == "short"
     assert score > 0.8
