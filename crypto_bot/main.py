@@ -257,8 +257,6 @@ def _cast_to_type(value: str, example: object) -> object:
         return value
 
 
-async def _ws_ping_loop(exchange: object, interval: float) -> None:
-    pass
 async def _ws_ping_loop(exchange: ccxt.Exchange, interval: float) -> None:
     """Periodically send WebSocket ping messages."""
     try:
@@ -900,6 +898,9 @@ async def _main_impl() -> TelegramNotifier:
                     await asyncio.sleep(1)
                     continue
 
+            except Exception:
+                pass
+
                 balances = await asyncio.to_thread(
                     check_wallet_balances, user.get("wallet_address", "")
                 )
@@ -973,6 +974,7 @@ async def _main_impl() -> TelegramNotifier:
                     config["loop_interval_minutes"], unit="m"
                 ).total_seconds()
                 await asyncio.sleep(delay)
+    
             except asyncio.CancelledError:
                 raise
             except ccxt.NetworkError as exc:
