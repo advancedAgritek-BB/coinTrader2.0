@@ -1,6 +1,7 @@
 from typing import Optional, Tuple
 
 import pandas as pd
+import numpy as np
 import ta
 try:  # pragma: no cover - optional dependency
     from scipy import stats as scipy_stats
@@ -33,8 +34,8 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     rsi_overbought_pct = float(params.get("rsi_overbought_pct", 90))
     rsi_oversold_pct = float(params.get("rsi_oversold_pct", 10))
 
-    lookback = 20
-    recent = df.iloc[-(lookback + 1) :]
+    lookback = lookback_cfg
+    recent = df.iloc[-(lookback_cfg + 1) :]
 
     rsi = ta.momentum.rsi(recent["close"], window=14)
     rsi_z = stats.zscore(rsi, lookback_cfg)
@@ -53,12 +54,12 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     )
     vwap_series = vwap.volume_weighted_average_price()
 
-    rsi = cache_series("rsi", df, rsi, lookback)
-    rsi_z = cache_series("rsi_z", df, rsi_z, lookback)
-    bb_z = cache_series("bb_z", df, bb_z, lookback)
-    kc_h = cache_series("kc_h", df, kc_h, lookback)
-    kc_l = cache_series("kc_l", df, kc_l, lookback)
-    vwap_series = cache_series("vwap", df, vwap_series, lookback)
+    rsi = cache_series("rsi", df, rsi, lookback_cfg)
+    rsi_z = cache_series("rsi_z", df, rsi_z, lookback_cfg)
+    bb_z = cache_series("bb_z", df, bb_z, lookback_cfg)
+    kc_h = cache_series("kc_h", df, kc_h, lookback_cfg)
+    kc_l = cache_series("kc_l", df, kc_l, lookback_cfg)
+    vwap_series = cache_series("vwap", df, vwap_series, lookback_cfg)
 
     df = recent.copy()
     df["rsi"] = rsi
@@ -74,40 +75,50 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     short_scores = []
 
     rsi_z_last = df["rsi_z"].iloc[-1]
-    lower_thr = scipy_stats.norm.ppf(rsi_oversold_pct / 100)
-    upper_thr = scipy_stats.norm.ppf(rsi_overbought_pct / 100)
+    rsi_z_series = df["rsi_z"].dropna()
+    if not rsi_z_series.empty:
+        lower_thr = rsi_z_series.quantile(rsi_oversold_pct / 100)
+        upper_thr = rsi_z_series.quantile(rsi_overbought_pct / 100)
+    else:
+        lower_thr = np.nan
+        upper_thr = np.nan
+
     oversold_cond = (
-        rsi_z_last < lower_thr if not pd.isna(rsi_z_last) else latest["rsi"] < 50
+        rsi_z_last < lower_thr
+        if not pd.isna(lower_thr) and not pd.isna(rsi_z_last)
+        else latest["rsi"] < 50
     )
     overbought_cond = (
-        rsi_z_last > upper_thr if not pd.isna(rsi_z_last) else latest["rsi"] > 50
+        rsi_z_last > upper_thr
+        if not pd.isna(upper_thr) and not pd.isna(rsi_z_last)
+        else latest["rsi"] > 50
     )
 
     if oversold_cond:
-        long_scores.append(min((50 - latest["rsi"]) / 20, 1))
+        long_scores.append(max(0.0, min((50 - latest["rsi"]) / 20, 1)))
     elif overbought_cond:
-        short_scores.append(min((latest["rsi"] - 50) / 20, 1))
+        short_scores.append(max(0.0, min((latest["rsi"] - 50) / 20, 1)))
 
     if not pd.isna(latest["bb_z"]):
         if latest["bb_z"] < 0:
-            long_scores.append(min(-latest["bb_z"] / 2, 1))
+            long_scores.append(max(0.0, min(-latest["bb_z"] / 2, 1)))
         elif latest["bb_z"] > 0:
-            short_scores.append(min(latest["bb_z"] / 2, 1))
+            short_scores.append(max(0.0, min(latest["bb_z"] / 2, 1)))
 
     if not pd.isna(latest["kc_h"]) and not pd.isna(latest["kc_l"]):
         width = latest["kc_h"] - latest["kc_l"]
         if width > 0:
             if latest["close"] < latest["kc_l"]:
-                long_scores.append(min((latest["kc_l"] - latest["close"]) / width, 1))
+                long_scores.append(max(0.0, min((latest["kc_l"] - latest["close"]) / width, 1)))
             elif latest["close"] > latest["kc_h"]:
-                short_scores.append(min((latest["close"] - latest["kc_h"]) / width, 1))
+                short_scores.append(max(0.0, min((latest["close"] - latest["kc_h"]) / width, 1)))
 
     if not pd.isna(latest["vwap"]):
         diff = abs(latest["close"] - latest["vwap"]) / latest["vwap"]
         if latest["close"] < latest["vwap"]:
-            long_scores.append(min(diff / 0.05, 1))
+            long_scores.append(max(0.0, min(diff / 0.05, 1)))
         elif latest["close"] > latest["vwap"]:
-            short_scores.append(min(diff / 0.05, 1))
+            short_scores.append(max(0.0, min(diff / 0.05, 1)))
 
     long_score = sum(long_scores) / len(long_scores) if long_scores else 0.0
     short_score = sum(short_scores) / len(short_scores) if short_scores else 0.0

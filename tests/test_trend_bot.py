@@ -55,7 +55,7 @@ def test_rsi_zscore(monkeypatch):
     monkeypatch.setattr(
         trend_bot.stats,
         "zscore",
-        lambda s, lookback=3: pd.Series([2] * len(s), index=s.index),
+        lambda s, lookback=3: pd.Series([0] * (len(s) - 1) + [2], index=s.index),
     )
     cfg = {"indicator_lookback": 3, "rsi_overbought_pct": 90}
     score, direction = trend_bot.generate_signal(df, cfg)
@@ -95,3 +95,44 @@ def test_torch_integration(monkeypatch):
     score, direction = trend_bot.generate_signal(df, cfg)
     assert direction == "long"
     assert score == pytest.approx(0.6)
+
+def _setup_reversal(monkeypatch, rsi_val=20):
+    """Patch indicators for reversal tests."""
+    def fake_ema(s, window=5):
+        val = 1 if window == 5 else 2
+        arr = [val] * (len(s) - 1) + [2 if window == 5 else 1]
+        return pd.Series(arr, index=s.index)
+
+    class FakeADX:
+        def __init__(self, *args, **kwargs):
+            self.len = len(args[0])
+
+        def adx(self):
+            return pd.Series([30] * self.len)
+
+    monkeypatch.setattr(trend_bot.ta.trend, "ema_indicator", fake_ema)
+    monkeypatch.setattr(
+        trend_bot.ta.momentum, "rsi", lambda s, window=14: pd.Series([rsi_val] * len(s), index=s.index)
+    )
+    monkeypatch.setattr(
+        trend_bot.stats, "zscore", lambda s, lookback=3: pd.Series([float("nan")] * len(s), index=s.index)
+    )
+    monkeypatch.setattr(trend_bot.ta.trend, "ADXIndicator", FakeADX)
+
+
+def test_volume_gate_blocks_reversal(monkeypatch):
+    _setup_reversal(monkeypatch)
+    df = _df_trend(150.0, high_equals_close=True)
+    cfg = {"volume_mult": 2, "volume_window": 20}
+    score, direction = trend_bot.generate_signal(df, cfg)
+    assert direction == "none"
+    assert score == 0.0
+
+
+def test_volume_gate_allows_reversal(monkeypatch):
+    _setup_reversal(monkeypatch)
+    df = _df_trend(500.0, high_equals_close=True)
+    cfg = {"volume_mult": 2, "volume_window": 20}
+    score, direction = trend_bot.generate_signal(df, cfg)
+    assert direction == "long"
+    assert score > 0

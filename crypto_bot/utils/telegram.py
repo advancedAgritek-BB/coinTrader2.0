@@ -8,6 +8,7 @@ import threading
 import os
 
 from telegram import Bot
+from aiolimiter import AsyncLimiter
 
 from .logger import LOG_DIR, setup_logger
 from pathlib import Path
@@ -92,6 +93,7 @@ class TelegramNotifier:
         token: str = "",
         chat_id: str = "",
         admins: Iterable[str] | str | None = None,
+        limiter: AsyncLimiter | None = None,
     ) -> None:
         self.enabled = enabled
         self.token = token
@@ -102,6 +104,8 @@ class TelegramNotifier:
         self._disabled = False
         # lock to serialize send attempts
         self._lock = threading.Lock()
+        # rate limiter for sending messages
+        self.limiter = limiter or AsyncLimiter(1, 1)
 
     def notify(self, text: str) -> Optional[str]:
         """Send ``text`` if notifications are enabled and credentials exist."""
@@ -111,6 +115,20 @@ class TelegramNotifier:
         with self._lock:
             if self._disabled:
                 return None
+            if self.limiter:
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+
+                if loop and loop.is_running():
+                    fut = asyncio.run_coroutine_threadsafe(
+                        self.limiter.acquire(), loop
+                    )
+                    fut.result()
+                else:
+                    asyncio.run(self.limiter.acquire())
+
             err = send_message(self.token, self.chat_id, text)
             if err is not None:
                 self._disabled = True
@@ -124,11 +142,14 @@ class TelegramNotifier:
     def from_config(cls, config: dict) -> "TelegramNotifier":
         """Create a notifier from a configuration dictionary."""
         admins = config.get("chat_admins") or config.get("admins")
+        rate = config.get("rate_limit", 1)
+        limiter = AsyncLimiter(rate, 1) if rate else None
         notifier = cls(
             token=config.get("token", ""),
             chat_id=config.get("chat_id", ""),
             enabled=config.get("enabled", True),
             admins=admins,
+            limiter=limiter,
         )
         return notifier
 
