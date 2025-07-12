@@ -126,3 +126,19 @@ def test_squeeze_zscore(monkeypatch):
     score, direction, _ = breakout_bot.generate_signal(df, cfg)
     assert direction == "long"
     assert score > 0
+
+
+def test_volume_ma_zero_returns_none():
+    prices = [100] * 11
+    volumes = [0] * 11
+    df = _make_df(prices, volumes)
+    score, direction, _ = breakout_bot.generate_signal(df)
+    assert score == 0.0
+    assert direction == "none"
+
+
+def test_micro_breakout_signal():
+    df = pd.DataFrame({"close": [1.0, 1.0, 1.0, 1.02], "volume": [100, 100, 100, 200]})
+    score, direction = breakout_bot.generate_micro_breakout(df)
+    assert direction == "long"
+    assert score > 0
