@@ -1,7 +1,9 @@
 import json
 import threading
 import os
+import asyncio
 from typing import Optional, Callable, Union, List, Any, Dict
+import aiohttp
 from datetime import datetime, timedelta, timezone
 
 try:
@@ -439,6 +441,8 @@ class KrakenWSClient:
             self.token_created = datetime.now(timezone.utc)
         self.public_ws: Optional[WebSocketApp] = None
         self.private_ws: Optional[WebSocketApp] = None
+        self._session_async: Optional[aiohttp.ClientSession] = None
+        self._private_ws_async = None
         self.last_public_heartbeat: Optional[datetime] = None
         self.last_private_heartbeat: Optional[datetime] = None
         self._public_subs = []
@@ -571,6 +575,23 @@ class KrakenWSClient:
             self._regenerate_private_subs()
             for sub in self._private_subs:
                 self.private_ws.send(sub)
+
+    async def connect_private_async(self) -> None:
+        prev_token = self.token
+        if self.token_expired():
+            self.token = None
+        if not self.token:
+            self.get_token()
+        token_changed = self.token != prev_token
+        if self._private_ws_async is None or getattr(self._private_ws_async, "closed", False):
+            if self._session_async is None:
+                self._session_async = aiohttp.ClientSession()
+            self._private_ws_async = await self._session_async.ws_connect(PRIVATE_URL, heartbeat=20)
+            token_changed = True
+        if token_changed:
+            self._regenerate_private_subs()
+            for sub in self._private_subs:
+                await self._private_ws_async.send_str(sub)
 
     def subscribe_ticker(
         self,
@@ -1003,6 +1024,31 @@ class KrakenWSClient:
         self.private_ws.send(data)
         return msg
 
+    async def add_order_async(
+        self,
+        symbol: Union[str, List[str]],
+        side: str,
+        order_qty: float,
+        order_type: str = "market",
+    ) -> dict:
+        """Asynchronously send an add_order request via the private websocket."""
+        await self.connect_private_async()
+        if isinstance(symbol, list):
+            symbol = symbol[0] if symbol else ""
+        msg = {
+            "method": "add_order",
+            "params": {
+                "symbol": symbol,
+                "side": side,
+                "order_type": order_type,
+                "order_qty": str(order_qty),
+                "token": self.token,
+            },
+        }
+        data = json.dumps(msg)
+        await self._private_ws_async.send_str(data)
+        return msg
+
     def edit_order(
         self,
         order_id: str,
@@ -1158,6 +1204,27 @@ class KrakenWSClient:
             except Exception as exc:
                 logger.error("Error closing private websocket: %s", exc)
             self.private_ws = None
+
+        if self._private_ws_async is not None:
+            try:
+                awaitable = getattr(self._private_ws_async, "close", None)
+                if asyncio.iscoroutinefunction(awaitable):
+                    asyncio.create_task(awaitable())
+                elif callable(awaitable):
+                    awaitable()
+            except Exception as exc:
+                logger.error("Error closing async private websocket: %s", exc)
+            self._private_ws_async = None
+        if self._session_async is not None:
+            try:
+                awaitable = getattr(self._session_async, "close", None)
+                if asyncio.iscoroutinefunction(awaitable):
+                    asyncio.create_task(awaitable())
+                elif callable(awaitable):
+                    awaitable()
+            except Exception as exc:
+                logger.error("Error closing aiohttp session: %s", exc)
+            self._session_async = None
 
         self._public_subs = []
         self._private_subs = []
