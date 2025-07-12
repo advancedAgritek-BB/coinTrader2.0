@@ -857,14 +857,6 @@ async def _main_impl() -> TelegramNotifier:
     balance_threshold = config.get("balance_change_threshold", 0.01)
     previous_balance: dict[str, float] = {"USDT": 0.0}
 
-    def check_balance_change(
-        new_balance: float,
-        reason: str,
-        *,
-        currency: str = "USDT",
-    ) -> None:
-    previous_balance: dict[str, float] = {}
-
     def check_balance_change(currency: str, new_balance: float, reason: str) -> None:
         nonlocal previous_balance
         prev = previous_balance.get(currency, 0.0)
