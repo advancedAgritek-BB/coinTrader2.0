@@ -3,7 +3,8 @@ import pandas as pd
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 
-ALLOWED_PAIRS = load_liquid_pairs() or []
+DEFAULT_PAIRS = ["BTC/USD", "ETH/USD"]
+ALLOWED_PAIRS = load_liquid_pairs() or DEFAULT_PAIRS
 
 
 def generate_signal(
@@ -64,17 +65,20 @@ def generate_signal(
 
     if (
         len(df) <= max_history
-        and price_change >= breakout_pct
+        and abs(price_change) >= breakout_pct
         and vol_ratio >= volume_multiple
     ):
-        price_score = min(price_change / breakout_pct, 1.0)
+        price_score = min(abs(price_change) / breakout_pct, 1.0)
         vol_score = min(vol_ratio / volume_multiple, 1.0)
         score = (price_score + vol_score) / 2
         if config is None or config.get("atr_normalization", True):
             score = normalize_score_by_volatility(df, score)
         if direction not in {"auto", "long", "short"}:
             direction = "auto"
-        trade_direction = direction if direction != "auto" else "long"
+        if direction == "auto":
+            trade_direction = "short" if price_change < 0 else "long"
+        else:
+            trade_direction = direction
         return score, trade_direction
 
     return 0.0, "none"

@@ -25,6 +25,7 @@ def test_load_config_returns_dict():
     assert "voting_strategies" in config
     assert "min_agreeing_votes" in config
     assert "ohlcv_timeout" in config
+    assert "torch_signal_model" in config
     assert "grid_bot" in config
     grid_bot = config["grid_bot"]
     assert isinstance(grid_bot, dict)
@@ -46,6 +47,7 @@ def test_load_config_returns_dict():
 
     assert "telegram" in config
     assert "command_cooldown" in config["telegram"]
+    assert "rate_limit" in config["telegram"]
 
 
 def test_load_config_normalizes_symbol(tmp_path, monkeypatch):

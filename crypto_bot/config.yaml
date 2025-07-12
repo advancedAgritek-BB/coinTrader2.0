@@ -6,8 +6,9 @@ bb_squeeze_pct: 20
 bounce_scalper:
   atr_normalization: true
   atr_period: 14
-  cooldown_bars: 2
   down_candles: 3
+  cooldown_bars: 2
+  down_candles: 2
   max_concurrent_signals: 1
   min_score: 0.3
   overbought: 70
@@ -63,8 +64,9 @@ grid_bot:
   breakout_mult: 1.5
   cooldown_bars: 6
   max_active_legs: 4
+  num_levels: 10
   range_window: 20
-  spacing_factor: 0.75
+  spacing_factor: 0.5
   trend_ema_fast: 50
   trend_ema_slow: 200
   vol_zscore_threshold: 2.0
@@ -74,6 +76,7 @@ liquidity_check: true
 liquidity_depth: 10
 log_to_google: true
 loop_interval_minutes: 2
+leverage_mult: 10
 balance_poll_mod: 1
 max_age_days: 180
 max_change_pct: 10
@@ -107,6 +110,12 @@ meme_wave_sniper:
   execution:
     dry_run: true
   risk_file: crypto_bot/logs/sniper_risk.json
+new_listing_scanner:
+  enabled: false
+  interval_minutes: 60
+  volume_multiple: 5.0
+  timeframe: 1m
+  history_limit: 20
 meta_selector:
   enabled: false
 metrics_backend: csv
@@ -139,6 +148,9 @@ min_symbol_score: 0.1
 ml_signal_model:
   enabled: true
   weight: 0.4
+torch_signal_model:
+  enabled: false
+  weight: 0.3
 mode: auto
 mode_degrade_window: 20
 mode_threshold: 0.4
@@ -168,7 +180,7 @@ refresh_pairs:
   refresh_interval: 6h
   top_k: 40
   allowed_quote_currencies: [USD, USDT]
-  blacklist_assets: []
+  blocklist_assets: []
 regime_return_period: 5
 regime_timeframes:
 - 5m
@@ -240,7 +252,7 @@ strategy_router:
     sideways:
     - grid
     trending:
-    - trend
+    - dca_bot
     volatile:
     - sniper_bot
     - sniper_solana
@@ -275,6 +287,7 @@ telegram:
   chat_admins: 827777274
   chat_id: 827777274
   command_cooldown: 5
+  rate_limit: 1
   enabled: true
   token: your_telegram_token
   trade_updates: true
