@@ -65,9 +65,6 @@ from crypto_bot.utils.market_loader import (
 )
 from crypto_bot.utils.eval_queue import build_priority_queue
 from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
-
-# Backwards compatibility for tests
-_fix_symbol = fix_symbol
 from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
 from crypto_bot.utils.pnl_logger import log_pnl
 from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
