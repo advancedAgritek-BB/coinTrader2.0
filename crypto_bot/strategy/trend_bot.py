@@ -166,4 +166,16 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     if score > 0 and (config is None or config.get("atr_normalization", True)):
         score = normalize_score_by_volatility(df, score)
 
+    if config:
+        torch_cfg = config.get("torch_signal_model", {})
+        if torch_cfg.get("enabled") and score > 0:
+            weight = float(torch_cfg.get("weight", 0.5))
+            try:  # pragma: no cover - best effort
+                from crypto_bot.torch_signal_model import predict_signal as _pred
+                ml_score = _pred(df)
+                score = score * (1 - weight) + ml_score * weight
+                score = max(0.0, min(score, 1.0))
+            except Exception:
+                pass
+
     return score, direction
