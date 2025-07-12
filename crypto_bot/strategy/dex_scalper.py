@@ -10,7 +10,14 @@ DEFAULT_PAIRS = ["BTC/USD", "ETH/USD"]
 ALLOWED_PAIRS = load_liquid_pairs() or DEFAULT_PAIRS
 
 
-def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
+def generate_signal(
+    df: pd.DataFrame,
+    config: Optional[dict] = None,
+    *,
+    book: Optional[dict] = None,
+    min_volume: float = 0.0,
+    max_slippage_pct: float = 1.0,
+) -> Tuple[float, str]:
     """Short-term momentum strategy using EMA divergence on DEX pairs."""
     if df.empty:
         return 0.0, "none"
@@ -42,6 +49,20 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df["ema_slow"] = ema_slow
 
     latest = df.iloc[-1]
+
+    if min_volume > 0 and "volume" in df.columns:
+        if latest.get("volume", 0) < min_volume:
+            return 0.0, "none"
+
+    if book and isinstance(book, dict):
+        bids = book.get("bids", [])
+        asks = book.get("asks", [])
+        bid = bids[0][0] if bids and isinstance(bids[0], (list, tuple)) else (bids[0] if bids else None)
+        ask = asks[0][0] if asks and isinstance(asks[0], (list, tuple)) else (asks[0] if asks else None)
+        if bid and ask:
+            slippage = (ask - bid) / ((ask + bid) / 2)
+            if slippage > max_slippage_pct:
+                return 0.0, "none"
     if (
         latest["close"] == 0
         or pd.isnull(latest["ema_fast"])
