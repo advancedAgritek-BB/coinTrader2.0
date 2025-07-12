@@ -78,6 +78,7 @@ from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import telemetry, write_cycle_metrics
 from crypto_bot.utils.correlation import compute_correlation_matrix
 from crypto_bot.utils.strategy_analytics import write_scores, write_stats
+from crypto_bot.utils.balance import get_usdt_balance
 from crypto_bot.fund_manager import (
     auto_convert_funds,
     check_wallet_balances,
@@ -168,11 +169,7 @@ def notify_balance_change(
 async def fetch_balance(exchange, paper_wallet, config):
     """Return the latest wallet balance without logging."""
     if config["execution_mode"] != "dry_run":
-        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-            bal = await exchange.fetch_balance()
-        else:
-            bal = await asyncio.to_thread(exchange.fetch_balance)
-        return bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
+        return await get_usdt_balance(exchange, config)
     return paper_wallet.balance if paper_wallet else 0.0
 
 
@@ -573,15 +570,11 @@ async def _rotation_loop(
     while True:
         try:
             if state.get("running") and rotator.config.get("enabled"):
+                current_balance = await get_usdt_balance(exchange, rotator.config)
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
                     bal = await exchange.fetch_balance()
                 else:
                     bal = await asyncio.to_thread(exchange.fetch_balance)
-                current_balance = (
-                    bal.get("USDT", {}).get("free", 0)
-                    if isinstance(bal.get("USDT"), dict)
-                    else bal.get("USDT", 0)
-                )
                 check_balance_change(float(current_balance), "external change")
                 holdings = {
                     k: (v.get("total") if isinstance(v, dict) else v)
@@ -728,15 +721,7 @@ async def _main_impl() -> TelegramNotifier:
         previous_balance = new_balance
 
     try:
-        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-            bal = await exchange.fetch_balance()
-        else:
-            bal = await asyncio.to_thread(exchange.fetch_balance)
-        init_bal = (
-            bal.get("USDT", {}).get("free", 0)
-            if isinstance(bal.get("USDT"), dict)
-            else bal.get("USDT", 0)
-        )
+        init_bal = await get_usdt_balance(exchange, config)
         log_balance(float(init_bal))
         last_balance = float(init_bal)
         previous_balance = float(init_bal)
@@ -922,15 +907,7 @@ async def _main_impl() -> TelegramNotifier:
                     slippage_bps=config.get("solana_slippage_bps", 50),
                     notifier=notifier,
                 )
-                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-                    bal = await exchange.fetch_balance()
-                else:
-                    bal = await asyncio.to_thread(exchange.fetch_balance)
-                bal_val = (
-                    bal.get("USDT", {}).get("free", 0)
-                    if isinstance(bal.get("USDT"), dict)
-                    else bal.get("USDT", 0)
-                )
+                bal_val = await get_usdt_balance(exchange, config)
                 check_balance_change(float(bal_val), "funds converted")
 
             # Refresh OHLCV for open positions if a new candle has formed
