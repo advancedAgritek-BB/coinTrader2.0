@@ -1,5 +1,5 @@
 from dataclasses import asdict, dataclass, fields
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 from crypto_bot import cooldown_manager
 
@@ -61,6 +61,9 @@ class BounceScalperConfig:
     min_score: float = 0.3
     max_concurrent_signals: int = 1
     atr_normalization: bool = True
+
+    # pattern confirmation
+    pattern_timeframe: str = "1m"
 
     # metadata
     strategy: str = "bounce_scalper"
@@ -171,8 +174,26 @@ def generate_signal(
     df: pd.DataFrame,
     config: Optional[Union[dict, BounceScalperConfig]] = None,
     book: Optional[dict] = None,
+    *,
+    lower_df: pd.DataFrame | None = None,
+    fetcher: Callable | None = None,
 ) -> Tuple[float, str]:
-    """Identify short-term bounces with volume confirmation."""
+    """Identify short-term bounces with volume confirmation.
+
+    Parameters
+    ----------
+    df
+        Higher timeframe OHLCV data.
+    config
+        Optional configuration or :class:`BounceScalperConfig` instance.
+    book
+        Optional order book snapshot for imbalance filtering.
+    lower_df
+        Lower timeframe candles used for pattern confirmation.
+    fetcher
+        Optional callable ``fetcher(symbol, timeframe="1m", limit=2)`` used to
+        retrieve ``lower_df`` when it is not provided.
+    """
     if df.empty:
         return 0.0, "none"
 
@@ -183,6 +204,20 @@ def generate_signal(
     strategy = cfg.strategy
     if symbol and in_cooldown(symbol, strategy):
         return 0.0, "none"
+
+    pattern_tf = cfg_dict.get("pattern_timeframe", cfg.pattern_timeframe)
+    if lower_df is None and fetcher is not None and symbol:
+        try:
+            data = fetcher(symbol, timeframe=pattern_tf, limit=2)
+            if isinstance(data, pd.DataFrame):
+                lower_df = data
+            elif isinstance(data, (list, tuple)):
+                lower_df = pd.DataFrame(
+                    data,
+                    columns=["timestamp", "open", "high", "low", "close", "volume"],
+                )
+        except Exception:
+            lower_df = None
 
     rsi_window = cfg.rsi_window
     oversold = cfg.oversold
@@ -269,8 +304,9 @@ def generate_signal(
     )
     volume_spike = vol_z > zscore_threshold
 
-    eng_type = is_engulfing(df, body_pct)
-    hammer_type = is_hammer(df, body_pct)
+    pattern_df = lower_df if lower_df is not None else df
+    eng_type = is_engulfing(pattern_df, body_pct)
+    hammer_type = is_hammer(pattern_df, body_pct)
     bull_pattern = eng_type == "bullish" or hammer_type == "bullish"
     bear_pattern = eng_type == "bearish" or hammer_type == "bearish"
 
