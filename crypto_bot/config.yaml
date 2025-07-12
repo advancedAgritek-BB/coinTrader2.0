@@ -292,6 +292,8 @@ trend:
   trend_ema_fast: 5
   trend_ema_slow: 15
   donchian_confirmation: true
+  volume_window: 20
+  volume_mult: 1.0
 twap_enabled: true
 twap_interval_seconds: 10
 twap_slices: 4
