@@ -9,3 +9,6 @@ apt-get install -y --no-install-recommends git curl python3 python3-pip
 python3 -m pip install --upgrade pip
 # requirements.txt includes numpy and other packages needed for running the tests
 python3 -m pip install -r requirements.txt
+if [ -f requirements-dev.txt ]; then
+  python3 -m pip install -r requirements-dev.txt
+fi

@@ -129,6 +129,7 @@ def generate_signal(
     atr_buffer_mult = float(cfg.get("atr_buffer_mult", 0.1))
     vol_window = int(cfg.get("volume_window", 10))
     volume_mult = float(cfg.get("volume_mult", 2))
+    exit_drop_pct = float(cfg.get("pump_dump_exit_drop_pct", 0))
     threshold = float(cfg.get("squeeze_threshold", 0.03))
     momentum_filter = bool(cfg.get("momentum_filter", False))
     lookback_cfg = int(cfg_all.get("indicator_lookback", 250))
@@ -233,6 +234,20 @@ def generate_signal(
 
     if higher_df is not None:
         return score, direction
+
+    if score == 0 and exit_drop_pct and len(recent) >= 2:
+        prev_vol = volume.iloc[-2]
+        prev_vol_ma = vol_ma.iloc[-2]
+        prev_upper = dc_high.iloc[-2] + atr.iloc[-2] * atr_buffer_mult
+        prev_lower = dc_low.iloc[-2] - atr.iloc[-2] * atr_buffer_mult
+        prev_long = (
+            close.iloc[-2] > prev_upper and prev_vol > prev_vol_ma * volume_mult
+        )
+        prev_short = (
+            close.iloc[-2] < prev_lower and prev_vol > prev_vol_ma * volume_mult
+        )
+        if (prev_long or prev_short) and volume.iloc[-1] < prev_vol * exit_drop_pct:
+            return (0.0, "none") if higher_df is not None else (0.0, "none", atr_last)
 
     if _check_other and other_df is not None and not other_df.empty and direction != "none":
         other_score, other_dir, _ = generate_signal(

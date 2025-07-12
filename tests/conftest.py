@@ -5,6 +5,8 @@ from pathlib import Path
 from pandas import Series
 import pytest
 
+pytest_plugins = ("pytest_asyncio",)
+
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 
@@ -156,6 +158,93 @@ sys.modules.setdefault("sklearn.model_selection", _FakeSklearn.model_selection)
 sys.modules.setdefault("sklearn.metrics", _FakeSklearn.metrics)
 sys.modules.setdefault("sklearn.preprocessing", _FakeSklearn.preprocessing)
 sys.modules.setdefault("sklearn.pipeline", _FakeSklearn.pipeline)
+
+# Minimal stub for ``torch`` used by the PyTorch signal model.
+class _FakeTorch:
+    float32 = None
+
+    @staticmethod
+    def tensor(data, dtype=None):
+        class _T(float):
+            def unsqueeze(self, _):
+                return self
+
+            def squeeze(self):
+                return self
+
+            def clamp(self, _a, _b):
+                return self
+
+            def item(self):
+                return 0.0
+
+        return _T(0.0)
+
+    class nn:
+        class Module:
+            pass
+
+        class Linear(Module):
+            def __init__(self, *a, **k):
+                pass
+
+            def __call__(self, x):
+                return _FakeTorch.tensor(0.0)
+
+        class Sequential(Module):
+            def __init__(self, *a, **k):
+                pass
+
+            def __call__(self, x):
+                return _FakeTorch.tensor(0.0)
+
+        class ReLU(Module):
+            pass
+
+        class Sigmoid(Module):
+            pass
+
+        class BCELoss(Module):
+            def __call__(self, *a, **k):
+                return _FakeTorch.tensor(0.0)
+
+    class optim:
+        class Adam:
+            def __init__(self, *a, **k):
+                pass
+
+            def zero_grad(self):
+                pass
+
+            def step(self):
+                pass
+
+    class utils:
+        class data:
+            class TensorDataset:
+                def __init__(self, *a, **k):
+                    pass
+
+            class DataLoader:
+                def __init__(self, *a, **k):
+                    pass
+
+                def __iter__(self):
+                    yield _FakeTorch.tensor(0.0), _FakeTorch.tensor(0.0)
+
+    @staticmethod
+    def save(_obj, path):
+        Path(path).touch()
+
+    @staticmethod
+    def load(_path):
+        return {}
+
+
+sys.modules.setdefault("torch", _FakeTorch())
+sys.modules.setdefault("torch.nn", _FakeTorch.nn)
+sys.modules.setdefault("torch.optim", _FakeTorch.optim)
+sys.modules.setdefault("torch.utils.data", _FakeTorch.utils.data)
 
 # Minimal stub for the optional ``ta`` package used in ML signal models.
 try:  # pragma: no cover - optional dependency
