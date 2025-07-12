@@ -184,7 +184,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **scan_lookback_limit** – candles of history loaded during the initial scan.
 * **cycle_lookback_limit** – candles fetched each cycle. Defaults to
   `min(150, timeframe_minutes × 2)`.
-* **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
+* **symbol_refresh_minutes** – minutes before the symbol queue is refreshed (defaults to 5).
 * **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
 * **symbol_score_weights** – weights for volume, spread, change and age. The weights must sum to a positive value.
 * **uncached_volume_multiplier** – extra volume factor applied when a pair is missing from `cache/liquid_pairs.json`.
@@ -278,6 +278,7 @@ The bounce scalper looks for short-term reversals when a volume spike confirms m
 * **sniper_bot.high_freq** – switch the listing sniper to 1m candles.
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options.
 * **loop_interval_minutes** – delay between trading cycles.
+* **weight_update_minutes** – how often strategy weights are refreshed.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
 * **max_parallel** – number of markets processed concurrently.
 * **log_to_google** – export trades to Google Sheets.
@@ -431,10 +432,11 @@ twap_interval_seconds: 10    # delay between TWAP slices
 timeframe: 1h                # candles for regime detection
 scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
 loop_interval_minutes: 5     # wait time between trading cycles
+weight_update_minutes: 60    # refresh strategy weights every hour
 force_websocket_history: false  # set true to disable REST fallback
 max_ws_limit: 50             # skip WebSocket when request exceeds this
 ohlcv_timeout: 120            # request timeout for OHLCV fetches
-max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
+max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
 metrics:
   enabled: true              # write cycle statistics to metrics.csv
   file: crypto_bot/logs/metrics.csv

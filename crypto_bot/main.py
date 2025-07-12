@@ -874,7 +874,7 @@ async def _main_impl() -> TelegramNotifier:
                 ctx.timing = await runner.run(ctx)
                 loop_count += 1
 
-                if time.time() - last_weight_update >= 86400:
+                if time.time() - last_weight_update >= config.get("weight_update_minutes", 60) * 60:
                     weights = compute_strategy_weights()
                     if weights:
                         logger.info("Updating strategy allocation to %s", weights)
@@ -894,6 +894,77 @@ async def _main_impl() -> TelegramNotifier:
                     await asyncio.sleep(1)
                     continue
         
+
+            cycle_start = time.perf_counter()
+            ctx.timing = await runner.run(ctx)
+            loop_count += 1
+    
+            if time.time() - last_weight_update >= config.get("weight_update_minutes", 60) * 60:
+                weights = compute_strategy_weights()
+                if weights:
+                    logger.info("Updating strategy allocation to %s", weights)
+                    risk_manager.update_allocation(weights)
+                    config["strategy_allocation"] = weights
+                last_weight_update = time.time()
+    
+            if config.get("optimization", {}).get("enabled"):
+                if (
+                    time.time() - last_optimize
+                    >= config["optimization"].get("interval_days", 7) * 86400
+                ):
+                    optimize_strategies()
+                    last_optimize = time.time()
+    
+            if not state.get("running"):
+                await asyncio.sleep(1)
+                continue
+    
+            balances = await asyncio.to_thread(
+                check_wallet_balances, user.get("wallet_address", "")
+            )
+            for token in detect_non_trade_tokens(balances):
+                amount = balances[token]
+                logger.info("Converting %s %s to USDC", amount, token)
+                await auto_convert_funds(
+                    user.get("wallet_address", ""),
+                    token,
+                    "USDC",
+                    amount,
+                    dry_run=config["execution_mode"] == "dry_run",
+                    slippage_bps=config.get("solana_slippage_bps", 50),
+                    notifier=notifier,
+                )
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                    bal = await exchange.fetch_balance()
+                else:
+                    bal = await asyncio.to_thread(exchange.fetch_balance)
+                bal_val = (
+                    bal.get("USDT", {}).get("free", 0)
+                    if isinstance(bal.get("USDT"), dict)
+                    else bal.get("USDT", 0)
+                )
+                check_balance_change(float(bal_val), "funds converted")
+
+            # Refresh OHLCV for open positions if a new candle has formed
+            tf = config.get("timeframe", "1h")
+            tf_sec = timeframe_seconds(None, tf)
+            open_syms: list[str] = []
+            for sym in ctx.positions:
+                last_ts = last_candle_ts.get(sym, 0)
+                if time.time() - last_ts >= tf_sec:
+                    open_syms.append(sym)
+            if open_syms:
+                tf_cache = ctx.df_cache.get(tf, {})
+                tf_cache = await update_ohlcv_cache(
+                    exchange,
+                    tf_cache,
+                    open_syms,
+                    timeframe=tf,
+                    limit=2,
+                    use_websocket=config.get("use_websocket", False),
+                    force_websocket_history=config.get("force_websocket_history", False),
+                    max_concurrent=config.get("max_concurrent_ohlcv"),
+                )
                 balances = await asyncio.to_thread(
                     check_wallet_balances, user.get("wallet_address", "")
                 )
