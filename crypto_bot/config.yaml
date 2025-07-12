@@ -84,6 +84,7 @@ max_age_days: 180
 max_change_pct: 10
 max_concurrent_ohlcv: 4
 max_parallel: 4  # number of symbols processed concurrently
+analysis_concurrency: 10
 max_latency_ms: 1000
 max_ohlcv_failures: 3
 max_open_trades: 3
