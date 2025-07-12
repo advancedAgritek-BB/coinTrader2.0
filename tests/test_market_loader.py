@@ -487,6 +487,7 @@ def test_update_multi_tf_ohlcv_cache():
             ["BTC/USD"],
             config,
             limit=1,
+            timeframe_limits={"1h": 1, "4h": 1, "1d": 1},
             max_concurrent=2,
         )
     )
@@ -509,6 +510,7 @@ def test_update_regime_tf_cache():
             ["BTC/USD"],
             config,
             limit=1,
+            timeframe_limits={"5m": 1, "15m": 1, "1h": 1},
             max_concurrent=2,
             df_map=df_map,
         )
