@@ -8,6 +8,14 @@ from typing import Any, Dict, Sequence
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+try:  # pragma: no cover - optional dependency
+    import ccxt  # type: ignore
+    from ccxt.base.errors import NetworkError, ExchangeError
+except Exception:  # pragma: no cover - optional dependency
+    import types
+
+    ccxt = types.SimpleNamespace(NetworkError=Exception, ExchangeError=Exception)
+
 from . import console_monitor, log_reader
 from .utils.logger import LOG_DIR, setup_logger
 from .utils.open_trades import get_open_trades
@@ -43,6 +51,14 @@ async def status_loop(
             message = "\n".join(lines)
             for admin in admins:
                 admin.notify(message)
+        except ccxt.NetworkError as exc:
+            logger.warning("Network error: %s; retrying shortly", exc)
+            await asyncio.sleep(5)
+            continue
+        except ccxt.ExchangeError as exc:
+            logger.error("Exchange error: %s", exc)
+            await asyncio.sleep(5)
+            continue
         except Exception as exc:  # pragma: no cover - logging only
             logger.error("Status update failed: %s", exc)
         await asyncio.sleep(update_interval)
