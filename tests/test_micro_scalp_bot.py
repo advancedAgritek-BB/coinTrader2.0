@@ -27,7 +27,8 @@ def test_micro_scalp_long_signal(make_df):
     prices = list(range(1, 11))
     volumes = [100] * 10
     df = make_df(prices, volumes)
-    score, direction = micro_scalp_bot.generate_signal(df)
+    cfg = {"micro_scalp": {"fresh_cross_only": False}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg)
     assert direction == "long"
     assert 0 < score <= 1
 
@@ -80,7 +81,7 @@ def test_trend_filter_allows_long_signal(make_df):
 
     higher_prices = list(range(10, 21))
     higher_df = make_df(higher_prices, [100] * len(higher_prices))
-    cfg = {"micro_scalp": {"trend_fast": 3, "trend_slow": 5}}
+    cfg = {"micro_scalp": {"trend_fast": 3, "trend_slow": 5, "fresh_cross_only": False}}
 
     score, direction = micro_scalp_bot.generate_signal(df, cfg, higher_df=higher_df)
     assert direction == "long"
@@ -141,6 +142,36 @@ def test_wick_filter_blocks_short(make_df):
     df.loc[df.index[-1], "high"] = df["close"].iloc[-1] + 0.05
     cfg = {"micro_scalp": {"wick_pct": 0.2}}
     score, direction = micro_scalp_bot.generate_signal(df, cfg)
+    assert (score, direction) == (0.0, "none")
+
+
+def test_volume_std_zero_allows_signal(make_df):
+    prices = list(range(1, 11))
+    volumes = [100] * 10
+    df = make_df(prices, volumes)
+    cfg = {"micro_scalp": {"min_vol_z": 0, "fresh_cross_only": False}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg)
+    assert direction == "long"
+    assert score > 0
+
+
+def test_book_imbalance_blocks_long(make_df):
+    prices = list(range(1, 11))
+    volumes = [100] * 10
+    df = make_df(prices, volumes)
+    book = {"bids": [[10, 1.0]], "asks": [[10, 5.0]]}
+    cfg = {"micro_scalp": {"imbalance_ratio": 2.0, "fresh_cross_only": False}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg, book=book)
+    assert (score, direction) == (0.0, "none")
+
+
+def test_book_imbalance_blocks_short(make_df):
+    prices = list(range(10, 0, -1))
+    volumes = [100] * 10
+    df = make_df(prices, volumes)
+    book = {"bids": [[10, 5.0]], "asks": [[10, 1.0]]}
+    cfg = {"micro_scalp": {"imbalance_ratio": 2.0, "fresh_cross_only": False}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg, book=book)
     assert (score, direction) == (0.0, "none")
 
 

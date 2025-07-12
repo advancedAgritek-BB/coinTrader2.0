@@ -114,10 +114,11 @@ micro_scalp:
   confirm_bars: 2
   ema_fast: 3
   ema_slow: 8
-  fresh_cross_only: false
+  fresh_cross_only: true
   min_atr_pct: 0.0
   min_momentum_pct: 0.0
   min_vol_z: 1.5
+  imbalance_ratio: 0
   trend_fast: 21
   trend_slow: 50
   trend_timeframe: 5m
