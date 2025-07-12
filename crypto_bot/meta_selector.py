@@ -18,6 +18,7 @@ from crypto_bot.strategy import (
     breakout_bot,
     micro_scalp_bot,
     bounce_scalper,
+    cross_arbitrage,
 )
 
 LOG_FILE = LOG_DIR / "strategy_performance.json"
@@ -81,6 +82,7 @@ _STRATEGY_FN_MAP = {
     "bounce_scalper": bounce_scalper.generate_signal,
     "bounce_scalper_bot": bounce_scalper.generate_signal,
     "dca_bot": dca_bot.generate_signal,
+    "cross_arbitrage": cross_arbitrage.generate_signal,
 }
 
 

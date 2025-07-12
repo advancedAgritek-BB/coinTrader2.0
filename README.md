@@ -273,6 +273,18 @@ the second‑highest strategy are written to the CSV file defined by
 #### Bounce Scalper
 The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry.
 
+#### Cross Exchange Arbitrage
+`cross_arbitrage` compares ticker prices from two exchanges and returns a signal when the spread exceeds a configurable threshold. Enable it in `config.yaml` and provide the exchange objects at runtime.
+
+```yaml
+cross_arbitrage:
+  enabled: true
+  exchange_a: binance
+  exchange_b: kraken
+  symbol: BTC/USDT
+  threshold: 0.005
+```
+
 ### Data and Logging
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
 * **sniper_bot.high_freq** – switch the listing sniper to 1m candles.
