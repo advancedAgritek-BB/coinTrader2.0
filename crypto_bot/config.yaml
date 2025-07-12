@@ -242,7 +242,7 @@ strategy_router:
     sideways:
     - grid
     trending:
-    - trend
+    - dca_bot
     volatile:
     - sniper_bot
     - sniper_solana
