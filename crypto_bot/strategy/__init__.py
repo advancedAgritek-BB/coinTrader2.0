@@ -10,6 +10,7 @@ from . import (
     sniper_bot,
     trend_bot,
 )
+from .breakout_bot import generate_micro_breakout
 
 # Export Solana sniper strategy module under a unified name
 import importlib
@@ -26,6 +27,7 @@ __all__ = [
     "grid_bot",
     "mean_bot",
     "micro_scalp_bot",
+    "generate_micro_breakout",
     "sniper_bot",
     "trend_bot",
     "sniper_solana",
