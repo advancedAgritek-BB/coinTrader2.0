@@ -29,6 +29,16 @@ from crypto_bot.utils import stats
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.cooldown_manager import in_cooldown, mark_cooldown
 
+# When True the next call to :func:`generate_signal` bypasses any cooldown
+# checks.  Set via :func:`trigger_once` and automatically reset after use.
+FORCE_SIGNAL = False
+
+
+def trigger_once() -> None:
+    """Force the next generated signal even if cooling down."""
+    global FORCE_SIGNAL
+    FORCE_SIGNAL = True
+
 
 @dataclass
 class BounceScalperConfig:
@@ -180,9 +190,10 @@ def generate_signal(
     cfg_dict = _as_dict(config)
     cfg = BounceScalperConfig.from_dict(cfg_dict)
 
+    global FORCE_SIGNAL
     symbol = cfg.symbol
     strategy = cfg.strategy
-    if symbol and in_cooldown(symbol, strategy):
+    if symbol and not FORCE_SIGNAL and in_cooldown(symbol, strategy):
         return 0.0, "none"
 
     rsi_window = cfg.rsi_window
@@ -362,4 +373,6 @@ def generate_signal(
                     else:
                         return 0.0, "none"
 
-    return score, direction
+    result = (score, direction)
+    FORCE_SIGNAL = False
+    return result
