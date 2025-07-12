@@ -110,6 +110,9 @@ meme_wave_sniper:
   execution:
     dry_run: true
   risk_file: crypto_bot/logs/sniper_risk.json
+  candle_capture:
+    url: https://api.helius.xyz/v0/markets/{mint}/candles?resolution=1m&limit=1
+    minutes: 15
 new_listing_scanner:
   enabled: false
   interval_minutes: 60
@@ -138,6 +141,8 @@ micro_scalp:
   vol_window: 20
   volume_window: 20
   wick_pct: 0.2
+sniper_bot:
+  high_freq: false
 min_agreeing_votes: 1
 min_confidence_score: 0.1  # baseline; actual min = baseline * (1 + bb_width_z/3)
 min_consistent_agreement: 1

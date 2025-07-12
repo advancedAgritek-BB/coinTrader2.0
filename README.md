@@ -93,6 +93,9 @@ needed.
    ```bash
    python -m crypto_bot.solana.runner
    ```
+6. Enable high frequency sniping by setting ``sniper_bot.high_freq`` to ``true``
+   in ``crypto_bot/config.yaml``. When ``meme_wave_sniper.candle_capture`` is
+   configured the runner automatically records 1m candles for new pools.
 
 Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
 
@@ -269,6 +272,7 @@ The bounce scalper looks for short-term reversals when a volume spike confirms m
 
 ### Data and Logging
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
+* **sniper_bot.high_freq** – switch the listing sniper to 1m candles.
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options.
 * **loop_interval_minutes** – delay between trading cycles.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
@@ -837,6 +841,9 @@ meme_wave_sniper:
     daily_loss_cap: 2
   execution:
     dry_run: false
+  candle_capture:
+    url: https://api.helius.xyz/v0/markets/{mint}/candles?resolution=1m&limit=1
+    minutes: 15
 
 ```
 Set the `HELIUS_KEY` environment variable with your Helius API key.

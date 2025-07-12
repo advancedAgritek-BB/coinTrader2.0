@@ -98,7 +98,6 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         if not pd.isna(lower_thr) and not pd.isna(rsi_z_last)
         else latest["rsi"] < dynamic_oversold
     )
- codex/extend-generate_signal-for-breakout-monitoring
 
     upper_thr = scipy_stats.norm.ppf(rsi_overbought_pct / 100)
     lower_thr = scipy_stats.norm.ppf(rsi_oversold_pct / 100)
