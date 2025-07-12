@@ -933,6 +933,7 @@ async def _main_impl() -> TelegramNotifier:
 
     try:
         while True:
+            delay_override: float | None = None
             try:
                 cycle_start = time.perf_counter()
                 ctx.timing = await runner.run(ctx)
@@ -957,7 +958,18 @@ async def _main_impl() -> TelegramNotifier:
                 if not state.get("running"):
                     await asyncio.sleep(1)
                     continue
+            except asyncio.CancelledError:
+                raise
+            except ccxt.NetworkError as exc:
+                logger.warning("Network error: %s; retrying shortly", exc)
+                delay_override = 5
+            except ccxt.ExchangeError as exc:
+                logger.error("Exchange error: %s", exc)
+                delay_override = 5
+            except Exception as exc:  # pragma: no cover - loop errors
+                logger.error("Main loop error: %s", exc, exc_info=True)
 
+            try:
                 await handle_fund_conversions(
                     exchange,
                     config,
@@ -967,95 +979,38 @@ async def _main_impl() -> TelegramNotifier:
                 )
 
                 await refresh_open_position_data(exchange, ctx, last_candle_ts, config)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.error("Post-iteration error: %s", exc, exc_info=True)
 
-                balances = await asyncio.to_thread(
-                    check_wallet_balances, user.get("wallet_address", "")
-                )
-                for token in detect_non_trade_tokens(balances):
-                    amount = balances[token]
-                    logger.info("Converting %s %s to USDC", amount, token)
-                    await auto_convert_funds(
-                        user.get("wallet_address", ""),
-                        token,
-                        "USDC",
-                        amount,
-                        dry_run=config["execution_mode"] == "dry_run",
-                        slippage_bps=config.get("solana_slippage_bps", 50),
-                        notifier=notifier,
-                    )
-                    bal_val = await get_usdt_balance(exchange, config)
-                    check_balance_change(float(bal_val), "funds converted")
+            total_time = time.perf_counter() - cycle_start
+            timing = getattr(ctx, "timing", {})
+            _emit_timing(
+                timing.get("fetch_candidates", 0.0),
+                timing.get("update_caches", 0.0),
+                timing.get("analyse_batch", 0.0),
+                total_time,
+                metrics_path,
+                timing.get("ohlcv_fetch_latency", 0.0),
+                timing.get("execution_latency", 0.0),
+            )
 
-                tf = config.get("timeframe", "1h")
-                tf_sec = timeframe_seconds(None, tf)
-                open_syms: list[str] = []
-                for sym in ctx.positions:
-                    last_ts = last_candle_ts.get(sym, 0)
-                    if time.time() - last_ts >= tf_sec:
-                        open_syms.append(sym)
-                if open_syms:
-                    tf_cache = ctx.df_cache.get(tf, {})
-                    tf_cache = await update_ohlcv_cache(
-                        exchange,
-                        tf_cache,
-                        open_syms,
-                        timeframe=tf,
-                        limit=2,
-                        use_websocket=config.get("use_websocket", False),
-                        force_websocket_history=config.get("force_websocket_history", False),
-                        max_concurrent=config.get("max_concurrent_ohlcv"),
-                    )
-                    ctx.df_cache[tf] = tf_cache
-                    session_state.df_cache[tf] = tf_cache
-                    for sym in open_syms:
-                        df = tf_cache.get(sym)
-                        if df is not None and not df.empty:
-                            last_candle_ts[sym] = int(df["timestamp"].iloc[-1])
-
-                total_time = time.perf_counter() - cycle_start
-                timing = getattr(ctx, "timing", {})
-                _emit_timing(
-                    timing.get("fetch_candidates", 0.0),
-                    timing.get("update_caches", 0.0),
-                    timing.get("analyse_batch", 0.0),
-                    total_time,
-                    metrics_path,
-                    timing.get("ohlcv_fetch_latency", 0.0),
-                    timing.get("execution_latency", 0.0),
-                )
-
-                if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
-                    metrics = {
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "ticker_fetch_time": timing.get("fetch_candidates", 0.0),
-                        "symbol_filter_ratio": timing.get("symbol_filter_ratio", 1.0),
-                        "ohlcv_fetch_latency": timing.get("ohlcv_fetch_latency", 0.0),
-                        "execution_latency": timing.get("execution_latency", 0.0),
-                        "unknown_regimes": sum(
-                            1 for r in getattr(ctx, "analysis_results", []) if r.get("regime") == "unknown"
-                        ),
-                    }
-                    write_cycle_metrics(metrics, config)
-                logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
-                delay = pd.Timedelta(
-                    config["loop_interval_minutes"], unit="m"
-                ).total_seconds()
-                await asyncio.sleep(delay)
-    
-            except asyncio.CancelledError:
-                raise
-            except ccxt.NetworkError as exc:
-                logger.warning("Network error: %s; retrying shortly", exc)
-                await asyncio.sleep(5)
-                continue
-            except ccxt.ExchangeError as exc:
-                logger.error("Exchange error: %s", exc)
-                await asyncio.sleep(5)
-                continue
-            except Exception as exc:  # pragma: no cover - loop errors
-                logger.error("Main loop error: %s", exc, exc_info=True)
+            if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
+                metrics = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "ticker_fetch_time": timing.get("fetch_candidates", 0.0),
+                    "symbol_filter_ratio": timing.get("symbol_filter_ratio", 1.0),
+                    "ohlcv_fetch_latency": timing.get("ohlcv_fetch_latency", 0.0),
+                    "execution_latency": timing.get("execution_latency", 0.0),
+                    "unknown_regimes": sum(
+                        1 for r in getattr(ctx, "analysis_results", []) if r.get("regime") == "unknown"
+                    ),
+                }
+                write_cycle_metrics(metrics, config)
+            logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
+            delay = delay_override if delay_override is not None else pd.Timedelta(
+                config["loop_interval_minutes"], unit="m"
+            ).total_seconds()
+            await asyncio.sleep(delay)
     finally:
         if session_state.scan_task:
             session_state.scan_task.cancel()
