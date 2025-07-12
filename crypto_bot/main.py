@@ -755,7 +755,7 @@ async def _price_model_training_loop(ctx: BotContext) -> None:
     )
     while True:
         try:
-            from crypto_bot import torch_price_model
+            from crypto_bot.models import torch_price_model
 
             torch_price_model.train_model(ctx.df_cache)
         except asyncio.CancelledError:

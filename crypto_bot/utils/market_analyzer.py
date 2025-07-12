@@ -27,7 +27,9 @@ from crypto_bot.volatility_filter import calc_atr
 from ta.volatility import BollingerBands
 from crypto_bot.utils import zscore
 from crypto_bot.utils.telemetry import telemetry
-from crypto_bot.torch_price_model import predict_price as torch_predict_price
+from crypto_bot.models.torch_price_model import (
+    predict_price as torch_predict_price,
+)
 
 
 analysis_logger = setup_logger("strategy_rank", LOG_DIR / "strategy_rank.log")
