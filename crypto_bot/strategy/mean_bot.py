@@ -1,6 +1,7 @@
 from typing import Optional, Tuple
 
 import pandas as pd
+import numpy as np
 import ta
 try:  # pragma: no cover - optional dependency
     from scipy import stats as scipy_stats
@@ -74,13 +75,23 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     short_scores = []
 
     rsi_z_last = df["rsi_z"].iloc[-1]
-    lower_thr = scipy_stats.norm.ppf(rsi_oversold_pct / 100)
-    upper_thr = scipy_stats.norm.ppf(rsi_overbought_pct / 100)
+    rsi_z_series = df["rsi_z"].dropna()
+    if not rsi_z_series.empty:
+        lower_thr = rsi_z_series.quantile(rsi_oversold_pct / 100)
+        upper_thr = rsi_z_series.quantile(rsi_overbought_pct / 100)
+    else:
+        lower_thr = np.nan
+        upper_thr = np.nan
+
     oversold_cond = (
-        rsi_z_last < lower_thr if not pd.isna(rsi_z_last) else latest["rsi"] < 50
+        rsi_z_last < lower_thr
+        if not pd.isna(lower_thr) and not pd.isna(rsi_z_last)
+        else latest["rsi"] < 50
     )
     overbought_cond = (
-        rsi_z_last > upper_thr if not pd.isna(rsi_z_last) else latest["rsi"] > 50
+        rsi_z_last > upper_thr
+        if not pd.isna(upper_thr) and not pd.isna(rsi_z_last)
+        else latest["rsi"] > 50
     )
 
     if oversold_cond:

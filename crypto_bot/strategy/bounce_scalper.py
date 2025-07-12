@@ -4,6 +4,7 @@ from typing import Optional, Tuple, Union
 from crypto_bot import cooldown_manager
 
 import pandas as pd
+import numpy as np
 import ta
 try:  # pragma: no cover - optional dependency
     from scipy import stats as scipy_stats
@@ -270,16 +271,21 @@ def generate_signal(
     direction = "none"
 
     rsi_z_last = df["rsi_z"].iloc[-1]
-    lower_thresh = scipy_stats.norm.ppf(cfg.rsi_oversold_pct / 100)
-    upper_thresh = scipy_stats.norm.ppf(cfg.rsi_overbought_pct / 100)
+    rsi_z_series = df["rsi_z"].dropna()
+    if not rsi_z_series.empty:
+        lower_thresh = rsi_z_series.quantile(cfg.rsi_oversold_pct / 100)
+        upper_thresh = rsi_z_series.quantile(cfg.rsi_overbought_pct / 100)
+    else:
+        lower_thresh = np.nan
+        upper_thresh = np.nan
     oversold_cond = (
         rsi_z_last < lower_thresh
-        if not pd.isna(rsi_z_last)
+        if not pd.isna(lower_thresh) and not pd.isna(rsi_z_last)
         else latest["rsi"] < oversold
     )
     overbought_cond = (
         rsi_z_last > upper_thresh
-        if not pd.isna(rsi_z_last)
+        if not pd.isna(upper_thresh) and not pd.isna(rsi_z_last)
         else latest["rsi"] > overbought
     )
 

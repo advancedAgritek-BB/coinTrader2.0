@@ -55,7 +55,7 @@ def test_rsi_zscore(monkeypatch):
     monkeypatch.setattr(
         trend_bot.stats,
         "zscore",
-        lambda s, lookback=3: pd.Series([2] * len(s), index=s.index),
+        lambda s, lookback=3: pd.Series([0] * (len(s) - 1) + [2], index=s.index),
     )
     cfg = {"indicator_lookback": 3, "rsi_overbought_pct": 90}
     score, direction = trend_bot.generate_signal(df, cfg)
