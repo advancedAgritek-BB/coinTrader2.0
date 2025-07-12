@@ -275,6 +275,11 @@ async def analyze_symbol(
             + weights.get("strategy_regime_strength", 0.0) * 1.0
         )
 
+        leverage = 1
+        if regime in {"breakout", "volatile"} and score > 0.8:
+            leverage = config.get("leverage_mult", 10)
+        result["leverage"] = leverage
+
         result.update({
             "env": env,
             "name": name,
