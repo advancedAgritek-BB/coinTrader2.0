@@ -51,6 +51,7 @@ from crypto_bot.execution.cex_executor import (
     get_exchange,
     place_stop_order,
 )
+from crypto_bot.strategy.grid_bot import GridConfig
 from crypto_bot.open_position_guard import OpenPositionGuard
 from crypto_bot import console_monitor, console_control
 from crypto_bot.utils.performance_logger import log_performance
@@ -478,6 +479,10 @@ async def execute_signals(ctx: BotContext) -> None:
             continue
         amount = size / price
         start_exec = time.perf_counter()
+        params = None
+        if candidate.get("name") == "grid_bot":
+            grid_cfg = GridConfig.from_dict(ctx.config.get("grid_bot"))
+            params = {"leverage": grid_cfg.leverage}
         await cex_trade_async(
             ctx.exchange,
             ctx.ws_client,
@@ -488,6 +493,7 @@ async def execute_signals(ctx: BotContext) -> None:
             dry_run=ctx.config.get("execution_mode") == "dry_run",
             use_websocket=ctx.config.get("use_websocket", False),
             config=ctx.config,
+            params=params,
         )
         ctx.timing["execution_latency"] = max(
             ctx.timing.get("execution_latency", 0.0),

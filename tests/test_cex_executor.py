@@ -373,3 +373,35 @@ def test_execute_trade_no_message_when_disabled(monkeypatch):
     )
 
     assert calls["count"] == 0
+
+
+class ParamExchange:
+    def __init__(self):
+        self.args = None
+
+    async def create_order(self, symbol, type_, side, amount, params=None):
+        self.args = (symbol, type_, side, amount, params)
+        return {"params": params}
+
+
+def test_execute_trade_async_with_params(monkeypatch):
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+    ex = ParamExchange()
+    res = asyncio.run(
+        cex_executor.execute_trade_async(
+            ex,
+            None,
+            "XBT/USDT",
+            "buy",
+            1.0,
+            TelegramNotifier("t", "c"),
+            notifier=DummyNotifier(),
+            dry_run=False,
+            params={"leverage": 3},
+        )
+    )
+    assert ex.args[4]["leverage"] == 3
+    assert res["params"]["leverage"] == 3

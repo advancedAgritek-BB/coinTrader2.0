@@ -94,6 +94,7 @@ def execute_trade(
     use_websocket: bool = False,
     config: Optional[Dict] = None,
     score: float = 0.0,
+    params: Optional[Dict] = None,
 ) -> Dict:
     if notifier is None:
         if isinstance(token, TelegramNotifier):
@@ -138,13 +139,17 @@ def execute_trade(
                 except Exception as err:
                     logger.warning("Limit price fetch failed: %s", err)
                 if price:
-                    params = {"postOnly": True}
+                    p = {"postOnly": True}
                     if config.get("hidden_limit"):
-                        params["hidden"] = True
-                    return exchange.create_limit_order(symbol, side, size, price, params)
+                        p["hidden"] = True
+                    if params:
+                        p.update(params)
+                    return exchange.create_limit_order(symbol, side, size, price, p)
 
             if ws_client is not None:
                 return ws_client.add_order(symbol, side, size)
+            if params:
+                return exchange.create_order(symbol, "market", side, size, params)
             return exchange.create_market_order(symbol, side, size)
         except Exception as exc:
             err_msg = notifier.notify(f"Order failed: {exc}")
@@ -290,6 +295,7 @@ async def execute_trade_async(
     use_websocket: bool = False,
     config: Optional[Dict] = None,
     score: float = 0.0,
+    params: Optional[Dict] = None,
 ) -> Dict:
     """Asynchronous version of :func:`execute_trade`. It supports both
     ``ccxt.pro`` exchanges and the threaded ``KrakenWSClient`` fallback."""
@@ -325,14 +331,16 @@ async def execute_trade_async(
                 except Exception as err:
                     logger.warning("Limit price fetch failed: %s", err)
                 if price:
-                    params = {"postOnly": True}
+                    p = {"postOnly": True}
                     if config.get("hidden_limit"):
-                        params["hidden"] = True
+                        p["hidden"] = True
+                    if params:
+                        p.update(params)
                     if asyncio.iscoroutinefunction(getattr(exchange, "create_limit_order", None)):
-                        order = await exchange.create_limit_order(symbol, side, amount, price, params)
+                        order = await exchange.create_limit_order(symbol, side, amount, price, p)
                     else:
                         order = await asyncio.to_thread(
-                            exchange.create_limit_order, symbol, side, amount, price, params
+                            exchange.create_limit_order, symbol, side, amount, price, p
                         )
                 else:
                     if use_websocket and ws_client is not None and not ccxtpro:
@@ -340,22 +348,38 @@ async def execute_trade_async(
                     elif asyncio.iscoroutinefunction(
                         getattr(exchange, "create_market_order", None)
                     ):
-                        order = await exchange.create_market_order(symbol, side, amount)
+                        if params:
+                            order = await exchange.create_order(symbol, "market", side, amount, params)
+                        else:
+                            order = await exchange.create_market_order(symbol, side, amount)
                     else:
-                        order = await asyncio.to_thread(
-                            exchange.create_market_order, symbol, side, amount
-                        )
+                        if params:
+                            order = await asyncio.to_thread(
+                                exchange.create_order, symbol, "market", side, amount, params
+                            )
+                        else:
+                            order = await asyncio.to_thread(
+                                exchange.create_market_order, symbol, side, amount
+                            )
             else:
                 if use_websocket and ws_client is not None and not ccxtpro:
                     order = ws_client.add_order(symbol, side, amount)
                 elif asyncio.iscoroutinefunction(
                     getattr(exchange, "create_market_order", None)
                 ):
-                    order = await exchange.create_market_order(symbol, side, amount)
+                    if params:
+                        order = await exchange.create_order(symbol, "market", side, amount, params)
+                    else:
+                        order = await exchange.create_market_order(symbol, side, amount)
                 else:
-                    order = await asyncio.to_thread(
-                        exchange.create_market_order, symbol, side, amount
-                    )
+                    if params:
+                        order = await asyncio.to_thread(
+                            exchange.create_order, symbol, "market", side, amount, params
+                        )
+                    else:
+                        order = await asyncio.to_thread(
+                            exchange.create_market_order, symbol, side, amount
+                        )
         except Exception as e:  # pragma: no cover - network
             err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
             if err_msg:
@@ -416,6 +440,7 @@ def place_stop_order(
     chat_id: Optional[str] = None,
     notifier: Optional[TelegramNotifier] = None,
     dry_run: bool = True,
+    params: Optional[Dict] = None,
 ) -> Dict:
     """Submit a stop-loss order on the exchange."""
     if notifier is None:
@@ -437,12 +462,15 @@ def place_stop_order(
         }
     else:
         try:
+            p = {"stopPrice": stop_price}
+            if params:
+                p.update(params)
             order = exchange.create_order(
                 symbol,
                 "stop_market",
                 side,
                 amount,
-                params={"stopPrice": stop_price},
+                params=p,
             )
         except Exception as e:
             err_msg = notifier.notify(f"Stop order failed: {e}")
