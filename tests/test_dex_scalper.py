@@ -1,6 +1,6 @@
 import pandas as pd
 
-from crypto_bot.strategy import dex_scalper
+import crypto_bot.strategy.dex_scalper as dex_scalper
 
 
 def test_scalper_long_signal():
@@ -42,3 +42,20 @@ def test_scalper_custom_config():
     score, direction = dex_scalper.generate_signal(df, cfg)
     assert direction == 'long'
     assert score > 0
+
+
+def test_volume_filter_blocks_signal():
+    close = pd.Series(range(1, 41))
+    volume = [0] * 40
+    df = pd.DataFrame({'close': close, 'volume': volume})
+    score, direction = dex_scalper.generate_signal(df, min_volume=1)
+    assert (score, direction) == (0.0, 'none')
+
+
+def test_order_book_slippage_blocks_signal():
+    close = pd.Series(range(1, 41))
+    volume = [100] * 40
+    df = pd.DataFrame({'close': close, 'volume': volume})
+    book = {'bids': [[10, 1.0]], 'asks': [[20, 1.0]]}
+    score, direction = dex_scalper.generate_signal(df, book=book, max_slippage_pct=0.5)
+    assert (score, direction) == (0.0, 'none')
