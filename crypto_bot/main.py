@@ -84,6 +84,7 @@ from crypto_bot.fund_manager import (
     check_wallet_balances,
     detect_non_trade_tokens,
 )
+from crypto_bot.utils.balance import get_usdt_balance
 from crypto_bot.regime.regime_classifier import CONFIG
 
 
@@ -865,8 +866,10 @@ async def _main_impl() -> TelegramNotifier:
         handle_exits,
     ])
 
+    
     loop_count = 0
     last_weight_update = last_optimize = 0.0
+    metrics_path = Path(config.get("metrics_output_file", LOG_DIR / "metrics.csv"))
 
     try:
         while True:
@@ -882,7 +885,7 @@ async def _main_impl() -> TelegramNotifier:
                         risk_manager.update_allocation(weights)
                         config["strategy_allocation"] = weights
                     last_weight_update = time.time()
-        
+
                 if config.get("optimization", {}).get("enabled"):
                     if (
                         time.time() - last_optimize
@@ -890,7 +893,7 @@ async def _main_impl() -> TelegramNotifier:
                     ):
                         optimize_strategies()
                         last_optimize = time.time()
-        
+
                 if not state.get("running"):
                     await asyncio.sleep(1)
                     continue
@@ -898,76 +901,6 @@ async def _main_impl() -> TelegramNotifier:
             except Exception:
                 pass
 
-            cycle_start = time.perf_counter()
-            ctx.timing = await runner.run(ctx)
-            loop_count += 1
-    
-            if time.time() - last_weight_update >= config.get("weight_update_minutes", 60) * 60:
-                weights = compute_strategy_weights()
-                if weights:
-                    logger.info("Updating strategy allocation to %s", weights)
-                    risk_manager.update_allocation(weights)
-                    config["strategy_allocation"] = weights
-                last_weight_update = time.time()
-    
-            if config.get("optimization", {}).get("enabled"):
-                if (
-                    time.time() - last_optimize
-                    >= config["optimization"].get("interval_days", 7) * 86400
-                ):
-                    optimize_strategies()
-                    last_optimize = time.time()
-    
-            if not state.get("running"):
-                await asyncio.sleep(1)
-                continue
-    
-            balances = await asyncio.to_thread(
-                check_wallet_balances, user.get("wallet_address", "")
-            )
-            for token in detect_non_trade_tokens(balances):
-                amount = balances[token]
-                logger.info("Converting %s %s to USDC", amount, token)
-                await auto_convert_funds(
-                    user.get("wallet_address", ""),
-                    token,
-                    "USDC",
-                    amount,
-                    dry_run=config["execution_mode"] == "dry_run",
-                    slippage_bps=config.get("solana_slippage_bps", 50),
-                    notifier=notifier,
-                )
-                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-                    bal = await exchange.fetch_balance()
-                else:
-                    bal = await asyncio.to_thread(exchange.fetch_balance)
-                bal_val = (
-                    bal.get("USDT", {}).get("free", 0)
-                    if isinstance(bal.get("USDT"), dict)
-                    else bal.get("USDT", 0)
-                )
-                check_balance_change(float(bal_val), "funds converted")
-
-            # Refresh OHLCV for open positions if a new candle has formed
-            tf = config.get("timeframe", "1h")
-            tf_sec = timeframe_seconds(None, tf)
-            open_syms: list[str] = []
-            for sym in ctx.positions:
-                last_ts = last_candle_ts.get(sym, 0)
-                if time.time() - last_ts >= tf_sec:
-                    open_syms.append(sym)
-            if open_syms:
-                tf_cache = ctx.df_cache.get(tf, {})
-                tf_cache = await update_ohlcv_cache(
-                    exchange,
-                    tf_cache,
-                    open_syms,
-                    timeframe=tf,
-                    limit=2,
-                    use_websocket=config.get("use_websocket", False),
-                    force_websocket_history=config.get("force_websocket_history", False),
-                    max_concurrent=config.get("max_concurrent_ohlcv"),
-                )
                 balances = await asyncio.to_thread(
                     check_wallet_balances, user.get("wallet_address", "")
                 )
@@ -983,18 +916,9 @@ async def _main_impl() -> TelegramNotifier:
                         slippage_bps=config.get("solana_slippage_bps", 50),
                         notifier=notifier,
                     )
-                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-                        bal = await exchange.fetch_balance()
-                    else:
-                        bal = await asyncio.to_thread(exchange.fetch_balance)
-                    bal_val = (
-                        bal.get("USDT", {}).get("free", 0)
-                        if isinstance(bal.get("USDT"), dict)
-                        else bal.get("USDT", 0)
-                    )
+                    bal_val = await get_usdt_balance(exchange, config)
                     check_balance_change(float(bal_val), "funds converted")
-    
-                # Refresh OHLCV for open positions if a new candle has formed
+
                 tf = config.get("timeframe", "1h")
                 tf_sec = timeframe_seconds(None, tf)
                 open_syms: list[str] = []
@@ -1014,115 +938,13 @@ async def _main_impl() -> TelegramNotifier:
                         force_websocket_history=config.get("force_websocket_history", False),
                         max_concurrent=config.get("max_concurrent_ohlcv"),
                     )
-                    balances = await asyncio.to_thread(
-                        check_wallet_balances, user.get("wallet_address", "")
-                    )
-                    for token in detect_non_trade_tokens(balances):
-                        amount = balances[token]
-                        logger.info("Converting %s %s to USDC", amount, token)
-                        await auto_convert_funds(
-                            user.get("wallet_address", ""),
-                            token,
-                            "USDC",
-                            amount,
-                            dry_run=config["execution_mode"] == "dry_run",
-                            slippage_bps=config.get("solana_slippage_bps", 50),
-                            notifier=notifier,
-                        )
-                        bal_val = await get_usdt_balance(exchange, config)
-                        check_balance_change(float(bal_val), "funds converted")
-    
-                    # Refresh OHLCV for open positions if a new candle has formed
-                    tf = config.get("timeframe", "1h")
-                    tf_sec = timeframe_seconds(None, tf)
-                    open_syms: list[str] = []
-                    for sym in ctx.positions:
-                        last_ts = last_candle_ts.get(sym, 0)
-                        if time.time() - last_ts >= tf_sec:
-                            open_syms.append(sym)
-                    if open_syms:
-                        tf_cache = ctx.df_cache.get(tf, {})
-                        tf_cache = await update_ohlcv_cache(
-                            exchange,
-                            tf_cache,
-                            open_syms,
-                            timeframe=tf,
-                            limit=2,
-                            use_websocket=config.get("use_websocket", False),
-                            force_websocket_history=config.get("force_websocket_history", False),
-                            max_concurrent=config.get("max_concurrent_ohlcv"),
-                        )
-                        balances = await asyncio.to_thread(
-                            check_wallet_balances, user.get("wallet_address", "")
-                        )
-                        for token in detect_non_trade_tokens(balances):
-                            amount = balances[token]
-                            logger.info("Converting %s %s to USDC", amount, token)
-                            await auto_convert_funds(
-                                user.get("wallet_address", ""),
-                                token,
-                                "USDC",
-                                amount,
-                                dry_run=config["execution_mode"] == "dry_run",
-                                slippage_bps=config.get("solana_slippage_bps", 50),
-                                notifier=notifier,
-                            )
-                            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-                                bal = await exchange.fetch_balance()
-                            else:
-                                bal = await asyncio.to_thread(exchange.fetch_balance)
-                            bal_val = (
-                                bal.get("USDT", {}).get("free", 0)
-                                if isinstance(bal.get("USDT"), dict)
-                                else bal.get("USDT", 0)
-                            )
-                            check_balance_change(float(bal_val), "funds converted")
-    
-                        # Refresh OHLCV for open positions if a new candle has formed
-                        tf = config.get("timeframe", "1h")
-                        tf_sec = timeframe_seconds(None, tf)
-                        open_syms: list[str] = []
-                        for sym in ctx.positions:
-                            last_ts = last_candle_ts.get(sym, 0)
-                            if time.time() - last_ts >= tf_sec:
-                                open_syms.append(sym)
-                        if open_syms:
-                            tf_cache = ctx.df_cache.get(tf, {})
-                            tf_cache = await update_ohlcv_cache(
-                                exchange,
-                                tf_cache,
-                                open_syms,
-                                timeframe=tf,
-                                limit=2,
-                                use_websocket=config.get("use_websocket", False),
-                                force_websocket_history=config.get("force_websocket_history", False),
-                                max_concurrent=config.get("max_concurrent_ohlcv"),
-                            )
-                            ctx.df_cache[tf] = tf_cache
-                            session_state.df_cache[tf] = tf_cache
-                            for sym in open_syms:
-                                df = tf_cache.get(sym)
-                                if df is not None and not df.empty:
-                                    last_candle_ts[sym] = int(df["timestamp"].iloc[-1])
-    
-                    total_time = time.perf_counter() - cycle_start
-                    timing = getattr(ctx, "timing", {})
-                    _emit_timing(
-                        timing.get("fetch_candidates", 0.0),
-                        timing.get("update_caches", 0.0),
-                        timing.get("analyse_batch", 0.0),
-                        total_time,
-                        metrics_path,
-                        timing.get("ohlcv_fetch_latency", 0.0),
-                        timing.get("execution_latency", 0.0),
-                    )
                     ctx.df_cache[tf] = tf_cache
                     session_state.df_cache[tf] = tf_cache
                     for sym in open_syms:
                         df = tf_cache.get(sym)
                         if df is not None and not df.empty:
                             last_candle_ts[sym] = int(df["timestamp"].iloc[-1])
-    
+
                 total_time = time.perf_counter() - cycle_start
                 timing = getattr(ctx, "timing", {})
                 _emit_timing(
@@ -1134,7 +956,7 @@ async def _main_impl() -> TelegramNotifier:
                     timing.get("ohlcv_fetch_latency", 0.0),
                     timing.get("execution_latency", 0.0),
                 )
-    
+
                 if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
                     metrics = {
                         "timestamp": datetime.utcnow().isoformat(),
@@ -1153,6 +975,18 @@ async def _main_impl() -> TelegramNotifier:
                 ).total_seconds()
                 await asyncio.sleep(delay)
     
+            except asyncio.CancelledError:
+                raise
+            except ccxt.NetworkError as exc:
+                logger.warning("Network error: %s; retrying shortly", exc)
+                await asyncio.sleep(5)
+                continue
+            except ccxt.ExchangeError as exc:
+                logger.error("Exchange error: %s", exc)
+                await asyncio.sleep(5)
+                continue
+            except Exception as exc:  # pragma: no cover - loop errors
+                logger.error("Main loop error: %s", exc, exc_info=True)
     finally:
         if session_state.scan_task:
             session_state.scan_task.cancel()
