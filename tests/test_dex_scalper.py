@@ -3,6 +3,17 @@ import pandas as pd
 from crypto_bot.strategy import dex_scalper
 
 
+def _make_df(prices):
+    return pd.DataFrame(
+        {
+            "open": prices,
+            "high": [p + 0.5 for p in prices],
+            "low": [p - 0.5 for p in prices],
+            "close": prices,
+        }
+    )
+
+
 def test_scalper_long_signal():
     close = pd.Series(range(1, 41))
     df = pd.DataFrame({'close': close})
@@ -41,4 +52,28 @@ def test_scalper_custom_config():
     cfg = {'dex_scalper': {'ema_fast': 3, 'ema_slow': 10, 'min_signal_score': 0.05}}
     score, direction = dex_scalper.generate_signal(df, cfg)
     assert direction == 'long'
+    assert score > 0
+
+
+def test_atr_filter_blocks_signal():
+    prices = list(range(1, 41))
+    df = _make_df(prices)
+    cfg = {"dex_scalper": {"min_atr_pct": 0.2}}
+    score, direction = dex_scalper.generate_signal(df, cfg)
+    assert (score, direction) == (0.0, "none")
+
+
+def test_atr_filter_allows_signal():
+    prices = list(range(1, 41))
+    df = pd.DataFrame(
+        {
+            "open": prices,
+            "high": [p + 10 for p in prices],
+            "low": [p - 10 for p in prices],
+            "close": prices,
+        }
+    )
+    cfg = {"dex_scalper": {"min_atr_pct": 0.2}}
+    score, direction = dex_scalper.generate_signal(df, cfg)
+    assert direction == "long"
     assert score > 0
