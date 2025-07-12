@@ -285,6 +285,19 @@ cross_arbitrage:
   threshold: 0.005
 ```
 
+#### Cross Chain Arbitrage
+`cross_chain_arbitrage` compares average CEX prices with the Solana DEX quote
+via Jupiter. Configure the API keys and threshold in `config.yaml` and pass your
+exchange instances at runtime.
+
+```yaml
+cross_chain_arbitrage:
+  enabled: true
+  threshold: 0.005
+  helius_key: YOUR_KEY
+  jupiter_url: https://quote-api.jup.ag/v6/quote
+```
+
 ### Data and Logging
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
 * **sniper_bot.high_freq** – switch the listing sniper to 1m candles.

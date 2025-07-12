@@ -10,6 +10,7 @@ from . import (
     micro_scalp_bot,
     sniper_bot,
     cross_arbitrage,
+    cross_chain_arbitrage,
     arbitrage_bot,
     pair_arbitrage,
 )
@@ -46,6 +47,7 @@ __all__ = [
     "trend_bot",
     "arbitrage_bot",
     "cross_arbitrage",
+    "cross_chain_arbitrage",
     "pair_arbitrage",
     "sniper_solana",
     "high_freq_strategies",
@@ -54,6 +56,7 @@ __all__ = [
 # Strategies geared toward lower latency execution. These are prioritized
 # by :mod:`crypto_bot.main` when running in HFT mode.
 high_freq_strategies = [
+    cross_chain_arbitrage.generate_signal,
     cross_arbitrage.generate_signal,
     arbitrage_bot.generate_signal,
     micro_scalp_bot.generate_signal,
