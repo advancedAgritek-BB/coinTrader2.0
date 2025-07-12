@@ -44,6 +44,10 @@ def generate_signal(
     Tuple[float, str]
         Score between 0 and 1 and trade direction.
     """
+    symbol = config.get("symbol") if config else ""
+    if symbol and ALLOWED_PAIRS and symbol not in ALLOWED_PAIRS:
+        return 0.0, "none"
+
     if config:
         breakout_pct = config.get("breakout_pct", breakout_pct)
         volume_multiple = config.get("volume_multiple", volume_multiple)

@@ -42,3 +42,11 @@ def test_scalper_custom_config():
     score, direction = dex_scalper.generate_signal(df, cfg)
     assert direction == 'long'
     assert score > 0
+
+
+def test_scalper_blocks_disallowed_pair(monkeypatch):
+    close = pd.Series(range(1, 41))
+    df = pd.DataFrame({'close': close})
+    monkeypatch.setattr(dex_scalper, 'ALLOWED_PAIRS', ['ETH/USD'])
+    score, direction = dex_scalper.generate_signal(df, {'symbol': 'BTC/USD'})
+    assert (score, direction) == (0.0, 'none')
