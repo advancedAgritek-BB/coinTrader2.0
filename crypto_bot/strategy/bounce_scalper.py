@@ -49,7 +49,7 @@ class BounceScalperConfig:
     rsi_oversold_pct: float = 10.0
 
     # pattern confirmation
-    down_candles: int = 3
+    down_candles: int = 2
     up_candles: int = 3
     trend_ema_fast: int = 9
     trend_ema_slow: int = 21
