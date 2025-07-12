@@ -41,6 +41,7 @@ def test_load_config_returns_dict():
         "cooldown_bars",
         "breakout_mult",
         "atr_normalization",
+        "use_ml_center",
     ]:
         assert key in grid_bot
 

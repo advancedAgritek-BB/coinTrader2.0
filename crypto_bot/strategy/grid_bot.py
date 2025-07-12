@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import asdict, dataclass, fields
+from pathlib import Path
 from typing import Mapping, Optional, Tuple, Union
 
 import numpy as np
@@ -15,6 +16,36 @@ from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.volatility_filter import calc_atr
 from . import breakout_bot
+
+GRID_CENTER_MODEL_PATH = (
+    Path(__file__).resolve().parents[1] / "models" / "grid_center_weights.json"
+)
+_GRID_CENTER_WEIGHTS: tuple[float, float] | None = None
+
+
+def _load_center_weights() -> tuple[float, float] | None:
+    """Load and cache weights for the grid centre model."""
+    global _GRID_CENTER_WEIGHTS
+    if _GRID_CENTER_WEIGHTS is None:
+        try:
+            import json  # pragma: no cover - json always available
+
+            with open(GRID_CENTER_MODEL_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            w = data.get("weights")
+            if isinstance(w, list) and len(w) == 2:
+                _GRID_CENTER_WEIGHTS = float(w[0]), float(w[1])
+        except Exception:
+            _GRID_CENTER_WEIGHTS = None
+    return _GRID_CENTER_WEIGHTS
+
+
+def _predict_center(high: float, low: float) -> float | None:
+    """Return predicted centre price from ML model if available."""
+    weights = _load_center_weights()
+    if not weights:
+        return None
+    return weights[0] * high + weights[1] * low
 
 
 @dataclass
@@ -38,6 +69,7 @@ class GridConfig:
     trend_ema_slow: int = 200
 
     range_window: int = 20
+    use_ml_center: bool = False
 
     @classmethod
     def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":
@@ -190,10 +222,14 @@ def generate_signal(
         return 0.0, "none"
 
     price = recent["close"].iloc[-1]
-    if "vwap" in recent.columns and not pd.isna(recent["vwap"].iloc[-1]):
-        centre = recent["vwap"].iloc[-1]
-    else:
-        centre = (high + low) / 2
+    centre = None
+    if cfg.use_ml_center:
+        centre = _predict_center(high, low)
+    if centre is None:
+        if "vwap" in recent.columns and not pd.isna(recent["vwap"].iloc[-1]):
+            centre = recent["vwap"].iloc[-1]
+        else:
+            centre = (high + low) / 2
 
     atr = calc_atr(recent, window=atr_period)
     range_step = (high - low) / max(num_levels - 1, 1)

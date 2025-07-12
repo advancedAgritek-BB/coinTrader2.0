@@ -195,13 +195,16 @@ except Exception:  # pragma: no cover - ta not installed
 
     sys.modules.setdefault("ta", _FakeTa())
 
-# Lightweight stub for PyYAML
-class _FakeYaml:
-    @staticmethod
-    def safe_load(*args, **kwargs):
-        return {}
+# Lightweight stub for PyYAML if the real library isn't available
+try:  # pragma: no cover - optional dependency
+    import yaml  # type: ignore  # noqa: F401
+except Exception:
+    class _FakeYaml:
+        @staticmethod
+        def safe_load(*args, **kwargs):
+            return {}
 
-sys.modules.setdefault("yaml", _FakeYaml())
+    sys.modules.setdefault("yaml", _FakeYaml())
 
 # Basic stub for aiohttp
 class _FakeAioHttp:

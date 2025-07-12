@@ -1,5 +1,18 @@
 import pandas as pd
 import pytest
+import types, sys
+sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
+sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
+cachetools_mod = types.ModuleType("cachetools")
+cachetools_mod.TTLCache = dict
+sys.modules.setdefault("cachetools", cachetools_mod)
+prom_mod = types.ModuleType("prometheus_client")
+prom_mod.Counter = lambda *a, **k: None
+sys.modules.setdefault("prometheus_client", prom_mod)
+sys.modules.setdefault(
+    "crypto_bot.strategy.trend_bot",
+    types.SimpleNamespace(generate_signal=lambda *_a, **_k: (0.0, "none")),
+)
 from crypto_bot.strategy import grid_bot
 from crypto_bot.strategy.grid_bot import GridConfig
 from crypto_bot import grid_state
@@ -177,3 +190,21 @@ def test_range_window_config(cfg):
     score, direction = grid_bot.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0.0
+
+
+def test_ml_center_used(monkeypatch):
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "_predict_center", lambda h, l: 105.0)
+    df = _df_with_price(111.0)
+    cfg = GridConfig(atr_normalization=False, use_ml_center=True)
+    score, _ = grid_bot.generate_signal(df, config=cfg)
+    assert 0.7 < score < 0.9
+
+
+def test_ml_center_fallback(monkeypatch):
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "_predict_center", lambda h, l: None)
+    df = _df_with_price(111.0)
+    cfg = GridConfig(atr_normalization=False, use_ml_center=True)
+    score, _ = grid_bot.generate_signal(df, config=cfg)
+    assert score > 0.9
