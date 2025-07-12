@@ -46,6 +46,7 @@ def test_load_config_returns_dict():
 
     assert "telegram" in config
     assert "command_cooldown" in config["telegram"]
+    assert "rate_limit" in config["telegram"]
 
 
 def test_load_config_normalizes_symbol(tmp_path, monkeypatch):
