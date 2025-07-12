@@ -354,14 +354,21 @@ def generate_signal(
             mark_cooldown(symbol, strategy)
         book_data = book or cfg_dict.get("order_book")
         ratio = float(cfg_dict.get("imbalance_ratio", 0))
+        penalty = float(cfg_dict.get("imbalance_penalty", 0))
         if ratio and isinstance(book_data, dict):
             bids = sum(v for _, v in book_data.get("bids", []))
             asks = sum(v for _, v in book_data.get("asks", []))
             if bids and asks:
                 imbalance = bids / asks
                 if direction == "long" and imbalance < ratio:
-                    return 0.0, "none"
+                    if penalty > 0:
+                        score *= penalty
+                    else:
+                        return 0.0, "none"
                 if direction == "short" and imbalance > ratio:
-                    return 0.0, "none"
+                    if penalty > 0:
+                        score *= penalty
+                    else:
+                        return 0.0, "none"
 
     return score, direction

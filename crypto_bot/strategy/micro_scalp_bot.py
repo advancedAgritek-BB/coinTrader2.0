@@ -88,6 +88,7 @@ def generate_signal(
     confirm_bars = int(params.get("confirm_bars", 1))
     fresh_cross_only = bool(params.get("fresh_cross_only", True))
     imbalance_ratio = float(params.get("imbalance_ratio", 0))
+    imbalance_penalty = float(params.get("imbalance_penalty", 0))
     trend_fast = int(params.get("trend_fast", 0))
     trend_slow = int(params.get("trend_slow", 0))
     _ = params.get("trend_timeframe")
@@ -190,9 +191,15 @@ def generate_signal(
         if bids and asks:
             imbalance = bids / asks
             if direction == "long" and imbalance < imbalance_ratio:
-                return 0.0, "none"
+                if imbalance_penalty > 0:
+                    score *= imbalance_penalty
+                else:
+                    return 0.0, "none"
             if direction == "short" and imbalance > imbalance_ratio:
-                return 0.0, "none"
+                if imbalance_penalty > 0:
+                    score *= imbalance_penalty
+                else:
+                    return 0.0, "none"
 
     if trend_fast_val is not None and trend_slow_val is not None:
         if direction == "long" and trend_fast_val <= trend_slow_val:
