@@ -83,6 +83,8 @@ def test_no_signal_without_volume_spike():
         "up_candles": 2,
         "body_pct": 0.5,
     }
+    # rolling std should be zero on the last bar
+    assert df["volume"].rolling(3).std().iloc[-1] == 0.0
     score, direction = bounce_scalper.generate_signal(df, cfg)
     assert direction == "none"
     assert score == 0.0
