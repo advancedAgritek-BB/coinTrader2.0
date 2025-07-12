@@ -1,5 +1,13 @@
 import ccxt
 import asyncio
+import sys
+import types
+
+sys.modules.setdefault("crypto_bot.strategy", types.ModuleType("strategy"))
+sys.modules.setdefault("crypto_bot.strategy.arbitrage_bot", types.ModuleType("arbitrage_bot"))
+sys.modules.setdefault("crypto_bot.strategy.high_freq_strategies", types.ModuleType("high_freq_strategies"))
+sys.modules["crypto_bot.strategy"].arbitrage_bot = sys.modules["crypto_bot.strategy.arbitrage_bot"]
+sys.modules["crypto_bot.strategy"].high_freq_strategies = sys.modules["crypto_bot.strategy.high_freq_strategies"]
 from crypto_bot.execution.cex_executor import place_stop_order
 from crypto_bot.utils import trade_logger
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -87,6 +95,25 @@ class DummyWS:
         return {"ws": True}
 
 
+class AsyncDummyWS:
+    def __init__(self):
+        self.called = False
+        self.msg = None
+
+    async def add_order_async(self, symbol, side=None, amount=None, order_type="market"):
+        self.called = True
+        self.msg = {
+            "method": "add_order",
+            "params": {
+                "symbol": symbol,
+                "side": side,
+                "order_qty": amount,
+                "order_type": order_type,
+            },
+        }
+        return {"async": True}
+
+
 def test_execute_trade_rest_path(monkeypatch):
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
@@ -170,6 +197,32 @@ def test_execute_trade_ws_path(monkeypatch):
     assert order == {"ws": True}
     assert ws.called
     assert ws.msg["method"] == "add_order"
+    assert ws.msg["params"]["symbol"] == "XBT/USDT"
+    assert ws.msg["params"]["side"] == "buy"
+    assert ws.msg["params"]["order_qty"] == 1.0
+
+
+def test_execute_trade_async_ws_path(monkeypatch):
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+    ws = AsyncDummyWS()
+    notifier = DummyNotifier()
+    order = asyncio.run(
+        cex_executor.execute_trade_async(
+            object(),
+            ws,
+            "XBT/USDT",
+            "buy",
+            1.0,
+            notifier=notifier,
+            dry_run=False,
+            use_websocket=True,
+        )
+    )
+    assert order == {"async": True}
+    assert ws.called
     assert ws.msg["params"]["symbol"] == "XBT/USDT"
     assert ws.msg["params"]["side"] == "buy"
     assert ws.msg["params"]["order_qty"] == 1.0
@@ -383,8 +436,6 @@ class ParamExchange:
         self.args = (symbol, type_, side, amount, params)
         return {"params": params}
 
-
-def test_execute_trade_async_with_params(monkeypatch):
 class LeveragedLimitExchange(LimitExchange):
     def create_limit_order(self, symbol, side, amount, price, params=None):
         self.limit_called = True
@@ -392,7 +443,7 @@ class LeveragedLimitExchange(LimitExchange):
         return {"limit": True, "price": price, "params": params}
 
 
-def test_execute_trade_passes_leverage(monkeypatch):
+def test_execute_trade_async_with_params(monkeypatch):
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)

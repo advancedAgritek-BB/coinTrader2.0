@@ -152,18 +152,6 @@ def execute_trade(
             if params:
                 return exchange.create_order(symbol, "market", side, size, params)
             return exchange.create_market_order(symbol, side, size)
-                    params = {"postOnly": True, "leverage": leverage}
-                    if config.get("hidden_limit"):
-                        params["hidden"] = True
-                    return exchange.create_limit_order(
-                        symbol, side, size, price, params
-                    )
-
-            if ws_client is not None:
-                return ws_client.add_order(symbol, side, size)
-            return exchange.create_market_order(
-                symbol, side, size, params={"leverage": leverage}
-            )
         except Exception as exc:
             err_msg = notifier.notify(f"Order failed: {exc}")
             if err_msg:
@@ -359,7 +347,10 @@ async def execute_trade_async(
                         )
                 else:
                     if use_websocket and ws_client is not None and not ccxtpro:
-                        order = ws_client.add_order(symbol, side, amount)
+                        if hasattr(ws_client, "add_order_async") and asyncio.iscoroutinefunction(ws_client.add_order_async):
+                            order = await ws_client.add_order_async(symbol, side, amount)
+                        else:
+                            order = ws_client.add_order(symbol, side, amount)
                     elif asyncio.iscoroutinefunction(
                         getattr(exchange, "create_market_order", None)
                     ):
@@ -376,20 +367,15 @@ async def execute_trade_async(
                             order = await asyncio.to_thread(
                                 exchange.create_market_order, symbol, side, amount
                             )
-                        order = await exchange.create_market_order(
-                            symbol, side, amount, params={"leverage": leverage}
-                        )
-                    else:
-                        order = await asyncio.to_thread(
-                            exchange.create_market_order,
-                            symbol,
-                            side,
-                            amount,
-                            params={"leverage": leverage},
-                        )
+                    order = await exchange.create_market_order(
+                        symbol, side, amount, params={"leverage": leverage}
+                    )
             else:
                 if use_websocket and ws_client is not None and not ccxtpro:
-                    order = ws_client.add_order(symbol, side, amount)
+                    if hasattr(ws_client, "add_order_async") and asyncio.iscoroutinefunction(ws_client.add_order_async):
+                        order = await ws_client.add_order_async(symbol, side, amount)
+                    else:
+                        order = ws_client.add_order(symbol, side, amount)
                 elif asyncio.iscoroutinefunction(
                     getattr(exchange, "create_market_order", None)
                 ):
@@ -408,14 +394,6 @@ async def execute_trade_async(
                         )
                     order = await exchange.create_market_order(
                         symbol, side, amount, params={"leverage": leverage}
-                    )
-                else:
-                    order = await asyncio.to_thread(
-                        exchange.create_market_order,
-                        symbol,
-                        side,
-                        amount,
-                        params={"leverage": leverage},
                     )
         except Exception as e:  # pragma: no cover - network
             err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
