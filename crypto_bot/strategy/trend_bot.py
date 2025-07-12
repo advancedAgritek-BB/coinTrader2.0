@@ -36,25 +36,27 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     slow_window = int(params.get("trend_ema_slow", 15))
     atr_period = int(params.get("atr_period", 14))
     k = float(params.get("k", 1.0))
+    volume_window = int(params.get("volume_window", 20))
+    volume_mult = float(params.get("volume_mult", 1.0))
 
     df["ema_fast"] = ta.trend.ema_indicator(df["close"], window=fast_window)
     df["ema_slow"] = ta.trend.ema_indicator(df["close"], window=slow_window)
     df["rsi"] = ta.momentum.rsi(df["close"], window=14)
     df["rsi_z"] = stats.zscore(df["rsi"], lookback_cfg)
-    df["volume_ma"] = df["volume"].rolling(window=20).mean()
+    df["volume_ma"] = df["volume"].rolling(window=volume_window).mean()
     df["atr"] = ta.volatility.average_true_range(df["high"], df["low"], df["close"], window=atr_period)
-    lookback = 50
+    lookback = max(50, volume_window)
     recent = df.iloc[-(lookback + 1) :]
 
     ema20 = ta.trend.ema_indicator(recent["close"], window=20)
     ema50 = ta.trend.ema_indicator(recent["close"], window=50)
     rsi = ta.momentum.rsi(recent["close"], window=14)
-    vol_ma = recent["volume"].rolling(window=20).mean()
+    vol_ma = recent["volume"].rolling(window=volume_window).mean()
 
     ema20 = cache_series("ema20", df, ema20, lookback)
     ema50 = cache_series("ema50", df, ema50, lookback)
     rsi = cache_series("rsi", df, rsi, lookback)
-    vol_ma = cache_series("volume_ma", df, vol_ma, lookback)
+    vol_ma = cache_series(f"volume_ma_{volume_window}", df, vol_ma, lookback)
 
     df = recent.copy()
     df["ema20"] = ema20
@@ -79,15 +81,22 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     rsi_z_last = df["rsi_z"].iloc[-1]
     upper_thr = scipy_stats.norm.ppf(rsi_overbought_pct / 100)
     lower_thr = scipy_stats.norm.ppf(rsi_oversold_pct / 100)
+    volume_ok = latest["volume"] > latest["volume_ma"] * volume_mult
     overbought_cond = (
-        rsi_z_last > upper_thr
-        if not pd.isna(rsi_z_last)
-        else latest["rsi"] > dynamic_overbought
+        (
+            rsi_z_last > upper_thr
+            if not pd.isna(rsi_z_last)
+            else latest["rsi"] > dynamic_overbought
+        )
+        and volume_ok
     )
     oversold_cond = (
-        rsi_z_last < lower_thr
-        if not pd.isna(rsi_z_last)
-        else latest["rsi"] < dynamic_oversold
+        (
+            rsi_z_last < lower_thr
+            if not pd.isna(rsi_z_last)
+            else latest["rsi"] < dynamic_oversold
+        )
+        and volume_ok
     )
 
     long_cond = (
