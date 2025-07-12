@@ -6,14 +6,11 @@ from crypto_bot import cooldown_manager
 import pandas as pd
 import numpy as np
 import ta
-
 try:  # pragma: no cover - optional dependency
     from scipy import stats as scipy_stats
-
     if not hasattr(scipy_stats, "norm"):
         raise ImportError
 except Exception:  # pragma: no cover - fallback
-
     class _Norm:
         @staticmethod
         def ppf(_x):
@@ -28,6 +25,7 @@ from crypto_bot.utils import stats
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.cooldown_manager import in_cooldown, mark_cooldown
+from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 
 # When True the next call to :func:`generate_signal` bypasses any cooldown
 # checks.  Set via :func:`trigger_once` and automatically reset after use.
@@ -53,7 +51,6 @@ class BounceScalperConfig:
     volume_multiple: float = 2.0
     ema_window: int = 50
     atr_window: int = 14
-    atr_ma_window: int = 50
     lookback: int = 250
     rsi_overbought_pct: float = 90.0
     rsi_oversold_pct: float = 10.0
@@ -65,7 +62,6 @@ class BounceScalperConfig:
     trend_ema_slow: int = 21
 
     # risk management
-    cooldown_bars: int = 2
     atr_period: int = 14
     stop_loss_atr_mult: float = 1.5
     take_profit_atr_mult: float = 2.0
@@ -193,6 +189,11 @@ def generate_signal(
     global FORCE_SIGNAL
     symbol = cfg.symbol
     strategy = cfg.strategy
+
+    win_rate = get_recent_win_rate(4, strategy=strategy)
+    skip_cooldown = win_rate == 1.0
+
+    if symbol and not skip_cooldown and in_cooldown(symbol, strategy):
     if symbol and not FORCE_SIGNAL and in_cooldown(symbol, strategy):
         return 0.0, "none"
 
@@ -204,7 +205,6 @@ def generate_signal(
     volume_multiple = cfg.volume_multiple
     ema_window = cfg.ema_window
     atr_window = cfg.atr_window
-    atr_ma_window = cfg.atr_ma_window
     down_candles = cfg.down_candles
     up_candles = cfg.up_candles
     body_pct = cfg_dict.get("body_pct", 0.5)
@@ -226,23 +226,13 @@ def generate_signal(
     df["atr"] = ta.volatility.average_true_range(
         df["high"], df["low"], df["close"], window=atr_window_used
     )
-    atr_ma_window_used = min(atr_ma_window, len(df))
-    df["atr_ma"] = df["atr"].rolling(window=atr_ma_window_used).mean()
 
     latest = df.iloc[-1]
 
-    if (
-        not pd.isna(latest["atr"])
-        and not pd.isna(latest["atr_ma"])
-        and latest["close"] > 0
-        and latest["atr_ma"] > 0
-    ):
-        if latest["atr"] > latest["atr_ma"]:
-            ratio = min((latest["atr"] / latest["atr_ma"]) - 1, 1.0)
-            width = overbought - oversold
-            shrink = width * ratio / 2
-            oversold = min(50.0, oversold + shrink)
-            overbought = max(50.0, overbought - shrink)
+    if not pd.isna(latest["atr"]) and latest["close"] > 0:
+        atr_pct = latest["atr"] / latest["close"] * 100
+        oversold = max(10.0, oversold - atr_pct * 0.5)
+        overbought = min(90.0, overbought + atr_pct * 0.5)
 
     recent = df.iloc[-(lookback + 1) :]
     rsi_series = ta.momentum.rsi(recent["close"], window=rsi_window)
@@ -318,11 +308,9 @@ def generate_signal(
     ):
         rsi_score = min((oversold - latest["rsi"]) / oversold, 1.0)
         vol_score = min(
-            (
-                latest["volume"] / (latest["vol_ma"] * volume_multiple)
-                if latest["vol_ma"] > 0
-                else 0
-            ),
+            latest["volume"] / (latest["vol_ma"] * volume_multiple)
+            if latest["vol_ma"] > 0
+            else 0,
             1.0,
         )
         score = (rsi_score + vol_score) / 2
@@ -339,11 +327,9 @@ def generate_signal(
     ):
         rsi_score = min((latest["rsi"] - overbought) / (100 - overbought), 1.0)
         vol_score = min(
-            (
-                latest["volume"] / (latest["vol_ma"] * volume_multiple)
-                if latest["vol_ma"] > 0
-                else 0
-            ),
+            latest["volume"] / (latest["vol_ma"] * volume_multiple)
+            if latest["vol_ma"] > 0
+            else 0,
             1.0,
         )
         score = (rsi_score + vol_score) / 2
