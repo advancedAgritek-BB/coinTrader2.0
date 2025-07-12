@@ -281,6 +281,7 @@ The bounce scalper looks for short-term reversals when a volume spike confirms m
 * **weight_update_minutes** – how often strategy weights are refreshed.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
 * **max_parallel** – number of markets processed concurrently.
+* **analysis_concurrency** – analysis tasks executed in parallel.
 * **log_to_google** – export trades to Google Sheets.
 * **telegram** – bot token, chat ID and trade notifications. Optional
   **status_updates** and **balance_updates** flags control startup and
@@ -436,6 +437,8 @@ weight_update_minutes: 60    # refresh strategy weights every hour
 force_websocket_history: false  # set true to disable REST fallback
 max_ws_limit: 50             # skip WebSocket when request exceeds this
 ohlcv_timeout: 120            # request timeout for OHLCV fetches
+max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
+analysis_concurrency: 10     # limit concurrent analysis tasks
 max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
 metrics:
   enabled: true              # write cycle statistics to metrics.csv
@@ -448,7 +451,8 @@ evaluation cycle, giving the market time to evolve before scanning again.
 `update_ohlcv_cache` gathers new candles. The new `ohlcv_timeout` option
 controls the timeout for each fetch call. If you still encounter timeouts after
 raising this value, try lowering `max_concurrent_ohlcv` to reduce pressure on
-the exchange API.
+the exchange API. `analysis_concurrency` limits how many symbols are analysed
+simultaneously during each cycle.
 The updater automatically determines how many candles are missing from the
 cache, so even when `limit` is large it only requests the data required to fill
 the gap, avoiding needless delays.

@@ -416,14 +416,17 @@ async def analyse_batch(ctx: BotContext) -> None:
         ctx.analysis_results = []
         return
 
-    tasks = []
     mode = ctx.config.get("mode", "cex")
-    for sym in batch:
-        df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
-        for tf, cache in ctx.regime_cache.items():
-            df_map[tf] = cache.get(sym)
-        tasks.append(analyze_symbol(sym, df_map, mode, ctx.config, ctx.notifier))
+    sem = asyncio.Semaphore(ctx.config.get("analysis_concurrency", 10))
 
+    async def bounded_analyze(sym: str):
+        async with sem:
+            df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
+            for tf, cache in ctx.regime_cache.items():
+                df_map[tf] = cache.get(sym)
+            return await analyze_symbol(sym, df_map, mode, ctx.config, ctx.notifier)
+
+    tasks = [bounded_analyze(sym) for sym in batch]
     ctx.analysis_results = await asyncio.gather(*tasks)
 
 
