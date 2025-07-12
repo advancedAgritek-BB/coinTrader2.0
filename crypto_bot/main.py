@@ -874,7 +874,7 @@ async def _main_impl() -> TelegramNotifier:
                 ctx.timing = await runner.run(ctx)
                 loop_count += 1
 
-                if time.time() - last_weight_update >= 86400:
+                if time.time() - last_weight_update >= config.get("weight_update_minutes", 60) * 60:
                     weights = compute_strategy_weights()
                     if weights:
                         logger.info("Updating strategy allocation to %s", weights)
@@ -898,7 +898,7 @@ async def _main_impl() -> TelegramNotifier:
             ctx.timing = await runner.run(ctx)
             loop_count += 1
     
-            if time.time() - last_weight_update >= 86400:
+            if time.time() - last_weight_update >= config.get("weight_update_minutes", 60) * 60:
                 weights = compute_strategy_weights()
                 if weights:
                     logger.info("Updating strategy allocation to %s", weights)

@@ -78,6 +78,7 @@ liquidity_check: true
 liquidity_depth: 10
 log_to_google: true
 loop_interval_minutes: 2
+weight_update_minutes: 60
 leverage_mult: 10
 balance_poll_mod: 1
 max_age_days: 180
