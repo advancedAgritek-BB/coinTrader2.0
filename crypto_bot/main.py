@@ -634,6 +634,9 @@ async def _main_impl() -> TelegramNotifier:
     config = load_config()
     dotenv_values(ENV_PATH)
     user = load_or_create()
+    status_updates = config.get("telegram", {}).get("status_updates", True)
+    balance_updates = config.get("telegram", {}).get("balance_updates", False)
+    volume_ratio = config.get("volume_ratio", 1.0)
     tg_cfg = {
         "token": user.get("telegram_token", ""),
         "chat_id": user.get("telegram_chat_id", ""),
