@@ -5,7 +5,7 @@ import crypto_bot.console_control as console_control
 
 def test_control_loop(monkeypatch):
     state = {"running": True}
-    commands = ["stop", "start", "quit"]
+    commands = ["stop", "b", "start", "quit"]
     seen = []
 
     def fake_input(prompt=""):
@@ -18,10 +18,12 @@ def test_control_loop(monkeypatch):
 
     # After first command ('stop') the state should have been False
     assert seen[1] is False
+    # Command 'b' should trigger the bounce scalper
+    assert console_control.bounce_scalper.FORCE_SIGNAL is True
     # After second command ('start') the state should have been True
-    assert seen[2] is True
+    assert seen[3] is True
     # Function should exit after processing all commands
-    assert len(seen) == 3
+    assert len(seen) == 4
     # "quit" stops the loop and leaves the bot stopped
     assert state["running"] is False
 

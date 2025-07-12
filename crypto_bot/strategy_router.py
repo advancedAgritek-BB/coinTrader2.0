@@ -13,6 +13,7 @@ from functools import lru_cache
 from datetime import datetime
 
 from crypto_bot.utils import timeframe_seconds, commit_lock
+from crypto_bot.utils.strategy_utils import compute_edge
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -587,6 +588,25 @@ def route(
         if fn:
             logger.info("Bandit selected %s for %s", choice, regime)
             return _wrap(fn)
+
+    edge_thr = float(cfg_get(cfg, "scalp_edge_threshold", 0.0))
+    if edge_thr:
+        penalty = float(cfg_get(cfg, "drawdown_penalty_coef", 0.0))
+        try:
+            micro = compute_edge("micro_scalp_bot", penalty)
+            bounce = compute_edge("bounce_scalper", penalty)
+            best_edge = max(micro, bounce)
+            if best_edge > edge_thr:
+                best_fn = micro_scalp_bot if micro >= bounce else bounce_scalper
+                logger.info(
+                    "Routing to %s via edge %.2f > %.2f",
+                    best_fn.__name__,
+                    best_edge,
+                    edge_thr,
+                )
+                return _wrap(best_fn.generate_signal)
+        except Exception:
+            pass
 
     if mode == "onchain":
         chain = ""

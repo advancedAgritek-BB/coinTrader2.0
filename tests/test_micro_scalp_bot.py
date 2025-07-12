@@ -175,6 +175,26 @@ def test_book_imbalance_blocks_short(make_df):
     assert (score, direction) == (0.0, "none")
 
 
+def test_book_imbalance_penalty_reduces_score(make_df):
+    prices = list(range(1, 11))
+    volumes = [100] * 10
+    df = make_df(prices, volumes)
+    base_score, base_dir = micro_scalp_bot.generate_signal(
+        df, {"micro_scalp": {"fresh_cross_only": False}}
+    )
+    book = {"bids": [[10, 1.0]], "asks": [[10, 5.0]]}
+    cfg = {
+        "micro_scalp": {
+            "imbalance_ratio": 2.0,
+            "imbalance_penalty": 0.5,
+            "fresh_cross_only": False,
+        }
+    }
+    score, direction = micro_scalp_bot.generate_signal(df, cfg, book=book)
+    assert direction == base_dir
+    assert 0 < score < base_score
+
+
 @pytest.mark.parametrize(
     "prices,volumes,cfg",
     [

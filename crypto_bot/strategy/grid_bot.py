@@ -22,7 +22,7 @@ from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 class GridConfig:
     """Configuration options for :func:`generate_signal`."""
 
-    num_levels: int = 5
+    num_levels: int = 10
     breakout_mult: float = 1.5
     cooldown_bars: int = 6
     max_active_legs: int = 4
@@ -34,11 +34,12 @@ class GridConfig:
     vol_zscore_threshold: float = 2.0
 
     atr_period: int = 14
-    spacing_factor: float = 0.75
+    spacing_factor: float = 0.5
     trend_ema_fast: int = 50
     trend_ema_slow: int = 200
 
     range_window: int = 20
+    min_range_pct: float = 0.001
 
     @classmethod
     def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":
@@ -68,12 +69,12 @@ def _as_dict(cfg: ConfigType) -> dict:
 
 
 def _get_num_levels() -> int:
-    """Return grid levels from ``GRID_LEVELS`` env var or default of 5."""
+    """Return grid levels from ``GRID_LEVELS`` env var or default of 10."""
     env = os.getenv("GRID_LEVELS")
     try:
-        return int(env) if env else 5
+        return int(env) if env else 10
     except ValueError:  # pragma: no cover - invalid env
-        return 5
+        return 10
 
 
 def volume_ok(series: pd.Series, window: int, mult: float, z_thresh: float) -> bool:
@@ -110,8 +111,12 @@ def compute_vwap(df: pd.DataFrame, window: int) -> pd.Series:
         return pd.Series(index=df.index, dtype=float)
     typical = (df["high"] + df["low"] + df["close"]) / 3
     pv = typical * df["volume"]
-    vwap = pv.rolling(window).sum() / df["volume"].rolling(window).sum()
-    return vwap
+    vol_sum = df["volume"].rolling(window).sum()
+    price_sum = pv.rolling(window).sum()
+    rolling_mean = typical.rolling(window, min_periods=1).mean()
+    vwap = price_sum / vol_sum
+    vwap = vwap.where(vol_sum != 0, rolling_mean)
+    return vwap.fillna(rolling_mean)
 
 
 def is_in_trend(df: pd.DataFrame, fast: int, slow: int, side: str) -> bool:
@@ -171,6 +176,18 @@ def generate_signal(
     if recent.empty:
         return 0.0, "none"
 
+    range_slice = df.tail(range_window)
+    high = range_slice["high"].max()
+    low = range_slice["low"].min()
+
+    if high == low:
+        return 0.0, "none"
+
+    price = recent["close"].iloc[-1]
+    range_size = high - low
+    if range_size < price * cfg.min_range_pct:
+        return 0.0, "none"
+
     atr_series = ta.volatility.average_true_range(
         recent["high"], recent["low"], recent["close"], window=atr_period
     )
@@ -185,14 +202,6 @@ def generate_signal(
     if not vwap_series.isna().all():
         recent["vwap"] = vwap_series
 
-    range_slice = df.tail(range_window)
-    high = range_slice["high"].max()
-    low = range_slice["low"].min()
-
-    if high == low:
-        return 0.0, "none"
-
-    price = recent["close"].iloc[-1]
     if "vwap" in recent.columns and not pd.isna(recent["vwap"].iloc[-1]):
         centre = recent["vwap"].iloc[-1]
     else:
