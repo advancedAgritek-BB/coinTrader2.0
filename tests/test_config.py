@@ -36,6 +36,7 @@ def test_load_config_returns_dict():
         "trend_ema_fast",
         "trend_ema_slow",
         "dynamic_grid",
+        "use_ml_center",
         "volume_ma_window",
         "volume_multiple",
         "vol_zscore_threshold",

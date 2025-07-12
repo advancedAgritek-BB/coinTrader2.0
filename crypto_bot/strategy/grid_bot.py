@@ -44,6 +44,8 @@ class GridConfig:
 
     dynamic_grid: bool = False
 
+    use_ml_center: bool = False
+
     range_window: int = 20
     min_range_pct: float = 0.001
 
@@ -217,10 +219,18 @@ def generate_signal(
     if not vwap_series.isna().all():
         recent["vwap"] = vwap_series
 
-    if "vwap" in recent.columns and not pd.isna(recent["vwap"].iloc[-1]):
-        centre = recent["vwap"].iloc[-1]
-    else:
-        centre = (high + low) / 2
+    centre = float("nan")
+    if cfg.use_ml_center:
+        try:  # pragma: no cover - best effort
+            from crypto_bot import grid_center_model
+            centre = grid_center_model.predict_centre(recent)
+        except Exception:
+            centre = float("nan")
+    if pd.isna(centre):
+        if "vwap" in recent.columns and not pd.isna(recent["vwap"].iloc[-1]):
+            centre = recent["vwap"].iloc[-1]
+        else:
+            centre = (high + low) / 2
 
     atr = calc_atr(recent, window=atr_period)
     range_step = (high - low) / max(num_levels - 1, 1)

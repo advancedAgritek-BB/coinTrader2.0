@@ -215,6 +215,7 @@ def generate_signal(
     skip_cooldown = win_rate == 1.0
 
     if symbol and not skip_cooldown and in_cooldown(symbol, strategy):
+        return 0.0, "none"
     if symbol and not FORCE_SIGNAL and in_cooldown(symbol, strategy):
         return 0.0, "none"
 
