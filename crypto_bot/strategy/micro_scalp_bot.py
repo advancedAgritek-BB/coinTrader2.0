@@ -35,6 +35,9 @@ def generate_signal(
     df: pd.DataFrame,
     config: Optional[dict] = None,
     higher_df: pd.DataFrame | None = None,
+    *,
+    book: Optional[dict] = None,
+    ticks: Optional[pd.DataFrame] = None,
 ) -> Tuple[float, str]:
     """Return short-term signal using EMA crossover on 1m data.
 
@@ -51,9 +54,25 @@ def generate_signal(
         Higher timeframe OHLCV data used to confirm the trend. When provided
         the function only returns a signal if ``trend_fast`` is above
         ``trend_slow`` for longs (and vice versa for shorts).
+    ticks
+        Optional tick-level data with ``price`` and optional ``volume`` columns.
     """
     if df.empty:
         return 0.0, "none"
+
+    if ticks is not None and not ticks.empty:
+        price_col = "price" if "price" in ticks.columns else "close"
+        vol = ticks["volume"] if "volume" in ticks.columns else 0
+        tick_df = pd.DataFrame(
+            {
+                "open": ticks[price_col],
+                "high": ticks[price_col],
+                "low": ticks[price_col],
+                "close": ticks[price_col],
+                "volume": vol,
+            }
+        )
+        df = pd.concat([df, tick_df], ignore_index=True)
 
     params = config.get("micro_scalp", {}) if config else {}
     fast_window = int(params.get("ema_fast", 3))
@@ -67,7 +86,8 @@ def generate_signal(
     lower_wick_pct = float(params.get("lower_wick_pct", wick_pct))
     upper_wick_pct = float(params.get("upper_wick_pct", wick_pct))
     confirm_bars = int(params.get("confirm_bars", 1))
-    fresh_cross_only = bool(params.get("fresh_cross_only", False))
+    fresh_cross_only = bool(params.get("fresh_cross_only", True))
+    imbalance_ratio = float(params.get("imbalance_ratio", 0))
     trend_fast = int(params.get("trend_fast", 0))
     trend_slow = int(params.get("trend_slow", 0))
     _ = params.get("trend_timeframe")
@@ -111,7 +131,7 @@ def generate_signal(
         vol_std_series = cache_series("volume_std", df, vol_std_series, lookback)
         vol_mean = vol_ma_series.iloc[-1]
         vol_std = vol_std_series.iloc[-1]
-        vol_z = (latest["volume"] - vol_mean) / vol_std if vol_std > 0 else float("-inf")
+        vol_z = (latest["volume"] - vol_mean) / vol_std if vol_std > 0 else 0.0
         if pd.isna(vol_z) or vol_z < min_vol_z:
             return 0.0, "none"
 
@@ -133,8 +153,11 @@ def generate_signal(
     if momentum == 0:
         return 0.0, "none"
 
-    if min_momentum_pct and abs(momentum) / latest["close"] < min_momentum_pct:
-        return 0.0, "none"
+    if min_momentum_pct:
+        momentum_pct = abs(momentum) / latest["close"]
+        momentum_change = abs(df["momentum"].pct_change().iloc[-1])
+        if momentum_pct < min_momentum_pct or momentum_change < min_momentum_pct:
+            return 0.0, "none"
 
     if confirm_bars > 0:
         if len(df) < confirm_bars:
@@ -159,6 +182,17 @@ def generate_signal(
         return 0.0, "none"
     if direction == "short" and upper_wick_ratio < upper_wick_pct:
         return 0.0, "none"
+
+    book_data = book or params.get("order_book")
+    if imbalance_ratio and isinstance(book_data, dict):
+        bids = sum(v for _, v in book_data.get("bids", []))
+        asks = sum(v for _, v in book_data.get("asks", []))
+        if bids and asks:
+            imbalance = bids / asks
+            if direction == "long" and imbalance < imbalance_ratio:
+                return 0.0, "none"
+            if direction == "short" and imbalance > imbalance_ratio:
+                return 0.0, "none"
 
     if trend_fast_val is not None and trend_slow_val is not None:
         if direction == "long" and trend_fast_val <= trend_slow_val:

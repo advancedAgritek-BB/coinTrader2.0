@@ -9,7 +9,9 @@ from . import (
     micro_scalp_bot,
     sniper_bot,
     trend_bot,
+    arbitrage_bot,
 )
+from .breakout_bot import generate_micro_breakout
 
 # Export Solana sniper strategy module under a unified name
 import importlib
@@ -26,8 +28,20 @@ __all__ = [
     "grid_bot",
     "mean_bot",
     "micro_scalp_bot",
+    "generate_micro_breakout",
     "sniper_bot",
     "trend_bot",
+    "arbitrage_bot",
     "sniper_solana",
+    "high_freq_strategies",
+]
+
+# Strategies geared toward lower latency execution. These are prioritized
+# by :mod:`crypto_bot.main` when running in HFT mode.
+high_freq_strategies = [
+    arbitrage_bot.generate_signal,
+    micro_scalp_bot.generate_signal,
+    dex_scalper.generate_signal,
+    bounce_scalper.generate_signal,
 ]
 
