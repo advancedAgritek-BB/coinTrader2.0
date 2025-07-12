@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from datetime import datetime
 from collections import deque, OrderedDict, defaultdict
+from cachetools import LRUCache
 from dataclasses import dataclass, field
 
 # Track WebSocket ping tasks
@@ -120,9 +121,14 @@ class SessionState:
 
     positions: dict[str, dict] = field(default_factory=dict)
     df_cache: dict[str, dict[str, pd.DataFrame]] = field(default_factory=dict)
+    global_cache_limit: int = 1000
+    ohlcv_cache: LRUCache = field(init=False)
     regime_cache: dict[str, dict[str, pd.DataFrame]] = field(default_factory=dict)
     last_balance: float | None = None
     scan_task: asyncio.Task | None = None
+
+    def __post_init__(self) -> None:
+        self.ohlcv_cache = LRUCache(self.global_cache_limit)
 
 
 def update_df_cache(
@@ -131,16 +137,18 @@ def update_df_cache(
     symbol: str,
     df: pd.DataFrame,
     max_size: int = DF_CACHE_MAX_SIZE,
+    global_cache: LRUCache | None = None,
 ) -> None:
     """Update an OHLCV cache with LRU eviction."""
     tf_cache = cache.setdefault(timeframe, OrderedDict())
-    if not isinstance(tf_cache, OrderedDict):
-        tf_cache = OrderedDict(tf_cache)
-        cache[timeframe] = tf_cache
     tf_cache[symbol] = df
     tf_cache.move_to_end(symbol)
     if len(tf_cache) > max_size:
-        tf_cache.popitem(last=False)
+        old_sym, _ = tf_cache.popitem(last=False)
+        if global_cache is not None:
+            global_cache.pop((timeframe, old_sym), None)
+    if global_cache is not None:
+        global_cache[(timeframe, symbol)] = df
 
 
 def direction_to_side(direction: str) -> str:
@@ -304,6 +312,7 @@ async def initial_scan(
             batch,
             config,
             limit=config.get("scan_lookback_limit", 50),
+            timeframe_limits=config.get("timeframe_limits"),
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
@@ -316,6 +325,7 @@ async def initial_scan(
             batch,
             config,
             limit=config.get("scan_lookback_limit", 50),
+            timeframe_limits=config.get("timeframe_limits"),
             use_websocket=config.get("use_websocket", False),
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
@@ -373,6 +383,7 @@ async def update_caches(ctx: BotContext) -> None:
         batch,
         ctx.config,
         limit=limit,
+        timeframe_limits=ctx.config.get("timeframe_limits"),
         use_websocket=ctx.config.get("use_websocket", False),
         force_websocket_history=ctx.config.get("force_websocket_history", False),
         max_concurrent=ctx.config.get("max_concurrent_ohlcv"),
@@ -385,6 +396,7 @@ async def update_caches(ctx: BotContext) -> None:
         batch,
         ctx.config,
         limit=limit,
+        timeframe_limits=ctx.config.get("timeframe_limits"),
         use_websocket=ctx.config.get("use_websocket", False),
         force_websocket_history=ctx.config.get("force_websocket_history", False),
         max_concurrent=ctx.config.get("max_concurrent_ohlcv"),
@@ -794,7 +806,10 @@ async def _main_impl() -> TelegramNotifier:
     mode = user.get("mode", config.get("mode", "auto"))
     state = {"running": True, "mode": mode}
     # Caches for OHLCV and regime data are stored on the session_state
-    session_state = SessionState(last_balance=last_balance)
+    session_state = SessionState(
+        last_balance=last_balance,
+        global_cache_limit=config.get("ohlcv_global_cache_limit", 1000),
+    )
     last_candle_ts: dict[str, int] = {}
 
     control_task = asyncio.create_task(console_control.control_loop(state))

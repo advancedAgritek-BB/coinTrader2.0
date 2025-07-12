@@ -140,6 +140,8 @@ mode_threshold: 0.4
 ohlcv_snapshot_frequency_minutes: 1440
 ohlcv_snapshot_limit: 500
 ohlcv_timeout: 120
+ohlcv_global_cache_limit: 1000
+timeframe_limits: {}
 optimization:
   enabled: true
   interval_days: 5
