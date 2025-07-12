@@ -29,6 +29,7 @@ from crypto_bot.strategy import (
     mean_bot,
     breakout_bot,
     micro_scalp_bot,
+    solana_scalping,
     bounce_scalper,
     cross_arbitrage,
 )
