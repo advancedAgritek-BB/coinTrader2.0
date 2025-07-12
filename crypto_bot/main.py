@@ -244,6 +244,18 @@ def _flatten_config(data: dict, parent: str = "") -> dict:
     return flat
 
 
+def _cast_to_type(value: str, example: object) -> object:
+    """Try to cast a string to the type of `example`."""
+    target_type = type(example)
+    if target_type is bool:
+        return value.lower() in {"1", "true", "yes", "on"}
+    try:
+        return target_type(value)
+    except Exception:
+        return value
+
+
+async def _ws_ping_loop(exchange: object, interval: float) -> None:
 async def _ws_ping_loop(exchange: ccxt.Exchange, interval: float) -> None:
     """Periodically send WebSocket ping messages."""
     try:
@@ -643,16 +655,16 @@ async def _main_impl() -> TelegramNotifier:
     flat_cfg = _flatten_config(config)
     for key, val in secrets.items():
         if key in flat_cfg:
-            if flat_cfg[key] != val:
-                logger.info(
-                    "Overriding %s from .env (config.yaml value: %s)",
-                    key,
-                    flat_cfg[key],
-                )
-            else:
-                logger.info("Using %s from .env (matches config.yaml)", key)
+            cast_val = _cast_to_type(val, flat_cfg[key])
+            secrets[key] = str(cast_val)
+            logger.info(
+                "Overriding %s: %s -> %s (from .env)",
+                key,
+                flat_cfg[key],
+                cast_val,
+            )
         else:
-            logger.info("Setting %s from .env", key)
+            logger.info("Setting %s=%s from .env", key, val)
     os.environ.update(secrets)
 
     user = load_or_create()
