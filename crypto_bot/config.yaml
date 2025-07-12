@@ -114,10 +114,11 @@ micro_scalp:
   confirm_bars: 2
   ema_fast: 3
   ema_slow: 8
-  fresh_cross_only: false
+  fresh_cross_only: true
   min_atr_pct: 0.0
   min_momentum_pct: 0.0
   min_vol_z: 1.5
+  imbalance_ratio: 0
   trend_fast: 21
   trend_slow: 50
   trend_timeframe: 5m
@@ -140,6 +141,8 @@ mode_threshold: 0.4
 ohlcv_snapshot_frequency_minutes: 1440
 ohlcv_snapshot_limit: 500
 ohlcv_timeout: 120
+ohlcv_global_cache_limit: 1000
+timeframe_limits: {}
 optimization:
   enabled: true
   interval_days: 5
@@ -286,8 +289,9 @@ trade_size_pct: 0.2
 trend:
   atr_period: 14
   k: 1.0
-  trend_ema_fast: 20
-  trend_ema_slow: 50
+  trend_ema_fast: 5
+  trend_ema_slow: 15
+  donchian_confirmation: true
 twap_enabled: true
 twap_interval_seconds: 10
 twap_slices: 4
