@@ -15,6 +15,7 @@ from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.volatility_filter import calc_atr
 from . import breakout_bot
+from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 
 
 @dataclass
@@ -145,7 +146,9 @@ def generate_signal(
     symbol = cfg.symbol
     if symbol:
         grid_state.update_bar(symbol, len(df))
-        if grid_state.in_cooldown(symbol, cfg.cooldown_bars):
+        win_rate = get_recent_win_rate(4, strategy="grid_bot")
+        skip_cd = win_rate == 1.0
+        if not skip_cd and grid_state.in_cooldown(symbol, cfg.cooldown_bars):
             return 0.0, "none"
         if grid_state.active_leg_count(symbol) >= cfg.max_active_legs:
             return 0.0, "none"
