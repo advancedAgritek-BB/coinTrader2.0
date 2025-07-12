@@ -142,3 +142,16 @@ def test_micro_breakout_signal():
     score, direction = breakout_bot.generate_micro_breakout(df)
     assert direction == "long"
     assert score > 0
+
+
+def test_exit_on_volume_drop(breakout_df):
+    df = breakout_df("long")
+    base_score, base_dir, _ = breakout_bot.generate_signal(df)
+    assert base_dir == "long" and base_score > 0
+
+    follow_price = df["close"].iloc[-1] + 1
+    extra = _make_df([follow_price], [100])
+    df = pd.concat([df, extra], ignore_index=True)
+    score, direction, _ = breakout_bot.generate_signal(df)
+    assert direction == "none"
+    assert score == 0.0

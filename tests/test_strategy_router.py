@@ -3,6 +3,7 @@ import pytest
 from crypto_bot import strategy_router
 from crypto_bot.strategy_router import strategy_for, route, RouterConfig
 from crypto_bot.strategy import (
+    dca_bot,
     trend_bot,
     grid_bot,
     mean_bot,
@@ -17,7 +18,7 @@ from crypto_bot.strategy import (
 SAMPLE_CFG = {
     "strategy_router": {
         "regimes": {
-            "trending": ["trend"],
+            "trending": ["dca_bot"],
             "sideways": ["grid"],
             "mean-reverting": ["mean_bot"],
             "breakout": ["breakout_bot"],
@@ -32,7 +33,7 @@ SAMPLE_CFG = {
 def test_strategy_for_mapping():
     data = {"strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"], "commit_lock_intervals": 3}}
     cfg = RouterConfig.from_dict(data)
-    assert strategy_for("trending", cfg) is trend_bot.generate_signal
+    assert strategy_for("trending", cfg) is dca_bot.generate_signal
     assert strategy_for("sideways", cfg) is grid_bot.generate_signal
     assert strategy_for("mean-reverting", cfg) is mean_bot.generate_signal
     assert strategy_for("breakout", cfg) is breakout_bot.generate_signal
@@ -103,12 +104,12 @@ def test_regime_commit_lock(tmp_path, monkeypatch):
 
     fn = route("sideways", "cex", cfg)
 
-    assert fn.__name__ == trend_bot.generate_signal.__name__
+    assert fn.__name__ == dca_bot.generate_signal.__name__
     assert lock.stat().st_mtime == ts
 
 import pandas as pd
 from crypto_bot.strategy_router import route
-from crypto_bot.strategy import breakout_bot, trend_bot
+from crypto_bot.strategy import breakout_bot, trend_bot, dca_bot
 
 
 def make_df(close_vals, vol_vals):
@@ -138,7 +139,7 @@ def test_fastpath_trend(tmp_path):
         "breakout_max_bandwidth": 0,
         "breakout_volume_multiplier": 100,
         "trend_adx_threshold": 5
-    }}, "regime": {"trending": ["trend"]}}
+    }}, "regime": {"trending": ["dca_bot"]}}
     # create rising series so ADX > threshold
     vals = list(range(10))
     df = make_df(vals, [1]*10)
