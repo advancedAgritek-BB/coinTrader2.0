@@ -135,6 +135,9 @@ min_symbol_score: 0.1
 ml_signal_model:
   enabled: true
   weight: 0.4
+torch_signal_model:
+  enabled: false
+  weight: 0.3
 mode: auto
 mode_degrade_window: 20
 mode_threshold: 0.4
