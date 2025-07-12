@@ -1114,20 +1114,6 @@ async def _main_impl() -> TelegramNotifier:
                 continue
             except Exception as exc:  # pragma: no cover - loop errors
                 logger.error("Main loop error: %s", exc, exc_info=True)
-            if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
-                metrics = {
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "ticker_fetch_time": timing.get("fetch_candidates", 0.0),
-                    "symbol_filter_ratio": timing.get("symbol_filter_ratio", 1.0),
-                    "ohlcv_fetch_latency": timing.get("ohlcv_fetch_latency", 0.0),
-                    "execution_latency": timing.get("execution_latency", 0.0),
-                    "unknown_regimes": sum(
-                        1 for r in getattr(ctx, "analysis_results", []) if r.get("regime") == "unknown"
-                    ),
-                }
-                write_cycle_metrics(metrics, config)
-            logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
-            await asyncio.sleep(config["loop_interval_minutes"] * 60)
     
     finally:
         if session_state.scan_task:
