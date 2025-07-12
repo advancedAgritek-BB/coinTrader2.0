@@ -78,11 +78,12 @@ liquidity_check: true
 liquidity_depth: 10
 log_to_google: true
 loop_interval_minutes: 2
+weight_update_minutes: 60
 leverage_mult: 10
 balance_poll_mod: 1
 max_age_days: 180
 max_change_pct: 10
-max_concurrent_ohlcv: 4
+max_concurrent_ohlcv: 20
 max_parallel: 4  # number of symbols processed concurrently
 analysis_concurrency: 10
 max_latency_ms: 1000
@@ -280,7 +281,7 @@ symbol_filter:
   http_timeout: 10           # seconds for fallback /Ticker requests
   ticker_retry_attempts: 3
   log_ticker_exceptions: false
-symbol_refresh_minutes: 30
+symbol_refresh_minutes: 5
 symbol_score_weights:
   age: 0.05
   change: 0.3
