@@ -7,6 +7,11 @@ import crypto_bot.utils.market_analyzer as ma
 
 
 def _df(n: int = 30) -> pd.DataFrame:
+
+from crypto_bot.models import torch_price_model as tpm
+
+
+def _make_df(n: int = 60) -> pd.DataFrame:
     rng = np.random.RandomState(0)
     return pd.DataFrame({
         "open": rng.rand(n) + 100,
@@ -54,3 +59,17 @@ def test_analyze_symbol_integration(monkeypatch):
     assert res["ai_pred_price"] == df["close"].iloc[-1] * 1.1
     assert res["direction"] == "long"
     assert res["score"] == 0.5 + abs(res["ai_pred_price"] - df["close"].iloc[-1]) / df["close"].iloc[-1]
+        "volume": rng.rand(n) * 100,
+    })
+
+
+def test_train_and_predict(tmp_path, monkeypatch):
+    df = _make_df()
+    cache = {"1h": {"AAA/USD": df}}
+    monkeypatch.setattr(tpm, "MODEL_PATH", tmp_path / "price_model.pt")
+    model = tpm.train_model(cache)
+    if tpm.torch is not None:
+        assert tpm.MODEL_PATH.exists()
+        if model is not None:
+            pred = tpm.predict_price(df, model=model)
+            assert isinstance(pred, float)
