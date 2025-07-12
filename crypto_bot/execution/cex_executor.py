@@ -298,9 +298,14 @@ async def execute_trade_async(
     score: float = 0.0,
     params: Optional[Dict] = None,
     leverage: int = 1,
+    *,
+    exchange_override: ccxt.Exchange | None = None,
 ) -> Dict:
     """Asynchronous version of :func:`execute_trade`. It supports both
     ``ccxt.pro`` exchanges and the threaded ``KrakenWSClient`` fallback."""
+
+    if exchange_override is not None:
+        exchange = exchange_override
 
     if notifier is None:
         if isinstance(token, TelegramNotifier):
