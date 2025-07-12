@@ -64,15 +64,11 @@ from crypto_bot.utils.market_loader import (
 )
 from crypto_bot.utils.eval_queue import build_priority_queue
 from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
-
-# Backwards compatibility for tests
-_fix_symbol = fix_symbol
 from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
 from crypto_bot.utils.pnl_logger import log_pnl
 from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 from crypto_bot.paper_wallet import PaperWallet
-from crypto_bot import grid_state
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import telemetry, write_cycle_metrics
@@ -244,7 +240,7 @@ def _flatten_config(data: dict, parent: str = "") -> dict:
     return flat
 
 
-async def _ws_ping_loop(exchange: object, interval: float) -> None:
+async def _ws_ping_loop(exchange: ccxt.Exchange, interval: float) -> None:
     """Periodically send WebSocket ping messages."""
     try:
         while True:
@@ -280,7 +276,7 @@ async def _ws_ping_loop(exchange: object, interval: float) -> None:
 
 
 async def initial_scan(
-    exchange: object,
+    exchange: ccxt.Exchange,
     config: dict,
     state: SessionState,
     notifier: TelegramNotifier | None = None,
@@ -450,7 +446,10 @@ async def execute_signals(ctx: BotContext) -> None:
         if not ctx.risk_manager.can_allocate(strategy, size, ctx.balance):
             continue
 
-        amount = size / price if price > 0 else 0.0
+        if price <= 0:
+            logger.warning("Price for %s is %s; skipping trade", sym, price)
+            continue
+        amount = size / price
         start_exec = time.perf_counter()
         await cex_trade_async(
             ctx.exchange,
@@ -506,6 +505,7 @@ async def handle_exits(ctx: BotContext) -> None:
         if df is None or df.empty:
             continue
         current_price = float(df["close"].iloc[-1])
+        # "buy" positions are treated as long when computing PnL
         pnl_pct = (
             (current_price - pos["entry_price"]) / pos["entry_price"]
         ) * (1 if pos["side"] == "buy" else -1)
@@ -561,7 +561,7 @@ async def handle_exits(ctx: BotContext) -> None:
 
 async def _rotation_loop(
     rotator: PortfolioRotator,
-    exchange: object,
+    exchange: ccxt.Exchange,
     wallet: str,
     state: dict,
     notifier: TelegramNotifier | None,
@@ -985,7 +985,10 @@ async def _main_impl() -> TelegramNotifier:
                 }
                 write_cycle_metrics(metrics, config)
             logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
-            await asyncio.sleep(config["loop_interval_minutes"] * 60)
+            delay = pd.Timedelta(
+                config["loop_interval_minutes"], unit="m"
+            ).total_seconds()
+            await asyncio.sleep(delay)
     
     finally:
         if session_state.scan_task:
