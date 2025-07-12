@@ -291,9 +291,19 @@ async def analyze_symbol(
         price_cfg = config.get("ml_price_predictor", {})
         if price_cfg.get("enabled"):
             try:
-                from crypto_bot.models.price_predictor import predict_score as _pred
+                from crypto_bot.models.price_predictor import (
+                    predict_score as _pred_score,
+                    predict_price as _pred_price,
+                )
 
-                result["price_score"] = float(_pred(df))
+                result["price_score"] = float(_pred_score(df))
+                if price_cfg.get("use_direction") and "close" in df.columns:
+                    pred_val = float(_pred_price(df))
+                    last_val = float(df["close"].iloc[-1])
+                    if pred_val > last_val:
+                        result["direction"] = "long"
+                    elif pred_val < last_val:
+                        result["direction"] = "short"
             except Exception:  # pragma: no cover - best effort
                 result["price_score"] = 0.0
 
