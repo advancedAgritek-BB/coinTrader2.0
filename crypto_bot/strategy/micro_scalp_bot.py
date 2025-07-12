@@ -1,5 +1,7 @@
 from typing import Optional, Tuple
 
+from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
+
 import pandas as pd
 import ta
 from crypto_bot.utils.indicator_cache import cache_series
@@ -38,6 +40,8 @@ def generate_signal(
     *,
     book: Optional[dict] = None,
     ticks: Optional[pd.DataFrame] = None,
+    mempool_monitor: Optional[SolanaMempoolMonitor] = None,
+    mempool_cfg: Optional[dict] = None,
 ) -> Tuple[float, str]:
     """Return short-term signal using EMA crossover on 1m data.
 
@@ -56,6 +60,12 @@ def generate_signal(
         ``trend_slow`` for longs (and vice versa for shorts).
     ticks
         Optional tick-level data with ``price`` and optional ``volume`` columns.
+    mempool_monitor
+        Optional :class:`~crypto_bot.execution.solana_mempool.SolanaMempoolMonitor`
+        instance to check the current priority fee.
+    mempool_cfg
+        Configuration dictionary with ``enabled`` and ``suspicious_fee_threshold``
+        keys controlling the fee check.
     """
     if df.empty:
         return 0.0, "none"
@@ -75,6 +85,12 @@ def generate_signal(
         df = pd.concat([df, tick_df], ignore_index=True)
 
     params = config.get("micro_scalp", {}) if config else {}
+
+    cfg = mempool_cfg or {}
+    if mempool_monitor and cfg.get("enabled"):
+        threshold = cfg.get("suspicious_fee_threshold", 0.0)
+        if mempool_monitor.is_suspicious(threshold):
+            return 0.0, "none"
     fast_window = int(params.get("ema_fast", 3))
     slow_window = int(params.get("ema_slow", 8))
     vol_window = int(params.get("volume_window", 20))
