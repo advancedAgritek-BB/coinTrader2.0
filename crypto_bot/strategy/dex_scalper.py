@@ -18,7 +18,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     slow_window = params.get("ema_slow", 20)
     min_score = params.get("min_signal_score", 0.1)
 
-    if len(df) < slow_window:
+    if len(df) < max(fast_window, slow_window):
         return 0.0, "none"
 
     lookback = slow_window
