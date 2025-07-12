@@ -33,8 +33,8 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     rsi_overbought_pct = float(params.get("rsi_overbought_pct", 90))
     rsi_oversold_pct = float(params.get("rsi_oversold_pct", 10))
 
-    lookback = 20
-    recent = df.iloc[-(lookback + 1) :]
+    lookback = lookback_cfg
+    recent = df.iloc[-(lookback_cfg + 1) :]
 
     rsi = ta.momentum.rsi(recent["close"], window=14)
     rsi_z = stats.zscore(rsi, lookback_cfg)
@@ -53,12 +53,12 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     )
     vwap_series = vwap.volume_weighted_average_price()
 
-    rsi = cache_series("rsi", df, rsi, lookback)
-    rsi_z = cache_series("rsi_z", df, rsi_z, lookback)
-    bb_z = cache_series("bb_z", df, bb_z, lookback)
-    kc_h = cache_series("kc_h", df, kc_h, lookback)
-    kc_l = cache_series("kc_l", df, kc_l, lookback)
-    vwap_series = cache_series("vwap", df, vwap_series, lookback)
+    rsi = cache_series("rsi", df, rsi, lookback_cfg)
+    rsi_z = cache_series("rsi_z", df, rsi_z, lookback_cfg)
+    bb_z = cache_series("bb_z", df, bb_z, lookback_cfg)
+    kc_h = cache_series("kc_h", df, kc_h, lookback_cfg)
+    kc_l = cache_series("kc_l", df, kc_l, lookback_cfg)
+    vwap_series = cache_series("vwap", df, vwap_series, lookback_cfg)
 
     df = recent.copy()
     df["rsi"] = rsi
