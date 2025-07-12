@@ -373,3 +373,60 @@ def test_execute_trade_no_message_when_disabled(monkeypatch):
     )
 
     assert calls["count"] == 0
+
+
+class ParamExchange:
+    def __init__(self):
+        self.args = None
+
+    async def create_order(self, symbol, type_, side, amount, params=None):
+        self.args = (symbol, type_, side, amount, params)
+        return {"params": params}
+
+
+def test_execute_trade_async_with_params(monkeypatch):
+class LeveragedLimitExchange(LimitExchange):
+    def create_limit_order(self, symbol, side, amount, price, params=None):
+        self.limit_called = True
+        self.params = params
+        return {"limit": True, "price": price, "params": params}
+
+
+def test_execute_trade_passes_leverage(monkeypatch):
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+    ex = ParamExchange()
+    res = asyncio.run(
+        cex_executor.execute_trade_async(
+            ex,
+            None,
+            "XBT/USDT",
+            "buy",
+            1.0,
+            TelegramNotifier("t", "c"),
+            notifier=DummyNotifier(),
+            dry_run=False,
+            params={"leverage": 3},
+        )
+    )
+    assert ex.args[4]["leverage"] == 3
+    assert res["params"]["leverage"] == 3
+    ex = LeveragedLimitExchange()
+    notifier = DummyNotifier()
+    order = cex_executor.execute_trade(
+        ex,
+        None,
+        "XBT/USDT",
+        "buy",
+        1.0,
+        TelegramNotifier("t", "c"),
+        notifier=notifier,
+        dry_run=False,
+        score=0.9,
+        leverage=5,
+    )
+    assert order["params"]["leverage"] == 5
+
+

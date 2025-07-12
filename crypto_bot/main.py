@@ -49,6 +49,7 @@ from crypto_bot.execution.cex_executor import (
     get_exchange,
     place_stop_order,
 )
+from crypto_bot.strategy.grid_bot import GridConfig
 from crypto_bot.open_position_guard import OpenPositionGuard
 from crypto_bot import console_monitor, console_control
 from crypto_bot.utils.performance_logger import log_performance
@@ -460,11 +461,18 @@ async def execute_signals(ctx: BotContext) -> None:
             price=price,
         )
 
+        leverage = candidate.get("leverage", 1)
+        size *= leverage
+
         if not ctx.risk_manager.can_allocate(strategy, size, ctx.balance):
             continue
 
         amount = size / price if price > 0 else 0.0
         start_exec = time.perf_counter()
+        params = None
+        if candidate.get("name") == "grid_bot":
+            grid_cfg = GridConfig.from_dict(ctx.config.get("grid_bot"))
+            params = {"leverage": grid_cfg.leverage}
         await cex_trade_async(
             ctx.exchange,
             ctx.ws_client,
@@ -475,6 +483,8 @@ async def execute_signals(ctx: BotContext) -> None:
             dry_run=ctx.config.get("execution_mode") == "dry_run",
             use_websocket=ctx.config.get("use_websocket", False),
             config=ctx.config,
+            params=params,
+            leverage=leverage,
         )
         ctx.timing["execution_latency"] = max(
             ctx.timing.get("execution_latency", 0.0),
@@ -619,53 +629,16 @@ async def _main_impl() -> TelegramNotifier:
 
     logger.info("Starting bot")
     config = load_config()
-    metrics_path = (
-        Path(config.get("metrics_csv")) if config.get("metrics_csv") else None
-    )
-    volume_ratio = 0.01 if config.get("testing_mode") else 1.0
-    cooldown_configure(config.get("min_cooldown", 0))
-    status_updates = config.get("telegram", {}).get("status_updates", True)
-    market_loader_configure(
-        config.get("ohlcv_timeout", 120),
-        config.get("max_ohlcv_failures", 3),
-        config.get("max_ws_limit", 50),
-        status_updates,
-        max_concurrent=config.get("max_concurrent_ohlcv"),
-    )
-    secrets = dotenv_values(ENV_PATH)
-    flat_cfg = _flatten_config(config)
-    for key, val in secrets.items():
-        if key in flat_cfg:
-            cast_val = _cast_to_type(val, flat_cfg[key])
-            secrets[key] = str(cast_val)
-            logger.info(
-                "Overriding %s: %s -> %s (from .env)",
-                key,
-                flat_cfg[key],
-                cast_val,
-            )
-        else:
-            logger.info("Setting %s=%s from .env", key, val)
-    os.environ.update(secrets)
-
+    dotenv_values(ENV_PATH)
     user = load_or_create()
-
-    trade_updates = config.get("telegram", {}).get("trade_updates", True)
-    status_updates = config.get("telegram", {}).get("status_updates", True)
-    balance_updates = config.get("telegram", {}).get("balance_updates", False)
-
-    tg_cfg = {**config.get("telegram", {})}
-    if user.get("telegram_token"):
-        tg_cfg["token"] = user["telegram_token"]
-    if user.get("telegram_chat_id"):
-        tg_cfg["chat_id"] = user["telegram_chat_id"]
-    if os.getenv("TELE_CHAT_ADMINS"):
-        tg_cfg["chat_admins"] = os.getenv("TELE_CHAT_ADMINS")
-    trade_updates = tg_cfg.get("trade_updates", True)
-    status_updates = tg_cfg.get("status_updates", status_updates)
-    balance_updates = tg_cfg.get("balance_updates", balance_updates)
-
+    tg_cfg = {
+        "token": user.get("telegram_token", ""),
+        "chat_id": user.get("telegram_chat_id", ""),
+        "enabled": True,
+    }
     notifier = TelegramNotifier.from_config(tg_cfg)
+    send_test_message(notifier.token, notifier.chat_id, "Bot started")
+    get_exchange(config)
     if status_updates:
         notifier.notify("🤖 CoinTrader2.0 started")
 
@@ -896,6 +869,31 @@ async def _main_impl() -> TelegramNotifier:
 
     try:
         while True:
+            try:
+                cycle_start = time.perf_counter()
+                ctx.timing = await runner.run(ctx)
+                loop_count += 1
+
+                if time.time() - last_weight_update >= 86400:
+                    weights = compute_strategy_weights()
+                    if weights:
+                        logger.info("Updating strategy allocation to %s", weights)
+                        risk_manager.update_allocation(weights)
+                        config["strategy_allocation"] = weights
+                    last_weight_update = time.time()
+
+                if config.get("optimization", {}).get("enabled"):
+                    if (
+                        time.time() - last_optimize
+                        >= config["optimization"].get("interval_days", 7) * 86400
+                    ):
+                        optimize_strategies()
+                        last_optimize = time.time()
+
+                if not state.get("running"):
+                    await asyncio.sleep(1)
+                    continue
+
             cycle_start = time.perf_counter()
             ctx.timing = await runner.run(ctx)
             loop_count += 1
@@ -981,15 +979,7 @@ async def _main_impl() -> TelegramNotifier:
                         slippage_bps=config.get("solana_slippage_bps", 50),
                         notifier=notifier,
                     )
-                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-                        bal = await exchange.fetch_balance()
-                    else:
-                        bal = await asyncio.to_thread(exchange.fetch_balance)
-                    bal_val = (
-                        bal.get("USDT", {}).get("free", 0)
-                        if isinstance(bal.get("USDT"), dict)
-                        else bal.get("USDT", 0)
-                    )
+                    bal_val = await get_usdt_balance(exchange, config)
                     check_balance_change(float(bal_val), "funds converted")
 
                 # Refresh OHLCV for open positions if a new candle has formed
@@ -1012,12 +1002,58 @@ async def _main_impl() -> TelegramNotifier:
                         force_websocket_history=config.get("force_websocket_history", False),
                         max_concurrent=config.get("max_concurrent_ohlcv"),
                     )
-                    ctx.df_cache[tf] = tf_cache
-                    session_state.df_cache[tf] = tf_cache
-                    for sym in open_syms:
-                        df = tf_cache.get(sym)
-                        if df is not None and not df.empty:
-                            last_candle_ts[sym] = int(df["timestamp"].iloc[-1])
+                    balances = await asyncio.to_thread(
+                        check_wallet_balances, user.get("wallet_address", "")
+                    )
+                    for token in detect_non_trade_tokens(balances):
+                        amount = balances[token]
+                        logger.info("Converting %s %s to USDC", amount, token)
+                        await auto_convert_funds(
+                            user.get("wallet_address", ""),
+                            token,
+                            "USDC",
+                            amount,
+                            dry_run=config["execution_mode"] == "dry_run",
+                            slippage_bps=config.get("solana_slippage_bps", 50),
+                            notifier=notifier,
+                        )
+                        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                            bal = await exchange.fetch_balance()
+                        else:
+                            bal = await asyncio.to_thread(exchange.fetch_balance)
+                        bal_val = (
+                            bal.get("USDT", {}).get("free", 0)
+                            if isinstance(bal.get("USDT"), dict)
+                            else bal.get("USDT", 0)
+                        )
+                        check_balance_change(float(bal_val), "funds converted")
+
+                    # Refresh OHLCV for open positions if a new candle has formed
+                    tf = config.get("timeframe", "1h")
+                    tf_sec = timeframe_seconds(None, tf)
+                    open_syms: list[str] = []
+                    for sym in ctx.positions:
+                        last_ts = last_candle_ts.get(sym, 0)
+                        if time.time() - last_ts >= tf_sec:
+                            open_syms.append(sym)
+                    if open_syms:
+                        tf_cache = ctx.df_cache.get(tf, {})
+                        tf_cache = await update_ohlcv_cache(
+                            exchange,
+                            tf_cache,
+                            open_syms,
+                            timeframe=tf,
+                            limit=2,
+                            use_websocket=config.get("use_websocket", False),
+                            force_websocket_history=config.get("force_websocket_history", False),
+                            max_concurrent=config.get("max_concurrent_ohlcv"),
+                        )
+                        ctx.df_cache[tf] = tf_cache
+                        session_state.df_cache[tf] = tf_cache
+                        for sym in open_syms:
+                            df = tf_cache.get(sym)
+                            if df is not None and not df.empty:
+                                last_candle_ts[sym] = int(df["timestamp"].iloc[-1])
 
                 total_time = time.perf_counter() - cycle_start
                 timing = getattr(ctx, "timing", {})
@@ -1049,6 +1085,35 @@ async def _main_impl() -> TelegramNotifier:
                 timing.get("execution_latency", 0.0),
             )
 
+                if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
+                    metrics = {
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "ticker_fetch_time": timing.get("fetch_candidates", 0.0),
+                        "symbol_filter_ratio": timing.get("symbol_filter_ratio", 1.0),
+                        "ohlcv_fetch_latency": timing.get("ohlcv_fetch_latency", 0.0),
+                        "execution_latency": timing.get("execution_latency", 0.0),
+                        "unknown_regimes": sum(
+                            1 for r in getattr(ctx, "analysis_results", []) if r.get("regime") == "unknown"
+                        ),
+                    }
+                    write_cycle_metrics(metrics, config)
+                logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
+                delay = pd.Timedelta(
+                    config["loop_interval_minutes"], unit="m"
+                ).total_seconds()
+                await asyncio.sleep(delay)
+            except asyncio.CancelledError:
+                raise
+            except ccxt.NetworkError as exc:
+                logger.warning("Network error: %s; retrying shortly", exc)
+                await asyncio.sleep(5)
+                continue
+            except ccxt.ExchangeError as exc:
+                logger.error("Exchange error: %s", exc)
+                await asyncio.sleep(5)
+                continue
+            except Exception as exc:  # pragma: no cover - loop errors
+                logger.error("Main loop error: %s", exc, exc_info=True)
             if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
                 metrics = {
                     "timestamp": datetime.utcnow().isoformat(),
@@ -1126,8 +1191,6 @@ async def _main_impl() -> TelegramNotifier:
                     await asyncio.to_thread(exchange.close)
 
     return notifier
-
-
 async def main() -> None:
     """Entry point for running the trading bot with error handling."""
     notifier: TelegramNotifier | None = None

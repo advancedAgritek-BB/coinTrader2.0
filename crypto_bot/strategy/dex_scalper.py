@@ -4,8 +4,10 @@ import ta
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.pair_cache import load_liquid_pairs
+from crypto_bot.volatility_filter import calc_atr
 
-ALLOWED_PAIRS = load_liquid_pairs() or []
+DEFAULT_PAIRS = ["BTC/USD", "ETH/USD"]
+ALLOWED_PAIRS = load_liquid_pairs() or DEFAULT_PAIRS
 
 
 def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
@@ -21,8 +23,9 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     fast_window = params.get("ema_fast", 5)
     slow_window = params.get("ema_slow", 20)
     min_score = params.get("min_signal_score", 0.1)
+    min_atr_pct = float(params.get("min_atr_pct", 0.0))
 
-    if len(df) < slow_window:
+    if len(df) < max(fast_window, slow_window):
         return 0.0, "none"
 
     lookback = slow_window
@@ -48,6 +51,14 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
 
     momentum = latest["ema_fast"] - latest["ema_slow"]
     score = min(abs(momentum) / latest["close"], 1.0)
+
+    if min_atr_pct:
+        if {"high", "low", "close"}.issubset(df.columns):
+            atr = calc_atr(df)
+        else:
+            atr = 0.0
+        if latest["close"] == 0 or pd.isna(atr) or atr / latest["close"] < min_atr_pct:
+            return 0.0, "none"
 
     if score < min_score:
         return 0.0, "none"
