@@ -686,6 +686,8 @@ To automate updates you can run the script periodically via cron:
 0 * * * * cd /path/to/coinTrader2.0 && /usr/bin/python3 tasks/refresh_pairs.py
 ```
 Delete `cache/liquid_pairs.json` to force a full rebuild on the next run.
+If the cache file is missing or empty the sniper and DEX scalper
+strategies fall back to trading `BTC/USD` and `ETH/USD`.
 
 ## Web UI
 
