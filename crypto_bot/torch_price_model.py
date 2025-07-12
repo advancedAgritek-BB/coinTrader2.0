@@ -2,6 +2,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict
+from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 
@@ -16,6 +18,18 @@ MODEL_PATH = Path(__file__).resolve().parent / "models" / "torch_price_model.pt"
 REPORT_PATH = MODEL_PATH.with_name("torch_price_model_report.json")
 
 
+    from torch import nn
+except Exception:  # pragma: no cover - allow running without torch
+    torch = None  # type: ignore
+
+MODEL_PATH = Path(__file__).resolve().parent / "models" / "torch_price_model.pt"
+
+
+class PriceNet(nn.Module):  # pragma: no cover - small network
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(5, 8),
 class PriceNet(nn.Module):  # pragma: no cover - simple network
     def __init__(self):
         super().__init__()
@@ -67,6 +81,24 @@ def train_model(df_cache: Dict[str, Dict[str, pd.DataFrame]], epochs: int = 5) -
     opt = optim.Adam(model.parameters(), lr=0.01)
     loss_fn = nn.MSELoss()
     for _ in range(epochs):  # pragma: no cover - training loop
+def train_model(df: pd.DataFrame, epochs: int = 20) -> Optional[nn.Module]:
+    """Train ``PriceNet`` on OHLCV data."""
+    if torch is None:
+        return None
+    if df.empty:
+        return None
+    feats = df[["open", "high", "low", "close", "volume"]].iloc[:-1]
+    targets = df["close"].shift(-1).dropna()
+    X = torch.tensor(feats.values, dtype=torch.float32)
+    y = torch.tensor(targets.values, dtype=torch.float32).unsqueeze(1)
+    ds = TensorDataset(X, y)
+    loader = DataLoader(ds, batch_size=32, shuffle=True)
+    model = PriceNet()
+    if not hasattr(model, "parameters"):
+        return None
+    opt = optim.Adam(model.parameters(), lr=0.01)
+    loss_fn = nn.MSELoss()
+    for _ in range(epochs):  # pragma: no cover - simple loop
         for xb, yb in loader:
             opt.zero_grad()
             out = model(xb)
@@ -79,3 +111,62 @@ def train_model(df_cache: Dict[str, Dict[str, pd.DataFrame]], epochs: int = 5) -
     with open(REPORT_PATH, "w") as f:
         json.dump(report, f)
     return model
+    model.eval()
+    return model
+
+
+def load_model() -> nn.Module:
+    if torch is None:
+        raise ImportError("torch not available")
+    model = PriceNet()
+    state = torch.load(MODEL_PATH)
+    model.load_state_dict(state)
+    model.eval()
+    return model
+
+
+def predict_price(df: pd.DataFrame, model: Optional[nn.Module] = None) -> float:
+_model: Optional[nn.Module] = None
+
+
+def load_model() -> nn.Module:
+    """Load the torch price prediction model."""
+    global _model
+    if _model is None:
+        if torch is None:
+            raise ImportError("torch not available")
+        model = PriceNet()
+        if MODEL_PATH.exists():
+            try:  # pragma: no cover - best effort loading
+                state = torch.load(MODEL_PATH)
+                if hasattr(model, "load_state_dict"):
+                    model.load_state_dict(state)
+            except Exception:
+                pass
+        if hasattr(model, "eval"):
+            model.eval()
+        _model = model
+    return _model
+
+
+def predict_price(df: pd.DataFrame, model: Optional[nn.Module] = None) -> float:
+    """Predict next closing price for ``df`` using the torch model."""
+    if torch is None:
+        return float("nan")
+    if model is None:
+        model = load_model()
+    if df.empty:
+        return float("nan")
+    row = df[["open", "high", "low", "close", "volume"]].iloc[[-1]].values
+    x = torch.tensor(row, dtype=torch.float32)
+    with torch.no_grad():
+        val = float(model(x).squeeze().item())
+    return val
+    row = df[["open", "high", "low", "close"]].iloc[[-1]].values
+    x = torch.tensor(row, dtype=torch.float32)
+    if hasattr(torch, "no_grad"):
+        with torch.no_grad():
+            val = model(x).squeeze().item()
+    else:
+        val = model(x).squeeze().item()
+    return float(val)

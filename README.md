@@ -14,6 +14,8 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 * Balance change alerts when USDT funds move
 * Capital tracker, sentiment filter and tax logger helpers
 * Solana mempool monitor to avoid swaps when fees spike
+* Cross-chain arbitrage between CEXs and Solana DEXes
+* RSI/MACD scalper for Solana pairs
 * Hourly new listing scanner using x_semantic_search
 * Paper trading wallet for dry-run simulation
 * Live trading or dry-run simulation
@@ -284,6 +286,31 @@ cross_arbitrage:
   symbol: BTC/USDT
   threshold: 0.005
 ```
+
+#### Cross Chain Arbitrage
+`cross_chain_arbitrage` compares average CEX prices with the Solana DEX quote
+via Jupiter. Configure the API keys and threshold in `config.yaml` and pass your
+exchange instances at runtime.
+#### Cross-Chain Arbitrage
+Tracks spreads between a centralized exchange and a Solana DEX. A trade is
+triggered when the difference covers bridge costs and exceeds ``threshold``.
+
+```yaml
+cross_chain_arbitrage:
+  enabled: true
+  threshold: 0.005
+  helius_key: YOUR_KEY
+  jupiter_url: https://quote-api.jup.ag/v6/quote
+```
+
+  cex: kraken
+  dex: jupiter
+  symbol: SOL/USDC
+  threshold: 0.007
+```
+
+As with all examples, this feature is provided for **educational use only**.
+Use it at your own risk—nothing here is financial advice.
 
 ### Data and Logging
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
@@ -846,6 +873,24 @@ score, direction = micro_scalp_bot.generate_signal(
     mempool_cfg=cfg["mempool_monitor"],
 )
 ```
+
+## RSI/MACD Solana Scalper
+
+An intraday strategy that uses RSI and MACD on one-minute candles to capture
+quick momentum swings on Solana pairs. The mempool monitor can be used to avoid
+entries when fees spike.
+
+```yaml
+sol_rsi_macd_scalper:
+  enabled: true
+  rsi_window: 14
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+```
+
+This scalper is also provided strictly for **educational use**. Trading carries
+risk and nothing here is financial advice.
 
 ## Solana Meme-Wave Sniper
 

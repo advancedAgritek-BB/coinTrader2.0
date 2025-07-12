@@ -32,3 +32,11 @@ async def get_usdt_balance(exchange: Any, config: dict | None = None) -> float:
     if not value:
         logger.warning("%s balance not found or zero", key)
     return float(value or 0)
+
+
+async def get_btc_balance(exchange: Any, config: dict | None = None) -> float:
+    """Return the free BTC balance using ``get_usdt_balance``."""
+
+    conf = dict(config or {})
+    conf.setdefault("base_currency", "BTC")
+    return await get_usdt_balance(exchange, conf)

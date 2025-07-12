@@ -8,14 +8,19 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
+_orig_crypto_bot = sys.modules.get("crypto_bot")
+_orig_strategy_pkg = sys.modules.get("crypto_bot.strategy")
+_orig_execution_pkg = sys.modules.get("crypto_bot.execution")
+_orig_utils_pkg = sys.modules.get("crypto_bot.utils")
+
 crypto_bot = types.ModuleType("crypto_bot")
 strategy_pkg = types.ModuleType("crypto_bot.strategy")
 execution_pkg = types.ModuleType("crypto_bot.execution")
 utils_pkg = types.ModuleType("crypto_bot.utils")
-sys.modules.setdefault("crypto_bot", crypto_bot)
-sys.modules.setdefault("crypto_bot.strategy", strategy_pkg)
-sys.modules.setdefault("crypto_bot.execution", execution_pkg)
-sys.modules.setdefault("crypto_bot.utils", utils_pkg)
+sys.modules["crypto_bot"] = crypto_bot
+sys.modules["crypto_bot.strategy"] = strategy_pkg
+sys.modules["crypto_bot.execution"] = execution_pkg
+sys.modules["crypto_bot.utils"] = utils_pkg
 
 spec = importlib.util.spec_from_file_location(
     "crypto_bot.execution.solana_mempool",
@@ -34,6 +39,7 @@ vol_filter = types.ModuleType("crypto_bot.volatility_filter")
 vol_filter.calc_atr = lambda df, window=14: df["high"].sub(df["low"]).rolling(window).mean().iloc[-1]
 sys.modules["crypto_bot.utils.indicator_cache"] = ind_cache
 sys.modules["crypto_bot.utils.volatility"] = vol_mod
+_orig_vol_filter = sys.modules.get("crypto_bot.volatility_filter")
 sys.modules["crypto_bot.volatility_filter"] = vol_filter
 
 for mod_name in ["indicator_cache", "volatility"]:
@@ -51,6 +57,26 @@ spec = importlib.util.spec_from_file_location(
 micro_scalp_bot = importlib.util.module_from_spec(spec)
 sys.modules["crypto_bot.strategy.micro_scalp_bot"] = micro_scalp_bot
 spec.loader.exec_module(micro_scalp_bot)
+if _orig_vol_filter is not None:
+    sys.modules["crypto_bot.volatility_filter"] = _orig_vol_filter
+else:
+    sys.modules.pop("crypto_bot.volatility_filter", None)
+if _orig_crypto_bot is not None:
+    sys.modules["crypto_bot"] = _orig_crypto_bot
+else:
+    sys.modules.pop("crypto_bot", None)
+if _orig_strategy_pkg is not None:
+    sys.modules["crypto_bot.strategy"] = _orig_strategy_pkg
+else:
+    sys.modules.pop("crypto_bot.strategy", None)
+if _orig_execution_pkg is not None:
+    sys.modules["crypto_bot.execution"] = _orig_execution_pkg
+else:
+    sys.modules.pop("crypto_bot.execution", None)
+if _orig_utils_pkg is not None:
+    sys.modules["crypto_bot.utils"] = _orig_utils_pkg
+else:
+    sys.modules.pop("crypto_bot.utils", None)
 
 
 @pytest.fixture
