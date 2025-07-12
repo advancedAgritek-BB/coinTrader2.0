@@ -711,6 +711,31 @@ async def refresh_open_position_data(
                 last_candle_ts[sym] = int(df["timestamp"].iloc[-1])
 
 
+async def _price_model_training_loop(ctx: BotContext) -> None:
+    """Periodically train the torch price model."""
+    interval = (
+        ctx.config.get("torch_price_model", {}).get("training_interval_hours", 24)
+        * 3600
+    )
+    while True:
+        try:
+            from crypto_bot import torch_price_model
+
+            torch_price_model.train_model(ctx.df_cache)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:  # pragma: no cover - training errors
+            logger.error("Price model training error: %s", exc, exc_info=True)
+        sleep_remaining = interval
+        while sleep_remaining > 0:
+            sleep_chunk = min(60, sleep_remaining)
+            try:
+                await asyncio.sleep(sleep_chunk)
+            except asyncio.CancelledError:
+                return
+            sleep_remaining -= sleep_chunk
+
+
 async def _main_impl() -> TelegramNotifier:
     """Implementation for running the trading bot."""
 
@@ -966,6 +991,10 @@ async def _main_impl() -> TelegramNotifier:
         handle_exits,
     ])
 
+    price_train_task = None
+    if config.get("torch_price_model", {}).get("enabled"):
+        price_train_task = asyncio.create_task(_price_model_training_loop(ctx))
+
     
     loop_count = 0
     last_weight_update = last_optimize = 0.0
@@ -1063,6 +1092,8 @@ async def _main_impl() -> TelegramNotifier:
         rotation_task.cancel()
         if sniper_task:
             sniper_task.cancel()
+        if price_train_task:
+            price_train_task.cancel()
         for task in list(position_tasks.values()):
             task.cancel()
         for task in list(position_tasks.values()):
@@ -1090,6 +1121,11 @@ async def _main_impl() -> TelegramNotifier:
         if sniper_task:
             try:
                 await sniper_task
+            except asyncio.CancelledError:
+                pass
+        if price_train_task:
+            try:
+                await price_train_task
             except asyncio.CancelledError:
                 pass
         try:
