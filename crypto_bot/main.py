@@ -604,7 +604,9 @@ async def _rotation_loop(
                     if isinstance(bal.get("USDT"), dict)
                     else bal.get("USDT", 0)
                 )
-                check_balance_change(float(current_balance), "external change")
+                check_balance_change(
+                    "USDT", float(current_balance), "external change"
+                )
                 holdings = {
                     k: (v.get("total") if isinstance(v, dict) else v)
                     for k, v in bal.items()
@@ -646,7 +648,7 @@ async def handle_fund_conversions(
             notifier=notifier,
         )
         bal_val = await get_usdt_balance(exchange, config)
-        check_balance_change(float(bal_val), "funds converted")
+        check_balance_change("BTC", float(bal_val), "funds converted")
 
 
 async def refresh_open_position_data(
@@ -766,14 +768,17 @@ async def _main_impl() -> TelegramNotifier:
             return notifier
 
     balance_threshold = config.get("balance_change_threshold", 0.01)
-    previous_balance = 0.0
+    previous_balance: dict[str, float] = {}
 
-    def check_balance_change(new_balance: float, reason: str) -> None:
+    def check_balance_change(currency: str, new_balance: float, reason: str) -> None:
         nonlocal previous_balance
-        delta = new_balance - previous_balance
+        prev = previous_balance.get(currency, 0.0)
+        delta = new_balance - prev
         if abs(delta) > balance_threshold and notifier:
-            notifier.notify(f"Balance changed by {delta:.4f} USDT due to {reason}")
-        previous_balance = new_balance
+            notifier.notify(
+                f"Balance changed by {delta:.4f} {currency} due to {reason}"
+            )
+        previous_balance[currency] = new_balance
 
     try:
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
@@ -787,7 +792,7 @@ async def _main_impl() -> TelegramNotifier:
         )
         log_balance(float(init_bal))
         last_balance = float(init_bal)
-        previous_balance = float(init_bal)
+        previous_balance["USDT"] = float(init_bal)
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)
         if status_updates:
