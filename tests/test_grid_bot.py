@@ -232,3 +232,30 @@ def test_narrow_range_blocks_signal(monkeypatch):
     df = _df_narrow_range()
     score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert (score, direction) == (0.0, "none")
+
+def test_ml_center_prediction_used(monkeypatch):
+    df = _df_with_price(111.0)
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "compute_vwap", lambda df, w: pd.Series([95.0]*len(df), index=df.index))
+    called = {"breakout": False}
+    monkeypatch.setattr(grid_bot.breakout_bot, "generate_signal", lambda *_a, **_k: (called.__setitem__("breakout", True), (0.0, "none"))[1])
+    monkeypatch.setattr(grid_bot.grid_center_model, "predict_centre", lambda _df: 100.0)
+    cfg = GridConfig(use_ml_center=True, atr_normalization=False)
+    score, direction = grid_bot.generate_signal(df, config=cfg)
+    assert not called["breakout"]
+    assert direction == "short"
+    assert score > 0
+
+
+def test_ml_center_fallback(monkeypatch):
+    df = _df_with_price(111.0)
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "compute_vwap", lambda df, w: pd.Series([95.0]*len(df), index=df.index))
+    monkeypatch.setattr(grid_bot.grid_center_model, "predict_centre", lambda _df: float("nan"))
+    called = {}
+    monkeypatch.setattr(grid_bot.breakout_bot, "generate_signal", lambda *_a, **_k: called.setdefault("called", True) or (0.1, "short"))
+    cfg = GridConfig(use_ml_center=True, atr_normalization=False)
+    score, direction = grid_bot.generate_signal(df, config=cfg)
+    assert called.get("called")
+    assert direction == "short"
+    assert score == 0.1
