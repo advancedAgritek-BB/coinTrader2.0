@@ -460,6 +460,9 @@ async def execute_signals(ctx: BotContext) -> None:
             price=price,
         )
 
+        leverage = candidate.get("leverage", 1)
+        size *= leverage
+
         if not ctx.risk_manager.can_allocate(strategy, size, ctx.balance):
             continue
 
@@ -475,6 +478,7 @@ async def execute_signals(ctx: BotContext) -> None:
             dry_run=ctx.config.get("execution_mode") == "dry_run",
             use_websocket=ctx.config.get("use_websocket", False),
             config=ctx.config,
+            leverage=leverage,
         )
         ctx.timing["execution_latency"] = max(
             ctx.timing.get("execution_latency", 0.0),
