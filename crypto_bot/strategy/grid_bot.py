@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from dataclasses import asdict, dataclass, fields
+import dataclasses
+from dataclasses import asdict, dataclass, field, fields
 from typing import Mapping, Optional, Tuple, Union
 
 import numpy as np
@@ -46,6 +47,9 @@ class GridConfig:
     range_window: int = 20
     min_range_pct: float = 0.001
 
+    arbitrage_pairs: list[tuple[str, str]] = field(default_factory=list)
+    arbitrage_threshold: float = 0.005
+
     @classmethod
     def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":
         cfg = cfg or {}
@@ -54,7 +58,13 @@ class GridConfig:
             if f.name == "num_levels":
                 params[f.name] = int(cfg.get("num_levels", _get_num_levels()))
             else:
-                params[f.name] = cfg.get(f.name, getattr(cls, f.name))
+                if f.default is not dataclasses.MISSING:
+                    default = f.default
+                elif f.default_factory is not dataclasses.MISSING:  # type: ignore[attr-defined]
+                    default = f.default_factory()
+                else:
+                    default = None
+                params[f.name] = cfg.get(f.name, default)
         return cls(**params)
 
 
