@@ -10,6 +10,7 @@ from . import (
     sniper_bot,
     trend_bot,
     arbitrage_bot,
+    pair_arbitrage,
 )
 from .breakout_bot import generate_micro_breakout
 
@@ -32,6 +33,7 @@ __all__ = [
     "sniper_bot",
     "trend_bot",
     "arbitrage_bot",
+    "pair_arbitrage",
     "sniper_solana",
     "high_freq_strategies",
 ]
