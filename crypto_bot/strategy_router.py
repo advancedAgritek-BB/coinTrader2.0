@@ -30,6 +30,7 @@ from crypto_bot.strategy import (
     breakout_bot,
     micro_scalp_bot,
     bounce_scalper,
+    cross_arbitrage,
 )
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
@@ -212,6 +213,7 @@ def get_strategy_by_name(
     mapping: Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]] = {}
     mapping.update(getattr(meta_selector, "_STRATEGY_FN_MAP", {}))
     mapping.update(getattr(rl_selector, "_STRATEGY_FN_MAP", {}))
+    mapping.setdefault("cross_arbitrage", cross_arbitrage.generate_signal)
     return mapping.get(name)
 
 
@@ -427,6 +429,20 @@ def route(
         return wrapped
 
     cfg = config or DEFAULT_ROUTER_CFG
+
+    ca_cfg = cfg_get(cfg, "cross_arbitrage", {})
+    if isinstance(ca_cfg, Mapping) and ca_cfg.get("enabled"):
+        ex_a = ca_cfg.get("exchange_a")
+        ex_b = ca_cfg.get("exchange_b")
+        symbol = ca_cfg.get("symbol") or cfg_get(cfg, "symbol", "")
+        threshold = float(ca_cfg.get("threshold", 0.005))
+        if ex_a and ex_b:
+            logger.info("Routing to cross_arbitrage strategy")
+
+            def cross_fn(_df: pd.DataFrame | None = None, _cfg=None):
+                return cross_arbitrage.generate_signal(ex_a, ex_b, symbol, threshold)
+
+            return _wrap(cross_fn)
 
     # === FAST-PATH FOR STRONG SIGNALS ===
     fp = (

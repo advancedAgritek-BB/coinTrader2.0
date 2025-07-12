@@ -1,7 +1,10 @@
 from typing import Dict, List
 import json
 import os
+import asyncio
+import time
 from pathlib import Path
+import aiohttp
 
 try:
     from solana.rpc.api import Client  # type: ignore
@@ -12,7 +15,6 @@ except Exception:  # pragma: no cover - dependency optional
     PublicKey = None  # type: ignore
     TokenAccountOpts = None  # type: ignore
 
-from crypto_bot.execution.solana_executor import execute_swap
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
 
@@ -32,6 +34,38 @@ TOKEN_MINTS = {
 
 MIN_BALANCE_THRESHOLD = float(os.getenv("MIN_BALANCE_THRESHOLD", "0.001"))
 
+
+def with_retry(func):
+    """Retry ``func`` on network errors with exponential backoff."""
+
+    async def async_wrapper(*args, **kwargs):
+        attempts = int(os.getenv("SOLANA_RETRY_ATTEMPTS", "3"))
+        delay = float(os.getenv("SOLANA_RETRY_DELAY", "1"))
+        for attempt in range(attempts):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as exc:  # pragma: no cover - network
+                if attempt >= attempts - 1:
+                    raise
+                await asyncio.sleep(delay * 2**attempt)
+
+    def sync_wrapper(*args, **kwargs):
+        attempts = int(os.getenv("SOLANA_RETRY_ATTEMPTS", "3"))
+        delay = float(os.getenv("SOLANA_RETRY_DELAY", "1"))
+        for attempt in range(attempts):
+            try:
+                return func(*args, **kwargs)
+            except Exception as exc:
+                if attempt >= attempts - 1:
+                    raise
+                time.sleep(delay * 2**attempt)
+
+    if asyncio.iscoroutinefunction(func):
+        return async_wrapper
+    return sync_wrapper
+
+
+@with_retry
 def check_wallet_balances(wallet_address: str) -> Dict[str, float]:
     """Return token balances for ``wallet_address``.
 
@@ -135,6 +169,7 @@ async def auto_convert_funds(
         return result
     else:
         try:
+            from crypto_bot.execution.solana_executor import execute_swap
             result = await execute_swap(
                 from_mint,
                 to_mint,

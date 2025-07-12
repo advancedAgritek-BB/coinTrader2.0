@@ -12,6 +12,7 @@ from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot import tax_logger
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from pathlib import Path
+from crypto_bot.fund_manager import with_retry
 
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
@@ -20,6 +21,20 @@ logger = setup_logger(__name__, LOG_DIR / "execution.log")
 JUPITER_QUOTE_URL = "https://quote-api.jup.ag/v6/quote"
 JUPITER_SWAP_URL = "https://quote-api.jup.ag/v6/swap"
 JITO_BUNDLE_URL = "https://mainnet.block-engine.jito.wtf/api/v1/bundles"
+
+
+@with_retry
+async def _get_json(session: aiohttp.ClientSession, url: str, **kwargs) -> Dict:
+    async with session.get(url, **kwargs) as resp:
+        resp.raise_for_status()
+        return await resp.json()
+
+
+@with_retry
+async def _post_json(session: aiohttp.ClientSession, url: str, **kwargs) -> Dict:
+    async with session.post(url, **kwargs) as resp:
+        resp.raise_for_status()
+        return await resp.json()
 
 
 async def execute_swap(
@@ -120,7 +135,8 @@ async def execute_swap(
     client = Client(rpc_url)
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(
+        quote_data = await _get_json(
+            session,
             JUPITER_QUOTE_URL,
             params={
                 "inputMint": token_in,
@@ -129,16 +145,15 @@ async def execute_swap(
                 "slippageBps": slippage_bps,
             },
             timeout=10,
-        ) as quote_resp:
-            quote_resp.raise_for_status()
-            quote_data = await quote_resp.json()
+        )
         if not quote_data.get("data"):
             logger.warning("No routes returned from Jupiter")
             return {}
         route = quote_data["data"][0]
 
         try:
-            async with session.get(
+            back_data = await _get_json(
+                session,
                 JUPITER_QUOTE_URL,
                 params={
                     "inputMint": token_out,
@@ -147,9 +162,7 @@ async def execute_swap(
                     "slippageBps": slippage_bps,
                 },
                 timeout=10,
-            ) as back_resp:
-                back_resp.raise_for_status()
-                back_data = await back_resp.json()
+            )
             back_route = back_data["data"][0]
             ask = float(route["outAmount"]) / float(route["inAmount"])
             bid = float(back_route["inAmount"]) / float(back_route["outAmount"])
@@ -169,13 +182,12 @@ async def execute_swap(
         except Exception as err:  # pragma: no cover - network
             logger.warning("Slippage check failed: %s", err)
 
-        async with session.post(
+        swap_data = await _post_json(
+            session,
             JUPITER_SWAP_URL,
             json={"route": route, "userPublicKey": str(keypair.public_key)},
             timeout=10,
-        ) as swap_resp:
-            swap_resp.raise_for_status()
-            swap_data = await swap_resp.json()
+        )
         swap_tx = swap_data["swapTransaction"]
 
     raw_tx = base64.b64decode(swap_tx)
@@ -188,14 +200,13 @@ async def execute_swap(
     if jito_key:
         signed_tx = base64.b64encode(tx.serialize()).decode()
         async with aiohttp.ClientSession() as jito_session:
-            async with jito_session.post(
+            bundle_data = await _post_json(
+                jito_session,
                 JITO_BUNDLE_URL,
                 json={"transactions": [signed_tx]},
                 headers={"Authorization": f"Bearer {jito_key}"},
                 timeout=10,
-            ) as bundle_resp:
-                bundle_resp.raise_for_status()
-                bundle_data = await bundle_resp.json()
+            )
         tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
     else:
         send_res = client.send_transaction(tx, keypair)

@@ -257,8 +257,6 @@ def _cast_to_type(value: str, example: object) -> object:
         return value
 
 
-async def _ws_ping_loop(exchange: object, interval: float) -> None:
-    pass
 async def _ws_ping_loop(exchange: ccxt.Exchange, interval: float) -> None:
     """Periodically send WebSocket ping messages."""
     try:
@@ -931,6 +929,7 @@ async def _main_impl() -> TelegramNotifier:
     
     loop_count = 0
     last_weight_update = last_optimize = 0.0
+    metrics_path = Path(config.get("metrics_output_file", LOG_DIR / "metrics.csv"))
 
     try:
         while True:
@@ -968,6 +967,52 @@ async def _main_impl() -> TelegramNotifier:
                 )
 
                 await refresh_open_position_data(exchange, ctx, last_candle_ts, config)
+            except Exception:
+                pass
+
+                balances = await asyncio.to_thread(
+                    check_wallet_balances, user.get("wallet_address", "")
+                )
+                for token in detect_non_trade_tokens(balances):
+                    amount = balances[token]
+                    logger.info("Converting %s %s to USDC", amount, token)
+                    await auto_convert_funds(
+                        user.get("wallet_address", ""),
+                        token,
+                        "USDC",
+                        amount,
+                        dry_run=config["execution_mode"] == "dry_run",
+                        slippage_bps=config.get("solana_slippage_bps", 50),
+                        notifier=notifier,
+                    )
+                    bal_val = await get_usdt_balance(exchange, config)
+                    check_balance_change(float(bal_val), "funds converted")
+
+                tf = config.get("timeframe", "1h")
+                tf_sec = timeframe_seconds(None, tf)
+                open_syms: list[str] = []
+                for sym in ctx.positions:
+                    last_ts = last_candle_ts.get(sym, 0)
+                    if time.time() - last_ts >= tf_sec:
+                        open_syms.append(sym)
+                if open_syms:
+                    tf_cache = ctx.df_cache.get(tf, {})
+                    tf_cache = await update_ohlcv_cache(
+                        exchange,
+                        tf_cache,
+                        open_syms,
+                        timeframe=tf,
+                        limit=2,
+                        use_websocket=config.get("use_websocket", False),
+                        force_websocket_history=config.get("force_websocket_history", False),
+                        max_concurrent=config.get("max_concurrent_ohlcv"),
+                    )
+                    ctx.df_cache[tf] = tf_cache
+                    session_state.df_cache[tf] = tf_cache
+                    for sym in open_syms:
+                        df = tf_cache.get(sym)
+                        if df is not None and not df.empty:
+                            last_candle_ts[sym] = int(df["timestamp"].iloc[-1])
 
                 total_time = time.perf_counter() - cycle_start
                 timing = getattr(ctx, "timing", {})
@@ -998,6 +1043,7 @@ async def _main_impl() -> TelegramNotifier:
                     config["loop_interval_minutes"], unit="m"
                 ).total_seconds()
                 await asyncio.sleep(delay)
+    
             except asyncio.CancelledError:
                 raise
             except ccxt.NetworkError as exc:
