@@ -665,7 +665,7 @@ By default the worker refreshes the file every **6 hours**. Change the interval
 under `pairs_worker.refresh_interval` in `crypto_bot/config.yaml` and restart the
 worker to apply the new schedule.
 You can also limit the markets saved in the cache by defining
-`allowed_quote_currencies` and `blacklist_assets` under `refresh_pairs`:
+`allowed_quote_currencies` and `blocklist_assets` under `refresh_pairs`:
 
 ```yaml
 refresh_pairs:
@@ -673,7 +673,7 @@ refresh_pairs:
   refresh_interval: 6h
   top_k: 40
   allowed_quote_currencies: [USD, USDT]
-  blacklist_assets: []
+  blocklist_assets: []
 ```
 Run it manually whenever needed:
 
@@ -936,6 +936,18 @@ and caps the result between 0 and 1.
 
 ```bash
 pip install -r requirements.txt
+```
+
+The requirements file includes core packages like
+[`ccxt`](https://github.com/ccxt/ccxt) for exchange connectivity,
+[`python-dotenv`](https://pypi.org/project/python-dotenv/) to load
+environment variables and [`cachetools`](https://pypi.org/project/cachetools/)
+for in-memory caching.
+
+If you plan to run the test suite install the development extras as well:
+
+```bash
+pip install -r requirements-dev.txt
 ```
 
 2. Run the test suite to verify your environment:

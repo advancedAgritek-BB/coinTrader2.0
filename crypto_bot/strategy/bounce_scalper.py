@@ -29,6 +29,16 @@ from crypto_bot.utils import stats
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.cooldown_manager import in_cooldown, mark_cooldown
 
+# When True the next call to :func:`generate_signal` bypasses any cooldown
+# checks.  Set via :func:`trigger_once` and automatically reset after use.
+FORCE_SIGNAL = False
+
+
+def trigger_once() -> None:
+    """Force the next generated signal even if cooling down."""
+    global FORCE_SIGNAL
+    FORCE_SIGNAL = True
+
 
 @dataclass
 class BounceScalperConfig:
@@ -49,7 +59,7 @@ class BounceScalperConfig:
     rsi_oversold_pct: float = 10.0
 
     # pattern confirmation
-    down_candles: int = 3
+    down_candles: int = 2
     up_candles: int = 3
     trend_ema_fast: int = 9
     trend_ema_slow: int = 21
@@ -180,9 +190,10 @@ def generate_signal(
     cfg_dict = _as_dict(config)
     cfg = BounceScalperConfig.from_dict(cfg_dict)
 
+    global FORCE_SIGNAL
     symbol = cfg.symbol
     strategy = cfg.strategy
-    if symbol and in_cooldown(symbol, strategy):
+    if symbol and not FORCE_SIGNAL and in_cooldown(symbol, strategy):
         return 0.0, "none"
 
     rsi_window = cfg.rsi_window
@@ -210,10 +221,6 @@ def generate_signal(
         return 0.0, "none"
 
     df = df.copy()
-    df["rsi"] = ta.momentum.rsi(df["close"], window=rsi_window)
-    df["rsi_z"] = stats.zscore(df["rsi"], cfg.lookback)
-    df["vol_ma"] = df["volume"].rolling(window=vol_window).mean()
-    df["vol_std"] = df["volume"].rolling(window=vol_window).std()
     df["ema"] = ta.trend.ema_indicator(df["close"], window=ema_window)
     atr_window_used = min(atr_window, len(df))
     df["atr"] = ta.volatility.average_true_range(
@@ -223,16 +230,6 @@ def generate_signal(
     df["atr_ma"] = df["atr"].rolling(window=atr_ma_window_used).mean()
 
     latest = df.iloc[-1]
-    prev_close = df["close"].iloc[-2]
-    if not pd.isna(latest["vol_std"]) and latest["vol_std"] > 0:
-        zscore = (latest["volume"] - latest["vol_ma"]) / latest["vol_std"]
-        volume_spike = zscore > zscore_threshold
-    else:
-        volume_spike = (
-            latest["volume"] > latest["vol_ma"] * volume_multiple
-            if latest["vol_ma"] > 0
-            else False
-        )
 
     if (
         not pd.isna(latest["atr"])
@@ -247,28 +244,33 @@ def generate_signal(
             oversold = min(50.0, oversold + shrink)
             overbought = max(50.0, overbought - shrink)
 
-    trend_ok_long = latest["close"] > latest["ema"]
-    trend_ok_short = latest["close"] < latest["ema"]
-
     recent = df.iloc[-(lookback + 1) :]
     rsi_series = ta.momentum.rsi(recent["close"], window=rsi_window)
     vol_ma = recent["volume"].rolling(window=vol_window).mean()
+    vol_std = recent["volume"].rolling(window=vol_window).std()
     rsi_series = cache_series("rsi", df, rsi_series, lookback)
     vol_ma = cache_series("vol_ma", df, vol_ma, lookback)
+    vol_std = cache_series("vol_std", df, vol_std, lookback)
 
     df = recent.copy()
     df["rsi"] = rsi_series
     df["rsi_z"] = stats.zscore(rsi_series, cfg.lookback)
     df["vol_ma"] = vol_ma
+    df["vol_std"] = vol_std
 
     latest = df.iloc[-1]
     prev_close = df["close"].iloc[-2]
     vol_z = (
         (latest["volume"] - latest["vol_ma"]) / latest["vol_std"]
         if latest["vol_std"] > 0
-        else float("inf")
+        else (
+            zscore_threshold if latest["volume"] > latest["vol_ma"] else 0.0
+        )
     )
     volume_spike = vol_z > zscore_threshold
+
+    trend_ok_long = latest["close"] > latest["ema"]
+    trend_ok_short = latest["close"] < latest["ema"]
 
     eng_type = is_engulfing(df, body_pct)
     hammer_type = is_hammer(df, body_pct)
@@ -371,4 +373,6 @@ def generate_signal(
                     else:
                         return 0.0, "none"
 
-    return score, direction
+    result = (score, direction)
+    FORCE_SIGNAL = False
+    return result

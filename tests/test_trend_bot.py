@@ -1,5 +1,5 @@
 import pandas as pd
-
+import pytest
 from crypto_bot.strategy import trend_bot
 
 
@@ -87,6 +87,14 @@ def test_reversal_cross_signal(monkeypatch):
     assert direction == "long"
     assert score > 0
 
+def test_torch_integration(monkeypatch):
+    df = _df_trend(150.0, high_equals_close=True)
+    monkeypatch.setattr(trend_bot, "normalize_score_by_volatility", lambda d, s: s)
+    monkeypatch.setattr(trend_bot.torch_signal_model, "predict_signal", lambda d: 0.2)
+    cfg = {"torch_signal_model": {"enabled": True, "weight": 0.5}}
+    score, direction = trend_bot.generate_signal(df, cfg)
+    assert direction == "long"
+    assert score == pytest.approx(0.6)
 
 def _setup_reversal(monkeypatch, rsi_val=20):
     """Patch indicators for reversal tests."""
