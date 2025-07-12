@@ -1,6 +1,6 @@
 import pandas as pd
 
-from crypto_bot.strategy import dex_scalper
+import crypto_bot.strategy.dex_scalper as dex_scalper
 
 
 def test_scalper_long_signal():
@@ -42,3 +42,13 @@ def test_scalper_custom_config():
     score, direction = dex_scalper.generate_signal(df, cfg)
     assert direction == 'long'
     assert score > 0
+
+
+def test_scalper_fast_window_longer_than_df():
+    """Ensure short DataFrame returns neutral when below required window."""
+    close = pd.Series(range(20))
+    df = pd.DataFrame({'close': close})
+    cfg = {'dex_scalper': {'ema_fast': 30, 'ema_slow': 10}}
+    score, direction = dex_scalper.generate_signal(df, cfg)
+    assert direction == 'none'
+    assert score == 0.0
