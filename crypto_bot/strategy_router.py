@@ -29,8 +29,10 @@ from crypto_bot.strategy import (
     mean_bot,
     breakout_bot,
     micro_scalp_bot,
+    solana_scalping,
     bounce_scalper,
     cross_arbitrage,
+    cross_chain_arbitrage,
 )
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
@@ -214,6 +216,9 @@ def get_strategy_by_name(
     mapping.update(getattr(meta_selector, "_STRATEGY_FN_MAP", {}))
     mapping.update(getattr(rl_selector, "_STRATEGY_FN_MAP", {}))
     mapping.setdefault("cross_arbitrage", cross_arbitrage.generate_signal)
+    mapping.setdefault(
+        "cross_chain_arbitrage", cross_chain_arbitrage.generate_signal
+    )
     return mapping.get(name)
 
 
@@ -429,6 +434,21 @@ def route(
         return wrapped
 
     cfg = config or DEFAULT_ROUTER_CFG
+
+    cca_cfg = cfg_get(cfg, "cross_chain_arbitrage", {})
+    if isinstance(cca_cfg, Mapping) and cca_cfg.get("enabled"):
+        exchanges = cca_cfg.get("exchanges") or cca_cfg.get("exchange_list")
+        symbol = cca_cfg.get("symbol") or cfg_get(cfg, "symbol", "")
+        threshold = float(cca_cfg.get("threshold", 0.005))
+        if exchanges:
+            logger.info("Routing to cross_chain_arbitrage strategy")
+
+            def cca_fn(_df: pd.DataFrame | None = None, _cfg=None):
+                return cross_chain_arbitrage.generate_signal(
+                    exchanges, symbol, threshold
+                )
+
+            return _wrap(cca_fn)
 
     ca_cfg = cfg_get(cfg, "cross_arbitrage", {})
     if isinstance(ca_cfg, Mapping) and ca_cfg.get("enabled"):

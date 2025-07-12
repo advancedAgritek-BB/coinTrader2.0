@@ -146,8 +146,20 @@ micro_scalp:
   vol_window: 20
   volume_window: 20
   wick_pct: 0.2
+solana_scalping:
+  rsi_window: 14
+  oversold: 30
+  overbought: 70
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
 sniper_bot:
   high_freq: false
+cross_chain_arbitrage:
+  enabled: false
+  threshold: 0.005
+  helius_key: YOUR_KEY
+  jupiter_url: https://quote-api.jup.ag/v6/quote
 min_agreeing_votes: 1
 min_confidence_score: 0.1  # baseline; actual min = baseline * (1 + bb_width_z/3)
 min_consistent_agreement: 1
@@ -162,6 +174,8 @@ torch_signal_model:
   enabled: false
   weight: 0.3
 ml_price_predictor:
+  enabled: false
+torch_price_model:
   enabled: false
 mode: auto
 mode_degrade_window: 20
@@ -263,6 +277,8 @@ strategy_router:
     - mean_bot
     scalp:
     - micro_scalp
+    sol_scalp:
+    - solana_scalping
     sideways:
     - grid
     trending:

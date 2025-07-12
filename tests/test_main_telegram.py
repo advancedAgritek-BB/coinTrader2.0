@@ -105,4 +105,74 @@ def test_balance_change_notification(monkeypatch):
 
     assert msgs == ["Balance changed: 120.00 USDT"]
 
+
+def test_rotation_loop_currency(monkeypatch):
+    messages = []
+    prev: dict[str, float] = {}
+
+    def check(currency: str, new_balance: float, reason: str) -> None:
+        delta = new_balance - prev.get(currency, 0.0)
+        messages.append(f"Balance changed by {delta:.4f} {currency} due to {reason}")
+        prev[currency] = new_balance
+
+    class DummyExchange:
+        def __init__(self):
+            self.calls = 0
+
+        async def fetch_balance(self):
+            self.calls += 1
+            if self.calls == 1:
+                return {"USDT": {"free": 10}}
+            raise asyncio.CancelledError()
+
+    class DummyRotator:
+        def __init__(self):
+            self.config = {"interval_days": 0, "enabled": True}
+
+        async def rotate(self, *a, **k):
+            pass
+
+    state = {"running": True}
+    asyncio.run(
+        main._rotation_loop(DummyRotator(), DummyExchange(), "", state, None, check)
+    )
+
+    assert messages == [
+        "Balance changed by 10.0000 USDT due to external change"
+    ]
+
+
+def test_handle_fund_conversions_currency(monkeypatch):
+    messages = []
+    prev: dict[str, float] = {}
+
+    def check(currency: str, new_balance: float, reason: str) -> None:
+        delta = new_balance - prev.get(currency, 0.0)
+        messages.append(f"Balance changed by {delta:.4f} {currency} due to {reason}")
+        prev[currency] = new_balance
+
+    monkeypatch.setattr(main, "check_wallet_balances", lambda wallet: {"A": 1})
+    monkeypatch.setattr(main, "detect_non_trade_tokens", lambda balances: ["A"])
+
+    async def fake_convert(*_a, **_k):
+        return {}
+
+    monkeypatch.setattr(main, "auto_convert_funds", fake_convert)
+
+    async def fake_balance(*_a, **_k):
+        return 5
+
+    monkeypatch.setattr(main, "get_usdt_balance", fake_balance)
+
+    class DummyExchange:
+        pass
+
+    asyncio.run(
+        main.handle_fund_conversions(DummyExchange(), {}, None, "wallet", check)
+    )
+
+    assert messages == [
+        "Balance changed by 5.0000 BTC due to funds converted"
+    ]
+
     
