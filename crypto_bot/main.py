@@ -558,6 +558,9 @@ async def handle_exits(ctx: BotContext) -> None:
                 use_websocket=ctx.config.get("use_websocket", False),
                 config=ctx.config,
             )
+            profit = (current_price - pos["entry_price"]) * pos["size"]
+            if pos["side"] == "sell":
+                profit = -profit
             if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
                 try:
                     ctx.paper_wallet.close(sym, pos["size"], current_price)
@@ -568,6 +571,25 @@ async def handle_exits(ctx: BotContext) -> None:
                 pos.get("strategy", ""), pos["size"] * pos["entry_price"]
             )
             ctx.positions.pop(sym, None)
+            if profit > 0 and getattr(ctx, "user_wallet", None):
+                await auto_convert_funds(
+                    ctx.user_wallet,
+                    "USDT",
+                    "BTC",
+                    profit,
+                    dry_run=ctx.config.get("execution_mode") == "dry_run",
+                    slippage_bps=ctx.config.get("solana_slippage_bps", 50),
+                    notifier=ctx.notifier,
+                )
+                try:
+                    tf_price = ctx.df_cache.get(tf, {}).get("BTC/USDT") or ctx.df_cache.get(tf, {}).get("XBT/USDT")
+                    if tf_price is not None and not tf_price.empty:
+                        btc_price = float(tf_price["close"].iloc[-1])
+                        btc_amt = profit / btc_price
+                        if ctx.notifier:
+                            await ctx.notifier.send_message(f"Added {btc_amt:.6f} BTC to wallet")
+                except Exception:
+                    pass
             try:
                 log_position(
                     sym,
