@@ -98,6 +98,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         if not pd.isna(lower_thr) and not pd.isna(rsi_z_last)
         else latest["rsi"] < dynamic_oversold
     )
+
     upper_thr = scipy_stats.norm.ppf(rsi_overbought_pct / 100)
     lower_thr = scipy_stats.norm.ppf(rsi_oversold_pct / 100)
     volume_ok = latest["volume"] > latest["volume_ma"] * volume_mult
@@ -105,7 +106,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         (
             rsi_z_last > upper_thr
             if not pd.isna(rsi_z_last)
-            else latest["rsi"] > dynamic_overbought
+                else latest["rsi"] > dynamic_overbought
         )
         and volume_ok
     )
@@ -113,7 +114,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         (
             rsi_z_last < lower_thr
             if not pd.isna(rsi_z_last)
-            else latest["rsi"] < dynamic_oversold
+                else latest["rsi"] < dynamic_oversold
         )
         and volume_ok
     )
