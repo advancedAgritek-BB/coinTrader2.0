@@ -279,7 +279,7 @@ symbol_filter:
   http_timeout: 10           # seconds for fallback /Ticker requests
   ticker_retry_attempts: 3
   log_ticker_exceptions: false
-symbol_refresh_minutes: 30
+symbol_refresh_minutes: 5
 symbol_score_weights:
   age: 0.05
   change: 0.3
