@@ -27,6 +27,7 @@ from crypto_bot.volatility_filter import calc_atr
 from ta.volatility import BollingerBands
 from crypto_bot.utils import zscore
 from crypto_bot.utils.telemetry import telemetry
+from crypto_bot.torch_price_model import predict_price as torch_predict_price
 
 
 analysis_logger = setup_logger("strategy_rank", LOG_DIR / "strategy_rank.log")
@@ -296,6 +297,18 @@ async def analyze_symbol(
                 result["price_score"] = float(_pred(df))
             except Exception:  # pragma: no cover - best effort
                 result["price_score"] = 0.0
+
+        torch_cfg = config.get("torch_price_model", {})
+        if torch_cfg.get("enabled"):
+            try:  # pragma: no cover - best effort
+                pred = float(torch_predict_price(df))
+                last = float(df["close"].iloc[-1])
+                result["ai_pred_price"] = pred
+                result["direction"] = "long" if pred > last else "short"
+                if last:
+                    result["score"] += abs(pred - last) / last
+            except Exception:
+                pass
 
         votes = []
         voting = config.get("voting_strategies", [])
