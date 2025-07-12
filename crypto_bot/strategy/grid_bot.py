@@ -15,18 +15,22 @@ from crypto_bot import grid_state
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.volatility_filter import calc_atr
+
+DYNAMIC_THRESHOLD = 1.5
 from . import breakout_bot
+from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 
 
 @dataclass
 class GridConfig:
     """Configuration options for :func:`generate_signal`."""
 
-    num_levels: int = 5
+    num_levels: int = 10
     breakout_mult: float = 1.5
     cooldown_bars: int = 6
     max_active_legs: int = 4
     symbol: str = ""
+    leverage: int = 1
 
     atr_normalization: bool = True
     volume_ma_window: int = 20
@@ -34,11 +38,14 @@ class GridConfig:
     vol_zscore_threshold: float = 2.0
 
     atr_period: int = 14
-    spacing_factor: float = 0.75
+    spacing_factor: float = 0.5
     trend_ema_fast: int = 50
     trend_ema_slow: int = 200
 
+    dynamic_grid: bool = False
+
     range_window: int = 20
+    min_range_pct: float = 0.001
 
     arbitrage_pairs: list[tuple[str, str]] = field(default_factory=list)
     arbitrage_threshold: float = 0.005
@@ -77,12 +84,12 @@ def _as_dict(cfg: ConfigType) -> dict:
 
 
 def _get_num_levels() -> int:
-    """Return grid levels from ``GRID_LEVELS`` env var or default of 5."""
+    """Return grid levels from ``GRID_LEVELS`` env var or default of 10."""
     env = os.getenv("GRID_LEVELS")
     try:
-        return int(env) if env else 5
+        return int(env) if env else 10
     except ValueError:  # pragma: no cover - invalid env
-        return 5
+        return 10
 
 
 def volume_ok(series: pd.Series, window: int, mult: float, z_thresh: float) -> bool:
@@ -119,8 +126,12 @@ def compute_vwap(df: pd.DataFrame, window: int) -> pd.Series:
         return pd.Series(index=df.index, dtype=float)
     typical = (df["high"] + df["low"] + df["close"]) / 3
     pv = typical * df["volume"]
-    vwap = pv.rolling(window).sum() / df["volume"].rolling(window).sum()
-    return vwap
+    vol_sum = df["volume"].rolling(window).sum()
+    price_sum = pv.rolling(window).sum()
+    rolling_mean = typical.rolling(window, min_periods=1).mean()
+    vwap = price_sum / vol_sum
+    vwap = vwap.where(vol_sum != 0, rolling_mean)
+    return vwap.fillna(rolling_mean)
 
 
 def is_in_trend(df: pd.DataFrame, fast: int, slow: int, side: str) -> bool:
@@ -155,7 +166,9 @@ def generate_signal(
     symbol = cfg.symbol
     if symbol:
         grid_state.update_bar(symbol, len(df))
-        if grid_state.in_cooldown(symbol, cfg.cooldown_bars):
+        win_rate = get_recent_win_rate(4, strategy="grid_bot")
+        skip_cd = win_rate == 1.0
+        if not skip_cd and grid_state.in_cooldown(symbol, cfg.cooldown_bars):
             return 0.0, "none"
         if grid_state.active_leg_count(symbol) >= cfg.max_active_legs:
             return 0.0, "none"
@@ -178,6 +191,18 @@ def generate_signal(
     if recent.empty:
         return 0.0, "none"
 
+    range_slice = df.tail(range_window)
+    high = range_slice["high"].max()
+    low = range_slice["low"].min()
+
+    if high == low:
+        return 0.0, "none"
+
+    price = recent["close"].iloc[-1]
+    range_size = high - low
+    if range_size < price * cfg.min_range_pct:
+        return 0.0, "none"
+
     atr_series = ta.volatility.average_true_range(
         recent["high"], recent["low"], recent["close"], window=atr_period
     )
@@ -192,14 +217,6 @@ def generate_signal(
     if not vwap_series.isna().all():
         recent["vwap"] = vwap_series
 
-    range_slice = df.tail(range_window)
-    high = range_slice["high"].max()
-    low = range_slice["low"].min()
-
-    if high == low:
-        return 0.0, "none"
-
-    price = recent["close"].iloc[-1]
     if "vwap" in recent.columns and not pd.isna(recent["vwap"].iloc[-1]):
         centre = recent["vwap"].iloc[-1]
     else:
@@ -207,7 +224,20 @@ def generate_signal(
 
     atr = calc_atr(recent, window=atr_period)
     range_step = (high - low) / max(num_levels - 1, 1)
-    grid_step = min(atr * cfg.spacing_factor, range_step)
+    computed_step = min(atr * cfg.spacing_factor, range_step)
+    grid_step = computed_step
+    if cfg.dynamic_grid and symbol:
+        prev_step = grid_state.get_grid_step(symbol)
+        prev_atr = grid_state.get_last_atr(symbol)
+        grid_state.set_last_atr(symbol, atr)
+        if prev_step is not None and prev_atr is not None and prev_atr > 0:
+            ratio = max(atr / prev_atr, prev_atr / atr)
+            if ratio >= DYNAMIC_THRESHOLD:
+                grid_state.set_grid_step(symbol, computed_step)
+            else:
+                grid_step = prev_step
+        else:
+            grid_state.set_grid_step(symbol, computed_step)
     if not grid_step:
         return 0.0, "none"
 

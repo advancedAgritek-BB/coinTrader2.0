@@ -1,19 +1,16 @@
 from dataclasses import asdict, dataclass, fields
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 from crypto_bot import cooldown_manager
 
 import pandas as pd
 import numpy as np
 import ta
-
 try:  # pragma: no cover - optional dependency
     from scipy import stats as scipy_stats
-
     if not hasattr(scipy_stats, "norm"):
         raise ImportError
 except Exception:  # pragma: no cover - fallback
-
     class _Norm:
         @staticmethod
         def ppf(_x):
@@ -28,6 +25,17 @@ from crypto_bot.utils import stats
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.cooldown_manager import in_cooldown, mark_cooldown
+from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
+
+# When True the next call to :func:`generate_signal` bypasses any cooldown
+# checks.  Set via :func:`trigger_once` and automatically reset after use.
+FORCE_SIGNAL = False
+
+
+def trigger_once() -> None:
+    """Force the next generated signal even if cooling down."""
+    global FORCE_SIGNAL
+    FORCE_SIGNAL = True
 
 
 @dataclass
@@ -43,25 +51,26 @@ class BounceScalperConfig:
     volume_multiple: float = 2.0
     ema_window: int = 50
     atr_window: int = 14
-    atr_ma_window: int = 50
     lookback: int = 250
     rsi_overbought_pct: float = 90.0
     rsi_oversold_pct: float = 10.0
 
     # pattern confirmation
-    down_candles: int = 3
+    down_candles: int = 2
     up_candles: int = 3
     trend_ema_fast: int = 9
     trend_ema_slow: int = 21
 
     # risk management
-    cooldown_bars: int = 2
     atr_period: int = 14
     stop_loss_atr_mult: float = 1.5
     take_profit_atr_mult: float = 2.0
     min_score: float = 0.3
     max_concurrent_signals: int = 1
     atr_normalization: bool = True
+
+    # pattern confirmation
+    pattern_timeframe: str = "1m"
 
     # metadata
     strategy: str = "bounce_scalper"
@@ -172,18 +181,56 @@ def generate_signal(
     df: pd.DataFrame,
     config: Optional[Union[dict, BounceScalperConfig]] = None,
     book: Optional[dict] = None,
+    *,
+    lower_df: pd.DataFrame | None = None,
+    fetcher: Callable | None = None,
 ) -> Tuple[float, str]:
-    """Identify short-term bounces with volume confirmation."""
+    """Identify short-term bounces with volume confirmation.
+
+    Parameters
+    ----------
+    df
+        Higher timeframe OHLCV data.
+    config
+        Optional configuration or :class:`BounceScalperConfig` instance.
+    book
+        Optional order book snapshot for imbalance filtering.
+    lower_df
+        Lower timeframe candles used for pattern confirmation.
+    fetcher
+        Optional callable ``fetcher(symbol, timeframe="1m", limit=2)`` used to
+        retrieve ``lower_df`` when it is not provided.
+    """
     if df.empty:
         return 0.0, "none"
 
     cfg_dict = _as_dict(config)
     cfg = BounceScalperConfig.from_dict(cfg_dict)
 
+    global FORCE_SIGNAL
     symbol = cfg.symbol
     strategy = cfg.strategy
-    if symbol and in_cooldown(symbol, strategy):
+
+    win_rate = get_recent_win_rate(4, strategy=strategy)
+    skip_cooldown = win_rate == 1.0
+
+    if symbol and not skip_cooldown and in_cooldown(symbol, strategy):
+    if symbol and not FORCE_SIGNAL and in_cooldown(symbol, strategy):
         return 0.0, "none"
+
+    pattern_tf = cfg_dict.get("pattern_timeframe", cfg.pattern_timeframe)
+    if lower_df is None and fetcher is not None and symbol:
+        try:
+            data = fetcher(symbol, timeframe=pattern_tf, limit=2)
+            if isinstance(data, pd.DataFrame):
+                lower_df = data
+            elif isinstance(data, (list, tuple)):
+                lower_df = pd.DataFrame(
+                    data,
+                    columns=["timestamp", "open", "high", "low", "close", "volume"],
+                )
+        except Exception:
+            lower_df = None
 
     rsi_window = cfg.rsi_window
     oversold = cfg.oversold
@@ -193,7 +240,6 @@ def generate_signal(
     volume_multiple = cfg.volume_multiple
     ema_window = cfg.ema_window
     atr_window = cfg.atr_window
-    atr_ma_window = cfg.atr_ma_window
     down_candles = cfg.down_candles
     up_candles = cfg.up_candles
     body_pct = cfg_dict.get("body_pct", 0.5)
@@ -210,65 +256,49 @@ def generate_signal(
         return 0.0, "none"
 
     df = df.copy()
-    df["rsi"] = ta.momentum.rsi(df["close"], window=rsi_window)
-    df["rsi_z"] = stats.zscore(df["rsi"], cfg.lookback)
-    df["vol_ma"] = df["volume"].rolling(window=vol_window).mean()
-    df["vol_std"] = df["volume"].rolling(window=vol_window).std()
     df["ema"] = ta.trend.ema_indicator(df["close"], window=ema_window)
     atr_window_used = min(atr_window, len(df))
     df["atr"] = ta.volatility.average_true_range(
         df["high"], df["low"], df["close"], window=atr_window_used
     )
-    atr_ma_window_used = min(atr_ma_window, len(df))
-    df["atr_ma"] = df["atr"].rolling(window=atr_ma_window_used).mean()
 
     latest = df.iloc[-1]
-    prev_close = df["close"].iloc[-2]
-    if not pd.isna(latest["vol_std"]) and latest["vol_std"] > 0:
-        zscore = (latest["volume"] - latest["vol_ma"]) / latest["vol_std"]
-        volume_spike = zscore > zscore_threshold
-    else:
-        volume_spike = (
-            latest["volume"] > latest["vol_ma"] * volume_multiple
-            if latest["vol_ma"] > 0
-            else False
-        )
 
-    if (
-        not pd.isna(latest["atr"])
-        and not pd.isna(latest["atr_ma"])
-        and latest["close"] > 0
-        and latest["atr_ma"] > 0
-    ):
-        if latest["atr"] > latest["atr_ma"]:
-            ratio = min((latest["atr"] / latest["atr_ma"]) - 1, 1.0)
-            width = overbought - oversold
-            shrink = width * ratio / 2
-            oversold = min(50.0, oversold + shrink)
-            overbought = max(50.0, overbought - shrink)
-
-    trend_ok_long = latest["close"] > latest["ema"]
-    trend_ok_short = latest["close"] < latest["ema"]
+    if not pd.isna(latest["atr"]) and latest["close"] > 0:
+        atr_pct = latest["atr"] / latest["close"] * 100
+        oversold = max(10.0, oversold - atr_pct * 0.5)
+        overbought = min(90.0, overbought + atr_pct * 0.5)
 
     recent = df.iloc[-(lookback + 1) :]
     rsi_series = ta.momentum.rsi(recent["close"], window=rsi_window)
     vol_ma = recent["volume"].rolling(window=vol_window).mean()
+    vol_std = recent["volume"].rolling(window=vol_window).std()
     rsi_series = cache_series("rsi", df, rsi_series, lookback)
     vol_ma = cache_series("vol_ma", df, vol_ma, lookback)
+    vol_std = cache_series("vol_std", df, vol_std, lookback)
 
     df = recent.copy()
     df["rsi"] = rsi_series
     df["rsi_z"] = stats.zscore(rsi_series, cfg.lookback)
     df["vol_ma"] = vol_ma
+    df["vol_std"] = vol_std
 
     latest = df.iloc[-1]
     prev_close = df["close"].iloc[-2]
     vol_z = (
         (latest["volume"] - latest["vol_ma"]) / latest["vol_std"]
         if latest["vol_std"] > 0
-        else float("inf")
+        else (
+            zscore_threshold if latest["volume"] > latest["vol_ma"] else 0.0
+        )
     )
     volume_spike = vol_z > zscore_threshold
+
+    pattern_df = lower_df if lower_df is not None else df
+    eng_type = is_engulfing(pattern_df, body_pct)
+    hammer_type = is_hammer(pattern_df, body_pct)
+    trend_ok_long = latest["close"] > latest["ema"]
+    trend_ok_short = latest["close"] < latest["ema"]
 
     eng_type = is_engulfing(df, body_pct)
     hammer_type = is_hammer(df, body_pct)
@@ -316,11 +346,9 @@ def generate_signal(
     ):
         rsi_score = min((oversold - latest["rsi"]) / oversold, 1.0)
         vol_score = min(
-            (
-                latest["volume"] / (latest["vol_ma"] * volume_multiple)
-                if latest["vol_ma"] > 0
-                else 0
-            ),
+            latest["volume"] / (latest["vol_ma"] * volume_multiple)
+            if latest["vol_ma"] > 0
+            else 0,
             1.0,
         )
         score = (rsi_score + vol_score) / 2
@@ -337,11 +365,9 @@ def generate_signal(
     ):
         rsi_score = min((latest["rsi"] - overbought) / (100 - overbought), 1.0)
         vol_score = min(
-            (
-                latest["volume"] / (latest["vol_ma"] * volume_multiple)
-                if latest["vol_ma"] > 0
-                else 0
-            ),
+            latest["volume"] / (latest["vol_ma"] * volume_multiple)
+            if latest["vol_ma"] > 0
+            else 0,
             1.0,
         )
         score = (rsi_score + vol_score) / 2
@@ -371,4 +397,6 @@ def generate_signal(
                     else:
                         return 0.0, "none"
 
-    return score, direction
+    result = (score, direction)
+    FORCE_SIGNAL = False
+    return result
