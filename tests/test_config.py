@@ -35,6 +35,7 @@ def test_load_config_returns_dict():
         "spacing_factor",
         "trend_ema_fast",
         "trend_ema_slow",
+        "dynamic_grid",
         "volume_ma_window",
         "volume_multiple",
         "vol_zscore_threshold",
