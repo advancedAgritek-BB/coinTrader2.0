@@ -4,6 +4,7 @@ from typing import Optional, Tuple, Union
 from crypto_bot import cooldown_manager
 
 import pandas as pd
+import numpy as np
 import ta
 
 try:  # pragma: no cover - optional dependency
@@ -58,7 +59,7 @@ class BounceScalperConfig:
     rsi_oversold_pct: float = 10.0
 
     # pattern confirmation
-    down_candles: int = 3
+    down_candles: int = 2
     up_candles: int = 3
     trend_ema_fast: int = 9
     trend_ema_slow: int = 21
@@ -220,10 +221,6 @@ def generate_signal(
         return 0.0, "none"
 
     df = df.copy()
-    df["rsi"] = ta.momentum.rsi(df["close"], window=rsi_window)
-    df["rsi_z"] = stats.zscore(df["rsi"], cfg.lookback)
-    df["vol_ma"] = df["volume"].rolling(window=vol_window).mean()
-    df["vol_std"] = df["volume"].rolling(window=vol_window).std()
     df["ema"] = ta.trend.ema_indicator(df["close"], window=ema_window)
     atr_window_used = min(atr_window, len(df))
     df["atr"] = ta.volatility.average_true_range(
@@ -233,16 +230,6 @@ def generate_signal(
     df["atr_ma"] = df["atr"].rolling(window=atr_ma_window_used).mean()
 
     latest = df.iloc[-1]
-    prev_close = df["close"].iloc[-2]
-    if not pd.isna(latest["vol_std"]) and latest["vol_std"] > 0:
-        zscore = (latest["volume"] - latest["vol_ma"]) / latest["vol_std"]
-        volume_spike = zscore > zscore_threshold
-    else:
-        volume_spike = (
-            latest["volume"] > latest["vol_ma"] * volume_multiple
-            if latest["vol_ma"] > 0
-            else False
-        )
 
     if (
         not pd.isna(latest["atr"])
@@ -257,28 +244,33 @@ def generate_signal(
             oversold = min(50.0, oversold + shrink)
             overbought = max(50.0, overbought - shrink)
 
-    trend_ok_long = latest["close"] > latest["ema"]
-    trend_ok_short = latest["close"] < latest["ema"]
-
     recent = df.iloc[-(lookback + 1) :]
     rsi_series = ta.momentum.rsi(recent["close"], window=rsi_window)
     vol_ma = recent["volume"].rolling(window=vol_window).mean()
+    vol_std = recent["volume"].rolling(window=vol_window).std()
     rsi_series = cache_series("rsi", df, rsi_series, lookback)
     vol_ma = cache_series("vol_ma", df, vol_ma, lookback)
+    vol_std = cache_series("vol_std", df, vol_std, lookback)
 
     df = recent.copy()
     df["rsi"] = rsi_series
     df["rsi_z"] = stats.zscore(rsi_series, cfg.lookback)
     df["vol_ma"] = vol_ma
+    df["vol_std"] = vol_std
 
     latest = df.iloc[-1]
     prev_close = df["close"].iloc[-2]
     vol_z = (
         (latest["volume"] - latest["vol_ma"]) / latest["vol_std"]
         if latest["vol_std"] > 0
-        else float("inf")
+        else (
+            zscore_threshold if latest["volume"] > latest["vol_ma"] else 0.0
+        )
     )
     volume_spike = vol_z > zscore_threshold
+
+    trend_ok_long = latest["close"] > latest["ema"]
+    trend_ok_short = latest["close"] < latest["ema"]
 
     eng_type = is_engulfing(df, body_pct)
     hammer_type = is_hammer(df, body_pct)
@@ -296,16 +288,21 @@ def generate_signal(
     direction = "none"
 
     rsi_z_last = df["rsi_z"].iloc[-1]
-    lower_thresh = scipy_stats.norm.ppf(cfg.rsi_oversold_pct / 100)
-    upper_thresh = scipy_stats.norm.ppf(cfg.rsi_overbought_pct / 100)
+    rsi_z_series = df["rsi_z"].dropna()
+    if not rsi_z_series.empty:
+        lower_thresh = rsi_z_series.quantile(cfg.rsi_oversold_pct / 100)
+        upper_thresh = rsi_z_series.quantile(cfg.rsi_overbought_pct / 100)
+    else:
+        lower_thresh = np.nan
+        upper_thresh = np.nan
     oversold_cond = (
         rsi_z_last < lower_thresh
-        if not pd.isna(rsi_z_last)
+        if not pd.isna(lower_thresh) and not pd.isna(rsi_z_last)
         else latest["rsi"] < oversold
     )
     overbought_cond = (
         rsi_z_last > upper_thresh
-        if not pd.isna(rsi_z_last)
+        if not pd.isna(upper_thresh) and not pd.isna(rsi_z_last)
         else latest["rsi"] > overbought
     )
 
@@ -359,15 +356,22 @@ def generate_signal(
             mark_cooldown(symbol, strategy)
         book_data = book or cfg_dict.get("order_book")
         ratio = float(cfg_dict.get("imbalance_ratio", 0))
+        penalty = float(cfg_dict.get("imbalance_penalty", 0))
         if ratio and isinstance(book_data, dict):
             bids = sum(v for _, v in book_data.get("bids", []))
             asks = sum(v for _, v in book_data.get("asks", []))
             if bids and asks:
                 imbalance = bids / asks
                 if direction == "long" and imbalance < ratio:
-                    return 0.0, "none"
+                    if penalty > 0:
+                        score *= penalty
+                    else:
+                        return 0.0, "none"
                 if direction == "short" and imbalance > ratio:
-                    return 0.0, "none"
+                    if penalty > 0:
+                        score *= penalty
+                    else:
+                        return 0.0, "none"
 
     result = (score, direction)
     FORCE_SIGNAL = False
