@@ -265,7 +265,9 @@ def generate_signal(
     vol_z = (
         (latest["volume"] - latest["vol_ma"]) / latest["vol_std"]
         if latest["vol_std"] > 0
-        else float("inf")
+        else (
+            zscore_threshold if latest["volume"] > latest["vol_ma"] else 0.0
+        )
     )
     volume_spike = vol_z > zscore_threshold
 
