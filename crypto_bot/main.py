@@ -256,8 +256,6 @@ def _cast_to_type(value: str, example: object) -> object:
         return value
 
 
-async def _ws_ping_loop(exchange: object, interval: float) -> None:
-    pass
 async def _ws_ping_loop(exchange: ccxt.Exchange, interval: float) -> None:
     """Periodically send WebSocket ping messages."""
     try:
@@ -896,7 +894,9 @@ async def _main_impl() -> TelegramNotifier:
                 if not state.get("running"):
                     await asyncio.sleep(1)
                     continue
-        
+
+            except Exception:
+                pass
 
             cycle_start = time.perf_counter()
             ctx.timing = await runner.run(ctx)
@@ -1152,18 +1152,6 @@ async def _main_impl() -> TelegramNotifier:
                     config["loop_interval_minutes"], unit="m"
                 ).total_seconds()
                 await asyncio.sleep(delay)
-            except asyncio.CancelledError:
-                raise
-            except ccxt.NetworkError as exc:
-                logger.warning("Network error: %s; retrying shortly", exc)
-                await asyncio.sleep(5)
-                continue
-            except ccxt.ExchangeError as exc:
-                logger.error("Exchange error: %s", exc)
-                await asyncio.sleep(5)
-                continue
-            except Exception as exc:  # pragma: no cover - loop errors
-                logger.error("Main loop error: %s", exc, exc_info=True)
     
     finally:
         if session_state.scan_task:
