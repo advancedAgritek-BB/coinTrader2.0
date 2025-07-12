@@ -3,6 +3,17 @@ import pandas as pd
 import crypto_bot.strategy.dex_scalper as dex_scalper
 
 
+def _make_df(prices):
+    return pd.DataFrame(
+        {
+            "open": prices,
+            "high": [p + 0.5 for p in prices],
+            "low": [p - 0.5 for p in prices],
+            "close": prices,
+        }
+    )
+
+
 def test_scalper_long_signal():
     close = pd.Series(range(1, 41))
     df = pd.DataFrame({'close': close})
@@ -44,6 +55,28 @@ def test_scalper_custom_config():
     assert score > 0
 
 
+def test_atr_filter_blocks_signal():
+    prices = list(range(1, 41))
+    df = _make_df(prices)
+    cfg = {"dex_scalper": {"min_atr_pct": 0.2}}
+    score, direction = dex_scalper.generate_signal(df, cfg)
+    assert (score, direction) == (0.0, "none")
+
+
+def test_atr_filter_allows_signal():
+    prices = list(range(1, 41))
+    df = pd.DataFrame(
+        {
+            "open": prices,
+            "high": [p + 10 for p in prices],
+            "low": [p - 10 for p in prices],
+            "close": prices,
+        }
+    )
+    cfg = {"dex_scalper": {"min_atr_pct": 0.2}}
+    score, direction = dex_scalper.generate_signal(df, cfg)
+    assert direction == "long"
+    assert score > 0
 def test_scalper_fast_window_longer_than_df():
     """Ensure short DataFrame returns neutral when below required window."""
     close = pd.Series(range(20))

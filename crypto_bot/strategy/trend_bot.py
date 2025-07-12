@@ -106,7 +106,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         (
             rsi_z_last > upper_thr
             if not pd.isna(rsi_z_last)
-            else latest["rsi"] > dynamic_overbought
+                else latest["rsi"] > dynamic_overbought
         )
         and volume_ok
     )
@@ -114,7 +114,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         (
             rsi_z_last < lower_thr
             if not pd.isna(rsi_z_last)
-            else latest["rsi"] < dynamic_oversold
+                else latest["rsi"] < dynamic_oversold
         )
         and volume_ok
     )

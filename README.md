@@ -227,6 +227,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **grid_bot.leverage** – leverage level used when creating grid orders on
   margin or futures markets.
 * **micro_scalp** – EMA settings plus volume z-score, order book imbalance and ATR filters for the scalp bot. Tick data can be streamed via WebSockets for higher frequency entries.
+* **dex_scalper** – EMA-based DEX scalper with a `min_atr_pct` filter to skip trades when volatility is too low.
 * **order_book**/**imbalance_ratio** – provide a book snapshot when calling a strategy or via config. Bid and ask totals are compared and if the ratio favors the opposite side below `imbalance_ratio` the score is scaled by `imbalance_penalty` or the signal is skipped.
 * **breakout** – Bollinger/Keltner squeeze, volume multiplier, ATR buffer and
   outputs ATR for stop sizing.
