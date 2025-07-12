@@ -6,7 +6,8 @@ from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.volatility_filter import calc_atr
 
-ALLOWED_PAIRS = load_liquid_pairs() or []
+DEFAULT_PAIRS = ["BTC/USD", "ETH/USD"]
+ALLOWED_PAIRS = load_liquid_pairs() or DEFAULT_PAIRS
 
 
 def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
@@ -20,7 +21,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     min_score = params.get("min_signal_score", 0.1)
     min_atr_pct = float(params.get("min_atr_pct", 0.0))
 
-    if len(df) < slow_window:
+    if len(df) < max(fast_window, slow_window):
         return 0.0, "none"
 
     lookback = slow_window

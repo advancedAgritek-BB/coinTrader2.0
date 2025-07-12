@@ -5,6 +5,8 @@ from pathlib import Path
 from pandas import Series
 import pytest
 
+pytest_plugins = ("pytest_asyncio",)
+
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 
