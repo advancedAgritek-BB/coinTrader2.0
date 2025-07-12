@@ -275,6 +275,7 @@ def test_config_from_dict():
     assert cfg.symbol == "ETH/USDT"
     # ensure defaults applied
     assert cfg.overbought == 70
+    assert cfg.down_candles == 2
 
 
 def test_adaptive_rsi_threshold(monkeypatch):
