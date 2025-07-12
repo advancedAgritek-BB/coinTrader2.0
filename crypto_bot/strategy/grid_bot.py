@@ -27,6 +27,7 @@ class GridConfig:
     cooldown_bars: int = 6
     max_active_legs: int = 4
     symbol: str = ""
+    leverage: int = 1
 
     atr_normalization: bool = True
     volume_ma_window: int = 20

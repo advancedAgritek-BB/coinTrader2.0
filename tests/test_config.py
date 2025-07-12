@@ -39,6 +39,7 @@ def test_load_config_returns_dict():
         "volume_multiple",
         "vol_zscore_threshold",
         "max_active_legs",
+        "leverage",
         "cooldown_bars",
         "breakout_mult",
         "atr_normalization",
