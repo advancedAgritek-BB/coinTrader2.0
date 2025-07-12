@@ -626,6 +626,66 @@ async def _rotation_loop(
                 break
 
 
+async def handle_fund_conversions(
+    exchange: object,
+    config: dict,
+    notifier: TelegramNotifier | None,
+    user_wallet: str,
+    check_balance_change: callable,
+) -> None:
+    """Convert unsupported funding tokens to USDC and update balance."""
+
+    balances = await asyncio.to_thread(check_wallet_balances, user_wallet)
+    for token in detect_non_trade_tokens(balances):
+        amount = balances[token]
+        logger.info("Converting %s %s to USDC", amount, token)
+        await auto_convert_funds(
+            user_wallet,
+            token,
+            "USDC",
+            amount,
+            dry_run=config.get("execution_mode") == "dry_run",
+            slippage_bps=config.get("solana_slippage_bps", 50),
+            notifier=notifier,
+        )
+        bal_val = await get_usdt_balance(exchange, config)
+        check_balance_change(float(bal_val), "funds converted")
+
+
+async def refresh_open_position_data(
+    exchange: object,
+    ctx: BotContext,
+    last_candle_ts: dict[str, int],
+    config: dict,
+) -> None:
+    """Update OHLCV data for open positions if a new candle formed."""
+
+    tf = config.get("timeframe", "1h")
+    tf_sec = timeframe_seconds(None, tf)
+    open_syms: list[str] = []
+    for sym in ctx.positions:
+        last_ts = last_candle_ts.get(sym, 0)
+        if time.time() - last_ts >= tf_sec:
+            open_syms.append(sym)
+    if open_syms:
+        tf_cache = ctx.df_cache.get(tf, {})
+        tf_cache = await update_ohlcv_cache(
+            exchange,
+            tf_cache,
+            open_syms,
+            timeframe=tf,
+            limit=2,
+            use_websocket=config.get("use_websocket", False),
+            force_websocket_history=config.get("force_websocket_history", False),
+            max_concurrent=config.get("max_concurrent_ohlcv"),
+        )
+        ctx.df_cache[tf] = tf_cache
+        for sym in open_syms:
+            df = tf_cache.get(sym)
+            if df is not None and not df.empty:
+                last_candle_ts[sym] = int(df["timestamp"].iloc[-1])
+
+
 async def _main_impl() -> TelegramNotifier:
     """Implementation for running the trading bot."""
 
@@ -898,6 +958,15 @@ async def _main_impl() -> TelegramNotifier:
                     await asyncio.sleep(1)
                     continue
 
+                await handle_fund_conversions(
+                    exchange,
+                    config,
+                    notifier,
+                    user.get("wallet_address", ""),
+                    check_balance_change,
+                )
+
+                await refresh_open_position_data(exchange, ctx, last_candle_ts, config)
             except Exception:
                 pass
 
