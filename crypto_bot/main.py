@@ -604,7 +604,9 @@ async def _rotation_loop(
                     if isinstance(bal.get("USDT"), dict)
                     else bal.get("USDT", 0)
                 )
-                check_balance_change(float(current_balance), "external change")
+                check_balance_change(
+                    "USDT", float(current_balance), "external change"
+                )
                 holdings = {
                     k: (v.get("total") if isinstance(v, dict) else v)
                     for k, v in bal.items()
@@ -649,6 +651,8 @@ async def handle_fund_conversions(
         check_balance_change(float(bal_val), "funds converted", currency="BTC")
         if notifier:
             notifier.notify(f"Converted to {bal_val:.6f} BTC")
+        bal_val = await get_usdt_balance(exchange, config)
+        check_balance_change("BTC", float(bal_val), "funds converted")
 
 
 async def refresh_open_position_data(
@@ -776,6 +780,9 @@ async def _main_impl() -> TelegramNotifier:
         *,
         currency: str = "USDT",
     ) -> None:
+    previous_balance: dict[str, float] = {}
+
+    def check_balance_change(currency: str, new_balance: float, reason: str) -> None:
         nonlocal previous_balance
         prev = previous_balance.get(currency, 0.0)
         delta = new_balance - prev
@@ -798,6 +805,7 @@ async def _main_impl() -> TelegramNotifier:
         log_balance(float(init_bal))
         last_balance = float(init_bal)
         previous_balance = {"USDT": float(init_bal)}
+        previous_balance["USDT"] = float(init_bal)
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)
         if status_updates:
