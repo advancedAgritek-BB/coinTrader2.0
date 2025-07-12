@@ -664,7 +664,7 @@ By default the worker refreshes the file every **6 hours**. Change the interval
 under `pairs_worker.refresh_interval` in `crypto_bot/config.yaml` and restart the
 worker to apply the new schedule.
 You can also limit the markets saved in the cache by defining
-`allowed_quote_currencies` and `blacklist_assets` under `refresh_pairs`:
+`allowed_quote_currencies` and `blocklist_assets` under `refresh_pairs`:
 
 ```yaml
 refresh_pairs:
@@ -672,7 +672,7 @@ refresh_pairs:
   refresh_interval: 6h
   top_k: 40
   allowed_quote_currencies: [USD, USDT]
-  blacklist_assets: []
+  blocklist_assets: []
 ```
 Run it manually whenever needed:
 

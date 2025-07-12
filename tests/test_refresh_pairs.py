@@ -73,7 +73,23 @@ def test_refresh_pairs_filters_quote(monkeypatch, tmp_path):
     assert set(json.loads(pair_file.read_text())) == {"ETH/USD"}
 
 
-def test_refresh_pairs_blacklist(monkeypatch, tmp_path):
+def test_refresh_pairs_blocklist(monkeypatch, tmp_path):
+    cache_dir = tmp_path / "cache"
+    pair_file = cache_dir / "liquid_pairs.json"
+    monkeypatch.setattr(rp, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(rp, "PAIR_FILE", pair_file)
+    tickers = {
+        "SCAM/USD": {"quoteVolume": 4_000_000},
+        "BTC/USD": {"quoteVolume": 3_000_000},
+    }
+    monkeypatch.setattr(rp, "get_exchange", lambda _cfg: DummyExchange(tickers))
+    cfg = {"refresh_pairs": {"blocklist_assets": ["SCAM"]}}
+    pairs = rp.refresh_pairs(1_000_000, 2, cfg)
+    assert pairs == ["BTC/USD"]
+    assert set(json.loads(pair_file.read_text())) == {"BTC/USD"}
+
+
+def test_refresh_pairs_old_blacklist(monkeypatch, tmp_path):
     cache_dir = tmp_path / "cache"
     pair_file = cache_dir / "liquid_pairs.json"
     monkeypatch.setattr(rp, "CACHE_DIR", cache_dir)
@@ -84,6 +100,7 @@ def test_refresh_pairs_blacklist(monkeypatch, tmp_path):
     }
     monkeypatch.setattr(rp, "get_exchange", lambda _cfg: DummyExchange(tickers))
     cfg = {"refresh_pairs": {"blacklist_assets": ["SCAM"]}}
-    pairs = rp.refresh_pairs(1_000_000, 2, cfg)
+    with pytest.warns(DeprecationWarning):
+        pairs = rp.refresh_pairs(1_000_000, 2, cfg)
     assert pairs == ["BTC/USD"]
     assert set(json.loads(pair_file.read_text())) == {"BTC/USD"}
