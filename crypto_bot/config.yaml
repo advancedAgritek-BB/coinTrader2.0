@@ -70,7 +70,13 @@ grid_bot:
   cooldown_bars: 6
   max_active_legs: 4
   range_window: 20
-  spacing_factor: 0.75
+  spacing_factor: 0.5
+  dynamic_grid: false
+  use_ml_center: false
+  min_range_pct: 0.001
+  leverage: 1
+  arbitrage_pairs: []
+  arbitrage_threshold: 0.005
   trend_ema_fast: 50
   trend_ema_slow: 200
   vol_zscore_threshold: 2.0
