@@ -72,12 +72,13 @@ needed.
    console output when viewing live positions.
    Exchange connectivity relies on [ccxt](https://github.com/ccxt/ccxt) which is installed with these requirements. Make sure the `ccxt` package is available when running the trading bot.
 2. Run `python crypto_bot/wallet_manager.py` (or `python -m crypto_bot.wallet_manager`) to create `user_config.yaml` and enter your API credentials.
+2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials (optional for dry-run mode).
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:
    ```bash
    python -m crypto_bot.main
    ```
-   When dry-run mode is selected you will be prompted for the starting USDT balance.
+   When `execution_mode: dry_run` is set you will be prompted for the starting USDT balance after launching `python -m crypto_bot.main`.
    The console now refreshes with your wallet balance and any active
    trades in real time. Profitable positions are shown in green while
    losing ones appear in red. The monitor lists open trades on a single
