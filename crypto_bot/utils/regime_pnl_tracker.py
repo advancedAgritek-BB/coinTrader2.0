@@ -5,7 +5,6 @@ from typing import Dict, Any
 
 from .logger import LOG_DIR
 
-
 LOG_FILE = LOG_DIR / "regime_pnl.csv"
 
 
@@ -72,6 +71,7 @@ def get_recent_win_rate(
     path: str | Path = LOG_FILE,
     strategy: str | None = None,
 ) -> float:
+    """Return win rate over the last ``window`` trades."""
     """Return win rate over the most recent trades.
 
     Parameters
