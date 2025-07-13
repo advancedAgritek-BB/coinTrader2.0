@@ -44,6 +44,15 @@ def test_strategy_map_contains_micro_scalp():
     )
 
 
+def test_strategy_map_contains_dca_bot():
+    from crypto_bot.strategy import dca_bot
+
+    assert (
+        meta_selector._STRATEGY_FN_MAP.get("dca_bot")
+        is dca_bot.generate_signal
+    )
+
+
 def test_strategy_map_contains_bounce_scalper():
     from crypto_bot.strategy import bounce_scalper
 
