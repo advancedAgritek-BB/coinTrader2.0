@@ -161,8 +161,6 @@ ml_signal_model:
   enabled: true
   weight: 0.6
 mode: auto
-  weight: 0.4
-mode: onchain
 mode_degrade_window: 20
 mode_threshold: 0.4
 ohlcv_snapshot_frequency_minutes: 1440
