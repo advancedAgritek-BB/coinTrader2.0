@@ -88,7 +88,9 @@ class PoolWatcher:
                     if e.status == 404:
                         self._failures += 1
                         logger.error(
-                            "PoolWatcher error: 404 - the configured URL is invalid or no longer supported"
+                            "PoolWatcher error: 404 from %s - the configured URL is invalid or no longer supported. "
+                            "Try https://rpc.helius.xyz/?api-key=YOUR_KEY",
+                            self.url,
                         )
                         if self._failures >= self._max_failures:
                             self._running = False
