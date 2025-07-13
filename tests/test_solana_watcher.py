@@ -177,7 +177,10 @@ def test_watcher_logs_404_and_continues(monkeypatch, caplog):
     with caplog.at_level(logging.ERROR):
         event = asyncio.run(run_once())
     assert event.pool_address == "P3"
-    assert any("configured URL is invalid" in rec.message for rec in caplog.records)
+    assert any(
+        "http://test" in rec.message and "https://rpc.helius.xyz/?api-key=YOUR_KEY" in rec.message
+        for rec in caplog.records
+    )
 
 
 def test_watcher_raises_after_consecutive_404(monkeypatch):
