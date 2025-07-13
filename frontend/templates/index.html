@@ -34,6 +34,28 @@
     </div>
   </div>
 </div>
+
+<div class="row mt-4">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Open Positions</div>
+      <div class="card-body p-0">
+        <table class="table mb-0" id="positions-table">
+          <thead>
+            <tr><th>Symbol</th><th>Side</th><th>Amount</th><th>Entry</th><th>Current</th><th>PnL</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">Live Signals</div>
+      <div class="card-body" id="signals-container"></div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -90,9 +112,9 @@ function updateStatus(data){
     document.getElementById('stop-link').style.display = 'none';
     document.getElementById('start-form').style.display = '';
   }
-  document.getElementById('uptime').textContent = data.uptime;
   if(data.mode){
     document.getElementById('mode').value = data.mode;
+  }
   if(data.uptime !== undefined){
     document.getElementById('uptime').textContent = data.uptime;
   }
@@ -103,7 +125,56 @@ function showAlert(msg, type){
   container.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
 }
 
+function color(val){
+  const g = Math.floor(255 * val);
+  const r = 255 - g;
+  return `rgb(${r},${g},0)`;
+}
+
+async function fetchPositions(){
+  try {
+    const resp = await fetch('/api/positions');
+    const data = await resp.json();
+    const tbody = document.querySelector('#positions-table tbody');
+    if(tbody){
+      tbody.innerHTML = '';
+      data.forEach(p => {
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${p.symbol}</td><td>${p.side}</td><td>${p.amount}</td><td>${p.entry_price}</td><td>${p.current_price}</td><td>${p.pnl}</td>`;
+        tbody.appendChild(row);
+      });
+    }
+  } catch(e){
+    console.error('Failed to fetch positions', e);
+  }
+}
+
+async function fetchSignals(){
+  try {
+    const resp = await fetch('/api/live-signals');
+    const data = await resp.json();
+    const cont = document.getElementById('signals-container');
+    if(!cont) return;
+    if(!Object.keys(data).length){
+      cont.textContent = 'No data';
+      return;
+    }
+    let html = '<table class="table table-bordered mb-0"><tbody><tr>';
+    for(const [sym,val] of Object.entries(data)){
+      html += `<td style="background-color:${color(val)}">${sym}<br>${Number(val).toFixed(2)}</td>`;
+    }
+    html += '</tr></tbody></table>';
+    cont.innerHTML = html;
+  } catch(e){
+    console.error('Failed to fetch signals', e);
+  }
+}
+
 document.getElementById('start-form')?.addEventListener('submit', startBot);
 document.getElementById('stop-link')?.addEventListener('click', stopBot);
+fetchPositions();
+fetchSignals();
+setInterval(fetchPositions, 5000);
+setInterval(fetchSignals, 10000);
 </script>
 {% endblock %}
