@@ -72,6 +72,17 @@ def get_recent_win_rate(
     strategy: str | None = None,
 ) -> float:
     """Return win rate over the last ``window`` trades."""
+    """Return win rate over the most recent trades.
+
+    Parameters
+    ----------
+    window : int, optional
+        Number of trades to evaluate (default ``20``).
+    path : str or Path, optional
+        CSV log file location (default :data:`LOG_FILE`).
+    strategy : str, optional
+        Filter trades for the given strategy.
+    """
     file = Path(path)
     if not file.exists():
         return 0.0
@@ -80,9 +91,11 @@ def get_recent_win_rate(
         return 0.0
     if strategy is not None and "strategy" in df.columns:
         df = df[df["strategy"] == strategy]
+
     recent = df.tail(window)
     if strategy is not None and "strategy" in recent.columns:
         recent = recent[recent["strategy"] == strategy]
+
     wins = (recent["pnl"] > 0).sum()
     total = len(recent)
     return float(wins / total) if total else 0.0

@@ -38,13 +38,11 @@ def generate_signal(
     config: Optional[dict] = None,
     higher_df: pd.DataFrame | None = None,
     *,
-    mempool_monitor=None,
+    mempool_monitor: Optional[SolanaMempoolMonitor] = None,
     mempool_cfg: Optional[dict] = None,
     tick_data: pd.DataFrame | None = None,
     book: Optional[dict] = None,
     ticks: Optional[pd.DataFrame] = None,
-    mempool_monitor: Optional[SolanaMempoolMonitor] = None,
-    mempool_cfg: Optional[dict] = None,
 ) -> Tuple[float, str]:
     """Return short-term signal using EMA crossover on 1m data.
 
@@ -83,10 +81,6 @@ def generate_signal(
     if df.empty:
         return 0.0, "none"
 
-    if mempool_monitor and (mempool_cfg or {}).get("enabled"):
-        threshold = (mempool_cfg or {}).get("suspicious_fee_threshold", 0.0)
-        if mempool_monitor.is_suspicious(threshold):
-            return 0.0, "none"
     if ticks is not None and not ticks.empty:
         price_col = "price" if "price" in ticks.columns else "close"
         vol = ticks["volume"] if "volume" in ticks.columns else 0
