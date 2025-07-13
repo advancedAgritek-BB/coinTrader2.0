@@ -23,7 +23,8 @@ def test_no_signal_when_volume_below_ma():
 
 def test_long_signal_with_filters():
     df = _df_trend(150.0)
-    score, direction = trend_bot.generate_signal(df)
+    cfg = {"donchian_confirmation": False}
+    score, direction = trend_bot.generate_signal(df, cfg)
     assert direction == "long"
     assert score > 0.0
 
@@ -51,7 +52,7 @@ def test_rsi_zscore(monkeypatch):
         "zscore",
         lambda s, lookback=3: pd.Series([2] * len(s), index=s.index),
     )
-    cfg = {"indicator_lookback": 3, "rsi_overbought_pct": 90}
+    cfg = {"indicator_lookback": 3, "rsi_overbought_pct": 90, "donchian_confirmation": False}
     score, direction = trend_bot.generate_signal(df, cfg)
     assert direction == "long"
     assert score > 0
