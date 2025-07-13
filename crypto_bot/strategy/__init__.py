@@ -18,7 +18,7 @@ import importlib
 # Import the module so callers can access ``sniper_solana.generate_signal`` just
 # like before. This keeps backwards compatibility after removing the local
 # implementation.
-sniper_solana = importlib.import_module("crypto_bot.solana.sniper_solana")
+sniper_solana = importlib.import_module("crypto_bot.strategies.sniper_solana")
 solana_scalping = importlib.import_module("crypto_bot.solana.scalping")
 
 __all__ = [
