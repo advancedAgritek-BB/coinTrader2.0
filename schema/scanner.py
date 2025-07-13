@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pydantic import BaseModel, Field, ValidationError, validator
 
 
@@ -49,8 +50,12 @@ class ScannerConfig(BaseModel):
 class SolanaScannerApiKeys(BaseModel):
     """API key configuration for Solana scanner."""
 
-    moralis: str = "YOUR_KEY"
-    bitquery: str = "YOUR_KEY"
+    moralis: str = Field(
+        default_factory=lambda: os.getenv("MORALIS_KEY", "YOUR_KEY")
+    )
+    bitquery: str = Field(
+        default_factory=lambda: os.getenv("BITQUERY_KEY", "YOUR_KEY")
+    )
 
 
 class SolanaScannerConfig(BaseModel):
