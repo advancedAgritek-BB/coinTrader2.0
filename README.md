@@ -221,6 +221,8 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
 * **exit_strategy** – partial profit taking and trailing stop logic.
 * **micro_scalp** – EMA settings plus volume z-score and ATR filters for the scalp bot.
+  Supports tick-level aggregation, optional mempool fee checks and order-book
+  imbalance filtering with an optional penalty.
 * **pattern_timeframe** – optional candle interval used by the bounce scalper to
   confirm engulfing or hammer patterns.
 * **trigger_once** – bypass the cooldown and win-rate filter for one bounce scalper cycle.
