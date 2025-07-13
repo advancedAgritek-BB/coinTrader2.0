@@ -558,6 +558,15 @@ def route(
         json.dumps({"timestamp": datetime.utcnow().isoformat(), "regime": regime})
     )
 
+    symbol = ""
+    if isinstance(cfg, RouterConfig):
+        symbol = str(cfg.raw.get("symbol", ""))
+    elif isinstance(cfg, Mapping):
+        symbol = str(cfg.get("symbol", ""))
+    if symbol.endswith("/USDC") and regime == "breakout":
+        logger.info("Routing USDC breakout to Solana sniper bot")
+        return _wrap(sniper_solana.generate_signal)
+
     # Thompson sampling router
     bandit_active = (
         cfg.bandit_enabled
