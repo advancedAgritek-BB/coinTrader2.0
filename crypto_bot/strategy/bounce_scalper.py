@@ -48,6 +48,7 @@ class BounceScalperConfig:
     up_candles: int = 3
     trend_ema_fast: int = 9
     trend_ema_slow: int = 21
+    pattern_timeframe: str = "1m"
 
     # risk management
     cooldown_bars: int = 2
