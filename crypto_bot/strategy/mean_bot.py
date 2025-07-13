@@ -53,12 +53,17 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     )
     vwap_series = vwap.volume_weighted_average_price()
 
+    adx = ta.trend.ADXIndicator(
+        df["high"], df["low"], df["close"], window=14
+    ).adx()
+
     rsi = cache_series("rsi", df, rsi, lookback)
     rsi_z = cache_series("rsi_z", df, rsi_z, lookback)
     bb_z = cache_series("bb_z", df, bb_z, lookback)
     kc_h = cache_series("kc_h", df, kc_h, lookback)
     kc_l = cache_series("kc_l", df, kc_l, lookback)
     vwap_series = cache_series("vwap", df, vwap_series, lookback)
+    adx = cache_series("adx", df, adx, lookback)
 
     df = recent.copy()
     df["rsi"] = rsi
@@ -67,8 +72,12 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df["kc_h"] = kc_h
     df["kc_l"] = kc_l
     df["vwap"] = vwap_series
+    df["adx"] = adx
 
     latest = df.iloc[-1]
+
+    if latest["adx"] > 25:
+        return 0.0, "none"
 
     long_scores = []
     short_scores = []
