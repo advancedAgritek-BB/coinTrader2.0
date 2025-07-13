@@ -107,6 +107,8 @@ meme_wave_sniper:
   pool:
     url: https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY
     interval: 5
+    websocket_url: wss://atlas-mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
+    raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
   scoring:
     weight_liquidity: 1.0
     weight_tx: 1.0

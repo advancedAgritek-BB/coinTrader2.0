@@ -138,6 +138,9 @@ SECRETS_PATH=/path/to/secret
 SOLANA_PRIVATE_KEY="[1,2,3,...]"       # required for Solana trades
 # defaults to https://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
 SOLANA_RPC_URL=https://devnet.solana.com  # optional custom endpoint
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
+# SOLANA_RPC_URL=https://api.devnet.solana.com      # devnet example
+HELIUS_KEY=your_helius_api_key          # optional, for Helius RPC endpoints
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 ```
@@ -145,6 +148,25 @@ BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 `TELE_CHAT_ADMINS` lets the Telegram bot accept commands from multiple
 admin chats. Omit it to restrict control to the single `chat_id` in the
 configuration file.
+
+### Solana Setup
+
+Example RPC URLs:
+
+```env
+# Mainnet
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+# Devnet
+# SOLANA_RPC_URL=https://api.devnet.solana.com
+```
+
+When using [Helius](https://www.helius.xyz/) endpoints, append `?api-key=${HELIUS_KEY}` to the URL:
+
+```env
+SOLANA_RPC_URL=https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
+```
+
+You can generate a key and enable advanced features like **ShredStream** and **LaserStream** from the [Helius dashboard](https://dashboard.helius.xyz/). These streams can be configured directly in the bot's web dashboard.
 
 ### YAML Configuration
 
@@ -879,6 +901,8 @@ meme_wave_sniper:
   pool:
     url: https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
     interval: 5
+    websocket_url: wss://atlas-mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
+    raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
   scoring:
     weight_liquidity: 1.0
     weight_tx: 1.0
@@ -907,6 +931,29 @@ API requirements: [Helius](https://www.helius.xyz/) for pool data,
 [Jupiter](https://jup.ag/) for quotes, [Jito](https://www.jito.network/) for
 bundle submission, and a [Twitter](https://developer.twitter.com/) token for
 sentiment scores.
+
+### Monitoring Raydium Pools via WebSockets
+
+Raydium also streams pool creation events over WebSockets. To watch these in
+real time:
+
+1. Obtain a Helius API key from your dashboard.
+2. Set `meme_wave_sniper.pool.websocket_url` in `crypto_bot/config.yaml` to
+   `wss://mainnet.helius-rpc.com/?api-key=YOUR_KEY`.
+3. Run `python -m crypto_bot.solana.pool_ws_monitor`.
+
+`pool_ws_monitor.py` subscribes to the Raydium program and prints each update:
+
+```python
+import asyncio
+from crypto_bot.solana.pool_ws_monitor import watch_pools
+
+async def main():
+    async for event in watch_pools():
+        print(event)
+
+asyncio.run(main())
+```
 
 ### Backtesting
 
