@@ -62,9 +62,14 @@ window drops below **0.05** and volume is more than **5×** the average,
 `strategy_router.fast_path` in `crypto_bot/config.yaml` and can be tuned as
 needed.
 
+## Python Compatibility
+
+The bot requires **Python 3.11** or later. Make sure your environment uses a
+compatible interpreter before installing the packages.
+
 ## Quick Start
 
-1. Install the dependencies:
+1. Ensure you are running **Python 3.11** or newer and then install the dependencies:
    ```bash
    pip install -r requirements.txt
    ```
@@ -1022,7 +1027,7 @@ and caps the result between 0 and 1.
 
 ## Development Setup
 
-1. Install the Python dependencies:
+1. Ensure your environment uses **Python 3.11** or later, then install the Python dependencies:
 
 ```bash
 pip install -r requirements.txt
