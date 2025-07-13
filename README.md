@@ -73,6 +73,7 @@ needed.
    Exchange connectivity relies on [ccxt](https://github.com/ccxt/ccxt) which is installed with these requirements. Make sure the `ccxt` package is available when running the trading bot.
 2. Run `python crypto_bot/wallet_manager.py` (or `python -m crypto_bot.wallet_manager`) to create `~/.cointrader/user_config.yaml` and enter your API credentials.
 2. Run `python crypto_bot/wallet_manager.py` to create `~/.cointrader/user_config.yaml` and enter your API credentials (optional for dry-run mode).
+2. Run `python crypto_bot/wallet_manager.py` (or `python -m crypto_bot.wallet_manager`) to create `user_config.yaml` and enter your API credentials (optional for dry-run mode).
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:
    ```bash
@@ -122,8 +123,7 @@ FERNET_KEY=optional_key_for_encryption
 KRAKEN_WS_TOKEN=your_ws_token          # optional for Kraken
 KRAKEN_API_TOKEN=your_api_token        # optional for Kraken
 TELEGRAM_TOKEN=your_telegram_token
-TELE_CHAT_ADMINS=123456,789012         # optional comma separated admin IDs
-TELE_CHAT_ADMINS=12345,67890          # comma-separated chat IDs
+TELE_CHAT_ADMINS=123456,789012         # optional comma-separated admin chat IDs for bot control
 GOOGLE_CRED_JSON=path_to_google_credentials.json
 TWITTER_SENTIMENT_URL=https://api.example.com/twitter-sentiment
 FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
@@ -131,9 +131,6 @@ SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
 ```
 
-`TELE_CHAT_ADMINS` lets the Telegram bot accept commands from multiple
-admin chats. Omit it to restrict control to the single `chat_id` in the
-configuration file.
 
 ### YAML Configuration
 
