@@ -64,6 +64,10 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     atr = atr_full.iloc[-(lookback + 1) :]
     adx = adx_full.iloc[-(lookback + 1) :]
 
+    adx = ta.trend.ADXIndicator(
+        df["high"], df["low"], df["close"], window=14
+    ).adx()
+
     rsi = cache_series("rsi", df, rsi, lookback)
     rsi_z = cache_series("rsi_z", df, rsi_z, lookback)
     bb_z = cache_series("bb_z", df, bb_z, lookback)
@@ -85,6 +89,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
 
     latest = df.iloc[-1]
 
+    if latest["adx"] > 25:
     if df["adx"].iloc[-1] > adx_threshold:
         return 0.0, "none"
 
