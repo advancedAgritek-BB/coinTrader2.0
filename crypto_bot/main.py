@@ -867,20 +867,37 @@ async def _main_impl() -> TelegramNotifier:
             )
         previous_balance[currency] = new_balance
 
+    paper_wallet = None
     try:
-        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-            bal = await exchange.fetch_balance()
+        if config.get("execution_mode") == "dry_run":
+            try:
+                start_bal = float(input("Enter paper trading balance in USDT: "))
+            except Exception:
+                start_bal = 1000.0
+            init_bal = start_bal
+            paper_wallet = PaperWallet(start_bal, config.get("max_open_trades", 1))
         else:
-            bal = await asyncio.to_thread(exchange.fetch_balance)
-        init_bal = (
-            bal.get("USDT", {}).get("free", 0)
-            if isinstance(bal.get("USDT"), dict)
-            else bal.get("USDT", 0)
-        )
+            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                bal = await asyncio.wait_for(exchange.fetch_balance(), timeout=10)
+            else:
+                bal = await asyncio.wait_for(
+                    asyncio.to_thread(exchange.fetch_balance), timeout=10
+                )
+            init_bal = (
+                bal.get("USDT", {}).get("free", 0)
+                if isinstance(bal.get("USDT"), dict)
+                else bal.get("USDT", 0)
+            )
         log_balance(float(init_bal))
         last_balance = float(init_bal)
         previous_balance = {"USDT": float(init_bal)}
-        previous_balance["USDT"] = float(init_bal)
+        if paper_wallet:
+            last_balance = notify_balance_change(
+                notifier,
+                last_balance,
+                float(paper_wallet.balance),
+                balance_updates,
+            )
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)
         if status_updates:
@@ -907,21 +924,6 @@ async def _main_impl() -> TelegramNotifier:
     risk_params["volume_ratio"] = volume_ratio
     risk_config = RiskConfig(**risk_params)
     risk_manager = RiskManager(risk_config)
-
-    paper_wallet = None
-    if config.get("execution_mode") == "dry_run":
-        try:
-            start_bal = float(input("Enter paper trading balance in USDT: "))
-        except Exception:
-            start_bal = 1000.0
-        paper_wallet = PaperWallet(start_bal, config.get("max_open_trades", 1))
-        log_balance(paper_wallet.balance)
-        last_balance = notify_balance_change(
-            notifier,
-            last_balance,
-            float(paper_wallet.balance),
-            balance_updates,
-        )
 
     monitor_task = asyncio.create_task(
         console_monitor.monitor_loop(exchange, paper_wallet, LOG_DIR / "bot.log")
