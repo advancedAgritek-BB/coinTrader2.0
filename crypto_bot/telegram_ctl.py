@@ -287,9 +287,6 @@ class TelegramCtl:
     async def trades_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self._call(update, "trades")
 
-    async def reload_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await self._call(update, "reload")
-
     async def _send_pages(self, update: Update, pages: list[str]) -> None:
         for page in pages:
             await update.reply_text(page)
