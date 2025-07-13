@@ -3,7 +3,6 @@ import asyncio
 import contextlib
 import json
 import time
-import sys
 from pathlib import Path
 from datetime import datetime
 from collections import deque, OrderedDict, defaultdict
@@ -21,7 +20,7 @@ except Exception:  # pragma: no cover - optional dependency
 
 import pandas as pd
 import yaml
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from pydantic import ValidationError
 
 from schema.scanner import ScannerConfig
@@ -50,7 +49,6 @@ from crypto_bot.execution.cex_executor import (
     get_exchange,
     place_stop_order,
 )
-from crypto_bot.strategy.grid_bot import GridConfig
 from crypto_bot.open_position_guard import OpenPositionGuard
 from crypto_bot import console_monitor, console_control
 from crypto_bot.utils.performance_logger import log_performance
@@ -66,6 +64,9 @@ from crypto_bot.utils.market_loader import (
 )
 from crypto_bot.utils.eval_queue import build_priority_queue
 from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
+
+# Backwards compatibility for tests
+_fix_symbol = fix_symbol
 from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
 from crypto_bot.utils.pnl_logger import log_pnl
 from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
@@ -82,7 +83,6 @@ from crypto_bot.fund_manager import (
     check_wallet_balances,
     detect_non_trade_tokens,
 )
-from crypto_bot.utils.balance import get_usdt_balance, get_btc_balance
 from crypto_bot.regime.regime_classifier import CONFIG
 
 
@@ -94,11 +94,7 @@ def _fix_symbol(sym: str) -> str:
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENV_PATH = Path(__file__).resolve().parent / ".env"
 
-# Enable console logging by default so uncaught exceptions are visible when
-# running the bot manually. Tests can restore the previous behaviour by
-# passing ``--no-console-log`` on the command line.
-_DISABLE_CONSOLE = "--no-console-log" in sys.argv
-logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=not _DISABLE_CONSOLE)
+logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
@@ -248,18 +244,7 @@ def _flatten_config(data: dict, parent: str = "") -> dict:
     return flat
 
 
-def _cast_to_type(value: str, example: object) -> object:
-    """Try to cast a string to the type of `example`."""
-    target_type = type(example)
-    if target_type is bool:
-        return value.lower() in {"1", "true", "yes", "on"}
-    try:
-        return target_type(value)
-    except Exception:
-        return value
-
-
-async def _ws_ping_loop(exchange: ccxt.Exchange, interval: float) -> None:
+async def _ws_ping_loop(exchange: object, interval: float) -> None:
     """Periodically send WebSocket ping messages."""
     try:
         while True:
@@ -417,17 +402,14 @@ async def analyse_batch(ctx: BotContext) -> None:
         ctx.analysis_results = []
         return
 
+    tasks = []
     mode = ctx.config.get("mode", "cex")
-    sem = asyncio.Semaphore(ctx.config.get("analysis_concurrency", 10))
+    for sym in batch:
+        df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
+        for tf, cache in ctx.regime_cache.items():
+            df_map[tf] = cache.get(sym)
+        tasks.append(analyze_symbol(sym, df_map, mode, ctx.config, ctx.notifier))
 
-    async def bounded_analyze(sym: str):
-        async with sem:
-            df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
-            for tf, cache in ctx.regime_cache.items():
-                df_map[tf] = cache.get(sym)
-            return await analyze_symbol(sym, df_map, mode, ctx.config, ctx.notifier)
-
-    tasks = [bounded_analyze(sym) for sym in batch]
     ctx.analysis_results = await asyncio.gather(*tasks)
 
 
@@ -465,61 +447,22 @@ async def execute_signals(ctx: BotContext) -> None:
             price=price,
         )
 
-        leverage = candidate.get("leverage", 1)
-        size *= leverage
-
         if not ctx.risk_manager.can_allocate(strategy, size, ctx.balance):
             continue
 
         amount = size / price if price > 0 else 0.0
         start_exec = time.perf_counter()
-        params = None
-        if candidate.get("name") == "grid_bot":
-            grid_cfg = GridConfig.from_dict(ctx.config.get("grid_bot"))
-            params = {"leverage": grid_cfg.leverage}
-        if "exchange_buy" in candidate and "exchange_sell" in candidate:
-            await cex_trade_async(
-                ctx.exchange,
-                ctx.ws_client,
-                sym,
-                "buy",
-                amount,
-                ctx.notifier,
-                dry_run=ctx.config.get("execution_mode") == "dry_run",
-                use_websocket=ctx.config.get("use_websocket", False),
-                config=ctx.config,
-                params=params,
-                leverage=leverage,
-                exchange_override=candidate["exchange_buy"],
-            )
-            await cex_trade_async(
-                ctx.exchange,
-                ctx.ws_client,
-                sym,
-                "sell",
-                amount,
-                ctx.notifier,
-                dry_run=ctx.config.get("execution_mode") == "dry_run",
-                use_websocket=ctx.config.get("use_websocket", False),
-                config=ctx.config,
-                params=params,
-                leverage=leverage,
-                exchange_override=candidate["exchange_sell"],
-            )
-        else:
-            await cex_trade_async(
-                ctx.exchange,
-                ctx.ws_client,
-                sym,
-                direction_to_side(candidate["direction"]),
-                amount,
-                ctx.notifier,
-                dry_run=ctx.config.get("execution_mode") == "dry_run",
-                use_websocket=ctx.config.get("use_websocket", False),
-                config=ctx.config,
-                params=params,
-                leverage=leverage,
-            )
+        await cex_trade_async(
+            ctx.exchange,
+            ctx.ws_client,
+            sym,
+            direction_to_side(candidate["direction"]),
+            amount,
+            ctx.notifier,
+            dry_run=ctx.config.get("execution_mode") == "dry_run",
+            use_websocket=ctx.config.get("use_websocket", False),
+            config=ctx.config,
+        )
         ctx.timing["execution_latency"] = max(
             ctx.timing.get("execution_latency", 0.0),
             time.perf_counter() - start_exec,
@@ -529,11 +472,6 @@ async def execute_signals(ctx: BotContext) -> None:
         if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
             ctx.paper_wallet.open(sym, direction_to_side(candidate["direction"]), amount, price)
             ctx.balance = ctx.paper_wallet.balance
-        ex_fields: dict[str, object] = {}
-        if "exchange_buy" in candidate and "exchange_sell" in candidate:
-            ex_fields["exchange_buy"] = candidate["exchange_buy"]
-            ex_fields["exchange_sell"] = candidate["exchange_sell"]
-
         ctx.positions[sym] = {
             "side": direction_to_side(candidate["direction"]),
             "entry_price": price,
@@ -545,7 +483,6 @@ async def execute_signals(ctx: BotContext) -> None:
             "size": amount,
             "trailing_stop": 0.0,
             "highest_price": price,
-            **ex_fields,
         }
         try:
             log_position(
@@ -599,9 +536,6 @@ async def handle_exits(ctx: BotContext) -> None:
                 use_websocket=ctx.config.get("use_websocket", False),
                 config=ctx.config,
             )
-            profit = (current_price - pos["entry_price"]) * pos["size"]
-            if pos["side"] == "sell":
-                profit = -profit
             if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
                 try:
                     ctx.paper_wallet.close(sym, pos["size"], current_price)
@@ -612,25 +546,6 @@ async def handle_exits(ctx: BotContext) -> None:
                 pos.get("strategy", ""), pos["size"] * pos["entry_price"]
             )
             ctx.positions.pop(sym, None)
-            if profit > 0 and getattr(ctx, "user_wallet", None):
-                await auto_convert_funds(
-                    ctx.user_wallet,
-                    "USDT",
-                    "BTC",
-                    profit,
-                    dry_run=ctx.config.get("execution_mode") == "dry_run",
-                    slippage_bps=ctx.config.get("solana_slippage_bps", 50),
-                    notifier=ctx.notifier,
-                )
-                try:
-                    tf_price = ctx.df_cache.get(tf, {}).get("BTC/USDT") or ctx.df_cache.get(tf, {}).get("XBT/USDT")
-                    if tf_price is not None and not tf_price.empty:
-                        btc_price = float(tf_price["close"].iloc[-1])
-                        btc_amt = profit / btc_price
-                        if ctx.notifier:
-                            await ctx.notifier.send_message(f"Added {btc_amt:.6f} BTC to wallet")
-                except Exception:
-                    pass
             try:
                 log_position(
                     sym,
@@ -667,9 +582,7 @@ async def _rotation_loop(
                     if isinstance(bal.get("USDT"), dict)
                     else bal.get("USDT", 0)
                 )
-                check_balance_change(
-                    "USDT", float(current_balance), "external change"
-                )
+                check_balance_change(float(current_balance), "external change")
                 holdings = {
                     k: (v.get("total") if isinstance(v, dict) else v)
                     for k, v in bal.items()
@@ -688,112 +601,58 @@ async def _rotation_loop(
                 break
 
 
-async def handle_fund_conversions(
-    exchange: object,
-    config: dict,
-    notifier: TelegramNotifier | None,
-    user_wallet: str,
-    check_balance_change: callable,
-) -> None:
-    """Convert unsupported funding tokens to BTC and update balance."""
-
-    balances = await asyncio.to_thread(check_wallet_balances, user_wallet)
-    for token in detect_non_trade_tokens(balances):
-        amount = balances[token]
-        logger.info("Converting %s %s to BTC", amount, token)
-        await auto_convert_funds(
-            user_wallet,
-            token,
-            "BTC",
-            amount,
-            dry_run=config.get("execution_mode") == "dry_run",
-            slippage_bps=config.get("solana_slippage_bps", 50),
-            notifier=notifier,
-        )
-        bal_val = await get_btc_balance(exchange, config)
-        check_balance_change(float(bal_val), "funds converted", currency="BTC")
-        if notifier:
-            notifier.notify(f"Converted to {bal_val:.6f} BTC")
-        bal_val = await get_usdt_balance(exchange, config)
-        check_balance_change("BTC", float(bal_val), "funds converted")
-
-
-async def refresh_open_position_data(
-    exchange: object,
-    ctx: BotContext,
-    last_candle_ts: dict[str, int],
-    config: dict,
-) -> None:
-    """Update OHLCV data for open positions if a new candle formed."""
-
-    tf = config.get("timeframe", "1h")
-    tf_sec = timeframe_seconds(None, tf)
-    open_syms: list[str] = []
-    for sym in ctx.positions:
-        last_ts = last_candle_ts.get(sym, 0)
-        if time.time() - last_ts >= tf_sec:
-            open_syms.append(sym)
-    if open_syms:
-        tf_cache = ctx.df_cache.get(tf, {})
-        tf_cache = await update_ohlcv_cache(
-            exchange,
-            tf_cache,
-            open_syms,
-            timeframe=tf,
-            limit=2,
-            use_websocket=config.get("use_websocket", False),
-            force_websocket_history=config.get("force_websocket_history", False),
-            max_concurrent=config.get("max_concurrent_ohlcv"),
-        )
-        ctx.df_cache[tf] = tf_cache
-        for sym in open_syms:
-            df = tf_cache.get(sym)
-            if df is not None and not df.empty:
-                last_candle_ts[sym] = int(df["timestamp"].iloc[-1])
-
-
-async def _price_model_training_loop(ctx: BotContext) -> None:
-    """Periodically train the torch price model."""
-    interval = (
-        ctx.config.get("torch_price_model", {}).get("training_interval_hours", 24)
-        * 3600
-    )
-    while True:
-        try:
-            from crypto_bot.models import torch_price_model
-
-            torch_price_model.train_model(ctx.df_cache)
-        except asyncio.CancelledError:
-            break
-        except Exception as exc:  # pragma: no cover - training errors
-            logger.error("Price model training error: %s", exc, exc_info=True)
-        sleep_remaining = interval
-        while sleep_remaining > 0:
-            sleep_chunk = min(60, sleep_remaining)
-            try:
-                await asyncio.sleep(sleep_chunk)
-            except asyncio.CancelledError:
-                return
-            sleep_remaining -= sleep_chunk
-
-
 async def _main_impl() -> TelegramNotifier:
     """Implementation for running the trading bot."""
 
     logger.info("Starting bot")
     config = load_config()
-    load_dotenv(ENV_PATH)
+    metrics_path = (
+        Path(config.get("metrics_csv")) if config.get("metrics_csv") else None
+    )
+    volume_ratio = 0.01 if config.get("testing_mode") else 1.0
+    cooldown_configure(config.get("min_cooldown", 0))
+    status_updates = config.get("telegram", {}).get("status_updates", True)
+    market_loader_configure(
+        config.get("ohlcv_timeout", 120),
+        config.get("max_ohlcv_failures", 3),
+        config.get("max_ws_limit", 50),
+        status_updates,
+        max_concurrent=config.get("max_concurrent_ohlcv"),
+    )
+    secrets = dotenv_values(ENV_PATH)
+    flat_cfg = _flatten_config(config)
+    for key, val in secrets.items():
+        if key in flat_cfg:
+            if flat_cfg[key] != val:
+                logger.info(
+                    "Overriding %s from .env (config.yaml value: %s)",
+                    key,
+                    flat_cfg[key],
+                )
+            else:
+                logger.info("Using %s from .env (matches config.yaml)", key)
+        else:
+            logger.info("Setting %s from .env", key)
+    os.environ.update(secrets)
+
     user = load_or_create()
+
+    trade_updates = config.get("telegram", {}).get("trade_updates", True)
     status_updates = config.get("telegram", {}).get("status_updates", True)
     balance_updates = config.get("telegram", {}).get("balance_updates", False)
-    volume_ratio = config.get("volume_ratio", 1.0)
-    tg_cfg = {
-        "token": user.get("telegram_token", ""),
-        "chat_id": user.get("telegram_chat_id", ""),
-        "enabled": True,
-    }
+
+    tg_cfg = {**config.get("telegram", {})}
+    if user.get("telegram_token"):
+        tg_cfg["token"] = user["telegram_token"]
+    if user.get("telegram_chat_id"):
+        tg_cfg["chat_id"] = user["telegram_chat_id"]
+    if os.getenv("TELE_CHAT_ADMINS"):
+        tg_cfg["chat_admins"] = os.getenv("TELE_CHAT_ADMINS")
+    trade_updates = tg_cfg.get("trade_updates", True)
+    status_updates = tg_cfg.get("status_updates", status_updates)
+    balance_updates = tg_cfg.get("balance_updates", balance_updates)
+
     notifier = TelegramNotifier.from_config(tg_cfg)
-    send_test_message(notifier.token, notifier.chat_id, "Bot started")
     if status_updates:
         notifier.notify("🤖 CoinTrader2.0 started")
 
@@ -815,58 +674,6 @@ async def _main_impl() -> TelegramNotifier:
             notifier.notify(
                 "❌ ccxt library not found or stubbed; check your installation"
             )
-        return notifier
-
-    balance_threshold = config.get("balance_change_threshold", 0.01)
-    previous_balance: dict[str, float] = {"USDT": 0.0}
-
-    def check_balance_change(currency: str, new_balance: float, reason: str) -> None:
-        nonlocal previous_balance
-        prev = previous_balance.get(currency, 0.0)
-        delta = new_balance - prev
-        if abs(delta) > balance_threshold and notifier:
-            notifier.notify(
-                f"Balance changed by {delta:.4f} {currency} due to {reason}"
-            )
-        previous_balance[currency] = new_balance
-
-    paper_wallet = None
-    try:
-        if config.get("execution_mode") == "dry_run":
-            try:
-                start_bal = float(input("Enter paper trading balance in USDT: "))
-            except Exception:
-                start_bal = 1000.0
-            init_bal = start_bal
-            paper_wallet = PaperWallet(start_bal, config.get("max_open_trades", 1))
-        else:
-            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-                bal = await asyncio.wait_for(exchange.fetch_balance(), timeout=10)
-            else:
-                bal = await asyncio.wait_for(
-                    asyncio.to_thread(exchange.fetch_balance), timeout=10
-                )
-            init_bal = (
-                bal.get("USDT", {}).get("free", 0)
-                if isinstance(bal.get("USDT"), dict)
-                else bal.get("USDT", 0)
-            )
-        log_balance(float(init_bal))
-        last_balance = float(init_bal)
-        previous_balance = {"USDT": float(init_bal)}
-        if paper_wallet:
-            last_balance = notify_balance_change(
-                notifier,
-                last_balance,
-                float(paper_wallet.balance),
-                balance_updates,
-            )
-    except Exception as exc:  # pragma: no cover - network
-        logger.error("Exchange API setup failed: %s", exc)
-        if status_updates:
-            err = notifier.notify(f"API error: {exc}")
-            if err:
-                logger.error("Failed to notify user: %s", err)
         return notifier
 
     if config.get("scan_markets", False) and not config.get("symbols"):
@@ -910,6 +717,36 @@ async def _main_impl() -> TelegramNotifier:
                 )
             return notifier
 
+    balance_threshold = config.get("balance_change_threshold", 0.01)
+    previous_balance = 0.0
+
+    def check_balance_change(new_balance: float, reason: str) -> None:
+        nonlocal previous_balance
+        delta = new_balance - previous_balance
+        if abs(delta) > balance_threshold and notifier:
+            notifier.notify(f"Balance changed by {delta:.4f} USDT due to {reason}")
+        previous_balance = new_balance
+
+    try:
+        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+            bal = await exchange.fetch_balance()
+        else:
+            bal = await asyncio.to_thread(exchange.fetch_balance)
+        init_bal = (
+            bal.get("USDT", {}).get("free", 0)
+            if isinstance(bal.get("USDT"), dict)
+            else bal.get("USDT", 0)
+        )
+        log_balance(float(init_bal))
+        last_balance = float(init_bal)
+        previous_balance = float(init_bal)
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("Exchange API setup failed: %s", exc)
+        if status_updates:
+            err = notifier.notify(f"API error: {exc}")
+            if err:
+                logger.error("Failed to notify user: %s", err)
+        return notifier
     risk_params = {**config.get("risk", {})}
     risk_params.update(config.get("sentiment_filter", {}))
     risk_params.update(config.get("volatility_filter", {}))
@@ -929,6 +766,21 @@ async def _main_impl() -> TelegramNotifier:
     risk_params["volume_ratio"] = volume_ratio
     risk_config = RiskConfig(**risk_params)
     risk_manager = RiskManager(risk_config)
+
+    paper_wallet = None
+    if config.get("execution_mode") == "dry_run":
+        try:
+            start_bal = float(input("Enter paper trading balance in USDT: "))
+        except Exception:
+            start_bal = 1000.0
+        paper_wallet = PaperWallet(start_bal, config.get("max_open_trades", 1))
+        log_balance(paper_wallet.balance)
+        last_balance = notify_balance_change(
+            notifier,
+            last_balance,
+            float(paper_wallet.balance),
+            balance_updates,
+        )
 
     monitor_task = asyncio.create_task(
         console_monitor.monitor_loop(exchange, paper_wallet, LOG_DIR / "bot.log")
@@ -1026,65 +878,87 @@ async def _main_impl() -> TelegramNotifier:
         handle_exits,
     ])
 
-    price_train_task = None
-    if config.get("torch_price_model", {}).get("enabled"):
-        price_train_task = asyncio.create_task(_price_model_training_loop(ctx))
-
-    
     loop_count = 0
     last_weight_update = last_optimize = 0.0
-    metrics_path = Path(config.get("metrics_output_file", LOG_DIR / "metrics.csv"))
 
     try:
         while True:
-            delay_override: float | None = None
-            try:
-                cycle_start = time.perf_counter()
-                ctx.timing = await runner.run(ctx)
-                loop_count += 1
-
-                if time.time() - last_weight_update >= config.get("weight_update_minutes", 60) * 60:
-                    weights = compute_strategy_weights()
-                    if weights:
-                        logger.info("Updating strategy allocation to %s", weights)
-                        risk_manager.update_allocation(weights)
-                        config["strategy_allocation"] = weights
-                    last_weight_update = time.time()
-
-                if config.get("optimization", {}).get("enabled"):
-                    if (
-                        time.time() - last_optimize
-                        >= config["optimization"].get("interval_days", 7) * 86400
-                    ):
-                        optimize_strategies()
-                        last_optimize = time.time()
-
-                if not state.get("running"):
-                    await asyncio.sleep(1)
-                    continue
-            except asyncio.CancelledError:
-                raise
-            except ccxt.NetworkError as exc:
-                logger.warning("Network error: %s; retrying shortly", exc)
-                delay_override = 5
-            except ccxt.ExchangeError as exc:
-                logger.error("Exchange error: %s", exc)
-                delay_override = 5
-            except Exception as exc:  # pragma: no cover - loop errors
-                logger.error("Main loop error: %s", exc, exc_info=True)
-
-            try:
-                await handle_fund_conversions(
-                    exchange,
-                    config,
-                    notifier,
+            cycle_start = time.perf_counter()
+            ctx.timing = await runner.run(ctx)
+            loop_count += 1
+    
+            if time.time() - last_weight_update >= 86400:
+                weights = compute_strategy_weights()
+                if weights:
+                    logger.info("Updating strategy allocation to %s", weights)
+                    risk_manager.update_allocation(weights)
+                    config["strategy_allocation"] = weights
+                last_weight_update = time.time()
+    
+            if config.get("optimization", {}).get("enabled"):
+                if (
+                    time.time() - last_optimize
+                    >= config["optimization"].get("interval_days", 7) * 86400
+                ):
+                    optimize_strategies()
+                    last_optimize = time.time()
+    
+            if not state.get("running"):
+                await asyncio.sleep(1)
+                continue
+    
+            balances = await asyncio.to_thread(
+                check_wallet_balances, user.get("wallet_address", "")
+            )
+            for token in detect_non_trade_tokens(balances):
+                amount = balances[token]
+                logger.info("Converting %s %s to USDC", amount, token)
+                await auto_convert_funds(
                     user.get("wallet_address", ""),
-                    check_balance_change,
+                    token,
+                    "USDC",
+                    amount,
+                    dry_run=config["execution_mode"] == "dry_run",
+                    slippage_bps=config.get("solana_slippage_bps", 50),
+                    notifier=notifier,
                 )
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                    bal = await exchange.fetch_balance()
+                else:
+                    bal = await asyncio.to_thread(exchange.fetch_balance)
+                bal_val = (
+                    bal.get("USDT", {}).get("free", 0)
+                    if isinstance(bal.get("USDT"), dict)
+                    else bal.get("USDT", 0)
+                )
+                check_balance_change(float(bal_val), "funds converted")
 
-                await refresh_open_position_data(exchange, ctx, last_candle_ts, config)
-            except Exception as exc:
-                logger.error("Post-iteration error: %s", exc, exc_info=True)
+            # Refresh OHLCV for open positions if a new candle has formed
+            tf = config.get("timeframe", "1h")
+            tf_sec = timeframe_seconds(None, tf)
+            open_syms: list[str] = []
+            for sym in ctx.positions:
+                last_ts = last_candle_ts.get(sym, 0)
+                if time.time() - last_ts >= tf_sec:
+                    open_syms.append(sym)
+            if open_syms:
+                tf_cache = ctx.df_cache.get(tf, {})
+                tf_cache = await update_ohlcv_cache(
+                    exchange,
+                    tf_cache,
+                    open_syms,
+                    timeframe=tf,
+                    limit=2,
+                    use_websocket=config.get("use_websocket", False),
+                    force_websocket_history=config.get("force_websocket_history", False),
+                    max_concurrent=config.get("max_concurrent_ohlcv"),
+                )
+                ctx.df_cache[tf] = tf_cache
+                session_state.df_cache[tf] = tf_cache
+                for sym in open_syms:
+                    df = tf_cache.get(sym)
+                    if df is not None and not df.empty:
+                        last_candle_ts[sym] = int(df["timestamp"].iloc[-1])
 
             total_time = time.perf_counter() - cycle_start
             timing = getattr(ctx, "timing", {})
@@ -1111,10 +985,8 @@ async def _main_impl() -> TelegramNotifier:
                 }
                 write_cycle_metrics(metrics, config)
             logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
-            delay = delay_override if delay_override is not None else pd.Timedelta(
-                config["loop_interval_minutes"], unit="m"
-            ).total_seconds()
-            await asyncio.sleep(delay)
+            await asyncio.sleep(config["loop_interval_minutes"] * 60)
+    
     finally:
         if session_state.scan_task:
             session_state.scan_task.cancel()
@@ -1127,8 +999,6 @@ async def _main_impl() -> TelegramNotifier:
         rotation_task.cancel()
         if sniper_task:
             sniper_task.cancel()
-        if price_train_task:
-            price_train_task.cancel()
         for task in list(position_tasks.values()):
             task.cancel()
         for task in list(position_tasks.values()):
@@ -1158,11 +1028,6 @@ async def _main_impl() -> TelegramNotifier:
                 await sniper_task
             except asyncio.CancelledError:
                 pass
-        if price_train_task:
-            try:
-                await price_train_task
-            except asyncio.CancelledError:
-                pass
         try:
             await control_task
         except asyncio.CancelledError:
@@ -1184,6 +1049,8 @@ async def _main_impl() -> TelegramNotifier:
                     await asyncio.to_thread(exchange.close)
 
     return notifier
+
+
 async def main() -> None:
     """Entry point for running the trading bot with error handling."""
     notifier: TelegramNotifier | None = None

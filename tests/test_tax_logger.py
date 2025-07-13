@@ -1,5 +1,3 @@
-import pytest
-pytest.importorskip("pandas")
 import pandas as pd
 from datetime import timedelta
 from crypto_bot import tax_logger

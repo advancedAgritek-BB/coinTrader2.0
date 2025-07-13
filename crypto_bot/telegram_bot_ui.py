@@ -21,7 +21,6 @@ from telegram.ext import (
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier, is_admin
-from crypto_bot.utils.balance import get_usdt_balance
 
 from crypto_bot import log_reader, console_monitor
 from .telegram_ctl import BotController
@@ -234,7 +233,6 @@ class TelegramBotUI:
             await self._reply(update, "Rotation not configured")
             return
         try:
-            _ = await get_usdt_balance(self.exchange, {})
             if asyncio.iscoroutinefunction(getattr(self.exchange, "fetch_balance", None)):
                 bal = await self.exchange.fetch_balance()
             else:
@@ -329,11 +327,15 @@ class TelegramBotUI:
             await self._reply(update, "Exchange not configured")
             return
         try:
-            free_usdt = await get_usdt_balance(self.exchange, {})
             if asyncio.iscoroutinefunction(getattr(self.exchange, "fetch_balance", None)):
                 bal = await self.exchange.fetch_balance()
             else:
                 bal = await asyncio.to_thread(self.exchange.fetch_balance)
+            free_usdt = (
+                bal.get("USDT", {}).get("free")
+                if isinstance(bal.get("USDT"), dict)
+                else None
+            )
             lines = [f"Free USDT: {free_usdt or 0}"]
             lines += [
                 f"{k}: {v.get('total') if isinstance(v, dict) else v}"

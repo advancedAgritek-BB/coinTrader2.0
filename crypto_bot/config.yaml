@@ -7,7 +7,7 @@ bounce_scalper:
   atr_normalization: true
   atr_period: 14
   cooldown_bars: 2
-  down_candles: 2
+  down_candles: 3
   max_concurrent_signals: 1
   min_score: 0.3
   overbought: 70
@@ -21,8 +21,6 @@ bounce_scalper:
   vol_window: 20
   volume_multiple: 2
   zscore_threshold: 1.5
-  imbalance_ratio: 0
-  imbalance_penalty: 0
 breakout:
   atr_buffer_mult: 0.1
   bb_length: 20
@@ -34,7 +32,6 @@ breakout:
   squeeze_threshold: 0.03
   volume_mult: 2
   volume_window: 20
-  pump_dump_exit_drop_pct: 0.5
 cycle_bias:
   enabled: false
   mvrv_url: https://api.example.com/mvrv
@@ -63,14 +60,10 @@ grid_bot:
   breakout_mult: 1.5
   cooldown_bars: 6
   max_active_legs: 4
-  leverage: 1
-  num_levels: 10
   range_window: 20
-  spacing_factor: 0.5
+  spacing_factor: 0.75
   trend_ema_fast: 50
   trend_ema_slow: 200
-  dynamic_grid: false
-  use_ml_center: false
   vol_zscore_threshold: 2.0
   volume_ma_window: 20
   volume_multiple: 1.5
@@ -78,14 +71,11 @@ liquidity_check: true
 liquidity_depth: 10
 log_to_google: true
 loop_interval_minutes: 2
-weight_update_minutes: 60
-leverage_mult: 10
 balance_poll_mod: 1
 max_age_days: 180
 max_change_pct: 10
-max_concurrent_ohlcv: 20
+max_concurrent_ohlcv: 4
 max_parallel: 4  # number of symbols processed concurrently
-analysis_concurrency: 10
 max_latency_ms: 1000
 max_ohlcv_failures: 3
 max_open_trades: 3
@@ -114,15 +104,6 @@ meme_wave_sniper:
   execution:
     dry_run: true
   risk_file: crypto_bot/logs/sniper_risk.json
-  candle_capture:
-    url: https://api.helius.xyz/v0/markets/{mint}/candles?resolution=1m&limit=1
-    minutes: 15
-new_listing_scanner:
-  enabled: false
-  interval_minutes: 60
-  volume_multiple: 5.0
-  timeframe: 1m
-  history_limit: 20
 meta_selector:
   enabled: false
 metrics_backend: csv
@@ -133,32 +114,16 @@ micro_scalp:
   confirm_bars: 2
   ema_fast: 3
   ema_slow: 8
-  fresh_cross_only: true
+  fresh_cross_only: false
   min_atr_pct: 0.0
   min_momentum_pct: 0.0
   min_vol_z: 1.5
-  imbalance_ratio: 0
-  imbalance_penalty: 0
   trend_fast: 21
   trend_slow: 50
   trend_timeframe: 5m
   vol_window: 20
   volume_window: 20
   wick_pct: 0.2
-solana_scalping:
-  rsi_window: 14
-  oversold: 30
-  overbought: 70
-  macd_fast: 12
-  macd_slow: 26
-  macd_signal: 9
-sniper_bot:
-  high_freq: false
-cross_chain_arbitrage:
-  enabled: false
-  threshold: 0.005
-  helius_key: YOUR_KEY
-  jupiter_url: https://quote-api.jup.ag/v6/quote
 min_agreeing_votes: 1
 min_confidence_score: 0.1  # baseline; actual min = baseline * (1 + bb_width_z/3)
 min_consistent_agreement: 1
@@ -169,21 +134,12 @@ min_symbol_score: 0.1
 ml_signal_model:
   enabled: true
   weight: 0.4
-torch_signal_model:
-  enabled: false
-  weight: 0.3
-ml_price_predictor:
-  enabled: false
-torch_price_model:
-  enabled: false
 mode: auto
 mode_degrade_window: 20
 mode_threshold: 0.4
 ohlcv_snapshot_frequency_minutes: 1440
 ohlcv_snapshot_limit: 500
 ohlcv_timeout: 120
-ohlcv_global_cache_limit: 1000
-timeframe_limits: {}
 optimization:
   enabled: true
   interval_days: 5
@@ -205,7 +161,7 @@ refresh_pairs:
   refresh_interval: 6h
   top_k: 40
   allowed_quote_currencies: [USD, USDT]
-  blocklist_assets: []
+  blacklist_assets: []
 regime_return_period: 5
 regime_timeframes:
 - 5m
@@ -254,8 +210,6 @@ signal_weight_optimizer:
   min_weight: 0.05
 sl_pct: 0.03
 solana_slippage_bps: 50
-solana_retry_attempts: 3
-solana_retry_delay: 1
 strategy_allocation:
   grid_bot: 0.3
   sniper_bot: 0.3
@@ -276,12 +230,10 @@ strategy_router:
     - mean_bot
     scalp:
     - micro_scalp
-    sol_scalp:
-    - solana_scalping
     sideways:
     - grid
     trending:
-    - dca_bot
+    - trend
     volatile:
     - sniper_bot
     - sniper_solana
@@ -301,7 +253,7 @@ symbol_filter:
   http_timeout: 10           # seconds for fallback /Ticker requests
   ticker_retry_attempts: 3
   log_ticker_exceptions: false
-symbol_refresh_minutes: 5
+symbol_refresh_minutes: 30
 symbol_score_weights:
   age: 0.05
   change: 0.3
@@ -316,7 +268,6 @@ telegram:
   chat_admins: 827777274
   chat_id: 827777274
   command_cooldown: 5
-  rate_limit: 1
   enabled: true
   token: your_telegram_token
   trade_updates: true
@@ -335,11 +286,8 @@ trade_size_pct: 0.2
 trend:
   atr_period: 14
   k: 1.0
-  trend_ema_fast: 5
-  trend_ema_slow: 15
-  donchian_confirmation: true
-  volume_window: 20
-  volume_mult: 1.0
+  trend_ema_fast: 20
+  trend_ema_slow: 50
 twap_enabled: true
 twap_interval_seconds: 10
 twap_slices: 4

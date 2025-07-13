@@ -1,5 +1,3 @@
-import pytest
-pytest.importorskip("pandas")
 import pandas as pd
 from crypto_bot.utils.trend_confirmation import confirm_multi_tf_trend
 

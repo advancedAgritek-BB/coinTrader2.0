@@ -67,11 +67,7 @@ def compute_weights(regime: str, path: str | Path = LOG_FILE) -> Dict[str, float
     return {s: sc / total for s, sc in scores.items()}
 
 
-def get_recent_win_rate(
-    window: int = 20,
-    path: str | Path = LOG_FILE,
-    strategy: str | None = None,
-) -> float:
+def get_recent_win_rate(window: int = 20, path: str | Path = LOG_FILE) -> float:
     """Return win rate over the last ``window`` trades.
 
     Parameters
@@ -80,8 +76,6 @@ def get_recent_win_rate(
         Number of most recent trades to evaluate. Defaults to ``20``.
     path : str | Path, optional
         CSV log file path. Defaults to :data:`LOG_FILE`.
-    strategy : str, optional
-        Filter trades by strategy name if provided.
     """
     file = Path(path)
     if not file.exists():
@@ -89,8 +83,6 @@ def get_recent_win_rate(
     df = pd.read_csv(file)
     if df.empty:
         return 0.0
-    if strategy and "strategy" in df.columns:
-        df = df[df["strategy"] == strategy]
     recent = df.tail(window)
     wins = (recent["pnl"] > 0).sum()
     total = len(recent)

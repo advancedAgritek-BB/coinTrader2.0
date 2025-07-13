@@ -1,5 +1,3 @@
-import pytest
-pytest.importorskip("pandas")
 import asyncio
 import pandas as pd
 import crypto_bot.utils.market_analyzer as ma

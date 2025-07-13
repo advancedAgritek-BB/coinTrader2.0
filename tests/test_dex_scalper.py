@@ -1,19 +1,6 @@
-import pytest
-pytest.importorskip("pandas")
 import pandas as pd
 
-import crypto_bot.strategy.dex_scalper as dex_scalper
-
-
-def _make_df(prices):
-    return pd.DataFrame(
-        {
-            "open": prices,
-            "high": [p + 0.5 for p in prices],
-            "low": [p - 0.5 for p in prices],
-            "close": prices,
-        }
-    )
+from crypto_bot.strategy import dex_scalper
 
 
 def test_scalper_long_signal():
@@ -55,56 +42,3 @@ def test_scalper_custom_config():
     score, direction = dex_scalper.generate_signal(df, cfg)
     assert direction == 'long'
     assert score > 0
-
-
-def test_volume_filter_blocks_signal():
-    close = pd.Series(range(1, 41))
-    volume = [0] * 40
-    df = pd.DataFrame({'close': close, 'volume': volume})
-    score, direction = dex_scalper.generate_signal(df, min_volume=1)
-    assert (score, direction) == (0.0, 'none')
-
-
-def test_order_book_slippage_blocks_signal():
-    close = pd.Series(range(1, 41))
-    volume = [100] * 40
-    df = pd.DataFrame({'close': close, 'volume': volume})
-    book = {'bids': [[10, 1.0]], 'asks': [[20, 1.0]]}
-    score, direction = dex_scalper.generate_signal(df, book=book, max_slippage_pct=0.5)
-    assert (score, direction) == (0.0, 'none')
-def test_scalper_blocks_disallowed_pair(monkeypatch):
-    close = pd.Series(range(1, 41))
-    df = pd.DataFrame({'close': close})
-    monkeypatch.setattr(dex_scalper, 'ALLOWED_PAIRS', ['ETH/USD'])
-    score, direction = dex_scalper.generate_signal(df, {'symbol': 'BTC/USD'})
-    assert (score, direction) == (0.0, 'none')
-def test_atr_filter_blocks_signal():
-    prices = list(range(1, 41))
-    df = _make_df(prices)
-    cfg = {"dex_scalper": {"min_atr_pct": 0.2}}
-    score, direction = dex_scalper.generate_signal(df, cfg)
-    assert (score, direction) == (0.0, "none")
-
-
-def test_atr_filter_allows_signal():
-    prices = list(range(1, 41))
-    df = pd.DataFrame(
-        {
-            "open": prices,
-            "high": [p + 10 for p in prices],
-            "low": [p - 10 for p in prices],
-            "close": prices,
-        }
-    )
-    cfg = {"dex_scalper": {"min_atr_pct": 0.2}}
-    score, direction = dex_scalper.generate_signal(df, cfg)
-    assert direction == "long"
-    assert score > 0
-def test_scalper_fast_window_longer_than_df():
-    """Ensure short DataFrame returns neutral when below required window."""
-    close = pd.Series(range(20))
-    df = pd.DataFrame({'close': close})
-    cfg = {'dex_scalper': {'ema_fast': 30, 'ema_slow': 10}}
-    score, direction = dex_scalper.generate_signal(df, cfg)
-    assert direction == 'none'
-    assert score == 0.0

@@ -34,13 +34,13 @@ async def get_filtered_symbols(exchange, config) -> list:
     """
     global _cached_symbols, _last_refresh
 
-    refresh_m = config.get("symbol_refresh_minutes", 5)
+    refresh_m = config.get("symbol_refresh_minutes", 30)
     now = time.time()
 
-    if _cached_symbols is not None and now - _last_refresh >= refresh_m * 60:
-        _cached_symbols = None
-
-    if _cached_symbols is not None:
+    if (
+        _cached_symbols is not None
+        and now - _last_refresh < refresh_m * 60
+    ):
         return _cached_symbols
 
     symbols = config.get("symbols", [config.get("symbol")])

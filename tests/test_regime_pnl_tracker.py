@@ -1,5 +1,3 @@
-import pytest
-pytest.importorskip("pandas")
 import pandas as pd
 from crypto_bot.utils import regime_pnl_tracker as rpt
 
@@ -42,14 +40,3 @@ def test_recent_win_rate(tmp_path, monkeypatch):
 
     rate = rpt.get_recent_win_rate(2, log)
     assert rate == 0.5
-
-
-def test_recent_win_rate_filtered(tmp_path, monkeypatch):
-    log = tmp_path / "pnl.csv"
-    monkeypatch.setattr(rpt, "LOG_FILE", log)
-
-    rpt.log_trade("trending", "a", 1.0)
-    rpt.log_trade("trending", "b", -1.0)
-    rpt.log_trade("trending", "a", 2.0)
-    rate = rpt.get_recent_win_rate(2, log, strategy="a")
-    assert rate == 1.0

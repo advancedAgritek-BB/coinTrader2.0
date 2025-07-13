@@ -1,5 +1,3 @@
-import pytest
-pytest.importorskip("pandas")
 import pandas as pd
 import pytest
 from crypto_bot.strategy import grid_bot
@@ -46,21 +44,10 @@ def _df_range_change() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
-def _df_narrow_range() -> pd.DataFrame:
-    data = {
-        "high": [100.05] * 20,
-        "low": [100.0] * 20,
-        "close": [100.02] * 20,
-        "volume": [100.0] * 19 + [300.0],
-    }
-    return pd.DataFrame(data)
-
-
 def test_short_signal_above_upper_grid(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
     df = _df_with_price(111.0)
-    cfg = GridConfig(atr_normalization=False, num_levels=10, spacing_factor=0.5)
-    score, direction = grid_bot.generate_signal(df, config=cfg)
+    score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert direction == "short"
     assert score > 0.9
 
@@ -68,8 +55,7 @@ def test_short_signal_above_upper_grid(monkeypatch):
 def test_long_signal_below_lower_grid(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
     df = _df_with_price(89.0)
-    cfg = GridConfig(atr_normalization=False, num_levels=10, spacing_factor=0.5)
-    score, direction = grid_bot.generate_signal(df, config=cfg)
+    score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert direction == "long"
     assert score > 0.9
 
@@ -77,8 +63,7 @@ def test_long_signal_below_lower_grid(monkeypatch):
 def test_no_signal_in_middle(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
     df = _df_with_price(102.0)
-    cfg = GridConfig(atr_normalization=False, num_levels=10, spacing_factor=0.5)
-    score, direction = grid_bot.generate_signal(df, config=cfg)
+    score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert direction == "none"
     assert score == 0.0
 
@@ -86,13 +71,11 @@ def test_no_signal_in_middle(monkeypatch):
 def test_grid_levels_env_override(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
     df = _df_with_price(102.0)
-    cfg = GridConfig(atr_normalization=False, num_levels=10, spacing_factor=0.5)
-    _, direction = grid_bot.generate_signal(df, config=cfg)
+    _, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert direction == "none"
 
     monkeypatch.setenv("GRID_LEVELS", "3")
-    cfg = GridConfig(atr_normalization=False, num_levels=10, spacing_factor=0.5)
-    score, direction = grid_bot.generate_signal(df, config=cfg)
+    score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert direction == "short"
     assert score > 0.0
 
@@ -165,10 +148,9 @@ def test_volume_filter_blocks_long_signal():
 def test_atr_spacing(monkeypatch):
     df = _df_with_price(106.0)
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 2.0)
-    cfg = GridConfig(atr_normalization=False, num_levels=10, spacing_factor=0.5)
-    narrow, _ = grid_bot.generate_signal(df, config=cfg)
+    narrow, _ = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 10.0)
-    wide, _ = grid_bot.generate_signal(df, config=cfg)
+    wide, _ = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert narrow > wide
 
 
@@ -195,69 +177,3 @@ def test_range_window_config(cfg):
     score, direction = grid_bot.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0.0
-
-
-def test_dynamic_grid_updates_when_atr_spikes(monkeypatch):
-    symbol = "XBT/USDT"
-    cfg = GridConfig(symbol=symbol, dynamic_grid=True, atr_normalization=False)
-    grid_state.clear()
-    df = _df_with_price(105.0)
-
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 2.0)
-    grid_bot.generate_signal(df, config=cfg)
-    step1 = grid_state.get_grid_step(symbol)
-
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 4.0)
-    grid_bot.generate_signal(df, config=cfg)
-    step2 = grid_state.get_grid_step(symbol)
-
-    assert step2 > step1
-
-
-def test_dynamic_grid_ignores_small_atr_change(monkeypatch):
-    symbol = "XBT/USDT"
-    cfg = GridConfig(symbol=symbol, dynamic_grid=True, atr_normalization=False)
-    grid_state.clear()
-    df = _df_with_price(105.0)
-
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 2.0)
-    grid_bot.generate_signal(df, config=cfg)
-    step1 = grid_state.get_grid_step(symbol)
-
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 2.2)
-    grid_bot.generate_signal(df, config=cfg)
-    step2 = grid_state.get_grid_step(symbol)
-
-    assert step2 == step1
-def test_narrow_range_blocks_signal(monkeypatch):
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
-    df = _df_narrow_range()
-    score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
-    assert (score, direction) == (0.0, "none")
-
-def test_ml_center_prediction_used(monkeypatch):
-    df = _df_with_price(111.0)
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
-    monkeypatch.setattr(grid_bot, "compute_vwap", lambda df, w: pd.Series([95.0]*len(df), index=df.index))
-    called = {"breakout": False}
-    monkeypatch.setattr(grid_bot.breakout_bot, "generate_signal", lambda *_a, **_k: (called.__setitem__("breakout", True), (0.0, "none"))[1])
-    monkeypatch.setattr(grid_bot.grid_center_model, "predict_centre", lambda _df: 100.0)
-    cfg = GridConfig(use_ml_center=True, atr_normalization=False)
-    score, direction = grid_bot.generate_signal(df, config=cfg)
-    assert not called["breakout"]
-    assert direction == "short"
-    assert score > 0
-
-
-def test_ml_center_fallback(monkeypatch):
-    df = _df_with_price(111.0)
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
-    monkeypatch.setattr(grid_bot, "compute_vwap", lambda df, w: pd.Series([95.0]*len(df), index=df.index))
-    monkeypatch.setattr(grid_bot.grid_center_model, "predict_centre", lambda _df: float("nan"))
-    called = {}
-    monkeypatch.setattr(grid_bot.breakout_bot, "generate_signal", lambda *_a, **_k: called.setdefault("called", True) or (0.1, "short"))
-    cfg = GridConfig(use_ml_center=True, atr_normalization=False)
-    score, direction = grid_bot.generate_signal(df, config=cfg)
-    assert called.get("called")
-    assert direction == "short"
-    assert score == 0.1

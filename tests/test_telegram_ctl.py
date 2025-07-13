@@ -1,11 +1,5 @@
 import time
-import asyncio
-import types
-import pytest
-
-import crypto_bot.telegram_ctl as telegram_ctl
-
-ctl = telegram_ctl
+import telegram_ctl as ctl
 
 
 def test_set_get_page():
@@ -25,6 +19,15 @@ def test_expiration(monkeypatch):
     monkeypatch.setattr(time, "time", lambda: now + ctl.callback_timeout + 1)
     assert ctl.get_page(1, "logs") == 0
     assert ctl.callback_state == {}
+import asyncio
+import types
+import pytest
+
+try:
+    import crypto_bot.telegram_ctl as telegram_ctl
+except Exception as e:  # pragma: no cover - module may not exist
+    telegram_ctl = None
+
 
 class DummyUpdate:
     def __init__(self, user_id=1):
@@ -112,7 +115,7 @@ class TestTelegramCtl:
     async def test_pagination(self):
         update = DummyUpdate()
         long_text = "line\n" * 50
-        pages = telegram_ctl.paginate_text(long_text)
+        pages = telegram_ctl._paginate(long_text)
         assert len(pages) > 1
         await self.tg._send_pages(update, pages)
         assert update.message.text is not None
@@ -121,7 +124,7 @@ class TestTelegramCtl:
     async def test_heartbeat_start_stop(self):
         hb = self.tg.start_heartbeat()
         assert isinstance(hb, asyncio.Task)
-        await self.tg.stop_heartbeat()
+        self.tg.stop_heartbeat()
         assert hb.cancelled() or hb.done()
 from crypto_bot.telegram_ctl import status_loop
 from crypto_bot.utils.telegram import TelegramNotifier

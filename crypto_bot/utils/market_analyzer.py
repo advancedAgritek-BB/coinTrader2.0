@@ -27,9 +27,6 @@ from crypto_bot.volatility_filter import calc_atr
 from ta.volatility import BollingerBands
 from crypto_bot.utils import zscore
 from crypto_bot.utils.telemetry import telemetry
-from crypto_bot.models.torch_price_model import (
-    predict_price as torch_predict_price,
-)
 
 
 analysis_logger = setup_logger("strategy_rank", LOG_DIR / "strategy_rank.log")
@@ -278,11 +275,6 @@ async def analyze_symbol(
             + weights.get("strategy_regime_strength", 0.0) * 1.0
         )
 
-        leverage = 1
-        if regime in {"breakout", "volatile"} and score > 0.8:
-            leverage = config.get("leverage_mult", 10)
-        result["leverage"] = leverage
-
         result.update({
             "env": env,
             "name": name,
@@ -290,37 +282,6 @@ async def analyze_symbol(
             "direction": direction,
             "atr": atr,
         })
-
-        price_cfg = config.get("ml_price_predictor", {})
-        if price_cfg.get("enabled"):
-            try:
-                from crypto_bot.models.price_predictor import (
-                    predict_score as _pred_score,
-                    predict_price as _pred_price,
-                )
-
-                result["price_score"] = float(_pred_score(df))
-                if price_cfg.get("use_direction") and "close" in df.columns:
-                    pred_val = float(_pred_price(df))
-                    last_val = float(df["close"].iloc[-1])
-                    if pred_val > last_val:
-                        result["direction"] = "long"
-                    elif pred_val < last_val:
-                        result["direction"] = "short"
-            except Exception:  # pragma: no cover - best effort
-                result["price_score"] = 0.0
-
-        torch_cfg = config.get("torch_price_model", {})
-        if torch_cfg.get("enabled"):
-            try:  # pragma: no cover - best effort
-                pred = float(torch_predict_price(df))
-                last = float(df["close"].iloc[-1])
-                result["ai_pred_price"] = pred
-                result["direction"] = "long" if pred > last else "short"
-                if last:
-                    result["score"] += abs(pred - last) / last
-            except Exception:
-                pass
 
         votes = []
         voting = config.get("voting_strategies", [])

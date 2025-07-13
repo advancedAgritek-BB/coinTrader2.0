@@ -40,7 +40,7 @@ class ScannerConfig(BaseModel):
         return v
 
     @validator("symbol_batch_size", "scan_lookback_limit", "cycle_lookback_limit")
-    def _positive_int(cls, v, values, config, field):
+    def _positive_int(cls, v, field):
         if v is not None and v <= 0:
             raise ValueError(f"{field.name} must be > 0")
         return v

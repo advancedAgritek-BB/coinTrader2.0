@@ -14,9 +14,6 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 * Balance change alerts when USDT funds move
 * Capital tracker, sentiment filter and tax logger helpers
 * Solana mempool monitor to avoid swaps when fees spike
-* Cross-chain arbitrage between CEXs and Solana DEXes
-* RSI/MACD scalper for Solana pairs
-* Hourly new listing scanner using x_semantic_search
 * Paper trading wallet for dry-run simulation
 * Live trading or dry-run simulation
 * Web dashboard with watchdog thread and realtime log view
@@ -62,29 +59,22 @@ window drops below **0.05** and volume is more than **5×** the average,
 `strategy_router.fast_path` in `crypto_bot/config.yaml` and can be tuned as
 needed.
 
-## Python Compatibility
-
-The bot requires **Python 3.11** or later. Make sure your environment uses a
-compatible interpreter before installing the packages.
-
 ## Quick Start
 
-1. Ensure you are running **Python 3.11** or newer and then install the dependencies:
+1. Install the dependencies:
    ```bash
    pip install -r requirements.txt
    ```
    The optional `rich` package is included and provides colorized
    console output when viewing live positions.
    Exchange connectivity relies on [ccxt](https://github.com/ccxt/ccxt) which is installed with these requirements. Make sure the `ccxt` package is available when running the trading bot.
-2. Run `python crypto_bot/wallet_manager.py` (or `python -m crypto_bot.wallet_manager`) to create `~/.cointrader/user_config.yaml` and enter your API credentials.
-2. Run `python crypto_bot/wallet_manager.py` to create `~/.cointrader/user_config.yaml` and enter your API credentials (optional for dry-run mode).
-2. Run `python crypto_bot/wallet_manager.py` (or `python -m crypto_bot.wallet_manager`) to create `user_config.yaml` and enter your API credentials (optional for dry-run mode).
+2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:
    ```bash
    python -m crypto_bot.main
    ```
-   When `execution_mode: dry_run` is set you will be prompted for the starting USDT balance after launching `python -m crypto_bot.main`.
+   When dry-run mode is selected you will be prompted for the starting USDT balance.
    The console now refreshes with your wallet balance and any active
    trades in real time. Profitable positions are shown in green while
    losing ones appear in red. The monitor lists open trades on a single
@@ -102,11 +92,8 @@ compatible interpreter before installing the packages.
    ```bash
    python -m crypto_bot.solana.runner
    ```
-6. Enable high frequency sniping by setting ``sniper_bot.high_freq`` to ``true``
-   in ``crypto_bot/config.yaml``. When ``meme_wave_sniper.candle_capture`` is
-   configured the runner automatically records 1m candles for new pools.
 
-Run `wallet_manager.py` to create `~/.cointrader/user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `~/.cointrader/user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `~/.cointrader/user_config.yaml`.
+Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
 
 ## Configuration Files
 
@@ -128,15 +115,18 @@ FERNET_KEY=optional_key_for_encryption
 KRAKEN_WS_TOKEN=your_ws_token          # optional for Kraken
 KRAKEN_API_TOKEN=your_api_token        # optional for Kraken
 TELEGRAM_TOKEN=your_telegram_token
-TELE_CHAT_ADMINS=123456,789012         # optional comma-separated admin chat IDs for bot control
+TELE_CHAT_ADMINS=123456,789012         # optional comma separated admin IDs
+TELE_CHAT_ADMINS=12345,67890          # comma-separated chat IDs
 GOOGLE_CRED_JSON=path_to_google_credentials.json
 TWITTER_SENTIMENT_URL=https://api.example.com/twitter-sentiment
 FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
 SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
-SHOW_SECRET_INPUT=1                      # set to display typed secrets
 ```
 
+`TELE_CHAT_ADMINS` lets the Telegram bot accept commands from multiple
+admin chats. Omit it to restrict control to the single `chat_id` in the
+configuration file.
 
 ### YAML Configuration
 
@@ -190,7 +180,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **scan_lookback_limit** – candles of history loaded during the initial scan.
 * **cycle_lookback_limit** – candles fetched each cycle. Defaults to
   `min(150, timeframe_minutes × 2)`.
-* **symbol_refresh_minutes** – minutes before the symbol queue is refreshed (defaults to 5).
+* **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
 * **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
 * **symbol_score_weights** – weights for volume, spread, change and age. The weights must sum to a positive value.
 * **uncached_volume_multiplier** – extra volume factor applied when a pair is missing from `cache/liquid_pairs.json`.
@@ -230,11 +220,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   participate in ensemble evaluation.
 * **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
 * **exit_strategy** – partial profit taking and trailing stop logic.
-* **grid_bot.leverage** – leverage level used when creating grid orders on
-  margin or futures markets.
-* **micro_scalp** – EMA settings plus volume z-score, order book imbalance and ATR filters for the scalp bot. Tick data can be streamed via WebSockets for higher frequency entries.
-* **dex_scalper** – EMA-based DEX scalper with a `min_atr_pct` filter to skip trades when volatility is too low.
-* **order_book**/**imbalance_ratio** – provide a book snapshot when calling a strategy or via config. Bid and ask totals are compared and if the ratio favors the opposite side below `imbalance_ratio` the score is scaled by `imbalance_penalty` or the signal is skipped.
+* **micro_scalp** – EMA settings plus volume z-score and ATR filters for the scalp bot.
 * **breakout** – Bollinger/Keltner squeeze, volume multiplier, ATR buffer and
   outputs ATR for stop sizing.
 
@@ -279,52 +265,12 @@ the second‑highest strategy are written to the CSV file defined by
 #### Bounce Scalper
 The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry.
 
-#### Cross Exchange Arbitrage
-`cross_arbitrage` compares ticker prices from two exchanges and returns a signal when the spread exceeds a configurable threshold. Enable it in `config.yaml` and provide the exchange objects at runtime.
-
-```yaml
-cross_arbitrage:
-  enabled: true
-  exchange_a: binance
-  exchange_b: kraken
-  symbol: BTC/USDT
-  threshold: 0.005
-```
-
-#### Cross Chain Arbitrage
-`cross_chain_arbitrage` compares average CEX prices with the Solana DEX quote
-via Jupiter. Configure the API keys and threshold in `config.yaml` and pass your
-exchange instances at runtime.
-#### Cross-Chain Arbitrage
-Tracks spreads between a centralized exchange and a Solana DEX. A trade is
-triggered when the difference covers bridge costs and exceeds ``threshold``.
-
-```yaml
-cross_chain_arbitrage:
-  enabled: true
-  threshold: 0.005
-  helius_key: YOUR_KEY
-  jupiter_url: https://quote-api.jup.ag/v6/quote
-```
-
-  cex: kraken
-  dex: jupiter
-  symbol: SOL/USDC
-  threshold: 0.007
-```
-
-As with all examples, this feature is provided for **educational use only**.
-Use it at your own risk—nothing here is financial advice.
-
 ### Data and Logging
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
-* **sniper_bot.high_freq** – switch the listing sniper to 1m candles.
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options.
 * **loop_interval_minutes** – delay between trading cycles.
-* **weight_update_minutes** – how often strategy weights are refreshed.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
 * **max_parallel** – number of markets processed concurrently.
-* **analysis_concurrency** – analysis tasks executed in parallel.
 * **log_to_google** – export trades to Google Sheets.
 * **telegram** – bot token, chat ID and trade notifications. Optional
   **status_updates** and **balance_updates** flags control startup and
@@ -338,14 +284,14 @@ Use it at your own risk—nothing here is financial advice.
 
 
 1. Create API keys on **Coinbase Advanced Trade** or **Kraken**.
-2. Run `python crypto_bot/wallet_manager.py` to generate `~/.cointrader/user_config.yaml`. Any
+2. Run `python crypto_bot/wallet_manager.py` to generate `user_config.yaml`. Any
    credentials found in the environment will be used automatically.
 3. Place your API keys in `crypto_bot/.env` as shown in the configuration
    section above. Environment variables take precedence over values stored in
-   `~/.cointrader/user_config.yaml`.
+   `user_config.yaml`.
 3. Fill out `crypto_bot/.env` with your API keys and optional `FERNET_KEY`.
    Environment variables take precedence over values stored in
-   `~/.cointrader/user_config.yaml`. If you prefer to enter credentials interactively,
+   `user_config.yaml`. If you prefer to enter credentials interactively,
    leave the entries commented out.
 
    ```env
@@ -372,7 +318,7 @@ The built-in Telegram interface is provided by the `TelegramBotUI` class in
    ```
 
    The bot reads the chat ID and token from `config.yaml` (not
-   `~/.cointrader/user_config.yaml`). Set `trade_updates` to `false` to disable trade entry
+   `user_config.yaml`). Set `trade_updates` to `false` to disable trade entry
    and exit messages.
      trade_updates: true  # set false to disable trade notifications
    ```
@@ -476,13 +422,10 @@ twap_interval_seconds: 10    # delay between TWAP slices
 timeframe: 1h                # candles for regime detection
 scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
 loop_interval_minutes: 5     # wait time between trading cycles
-weight_update_minutes: 60    # refresh strategy weights every hour
 force_websocket_history: false  # set true to disable REST fallback
 max_ws_limit: 50             # skip WebSocket when request exceeds this
 ohlcv_timeout: 120            # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
-analysis_concurrency: 10     # limit concurrent analysis tasks
-max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
 metrics:
   enabled: true              # write cycle statistics to metrics.csv
   file: crypto_bot/logs/metrics.csv
@@ -494,8 +437,7 @@ evaluation cycle, giving the market time to evolve before scanning again.
 `update_ohlcv_cache` gathers new candles. The new `ohlcv_timeout` option
 controls the timeout for each fetch call. If you still encounter timeouts after
 raising this value, try lowering `max_concurrent_ohlcv` to reduce pressure on
-the exchange API. `analysis_concurrency` limits how many symbols are analysed
-simultaneously during each cycle.
+the exchange API.
 The updater automatically determines how many candles are missing from the
 cache, so even when `limit` is large it only requests the data required to fill
 the gap, avoiding needless delays.
@@ -721,7 +663,7 @@ By default the worker refreshes the file every **6 hours**. Change the interval
 under `pairs_worker.refresh_interval` in `crypto_bot/config.yaml` and restart the
 worker to apply the new schedule.
 You can also limit the markets saved in the cache by defining
-`allowed_quote_currencies` and `blocklist_assets` under `refresh_pairs`:
+`allowed_quote_currencies` and `blacklist_assets` under `refresh_pairs`:
 
 ```yaml
 refresh_pairs:
@@ -729,7 +671,7 @@ refresh_pairs:
   refresh_interval: 6h
   top_k: 40
   allowed_quote_currencies: [USD, USDT]
-  blocklist_assets: []
+  blacklist_assets: []
 ```
 Run it manually whenever needed:
 
@@ -743,8 +685,6 @@ To automate updates you can run the script periodically via cron:
 0 * * * * cd /path/to/coinTrader2.0 && /usr/bin/python3 tasks/refresh_pairs.py
 ```
 Delete `cache/liquid_pairs.json` to force a full rebuild on the next run.
-If the cache file is missing or empty the sniper and DEX scalper
-strategies fall back to trading `BTC/USD` and `ETH/USD`.
 
 ## Web UI
 
@@ -861,41 +801,6 @@ mempool_monitor:
 When enabled, `execute_swap` checks the current priority fee and pauses
 or adjusts the trade according to the selected action.
 
-You can also pass the monitor to strategy `generate_signal` functions to
-skip issuing a signal when fees are high:
-
-```python
-monitor = SolanaMempoolMonitor()
-cfg = {
-    "micro_scalp": {"fresh_cross_only": False},
-    "mempool_monitor": {"enabled": True, "suspicious_fee_threshold": 100},
-}
-score, direction = micro_scalp_bot.generate_signal(
-    df,
-    cfg,
-    mempool_monitor=monitor,
-    mempool_cfg=cfg["mempool_monitor"],
-)
-```
-
-## RSI/MACD Solana Scalper
-
-An intraday strategy that uses RSI and MACD on one-minute candles to capture
-quick momentum swings on Solana pairs. The mempool monitor can be used to avoid
-entries when fees spike.
-
-```yaml
-sol_rsi_macd_scalper:
-  enabled: true
-  rsi_window: 14
-  macd_fast: 12
-  macd_slow: 26
-  macd_signal: 9
-```
-
-This scalper is also provided strictly for **educational use**. Trading carries
-risk and nothing here is financial advice.
-
 ## Solana Meme-Wave Sniper
 
 This module watches for new liquidity pools on Solana and attempts to buy
@@ -928,9 +833,6 @@ meme_wave_sniper:
     daily_loss_cap: 2
   execution:
     dry_run: false
-  candle_capture:
-    url: https://api.helius.xyz/v0/markets/{mint}/candles?resolution=1m&limit=1
-    minutes: 15
 
 ```
 Set the `HELIUS_KEY` environment variable with your Helius API key.
@@ -948,24 +850,6 @@ API requirements: [Helius](https://www.helius.xyz/) for pool data,
 [Jupiter](https://jup.ag/) for quotes, [Jito](https://www.jito.network/) for
 bundle submission, and a [Twitter](https://developer.twitter.com/) token for
 sentiment scores.
-
-## New Listing Scanner
-
-The ``new_listing_scanner`` module queries X once per hour for tweets
-about "new crypto listing" using the ``x_semantic_search`` package. Symbols
-with quote volume greater than five times their baseline are passed to
-``sniper_bot.generate_signal`` for scoring. Enable the scanner in
-``crypto_bot/config.yaml``:
-
-```yaml
-new_listing_scanner:
-  enabled: true
-  interval_minutes: 60
-  volume_multiple: 5.0
-```
-
-When active, matching symbols appear in the logs with their score and trade
-direction.
 
 ### Backtesting
 
@@ -1028,22 +912,10 @@ and caps the result between 0 and 1.
 
 ## Development Setup
 
-1. Ensure your environment uses **Python 3.11** or later, then install the Python dependencies:
+1. Install the Python dependencies:
 
 ```bash
 pip install -r requirements.txt
-```
-
-The requirements file includes core packages like
-[`ccxt`](https://github.com/ccxt/ccxt) for exchange connectivity,
-[`python-dotenv`](https://pypi.org/project/python-dotenv/) to load
-environment variables and [`cachetools`](https://pypi.org/project/cachetools/)
-for in-memory caching.
-
-If you plan to run the test suite install the development extras as well:
-
-```bash
-pip install -r requirements-dev.txt
 ```
 
 2. Run the test suite to verify your environment:

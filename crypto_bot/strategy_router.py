@@ -13,7 +13,6 @@ from functools import lru_cache
 from datetime import datetime
 
 from crypto_bot.utils import timeframe_seconds, commit_lock
-from crypto_bot.utils.strategy_utils import compute_edge
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -29,10 +28,7 @@ from crypto_bot.strategy import (
     mean_bot,
     breakout_bot,
     micro_scalp_bot,
-    solana_scalping,
     bounce_scalper,
-    cross_arbitrage,
-    cross_chain_arbitrage,
 )
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
@@ -215,10 +211,6 @@ def get_strategy_by_name(
     mapping: Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]] = {}
     mapping.update(getattr(meta_selector, "_STRATEGY_FN_MAP", {}))
     mapping.update(getattr(rl_selector, "_STRATEGY_FN_MAP", {}))
-    mapping.setdefault("cross_arbitrage", cross_arbitrage.generate_signal)
-    mapping.setdefault(
-        "cross_chain_arbitrage", cross_chain_arbitrage.generate_signal
-    )
     return mapping.get(name)
 
 
@@ -435,35 +427,6 @@ def route(
 
     cfg = config or DEFAULT_ROUTER_CFG
 
-    cca_cfg = cfg_get(cfg, "cross_chain_arbitrage", {})
-    if isinstance(cca_cfg, Mapping) and cca_cfg.get("enabled"):
-        exchanges = cca_cfg.get("exchanges") or cca_cfg.get("exchange_list")
-        symbol = cca_cfg.get("symbol") or cfg_get(cfg, "symbol", "")
-        threshold = float(cca_cfg.get("threshold", 0.005))
-        if exchanges:
-            logger.info("Routing to cross_chain_arbitrage strategy")
-
-            def cca_fn(_df: pd.DataFrame | None = None, _cfg=None):
-                return cross_chain_arbitrage.generate_signal(
-                    exchanges, symbol, threshold
-                )
-
-            return _wrap(cca_fn)
-
-    ca_cfg = cfg_get(cfg, "cross_arbitrage", {})
-    if isinstance(ca_cfg, Mapping) and ca_cfg.get("enabled"):
-        ex_a = ca_cfg.get("exchange_a")
-        ex_b = ca_cfg.get("exchange_b")
-        symbol = ca_cfg.get("symbol") or cfg_get(cfg, "symbol", "")
-        threshold = float(ca_cfg.get("threshold", 0.005))
-        if ex_a and ex_b:
-            logger.info("Routing to cross_arbitrage strategy")
-
-            def cross_fn(_df: pd.DataFrame | None = None, _cfg=None):
-                return cross_arbitrage.generate_signal(ex_a, ex_b, symbol, threshold)
-
-            return _wrap(cross_fn)
-
     # === FAST-PATH FOR STRONG SIGNALS ===
     fp = (
         cfg.raw.get("strategy_router", {}).get("fast_path", {})
@@ -624,25 +587,6 @@ def route(
         if fn:
             logger.info("Bandit selected %s for %s", choice, regime)
             return _wrap(fn)
-
-    edge_thr = float(cfg_get(cfg, "scalp_edge_threshold", 0.0))
-    if edge_thr:
-        penalty = float(cfg_get(cfg, "drawdown_penalty_coef", 0.0))
-        try:
-            micro = compute_edge("micro_scalp_bot", penalty)
-            bounce = compute_edge("bounce_scalper", penalty)
-            best_edge = max(micro, bounce)
-            if best_edge > edge_thr:
-                best_fn = micro_scalp_bot if micro >= bounce else bounce_scalper
-                logger.info(
-                    "Routing to %s via edge %.2f > %.2f",
-                    best_fn.__name__,
-                    best_edge,
-                    edge_thr,
-                )
-                return _wrap(best_fn.generate_signal)
-        except Exception:
-            pass
 
     if mode == "onchain":
         chain = ""

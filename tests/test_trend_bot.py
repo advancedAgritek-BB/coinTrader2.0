@@ -1,7 +1,5 @@
-import pytest
-pytest.importorskip("pandas")
 import pandas as pd
-import pytest
+
 from crypto_bot.strategy import trend_bot
 
 
@@ -24,7 +22,7 @@ def test_no_signal_when_volume_below_ma():
 
 
 def test_long_signal_with_filters():
-    df = _df_trend(150.0, high_equals_close=True)
+    df = _df_trend(150.0)
     score, direction = trend_bot.generate_signal(df)
     assert direction == "long"
     assert score > 0.0
@@ -32,109 +30,28 @@ def test_long_signal_with_filters():
 
 def test_donchian_confirmation_blocks_false_breakout():
     df = _df_trend(150.0)
-    score, direction = trend_bot.generate_signal(df)
+    cfg = {"donchian_confirmation": True}
+    score, direction = trend_bot.generate_signal(df, cfg)
     assert direction == "none"
     assert score == 0.0
 
 
 def test_donchian_confirmation_allows_breakout():
     df = _df_trend(150.0, high_equals_close=True)
-    score, direction = trend_bot.generate_signal(df)
-    assert direction == "long"
-    assert score > 0.0
-
-
-def test_disable_donchian_allows_breakout():
-    df = _df_trend(150.0)
-    cfg = {"donchian_confirmation": False}
+    cfg = {"donchian_confirmation": True}
     score, direction = trend_bot.generate_signal(df, cfg)
     assert direction == "long"
     assert score > 0.0
 
 
 def test_rsi_zscore(monkeypatch):
-    df = _df_trend(150.0, high_equals_close=True)
+    df = _df_trend(150.0)
     monkeypatch.setattr(
         trend_bot.stats,
         "zscore",
-        lambda s, lookback=3: pd.Series([0] * (len(s) - 1) + [2], index=s.index),
+        lambda s, lookback=3: pd.Series([2] * len(s), index=s.index),
     )
     cfg = {"indicator_lookback": 3, "rsi_overbought_pct": 90}
-    score, direction = trend_bot.generate_signal(df, cfg)
-    assert direction == "long"
-    assert score > 0
-
-
-def test_reversal_cross_signal(monkeypatch):
-    df = _df_trend(150.0, high_equals_close=True)
-
-    def fake_ema(s, window=5):
-        val = 1 if window == 5 else 2
-        arr = [val] * (len(s) - 1) + [2 if window == 5 else 1]
-        return pd.Series(arr, index=s.index)
-
-    class FakeADX:
-        def __init__(self, *args, **kwargs):
-            self.len = len(args[0])
-
-        def adx(self):
-            return pd.Series([30] * self.len)
-
-    monkeypatch.setattr(trend_bot.ta.trend, "ema_indicator", fake_ema)
-    monkeypatch.setattr(trend_bot.ta.momentum, "rsi", lambda s, window=14: pd.Series([20] * len(s), index=s.index))
-    monkeypatch.setattr(trend_bot.stats, "zscore", lambda s, lookback=3: pd.Series([float("nan")] * len(s), index=s.index))
-    monkeypatch.setattr(trend_bot.ta.trend, "ADXIndicator", FakeADX)
-
-    score, direction = trend_bot.generate_signal(df)
-    assert direction == "long"
-    assert score > 0
-
-def test_torch_integration(monkeypatch):
-    df = _df_trend(150.0, high_equals_close=True)
-    monkeypatch.setattr(trend_bot, "normalize_score_by_volatility", lambda d, s: s)
-    monkeypatch.setattr(trend_bot.torch_signal_model, "predict_signal", lambda d: 0.2)
-    cfg = {"torch_signal_model": {"enabled": True, "weight": 0.5}}
-    score, direction = trend_bot.generate_signal(df, cfg)
-    assert direction == "long"
-    assert score == pytest.approx(0.6)
-
-def _setup_reversal(monkeypatch, rsi_val=20):
-    """Patch indicators for reversal tests."""
-    def fake_ema(s, window=5):
-        val = 1 if window == 5 else 2
-        arr = [val] * (len(s) - 1) + [2 if window == 5 else 1]
-        return pd.Series(arr, index=s.index)
-
-    class FakeADX:
-        def __init__(self, *args, **kwargs):
-            self.len = len(args[0])
-
-        def adx(self):
-            return pd.Series([30] * self.len)
-
-    monkeypatch.setattr(trend_bot.ta.trend, "ema_indicator", fake_ema)
-    monkeypatch.setattr(
-        trend_bot.ta.momentum, "rsi", lambda s, window=14: pd.Series([rsi_val] * len(s), index=s.index)
-    )
-    monkeypatch.setattr(
-        trend_bot.stats, "zscore", lambda s, lookback=3: pd.Series([float("nan")] * len(s), index=s.index)
-    )
-    monkeypatch.setattr(trend_bot.ta.trend, "ADXIndicator", FakeADX)
-
-
-def test_volume_gate_blocks_reversal(monkeypatch):
-    _setup_reversal(monkeypatch)
-    df = _df_trend(150.0, high_equals_close=True)
-    cfg = {"volume_mult": 2, "volume_window": 20}
-    score, direction = trend_bot.generate_signal(df, cfg)
-    assert direction == "none"
-    assert score == 0.0
-
-
-def test_volume_gate_allows_reversal(monkeypatch):
-    _setup_reversal(monkeypatch)
-    df = _df_trend(500.0, high_equals_close=True)
-    cfg = {"volume_mult": 2, "volume_window": 20}
     score, direction = trend_bot.generate_signal(df, cfg)
     assert direction == "long"
     assert score > 0

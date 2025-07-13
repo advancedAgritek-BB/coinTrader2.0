@@ -1,16 +1,10 @@
 import json
 from datetime import datetime, timedelta, timezone
-import asyncio
 import sys
 import types
 
 sys.modules.setdefault("scipy", types.ModuleType("scipy"))
 sys.modules.setdefault("scipy.stats", types.SimpleNamespace(pearsonr=lambda *a, **k: 0))
-sys.modules.setdefault("crypto_bot.strategy", types.ModuleType("strategy"))
-sys.modules.setdefault("crypto_bot.strategy.arbitrage_bot", types.ModuleType("arbitrage_bot"))
-sys.modules.setdefault("crypto_bot.strategy.high_freq_strategies", types.ModuleType("high_freq_strategies"))
-sys.modules["crypto_bot.strategy"].arbitrage_bot = sys.modules["crypto_bot.strategy.arbitrage_bot"]
-sys.modules["crypto_bot.strategy"].high_freq_strategies = sys.modules["crypto_bot.strategy.high_freq_strategies"]
 
 from crypto_bot.execution.kraken_ws import KrakenWSClient, PUBLIC_URL, PRIVATE_URL
 
@@ -1108,53 +1102,3 @@ def test_close_shuts_down_connections(monkeypatch):
     assert client.private_ws is None
     assert client._public_subs == []
     assert client._private_subs == []
-
-
-class AsyncDummyWS:
-    def __init__(self):
-        self.sent = []
-
-    async def send_str(self, msg):
-        self.sent.append(msg)
-
-    @property
-    def closed(self):
-        return False
-
-
-class DummySession:
-    def __init__(self, ws):
-        self.ws = ws
-        self.url = None
-
-    async def ws_connect(self, url, **_):
-        self.url = url
-        return self.ws
-
-    async def close(self):
-        pass
-
-
-def test_add_order_async(monkeypatch):
-    client = KrakenWSClient()
-    ws = AsyncDummyWS()
-    session = DummySession(ws)
-    monkeypatch.setattr(kraken_ws.aiohttp, "ClientSession", lambda: session)
-    monkeypatch.setattr(client, "get_token", lambda: "token")
-
-    asyncio.run(client.add_order_async("BTC/USD", "buy", 1.0))
-
-    expected = json.dumps(
-        {
-            "method": "add_order",
-            "params": {
-                "symbol": "BTC/USD",
-                "side": "buy",
-                "order_type": "market",
-                "order_qty": "1.0",
-                "token": client.token,
-            },
-        }
-    )
-    assert ws.sent == [expected]
-    assert session.url == PRIVATE_URL
