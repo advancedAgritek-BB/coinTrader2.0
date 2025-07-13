@@ -63,6 +63,7 @@ from crypto_bot.utils.market_loader import (
     configure as market_loader_configure,
 )
 from crypto_bot.utils.eval_queue import build_priority_queue
+from crypto_bot.solana import get_solana_new_tokens
 from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
 
 # Backwards compatibility for tests
@@ -351,6 +352,15 @@ async def fetch_candidates(ctx: BotContext) -> None:
     symbols = await get_filtered_symbols(ctx.exchange, ctx.config)
     ctx.timing["symbol_time"] = time.perf_counter() - t0
 
+    solana_tokens: list[str] = []
+    sol_cfg = ctx.config.get("solana_scanner", {})
+    if sol_cfg.get("enabled"):
+        try:
+            solana_tokens = await get_solana_new_tokens(sol_cfg)
+            symbols.extend((m, 0.0) for m in solana_tokens)
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.error("Solana scanner failed: %s", exc)
+
     symbol_names = [s for s, _ in symbols]
     avg_atr = compute_average_atr(
         symbol_names, ctx.df_cache, ctx.config.get("timeframe", "1h")
@@ -375,6 +385,9 @@ async def fetch_candidates(ctx: BotContext) -> None:
     async with QUEUE_LOCK:
         if not symbol_priority_queue:
             symbol_priority_queue = build_priority_queue(symbols)
+        if solana_tokens:
+            for sym in reversed(solana_tokens):
+                symbol_priority_queue.appendleft(sym)
         if len(symbol_priority_queue) < batch_size:
             symbol_priority_queue.extend(build_priority_queue(symbols))
         ctx.current_batch = [
