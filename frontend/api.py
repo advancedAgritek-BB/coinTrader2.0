@@ -3,10 +3,23 @@ from __future__ import annotations
 from fastapi import FastAPI
 import json
 import re
+from typing import TYPE_CHECKING
 
 from crypto_bot.utils.logger import LOG_DIR
 
+if TYPE_CHECKING:  # pragma: no cover - type checking only
+    from crypto_bot.bot_controller import TradingBotController
+
 app = FastAPI()
+CONTROLLER: "TradingBotController | None" = None
+
+
+def get_controller() -> "TradingBotController":
+    global CONTROLLER
+    if CONTROLLER is None:
+        from crypto_bot.bot_controller import TradingBotController
+        CONTROLLER = TradingBotController()
+    return CONTROLLER
 SIGNALS_FILE = LOG_DIR / "asset_scores.json"
 POSITIONS_FILE = LOG_DIR / "positions.log"
 PERFORMANCE_FILE = LOG_DIR / "strategy_performance.json"
@@ -75,3 +88,9 @@ def strategy_scores() -> dict:
         except Exception:
             return {}
     return {}
+
+
+@app.post("/reload-config")
+async def reload_config() -> dict:
+    """Reload ``crypto_bot`` configuration and return status."""
+    return await get_controller().reload_config()
