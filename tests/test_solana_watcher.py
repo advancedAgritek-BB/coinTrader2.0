@@ -33,7 +33,8 @@ class DummySession:
     async def __aexit__(self, exc_type, exc, tb):
         pass
 
-    def get(self, url, timeout=10):
+    def post(self, url, json=None, timeout=10):
+        self.json = json
         return DummyResp(self._data)
 
 
@@ -43,7 +44,8 @@ class FailingSession(DummySession):
         self._responses = responses
         self.calls = 0
 
-    def get(self, url, timeout=10):
+    def post(self, url, json=None, timeout=10):
+        self.json = json
         resp = self._responses[self.calls]
         self.calls += 1
         if isinstance(resp, Exception):
@@ -53,18 +55,24 @@ class FailingSession(DummySession):
 
 def test_watcher_yields_event(monkeypatch):
     data = {
-        "pools": [
-            {
-                "address": "P1",
-                "tokenMint": "M1",
-                "creator": "C1",
-                "liquidity": 10.5,
-                "txCount": 3,
-            }
-        ]
+        "result": {
+            "pools": [
+                {
+                    "address": "P1",
+                    "tokenMint": "M1",
+                    "creator": "C1",
+                    "liquidity": 10.5,
+                    "txCount": 3,
+                }
+            ]
+        }
     }
     session = DummySession(data)
-    monkeypatch.setattr(watcher, "aiohttp", type("M", (), {"ClientSession": lambda: session}))
+    monkeypatch.setattr(
+        watcher,
+        "aiohttp",
+        type("M", (), {"ClientSession": lambda: session}),
+    )
 
     w = PoolWatcher("http://test", interval=0)
 
@@ -82,29 +90,32 @@ def test_watcher_yields_event(monkeypatch):
     assert event.creator == "C1"
     assert event.liquidity == 10.5
     assert event.tx_count == 3
+    assert session.json["method"] == "getPools"
 
 
 def test_env_substitution(monkeypatch):
     monkeypatch.setenv("HELIUS_KEY", "ABC")
-    w = PoolWatcher("https://api.helius.xyz/v0/pools?api-key=YOUR_KEY", interval=0)
+    w = PoolWatcher("https://rpc.helius.xyz/?api-key=YOUR_KEY", interval=0)
     assert w.url.endswith("api-key=ABC")
 
 
 def test_env_missing(monkeypatch):
     monkeypatch.delenv("HELIUS_KEY", raising=False)
     with pytest.raises(ValueError):
-        PoolWatcher("https://api.helius.xyz/v0/pools?api-key=YOUR_KEY", interval=0)
+        PoolWatcher("https://rpc.helius.xyz/?api-key=YOUR_KEY", interval=0)
 def test_watcher_continues_after_error(monkeypatch):
     data_ok = {
-        "pools": [
-            {
-                "address": "P2",
-                "tokenMint": "M2",
-                "creator": "C2",
-                "liquidity": 1.0,
-                "txCount": 1,
-            }
-        ]
+        "result": {
+            "pools": [
+                {
+                    "address": "P2",
+                    "tokenMint": "M2",
+                    "creator": "C2",
+                    "liquidity": 1.0,
+                    "txCount": 1,
+                }
+            ]
+        }
     }
     class DummyClientError(Exception):
         status = 500
@@ -197,3 +208,4 @@ def test_watcher_raises_after_consecutive_404(monkeypatch):
 
     with pytest.raises(RuntimeError):
         asyncio.run(run_once())
+    assert session.json["method"] == "getPools"

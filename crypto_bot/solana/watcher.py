@@ -58,7 +58,7 @@ class PoolWatcher:
                     "Helius API key missing. Set HELIUS_KEY or update pool.url"
                 )
             if not url:
-                url = f"https://api.helius.xyz/v0/pools?api-key={key}"
+                url = f"https://rpc.helius.xyz/?api-key={key}"
             else:
                 url = url.replace("YOUR_KEY", key)
                 if url.endswith("api-key="):
@@ -76,7 +76,11 @@ class PoolWatcher:
         async with aiohttp.ClientSession() as session:
             while self._running:
                 try:
-                    async with session.get(self.url, timeout=10) as resp:
+                    async with session.post(
+                        self.url,
+                        json={"jsonrpc": "2.0", "id": 1, "method": "getPools"},
+                        timeout=10,
+                    ) as resp:
                         resp.raise_for_status()
                         data = await resp.json()
                         self._failures = 0
@@ -99,7 +103,8 @@ class PoolWatcher:
                     await asyncio.sleep(self.interval)
                     continue
 
-                pools = data.get("pools") or data.get("data") or data
+                result = data.get("result", data)
+                pools = result.get("pools") or result.get("data") or result
                 for item in pools:
                     addr = (
                         item.get("address")
