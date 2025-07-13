@@ -1,5 +1,7 @@
+"""Short term bounce detection strategy."""
+
 from dataclasses import asdict, dataclass, fields
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 from crypto_bot import cooldown_manager
 
@@ -24,6 +26,16 @@ from crypto_bot.utils import stats
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.cooldown_manager import in_cooldown, mark_cooldown
+from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
+
+# Flag to bypass cooldown and win-rate filtering once
+FORCE_SIGNAL = False
+
+
+def trigger_once() -> None:
+    """Force the next call to :func:`generate_signal` to emit a signal."""
+    global FORCE_SIGNAL
+    FORCE_SIGNAL = True
 
 
 @dataclass
@@ -51,13 +63,15 @@ class BounceScalperConfig:
     pattern_timeframe: str = "1m"
 
     # risk management
-    cooldown_bars: int = 2
     atr_period: int = 14
     stop_loss_atr_mult: float = 1.5
     take_profit_atr_mult: float = 2.0
     min_score: float = 0.3
     max_concurrent_signals: int = 1
     atr_normalization: bool = True
+
+    # pattern detection
+    pattern_timeframe: str = ""
 
     # metadata
     strategy: str = "bounce_scalper"
@@ -167,6 +181,9 @@ def confirm_lower_highs(df: pd.DataFrame, bars: int) -> bool:
 def generate_signal(
     df: pd.DataFrame,
     config: Optional[Union[dict, BounceScalperConfig]] = None,
+    *,
+    lower_df: Optional[pd.DataFrame] = None,
+    fetcher: Optional[Callable[[str], pd.DataFrame]] = None,
     book: Optional[dict] = None,
 ) -> Tuple[float, str]:
     """Identify short-term bounces with volume confirmation."""
@@ -178,8 +195,14 @@ def generate_signal(
 
     symbol = cfg.symbol
     strategy = cfg.strategy
-    if symbol and in_cooldown(symbol, strategy):
-        return 0.0, "none"
+    global FORCE_SIGNAL
+    force = FORCE_SIGNAL
+    if FORCE_SIGNAL:
+        FORCE_SIGNAL = False
+
+    if symbol and in_cooldown(symbol, strategy) and not force:
+        if get_recent_win_rate() >= 0.5:
+            return 0.0, "none"
 
     rsi_window = cfg.rsi_window
     oversold = cfg.oversold
@@ -193,16 +216,7 @@ def generate_signal(
     up_candles = cfg.up_candles
     body_pct = cfg_dict.get("body_pct", 0.5)
 
-    lookback = max(
-        rsi_window,
-        vol_window,
-        down_candles + 1,
-        up_candles + 1,
-        2,
-        cfg.lookback,
-    )
-    if len(df) < lookback:
-        return 0.0, "none"
+    lookback = min(cfg.lookback, len(df)) if cfg.lookback else len(df)
 
     df = df.copy()
     df["rsi"] = ta.momentum.rsi(df["close"], window=rsi_window)
@@ -243,7 +257,7 @@ def generate_signal(
 
     df = recent.copy()
     df["rsi"] = rsi_series
-    df["rsi_z"] = stats.zscore(rsi_series, cfg.lookback)
+    df["rsi_z"] = stats.zscore(rsi_series, lookback)
     df["vol_ma"] = vol_ma
 
     latest = df.iloc[-1]
@@ -255,8 +269,17 @@ def generate_signal(
     )
     volume_spike = vol_z > zscore_threshold
 
-    eng_type = is_engulfing(df, body_pct)
-    hammer_type = is_hammer(df, body_pct)
+    pattern_df = lower_df
+    if pattern_df is None and fetcher and cfg.pattern_timeframe:
+        try:
+            pattern_df = fetcher(cfg.pattern_timeframe)
+        except Exception:  # pragma: no cover - safety
+            pattern_df = None
+    if pattern_df is None:
+        pattern_df = df
+
+    eng_type = is_engulfing(pattern_df, body_pct)
+    hammer_type = is_hammer(pattern_df, body_pct)
     bull_pattern = eng_type == "bullish" or hammer_type == "bullish"
     bear_pattern = eng_type == "bearish" or hammer_type == "bearish"
 
