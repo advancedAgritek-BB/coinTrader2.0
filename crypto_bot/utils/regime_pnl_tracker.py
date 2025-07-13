@@ -82,6 +82,8 @@ def get_recent_win_rate(
         CSV log file path. Defaults to :data:`LOG_FILE`.
     strategy : str, optional
         Filter trades by strategy name if provided.
+    strategy : str | None, optional
+        Filter trades to this strategy name when provided.
     """
     file = Path(path)
     if not file.exists():
@@ -90,6 +92,7 @@ def get_recent_win_rate(
     if df.empty:
         return 0.0
     if strategy and "strategy" in df.columns:
+    if strategy is not None:
         df = df[df["strategy"] == strategy]
     recent = df.tail(window)
     wins = (recent["pnl"] > 0).sum()
