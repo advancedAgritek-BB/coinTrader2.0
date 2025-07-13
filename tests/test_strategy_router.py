@@ -167,3 +167,12 @@ def test_onchain_solana_route():
     fn = route("breakout", "onchain", cfg)
     assert fn is sniper_solana.generate_signal
 
+
+def test_usdc_pair_breakout():
+    cfg = {
+        "symbol": "XYZ/USDC",
+        "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
+    }
+    fn = route("breakout", "cex", cfg)
+    assert fn is sniper_solana.generate_signal
+
