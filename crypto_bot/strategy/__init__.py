@@ -19,6 +19,7 @@ import importlib
 # like before. This keeps backwards compatibility after removing the local
 # implementation.
 sniper_solana = importlib.import_module("crypto_bot.solana.sniper_solana")
+solana_scalping = importlib.import_module("crypto_bot.solana.scalping")
 
 __all__ = [
     "bounce_scalper",
@@ -31,5 +32,6 @@ __all__ = [
     "sniper_bot",
     "trend_bot",
     "sniper_solana",
+    "solana_scalping",
 ]
 
