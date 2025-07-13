@@ -6,6 +6,7 @@ _last_fill_bar: Dict[str, int] = {}
 _active_legs: Dict[str, int] = {}
 _current_bar: Dict[str, int] = {}
 _grid_spacing: Dict[str, float] = {}
+_grid_step: Dict[str, float] = {}
 _last_atr: Dict[str, float] = {}
 
 
@@ -48,11 +49,41 @@ def get_last_atr(symbol: str) -> float | None:
     return _last_atr.get(symbol)
 
 
+def get_grid_step(symbol: str) -> float | None:
+    """Return stored grid step size for ``symbol``."""
+    """Return last grid step size for ``symbol`` if set."""
+    return _grid_step.get(symbol)
+
+
+def set_grid_step(symbol: str, step: float) -> None:
+    """Persist grid step size for ``symbol``."""
+    _grid_step[symbol] = step
+
+
+def get_last_atr(symbol: str) -> float | None:
+    """Return last recorded ATR for ``symbol``."""
+    """Record ``step`` as the current grid spacing for ``symbol``."""
+    _grid_step[symbol] = float(step)
+
+
+def get_last_atr(symbol: str) -> float | None:
+    """Return most recent ATR value for ``symbol`` if known."""
+    return _last_atr.get(symbol)
+
+
+def set_last_atr(symbol: str, atr: float) -> None:
+    """Persist latest ATR for ``symbol``."""
+    _last_atr[symbol] = atr
+    """Record the last ATR value for ``symbol``."""
+    _last_atr[symbol] = float(atr)
+
+
 def clear() -> None:
     """Reset state (for tests)."""
     _last_fill_bar.clear()
     _active_legs.clear()
     _current_bar.clear()
     _grid_spacing.clear()
+    _grid_step.clear()
     _last_atr.clear()
 

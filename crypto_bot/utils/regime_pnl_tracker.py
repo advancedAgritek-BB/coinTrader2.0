@@ -82,6 +82,10 @@ def get_recent_win_rate(
         CSV log file path. Defaults to :data:`LOG_FILE`.
     strategy : str | None, optional
         If provided, only trades for this strategy are considered.
+    strategy : str, optional
+        Filter trades by strategy name if provided.
+    strategy : str | None, optional
+        Filter trades to this strategy name when provided.
     """
     file = Path(path)
     if not file.exists():
@@ -89,6 +93,9 @@ def get_recent_win_rate(
     df = pd.read_csv(file)
     if df.empty:
         return 0.0
+    if strategy and "strategy" in df.columns:
+    if strategy is not None:
+        df = df[df["strategy"] == strategy]
     recent = df.tail(window)
     if strategy is not None:
         recent = recent[recent["strategy"] == strategy]

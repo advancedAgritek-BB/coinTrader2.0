@@ -6,6 +6,7 @@ from typing import Callable, Optional, Tuple, Union
 from crypto_bot import cooldown_manager
 
 import pandas as pd
+import numpy as np
 import ta
 try:  # pragma: no cover - optional dependency
     from scipy import stats as scipy_stats
@@ -56,11 +57,10 @@ class BounceScalperConfig:
     rsi_oversold_pct: float = 10.0
 
     # pattern confirmation
-    down_candles: int = 3
+    down_candles: int = 2
     up_candles: int = 3
     trend_ema_fast: int = 9
     trend_ema_slow: int = 21
-    pattern_timeframe: str = "1m"
 
     # risk management
     atr_period: int = 14
@@ -233,21 +233,24 @@ def generate_signal(
     prev_close = df["close"].iloc[-2]
     if not pd.isna(latest["vol_std"]) and latest["vol_std"] > 0:
         zscore = (latest["volume"] - latest["vol_ma"]) / latest["vol_std"]
-        volume_spike = zscore > zscore_threshold
     else:
-        volume_spike = (
+        zscore = float("inf")
+    volume_spike = (
+        zscore > zscore_threshold
+        or (
             latest["volume"] > latest["vol_ma"] * volume_multiple
             if latest["vol_ma"] > 0
             else False
         )
+    )
 
     if not pd.isna(latest["atr"]) and latest["close"] > 0:
         atr_pct = latest["atr"] / latest["close"] * 100
         oversold = max(10.0, oversold - atr_pct * 0.5)
         overbought = min(90.0, overbought + atr_pct * 0.5)
 
-    trend_ok_long = latest["close"] > latest["ema"]
-    trend_ok_short = latest["close"] < latest["ema"]
+    trend_ok_long = pd.isna(latest["ema"]) or latest["close"] > latest["ema"]
+    trend_ok_short = pd.isna(latest["ema"]) or latest["close"] < latest["ema"]
 
     recent = df.iloc[-(lookback + 1) :]
     rsi_series = ta.momentum.rsi(recent["close"], window=rsi_window)
