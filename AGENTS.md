@@ -670,6 +670,21 @@ node nft-portfolio.js
 
 This prints a summary of NFTs in the wallet, including collection info and compression status.
 
+### Fetching New Pools
+
+Helius replaced the old `getPools` RPC method with `dex.getNewPools`. Use the standard RPC endpoint and include a protocols list:
+
+```json
+POST https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "dex.getNewPools",
+  "params": {"protocols": ["raydium"], "limit": 50}
+}
+```
+
+
 ## \ud83d\udce1 Helius Data Streaming \u2013 Quickstart Guide
 
 Helius offers multiple real-time data streaming options for the Solana blockchain, each tailored for different use cases depending on your performance, filtering, and integration needs. Below is a complete breakdown of the streaming methods available:

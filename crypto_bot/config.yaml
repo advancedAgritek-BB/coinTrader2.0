@@ -105,7 +105,7 @@ mempool_monitor:
 meme_wave_sniper:
   enabled: true
   pool:
-    url: https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+    url: https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY
     interval: 5
   scoring:
     weight_liquidity: 1.0
