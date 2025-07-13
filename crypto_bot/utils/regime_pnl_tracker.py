@@ -97,6 +97,8 @@ def get_recent_win_rate(
         df = df[df["strategy"] == strategy]
     recent = df.tail(window)
     if strategy is not None and "strategy" in recent.columns:
+    recent = df.tail(window)
+    if strategy is not None and "strategy" in df.columns:
         recent = recent[recent["strategy"] == strategy]
     wins = (recent["pnl"] > 0).sum()
     total = len(recent)

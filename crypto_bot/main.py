@@ -84,6 +84,7 @@ from crypto_bot.fund_manager import (
     detect_non_trade_tokens,
 )
 from crypto_bot.regime.regime_classifier import CONFIG
+from crypto_bot.volatility_filter import calc_atr
 
 
 def _fix_symbol(sym: str) -> str:
@@ -141,6 +142,18 @@ def update_df_cache(
     tf_cache.move_to_end(symbol)
     if len(tf_cache) > max_size:
         tf_cache.popitem(last=False)
+
+
+def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> float:
+    """Return the average ATR for symbols present in ``df_cache``."""
+    atr_values: list[float] = []
+    tf_cache = df_cache.get(timeframe, {})
+    for sym in symbols:
+        df = tf_cache.get(sym)
+        if df is None or df.empty:
+            continue
+        atr_values.append(calc_atr(df))
+    return sum(atr_values) / len(atr_values) if atr_values else 0.0
 
 
 def direction_to_side(direction: str) -> str:
@@ -338,13 +351,27 @@ async def fetch_candidates(ctx: BotContext) -> None:
     symbols = await get_filtered_symbols(ctx.exchange, ctx.config)
     ctx.timing["symbol_time"] = time.perf_counter() - t0
 
+    symbol_names = [s for s, _ in symbols]
+    avg_atr = compute_average_atr(
+        symbol_names, ctx.df_cache, ctx.config.get("timeframe", "1h")
+    )
+    adaptive_cfg = ctx.config.get("adaptive_scan", {})
+    if adaptive_cfg.get("enabled"):
+        baseline = adaptive_cfg.get("atr_baseline", 0.01)
+        max_factor = adaptive_cfg.get("max_factor", 2.0)
+        volatility_factor = min(max_factor, max(1.0, avg_atr / baseline))
+    else:
+        volatility_factor = 1.0
+    ctx.volatility_factor = volatility_factor
+
     total_available = len(ctx.config.get("symbols") or [ctx.config.get("symbol")])
     ctx.timing["symbol_filter_ratio"] = (
         len(symbols) / total_available if total_available else 1.0
     )
 
     global symbol_priority_queue
-    batch_size = ctx.config.get("symbol_batch_size", 10)
+    base_size = ctx.config.get("symbol_batch_size", 10)
+    batch_size = int(base_size * volatility_factor)
     async with QUEUE_LOCK:
         if not symbol_priority_queue:
             symbol_priority_queue = build_priority_queue(symbols)
@@ -984,8 +1011,9 @@ async def _main_impl() -> TelegramNotifier:
                     ),
                 }
                 write_cycle_metrics(metrics, config)
-            logger.info("Sleeping for %s minutes", config["loop_interval_minutes"])
-            await asyncio.sleep(config["loop_interval_minutes"] * 60)
+            delay = config["loop_interval_minutes"] / max(ctx.volatility_factor, 1e-6)
+            logger.info("Sleeping for %.2f minutes", delay)
+            await asyncio.sleep(delay * 60)
     
     finally:
         if session_state.scan_task:
