@@ -9,6 +9,8 @@ from typing import Optional, Any
 from crypto_bot.utils.logger import LOG_DIR
 import sys
 
+TRADE_FILE = LOG_DIR / "trades.csv"
+
 from rich.console import Console
 from rich.table import Table
 
@@ -21,14 +23,15 @@ async def monitor_loop(
     exchange: object,
     paper_wallet: Optional[object] = None,
     log_file: str | Path = LOG_DIR / "bot.log",
+    trade_file: str | Path = TRADE_FILE,
 ) -> None:
     """Periodically output balance, last log line and open trade stats.
 
     This coroutine runs until cancelled and is intentionally lightweight so
     tests can easily patch it. The monitor fetches the current balance from
     ``exchange`` or ``paper_wallet`` and prints the last line of ``log_file``.
-    When open trades exist, a line for each trade showing the PnL is printed
-    below the status line.
+    Open trade PnL lines are generated from ``trade_file`` and printed below the
+    status line when positions exist.
     """
     log_path = Path(log_file)
     last_line = ""
@@ -60,7 +63,7 @@ async def monitor_loop(
                 offset = fh.tell()
 
                 message = f"[Monitor] balance={balance} log='{last_line}'"
-                lines = await trade_stats_lines(exchange)
+                lines = await trade_stats_lines(exchange, Path(trade_file))
 
                 output = message
                 if lines:
@@ -83,8 +86,6 @@ async def monitor_loop(
         # Propagate cancellation after the file handle is closed by the
         # context manager.
         raise
-
-TRADE_FILE = LOG_DIR / "trades.csv"
 
 
 def display_trades(
