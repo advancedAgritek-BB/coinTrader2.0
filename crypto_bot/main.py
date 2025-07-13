@@ -583,17 +583,35 @@ async def execute_signals(ctx: BotContext) -> None:
 
         amount = size / price if price > 0 else 0.0
         start_exec = time.perf_counter()
-        await cex_trade_async(
-            ctx.exchange,
-            ctx.ws_client,
-            sym,
-            direction_to_side(candidate["direction"]),
-            amount,
-            ctx.notifier,
-            dry_run=ctx.config.get("execution_mode") == "dry_run",
-            use_websocket=ctx.config.get("use_websocket", False),
-            config=ctx.config,
-        )
+        executed_via_sniper = False
+        if sym.endswith("/USDC"):
+            from crypto_bot.solana import sniper_solana
+            sol_score, _ = sniper_solana.generate_signal(df)
+            if sol_score > 0.7:
+                from solana_trading import sniper_trade
+                await sniper_trade(
+                    {
+                        "symbol": sym,
+                        "side": direction_to_side(candidate["direction"]),
+                        "size": size,
+                        "score": score,
+                    },
+                    ctx.config.get("execution", {}),
+                )
+                executed_via_sniper = True
+
+        if not executed_via_sniper:
+            await cex_trade_async(
+                ctx.exchange,
+                ctx.ws_client,
+                sym,
+                direction_to_side(candidate["direction"]),
+                amount,
+                ctx.notifier,
+                dry_run=ctx.config.get("execution_mode") == "dry_run",
+                use_websocket=ctx.config.get("use_websocket", False),
+                config=ctx.config,
+            )
         ctx.timing["execution_latency"] = max(
             ctx.timing.get("execution_latency", 0.0),
             time.perf_counter() - start_exec,
