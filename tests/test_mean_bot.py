@@ -5,6 +5,7 @@ from crypto_bot.strategy import mean_bot
 
 def _df_with_drop(price: float) -> pd.DataFrame:
     base = [100.0] * 29 + [price]
+    base = [100.0] * 55 + [price]
     data = {
         "open": base,
         "high": [p + 1 for p in base],

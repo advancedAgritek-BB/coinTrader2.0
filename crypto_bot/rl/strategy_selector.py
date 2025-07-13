@@ -11,8 +11,10 @@ from crypto_bot.strategy import (
     grid_bot,
     sniper_bot,
     dex_scalper,
+    dca_bot,
     mean_bot,
     breakout_bot,
+    solana_scalping,
 )
 
 # Default log file location
@@ -24,8 +26,10 @@ _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {
     "grid_bot": grid_bot.generate_signal,
     "sniper_bot": sniper_bot.generate_signal,
     "dex_scalper": dex_scalper.generate_signal,
+    "dca_bot": dca_bot.generate_signal,
     "mean_bot": mean_bot.generate_signal,
     "breakout_bot": breakout_bot.generate_signal,
+    "solana_scalping": solana_scalping.generate_signal,
 }
 
 
