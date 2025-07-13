@@ -1,3 +1,5 @@
+import pytest
+pytest.importorskip("pandas")
 import pandas as pd
 from crypto_bot.strategy import pair_arbitrage, grid_bot
 from crypto_bot.strategy.grid_bot import GridConfig

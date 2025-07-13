@@ -1,3 +1,5 @@
+import pytest
+pytest.importorskip("pandas")
 import importlib.util
 import pandas as pd
 from pathlib import Path
