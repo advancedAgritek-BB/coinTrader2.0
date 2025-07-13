@@ -33,3 +33,9 @@ def test_solana_scanner_invalid_type():
     with pytest.raises(ValidationError):
         SolanaScannerConfig(interval_minutes="x")
 
+
+def test_solana_scanner_env_override(monkeypatch):
+    monkeypatch.setenv("MORALIS_KEY", "env_key")
+    cfg = SolanaScannerConfig()
+    assert cfg.api_keys.moralis == "env_key"
+

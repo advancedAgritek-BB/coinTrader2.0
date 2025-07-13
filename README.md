@@ -137,6 +137,8 @@ SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
 SOLANA_PRIVATE_KEY="[1,2,3,...]"       # required for Solana trades
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
+MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
+BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 ```
 
 `TELE_CHAT_ADMINS` lets the Telegram bot accept commands from multiple
