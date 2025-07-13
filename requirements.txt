@@ -33,3 +33,4 @@ pydantic<2
 numba
 cachetools
 prometheus-client
+solders
