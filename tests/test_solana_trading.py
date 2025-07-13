@@ -86,6 +86,7 @@ async def dummy_get_wallet():
 
 @pytest.mark.asyncio
 async def test_get_swap_quote(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     quote = {"inAmount": 100, "outAmount": 110}
     session = DummySession(quote, "tx")
     monkeypatch.setattr(solana_trading, "aiohttp", types.SimpleNamespace(ClientSession=lambda: session))
@@ -97,6 +98,7 @@ async def test_get_swap_quote(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_execute_swap(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     quote = {"inAmount": 100, "outAmount": 110}
     session = DummySession(quote, "RAW")
     monkeypatch.setattr(solana_trading, "aiohttp", types.SimpleNamespace(ClientSession=lambda: session))
@@ -111,6 +113,7 @@ async def test_execute_swap(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sniper_trade(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     quote = {"inAmount": 100, "outAmount": 110}
 
     async def fake_quote(*a, **k):
@@ -161,6 +164,7 @@ async def fake_price(_in, _out):
 
 
 def test_monitor_profit(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     dummy = DummyClient()
     monkeypatch.setattr(solana_trading, "AsyncClient", lambda url: dummy)
     monkeypatch.setattr(solana_trading, "_fetch_price", fake_price)
@@ -185,6 +189,7 @@ async def fake_monitor(tx, threshold):
 
 
 def test_sniper_trade(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(solana_trading, "execute_swap", fake_execute)
     monkeypatch.setattr(solana_trading, "auto_convert_funds", fake_convert)
     monkeypatch.setattr(solana_trading, "monitor_profit", fake_monitor)

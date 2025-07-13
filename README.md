@@ -89,8 +89,8 @@ needed.
    python -m frontend.app
    ```
 5. Run the meme-wave sniper separately with Raydium v3 integration.
-   Profits are automatically converted to BTC.  Set `SOLANA_PRIVATE_KEY`
-   and optionally `SOLANA_RPC_URL` before launching:
+   Profits are automatically converted to BTC. Set `SOLANA_PRIVATE_KEY` and
+   `HELIUS_KEY` or provide a custom `SOLANA_RPC_URL` before launching:
    ```bash
    python -m crypto_bot.solana.runner
    ```
@@ -136,6 +136,8 @@ FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-fundin
 SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
 SOLANA_PRIVATE_KEY="[1,2,3,...]"       # required for Solana trades
+# defaults to https://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
+SOLANA_RPC_URL=https://devnet.solana.com  # optional custom endpoint
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
 # SOLANA_RPC_URL=https://api.devnet.solana.com      # devnet example
 HELIUS_KEY=your_helius_api_key          # optional, for Helius RPC endpoints
