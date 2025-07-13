@@ -33,6 +33,7 @@ LOG = "LOG"
 ROTATE = "ROTATE"
 TOGGLE = "TOGGLE"
 MENU = "MENU"
+RELOAD = "RELOAD"
 SIGNALS = "SIGNALS"
 BALANCE = "BALANCE"
 TRADES = "TRADES"
@@ -78,6 +79,7 @@ class TelegramBotUI:
         self.app.add_handler(CommandHandler("log", self.log_cmd))
         self.app.add_handler(CommandHandler("rotate_now", self.rotate_now_cmd))
         self.app.add_handler(CommandHandler("toggle_mode", self.toggle_mode_cmd))
+        self.app.add_handler(CommandHandler("reload", self.reload_cmd))
         self.app.add_handler(CommandHandler("menu", self.menu_cmd))
         self.app.add_handler(CommandHandler("signals", self.show_signals))
         self.app.add_handler(CommandHandler("balance", self.show_balance))
@@ -88,6 +90,7 @@ class TelegramBotUI:
         self.app.add_handler(CallbackQueryHandler(self.log_cmd, pattern=f"^{LOG}$"))
         self.app.add_handler(CallbackQueryHandler(self.rotate_now_cmd, pattern=f"^{ROTATE}$"))
         self.app.add_handler(CallbackQueryHandler(self.toggle_mode_cmd, pattern=f"^{TOGGLE}$"))
+        self.app.add_handler(CallbackQueryHandler(self.reload_cmd, pattern=f"^{RELOAD}$"))
         self.app.add_handler(CallbackQueryHandler(self.menu_cmd, pattern=f"^{MENU}$"))
         self.app.add_handler(
             CallbackQueryHandler(self.show_signals, pattern=f"^{SIGNALS}$")
@@ -276,6 +279,16 @@ class TelegramBotUI:
         self.state["mode"] = mode
         await self._reply(update, f"Mode set to {mode}")
 
+    async def reload_cmd(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not await self._check_cooldown(update, "reload"):
+            return
+        if not await self._check_admin(update):
+            return
+        await self.controller.reload_config()
+        await self._reply(update, "Config reload scheduled")
+
     async def menu_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "menu"):
             return
@@ -291,6 +304,7 @@ class TelegramBotUI:
                 InlineKeyboardButton("Log", callback_data=LOG),
                 InlineKeyboardButton("Rotate Now", callback_data=ROTATE),
                 InlineKeyboardButton("Toggle Mode", callback_data=TOGGLE),
+                InlineKeyboardButton("Reload", callback_data=RELOAD),
             ],
             [
                 InlineKeyboardButton("Signals", callback_data=SIGNALS),

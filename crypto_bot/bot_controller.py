@@ -131,3 +131,7 @@ class TradingBotController:
         data = self.log_file.read_text().splitlines()
         return data[-lines:]
 
+    async def reload_config(self) -> str:
+        self.state["reload"] = True
+        return "Config reload scheduled"
+
