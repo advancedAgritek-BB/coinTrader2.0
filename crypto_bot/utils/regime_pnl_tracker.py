@@ -71,17 +71,21 @@ def get_recent_win_rate(
     path: str | Path = LOG_FILE,
     strategy: str | None = None,
 ) -> float:
-    """Return win rate over the last ``window`` trades."""
-    """Return win rate over the most recent trades.
+    """Return the fraction of profitable trades.
 
     Parameters
     ----------
     window : int, optional
-        Number of trades to evaluate (default ``20``).
+        Number of most recent trades to evaluate (default ``20``).
     path : str or Path, optional
-        CSV log file location (default :data:`LOG_FILE`).
+        CSV log file location (defaults to :data:`LOG_FILE`).
     strategy : str, optional
-        Filter trades for the given strategy.
+        If given, filter trades for the specified strategy.
+
+    Returns
+    -------
+    float
+        Win rate as ``wins / total`` over the evaluated trades.
     """
     file = Path(path)
     if not file.exists():
