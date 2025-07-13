@@ -236,6 +236,14 @@ signal_weight_optimizer:
   min_weight: 0.05
 sl_pct: 0.03
 solana_slippage_bps: 50
+solana_scanner:
+  enabled: false
+  interval_minutes: 5
+  api_keys:
+    moralis: YOUR_KEY
+    bitquery: YOUR_KEY
+  min_volume_usd: 0.0
+  max_tokens_per_scan: 20
 strategy_allocation:
   grid_bot: 0.3
   sniper_bot: 0.3

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from schema.scanner import ScannerConfig
+from schema.scanner import ScannerConfig, SolanaScannerConfig
 
 
 def test_symbols_required_when_not_scanning():
@@ -19,4 +19,17 @@ def test_positive_values_enforced():
         ScannerConfig(scan_markets=True, scan_lookback_limit=0)
     with pytest.raises(ValidationError):
         ScannerConfig(scan_markets=True, cycle_lookback_limit=0)
+
+
+def test_solana_scanner_defaults():
+    cfg = SolanaScannerConfig()
+    assert cfg.enabled is False
+    assert cfg.interval_minutes == 5
+    assert cfg.api_keys.moralis == "YOUR_KEY"
+    assert cfg.max_tokens_per_scan == 20
+
+
+def test_solana_scanner_invalid_type():
+    with pytest.raises(ValidationError):
+        SolanaScannerConfig(interval_minutes="x")
 

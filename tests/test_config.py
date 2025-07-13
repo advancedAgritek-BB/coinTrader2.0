@@ -66,6 +66,17 @@ def test_load_config_returns_dict():
 
     assert "telegram" in config
     assert "command_cooldown" in config["telegram"]
+    assert "solana_scanner" in config
+    sol_scanner = config["solana_scanner"]
+    assert isinstance(sol_scanner, dict)
+    for key in [
+        "enabled",
+        "interval_minutes",
+        "api_keys",
+        "min_volume_usd",
+        "max_tokens_per_scan",
+    ]:
+        assert key in sol_scanner
 
 
 def test_load_config_normalizes_symbol(tmp_path, monkeypatch):

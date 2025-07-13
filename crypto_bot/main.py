@@ -23,7 +23,10 @@ import yaml
 from dotenv import dotenv_values
 from pydantic import ValidationError
 
-from schema.scanner import ScannerConfig
+from schema.scanner import (
+    ScannerConfig,
+    SolanaScannerConfig,
+)
 
 from crypto_bot.utils.telegram import TelegramNotifier, send_test_message
 from crypto_bot.utils.trade_reporter import report_entry, report_exit
@@ -244,6 +247,18 @@ def load_config() -> dict:
     except ValidationError as exc:
         print("Invalid configuration:\n", exc)
         raise SystemExit(1)
+
+    try:
+        raw_scanner = data.get("solana_scanner", {}) or {}
+        if hasattr(SolanaScannerConfig, "model_validate"):
+            scanner = SolanaScannerConfig.model_validate(raw_scanner)
+        else:  # pragma: no cover - for Pydantic < 2
+            scanner = SolanaScannerConfig.parse_obj(raw_scanner)
+        data["solana_scanner"] = scanner.dict()
+    except ValidationError as exc:
+        print("Invalid configuration (solana_scanner):\n", exc)
+        raise SystemExit(1)
+
     return data
 
 
