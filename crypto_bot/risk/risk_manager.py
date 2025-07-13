@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Any, Optional
+import dataclasses
+from typing import Any, Optional, Mapping
 
 import pandas as pd
 from math import isnan
@@ -12,7 +13,6 @@ from crypto_bot.volatility_filter import too_flat, too_hot, calc_atr
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils import trade_memory
 from crypto_bot.utils import ev_tracker
-from pathlib import Path
 
 
 # Log to the main bot file so risk messages are consolidated
@@ -62,6 +62,32 @@ class RiskManager:
         self.stop_order: dict | None = None
         # Track protective stop orders for each open trade by symbol
         self.boost = 1.0
+
+    @classmethod
+    def from_config(cls, cfg: Mapping) -> "RiskManager":
+        """Instantiate ``RiskManager`` from a configuration mapping.
+
+        Parameters
+        ----------
+        cfg : Mapping
+            Dictionary with keys corresponding to :class:`RiskConfig` fields.
+
+        Returns
+        -------
+        RiskManager
+            Newly created instance using the provided configuration.
+        """
+        params = {}
+        for f in dataclasses.fields(RiskConfig):
+            if f.default is not dataclasses.MISSING:
+                default = f.default
+            elif f.default_factory is not dataclasses.MISSING:  # type: ignore[attr-defined]
+                default = f.default_factory()
+            else:
+                default = None
+            params[f.name] = cfg.get(f.name, default)
+        config = RiskConfig(**params)
+        return cls(config)
 
     def get_stop_order(self, symbol: str) -> dict | None:
         """Return the stop order for ``symbol`` if present."""
