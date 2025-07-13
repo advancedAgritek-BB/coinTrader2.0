@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, fields, field
 from typing import Mapping, Optional, Tuple, Union
 
 import numpy as np
@@ -19,7 +19,11 @@ from . import breakout_bot
 
 @dataclass
 class GridConfig:
-    """Configuration options for :func:`generate_signal`."""
+    """Configuration options for :func:`generate_signal`.
+
+    Attributes include standard grid parameters along with options for dynamic
+    grids, machine-learning centered ranges and simple arbitrage support.
+    """
 
     num_levels: int = 5
     breakout_mult: float = 1.5
@@ -33,7 +37,13 @@ class GridConfig:
     vol_zscore_threshold: float = 2.0
 
     atr_period: int = 14
-    spacing_factor: float = 0.75
+    spacing_factor: float = 0.5
+    dynamic_grid: bool = False
+    use_ml_center: bool = False
+    min_range_pct: float = 0.001
+    leverage: int = 1
+    arbitrage_pairs: list[str] = field(default_factory=list)
+    arbitrage_threshold: float = 0.005
     trend_ema_fast: int = 50
     trend_ema_slow: int = 200
 
