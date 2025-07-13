@@ -88,7 +88,9 @@ needed.
    ```bash
    python -m frontend.app
    ```
-5. Run the meme-wave sniper separately:
+5. Run the meme-wave sniper separately with Raydium v3 integration.
+   Profits are automatically converted to BTC.  Set `SOLANA_PRIVATE_KEY`
+   and optionally `SOLANA_RPC_URL` before launching:
    ```bash
    python -m crypto_bot.solana.runner
    ```
@@ -133,6 +135,8 @@ TWITTER_SENTIMENT_URL=https://api.example.com/twitter-sentiment
 FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
 SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
+SOLANA_PRIVATE_KEY="[1,2,3,...]"       # required for Solana trades
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
 ```
 
 `TELE_CHAT_ADMINS` lets the Telegram bot accept commands from multiple
