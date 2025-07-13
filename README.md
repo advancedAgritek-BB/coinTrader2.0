@@ -907,6 +907,29 @@ API requirements: [Helius](https://www.helius.xyz/) for pool data,
 bundle submission, and a [Twitter](https://developer.twitter.com/) token for
 sentiment scores.
 
+### Monitoring Raydium Pools via WebSockets
+
+Raydium also streams pool creation events over WebSockets. To watch these in
+real time:
+
+1. Obtain a Helius API key from your dashboard.
+2. Set `meme_wave_sniper.pool.websocket_url` in `crypto_bot/config.yaml` to
+   `wss://mainnet.helius-rpc.com/?api-key=YOUR_KEY`.
+3. Run `python -m crypto_bot.solana.pool_ws_monitor`.
+
+`pool_ws_monitor.py` subscribes to the Raydium program and prints each update:
+
+```python
+import asyncio
+from crypto_bot.solana.pool_ws_monitor import watch_pools
+
+async def main():
+    async for event in watch_pools():
+        print(event)
+
+asyncio.run(main())
+```
+
 ### Backtesting
 
 The `BacktestRunner` class in `crypto_bot.backtest.backtest_runner` can evaluate
