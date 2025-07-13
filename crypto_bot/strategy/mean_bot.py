@@ -89,7 +89,6 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
 
     latest = df.iloc[-1]
 
-    if latest["adx"] > 25:
     if df["adx"].iloc[-1] > adx_threshold:
         return 0.0, "none"
 
