@@ -1,6 +1,7 @@
 import os
 import base64
 import yaml
+import getpass
 from pathlib import Path
 from typing import Dict
 
@@ -27,6 +28,15 @@ SENSITIVE_FIELDS = {
     "kraken_api_key",
     "kraken_api_secret",
     "telegram_token",
+}
+
+SECRET_ENV_VARS = {
+    "COINBASE_API_KEY",
+    "COINBASE_API_SECRET",
+    "API_PASSPHRASE",
+    "KRAKEN_API_KEY",
+    "KRAKEN_API_SECRET",
+    "TELEGRAM_TOKEN",
 }
 
 
@@ -60,7 +70,12 @@ def _sanitize_secret(secret: str) -> str:
 
 def _env_or_prompt(name: str, prompt: str) -> str:
     """Return environment variable value or prompt the user."""
-    return os.getenv(name) or input(prompt)
+    val = os.getenv(name)
+    if val is not None:
+        return val
+    if name in SECRET_ENV_VARS:
+        return getpass.getpass(prompt)
+    return input(prompt)
 
 
 def load_external_secrets(provider: str, path: str) -> Dict[str, str]:
