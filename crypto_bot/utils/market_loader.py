@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 import pandas as pd
 import ccxt
+import aiohttp
 
 from .telegram import TelegramNotifier
 from .logger import LOG_DIR, setup_logger
@@ -719,6 +720,48 @@ async def fetch_ohlcv_async(
         return exc
 
 
+async def fetch_dexscreener_ohlcv(
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+) -> list:
+    """Return OHLCV data for ``symbol`` from the DexScreener API."""
+
+    pair = symbol.replace("/", "-")
+    url = (
+        "https://api.dexscreener.com/latest/dex/charts/"
+        f"{pair}?interval={timeframe}&limit={limit}"
+    )
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, timeout=10) as resp:
+            resp.raise_for_status()
+            data = await resp.json()
+
+    candles = (
+        data.get("candles")
+        or data.get("data")
+        or data.get("chart")
+        or []
+    )
+
+    result = []
+    for c in candles[-limit:]:
+        ts = int(c.get("t") or c.get("timestamp") or c.get("time", 0))
+        result.append(
+            [
+                ts,
+                float(c.get("o") or c.get("open", 0)),
+                float(c.get("h") or c.get("high", 0)),
+                float(c.get("l") or c.get("low", 0)),
+                float(c.get("c") or c.get("close", 0)),
+                float(c.get("v") or c.get("volume", 0)),
+            ]
+        )
+
+    return result
+
+
 async def fetch_order_book_async(
     exchange,
     symbol: str,
@@ -1063,23 +1106,59 @@ async def update_multi_tf_ohlcv_cache(
     config : Dict
         Configuration containing a ``timeframes`` list.
     """
+    from crypto_bot.regime.regime_classifier import clear_regime_cache
+
     tfs = config.get("timeframes", ["1h"])
     logger.info("Updating OHLCV cache for timeframes: %s", tfs)
 
     for tf in tfs:
         logger.info("Starting update for timeframe %s", tf)
         tf_cache = cache.get(tf, {})
-        cache[tf] = await update_ohlcv_cache(
-            exchange,
-            tf_cache,
-            symbols,
-            timeframe=tf,
-            limit=limit,
-            use_websocket=use_websocket,
-            force_websocket_history=force_websocket_history,
-            max_concurrent=max_concurrent,
-            notifier=notifier,
-        )
+
+        cex_symbols = [s for s in symbols if not s.endswith("/USDC")]
+        dex_symbols = [s for s in symbols if s.endswith("/USDC")]
+
+        if cex_symbols:
+            tf_cache = await update_ohlcv_cache(
+                exchange,
+                tf_cache,
+                cex_symbols,
+                timeframe=tf,
+                limit=limit,
+                use_websocket=use_websocket,
+                force_websocket_history=force_websocket_history,
+                max_concurrent=max_concurrent,
+                notifier=notifier,
+            )
+
+        for sym in dex_symbols:
+            try:
+                data = await fetch_dexscreener_ohlcv(sym, timeframe=tf, limit=limit)
+            except Exception as exc:  # pragma: no cover - network
+                logger.error("DexScreener OHLCV error for %s: %s", sym, exc)
+                continue
+            if not data:
+                continue
+            df_new = pd.DataFrame(
+                data,
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
+            changed = False
+            if sym in tf_cache and not tf_cache[sym].empty:
+                last_ts = tf_cache[sym]["timestamp"].iloc[-1]
+                df_new = df_new[df_new["timestamp"] > last_ts]
+                if df_new.empty:
+                    continue
+                tf_cache[sym] = pd.concat([tf_cache[sym], df_new], ignore_index=True)
+                changed = True
+            else:
+                tf_cache[sym] = df_new
+                changed = True
+            if changed:
+                tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
+                clear_regime_cache(sym, tf)
+
+        cache[tf] = tf_cache
         logger.info("Finished update for timeframe %s", tf)
 
     return cache
