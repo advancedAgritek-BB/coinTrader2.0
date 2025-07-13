@@ -3,6 +3,7 @@ import asyncio
 import contextlib
 import json
 import time
+import sys
 from pathlib import Path
 from datetime import datetime
 from collections import deque, OrderedDict, defaultdict
@@ -93,7 +94,11 @@ def _fix_symbol(sym: str) -> str:
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENV_PATH = Path(__file__).resolve().parent / ".env"
 
-logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
+# Enable console logging by default so uncaught exceptions are visible when
+# running the bot manually. Tests can restore the previous behaviour by
+# passing ``--no-console-log`` on the command line.
+_DISABLE_CONSOLE = "--no-console-log" in sys.argv
+logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=not _DISABLE_CONSOLE)
 
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
