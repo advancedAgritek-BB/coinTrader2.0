@@ -93,6 +93,10 @@ def get_recent_win_rate(
     df = pd.read_csv(file)
     if df.empty:
         return 0.0
+    if strategy is not None and "strategy" in df.columns:
+        df = df[df["strategy"] == strategy]
+    recent = df.tail(window)
+    if strategy is not None and "strategy" in recent.columns:
     recent = df.tail(window)
     if strategy is not None and "strategy" in df.columns:
         recent = recent[recent["strategy"] == strategy]

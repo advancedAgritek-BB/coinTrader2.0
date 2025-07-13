@@ -38,6 +38,9 @@ def generate_signal(
     config: Optional[dict] = None,
     higher_df: pd.DataFrame | None = None,
     *,
+    mempool_monitor=None,
+    mempool_cfg: Optional[dict] = None,
+    tick_data: pd.DataFrame | None = None,
     book: Optional[dict] = None,
     ticks: Optional[pd.DataFrame] = None,
     mempool_monitor: Optional[SolanaMempoolMonitor] = None,
@@ -74,9 +77,16 @@ def generate_signal(
     ``imbalance_penalty``
         Factor applied to the score when imbalance is against the trade.
     """
+    if tick_data is not None and not tick_data.empty:
+        df = pd.concat([df, tick_data], ignore_index=True)
+
     if df.empty:
         return 0.0, "none"
 
+    if mempool_monitor and (mempool_cfg or {}).get("enabled"):
+        threshold = (mempool_cfg or {}).get("suspicious_fee_threshold", 0.0)
+        if mempool_monitor.is_suspicious(threshold):
+            return 0.0, "none"
     if ticks is not None and not ticks.empty:
         price_col = "price" if "price" in ticks.columns else "close"
         vol = ticks["volume"] if "volume" in ticks.columns else 0

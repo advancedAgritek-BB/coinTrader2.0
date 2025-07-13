@@ -176,3 +176,30 @@ def test_wick_filter_blocks_short(make_df):
 def test_filters_return_none(make_df, prices, volumes, cfg):
     df = make_df(prices, volumes)
     assert micro_scalp_bot.generate_signal(df, cfg) == (0.0, "none")
+
+
+class DummyMempool:
+    def is_suspicious(self, threshold):
+        return True
+
+
+def test_mempool_blocks_signal(make_df):
+    prices = list(range(1, 11))
+    volumes = [100] * 10
+    df = make_df(prices, volumes)
+    cfg = {"micro_scalp": {"fresh_cross_only": False}}
+    monitor = DummyMempool()
+    score, direction = micro_scalp_bot.generate_signal(
+        df,
+        cfg,
+        mempool_monitor=monitor,
+        mempool_cfg={"enabled": True},
+    )
+    assert (score, direction) == (0.0, "none")
+
+
+def test_tick_data_extends(make_df):
+    df = make_df([1, 2, 3], [100, 100, 100])
+    tick = make_df([4], [50])
+    cfg = {"micro_scalp": {"fresh_cross_only": False}}
+    micro_scalp_bot.generate_signal(df, cfg, tick_data=tick)
