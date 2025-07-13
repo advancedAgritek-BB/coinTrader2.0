@@ -5,13 +5,12 @@ from __future__ import annotations
 import asyncio
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from crypto_bot.utils.logger import LOG_DIR
 
 
 import yaml
-from . import main
 from crypto_bot.utils.symbol_utils import fix_symbol
 
 from .portfolio_rotator import PortfolioRotator
@@ -140,7 +139,4 @@ class TradingBotController:
             return {"status": "reloaded", "mode": self.state["mode"]}
         except Exception as exc:  # pragma: no cover - unexpected
             return {"status": "error", "error": str(exc)}
-    async def reload_config(self) -> str:
-        self.state["reload"] = True
-        return "Config reload scheduled"
 
