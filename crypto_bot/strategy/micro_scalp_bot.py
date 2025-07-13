@@ -35,6 +35,10 @@ def generate_signal(
     df: pd.DataFrame,
     config: Optional[dict] = None,
     higher_df: pd.DataFrame | None = None,
+    *,
+    mempool_monitor=None,
+    mempool_cfg: Optional[dict] = None,
+    tick_data: pd.DataFrame | None = None,
 ) -> Tuple[float, str]:
     """Return short-term signal using EMA crossover on 1m data.
 
@@ -52,8 +56,16 @@ def generate_signal(
         the function only returns a signal if ``trend_fast`` is above
         ``trend_slow`` for longs (and vice versa for shorts).
     """
+    if tick_data is not None and not tick_data.empty:
+        df = pd.concat([df, tick_data], ignore_index=True)
+
     if df.empty:
         return 0.0, "none"
+
+    if mempool_monitor and (mempool_cfg or {}).get("enabled"):
+        threshold = (mempool_cfg or {}).get("suspicious_fee_threshold", 0.0)
+        if mempool_monitor.is_suspicious(threshold):
+            return 0.0, "none"
 
     params = config.get("micro_scalp", {}) if config else {}
     fast_window = int(params.get("ema_fast", 3))

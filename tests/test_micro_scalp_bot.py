@@ -27,7 +27,8 @@ def test_micro_scalp_long_signal(make_df):
     prices = list(range(1, 11))
     volumes = [100] * 10
     df = make_df(prices, volumes)
-    score, direction = micro_scalp_bot.generate_signal(df)
+    cfg = {"micro_scalp": {"fresh_cross_only": False}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg)
     assert direction == "long"
     assert 0 < score <= 1
 
@@ -35,7 +36,15 @@ def test_micro_scalp_long_signal(make_df):
 def test_cross_with_momentum_and_wick(make_df):
     prices = [10, 9, 8, 7, 6, 5, 6, 7, 8, 9]
     volumes = [100] * len(prices)
-    cfg = {"micro_scalp": {"ema_fast": 3, "ema_slow": 8, "lower_wick_pct": 0.3, "min_momentum_pct": 0.02}}
+    cfg = {
+        "micro_scalp": {
+            "ema_fast": 3,
+            "ema_slow": 8,
+            "lower_wick_pct": 0.3,
+            "min_momentum_pct": 0.02,
+            "fresh_cross_only": False,
+        }
+    }
     df = make_df(prices, volumes)
     score, direction = micro_scalp_bot.generate_signal(df, cfg)
     assert direction == "long"
@@ -80,7 +89,7 @@ def test_trend_filter_allows_long_signal(make_df):
 
     higher_prices = list(range(10, 21))
     higher_df = make_df(higher_prices, [100] * len(higher_prices))
-    cfg = {"micro_scalp": {"trend_fast": 3, "trend_slow": 5}}
+    cfg = {"micro_scalp": {"trend_fast": 3, "trend_slow": 5, "fresh_cross_only": False}}
 
     score, direction = micro_scalp_bot.generate_signal(df, cfg, higher_df=higher_df)
     assert direction == "long"
@@ -155,3 +164,30 @@ def test_wick_filter_blocks_short(make_df):
 def test_filters_return_none(make_df, prices, volumes, cfg):
     df = make_df(prices, volumes)
     assert micro_scalp_bot.generate_signal(df, cfg) == (0.0, "none")
+
+
+class DummyMempool:
+    def is_suspicious(self, threshold):
+        return True
+
+
+def test_mempool_blocks_signal(make_df):
+    prices = list(range(1, 11))
+    volumes = [100] * 10
+    df = make_df(prices, volumes)
+    cfg = {"micro_scalp": {"fresh_cross_only": False}}
+    monitor = DummyMempool()
+    score, direction = micro_scalp_bot.generate_signal(
+        df,
+        cfg,
+        mempool_monitor=monitor,
+        mempool_cfg={"enabled": True},
+    )
+    assert (score, direction) == (0.0, "none")
+
+
+def test_tick_data_extends(make_df):
+    df = make_df([1, 2, 3], [100, 100, 100])
+    tick = make_df([4], [50])
+    cfg = {"micro_scalp": {"fresh_cross_only": False}}
+    micro_scalp_bot.generate_signal(df, cfg, tick_data=tick)
