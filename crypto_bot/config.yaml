@@ -17,6 +17,7 @@ bounce_scalper:
   take_profit_atr_mult: 2.0
   trend_ema_fast: 9
   trend_ema_slow: 21
+  pattern_timeframe: "1m"
   up_candles: 3
   vol_window: 20
   volume_multiple: 2
