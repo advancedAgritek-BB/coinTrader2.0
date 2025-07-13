@@ -78,6 +78,7 @@ from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import telemetry, write_cycle_metrics
 from crypto_bot.utils.correlation import compute_correlation_matrix
 from crypto_bot.utils.strategy_analytics import write_scores, write_stats
+from crypto_bot.monitoring import record_sol_scanner_metrics
 from crypto_bot.fund_manager import (
     auto_convert_funds,
     check_wallet_balances,
@@ -708,11 +709,14 @@ async def _main_impl() -> TelegramNotifier:
         delay = SYMBOL_SCAN_RETRY_DELAY
         discovered: list[str] | None = None
         while attempt < MAX_SYMBOL_SCAN_ATTEMPTS:
+            start_scan = time.perf_counter()
             discovered = await load_kraken_symbols(
                 exchange,
                 config.get("excluded_symbols", []),
                 config,
             )
+            latency = time.perf_counter() - start_scan
+            record_sol_scanner_metrics(len(discovered or []), latency, config)
             if discovered:
                 break
             attempt += 1

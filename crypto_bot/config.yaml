@@ -119,6 +119,8 @@ meme_wave_sniper:
   execution:
     dry_run: true
   risk_file: crypto_bot/logs/sniper_risk.json
+solana_scanner:
+  max_tokens_per_scan: 50
 meta_selector:
   enabled: false
 metrics_backend: csv

@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+"""Adjust solana_scanner.max_tokens_per_scan based on BTC balance."""
+
+import asyncio
+from pathlib import Path
+import yaml
+import ccxt.async_support as ccxt
+
+from crypto_bot.utils.symbol_utils import fix_symbol
+
+CONFIG_PATH = Path(__file__).resolve().parents[1] / "crypto_bot" / "config.yaml"
+
+
+def load_config() -> dict:
+    if CONFIG_PATH.exists():
+        with open(CONFIG_PATH) as f:
+            data = yaml.safe_load(f) or {}
+    else:
+        data = {}
+    if "symbol" in data:
+        data["symbol"] = fix_symbol(data["symbol"])
+    if "symbols" in data:
+        data["symbols"] = [fix_symbol(s) for s in data.get("symbols", [])]
+    return data
+
+
+async def fetch_btc_balance(exchange) -> float:
+    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+        bal = await exchange.fetch_balance()
+    else:
+        bal = await asyncio.to_thread(exchange.fetch_balance)
+    val = bal.get("BTC", {})
+    return float(val.get("free", val if isinstance(val, (int, float)) else 0))
+
+
+async def adjust(config: dict) -> None:
+    name = config.get("exchange", "kraken").lower()
+    exchange_cls = getattr(ccxt, name)
+    exchange = exchange_cls({"enableRateLimit": True})
+    balance = 0.0
+    try:
+        balance = await fetch_btc_balance(exchange)
+    finally:
+        await exchange.close()
+
+    if balance >= 1:
+        max_tokens = 20
+    elif balance >= 0.5:
+        max_tokens = 10
+    else:
+        max_tokens = 5
+    config.setdefault("solana_scanner", {})["max_tokens_per_scan"] = max_tokens
+    with open(CONFIG_PATH, "w") as f:
+        yaml.safe_dump(config, f)
+    print(f"Set max_tokens_per_scan to {max_tokens} (BTC balance: {balance:.4f})")
+
+
+def main() -> None:
+    cfg = load_config()
+    asyncio.run(adjust(cfg))
+
+
+if __name__ == "__main__":
+    main()
