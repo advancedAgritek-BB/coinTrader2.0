@@ -90,19 +90,25 @@ def test_watcher_yields_event(monkeypatch):
     assert event.creator == "C1"
     assert event.liquidity == 10.5
     assert event.tx_count == 3
-    assert session.json["method"] == "getPools"
+    assert session.json["method"] == "dex.getNewPools"
+    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
+    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
+    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
+    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
+    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
+    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
 
 
 def test_env_substitution(monkeypatch):
     monkeypatch.setenv("HELIUS_KEY", "ABC")
-    w = PoolWatcher("https://mainnet.helius-rpc.com/?api-key=YOUR_KEY", interval=0)
+    w = PoolWatcher("https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY", interval=0)
     assert w.url.endswith("api-key=ABC")
 
 
 def test_env_missing(monkeypatch):
     monkeypatch.delenv("HELIUS_KEY", raising=False)
     with pytest.raises(ValueError):
-        PoolWatcher("https://mainnet.helius-rpc.com/?api-key=YOUR_KEY", interval=0)
+        PoolWatcher("https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY", interval=0)
 def test_watcher_continues_after_error(monkeypatch):
     data_ok = {
         "result": {
@@ -178,7 +184,7 @@ def test_watcher_logs_404_and_continues(monkeypatch, caplog):
         event = asyncio.run(run_once())
     assert event.pool_address == "P3"
     assert any(
-        "http://test" in rec.message and "https://mainnet.helius-rpc.com/?api-key=YOUR_KEY" in rec.message
+        "http://test" in rec.message and "https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY" in rec.message
         for rec in caplog.records
     )
 
@@ -211,4 +217,5 @@ def test_watcher_raises_after_consecutive_404(monkeypatch):
 
     with pytest.raises(RuntimeError):
         asyncio.run(run_once())
-    assert session.json["method"] == "getPools"
+    assert session.json["method"] == "dex.getNewPools"
+    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
