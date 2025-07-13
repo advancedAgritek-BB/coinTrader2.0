@@ -74,6 +74,7 @@ import base64
 
 
 def test_get_swap_quote(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     session = DummySession({"id": "1", "success": True})
     monkeypatch.setattr(raydium_client.aiohttp, "ClientSession", lambda: session)
     data = asyncio.run(raydium_client.get_swap_quote("A", "B", 1))
@@ -82,6 +83,7 @@ def test_get_swap_quote(monkeypatch):
 
 
 def test_execute_swap(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     session = DummySession({})
     monkeypatch.setattr(raydium_client.aiohttp, "ClientSession", lambda: session)
     monkeypatch.setattr(raydium_client, "get_wallet", lambda: None)
@@ -108,6 +110,7 @@ def test_execute_swap(monkeypatch):
 
 
 def test_sniper_trade(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     async def fake_quote(*a, **k):
         return {"data": {"quote": True}}
     monkeypatch.setattr(raydium_client, "get_swap_quote", fake_quote)

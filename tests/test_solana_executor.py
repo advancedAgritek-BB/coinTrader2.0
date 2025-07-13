@@ -6,6 +6,7 @@ from crypto_bot.utils.telegram import TelegramNotifier
 
 
 def test_execute_swap_dry_run(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     res = asyncio.run(
         solana_executor.execute_swap(
@@ -27,6 +28,7 @@ class DummyNotifier:
 
 
 def test_execute_swap_dry_run(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     notifier = DummyNotifier()
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
@@ -88,6 +90,7 @@ class DummyJitoSession(DummySession):
 
 
 def test_execute_swap_skips_on_slippage(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
@@ -143,6 +146,7 @@ def test_execute_swap_skips_on_slippage(monkeypatch):
 
 
 def test_swap_no_message_when_disabled(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     calls = {"count": 0}
 
     monkeypatch.setattr(
@@ -231,6 +235,7 @@ class EmptySession:
 
 
 def test_execute_swap_no_routes(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
@@ -296,6 +301,7 @@ class DummyMempool:
 
 
 def test_fee_abort(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
@@ -353,6 +359,7 @@ def test_fee_abort(monkeypatch):
 
 
 def test_execute_swap_jito(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)

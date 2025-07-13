@@ -116,7 +116,10 @@ async def execute_swap(
         raise ValueError("SOLANA_PRIVATE_KEY environment variable not set")
 
     keypair = Keypair.from_secret_key(bytes(json.loads(private_key)))
-    rpc_url = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
+    rpc_url = os.getenv(
+        "SOLANA_RPC_URL",
+        f"https://mainnet.helius-rpc.com/?api-key={os.getenv('HELIUS_KEY', '')}",
+    )
     client = Client(rpc_url)
 
     async with aiohttp.ClientSession() as session:
