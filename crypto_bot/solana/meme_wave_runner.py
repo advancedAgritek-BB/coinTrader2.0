@@ -13,7 +13,12 @@ from .executor import snipe
 async def _run(cfg: Mapping[str, object]) -> None:
     """Background task that watches pools and triggers snipes."""
     pool_cfg = cfg.get("pool", {})
-    watcher = PoolWatcher(pool_cfg.get("url", ""), pool_cfg.get("interval", 5))
+    watcher = PoolWatcher(
+        pool_cfg.get("url", ""),
+        pool_cfg.get("interval", 5),
+        pool_cfg.get("websocket_url"),
+        pool_cfg.get("raydium_program_id"),
+    )
     tracker = RiskTracker(cfg.get("risk_file", "crypto_bot/logs/sniper_risk.json"))
     safety_cfg = cfg.get("safety", {})
     scoring_cfg = cfg.get("scoring", {})

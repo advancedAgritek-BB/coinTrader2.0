@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncGenerator, Optional
@@ -40,6 +41,8 @@ class PoolWatcher:
         self,
         url: str | None = None,
         interval: float | None = None,
+        websocket_url: str | None = None,
+        raydium_program_id: str | None = None,
         max_failures: int = 3,
     ) -> None:
         if url is None or interval is None:
@@ -51,6 +54,10 @@ class PoolWatcher:
                 url = pool_cfg.get("url", "")
             if interval is None:
                 interval = float(pool_cfg.get("interval", 5))
+            if websocket_url is None:
+                websocket_url = pool_cfg.get("websocket_url", "")
+            if raydium_program_id is None:
+                raydium_program_id = pool_cfg.get("raydium_program_id", "")
         key = os.getenv("HELIUS_KEY")
         if not url or "YOUR_KEY" in url or url.endswith("api-key="):
             if not key:
@@ -63,8 +70,15 @@ class PoolWatcher:
                 url = url.replace("YOUR_KEY", key)
                 if url.endswith("api-key="):
                     url += key
+        if websocket_url:
+            if "${HELIUS_KEY}" in websocket_url:
+                websocket_url = websocket_url.replace("${HELIUS_KEY}", key or "")
+            if "YOUR_KEY" in websocket_url:
+                websocket_url = websocket_url.replace("YOUR_KEY", key or "")
         self.url = url
         self.interval = interval
+        self.websocket_url = websocket_url
+        self.raydium_program_id = raydium_program_id
         self._running = False
         self._seen: set[str] = set()
         self._max_failures = max_failures
@@ -72,6 +86,11 @@ class PoolWatcher:
 
     async def watch(self) -> AsyncGenerator[NewPoolEvent, None]:
         """Yield :class:`NewPoolEvent` objects as they are discovered."""
+        if self.websocket_url and self.raydium_program_id:
+            async for evt in self._watch_ws():
+                yield evt
+            return
+
         self._running = True
         async with aiohttp.ClientSession() as session:
             while self._running:
@@ -135,6 +154,43 @@ class PoolWatcher:
                     )
 
                 await asyncio.sleep(self.interval)
+
+    async def _watch_ws(self) -> AsyncGenerator[NewPoolEvent, None]:
+        """Yield events from a websocket subscription."""
+        self._running = True
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect(self.websocket_url) as ws:
+                await ws.send_json(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "programSubscribe",
+                        "params": [self.raydium_program_id, {"encoding": "jsonParsed"}],
+                    }
+                )
+                async for msg in ws:
+                    if not self._running:
+                        break
+                    if msg.type != aiohttp.WSMsgType.TEXT:
+                        continue
+                    try:
+                        data = json.loads(msg.data)
+                    except ValueError:
+                        continue
+                    if data.get("method") != "programNotification":
+                        continue
+                    value = data.get("params", {}).get("result", {}).get("value", {})
+                    addr = value.get("pubkey") or ""
+                    if not addr or addr in self._seen:
+                        continue
+                    self._seen.add(addr)
+                    yield NewPoolEvent(
+                        pool_address=addr,
+                        token_mint="",
+                        creator="",
+                        liquidity=0.0,
+                    )
+
 
     def stop(self) -> None:
         """Stop the watcher loop."""
