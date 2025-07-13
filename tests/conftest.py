@@ -1,27 +1,9 @@
 import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).resolve().parents[1]))
 import importlib.util
-try:  # optional numpy dependency
-    import numpy as np
-except Exception:  # pragma: no cover - numpy not installed
-    import numpy_stub as np
-    sys.modules.setdefault("numpy", np)
-
-try:  # optional pandas dependency
-    import pandas as pd
-    from pandas import Series
-except Exception:  # pragma: no cover - pandas not installed
-    import pandas_stub as pd
-    from pandas_stub import Series
-    sys.modules.setdefault("pandas", pd)
-    sys.modules.setdefault("pandas.core", pd)
+import numpy as np
+from pathlib import Path
+from pandas import Series
 import pytest
-
-if importlib.util.find_spec("pytest_asyncio") is not None:
-    pytest_plugins = ("pytest_asyncio",)
-else:  # pragma: no cover - plugin optional
-    pytest_plugins = ()
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -175,93 +157,6 @@ sys.modules.setdefault("sklearn.metrics", _FakeSklearn.metrics)
 sys.modules.setdefault("sklearn.preprocessing", _FakeSklearn.preprocessing)
 sys.modules.setdefault("sklearn.pipeline", _FakeSklearn.pipeline)
 
-# Minimal stub for ``torch`` used by the PyTorch signal model.
-class _FakeTorch:
-    float32 = None
-
-    @staticmethod
-    def tensor(data, dtype=None):
-        class _T(float):
-            def unsqueeze(self, _):
-                return self
-
-            def squeeze(self):
-                return self
-
-            def clamp(self, _a, _b):
-                return self
-
-            def item(self):
-                return 0.0
-
-        return _T(0.0)
-
-    class nn:
-        class Module:
-            pass
-
-        class Linear(Module):
-            def __init__(self, *a, **k):
-                pass
-
-            def __call__(self, x):
-                return _FakeTorch.tensor(0.0)
-
-        class Sequential(Module):
-            def __init__(self, *a, **k):
-                pass
-
-            def __call__(self, x):
-                return _FakeTorch.tensor(0.0)
-
-        class ReLU(Module):
-            pass
-
-        class Sigmoid(Module):
-            pass
-
-        class BCELoss(Module):
-            def __call__(self, *a, **k):
-                return _FakeTorch.tensor(0.0)
-
-    class optim:
-        class Adam:
-            def __init__(self, *a, **k):
-                pass
-
-            def zero_grad(self):
-                pass
-
-            def step(self):
-                pass
-
-    class utils:
-        class data:
-            class TensorDataset:
-                def __init__(self, *a, **k):
-                    pass
-
-            class DataLoader:
-                def __init__(self, *a, **k):
-                    pass
-
-                def __iter__(self):
-                    yield _FakeTorch.tensor(0.0), _FakeTorch.tensor(0.0)
-
-    @staticmethod
-    def save(_obj, path):
-        Path(path).touch()
-
-    @staticmethod
-    def load(_path):
-        return {}
-
-
-sys.modules.setdefault("torch", _FakeTorch())
-sys.modules.setdefault("torch.nn", _FakeTorch.nn)
-sys.modules.setdefault("torch.optim", _FakeTorch.optim)
-sys.modules.setdefault("torch.utils.data", _FakeTorch.utils.data)
-
 # Minimal stub for the optional ``ta`` package used in ML signal models.
 try:  # pragma: no cover - optional dependency
     import ta  # type: ignore  # noqa: F401
@@ -359,34 +254,7 @@ except Exception:  # pragma: no cover - requests not installed
             def close(self):
                 pass
 
-sys.modules.setdefault("requests", _FakeRequests())
-
-# Lightweight stubs for additional optional dependencies used in various modules.
-class _FakeLimiter:
-    class AsyncLimiter:
-        def __init__(self, *a, **k):
-            pass
-
-sys.modules.setdefault("aiolimiter", _FakeLimiter())
-
-class _FakeCcxt:
-    class ExchangeError(Exception):
-        pass
-
-    class RequestTimeout(Exception):
-        pass
-
-    class BadSymbol(Exception):
-        pass
-
-sys.modules.setdefault("ccxt", _FakeCcxt())
-sys.modules.setdefault("ccxt.async_support", _FakeCcxt())
-
-class _FakePydantic:
-    class ValidationError(Exception):
-        pass
-
-sys.modules.setdefault("pydantic", _FakePydantic())
+    sys.modules.setdefault("requests", _FakeRequests())
 
 
 @pytest.fixture(autouse=True)

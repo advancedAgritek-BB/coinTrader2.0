@@ -6,7 +6,6 @@ import asyncio
 from typing import Mapping
 
 from .watcher import PoolWatcher, NewPoolEvent
-from .candle_scheduler import CandleScheduler
 from .score import score_event
 from . import executor
 
@@ -17,23 +16,11 @@ async def run(config: Mapping[str, object]) -> None:
     url = str(pool_cfg.get("url", ""))
     interval = float(pool_cfg.get("interval", 5))
     watcher = PoolWatcher(url, interval)
-    candle_cfg = config.get("candle_capture", {}) if isinstance(config, Mapping) else {}
-    candle_url = str(
-        candle_cfg.get(
-            "url",
-            "https://api.helius.xyz/v0/markets/{mint}/candles?resolution=1m&limit=1",
-        )
-    )
-    candle_minutes = int(candle_cfg.get("minutes", 15))
-    scheduler = CandleScheduler(candle_url, candle_minutes)
 
     try:
         async for event in watcher.watch():
-            scheduler.schedule(event)
             score = score_event(event, config.get("scoring", {}))
             await executor.snipe(event, score, config.get("execution", {}))
     except asyncio.CancelledError:
         watcher.stop()
         raise
-    finally:
-        await scheduler.close()

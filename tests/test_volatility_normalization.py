@@ -1,5 +1,3 @@
-import pytest
-pytest.importorskip("pandas")
 import pandas as pd
 from crypto_bot.strategy import trend_bot
 

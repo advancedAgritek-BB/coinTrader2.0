@@ -1,5 +1,3 @@
-import pytest
-pytest.importorskip("pandas")
 import numpy as np
 import pandas as pd
 

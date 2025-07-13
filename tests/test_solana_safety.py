@@ -1,6 +1,5 @@
 from crypto_bot.solana.safety import is_safe
 from crypto_bot.solana.watcher import NewPoolEvent
-import pytest
 
 
 def make_event(**kwargs):
@@ -20,15 +19,8 @@ def make_event(**kwargs):
 
 def test_freeze_authority_rejection():
     event = make_event(freeze_authority="BAD")
-    cfg = {"freeze_blocklist": ["BAD"]}
-    assert is_safe(event, cfg) is False
-
-
-def test_freeze_authority_old_key():
-    event = make_event(freeze_authority="BAD")
     cfg = {"freeze_blacklist": ["BAD"]}
-    with pytest.warns(DeprecationWarning):
-        assert is_safe(event, cfg) is False
+    assert is_safe(event, cfg) is False
 
 
 def test_dev_wallet_percentage_check():

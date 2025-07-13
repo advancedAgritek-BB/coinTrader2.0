@@ -3,8 +3,7 @@ import pandas as pd
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 
-DEFAULT_PAIRS = ["BTC/USD", "ETH/USD"]
-ALLOWED_PAIRS = load_liquid_pairs() or DEFAULT_PAIRS
+ALLOWED_PAIRS = load_liquid_pairs() or []
 
 
 def generate_signal(
@@ -17,7 +16,6 @@ def generate_signal(
     initial_window: int = 3,
     min_volume: float = 100.0,
     direction: str = "auto",
-    high_freq: bool = False,
 ) -> Tuple[float, str]:
     """Detect pumps for newly listed tokens using early price and volume action.
 
@@ -40,20 +38,12 @@ def generate_signal(
         Minimum trade volume for the latest candle to consider a signal.
     direction : {"auto", "long", "short"}, optional
         Force a trade direction or infer automatically.
-    high_freq : bool, optional
-        When ``True`` the function expects 1m candles and shortens
-        ``max_history`` and ``initial_window`` so signals can trigger
-        right after a listing.
 
     Returns
     -------
     Tuple[float, str]
         Score between 0 and 1 and trade direction.
     """
-    symbol = config.get("symbol") if config else ""
-    if symbol and ALLOWED_PAIRS and symbol not in ALLOWED_PAIRS:
-        return 0.0, "none"
-
     if config:
         breakout_pct = config.get("breakout_pct", breakout_pct)
         volume_multiple = config.get("volume_multiple", volume_multiple)
@@ -61,10 +51,6 @@ def generate_signal(
         initial_window = config.get("initial_window", initial_window)
         min_volume = config.get("min_volume", min_volume)
         direction = config.get("direction", direction)
-
-    if high_freq:
-        max_history = min(max_history, 20)
-        initial_window = max(1, initial_window // 2)
 
     if len(df) < initial_window:
         return 0.0, "none"
@@ -78,20 +64,17 @@ def generate_signal(
 
     if (
         len(df) <= max_history
-        and abs(price_change) >= breakout_pct
+        and price_change >= breakout_pct
         and vol_ratio >= volume_multiple
     ):
-        price_score = min(abs(price_change) / breakout_pct, 1.0)
+        price_score = min(price_change / breakout_pct, 1.0)
         vol_score = min(vol_ratio / volume_multiple, 1.0)
         score = (price_score + vol_score) / 2
         if config is None or config.get("atr_normalization", True):
             score = normalize_score_by_volatility(df, score)
         if direction not in {"auto", "long", "short"}:
             direction = "auto"
-        if direction == "auto":
-            trade_direction = "short" if price_change < 0 else "long"
-        else:
-            trade_direction = direction
+        trade_direction = direction if direction != "auto" else "long"
         return score, trade_direction
 
     return 0.0, "none"

@@ -1,7 +1,6 @@
 import os
 import base64
 import yaml
-import getpass
 from pathlib import Path
 from typing import Dict
 
@@ -15,8 +14,7 @@ except Exception:
 
 logger = setup_logger(__name__, LOG_DIR / "wallet.log")
 
-# store user configuration under ~/.cointrader/user_config.yaml
-CONFIG_FILE = Path.home() / ".cointrader" / "user_config.yaml"
+CONFIG_FILE = Path(__file__).resolve().parent / 'user_config.yaml'
 
 FERNET_KEY = os.getenv("FERNET_KEY")
 _fernet = Fernet(FERNET_KEY) if FERNET_KEY and Fernet else None
@@ -28,15 +26,6 @@ SENSITIVE_FIELDS = {
     "kraken_api_key",
     "kraken_api_secret",
     "telegram_token",
-}
-
-SECRET_ENV_VARS = {
-    "COINBASE_API_KEY",
-    "COINBASE_API_SECRET",
-    "API_PASSPHRASE",
-    "KRAKEN_API_KEY",
-    "KRAKEN_API_SECRET",
-    "TELEGRAM_TOKEN",
 }
 
 
@@ -70,12 +59,7 @@ def _sanitize_secret(secret: str) -> str:
 
 def _env_or_prompt(name: str, prompt: str) -> str:
     """Return environment variable value or prompt the user."""
-    val = os.getenv(name)
-    if val is not None:
-        return val
-    if name in SECRET_ENV_VARS and os.getenv("SHOW_SECRET_INPUT", "").lower() not in {"1", "true", "yes"}:
-        return getpass.getpass(prompt)
-    return input(prompt)
+    return os.getenv(name) or input(prompt)
 
 
 def load_external_secrets(provider: str, path: str) -> Dict[str, str]:
@@ -157,7 +141,6 @@ def load_or_create() -> dict:
         logger.info("user_config.yaml not found; prompting for credentials")
         creds.update(prompt_user())
         logger.info("Creating new user configuration at %s", CONFIG_FILE)
-        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(CONFIG_FILE, "w") as f:
             yaml.safe_dump(creds, f)
 
@@ -197,7 +180,3 @@ def load_or_create() -> dict:
         os.environ.pop("API_PASSPHRASE", None)
 
     return creds
-
-
-if __name__ == "__main__":
-    load_or_create()

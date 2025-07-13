@@ -1,5 +1,3 @@
-import pytest
-pytest.importorskip("pandas")
 import pandas as pd
 from crypto_bot.utils.strategy_utils import compute_strategy_weights, compute_drawdown
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig

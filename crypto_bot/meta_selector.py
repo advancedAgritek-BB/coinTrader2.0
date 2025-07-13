@@ -13,14 +13,10 @@ from crypto_bot.strategy import (
     grid_bot,
     sniper_bot,
     dex_scalper,
-    dca_bot,
     mean_bot,
     breakout_bot,
     micro_scalp_bot,
-    solana_scalping,
     bounce_scalper,
-    cross_arbitrage,
-    cross_chain_arbitrage,
 )
 
 LOG_FILE = LOG_DIR / "strategy_performance.json"
@@ -81,13 +77,8 @@ _STRATEGY_FN_MAP = {
     "breakout_bot": breakout_bot.generate_signal,
     "micro_scalp": micro_scalp_bot.generate_signal,
     "micro_scalp_bot": micro_scalp_bot.generate_signal,
-    "solana_scalping": solana_scalping.generate_signal,
-    "sol_scalp": solana_scalping.generate_signal,
     "bounce_scalper": bounce_scalper.generate_signal,
     "bounce_scalper_bot": bounce_scalper.generate_signal,
-    "dca_bot": dca_bot.generate_signal,
-    "cross_arbitrage": cross_arbitrage.generate_signal,
-    "cross_chain_arbitrage": cross_chain_arbitrage.generate_signal,
 }
 
 

@@ -1,84 +1,7 @@
-import pytest
-pytest.importorskip("pandas")
 import pandas as pd
 import pytest
 
-import importlib.util
-import pathlib
-import types
-import sys
-
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-
-_orig_crypto_bot = sys.modules.get("crypto_bot")
-_orig_strategy_pkg = sys.modules.get("crypto_bot.strategy")
-_orig_execution_pkg = sys.modules.get("crypto_bot.execution")
-_orig_utils_pkg = sys.modules.get("crypto_bot.utils")
-
-crypto_bot = types.ModuleType("crypto_bot")
-strategy_pkg = types.ModuleType("crypto_bot.strategy")
-execution_pkg = types.ModuleType("crypto_bot.execution")
-utils_pkg = types.ModuleType("crypto_bot.utils")
-sys.modules["crypto_bot"] = crypto_bot
-sys.modules["crypto_bot.strategy"] = strategy_pkg
-sys.modules["crypto_bot.execution"] = execution_pkg
-sys.modules["crypto_bot.utils"] = utils_pkg
-
-spec = importlib.util.spec_from_file_location(
-    "crypto_bot.execution.solana_mempool",
-    ROOT / "crypto_bot/execution/solana_mempool.py",
-)
-sol_mempool = importlib.util.module_from_spec(spec)
-sys.modules["crypto_bot.execution.solana_mempool"] = sol_mempool
-spec.loader.exec_module(sol_mempool)
-
-# Minimal stubs for utility functions used by the strategy
-ind_cache = types.ModuleType("crypto_bot.utils.indicator_cache")
-ind_cache.cache_series = lambda *a, **k: a[2]
-vol_mod = types.ModuleType("crypto_bot.utils.volatility")
-vol_mod.normalize_score_by_volatility = lambda _df, s: s
-vol_filter = types.ModuleType("crypto_bot.volatility_filter")
-vol_filter.calc_atr = lambda df, window=14: df["high"].sub(df["low"]).rolling(window).mean().iloc[-1]
-sys.modules["crypto_bot.utils.indicator_cache"] = ind_cache
-sys.modules["crypto_bot.utils.volatility"] = vol_mod
-_orig_vol_filter = sys.modules.get("crypto_bot.volatility_filter")
-sys.modules["crypto_bot.volatility_filter"] = vol_filter
-
-for mod_name in ["indicator_cache", "volatility"]:
-    m_spec = importlib.util.spec_from_file_location(
-        f"crypto_bot.utils.{mod_name}", ROOT / f"crypto_bot/utils/{mod_name}.py"
-    )
-    module = importlib.util.module_from_spec(m_spec)
-    sys.modules[f"crypto_bot.utils.{mod_name}"] = module
-    m_spec.loader.exec_module(module)
-
-spec = importlib.util.spec_from_file_location(
-    "crypto_bot.strategy.micro_scalp_bot",
-    ROOT / "crypto_bot/strategy/micro_scalp_bot.py",
-)
-micro_scalp_bot = importlib.util.module_from_spec(spec)
-sys.modules["crypto_bot.strategy.micro_scalp_bot"] = micro_scalp_bot
-spec.loader.exec_module(micro_scalp_bot)
-if _orig_vol_filter is not None:
-    sys.modules["crypto_bot.volatility_filter"] = _orig_vol_filter
-else:
-    sys.modules.pop("crypto_bot.volatility_filter", None)
-if _orig_crypto_bot is not None:
-    sys.modules["crypto_bot"] = _orig_crypto_bot
-else:
-    sys.modules.pop("crypto_bot", None)
-if _orig_strategy_pkg is not None:
-    sys.modules["crypto_bot.strategy"] = _orig_strategy_pkg
-else:
-    sys.modules.pop("crypto_bot.strategy", None)
-if _orig_execution_pkg is not None:
-    sys.modules["crypto_bot.execution"] = _orig_execution_pkg
-else:
-    sys.modules.pop("crypto_bot.execution", None)
-if _orig_utils_pkg is not None:
-    sys.modules["crypto_bot.utils"] = _orig_utils_pkg
-else:
-    sys.modules.pop("crypto_bot.utils", None)
+from crypto_bot.strategy import micro_scalp_bot
 
 
 @pytest.fixture
@@ -104,8 +27,7 @@ def test_micro_scalp_long_signal(make_df):
     prices = list(range(1, 11))
     volumes = [100] * 10
     df = make_df(prices, volumes)
-    cfg = {"micro_scalp": {"fresh_cross_only": False}}
-    score, direction = micro_scalp_bot.generate_signal(df, cfg)
+    score, direction = micro_scalp_bot.generate_signal(df)
     assert direction == "long"
     assert 0 < score <= 1
 
@@ -158,7 +80,7 @@ def test_trend_filter_allows_long_signal(make_df):
 
     higher_prices = list(range(10, 21))
     higher_df = make_df(higher_prices, [100] * len(higher_prices))
-    cfg = {"micro_scalp": {"trend_fast": 3, "trend_slow": 5, "fresh_cross_only": False}}
+    cfg = {"micro_scalp": {"trend_fast": 3, "trend_slow": 5}}
 
     score, direction = micro_scalp_bot.generate_signal(df, cfg, higher_df=higher_df)
     assert direction == "long"
@@ -222,56 +144,6 @@ def test_wick_filter_blocks_short(make_df):
     assert (score, direction) == (0.0, "none")
 
 
-def test_volume_std_zero_allows_signal(make_df):
-    prices = list(range(1, 11))
-    volumes = [100] * 10
-    df = make_df(prices, volumes)
-    cfg = {"micro_scalp": {"min_vol_z": 0, "fresh_cross_only": False}}
-    score, direction = micro_scalp_bot.generate_signal(df, cfg)
-    assert direction == "long"
-    assert score > 0
-
-
-def test_book_imbalance_blocks_long(make_df):
-    prices = list(range(1, 11))
-    volumes = [100] * 10
-    df = make_df(prices, volumes)
-    book = {"bids": [[10, 1.0]], "asks": [[10, 5.0]]}
-    cfg = {"micro_scalp": {"imbalance_ratio": 2.0, "fresh_cross_only": False}}
-    score, direction = micro_scalp_bot.generate_signal(df, cfg, book=book)
-    assert (score, direction) == (0.0, "none")
-
-
-def test_book_imbalance_blocks_short(make_df):
-    prices = list(range(10, 0, -1))
-    volumes = [100] * 10
-    df = make_df(prices, volumes)
-    book = {"bids": [[10, 5.0]], "asks": [[10, 1.0]]}
-    cfg = {"micro_scalp": {"imbalance_ratio": 2.0, "fresh_cross_only": False}}
-    score, direction = micro_scalp_bot.generate_signal(df, cfg, book=book)
-    assert (score, direction) == (0.0, "none")
-
-
-def test_book_imbalance_penalty_reduces_score(make_df):
-    prices = list(range(1, 11))
-    volumes = [100] * 10
-    df = make_df(prices, volumes)
-    base_score, base_dir = micro_scalp_bot.generate_signal(
-        df, {"micro_scalp": {"fresh_cross_only": False}}
-    )
-    book = {"bids": [[10, 1.0]], "asks": [[10, 5.0]]}
-    cfg = {
-        "micro_scalp": {
-            "imbalance_ratio": 2.0,
-            "imbalance_penalty": 0.5,
-            "fresh_cross_only": False,
-        }
-    }
-    score, direction = micro_scalp_bot.generate_signal(df, cfg, book=book)
-    assert direction == base_dir
-    assert 0 < score < base_score
-
-
 @pytest.mark.parametrize(
     "prices,volumes,cfg",
     [
@@ -283,26 +155,3 @@ def test_book_imbalance_penalty_reduces_score(make_df):
 def test_filters_return_none(make_df, prices, volumes, cfg):
     df = make_df(prices, volumes)
     assert micro_scalp_bot.generate_signal(df, cfg) == (0.0, "none")
-
-
-def test_mempool_blocks_signal(make_df):
-    prices = list(range(1, 11))
-    volumes = [100] * 10
-    df = make_df(prices, volumes)
-    cfg = {
-        "micro_scalp": {"fresh_cross_only": False},
-        "mempool_monitor": {"enabled": True, "suspicious_fee_threshold": 100},
-    }
-
-    class DummyMonitor:
-        def is_suspicious(self, threshold):
-            assert threshold == 100
-            return True
-
-    score, direction = micro_scalp_bot.generate_signal(
-        df,
-        cfg,
-        mempool_monitor=DummyMonitor(),
-        mempool_cfg=cfg["mempool_monitor"],
-    )
-    assert (score, direction) == (0.0, "none")

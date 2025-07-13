@@ -1,5 +1,3 @@
-import pytest
-pytest.importorskip("pandas")
 import pandas as pd
 from crypto_bot.volatility_filter import too_flat, too_hot, fetch_funding_rate
 

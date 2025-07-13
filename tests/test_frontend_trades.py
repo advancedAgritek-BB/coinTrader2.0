@@ -1,5 +1,3 @@
-import pytest
-pytest.importorskip("pandas")
 from frontend import app
 import pandas as pd
 
