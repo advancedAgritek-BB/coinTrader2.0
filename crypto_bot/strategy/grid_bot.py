@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import os
-from dataclasses import asdict, dataclass, fields, field
 import dataclasses
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import dataclass, field, fields, asdict
 from typing import Mapping, Optional, Tuple, Union
 
 import numpy as np
@@ -38,33 +37,20 @@ class GridConfig:
     leverage: int = 1
 
     atr_normalization: bool = True
-    volume_ma_window: int = 20
-    volume_multiple: float = 1.5
-    vol_zscore_threshold: float = 2.0
-
     atr_period: int = 14
+    range_window: int = 20
     spacing_factor: float = 0.5
     dynamic_grid: bool = False
     use_ml_center: bool = False
     min_range_pct: float = 0.001
-    leverage: int = 1
-    arbitrage_pairs: list[str] = field(default_factory=list)
+    arbitrage_pairs: list[tuple[str, str]] = field(default_factory=list)
     arbitrage_threshold: float = 0.005
     trend_ema_fast: int = 50
     trend_ema_slow: int = 200
-
-    dynamic_grid: bool = False
-
-    use_ml_center: bool = False
-
-    range_window: int = 20
-    min_range_pct: float = 0.0
-    dynamic_grid: bool = False
+    volume_ma_window: int = 20
+    volume_multiple: float = 1.5
+    vol_zscore_threshold: float = 2.0
     atr_change_threshold: float = 0.1
-    min_range_pct: float = 0.001
-
-    arbitrage_pairs: list[tuple[str, str]] = field(default_factory=list)
-    arbitrage_threshold: float = 0.005
 
     @classmethod
     def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":

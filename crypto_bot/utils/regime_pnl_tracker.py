@@ -5,7 +5,6 @@ from typing import Dict, Any
 
 from .logger import LOG_DIR
 
-
 LOG_FILE = LOG_DIR / "regime_pnl.csv"
 
 
@@ -72,21 +71,7 @@ def get_recent_win_rate(
     path: str | Path = LOG_FILE,
     strategy: str | None = None,
 ) -> float:
-    """Return win rate over the last ``window`` trades.
-
-    Parameters
-    ----------
-    window : int, optional
-        Number of most recent trades to evaluate. Defaults to ``20``.
-    path : str | Path, optional
-        CSV log file path. Defaults to :data:`LOG_FILE`.
-    strategy : str | None, optional
-        If provided, only trades for this strategy are considered.
-    strategy : str, optional
-        Filter trades by strategy name if provided.
-    strategy : str | None, optional
-        Filter trades to this strategy name when provided.
-    """
+    """Return win rate over the last ``window`` trades."""
     file = Path(path)
     if not file.exists():
         return 0.0
@@ -97,8 +82,6 @@ def get_recent_win_rate(
         df = df[df["strategy"] == strategy]
     recent = df.tail(window)
     if strategy is not None and "strategy" in recent.columns:
-    recent = df.tail(window)
-    if strategy is not None and "strategy" in df.columns:
         recent = recent[recent["strategy"] == strategy]
     wins = (recent["pnl"] > 0).sum()
     total = len(recent)
