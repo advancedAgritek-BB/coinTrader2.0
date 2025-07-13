@@ -71,8 +71,8 @@ needed.
    The optional `rich` package is included and provides colorized
    console output when viewing live positions.
    Exchange connectivity relies on [ccxt](https://github.com/ccxt/ccxt) which is installed with these requirements. Make sure the `ccxt` package is available when running the trading bot.
-2. Run `python crypto_bot/wallet_manager.py` (or `python -m crypto_bot.wallet_manager`) to create `user_config.yaml` and enter your API credentials.
-2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials (optional for dry-run mode).
+2. Run `python crypto_bot/wallet_manager.py` (or `python -m crypto_bot.wallet_manager`) to create `~/.cointrader/user_config.yaml` and enter your API credentials.
+2. Run `python crypto_bot/wallet_manager.py` to create `~/.cointrader/user_config.yaml` and enter your API credentials (optional for dry-run mode).
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:
    ```bash
@@ -100,7 +100,7 @@ needed.
    in ``crypto_bot/config.yaml``. When ``meme_wave_sniper.candle_capture`` is
    configured the runner automatically records 1m candles for new pools.
 
-Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
+Run `wallet_manager.py` to create `~/.cointrader/user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `~/.cointrader/user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `~/.cointrader/user_config.yaml`.
 
 ## Configuration Files
 
@@ -335,14 +335,14 @@ Use it at your own risk—nothing here is financial advice.
 
 
 1. Create API keys on **Coinbase Advanced Trade** or **Kraken**.
-2. Run `python crypto_bot/wallet_manager.py` to generate `user_config.yaml`. Any
+2. Run `python crypto_bot/wallet_manager.py` to generate `~/.cointrader/user_config.yaml`. Any
    credentials found in the environment will be used automatically.
 3. Place your API keys in `crypto_bot/.env` as shown in the configuration
    section above. Environment variables take precedence over values stored in
-   `user_config.yaml`.
+   `~/.cointrader/user_config.yaml`.
 3. Fill out `crypto_bot/.env` with your API keys and optional `FERNET_KEY`.
    Environment variables take precedence over values stored in
-   `user_config.yaml`. If you prefer to enter credentials interactively,
+   `~/.cointrader/user_config.yaml`. If you prefer to enter credentials interactively,
    leave the entries commented out.
 
    ```env
@@ -369,7 +369,7 @@ The built-in Telegram interface is provided by the `TelegramBotUI` class in
    ```
 
    The bot reads the chat ID and token from `config.yaml` (not
-   `user_config.yaml`). Set `trade_updates` to `false` to disable trade entry
+   `~/.cointrader/user_config.yaml`). Set `trade_updates` to `false` to disable trade entry
    and exit messages.
      trade_updates: true  # set false to disable trade notifications
    ```
