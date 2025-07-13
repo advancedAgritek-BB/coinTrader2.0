@@ -6,6 +6,7 @@ from .sniper_solana import score_new_pool
 from .runner import run
 from .api_helpers import helius_ws, fetch_jito_bundle
 from .scanner import get_solana_new_tokens
+from .token_utils import get_token_accounts
 
 __all__ = [
     "NewPoolEvent",
@@ -16,4 +17,5 @@ __all__ = [
     "get_solana_new_tokens",
     "start_runner",
     "score_new_pool",
+    "get_token_accounts",
 ]
