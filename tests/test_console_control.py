@@ -80,9 +80,11 @@ def test_reload_command(monkeypatch, tmp_path):
     state = {"running": True}
     asyncio.run(console_control.control_loop(state))
 
+    # reload command should set the flag
+    assert state["reload"] is True
+
     config = {}
     main.maybe_reload_config(state, config)
 
-    assert not state.get("reload")
+    assert state.get("reload") is None
     assert load_calls
-    assert state["reload"] is True
