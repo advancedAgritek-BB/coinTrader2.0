@@ -99,9 +99,9 @@ max_spread_pct: 5
 max_vol: 1000000
 mempool_monitor:
   action: pause
-  enabled: false
+  enabled: true
   reprice_multiplier: 1.05
-  suspicious_fee_threshold: 100
+  suspicious_fee_threshold: 50
 meme_wave_sniper:
   enabled: true
   pool:
@@ -161,6 +161,8 @@ ml_signal_model:
   enabled: true
   weight: 0.6
 mode: auto
+  weight: 0.4
+mode: onchain
 mode_degrade_window: 20
 mode_threshold: 0.4
 ohlcv_snapshot_frequency_minutes: 1440
@@ -238,14 +240,14 @@ signal_weight_optimizer:
   learning_rate: 0.1
   min_weight: 0.05
 sl_pct: 0.03
-solana_slippage_bps: 50
+solana_slippage_bps: 20
 solana_scanner:
-  enabled: false
-  interval_minutes: 5
+  enabled: true
+  interval_minutes: 1
   api_keys:
     moralis: YOUR_KEY
     bitquery: YOUR_KEY
-  min_volume_usd: 0.0
+  min_volume_usd: 10000
   max_tokens_per_scan: 20
 strategy_allocation:
   grid_bot: 0.3
