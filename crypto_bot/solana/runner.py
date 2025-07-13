@@ -15,7 +15,9 @@ async def run(config: Mapping[str, object]) -> None:
     pool_cfg = config.get("pool", {}) if isinstance(config, Mapping) else {}
     url = str(pool_cfg.get("url", ""))
     interval = float(pool_cfg.get("interval", 5))
-    watcher = PoolWatcher(url, interval)
+    ws_url = pool_cfg.get("websocket_url")
+    program_id = pool_cfg.get("raydium_program_id")
+    watcher = PoolWatcher(url, interval, ws_url, program_id)
 
     try:
         async for event in watcher.watch():
