@@ -73,7 +73,7 @@ def _env_or_prompt(name: str, prompt: str) -> str:
     val = os.getenv(name)
     if val is not None:
         return val
-    if name in SECRET_ENV_VARS:
+    if name in SECRET_ENV_VARS and os.getenv("SHOW_SECRET_INPUT", "").lower() not in {"1", "true", "yes"}:
         return getpass.getpass(prompt)
     return input(prompt)
 

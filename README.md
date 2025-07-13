@@ -134,6 +134,7 @@ TWITTER_SENTIMENT_URL=https://api.example.com/twitter-sentiment
 FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
 SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
+SHOW_SECRET_INPUT=1                      # set to display typed secrets
 ```
 
 
