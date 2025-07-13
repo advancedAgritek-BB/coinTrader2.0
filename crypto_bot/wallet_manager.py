@@ -1,5 +1,6 @@
 import os
 import base64
+import json
 import yaml
 from pathlib import Path
 from typing import Dict
@@ -180,3 +181,25 @@ def load_or_create() -> dict:
         os.environ.pop("API_PASSPHRASE", None)
 
     return creds
+
+
+def get_wallet() -> "Keypair":
+    """Return a Keypair loaded from ``SOLANA_PRIVATE_KEY`` env variable."""
+    from solana.keypair import Keypair
+
+    private_key = os.getenv("SOLANA_PRIVATE_KEY")
+    if not private_key:
+        raise ValueError("SOLANA_PRIVATE_KEY environment variable not set")
+    try:
+        key_bytes = bytes(json.loads(private_key))
+    except Exception as exc:  # pragma: no cover - should be rare
+        raise ValueError("Invalid SOLANA_PRIVATE_KEY") from exc
+    return Keypair.from_secret_key(key_bytes)
+
+
+__all__ = [
+    "load_or_create",
+    "prompt_user",
+    "load_external_secrets",
+    "get_wallet",
+]
