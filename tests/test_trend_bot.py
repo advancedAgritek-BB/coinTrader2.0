@@ -24,7 +24,7 @@ def test_no_signal_when_volume_below_ma():
 
 
 def test_long_signal_with_filters():
-    df = _df_trend(150.0)
+    df = _df_trend(150.0, high_equals_close=True)
     score, direction = trend_bot.generate_signal(df)
     assert direction == "long"
     assert score > 0.0
@@ -32,22 +32,28 @@ def test_long_signal_with_filters():
 
 def test_donchian_confirmation_blocks_false_breakout():
     df = _df_trend(150.0)
-    cfg = {"donchian_confirmation": True}
-    score, direction = trend_bot.generate_signal(df, cfg)
+    score, direction = trend_bot.generate_signal(df)
     assert direction == "none"
     assert score == 0.0
 
 
 def test_donchian_confirmation_allows_breakout():
     df = _df_trend(150.0, high_equals_close=True)
-    cfg = {"donchian_confirmation": True}
+    score, direction = trend_bot.generate_signal(df)
+    assert direction == "long"
+    assert score > 0.0
+
+
+def test_disable_donchian_allows_breakout():
+    df = _df_trend(150.0)
+    cfg = {"donchian_confirmation": False}
     score, direction = trend_bot.generate_signal(df, cfg)
     assert direction == "long"
     assert score > 0.0
 
 
 def test_rsi_zscore(monkeypatch):
-    df = _df_trend(150.0)
+    df = _df_trend(150.0, high_equals_close=True)
     monkeypatch.setattr(
         trend_bot.stats,
         "zscore",
@@ -57,8 +63,6 @@ def test_rsi_zscore(monkeypatch):
     score, direction = trend_bot.generate_signal(df, cfg)
     assert direction == "long"
     assert score > 0
-<<<<<<< HEAD
-<<<<<<< HEAD
 
 
 def test_reversal_cross_signal(monkeypatch):
@@ -134,7 +138,3 @@ def test_volume_gate_allows_reversal(monkeypatch):
     score, direction = trend_bot.generate_signal(df, cfg)
     assert direction == "long"
     assert score > 0
-=======
->>>>>>> parent of c603900 (Update trend bot for faster ADX and default Donchian)
-=======
->>>>>>> parent of c0e4db4 (Merge pull request #906 from advancedAgritek-BB/codex/update-trend_bot.py-with-enhancements)

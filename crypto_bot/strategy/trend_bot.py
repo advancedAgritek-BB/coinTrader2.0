@@ -33,8 +33,8 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     lookback_cfg = int(params.get("indicator_lookback", 250))
     rsi_overbought_pct = float(params.get("rsi_overbought_pct", 90))
     rsi_oversold_pct = float(params.get("rsi_oversold_pct", 10))
-    fast_window = int(params.get("trend_ema_fast", 20))
-    slow_window = int(params.get("trend_ema_slow", 50))
+    fast_window = int(params.get("trend_ema_fast", 5))
+    slow_window = int(params.get("trend_ema_slow", 15))
     atr_period = int(params.get("atr_period", 14))
     k = float(params.get("k", 1.0))
     volume_window = int(params.get("volume_window", 20))
@@ -66,7 +66,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df["rsi_z"] = stats.zscore(rsi, lookback_cfg)
     df["volume_ma"] = vol_ma
 
-    adx_ind = ta.trend.ADXIndicator(df["high"], df["low"], df["close"], window=14)
+    adx_ind = ta.trend.ADXIndicator(df["high"], df["low"], df["close"], window=7)
     df["adx"] = adx_ind.adx()
 
     latest = df.iloc[-1]
@@ -76,8 +76,8 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     atr_pct = 0.0
     if latest["close"] != 0:
         atr_pct = (latest["atr"] / latest["close"]) * 100
-    dynamic_oversold = 30 + k * atr_pct
-    dynamic_overbought = 70 - k * atr_pct
+    dynamic_oversold = min(90.0, 30 + k * atr_pct)
+    dynamic_overbought = max(10.0, 70 - k * atr_pct)
 
     rsi_z_last = df["rsi_z"].iloc[-1]
     rsi_z_series = df["rsi_z"].dropna()
@@ -123,29 +123,46 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         latest["close"] > latest["ema_fast"]
         and latest["ema_fast"] > latest["ema_slow"]
         and overbought_cond
-        and latest["adx"] > 20
+        and latest["adx"] > 25
         and latest["volume"] > latest["volume_ma"]
     )
     short_cond = (
         latest["close"] < latest["ema_fast"]
         and latest["ema_fast"] < latest["ema_slow"]
         and oversold_cond
-        and latest["adx"] > 20
+        and latest["adx"] > 25
         and latest["volume"] > latest["volume_ma"]
     )
 
-    if config and config.get("donchian_confirmation"):
-        window = config.get("donchian_window", 20)
+    if params.get("donchian_confirmation", True):
+        window = params.get("donchian_window", 20)
         upper = df["high"].rolling(window=window).max().iloc[-1]
         lower = df["low"].rolling(window=window).min().iloc[-1]
         long_cond = long_cond and latest["close"] >= upper
         short_cond = short_cond and latest["close"] <= lower
+
+    cross_up = (
+        df["ema_fast"].iloc[-2] < df["ema_slow"].iloc[-2]
+        and latest["ema_fast"] > latest["ema_slow"]
+    )
+    cross_down = (
+        df["ema_fast"].iloc[-2] > df["ema_slow"].iloc[-2]
+        and latest["ema_fast"] < latest["ema_slow"]
+    )
+    reversal_long = cross_up and oversold_cond and latest["volume"] > latest["volume_ma"]
+    reversal_short = cross_down and overbought_cond and latest["volume"] > latest["volume_ma"]
 
     if long_cond:
         score = min((latest["rsi"] - 50) / 50, 1.0)
         direction = "long"
     elif short_cond:
         score = min((50 - latest["rsi"]) / 50, 1.0)
+        direction = "short"
+    elif reversal_long:
+        score = min((dynamic_oversold - latest["rsi"]) / dynamic_oversold, 1.0)
+        direction = "long"
+    elif reversal_short:
+        score = min((latest["rsi"] - dynamic_overbought) / (100 - dynamic_overbought), 1.0)
         direction = "short"
 
     if score > 0 and (config is None or config.get("atr_normalization", True)):
