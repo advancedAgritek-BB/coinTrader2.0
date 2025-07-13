@@ -45,3 +45,23 @@ class ScannerConfig(BaseModel):
             raise ValueError(f"{field.name} must be > 0")
         return v
 
+
+class SolanaScannerApiKeys(BaseModel):
+    """API key configuration for Solana scanner."""
+
+    moralis: str = "YOUR_KEY"
+    bitquery: str = "YOUR_KEY"
+
+
+class SolanaScannerConfig(BaseModel):
+    """Configuration for scanning Solana tokens."""
+
+    enabled: bool = False
+    interval_minutes: int = 5
+    api_keys: SolanaScannerApiKeys = Field(default_factory=SolanaScannerApiKeys)
+    min_volume_usd: float = 0.0
+    max_tokens_per_scan: int = 20
+
+    class Config:
+        extra = "forbid"
+
