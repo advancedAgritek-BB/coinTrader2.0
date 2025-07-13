@@ -80,6 +80,8 @@ def get_recent_win_rate(
         Number of most recent trades to evaluate. Defaults to ``20``.
     path : str | Path, optional
         CSV log file path. Defaults to :data:`LOG_FILE`.
+    strategy : str | None, optional
+        If provided, only trades for this strategy are considered.
     strategy : str, optional
         Filter trades by strategy name if provided.
     strategy : str | None, optional
@@ -95,6 +97,8 @@ def get_recent_win_rate(
     if strategy is not None:
         df = df[df["strategy"] == strategy]
     recent = df.tail(window)
+    if strategy is not None:
+        recent = recent[recent["strategy"] == strategy]
     wins = (recent["pnl"] > 0).sum()
     total = len(recent)
     return float(wins / total) if total else 0.0

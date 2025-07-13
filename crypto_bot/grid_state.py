@@ -5,6 +5,7 @@ from typing import Dict
 _last_fill_bar: Dict[str, int] = {}
 _active_legs: Dict[str, int] = {}
 _current_bar: Dict[str, int] = {}
+_grid_spacing: Dict[str, float] = {}
 _grid_step: Dict[str, float] = {}
 _last_atr: Dict[str, float] = {}
 
@@ -30,6 +31,22 @@ def in_cooldown(symbol: str, bars: int) -> bool:
 def active_leg_count(symbol: str) -> int:
     """Return number of active legs for ``symbol``."""
     return _active_legs.get(symbol, 0)
+
+
+def update_spacing(symbol: str, spacing: float, atr: float) -> None:
+    """Persist grid spacing and ATR for ``symbol``."""
+    _grid_spacing[symbol] = spacing
+    _last_atr[symbol] = atr
+
+
+def get_spacing(symbol: str) -> float | None:
+    """Return stored grid spacing for ``symbol``."""
+    return _grid_spacing.get(symbol)
+
+
+def get_last_atr(symbol: str) -> float | None:
+    """Return last ATR for ``symbol``."""
+    return _last_atr.get(symbol)
 
 
 def get_grid_step(symbol: str) -> float | None:
@@ -66,6 +83,7 @@ def clear() -> None:
     _last_fill_bar.clear()
     _active_legs.clear()
     _current_bar.clear()
+    _grid_spacing.clear()
     _grid_step.clear()
     _last_atr.clear()
 

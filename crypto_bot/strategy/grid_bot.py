@@ -58,6 +58,9 @@ class GridConfig:
     use_ml_center: bool = False
 
     range_window: int = 20
+    min_range_pct: float = 0.0
+    dynamic_grid: bool = False
+    atr_change_threshold: float = 0.1
     min_range_pct: float = 0.001
 
     arbitrage_pairs: list[tuple[str, str]] = field(default_factory=list)
@@ -230,6 +233,40 @@ def generate_signal(
     if not vwap_series.isna().all():
         recent["vwap"] = vwap_series
 
+    range_slice = df.tail(range_window)
+    high = range_slice["high"].max()
+    low = range_slice["low"].min()
+
+    if high == low:
+        return 0.0, "none"
+
+    price = recent["close"].iloc[-1]
+    if price == 0:
+        return 0.0, "none"
+
+    range_pct = (high - low) / price
+    if cfg.min_range_pct and range_pct < cfg.min_range_pct:
+        return 0.0, "none"
+    if "vwap" in recent.columns and not pd.isna(recent["vwap"].iloc[-1]):
+        centre = recent["vwap"].iloc[-1]
+    else:
+        centre = (high + low) / 2
+
+    atr = calc_atr(recent, window=atr_period)
+    range_step = (high - low) / max(num_levels - 1, 1)
+    grid_step = min(atr * cfg.spacing_factor, range_step)
+
+    if cfg.dynamic_grid and symbol:
+        prev_step = grid_state.get_spacing(symbol)
+        prev_atr = grid_state.get_last_atr(symbol)
+        if (
+            prev_step is not None
+            and prev_atr is not None
+            and prev_atr > 0
+            and abs(atr - prev_atr) / prev_atr <= cfg.atr_change_threshold
+        ):
+            grid_step = prev_step
+        grid_state.update_spacing(symbol, grid_step, atr)
     centre = float("nan")
     if cfg.use_ml_center:
         try:  # pragma: no cover - best effort
