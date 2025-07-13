@@ -685,7 +685,9 @@ Helius offers multiple real-time data streaming options for the Solana blockchai
 
 ### \ud83d\udd0c Standard WebSockets
 
-Endpoint: `wss://rpc.helius.xyz`
+Endpoint: `wss://mainnet.helius-rpc.com`
+
+Helius recently migrated from `rpc.helius.xyz` to `mainnet.helius-rpc.com`. Make sure your configuration uses the new domain.
 
 Features:
 
@@ -698,7 +700,7 @@ Example:
 ```javascript
 import { Connection, clusterApiUrl, PublicKey } from "@solana/web3.js";
 
-const connection = new Connection("wss://rpc.helius.xyz/?api-key=<YOUR_API_KEY>");
+const connection = new Connection("wss://mainnet.helius-rpc.com/?api-key=<YOUR_API_KEY>");
 
 connection.onAccountChange(
   new PublicKey("TARGET_PUBLIC_KEY"),

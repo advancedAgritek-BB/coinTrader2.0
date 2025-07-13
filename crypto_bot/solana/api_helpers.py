@@ -6,7 +6,7 @@ import aiohttp
 from contextlib import asynccontextmanager
 
 # Base endpoints from the blueprint
-# Helius WebSocket: wss://rpc.helius.xyz
+# Helius WebSocket: wss://mainnet.helius-rpc.com
 # Jito Block Engine REST: https://mainnet.block-engine.jito.wtf/api/v1
 # The blueprint recommends staying below 100 requests/sec for Helius and 60 requests/sec for Jito.
 # API keys are provided via environment variables HELIUS_KEY and JITO_KEY.
@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 async def helius_ws(api_key: str):
     """Yield a websocket connection to Helius RPC and close the session."""
 
-    url = f"wss://rpc.helius.xyz/?api-key={api_key}"
+    url = f"wss://mainnet.helius-rpc.com/?api-key={api_key}"
     session = aiohttp.ClientSession()
     ws = await session.ws_connect(url)
     try:
