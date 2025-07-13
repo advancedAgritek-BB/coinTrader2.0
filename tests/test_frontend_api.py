@@ -1,3 +1,9 @@
+import sys
+import types
+
+sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
+sys.modules.setdefault("ccxtpro", types.ModuleType("ccxtpro"))
+
 from frontend import api
 from fastapi.testclient import TestClient
 import json
@@ -47,3 +53,21 @@ def test_strategy_scores_endpoint(tmp_path, monkeypatch):
     resp = client.get("/strategy-scores")
     assert resp.status_code == 200
     assert resp.json() == scores
+
+
+def test_reload_config_endpoint(monkeypatch):
+    class Dummy:
+        def __init__(self):
+            self.called = False
+
+        async def reload_config(self):
+            self.called = True
+            return {"status": "reloaded"}
+
+    dummy = Dummy()
+    monkeypatch.setattr(api, "CONTROLLER", dummy)
+    client = TestClient(api.app)
+    resp = client.post("/reload-config")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "reloaded"
+    assert dummy.called is True

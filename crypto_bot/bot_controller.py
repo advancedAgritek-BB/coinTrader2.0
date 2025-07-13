@@ -131,3 +131,16 @@ class TradingBotController:
         data = self.log_file.read_text().splitlines()
         return data[-lines:]
 
+    async def reload_config(self) -> Dict[str, object]:
+        """Reload configuration from ``self.config_path``."""
+        try:
+            self.config = self._load_config()
+            self.exchange, self.ws_client = get_exchange(self.config)
+            self.state["mode"] = self.config.get("execution_mode", "dry_run")
+            return {"status": "reloaded", "mode": self.state["mode"]}
+        except Exception as exc:  # pragma: no cover - unexpected
+            return {"status": "error", "error": str(exc)}
+    async def reload_config(self) -> str:
+        self.state["reload"] = True
+        return "Config reload scheduled"
+

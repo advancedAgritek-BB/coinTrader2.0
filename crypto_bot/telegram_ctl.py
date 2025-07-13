@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from pathlib import Path
 from typing import Any, Dict, Sequence
@@ -148,6 +149,9 @@ class BotController:
     async def reload(self) -> str:
         self.state["reload"] = True
         return "Config reload requested"
+    async def reload_config(self) -> str:
+        self.state["reload"] = True
+        return "Config reload scheduled"
 
 
 def _reply_or_edit(update: Update, text: str, reply_markup: Any | None = None) -> None:
@@ -271,6 +275,9 @@ class TelegramCtl:
     async def toggle_mode_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self._call(update, "toggle_mode")
 
+    async def reload_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._call(update, "reload_config")
+
     async def signals_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self._call(update, "signals")
 
@@ -295,8 +302,10 @@ class TelegramCtl:
         self._heartbeat = asyncio.create_task(_loop())
         return self._heartbeat
 
-    def stop_heartbeat(self) -> None:
+    async def stop_heartbeat(self) -> None:
         if self._heartbeat:
             self._heartbeat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._heartbeat
 
 

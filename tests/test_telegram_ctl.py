@@ -77,6 +77,8 @@ class DummyBotController:
     async def reload(self):
         self.calls.append("reload")
         self.state["reload"] = True
+    async def reload_config(self):
+        self.calls.append("reload_config")
 
 
 @pytest.mark.skipif(telegram_ctl is None, reason="telegram_ctl module missing")
@@ -104,6 +106,7 @@ class TestTelegramCtl:
         await self.tg.signals_cmd(update, DummyContext())
         await self.tg.balance_cmd(update, DummyContext())
         await self.tg.trades_cmd(update, DummyContext())
+        await self.tg.reload_cmd(update, DummyContext())
         assert self.controller.calls == [
             "start",
             "stop",
@@ -114,6 +117,7 @@ class TestTelegramCtl:
             "signals",
             "balance",
             "trades",
+            "reload_config",
         ]
 
     @pytest.mark.asyncio
@@ -131,6 +135,7 @@ class TestTelegramCtl:
         assert isinstance(hb, asyncio.Task)
         self.tg.stop_heartbeat()
         await asyncio.sleep(0)
+        await self.tg.stop_heartbeat()
         assert hb.cancelled() or hb.done()
 
     @pytest.mark.asyncio

@@ -4,8 +4,8 @@ import crypto_bot.console_control as console_control
 
 
 def test_control_loop(monkeypatch):
-    state = {"running": True}
-    commands = ["stop", "start", "quit"]
+    state = {"running": True, "reload": False}
+    commands = ["stop", "start", "reload", "quit"]
     seen = []
 
     def fake_input(prompt=""):
@@ -20,14 +20,16 @@ def test_control_loop(monkeypatch):
     assert seen[1] is False
     # After second command ('start') the state should have been True
     assert seen[2] is True
+    # Reload command should set the reload flag
+    assert state["reload"] is True
     # Function should exit after processing all commands
-    assert len(seen) == 3
+    assert len(seen) == 4
     # "quit" stops the loop and leaves the bot stopped
     assert state["running"] is False
 
 
 def test_control_loop_updates_state(monkeypatch):
-    inputs = iter(["stop", "start", "quit"])
+    inputs = iter(["stop", "start", "reload", "quit"])
 
     def fake_input(prompt=""):
         return next(inputs)
@@ -38,7 +40,7 @@ def test_control_loop_updates_state(monkeypatch):
     monkeypatch.setattr("builtins.input", fake_input)
     monkeypatch.setattr(console_control.asyncio, "to_thread", fake_to_thread)
 
-    state = {"running": True}
+    state = {"running": True, "reload": False}
     asyncio.run(console_control.control_loop(state))
     assert state["running"] is False
 
@@ -83,3 +85,4 @@ def test_reload_command(monkeypatch, tmp_path):
 
     assert not state.get("reload")
     assert load_calls
+    assert state["reload"] is True

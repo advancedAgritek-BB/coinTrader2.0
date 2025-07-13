@@ -8,6 +8,7 @@ from crypto_bot.telegram_bot_ui import (
     SIGNALS,
     BALANCE,
     TRADES,
+    RELOAD,
 )
 from crypto_bot.utils.telegram import TelegramNotifier
 
@@ -305,3 +306,14 @@ def test_command_cooldown(monkeypatch, tmp_path):
     update3 = DummyUpdate()
     asyncio.run(ui.start_cmd(update3, DummyContext()))
     assert update3.message.text == "Trading started"
+
+
+def test_reload(monkeypatch, tmp_path):
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
+    state = {"running": True, "mode": "cex"}
+    ui, _ = make_ui(tmp_path, state)
+
+    update = DummyUpdate()
+    asyncio.run(ui.reload_cmd(update, DummyContext()))
+    assert state["reload"] is True
+    assert update.message.text == "Config reload scheduled"
