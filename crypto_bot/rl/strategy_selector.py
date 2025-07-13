@@ -13,6 +13,7 @@ from crypto_bot.strategy import (
     dex_scalper,
     mean_bot,
     breakout_bot,
+    solana_scalping,
 )
 
 # Default log file location
@@ -26,6 +27,7 @@ _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {
     "dex_scalper": dex_scalper.generate_signal,
     "mean_bot": mean_bot.generate_signal,
     "breakout_bot": breakout_bot.generate_signal,
+    "solana_scalping": solana_scalping.generate_signal,
 }
 
 

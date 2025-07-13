@@ -42,6 +42,19 @@ def test_strategy_for_mapping():
     assert strategy_for("unknown", cfg) is grid_bot.generate_signal
 
 
+def test_strategy_for_solana_scalping():
+    from crypto_bot.strategy import solana_scalping
+
+    data = {
+        "strategy_router": {"regimes": {"scalp": ["solana_scalping"]}}
+    }
+    cfg = RouterConfig.from_dict(data)
+    assert strategy_for("scalp", cfg) is solana_scalping.generate_signal
+    import crypto_bot.strategy_router as sr
+    sr._build_mappings_cached.cache_clear()
+    sr._CONFIG_REGISTRY.clear()
+
+
 def test_route_notifier(monkeypatch):
     msgs = []
 

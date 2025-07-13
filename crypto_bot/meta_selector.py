@@ -17,6 +17,7 @@ from crypto_bot.strategy import (
     breakout_bot,
     micro_scalp_bot,
     bounce_scalper,
+    solana_scalping,
 )
 
 LOG_FILE = LOG_DIR / "strategy_performance.json"
@@ -79,6 +80,8 @@ _STRATEGY_FN_MAP = {
     "micro_scalp_bot": micro_scalp_bot.generate_signal,
     "bounce_scalper": bounce_scalper.generate_signal,
     "bounce_scalper_bot": bounce_scalper.generate_signal,
+    "solana_scalping": solana_scalping.generate_signal,
+    "solana_scalping_bot": solana_scalping.generate_signal,
 }
 
 
