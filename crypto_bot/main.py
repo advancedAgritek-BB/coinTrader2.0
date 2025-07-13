@@ -665,6 +665,23 @@ async def _main_impl() -> TelegramNotifier:
     metrics_path = (
         Path(config.get("metrics_csv")) if config.get("metrics_csv") else None
     )
+
+    async def solana_scan_loop() -> None:
+        """Periodically fetch new Solana tokens and queue them."""
+        cfg = config.get("solana_scanner", {})
+        interval = cfg.get("interval_minutes", 5) * 60
+        while True:
+            try:
+                tokens = await get_solana_new_tokens(cfg)
+                if tokens:
+                    async with QUEUE_LOCK:
+                        for sym in reversed(tokens):
+                            symbol_priority_queue.appendleft(sym)
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.error("Solana scan error: %s", exc)
+            await asyncio.sleep(interval)
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
     cooldown_configure(config.get("min_cooldown", 0))
     status_updates = config.get("telegram", {}).get("status_updates", True)
@@ -867,6 +884,9 @@ async def _main_impl() -> TelegramNotifier:
             check_balance_change,
         )
     )
+    solana_scan_task: asyncio.Task | None = None
+    if config.get("solana_scanner", {}).get("enabled"):
+        solana_scan_task = asyncio.create_task(solana_scan_loop())
     print("Bot running. Type 'stop' to pause, 'start' to resume, 'quit' to exit.")
 
     from crypto_bot.telegram_bot_ui import TelegramBotUI
@@ -1048,6 +1068,12 @@ async def _main_impl() -> TelegramNotifier:
             await asyncio.sleep(delay * 60)
     
     finally:
+        if solana_scan_task:
+            solana_scan_task.cancel()
+            try:
+                await solana_scan_task
+            except asyncio.CancelledError:
+                pass
         if session_state.scan_task:
             session_state.scan_task.cancel()
             try:
