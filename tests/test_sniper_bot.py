@@ -49,3 +49,35 @@ def test_direction_override_short():
     score, direction = sniper_bot.generate_signal(df, config)
     assert direction == "short"
     assert score > 0.8
+
+
+def test_auto_short_on_price_drop():
+    df = _df_with_volume_and_price(
+        [1.0, 0.95, 0.9, 0.8],
+        [10, 12, 11, 200]
+    )
+    score, direction = sniper_bot.generate_signal(df)
+    assert direction == "short"
+    assert score > 0.8
+
+
+def test_high_freq_short_window():
+    df = _df_with_volume_and_price(
+        [1.0, 1.1, 1.2],
+        [10, 12, 40]
+    )
+    score, direction = sniper_bot.generate_signal(
+        df, high_freq=True, config={"min_volume": 1}
+    )
+    assert direction == "long"
+    assert score > 0.8
+
+
+def test_symbol_filter_blocks_disallowed():
+    df = _df_with_volume_and_price(
+        [1.0, 1.1, 1.2],
+        [10, 12, 40]
+    )
+    score, direction = sniper_bot.generate_signal(df, {"symbol": "XRP/USD"})
+    assert direction == "none"
+    assert score == 0.0
