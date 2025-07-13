@@ -265,6 +265,15 @@ def load_config() -> dict:
     return data
 
 
+def maybe_reload_config(state: dict, config: dict) -> None:
+    """Reload configuration when ``state['reload']`` is set."""
+    if state.get("reload"):
+        new_cfg = load_config()
+        config.clear()
+        config.update(new_cfg)
+        state.pop("reload", None)
+
+
 def _flatten_config(data: dict, parent: str = "") -> dict:
     """Flatten nested config keys to ENV_STYLE names."""
     flat: dict[str, str] = {}
@@ -1033,6 +1042,7 @@ async def _main_impl() -> TelegramNotifier:
 
     try:
         while True:
+            maybe_reload_config(state, config)
             reload_config(
                 config,
                 ctx,

@@ -20,6 +20,7 @@ async def control_loop(state: Dict[str, Any]) -> None:
                 print("Trading stopped")
             elif cmd == "reload":
                 state["reload"] = True
+                print("Reloading config")
                 print("Reload requested")
             elif cmd in {"quit", "exit"}:
                 state["running"] = False
