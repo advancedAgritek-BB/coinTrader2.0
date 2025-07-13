@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import pytest
 
 from crypto_bot.solana import watcher
@@ -117,7 +118,7 @@ def test_watcher_continues_after_error(monkeypatch):
         }
     }
     class DummyClientError(Exception):
-        pass
+        status = 500
 
     session = FailingSession([DummyClientError("boom"), data_ok])
     aiohttp_mod = type(
@@ -126,6 +127,7 @@ def test_watcher_continues_after_error(monkeypatch):
         {
             "ClientSession": lambda: session,
             "ClientError": DummyClientError,
+            "ClientResponseError": DummyClientError,
         },
     )
     monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
@@ -143,4 +145,67 @@ def test_watcher_continues_after_error(monkeypatch):
     assert event.pool_address == "P2"
     assert event.token_mint == "M2"
     assert event.creator == "C2"
+
+
+def test_watcher_logs_404_and_continues(monkeypatch, caplog):
+    data_ok = {"pools": [{"address": "P3"}]}
+
+    class Dummy404(Exception):
+        def __init__(self, status=404):
+            self.status = status
+
+    session = FailingSession([Dummy404(), data_ok])
+    aiohttp_mod = type(
+        "M",
+        (),
+        {
+            "ClientSession": lambda: session,
+            "ClientError": Exception,
+            "ClientResponseError": Dummy404,
+        },
+    )
+    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
+    w = PoolWatcher("http://test", interval=0)
+
+    async def run_once():
+        gen = w.watch()
+        event = await gen.__anext__()
+        w.stop()
+        await gen.aclose()
+        return event
+
+    with caplog.at_level(logging.ERROR):
+        event = asyncio.run(run_once())
+    assert event.pool_address == "P3"
+    assert any("configured URL is invalid" in rec.message for rec in caplog.records)
+
+
+def test_watcher_raises_after_consecutive_404(monkeypatch):
+    class Dummy404(Exception):
+        def __init__(self, status=404):
+            self.status = status
+
+    session = FailingSession([Dummy404(), Dummy404()])
+    aiohttp_mod = type(
+        "M",
+        (),
+        {
+            "ClientSession": lambda: session,
+            "ClientError": Exception,
+            "ClientResponseError": Dummy404,
+        },
+    )
+    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
+    w = PoolWatcher("http://test", interval=0, max_failures=2)
+
+    async def run_once():
+        gen = w.watch()
+        try:
+            await gen.__anext__()
+        finally:
+            w.stop()
+            await gen.aclose()
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(run_once())
     assert session.json["method"] == "getPools"

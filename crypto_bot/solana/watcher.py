@@ -36,7 +36,12 @@ logger = logging.getLogger(__name__)
 class PoolWatcher:
     """Async engine that polls for new pools and yields :class:`NewPoolEvent`."""
 
-    def __init__(self, url: str | None = None, interval: float | None = None) -> None:
+    def __init__(
+        self,
+        url: str | None = None,
+        interval: float | None = None,
+        max_failures: int = 3,
+    ) -> None:
         if url is None or interval is None:
             with open(CONFIG_PATH) as f:
                 cfg = yaml.safe_load(f) or {}
@@ -62,6 +67,8 @@ class PoolWatcher:
         self.interval = interval
         self._running = False
         self._seen: set[str] = set()
+        self._max_failures = max_failures
+        self._failures = 0
 
     async def watch(self) -> AsyncGenerator[NewPoolEvent, None]:
         """Yield :class:`NewPoolEvent` objects as they are discovered."""
@@ -76,6 +83,21 @@ class PoolWatcher:
                     ) as resp:
                         resp.raise_for_status()
                         data = await resp.json()
+                        self._failures = 0
+                except aiohttp.ClientResponseError as e:
+                    if e.status == 404:
+                        self._failures += 1
+                        logger.error(
+                            "PoolWatcher error: 404 - the configured URL is invalid or no longer supported"
+                        )
+                        if self._failures >= self._max_failures:
+                            self._running = False
+                            raise RuntimeError(f"Pools endpoint not found: {self.url}") from e
+                        await asyncio.sleep(self.interval)
+                        continue
+                    logger.error("PoolWatcher error: %s", e)
+                    await asyncio.sleep(self.interval)
+                    continue
                 except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
                     logger.error("PoolWatcher error: %s", e)
                     await asyncio.sleep(self.interval)
