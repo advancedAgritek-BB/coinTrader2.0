@@ -6,7 +6,6 @@ bb_squeeze_pct: 20
 bounce_scalper:
   atr_normalization: true
   atr_period: 14
-  down_candles: 3
   cooldown_bars: 2
   down_candles: 2
   max_concurrent_signals: 1
