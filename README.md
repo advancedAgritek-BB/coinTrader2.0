@@ -137,6 +137,8 @@ SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
 SOLANA_PRIVATE_KEY="[1,2,3,...]"       # required for Solana trades
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
+# SOLANA_RPC_URL=https://api.devnet.solana.com      # devnet example
+HELIUS_KEY=your_helius_api_key          # optional, for Helius RPC endpoints
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 ```
@@ -144,6 +146,25 @@ BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 `TELE_CHAT_ADMINS` lets the Telegram bot accept commands from multiple
 admin chats. Omit it to restrict control to the single `chat_id` in the
 configuration file.
+
+### Solana Setup
+
+Example RPC URLs:
+
+```env
+# Mainnet
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+# Devnet
+# SOLANA_RPC_URL=https://api.devnet.solana.com
+```
+
+When using [Helius](https://www.helius.xyz/) endpoints, append `?api-key=${HELIUS_KEY}` to the URL:
+
+```env
+SOLANA_RPC_URL=https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
+```
+
+You can generate a key and enable advanced features like **ShredStream** and **LaserStream** from the [Helius dashboard](https://dashboard.helius.xyz/). These streams can be configured directly in the bot's web dashboard.
 
 ### YAML Configuration
 
