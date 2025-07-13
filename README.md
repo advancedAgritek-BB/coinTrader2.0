@@ -83,7 +83,7 @@ needed.
    Before trading begins the bot performs a full market scan to populate
    its caches. Progress is logged and, when `telegram.status_updates` is
    enabled, sent to your Telegram chat.
-   Type `start`, `stop` or `quit` in the terminal to control the bot.
+   Type `start`, `stop`, `reload` or `quit` in the terminal to control the bot.
    Or launch the web dashboard with:
    ```bash
    python -m frontend.app
@@ -92,6 +92,17 @@ needed.
    ```bash
    python -m crypto_bot.solana.runner
    ```
+
+6. Edit `crypto_bot/config.yaml` and reload the settings without restarting the
+   bot:
+
+   ```yaml
+   risk:
+     trade_size_pct: 1.5  # new value
+   ```
+
+   Save the file and type `reload` in the console or send `/reload` via Telegram
+   to apply the changes immediately.
 
 Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
 
