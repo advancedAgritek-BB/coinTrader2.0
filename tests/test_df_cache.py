@@ -1,3 +1,5 @@
+import pytest
+pytest.importorskip("pandas")
 import pandas as pd
 from cachetools import LRUCache
 from crypto_bot import main

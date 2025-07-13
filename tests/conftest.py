@@ -1,11 +1,27 @@
 import sys
-import importlib.util
-import numpy as np
 from pathlib import Path
-from pandas import Series
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+import importlib.util
+try:  # optional numpy dependency
+    import numpy as np
+except Exception:  # pragma: no cover - numpy not installed
+    import numpy_stub as np
+    sys.modules.setdefault("numpy", np)
+
+try:  # optional pandas dependency
+    import pandas as pd
+    from pandas import Series
+except Exception:  # pragma: no cover - pandas not installed
+    import pandas_stub as pd
+    from pandas_stub import Series
+    sys.modules.setdefault("pandas", pd)
+    sys.modules.setdefault("pandas.core", pd)
 import pytest
 
-pytest_plugins = ("pytest_asyncio",)
+if importlib.util.find_spec("pytest_asyncio") is not None:
+    pytest_plugins = ("pytest_asyncio",)
+else:  # pragma: no cover - plugin optional
+    pytest_plugins = ()
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -343,7 +359,34 @@ except Exception:  # pragma: no cover - requests not installed
             def close(self):
                 pass
 
-    sys.modules.setdefault("requests", _FakeRequests())
+sys.modules.setdefault("requests", _FakeRequests())
+
+# Lightweight stubs for additional optional dependencies used in various modules.
+class _FakeLimiter:
+    class AsyncLimiter:
+        def __init__(self, *a, **k):
+            pass
+
+sys.modules.setdefault("aiolimiter", _FakeLimiter())
+
+class _FakeCcxt:
+    class ExchangeError(Exception):
+        pass
+
+    class RequestTimeout(Exception):
+        pass
+
+    class BadSymbol(Exception):
+        pass
+
+sys.modules.setdefault("ccxt", _FakeCcxt())
+sys.modules.setdefault("ccxt.async_support", _FakeCcxt())
+
+class _FakePydantic:
+    class ValidationError(Exception):
+        pass
+
+sys.modules.setdefault("pydantic", _FakePydantic())
 
 
 @pytest.fixture(autouse=True)

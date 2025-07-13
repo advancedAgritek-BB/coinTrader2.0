@@ -1,3 +1,5 @@
+import pytest
+pytest.importorskip("pandas")
 import pandas as pd
 
 import crypto_bot.strategy.dex_scalper as dex_scalper

@@ -1,3 +1,5 @@
+import pytest
+pytest.importorskip("pandas")
 import pandas as pd
 from crypto_bot.regime import regime_classifier as rc
 

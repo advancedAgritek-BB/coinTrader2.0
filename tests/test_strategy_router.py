@@ -1,4 +1,6 @@
 import pytest
+pytest.importorskip("pandas")
+import pytest
 
 from crypto_bot import strategy_router
 from crypto_bot.strategy_router import strategy_for, route, RouterConfig

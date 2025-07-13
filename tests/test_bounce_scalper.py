@@ -1,3 +1,5 @@
+import pytest
+pytest.importorskip("pandas")
 import pandas as pd
 from crypto_bot.strategy import bounce_scalper
 from crypto_bot.strategy.bounce_scalper import BounceScalperConfig

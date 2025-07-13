@@ -1,3 +1,5 @@
+import pytest
+pytest.importorskip("pandas")
 import json
 import pandas as pd
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig

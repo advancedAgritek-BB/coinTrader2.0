@@ -1,3 +1,5 @@
+import pytest
+pytest.importorskip("pandas")
 import asyncio
 import numpy as np
 import pandas as pd

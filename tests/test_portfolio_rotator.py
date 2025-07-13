@@ -1,3 +1,5 @@
+import pytest
+pytest.importorskip("pandas")
 import asyncio
 import json
 import logging
