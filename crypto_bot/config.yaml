@@ -8,24 +8,28 @@ sl_mult: 1.5
 tp_mult: 2.0
 ml_enabled: false
 bounce_scalper:
-  atr_normalization: true
-  atr_period: 14
-  cooldown_bars: 2
-  down_candles: 3
-  max_concurrent_signals: 1
-  min_score: 0.3
-  overbought: 70
-  oversold: 30
   rsi_window: 14
-  stop_loss_atr_mult: 1.5
-  take_profit_atr_mult: 2.0
+  oversold: 30
+  overbought: 70
+  vol_window: 20
+  zscore_threshold: 1.5
+  volume_multiple: 2
+  ema_window: 50
+  atr_window: 14
+  lookback: 250
+  rsi_overbought_pct: 90
+  rsi_oversold_pct: 10
+  down_candles: 3
+  up_candles: 3
   trend_ema_fast: 9
   trend_ema_slow: 21
   pattern_timeframe: "1m"
-  up_candles: 3
-  vol_window: 20
-  volume_multiple: 2
-  zscore_threshold: 1.5
+  atr_period: 14
+  stop_loss_atr_mult: 1.5
+  take_profit_atr_mult: 2.0
+  min_score: 0.3
+  max_concurrent_signals: 1
+  atr_normalization: true
 breakout:
   atr_buffer_mult: 0.1
   bb_length: 20

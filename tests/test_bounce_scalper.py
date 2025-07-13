@@ -16,7 +16,7 @@ def _df(prices, volumes):
     )
 
 
-def test_long_bounce_signal():
+def test_long_bounce_signal(monkeypatch):
     df = pd.DataFrame(
         {
             "open": [5.0, 5.0, 4.8, 4.5],
@@ -26,11 +26,18 @@ def test_long_bounce_signal():
             "volume": [100, 100, 100, 500],
         }
     )
+    monkeypatch.setattr(
+        bounce_scalper.ta.trend,
+        "ema_indicator",
+        lambda s, window=50: pd.Series([4] * len(s)),
+    )
     cfg = {
         "rsi_window": 3,
         "oversold": 100,
         "overbought": 0,
         "vol_window": 3,
+        "zscore_threshold": 1.0,
+        "rsi_oversold_pct": 100,
         "down_candles": 1,
         "up_candles": 2,
         "body_pct": 0.5,
@@ -40,7 +47,7 @@ def test_long_bounce_signal():
     assert score > 0
 
 
-def test_short_bounce_signal():
+def test_short_bounce_signal(monkeypatch):
     df = pd.DataFrame(
         {
             "open": [4.5, 4.7, 4.8, 5.1],
@@ -50,11 +57,18 @@ def test_short_bounce_signal():
             "volume": [100, 100, 100, 500],
         }
     )
+    monkeypatch.setattr(
+        bounce_scalper.ta.trend,
+        "ema_indicator",
+        lambda s, window=50: pd.Series([6] * len(s)),
+    )
     cfg = {
         "rsi_window": 3,
         "oversold": 100,
         "overbought": 0,
         "vol_window": 3,
+        "zscore_threshold": 1.0,
+        "rsi_overbought_pct": 0,
         "down_candles": 1,
         "up_candles": 2,
         "body_pct": 0.5,
@@ -269,6 +283,68 @@ def test_adaptive_rsi_threshold(monkeypatch):
         "body_pct": 0.5,
     }
     score, direction = bounce_scalper.generate_signal(df, cfg)
+    assert direction == "long"
+    assert score > 0
+
+
+def test_trigger_once(monkeypatch):
+    configure(60)
+    cooldowns.clear()
+    prices = list(range(100, 80, -1)) + [82]
+    volumes = [100 + i for i in range(20)] + [200]
+    df = _df(prices, volumes)
+
+    monkeypatch.setattr(
+        bounce_scalper.ta.trend, "ema_indicator", lambda s, window=50: pd.Series([80] * len(s))
+    )
+    cfg = BounceScalperConfig(symbol="XBT/USDT")
+    first = bounce_scalper.generate_signal(df, cfg)
+    second = bounce_scalper.generate_signal(df, cfg)
+    bounce_scalper.trigger_once()
+    third = bounce_scalper.generate_signal(df, cfg)
+    fourth = bounce_scalper.generate_signal(df, cfg)
+
+    assert first[1] != "none"
+    assert second[1] == "none"
+    assert third[1] != "none"
+    assert fourth[1] == "none"
+
+
+def test_lower_df_pattern_detection(monkeypatch):
+    df = pd.DataFrame(
+        {
+            "open": [5.0, 5.0, 4.8, 4.7],
+            "high": [5.2, 5.1, 4.9, 5.2],
+            "low": [4.8, 4.8, 4.5, 4.6],
+            "close": [5.0, 4.8, 4.6, 5.0],
+            "volume": [100, 100, 100, 500],
+        }
+    )
+    lower_df = pd.DataFrame(
+        {
+            "open": [4.8, 4.5],
+            "high": [5.0, 5.2],
+            "low": [4.5, 4.4],
+            "close": [4.6, 5.0],
+            "volume": [100, 500],
+        }
+    )
+
+    monkeypatch.setattr(
+        bounce_scalper.ta.trend, "ema_indicator", lambda s, window=50: pd.Series([4] * len(s))
+    )
+    cfg = {
+        "rsi_window": 3,
+        "oversold": 100,
+        "overbought": 0,
+        "vol_window": 3,
+        "zscore_threshold": 1.0,
+        "rsi_oversold_pct": 100,
+        "down_candles": 1,
+        "up_candles": 2,
+        "body_pct": 0.5,
+    }
+    score, direction = bounce_scalper.generate_signal(df, cfg, lower_df=lower_df)
     assert direction == "long"
     assert score > 0
 
