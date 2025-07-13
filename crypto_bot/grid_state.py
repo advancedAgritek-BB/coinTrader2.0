@@ -33,11 +33,18 @@ def active_leg_count(symbol: str) -> int:
 
 
 def get_grid_step(symbol: str) -> float | None:
+    """Return stored grid step size for ``symbol``."""
     """Return last grid step size for ``symbol`` if set."""
     return _grid_step.get(symbol)
 
 
 def set_grid_step(symbol: str, step: float) -> None:
+    """Persist grid step size for ``symbol``."""
+    _grid_step[symbol] = step
+
+
+def get_last_atr(symbol: str) -> float | None:
+    """Return last recorded ATR for ``symbol``."""
     """Record ``step`` as the current grid spacing for ``symbol``."""
     _grid_step[symbol] = float(step)
 
@@ -48,6 +55,8 @@ def get_last_atr(symbol: str) -> float | None:
 
 
 def set_last_atr(symbol: str, atr: float) -> None:
+    """Persist latest ATR for ``symbol``."""
+    _last_atr[symbol] = atr
     """Record the last ATR value for ``symbol``."""
     _last_atr[symbol] = float(atr)
 
@@ -59,3 +68,4 @@ def clear() -> None:
     _current_bar.clear()
     _grid_step.clear()
     _last_atr.clear()
+
