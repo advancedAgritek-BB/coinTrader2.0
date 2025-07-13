@@ -1,5 +1,7 @@
 from typing import Optional, Tuple
 
+import numpy as np
+
 import pandas as pd
 import ta
 try:  # pragma: no cover - optional dependency
@@ -16,6 +18,7 @@ except Exception:  # pragma: no cover - fallback
         norm = _Norm()
 
     scipy_stats = _FakeStats()
+from ta.trend import ADXIndicator
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
 
@@ -25,13 +28,17 @@ from crypto_bot.utils.volatility import normalize_score_by_volatility
 def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
     """Score mean reversion opportunities using multiple indicators."""
 
-    if len(df) < 3:
+    if len(df) < 50:
         return 0.0, "none"
 
     params = config or {}
     lookback_cfg = int(params.get("indicator_lookback", 250))
     rsi_overbought_pct = float(params.get("rsi_overbought_pct", 90))
     rsi_oversold_pct = float(params.get("rsi_oversold_pct", 10))
+    adx_threshold = float(params.get("adx_threshold", 25))
+    sl_mult = float(params.get("sl_mult", 1.5))
+    tp_mult = float(params.get("tp_mult", 2.0))
+    ml_enabled = bool(params.get("ml_enabled", False))
 
     lookback = 20
     recent = df.iloc[-(lookback + 1) :]
@@ -52,6 +59,10 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         recent["high"], recent["low"], recent["close"], recent["volume"], window=14
     )
     vwap_series = vwap.volume_weighted_average_price()
+    atr_full = ta.volatility.average_true_range(df["high"], df["low"], df["close"], window=14)
+    adx_full = ADXIndicator(df["high"], df["low"], df["close"], window=14).adx()
+    atr = atr_full.iloc[-(lookback + 1) :]
+    adx = adx_full.iloc[-(lookback + 1) :]
 
     rsi = cache_series("rsi", df, rsi, lookback)
     rsi_z = cache_series("rsi_z", df, rsi_z, lookback)
@@ -59,6 +70,8 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     kc_h = cache_series("kc_h", df, kc_h, lookback)
     kc_l = cache_series("kc_l", df, kc_l, lookback)
     vwap_series = cache_series("vwap", df, vwap_series, lookback)
+    atr = cache_series("atr", df, atr, lookback)
+    adx = cache_series("adx", df, adx, lookback)
 
     df = recent.copy()
     df["rsi"] = rsi
@@ -67,15 +80,23 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df["kc_h"] = kc_h
     df["kc_l"] = kc_l
     df["vwap"] = vwap_series
+    df["atr"] = atr
+    df["adx"] = adx
 
     latest = df.iloc[-1]
+
+    if df["adx"].iloc[-1] > adx_threshold:
+        return 0.0, "none"
 
     long_scores = []
     short_scores = []
 
     rsi_z_last = df["rsi_z"].iloc[-1]
-    lower_thr = scipy_stats.norm.ppf(rsi_oversold_pct / 100)
-    upper_thr = scipy_stats.norm.ppf(rsi_overbought_pct / 100)
+    atr_pct = 0.0 if latest["close"] == 0 else (latest["atr"] / latest["close"]) * 100
+    dynamic_oversold_pct = np.clip(rsi_oversold_pct + atr_pct * sl_mult, 1, 49)
+    dynamic_overbought_pct = np.clip(rsi_overbought_pct - atr_pct * tp_mult, 51, 99)
+    lower_thr = scipy_stats.norm.ppf(dynamic_oversold_pct / 100)
+    upper_thr = scipy_stats.norm.ppf(dynamic_overbought_pct / 100)
     oversold_cond = (
         rsi_z_last < lower_thr if not pd.isna(rsi_z_last) else latest["rsi"] < 50
     )
@@ -120,6 +141,14 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         direction = "short"
     else:
         return 0.0, "none"
+
+    if ml_enabled:
+        try:
+            from crypto_bot.ml_signal_model import predict_signal
+            ml_score = predict_signal(df)
+            score = (score + ml_score) / 2
+        except Exception:
+            pass
 
     if config is None or config.get("atr_normalization", True):
         score = normalize_score_by_volatility(df, score)
