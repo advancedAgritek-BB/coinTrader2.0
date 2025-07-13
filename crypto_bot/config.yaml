@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 atr_normalization: true
 indicator_lookback: 250
 rsi_overbought_pct: 90
@@ -373,3 +374,328 @@ exits:
   default_tp_pct: 0.05
   default_sl_pct: 0.02
   trailing_stop_pct: 0.03
+=======
+atr_normalization: true
+indicator_lookback: 250
+rsi_overbought_pct: 90
+rsi_oversold_pct: 10
+bb_squeeze_pct: 20
+bounce_scalper:
+  atr_normalization: true
+  atr_period: 14
+  cooldown_bars: 2
+  down_candles: 3
+  max_concurrent_signals: 1
+  min_score: 0.3
+  overbought: 70
+  oversold: 30
+  rsi_window: 14
+  stop_loss_atr_mult: 1.5
+  take_profit_atr_mult: 2.0
+  trend_ema_fast: 9
+  trend_ema_slow: 21
+  up_candles: 3
+  vol_window: 20
+  volume_multiple: 2
+  zscore_threshold: 1.5
+breakout:
+  atr_buffer_mult: 0.1
+  bb_length: 20
+  bb_std: 2
+  dc_length: 20
+  kc_length: 20
+  kc_mult: 1.5
+  momentum_filter: false
+  squeeze_threshold: 0.03
+  volume_mult: 2
+  volume_window: 20
+cycle_bias:
+  enabled: false
+  mvrv_url: https://api.example.com/mvrv
+  nupl_url: https://api.example.com/nupl
+  sopr_url: https://api.example.com/sopr
+exchange: kraken
+exchange_market_types:
+- spot
+excluded_symbols: []
+execution_mode: dry_run
+exit_strategy:
+  fib_tp_enabled: true
+  min_gain_to_trail: 0.1
+  partial_levels:
+  - 33
+  - 66
+  - 100
+  scale_out: true
+  trailing_stop_factor: 2.0
+  trailing_stop_pct: 0.07
+force_websocket_history: false
+max_ws_limit: 50
+grid_bot:
+  atr_normalization: true
+  atr_period: 14
+  breakout_mult: 1.5
+  cooldown_bars: 6
+  max_active_legs: 4
+  range_window: 20
+  spacing_factor: 0.75
+  trend_ema_fast: 50
+  trend_ema_slow: 200
+  vol_zscore_threshold: 2.0
+  volume_ma_window: 20
+  volume_multiple: 1.5
+liquidity_check: true
+liquidity_depth: 10
+log_to_google: true
+loop_interval_minutes: 2
+balance_poll_mod: 1
+max_age_days: 180
+max_change_pct: 10
+max_concurrent_ohlcv: 4
+max_parallel: 4  # number of symbols processed concurrently
+max_latency_ms: 1000
+max_ohlcv_failures: 3
+max_open_trades: 3
+max_slippage_pct: 0.1
+max_spread_pct: 5
+max_vol: 1000000
+mempool_monitor:
+  action: pause
+  enabled: false
+  reprice_multiplier: 1.05
+  suspicious_fee_threshold: 100
+meme_wave_sniper:
+  enabled: false
+  pool:
+    url: https://api.helius.xyz/v0/pools?api-key=YOUR_KEY
+    interval: 5
+  scoring:
+    weight_liquidity: 1.0
+    weight_tx: 1.0
+    weight_social: 0.5
+  safety:
+    min_liquidity: 10
+  risk:
+    max_concurrent: 3
+    daily_loss_cap: 2
+  execution:
+    dry_run: true
+  risk_file: crypto_bot/logs/sniper_risk.json
+meta_selector:
+  enabled: false
+metrics_backend: csv
+metrics_enabled: true
+metrics_output_file: crypto_bot/logs/metrics.csv
+micro_scalp:
+  atr_period: 14
+  confirm_bars: 2
+  ema_fast: 3
+  ema_slow: 8
+  fresh_cross_only: false
+  min_atr_pct: 0.0
+  min_momentum_pct: 0.0
+  min_vol_z: 1.5
+  trend_fast: 21
+  trend_slow: 50
+  trend_timeframe: 5m
+  vol_window: 20
+  volume_window: 20
+  wick_pct: 0.2
+min_agreeing_votes: 1
+min_confidence_score: 0.1  # baseline; actual min = baseline * (1 + bb_width_z/3)
+min_consistent_agreement: 1
+ensemble_min_conf: 0.15  # minimum confidence for ensemble strategies
+min_cooldown: 1
+min_symbol_age_days: 10
+min_symbol_score: 0.1
+ml_signal_model:
+  enabled: true
+  weight: 0.4
+mode: auto
+mode_degrade_window: 20
+mode_threshold: 0.4
+ohlcv_snapshot_frequency_minutes: 1440
+ohlcv_snapshot_limit: 500
+ohlcv_timeout: 120
+optimization:
+  enabled: true
+  interval_days: 5
+  parameter_ranges:
+    trend:
+      stop_loss:
+      - 0.02
+      take_profit:
+      - 0.04
+portfolio_rotation:
+  enabled: true
+  interval_days: 3
+  rebalance_threshold: 0.08
+  scoring_method: sharpe
+  top_assets: 5
+preferred_chain: solana
+refresh_pairs:
+  min_quote_volume_usd: 1000000
+  refresh_interval: 6h
+  top_k: 40
+  allowed_quote_currencies: [USD, USDT]
+  blacklist_assets: []
+regime_return_period: 5
+regime_timeframes:
+- 5m
+- 15m
+- 1h
+risk:
+  atr_long_window: 50
+  atr_period: 14
+  atr_short_window: 14
+  max_drawdown: 0.8
+  max_volatility_factor: 1.5
+  min_expected_value: -0.1
+  min_volume: 1
+  stop_loss_atr_mult: 2.0
+  stop_loss_pct: 0.03
+  take_profit_atr_mult: 4.0
+  take_profit_pct: 0.08
+  volume_threshold_ratio: 0.01
+rl_selector:
+  enabled: false
+scalp_timeframe: 1m
+scan_markets: true
+scan_in_background: true
+scoring_weights:
+  regime_confidence: 0.2
+  spread_penalty: -0.1
+  strategy_regime_strength: 0.2
+  strategy_score: 0.4
+  symbol_score: 0.1
+  volume_score: 0.1
+drawdown_penalty_coef: 0.3  # weight applied to historical drawdown
+sentiment_filter:
+  bull_fng: 70
+  bull_sentiment: 60
+  min_fng: 0
+  min_sentiment: 0
+signal_fusion:
+  enabled: false
+  fusion_method: weight
+  min_confidence: 0.0
+  strategies: []
+signal_threshold: 0.1
+signal_weight_optimizer:
+  enabled: false
+  learning_rate: 0.1
+  min_weight: 0.05
+sl_pct: 0.03
+solana_slippage_bps: 50
+strategy_allocation:
+  grid_bot: 0.3
+  sniper_bot: 0.3
+  trend_bot: 0.4
+strategy_evaluation_mode: voting
+strategy_router:
+  fast_path:
+    breakout_max_bandwidth: 0.05
+    breakout_squeeze_window: 20
+    breakout_volume_multiplier: 5
+    trend_adx_threshold: 35
+  regimes:
+    bounce:
+    - bounce_scalper
+    breakout:
+    - breakout_bot
+    mean-reverting:
+    - mean_bot
+    scalp:
+    - micro_scalp
+    sideways:
+    - grid
+    trending:
+    - trend
+    volatile:
+    - sniper_bot
+    - sniper_solana
+symbol: XBT/USDT
+symbol_batch_size: 10
+scan_lookback_limit: 50
+cycle_lookback_limit: null
+symbol_filter:
+  change_pct_percentile: 50
+  max_correlation: 0.85
+  correlation_max_pairs: 100
+  max_spread_pct: 5
+  min_volume_usd: 100
+  uncached_volume_multiplier: 5
+  volume_percentile: 30
+  kraken_batch_size: 100     # max symbols per fetch_tickers call
+  http_timeout: 10           # seconds for fallback /Ticker requests
+  ticker_retry_attempts: 3
+  log_ticker_exceptions: false
+symbol_refresh_minutes: 30
+symbol_score_weights:
+  age: 0.05
+  change: 0.3
+  latency: 0.05
+  spread: 0.2
+  volume: 0.4
+symbols: []
+tax_tracking:
+  enabled: false
+  export_path: crypto_bot/logs/tax_trades.csv
+telegram:
+  chat_admins: 827777274
+  chat_id: 827777274
+  command_cooldown: 5
+  enabled: true
+  token: your_telegram_token
+  trade_updates: true
+telegram_ctl:
+  enabled: false
+  update_interval: 60
+testing_mode: true
+timeframe: 1h
+timeframes:
+- 1h
+- 4h
+- 1d
+top_n_symbols: 8
+tp_pct: 0.07
+trade_size_pct: 0.2
+trend:
+  atr_period: 14
+  k: 1.0
+  trend_ema_fast: 20
+  trend_ema_slow: 50
+twap_enabled: true
+twap_interval_seconds: 10
+twap_slices: 4
+use_websocket: false          # (<- only for OHLCV; you can still use ws for tickers)
+hidden_limit: false
+volatility_filter:
+  max_funding_rate: 0.05
+  min_atr_pct: 0.0
+voting_strategies:
+- trend
+- momentum
+- mean_reversion
+wallet_address: your_wallet
+ws_ping_interval: 20
+bandit:
+  enabled: false
+  alpha0: 1
+  beta0: 1
+  explore_pct: 0.05
+safety:
+  restart_on_error: true
+  max_error_count: 5
+scoring:
+  lookback_bars: 50
+  method: sharpe
+  use_numba_scoring: false
+exec:
+  allow_market_orders: false
+  order_retry_interval: 5
+exits:
+  default_tp_pct: 0.05
+  default_sl_pct: 0.02
+  trailing_stop_pct: 0.03
+>>>>>>> parent of c603900 (Update trend bot for faster ADX and default Donchian)

@@ -114,11 +114,11 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
         if vol_score > 0:
             patterns["volume_spike"] = min(vol_score, 1.0)
 
-    if vol_mean > 0 and last["close"] >= high_max and last["volume"] > vol_mean:
+    if last["close"] >= high_max and last["volume"] > vol_mean:
         brk_score = min(1.0, last["volume"] / (vol_mean * 1.5))
         patterns["breakout"] = brk_score
 
-    if vol_mean > 0 and last["close"] <= low_min and last["volume"] > vol_mean:
+    if last["close"] <= low_min and last["volume"] > vol_mean:
         brkdn_score = min(1.0, last["volume"] / (vol_mean * 1.5))
         patterns["breakdown"] = brkdn_score
 
