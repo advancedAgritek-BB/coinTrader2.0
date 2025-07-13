@@ -24,6 +24,7 @@ class BotContext:
     current_batch: list[str] = field(default_factory=list)
     analysis_results: list | None = field(default_factory=list)
     timing: dict | None = field(default_factory=dict)
+    volatility_factor: float = 1.0
 
 
 class PhaseRunner:

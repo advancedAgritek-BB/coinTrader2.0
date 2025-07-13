@@ -180,6 +180,9 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **scan_lookback_limit** – candles of history loaded during the initial scan.
 * **cycle_lookback_limit** – candles fetched each cycle. Defaults to
   `min(150, timeframe_minutes × 2)`.
+* **adaptive_scan.enabled** – turn on dynamic sizing.
+* **adaptive_scan.atr_baseline** – ATR level corresponding to a 1× factor.
+* **adaptive_scan.max_factor** – cap multiplier for batch size and scan rate.
 * **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
 * **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
 * **symbol_score_weights** – weights for volume, spread, change and age. The weights must sum to a positive value.
@@ -624,6 +627,18 @@ size it is automatically refilled with the highest scoring symbols.
 Candidates are stored in a priority queue sorted by their score so the highest
 quality markets are scanned first. Each cycle pulls the next `symbol_batch_size`
 symbols from this queue and refills it when empty.
+
+When `adaptive_scan.enabled` is true the bot calculates the average ATR of the
+filtered markets. The batch size and delay between cycles are multiplied by
+`avg_atr / atr_baseline` up to `max_factor`. This increases scanning frequency
+during volatile periods.
+
+```yaml
+adaptive_scan:
+  enabled: true
+  atr_baseline: 0.01
+  max_factor: 2.0
+```
 
 OHLCV data for these symbols is now fetched concurrently using
 `load_ohlcv_parallel`, greatly reducing the time needed to evaluate
