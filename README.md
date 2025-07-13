@@ -71,6 +71,7 @@ needed.
    The optional `rich` package is included and provides colorized
    console output when viewing live positions.
    Exchange connectivity relies on [ccxt](https://github.com/ccxt/ccxt) which is installed with these requirements. Make sure the `ccxt` package is available when running the trading bot.
+2. Run `python crypto_bot/wallet_manager.py` (or `python -m crypto_bot.wallet_manager`) to create `user_config.yaml` and enter your API credentials.
 2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials (optional for dry-run mode).
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:

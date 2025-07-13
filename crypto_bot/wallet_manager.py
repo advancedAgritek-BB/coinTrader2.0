@@ -180,3 +180,7 @@ def load_or_create() -> dict:
         os.environ.pop("API_PASSPHRASE", None)
 
     return creds
+
+
+if __name__ == "__main__":
+    load_or_create()
