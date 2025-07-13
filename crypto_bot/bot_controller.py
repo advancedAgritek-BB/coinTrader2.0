@@ -40,6 +40,7 @@ class TradingBotController:
             "grid_bot": True,
             "sniper_bot": True,
             "dex_scalper": True,
+            "dca_bot": True,
             "mean_bot": True,
             "breakout_bot": True,
             "micro_scalp_bot": True,
