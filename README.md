@@ -876,7 +876,7 @@ URL should reference this key so Helius can authorize the requests:
 meme_wave_sniper:
   enabled: true
   pool:
-    url: https://rpc.helius.xyz/?api-key=${HELIUS_KEY}
+    url: https://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
     interval: 5
   scoring:
     weight_liquidity: 1.0

@@ -58,7 +58,7 @@ class PoolWatcher:
                     "Helius API key missing. Set HELIUS_KEY or update pool.url"
                 )
             if not url:
-                url = f"https://rpc.helius.xyz/?api-key={key}"
+                url = f"https://mainnet.helius-rpc.com/?api-key={key}"
             else:
                 url = url.replace("YOUR_KEY", key)
                 if url.endswith("api-key="):
@@ -89,7 +89,7 @@ class PoolWatcher:
                         self._failures += 1
                         logger.error(
                             "PoolWatcher error: 404 from %s - the configured URL is invalid or no longer supported. "
-                            "Try https://rpc.helius.xyz/?api-key=YOUR_KEY",
+                            "Try https://mainnet.helius-rpc.com/?api-key=YOUR_KEY",
                             self.url,
                         )
                         if self._failures >= self._max_failures:
