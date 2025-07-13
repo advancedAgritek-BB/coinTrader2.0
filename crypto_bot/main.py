@@ -100,6 +100,9 @@ def _fix_symbol(sym: str) -> str:
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENV_PATH = Path(__file__).resolve().parent / ".env"
 
+# Track the modification time of the loaded configuration
+_LAST_CONFIG_MTIME = CONFIG_PATH.stat().st_mtime
+
 logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 
 # Queue of symbols awaiting evaluation across loops
@@ -272,6 +275,69 @@ def _flatten_config(data: dict, parent: str = "") -> dict:
         else:
             flat[new_key.upper()] = value
     return flat
+
+
+def reload_config(
+    config: dict,
+    ctx: BotContext,
+    risk_manager: RiskManager,
+    rotator: PortfolioRotator,
+    position_guard: OpenPositionGuard,
+    *,
+    force: bool = False,
+) -> None:
+    """Reload the YAML config and update dependent objects."""
+    global _LAST_CONFIG_MTIME
+
+    try:
+        mtime = CONFIG_PATH.stat().st_mtime
+    except OSError:
+        mtime = _LAST_CONFIG_MTIME
+
+    if not force and mtime == _LAST_CONFIG_MTIME:
+        return
+
+    new_config = load_config()
+    _LAST_CONFIG_MTIME = mtime
+
+    config.clear()
+    config.update(new_config)
+    ctx.config = config
+
+    rotator.config = config.get("portfolio_rotation", rotator.config)
+    position_guard.max_open_trades = config.get(
+        "max_open_trades", position_guard.max_open_trades
+    )
+
+    cooldown_configure(config.get("min_cooldown", 0))
+    market_loader_configure(
+        config.get("ohlcv_timeout", 120),
+        config.get("max_ohlcv_failures", 3),
+        config.get("max_ws_limit", 50),
+        config.get("telegram", {}).get("status_updates", True),
+        max_concurrent=config.get("max_concurrent_ohlcv"),
+    )
+
+    volume_ratio = 0.01 if config.get("testing_mode") else 1.0
+    risk_params = {**config.get("risk", {})}
+    risk_params.update(config.get("sentiment_filter", {}))
+    risk_params.update(config.get("volatility_filter", {}))
+    risk_params["symbol"] = config.get("symbol", "")
+    risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
+    risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
+    risk_params["volume_threshold_ratio"] = config.get("risk", {}).get(
+        "volume_threshold_ratio", 0.1
+    )
+    risk_params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
+    risk_params["stop_loss_atr_mult"] = config.get("risk", {}).get(
+        "stop_loss_atr_mult", 2.0
+    )
+    risk_params["take_profit_atr_mult"] = config.get("risk", {}).get(
+        "take_profit_atr_mult", 4.0
+    )
+    risk_params["volume_ratio"] = volume_ratio
+    risk_manager.config = RiskConfig(**risk_params)
+
 
 
 async def _ws_ping_loop(exchange: object, interval: float) -> None:
@@ -662,6 +728,11 @@ async def _main_impl() -> TelegramNotifier:
 
     logger.info("Starting bot")
     config = load_config()
+    global _LAST_CONFIG_MTIME
+    try:
+        _LAST_CONFIG_MTIME = CONFIG_PATH.stat().st_mtime
+    except OSError:
+        pass
     metrics_path = (
         Path(config.get("metrics_csv")) if config.get("metrics_csv") else None
     )
@@ -962,6 +1033,16 @@ async def _main_impl() -> TelegramNotifier:
 
     try:
         while True:
+            reload_config(
+                config,
+                ctx,
+                risk_manager,
+                rotator,
+                position_guard,
+                force=state.get("reload", False),
+            )
+            state["reload"] = False
+
             cycle_start = time.perf_counter()
             ctx.timing = await runner.run(ctx)
             loop_count += 1

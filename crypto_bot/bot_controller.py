@@ -140,4 +140,7 @@ class TradingBotController:
             return {"status": "reloaded", "mode": self.state["mode"]}
         except Exception as exc:  # pragma: no cover - unexpected
             return {"status": "error", "error": str(exc)}
+    async def reload_config(self) -> str:
+        self.state["reload"] = True
+        return "Config reload scheduled"
 
