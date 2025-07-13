@@ -813,47 +813,6 @@ async def _main_impl() -> TelegramNotifier:
             )
         return notifier
 
-    if config.get("scan_markets", False) and not config.get("symbols"):
-        attempt = 0
-        delay = SYMBOL_SCAN_RETRY_DELAY
-        discovered: list[str] | None = None
-        while attempt < MAX_SYMBOL_SCAN_ATTEMPTS:
-            discovered = await load_kraken_symbols(
-                exchange,
-                config.get("excluded_symbols", []),
-                config,
-            )
-            if discovered:
-                break
-            attempt += 1
-            if attempt >= MAX_SYMBOL_SCAN_ATTEMPTS:
-                break
-            logger.warning(
-                "Symbol scan empty; retrying in %d seconds (attempt %d/%d)",
-                delay,
-                attempt + 1,
-                MAX_SYMBOL_SCAN_ATTEMPTS,
-            )
-            if status_updates:
-                notifier.notify(
-                    f"Symbol scan failed; retrying in {delay}s (attempt {attempt + 1}/{MAX_SYMBOL_SCAN_ATTEMPTS})"
-                )
-            await asyncio.sleep(delay)
-            delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
-
-        if discovered:
-            config["symbols"] = discovered
-        else:
-            logger.error(
-                "No symbols discovered after %d attempts; aborting startup",
-                MAX_SYMBOL_SCAN_ATTEMPTS,
-            )
-            if status_updates:
-                notifier.notify(
-                    f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
-                )
-            return notifier
-
     balance_threshold = config.get("balance_change_threshold", 0.01)
     previous_balance: dict[str, float] = {"USDT": 0.0}
 
@@ -905,6 +864,48 @@ async def _main_impl() -> TelegramNotifier:
             if err:
                 logger.error("Failed to notify user: %s", err)
         return notifier
+
+    if config.get("scan_markets", False) and not config.get("symbols"):
+        attempt = 0
+        delay = SYMBOL_SCAN_RETRY_DELAY
+        discovered: list[str] | None = None
+        while attempt < MAX_SYMBOL_SCAN_ATTEMPTS:
+            discovered = await load_kraken_symbols(
+                exchange,
+                config.get("excluded_symbols", []),
+                config,
+            )
+            if discovered:
+                break
+            attempt += 1
+            if attempt >= MAX_SYMBOL_SCAN_ATTEMPTS:
+                break
+            logger.warning(
+                "Symbol scan empty; retrying in %d seconds (attempt %d/%d)",
+                delay,
+                attempt + 1,
+                MAX_SYMBOL_SCAN_ATTEMPTS,
+            )
+            if status_updates:
+                notifier.notify(
+                    f"Symbol scan failed; retrying in {delay}s (attempt {attempt + 1}/{MAX_SYMBOL_SCAN_ATTEMPTS})"
+                )
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
+
+        if discovered:
+            config["symbols"] = discovered
+        else:
+            logger.error(
+                "No symbols discovered after %d attempts; aborting startup",
+                MAX_SYMBOL_SCAN_ATTEMPTS,
+            )
+            if status_updates:
+                notifier.notify(
+                    f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
+                )
+            return notifier
+
     risk_params = {**config.get("risk", {})}
     risk_params.update(config.get("sentiment_filter", {}))
     risk_params.update(config.get("volatility_filter", {}))
