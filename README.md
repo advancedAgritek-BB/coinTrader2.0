@@ -221,6 +221,9 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
 * **exit_strategy** – partial profit taking and trailing stop logic.
 * **micro_scalp** – EMA settings plus volume z-score and ATR filters for the scalp bot.
+* **pattern_timeframe** – optional candle interval used by the bounce scalper to
+  confirm engulfing or hammer patterns.
+* **trigger_once** – bypass the cooldown and win-rate filter for one bounce scalper cycle.
 * **breakout** – Bollinger/Keltner squeeze, volume multiplier, ATR buffer and
   outputs ATR for stop sizing.
 
@@ -263,7 +266,15 @@ ranks them by `score × edge` and executes the best result. Details about
 the second‑highest strategy are written to the CSV file defined by
 `second_place_csv`.
 #### Bounce Scalper
-The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry.
+The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry. Set `pattern_timeframe` to fetch a separate candle interval for confirming engulfing or hammer patterns. When in cooldown the scalper only signals if the recent win rate falls below 50%, effectively skipping the cooldown during a drawdown.
+
+```yaml
+bounce_scalper:
+  pattern_timeframe: 5m  # confirm patterns using 5-minute candles
+min_cooldown: 2          # minutes between entries
+```
+
+Calling `bounce_scalper.trigger_once()` bypasses the filter for a single cycle.
 
 #### Mean Bot
 The mean reversion bot now incorporates an ADX trend filter to avoid
