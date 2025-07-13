@@ -40,3 +40,17 @@ def test_recent_win_rate(tmp_path, monkeypatch):
 
     rate = rpt.get_recent_win_rate(2, log)
     assert rate == 0.5
+
+
+def test_recent_win_rate_filters_by_strategy(tmp_path, monkeypatch):
+    log = tmp_path / "pnl.csv"
+    monkeypatch.setattr(rpt, "LOG_FILE", log)
+
+    # two strategies interleaved
+    rpt.log_trade("trending", "trend_bot", 1.0)
+    rpt.log_trade("trending", "grid_bot", -1.0)
+    rpt.log_trade("trending", "trend_bot", 0.5)
+    rpt.log_trade("trending", "grid_bot", 0.2)
+
+    rate = rpt.get_recent_win_rate(3, log, strategy="trend_bot")
+    assert rate == 1.0

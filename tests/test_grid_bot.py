@@ -44,6 +44,16 @@ def _df_range_change() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
+def _df_small_range(price: float = 100.0) -> pd.DataFrame:
+    data = {
+        "high": [100.5] * 20,
+        "low": [99.5] * 20,
+        "close": [100.0] * 19 + [price],
+        "volume": [100.0] * 19 + [300.0],
+    }
+    return pd.DataFrame(data)
+
+
 def test_short_signal_above_upper_grid(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
     df = _df_with_price(111.0)
@@ -152,6 +162,28 @@ def test_atr_spacing(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 10.0)
     wide, _ = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert narrow > wide
+
+
+def test_small_range_no_signal(monkeypatch):
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 0.5)
+    df = _df_small_range()
+    cfg = GridConfig(min_range_pct=0.02, atr_normalization=False)
+    score, direction = grid_bot.generate_signal(df, config=cfg)
+    assert (score, direction) == (0.0, "none")
+
+
+def test_dynamic_grid_spacing_persists(monkeypatch):
+    atr_vals = iter([5.0, 5.2])
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: next(atr_vals))
+    grid_state.clear()
+    cfg = GridConfig(symbol="XBT/USDT", dynamic_grid=True, atr_normalization=False)
+    df = _df_with_price(111.0)
+    grid_bot.generate_signal(df, config=cfg)
+    first = grid_state.get_spacing("XBT/USDT")
+    df2 = _df_with_price(111.0)
+    grid_bot.generate_signal(df2, config=cfg)
+    second = grid_state.get_spacing("XBT/USDT")
+    assert first == second
 
 
 def test_long_blocked_by_trend_filter():

@@ -38,6 +38,9 @@ class GridConfig:
     trend_ema_slow: int = 200
 
     range_window: int = 20
+    min_range_pct: float = 0.0
+    dynamic_grid: bool = False
+    atr_change_threshold: float = 0.1
 
     @classmethod
     def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":
@@ -190,6 +193,12 @@ def generate_signal(
         return 0.0, "none"
 
     price = recent["close"].iloc[-1]
+    if price == 0:
+        return 0.0, "none"
+
+    range_pct = (high - low) / price
+    if cfg.min_range_pct and range_pct < cfg.min_range_pct:
+        return 0.0, "none"
     if "vwap" in recent.columns and not pd.isna(recent["vwap"].iloc[-1]):
         centre = recent["vwap"].iloc[-1]
     else:
@@ -198,6 +207,18 @@ def generate_signal(
     atr = calc_atr(recent, window=atr_period)
     range_step = (high - low) / max(num_levels - 1, 1)
     grid_step = min(atr * cfg.spacing_factor, range_step)
+
+    if cfg.dynamic_grid and symbol:
+        prev_step = grid_state.get_spacing(symbol)
+        prev_atr = grid_state.get_last_atr(symbol)
+        if (
+            prev_step is not None
+            and prev_atr is not None
+            and prev_atr > 0
+            and abs(atr - prev_atr) / prev_atr <= cfg.atr_change_threshold
+        ):
+            grid_step = prev_step
+        grid_state.update_spacing(symbol, grid_step, atr)
     if not grid_step:
         return 0.0, "none"
 
