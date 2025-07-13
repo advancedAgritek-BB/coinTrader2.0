@@ -1,5 +1,7 @@
 from typing import Optional, Tuple
 
+from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
+
 import pandas as pd
 import ta
 from crypto_bot.utils.indicator_cache import cache_series
@@ -35,6 +37,11 @@ def generate_signal(
     df: pd.DataFrame,
     config: Optional[dict] = None,
     higher_df: pd.DataFrame | None = None,
+    *,
+    book: Optional[dict] = None,
+    ticks: Optional[pd.DataFrame] = None,
+    mempool_monitor: Optional[SolanaMempoolMonitor] = None,
+    mempool_cfg: Optional[dict] = None,
 ) -> Tuple[float, str]:
     """Return short-term signal using EMA crossover on 1m data.
 
@@ -51,11 +58,46 @@ def generate_signal(
         Higher timeframe OHLCV data used to confirm the trend. When provided
         the function only returns a signal if ``trend_fast`` is above
         ``trend_slow`` for longs (and vice versa for shorts).
+    book : dict, optional
+        Order book data with ``bids`` and ``asks`` arrays.
+    ticks : pd.DataFrame, optional
+        Optional tick-level data with ``price`` and optional ``volume`` columns.
+    mempool_monitor : SolanaMempoolMonitor, optional
+        Instance used to monitor the Solana priority fee.
+    mempool_cfg : dict, optional
+        Configuration controlling the mempool fee check.
+    
+    Additional config options
+    -------------------------
+    ``imbalance_ratio``
+        Order book imbalance threshold used to filter or penalize signals.
+    ``imbalance_penalty``
+        Factor applied to the score when imbalance is against the trade.
     """
     if df.empty:
         return 0.0, "none"
 
+    if ticks is not None and not ticks.empty:
+        price_col = "price" if "price" in ticks.columns else "close"
+        vol = ticks["volume"] if "volume" in ticks.columns else 0
+        tick_df = pd.DataFrame(
+            {
+                "open": ticks[price_col],
+                "high": ticks[price_col],
+                "low": ticks[price_col],
+                "close": ticks[price_col],
+                "volume": vol,
+            }
+        )
+        df = pd.concat([df, tick_df], ignore_index=True)
+
     params = config.get("micro_scalp", {}) if config else {}
+
+    cfg = mempool_cfg or {}
+    if mempool_monitor and cfg.get("enabled"):
+        threshold = cfg.get("suspicious_fee_threshold", 0.0)
+        if mempool_monitor.is_suspicious(threshold):
+            return 0.0, "none"
     fast_window = int(params.get("ema_fast", 3))
     slow_window = int(params.get("ema_slow", 8))
     vol_window = int(params.get("volume_window", 20))
@@ -67,7 +109,9 @@ def generate_signal(
     lower_wick_pct = float(params.get("lower_wick_pct", wick_pct))
     upper_wick_pct = float(params.get("upper_wick_pct", wick_pct))
     confirm_bars = int(params.get("confirm_bars", 1))
-    fresh_cross_only = bool(params.get("fresh_cross_only", False))
+    fresh_cross_only = bool(params.get("fresh_cross_only", True))
+    imbalance_ratio = float(params.get("imbalance_ratio", 0))
+    imbalance_penalty = float(params.get("imbalance_penalty", 0))
     trend_fast = int(params.get("trend_fast", 0))
     trend_slow = int(params.get("trend_slow", 0))
     _ = params.get("trend_timeframe")
@@ -159,6 +203,23 @@ def generate_signal(
         return 0.0, "none"
     if direction == "short" and upper_wick_ratio < upper_wick_pct:
         return 0.0, "none"
+
+    book_data = book or params.get("order_book")
+    if imbalance_ratio and isinstance(book_data, dict):
+        bids = sum(v for _, v in book_data.get("bids", []))
+        asks = sum(v for _, v in book_data.get("asks", []))
+        if bids and asks:
+            imbalance = bids / asks
+            if direction == "long" and imbalance < imbalance_ratio:
+                if imbalance_penalty > 0:
+                    score *= imbalance_penalty
+                else:
+                    return 0.0, "none"
+            if direction == "short" and imbalance > imbalance_ratio:
+                if imbalance_penalty > 0:
+                    score *= imbalance_penalty
+                else:
+                    return 0.0, "none"
 
     if trend_fast_val is not None and trend_slow_val is not None:
         if direction == "long" and trend_fast_val <= trend_slow_val:
