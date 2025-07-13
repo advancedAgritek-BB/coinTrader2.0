@@ -145,6 +145,10 @@ class BotController:
             return self.config_file.read_text()
         return "Config not found"
 
+    async def reload(self) -> str:
+        self.state["reload"] = True
+        return "Config reload requested"
+
 
 def _reply_or_edit(update: Update, text: str, reply_markup: Any | None = None) -> None:
     """Reply to message or edit callback text."""
@@ -275,6 +279,9 @@ class TelegramCtl:
 
     async def trades_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self._call(update, "trades")
+
+    async def reload_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._call(update, "reload")
 
     async def _send_pages(self, update: Update, pages: list[str]) -> None:
         for page in pages:

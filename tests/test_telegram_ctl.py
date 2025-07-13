@@ -45,6 +45,7 @@ class DummyContext:
 class DummyBotController:
     def __init__(self):
         self.calls = []
+        self.state = {}
 
     async def start(self):
         self.calls.append("start")
@@ -72,6 +73,10 @@ class DummyBotController:
 
     async def trades(self):
         self.calls.append("trades")
+
+    async def reload(self):
+        self.calls.append("reload")
+        self.state["reload"] = True
 
 
 @pytest.mark.skipif(telegram_ctl is None, reason="telegram_ctl module missing")
@@ -125,7 +130,39 @@ class TestTelegramCtl:
         hb = self.tg.start_heartbeat()
         assert isinstance(hb, asyncio.Task)
         self.tg.stop_heartbeat()
+        await asyncio.sleep(0)
         assert hb.cancelled() or hb.done()
+
+    @pytest.mark.asyncio
+    async def test_reload_cmd_sets_flag(self, monkeypatch):
+        import sys, types
+        stub = types.ModuleType("crypto_bot.main")
+        load_calls = []
+
+        def fake_load():
+            load_calls.append(True)
+            return {}
+
+        def maybe_reload_config(state, config):
+            if state.get("reload"):
+                cfg = fake_load()
+                config.clear()
+                config.update(cfg)
+                state.pop("reload", None)
+
+        stub.load_config = fake_load
+        stub.maybe_reload_config = maybe_reload_config
+        monkeypatch.setitem(sys.modules, "crypto_bot.main", stub)
+        main = stub
+
+        update = DummyUpdate()
+        await self.tg.reload_cmd(update, DummyContext())
+        assert "reload" in self.controller.calls
+
+        config = {}
+        main.maybe_reload_config(self.controller.state, config)
+        assert not self.controller.state.get("reload")
+        assert load_calls
 from crypto_bot.telegram_ctl import status_loop
 from crypto_bot.utils.telegram import TelegramNotifier
 

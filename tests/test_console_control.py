@@ -41,3 +41,45 @@ def test_control_loop_updates_state(monkeypatch):
     state = {"running": True}
     asyncio.run(console_control.control_loop(state))
     assert state["running"] is False
+
+
+def test_reload_command(monkeypatch, tmp_path):
+    inputs = iter(["reload", "quit"])
+
+    def fake_input(prompt=""):
+        return next(inputs)
+
+    async def fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    monkeypatch.setattr(console_control.asyncio, "to_thread", fake_to_thread)
+
+    import sys, types
+    stub = types.ModuleType("crypto_bot.main")
+    load_calls = []
+
+    def fake_load():
+        load_calls.append(True)
+        return {}
+
+    def maybe_reload_config(state, config):
+        if state.get("reload"):
+            cfg = fake_load()
+            config.clear()
+            config.update(cfg)
+            state.pop("reload", None)
+
+    stub.load_config = fake_load
+    stub.maybe_reload_config = maybe_reload_config
+    monkeypatch.setitem(sys.modules, "crypto_bot.main", stub)
+    main = stub
+
+    state = {"running": True}
+    asyncio.run(console_control.control_loop(state))
+
+    config = {}
+    main.maybe_reload_config(state, config)
+
+    assert not state.get("reload")
+    assert load_calls

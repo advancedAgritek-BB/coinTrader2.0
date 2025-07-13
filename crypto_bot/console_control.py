@@ -8,7 +8,7 @@ from typing import Dict, Any
 
 async def control_loop(state: Dict[str, Any]) -> None:
     """Listen for commands and update ``state`` accordingly."""
-    print("Commands: start | stop | quit")
+    print("Commands: start | stop | reload | quit")
     try:
         while True:
             cmd = (await asyncio.to_thread(input, "> ")).strip().lower()
@@ -18,6 +18,9 @@ async def control_loop(state: Dict[str, Any]) -> None:
             elif cmd == "stop":
                 state["running"] = False
                 print("Trading stopped")
+            elif cmd == "reload":
+                state["reload"] = True
+                print("Reloading config")
             elif cmd in {"quit", "exit"}:
                 state["running"] = False
                 break
