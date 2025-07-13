@@ -1,5 +1,15 @@
 import yaml
+import importlib.util
 from pathlib import Path
+
+if not hasattr(yaml, "__file__"):
+    import sys
+    sys.modules.pop("yaml", None)
+    spec = importlib.util.find_spec("yaml")
+    if spec and spec.loader:
+        real_yaml = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(real_yaml)
+        yaml = real_yaml
 
 CONFIG_PATH = Path("crypto_bot/config.yaml")
 
@@ -17,6 +27,10 @@ def test_load_config_returns_dict():
     assert "rsi_overbought_pct" in config
     assert "rsi_oversold_pct" in config
     assert "bb_squeeze_pct" in config
+    assert "adx_threshold" in config
+    assert "sl_mult" in config
+    assert "tp_mult" in config
+    assert "ml_enabled" in config
     assert "scan_lookback_limit" in config
     assert "cycle_lookback_limit" in config
     assert "top_n_symbols" in config

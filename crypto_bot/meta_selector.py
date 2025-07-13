@@ -13,6 +13,7 @@ from crypto_bot.strategy import (
     grid_bot,
     sniper_bot,
     dex_scalper,
+    dca_bot,
     mean_bot,
     breakout_bot,
     micro_scalp_bot,
@@ -82,6 +83,8 @@ _STRATEGY_FN_MAP = {
     "bounce_scalper_bot": bounce_scalper.generate_signal,
     "solana_scalping": solana_scalping.generate_signal,
     "solana_scalping_bot": solana_scalping.generate_signal,
+    "dca": dca_bot.generate_signal,
+    "dca_bot": dca_bot.generate_signal,
 }
 
 

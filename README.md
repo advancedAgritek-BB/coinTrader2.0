@@ -265,6 +265,17 @@ the second‑highest strategy are written to the CSV file defined by
 #### Bounce Scalper
 The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry.
 
+#### Mean Bot
+The mean reversion bot now incorporates an ADX trend filter to avoid
+counter‑trend trades. Its RSI thresholds are scaled according to recent
+volatility, and you can optionally blend the final score with a machine
+learning prediction. Enable the weighting in `crypto_bot/config.yaml`:
+
+```yaml
+mean_bot:
+  ml_enabled: true
+```
+
 ### Data and Logging
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options.
