@@ -21,7 +21,7 @@ except Exception:  # pragma: no cover - optional dependency
 
 import pandas as pd
 import yaml
-from dotenv import dotenv_values
+from dotenv import load_dotenv
 from pydantic import ValidationError
 
 from schema.scanner import ScannerConfig
@@ -782,7 +782,7 @@ async def _main_impl() -> TelegramNotifier:
 
     logger.info("Starting bot")
     config = load_config()
-    dotenv_values(ENV_PATH)
+    load_dotenv(ENV_PATH)
     user = load_or_create()
     status_updates = config.get("telegram", {}).get("status_updates", True)
     balance_updates = config.get("telegram", {}).get("balance_updates", False)
@@ -794,7 +794,6 @@ async def _main_impl() -> TelegramNotifier:
     }
     notifier = TelegramNotifier.from_config(tg_cfg)
     send_test_message(notifier.token, notifier.chat_id, "Bot started")
-    get_exchange(config)
     if status_updates:
         notifier.notify("🤖 CoinTrader2.0 started")
 
