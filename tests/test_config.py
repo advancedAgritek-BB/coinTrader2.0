@@ -78,6 +78,17 @@ def test_load_config_returns_dict():
     ]:
         assert key in sol_scanner
 
+    assert "pyth" in config
+    pyth_cfg = config["pyth"]
+    assert isinstance(pyth_cfg, dict)
+    for key in [
+        "enabled",
+        "solana_endpoint",
+        "solana_ws_endpoint",
+        "program_id",
+    ]:
+        assert key in pyth_cfg
+
 
 def test_load_config_normalizes_symbol(tmp_path, monkeypatch):
     path = tmp_path / "config.yaml"

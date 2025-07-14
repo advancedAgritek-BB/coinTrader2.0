@@ -70,3 +70,15 @@ class SolanaScannerConfig(BaseModel):
     class Config:
         extra = "forbid"
 
+
+class PythConfig(BaseModel):
+    """Configuration for Pyth price feeds."""
+
+    enabled: bool = False
+    solana_endpoint: str = ""
+    solana_ws_endpoint: str = ""
+    program_id: str = ""
+
+    class Config:
+        extra = "forbid"
+
