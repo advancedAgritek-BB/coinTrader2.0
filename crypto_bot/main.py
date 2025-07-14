@@ -8,6 +8,8 @@ from datetime import datetime
 from collections import deque, OrderedDict, defaultdict
 from dataclasses import dataclass, field
 
+import aiohttp
+
 # Track WebSocket ping tasks
 WS_PING_TASKS: set[asyncio.Task] = set()
 
@@ -538,6 +540,60 @@ async def update_caches(ctx: BotContext) -> None:
     ctx.timing["ohlcv_fetch_latency"] = time.perf_counter() - start
 
 
+async def enrich_with_pyth(ctx: BotContext) -> None:
+    """Update cached OHLCV using the latest Pyth prices."""
+    batch = ctx.current_batch
+    if not batch:
+        return
+
+    async with aiohttp.ClientSession() as session:
+        for sym in batch:
+            if not sym.endswith("/USDC"):
+                continue
+            base = sym.split("/")[0]
+            try:
+                url = f"https://hermes.pyth.network/v2/price_feeds?query={base}"
+                async with session.get(url, timeout=10) as resp:
+                    feeds = await resp.json()
+            except Exception:
+                continue
+
+            feed_id = None
+            for item in feeds:
+                attrs = item.get("attributes", {})
+                if attrs.get("base") == base and attrs.get("quote_currency") == "USD":
+                    feed_id = item.get("id")
+                    break
+            if not feed_id:
+                continue
+
+            try:
+                url = (
+                    "https://hermes.pyth.network/api/latest_price_feeds?ids[]="
+                    f"{feed_id}"
+                )
+                async with session.get(url, timeout=10) as resp:
+                    data = await resp.json()
+            except Exception:
+                continue
+
+            if not data:
+                continue
+
+            price_info = data[0].get("price")
+            if not price_info:
+                continue
+
+            price = float(price_info.get("price", 0)) * (
+                10 ** price_info.get("expo", 0)
+            )
+
+            for cache in ctx.df_cache.values():
+                df = cache.get(sym)
+                if df is not None and not df.empty:
+                    df.loc[df.index[-1], "close"] = price
+
+
 async def analyse_batch(ctx: BotContext) -> None:
     """Run signal analysis on the current batch."""
     batch = ctx.current_batch
@@ -1062,6 +1118,7 @@ async def _main_impl() -> TelegramNotifier:
     runner = PhaseRunner([
         fetch_candidates,
         update_caches,
+        enrich_with_pyth,
         analyse_batch,
         execute_signals,
         handle_exits,
