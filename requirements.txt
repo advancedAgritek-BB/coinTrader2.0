@@ -34,3 +34,4 @@ numba
 cachetools
 prometheus-client
 solders
+pythclient

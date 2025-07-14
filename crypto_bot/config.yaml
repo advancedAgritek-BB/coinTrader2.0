@@ -252,6 +252,10 @@ pyth:
   solana_endpoint: "https://api.mainnet-beta.solana.com"
   solana_ws_endpoint: "wss://api.mainnet-beta.solana.com"
   program_id: ""
+  enabled: true
+  solana_endpoint: "https://api.mainnet-beta.solana.com"
+  solana_ws_endpoint: "wss://api.mainnet-beta.solana.com"
+  program_id: "FsJ3A3u2vn5cTVofAjvy6qM3HrjTXg5Gs1Y8D6fCt3m"
 strategy_allocation:
   grid_bot: 0.3
   sniper_bot: 0.3
