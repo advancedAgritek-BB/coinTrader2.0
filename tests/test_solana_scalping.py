@@ -26,3 +26,14 @@ def test_scalping_neutral_signal():
     df = make_df([50] * 40)
     score, direction = scalping.generate_signal(df)
     assert (score, direction) == (0.0, "none")
+
+
+def test_scalping_with_pyth_price():
+    prices = list(range(1, 40)) + [20, 21, 22, 23, 24, 25]
+    df = make_df(prices)
+    score, direction = scalping.generate_signal(df)
+    assert direction == "none"
+
+    score2, direction2 = scalping.generate_signal(df, pyth_price=50)
+    assert direction2 == "short"
+    assert score2 > 0

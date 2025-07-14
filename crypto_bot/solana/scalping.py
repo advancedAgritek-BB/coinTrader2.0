@@ -2,7 +2,12 @@ import pandas as pd
 import ta
 
 
-def generate_signal(df: pd.DataFrame, config: dict | None = None) -> tuple[float, str]:
+def generate_signal(
+    df: pd.DataFrame,
+    config: dict | None = None,
+    *,
+    pyth_price: float | None = None,
+) -> tuple[float, str]:
     """Return a simple Solana scalping signal using RSI and MACD.
 
     Parameters
@@ -14,6 +19,10 @@ def generate_signal(df: pd.DataFrame, config: dict | None = None) -> tuple[float
     """
     if df is None or df.empty:
         return 0.0, "none"
+
+    if pyth_price is not None and not df.empty:
+        df = df.copy()
+        df.iloc[-1, df.columns.get_loc("close")] = float(pyth_price)
 
     params = config.get("solana_scalping", {}) if config else {}
     rsi_window = int(params.get("rsi_window", 14))

@@ -7,6 +7,7 @@ from .runner import run
 from .api_helpers import helius_ws, fetch_jito_bundle
 from .scanner import get_solana_new_tokens
 from .token_utils import get_token_accounts
+from .pyth_utils import get_pyth_price
 
 __all__ = [
     "NewPoolEvent",
@@ -18,4 +19,5 @@ __all__ = [
     "start_runner",
     "score_new_pool",
     "get_token_accounts",
+    "get_pyth_price",
 ]
