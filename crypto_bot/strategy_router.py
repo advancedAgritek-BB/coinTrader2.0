@@ -320,7 +320,9 @@ def evaluate_regime(
     return engine.fuse(df, cfg_dict)
 
 
-def _bandit_context(df: pd.DataFrame, regime: str) -> Dict[str, float]:
+def _bandit_context(
+    df: pd.DataFrame, regime: str, symbol: str | None = None
+) -> Dict[str, float]:
     """Return bandit context features for Thompson sampling."""
     context: Dict[str, float] = {}
     for r in [
@@ -341,6 +343,16 @@ def _bandit_context(df: pd.DataFrame, regime: str) -> Dict[str, float]:
 
     if df is not None and not df.empty:
         price = df["close"].iloc[-1]
+        if symbol:
+            try:
+                from crypto_bot.utils.pyth import get_pyth_price
+
+                pyth_price = get_pyth_price(symbol)
+                if pyth_price:
+                    price = pyth_price
+            except Exception:
+                pass
+
         atr = calc_atr(df)
         context["atr_pct"] = atr / price if price else 0.0
 
@@ -590,7 +602,7 @@ def route(
         elif isinstance(cfg, Mapping):
             symbol = str(cfg.get("symbol", ""))
         context_df = df if df is not None else pd.DataFrame()
-        context = _bandit_context(context_df, regime)
+        context = _bandit_context(context_df, regime, symbol)
         choice = bandit.select(context, arms, symbol)
         fn = get_strategy_by_name(choice)
         if fn:

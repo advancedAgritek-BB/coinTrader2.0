@@ -167,6 +167,21 @@ SOLANA_RPC_URL=https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
 ```
 
 You can generate a key and enable advanced features like **ShredStream** and **LaserStream** from the [Helius dashboard](https://dashboard.helius.xyz/). These streams can be configured directly in the bot's web dashboard.
+Install the `pythclient` package to fetch oracle prices:
+
+```bash
+pip install pythclient
+```
+
+Add a `pyth` section to `crypto_bot/config.yaml`:
+
+```yaml
+pyth:
+  url: https://hermes.pyth.network  # optional custom endpoint, no API key needed
+```
+No API key is required, and you can customize the endpoint if desired.
+
+
 
 ### YAML Configuration
 

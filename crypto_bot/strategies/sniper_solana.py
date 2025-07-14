@@ -7,6 +7,8 @@ from typing import Tuple, Optional
 import pandas as pd
 import ta
 
+from crypto_bot.utils.pyth_utils import get_pyth_price
+
 from crypto_bot.fund_manager import auto_convert_funds
 
 
@@ -52,9 +54,23 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     profit_target = float(params.get("profit_target_pct", 0.05))
     token = params.get("token", "")
     entry_price = params.get("entry_price")
+    is_trading = bool(params.get("is_trading", True))
+    conf_pct = float(params.get("conf_pct", 0.0))
+
+    if not is_trading or conf_pct > 0.5:
+        return 0.0, "none"
 
     if len(df) < atr_window + 1:
         return 0.0, "none"
+
+    # Use live price from Pyth if a token is provided
+    if token:
+        price = get_pyth_price(f"Crypto.{token}/USD", config)
+        try:
+            df = df.copy()
+            df.at[df.index[-1], "close"] = float(price)
+        except Exception:
+            pass
 
     atr = ta.volatility.average_true_range(
         df["high"], df["low"], df["close"], window=atr_window
