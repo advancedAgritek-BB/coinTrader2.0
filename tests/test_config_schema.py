@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from schema.scanner import ScannerConfig, SolanaScannerConfig
+from schema.scanner import ScannerConfig, SolanaScannerConfig, PythConfig
 
 
 def test_symbols_required_when_not_scanning():
@@ -38,4 +38,17 @@ def test_solana_scanner_env_override(monkeypatch):
     monkeypatch.setenv("MORALIS_KEY", "env_key")
     cfg = SolanaScannerConfig()
     assert cfg.api_keys.moralis == "env_key"
+
+
+def test_pyth_defaults():
+    cfg = PythConfig()
+    assert cfg.enabled is False
+    assert cfg.solana_endpoint == ""
+    assert cfg.solana_ws_endpoint == ""
+    assert cfg.program_id == ""
+
+
+def test_pyth_invalid_type():
+    with pytest.raises(ValidationError):
+        PythConfig(extra_field=1)
 
