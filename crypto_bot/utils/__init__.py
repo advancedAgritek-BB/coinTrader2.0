@@ -19,3 +19,4 @@ from .stats import zscore
 from .commit_lock import check_and_update
 from .telemetry import telemetry
 from .solana_scanner import get_solana_new_tokens as utils_get_solana_new_tokens
+from .pyth import get_pyth_price
