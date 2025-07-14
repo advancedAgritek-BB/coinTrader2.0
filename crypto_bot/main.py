@@ -26,6 +26,7 @@ from pydantic import ValidationError
 from schema.scanner import (
     ScannerConfig,
     SolanaScannerConfig,
+    PythConfig,
 )
 
 from crypto_bot.utils.telegram import TelegramNotifier, send_test_message
@@ -260,6 +261,17 @@ def load_config() -> dict:
         data["solana_scanner"] = scanner.dict()
     except ValidationError as exc:
         print("Invalid configuration (solana_scanner):\n", exc)
+        raise SystemExit(1)
+
+    try:
+        raw_pyth = data.get("pyth", {}) or {}
+        if hasattr(PythConfig, "model_validate"):
+            pyth_cfg = PythConfig.model_validate(raw_pyth)
+        else:  # pragma: no cover - for Pydantic < 2
+            pyth_cfg = PythConfig.parse_obj(raw_pyth)
+        data["pyth"] = pyth_cfg.dict()
+    except ValidationError as exc:
+        print("Invalid configuration (pyth):\n", exc)
         raise SystemExit(1)
 
     return data
