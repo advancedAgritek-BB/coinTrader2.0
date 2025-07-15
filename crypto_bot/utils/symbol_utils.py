@@ -3,6 +3,7 @@ import time
 
 from .logger import LOG_DIR, setup_logger
 from .symbol_pre_filter import filter_symbols
+from .telemetry import telemetry
 
 
 def fix_symbol(sym: str) -> str:
@@ -44,25 +45,38 @@ async def get_filtered_symbols(exchange, config) -> list:
         return _cached_symbols
 
     symbols = config.get("symbols", [config.get("symbol")])
+    skipped_before = telemetry.snapshot().get("scan.symbols_skipped", 0)
     if asyncio.iscoroutinefunction(filter_symbols):
         scored = await filter_symbols(exchange, symbols, config)
     else:
         scored = await asyncio.to_thread(filter_symbols, exchange, symbols, config)
+    skipped_main = telemetry.snapshot().get("scan.symbols_skipped", 0) - skipped_before
     if not scored:
         fallback = config.get("symbol")
         excluded = [s.upper() for s in config.get("excluded_symbols", [])]
         if fallback and fallback.upper() in excluded:
             logger.warning("Fallback symbol %s is excluded", fallback)
+            logger.warning(
+                "No symbols met volume/spread requirements; consider adjusting symbol_filter in config. Rejected %d symbols",
+                skipped_main,
+            )
             return []
 
+        skipped_before = telemetry.snapshot().get("scan.symbols_skipped", 0)
         if asyncio.iscoroutinefunction(filter_symbols):
             check = await filter_symbols(exchange, [fallback], config)
         else:
             check = await asyncio.to_thread(filter_symbols, exchange, [fallback], config)
+        skipped_fb = telemetry.snapshot().get("scan.symbols_skipped", 0) - skipped_before
 
         if not check:
             logger.warning(
                 "Fallback symbol %s does not meet volume requirements", fallback
+            )
+            logger.warning(
+                "No symbols met volume/spread requirements; consider adjusting symbol_filter in config. Rejected %d symbols initially, %d on fallback",
+                skipped_main,
+                skipped_fb,
             )
             return []
 
@@ -73,6 +87,12 @@ async def get_filtered_symbols(exchange, config) -> list:
         scored = [(fallback, 0.0)]
 
     logger.info("%d symbols passed filtering", len(scored))
+
+    if not scored:
+        logger.warning(
+            "No symbols met volume/spread requirements; consider adjusting symbol_filter in config. Rejected %d symbols",
+            skipped_main,
+        )
 
     if scored:
         _cached_symbols = scored

@@ -42,6 +42,7 @@ def test_get_filtered_symbols_fallback_excluded(monkeypatch, caplog):
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     assert result == []
     assert any("excluded" in r.getMessage() for r in caplog.records)
+    assert any("No symbols met volume/spread requirements" in r.getMessage() for r in caplog.records)
     assert symbol_utils._cached_symbols is None
     assert symbol_utils._last_refresh == 0.0
 
@@ -65,6 +66,7 @@ def test_get_filtered_symbols_fallback_volume_fail(monkeypatch, caplog):
     assert result == []
     assert calls == [config.get("symbols", [config.get("symbol")]), ["BTC/USD"]]
     assert any("volume requirements" in r.getMessage() for r in caplog.records)
+    assert any("No symbols met volume/spread requirements" in r.getMessage() for r in caplog.records)
     assert symbol_utils._cached_symbols is None
     assert symbol_utils._last_refresh == 0.0
 
