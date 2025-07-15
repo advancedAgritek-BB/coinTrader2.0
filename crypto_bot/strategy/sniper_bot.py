@@ -24,13 +24,10 @@ def generate_signal(
     high_freq: bool = False,
     atr_window: int = 14,
     volume_window: int = 5,
-) -> Tuple[float, str, float, bool]:
-    """Detect pumps for newly listed tokens using early price and volume
-    action.
     price_fallback: bool = False,
     fallback_atr_mult: float = 2.0,
     fallback_volume_mult: float = 2.0,
-) -> Tuple[float, str]:
+) -> Tuple[float, str, float, bool]:
     """Detect pumps for newly listed tokens using early price and volume action.
 
     Parameters

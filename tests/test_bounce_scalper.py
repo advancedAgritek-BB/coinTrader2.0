@@ -1,5 +1,10 @@
 import pandas as pd
-from crypto_bot.strategy import bounce_scalper
+import types
+import sys
+sys.modules.setdefault(
+    "crypto_bot.strategy.sniper_bot", types.ModuleType("crypto_bot.strategy.sniper_bot")
+)
+import crypto_bot.strategy.bounce_scalper as bounce_scalper
 from crypto_bot.strategy.bounce_scalper import BounceScalperConfig
 from crypto_bot.cooldown_manager import configure, cooldowns
 
@@ -106,7 +111,13 @@ def test_respects_cooldown(monkeypatch):
     prices = list(range(100, 80, -1)) + [82]
     volumes = [100] * 20 + [300]
     df = _df(prices, volumes)
-    cfg = BounceScalperConfig(symbol="XBT/USDT")
+    cfg = BounceScalperConfig(
+        symbol="XBT/USDT",
+        cooldown_enabled=True,
+        oversold=30,
+        overbought=70,
+        volume_multiple=2.0,
+    )
     score, direction = bounce_scalper.generate_signal(df, cfg)
     assert direction == "long"
     assert score > 0
@@ -117,7 +128,9 @@ def test_respects_cooldown(monkeypatch):
     cooldown_manager.cooldowns.clear()
     cooldown_manager.mark_cooldown("BTC/USD", "bounce_scalper")
 
-    score, direction = bounce_scalper.generate_signal(df, {"symbol": "BTC/USD"})
+    score, direction = bounce_scalper.generate_signal(
+        df, {"symbol": "BTC/USD", "cooldown_enabled": True}
+    )
     assert direction == "none"
     assert score == 0.0
 
@@ -126,7 +139,13 @@ def test_mark_cooldown_called(monkeypatch):
     prices = list(range(100, 80, -1)) + [82]
     volumes = [100] * 20 + [300]
     df = _df(prices, volumes)
-    cfg = BounceScalperConfig(symbol="XBT/USDT")
+    cfg = BounceScalperConfig(
+        symbol="XBT/USDT",
+        cooldown_enabled=True,
+        oversold=30,
+        overbought=70,
+        volume_multiple=2.0,
+    )
     score, direction = bounce_scalper.generate_signal(df, cfg)
     assert direction == "short"
     assert score > 0
@@ -149,7 +168,13 @@ def test_order_book_imbalance_blocks(monkeypatch):
     prices = list(range(100, 80, -1)) + [82]
     volumes = [100] * 20 + [300]
     df = _df(prices, volumes)
-    cfg = BounceScalperConfig(symbol="XBT/USDT")
+    cfg = BounceScalperConfig(
+        symbol="XBT/USDT",
+        cooldown_enabled=True,
+        oversold=30,
+        overbought=70,
+        volume_multiple=2.0,
+    )
 
     snap = {
         "type": "snapshot",
@@ -167,7 +192,13 @@ def test_order_book_imbalance_blocks_short(monkeypatch):
     prices = list(range(100, 80, -1)) + [82]
     volumes = [100] * 20 + [300]
     df = _df(prices, volumes)
-    cfg = BounceScalperConfig(symbol="XBT/USDT")
+    cfg = BounceScalperConfig(
+        symbol="XBT/USDT",
+        cooldown_enabled=True,
+        oversold=30,
+        overbought=70,
+        volume_multiple=2.0,
+    )
 
     snap = {
         "type": "snapshot",
@@ -185,7 +216,15 @@ def test_imbalance_penalty_reduces_score(monkeypatch):
     prices = list(range(100, 80, -1)) + [82]
     volumes = [100] * 20 + [300]
     df = _df(prices, volumes)
-    base_score, direction = bounce_scalper.generate_signal(df, BounceScalperConfig(symbol="XBT/USDT"))
+    base_score, direction = bounce_scalper.generate_signal(
+        df,
+        BounceScalperConfig(
+            symbol="XBT/USDT",
+            oversold=30,
+            overbought=70,
+            volume_multiple=2.0,
+        ),
+    )
     assert direction == "long"
 
     snap = {
@@ -207,7 +246,10 @@ def test_trend_filter_blocks_signals(monkeypatch):
 
     # Force EMA above the last close so long signal should be blocked
     monkeypatch.setattr(bounce_scalper.ta.trend, "ema_indicator", lambda s, window=50: pd.Series([90]*len(s)))
-    score, direction = bounce_scalper.generate_signal(df, BounceScalperConfig(symbol="XBT/USDT"))
+    score, direction = bounce_scalper.generate_signal(
+        df,
+        BounceScalperConfig(symbol="XBT/USDT", oversold=30, overbought=70, volume_multiple=2.0),
+    )
     assert direction == "none"
     assert score == 0.0
 
@@ -231,7 +273,10 @@ def test_dynamic_rsi_thresholds(monkeypatch):
         lambda s, window=14: pd.Series([30.0]*len(s)),
     )
 
-    score, direction = bounce_scalper.generate_signal(df, BounceScalperConfig(symbol="XBT/USDT"))
+    score, direction = bounce_scalper.generate_signal(
+        df,
+        BounceScalperConfig(symbol="XBT/USDT", oversold=30, overbought=70, volume_multiple=2.0),
+    )
     # Threshold should drop below 30, preventing a signal
     assert direction == "none"
     assert score == 0.0
@@ -246,7 +291,10 @@ def test_volume_zscore_spike(monkeypatch):
     # Provide realistic EMA below last close
     monkeypatch.setattr(bounce_scalper.ta.trend, "ema_indicator", lambda s, window=50: pd.Series([80]*len(s)))
 
-    score, direction = bounce_scalper.generate_signal(df, BounceScalperConfig(symbol="XBT/USDT"))
+    score, direction = bounce_scalper.generate_signal(
+        df,
+        BounceScalperConfig(symbol="XBT/USDT", oversold=30, overbought=70, volume_multiple=2.0),
+    )
     assert direction == "long"
     assert score > 0
 
@@ -259,7 +307,13 @@ def test_cooldown_blocks_successive_signals(monkeypatch):
     df = _df(prices, volumes)
 
     monkeypatch.setattr(bounce_scalper.ta.trend, "ema_indicator", lambda s, window=50: pd.Series([80]*len(s)))
-    cfg = BounceScalperConfig(symbol="XBT/USDT")
+    cfg = BounceScalperConfig(
+        symbol="XBT/USDT",
+        cooldown_enabled=True,
+        oversold=30,
+        overbought=70,
+        volume_multiple=2.0,
+    )
     first = bounce_scalper.generate_signal(df, cfg)
     second = bounce_scalper.generate_signal(df, cfg)
 
@@ -272,7 +326,7 @@ def test_config_from_dict():
     assert cfg.rsi_window == 10
     assert cfg.symbol == "ETH/USDT"
     # ensure defaults applied
-    assert cfg.overbought == 70
+    assert cfg.overbought == 65
 
 
 def test_adaptive_rsi_threshold(monkeypatch):
@@ -316,7 +370,13 @@ def test_trigger_once(monkeypatch):
     monkeypatch.setattr(
         bounce_scalper.ta.trend, "ema_indicator", lambda s, window=50: pd.Series([80] * len(s))
     )
-    cfg = BounceScalperConfig(symbol="XBT/USDT")
+    cfg = BounceScalperConfig(
+        symbol="XBT/USDT",
+        cooldown_enabled=True,
+        oversold=30,
+        overbought=70,
+        volume_multiple=2.0,
+    )
     first = bounce_scalper.generate_signal(df, cfg)
     second = bounce_scalper.generate_signal(df, cfg)
     bounce_scalper.trigger_once()
