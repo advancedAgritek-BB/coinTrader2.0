@@ -42,15 +42,16 @@ sniper_bot:
   fallback_volume_mult: 1.2
 breakout:
   atr_buffer_mult: 0.05
-  bb_length: 20
+  bb_length: 12
   bb_std: 2
   dc_length: 20
-  kc_length: 20
+  kc_length: 12
   kc_mult: 1.2
   momentum_filter: false
   squeeze_threshold: 0.02
-  volume_mult: 1.5
+  vol_multiplier: 1.2
   volume_window: 20
+  adx_threshold: 20
 cycle_bias:
   enabled: false
   mvrv_url: https://api.example.com/mvrv

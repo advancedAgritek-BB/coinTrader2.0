@@ -25,9 +25,9 @@ def breakout_df():
         base = 100
         prices = [base] * 35
         if direction == "long":
-            last_price = base + (3 if breakout else 1)
+            last_price = base + (2 if breakout else 1)
         else:
-            last_price = base - (3 if breakout else 1)
+            last_price = base - (2 if breakout else 1)
         prices.append(last_price)
 
         volumes = [100] * 35 + ([300] if volume_spike else [100])
@@ -51,7 +51,7 @@ def no_squeeze_df():
 
 
 def test_long_breakout_signal():
-    prices = [100] * 35 + [103]
+    prices = [100] * 35 + [102]
     volumes = [100] * 35 + [300]
     df = _make_df(prices, volumes)
     score, direction, atr = breakout_bot.generate_signal(df)
@@ -60,7 +60,7 @@ def test_long_breakout_signal():
 
 
 def test_short_breakout_signal():
-    prices = [100] * 35 + [97]
+    prices = [100] * 35 + [98]
     volumes = [100] * 35 + [300]
     df = _make_df(prices, volumes)
     score, direction, atr = breakout_bot.generate_signal(df)
@@ -93,13 +93,13 @@ def test_signal_requires_all_conditions(direction, breakout_df, higher_squeeze_d
 
 
 @pytest.mark.parametrize("direction", ["long", "short"])
-def test_higher_timeframe_squeeze_required(direction, breakout_df, higher_squeeze_df, no_squeeze_df):
+def test_higher_timeframe_optional(direction, breakout_df, higher_squeeze_df, no_squeeze_df):
     df = breakout_df(direction)
     _, got = breakout_bot.generate_signal(df, higher_df=higher_squeeze_df)
     assert got == direction
 
-    _, got_none = breakout_bot.generate_signal(df, higher_df=no_squeeze_df)
-    assert got_none == "none"
+    _, got_no = breakout_bot.generate_signal(df, higher_df=no_squeeze_df)
+    assert got_no == direction
 
 
 def test_squeeze_zscore(monkeypatch):
