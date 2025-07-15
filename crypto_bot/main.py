@@ -616,26 +616,34 @@ async def execute_signals(ctx: BotContext) -> None:
     """Open trades for qualified analysis results."""
     results = getattr(ctx, "analysis_results", [])
     if not results:
+        logger.info("No analysis results to act on")
         return
 
     # Prioritize by score
     results = [r for r in results if not r.get("skip") and r.get("direction") != "none"]
+    if not results:
+        logger.info("All signals filtered out - nothing actionable")
+        return
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
     top_n = ctx.config.get("top_n_symbols", 3)
+    executed = 0
 
     for candidate in results[:top_n]:
         if not ctx.position_guard or not ctx.position_guard.can_open(ctx.positions):
+            logger.info("Max open trades reached; skipping remaining signals")
             break
         sym = candidate["symbol"]
         if sym in ctx.positions:
+            logger.info("Existing position for %s - skipping", sym)
             continue
 
         df = candidate["df"]
         price = df["close"].iloc[-1]
         score = candidate.get("score", 0.0)
         strategy = candidate.get("name", "")
-        allowed, _ = ctx.risk_manager.allow_trade(df, strategy)
+        allowed, reason = ctx.risk_manager.allow_trade(df, strategy)
         if not allowed:
+            logger.info("Trade blocked for %s: %s", sym, reason)
             continue
 
         size = ctx.risk_manager.position_size(
@@ -645,8 +653,17 @@ async def execute_signals(ctx: BotContext) -> None:
             atr=candidate.get("atr"),
             price=price,
         )
+        if size <= 0:
+            logger.info("Calculated size %.4f for %s - skipping", size, sym)
+            continue
 
         if not ctx.risk_manager.can_allocate(strategy, size, ctx.balance):
+            logger.info(
+                "Insufficient capital to allocate %.4f for %s via %s",
+                size,
+                sym,
+                strategy,
+            )
             continue
 
         amount = size / price if price > 0 else 0.0
@@ -669,7 +686,7 @@ async def execute_signals(ctx: BotContext) -> None:
                 executed_via_sniper = True
 
         if not executed_via_sniper:
-            await cex_trade_async(
+            order = await cex_trade_async(
                 ctx.exchange,
                 ctx.ws_client,
                 sym,
@@ -680,6 +697,10 @@ async def execute_signals(ctx: BotContext) -> None:
                 use_websocket=ctx.config.get("use_websocket", False),
                 config=ctx.config,
             )
+            if order:
+                executed += 1
+        else:
+            executed += 1
         ctx.timing["execution_latency"] = max(
             ctx.timing.get("execution_latency", 0.0),
             time.perf_counter() - start_exec,
@@ -712,6 +733,9 @@ async def execute_signals(ctx: BotContext) -> None:
             )
         except Exception:
             pass
+
+    if executed == 0:
+        logger.info("No trades executed from %d candidate signals", len(results[:top_n]))
 
 
 async def handle_exits(ctx: BotContext) -> None:
