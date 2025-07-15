@@ -1,11 +1,62 @@
+import os
 import pandas as pd
 from typing import Tuple, Optional
+import requests
 import ta
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 
 ALLOWED_PAIRS = load_liquid_pairs() or []
+
+
+def fetch_priority_fee_gwei(endpoint: str | None = None) -> float:
+    """Return the median Ethereum priority fee in gwei.
+
+    The ``MOCK_ETH_PRIORITY_FEE_GWEI`` environment variable overrides
+    network requests for testing purposes. ``endpoint`` defaults to the
+    ``ETH_RPC_URL`` environment variable when not provided. Errors are
+    swallowed and ``0.0`` is returned.
+    """
+
+    mock = os.getenv("MOCK_ETH_PRIORITY_FEE_GWEI")
+    if mock is not None:
+        try:
+            return float(mock)
+        except ValueError:
+            return 0.0
+
+    endpoint = endpoint or os.getenv("ETH_RPC_URL")
+    if not endpoint:
+        return 0.0
+
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "eth_feeHistory",
+        "params": [5, "latest", [50]],
+    }
+    try:
+        resp = requests.post(endpoint, json=payload, timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        reward = data.get("result", {}).get("reward")
+        if isinstance(reward, list):
+            fees = []
+            for block in reward:
+                if isinstance(block, list) and block:
+                    val = block[0]
+                    try:
+                        fees.append(int(val, 16))
+                    except Exception:
+                        pass
+            if fees:
+                fees.sort()
+                median = fees[len(fees) // 2]
+                return median / 1_000_000_000
+    except Exception:
+        pass
+    return 0.0
 
 
 def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
