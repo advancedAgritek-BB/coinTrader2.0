@@ -86,16 +86,17 @@ def generate_signal(
     bb_std = float(cfg.get("bb_std", 2))
     kc_len = int(cfg.get("kc_length", 20))
     kc_mult = float(cfg.get("kc_mult", 1.5))
-    dc_len = int(cfg.get("dc_length", 20))
+    donchian_window = int(cfg.get("donchian_window", cfg.get("dc_length", 30)))
     atr_buffer_mult = float(cfg.get("atr_buffer_mult", 0.1))
     vol_window = int(cfg.get("volume_window", 20))
-    volume_mult = float(cfg.get("volume_mult", 2))
+    vol_confirmation = bool(cfg.get("vol_confirmation", True))
+    vol_multiplier = float(cfg.get("vol_multiplier", cfg.get("volume_mult", 1.5)))
     threshold = float(cfg.get("squeeze_threshold", 0.03))
     momentum_filter = bool(cfg.get("momentum_filter", False))
     lookback_cfg = int(cfg_all.get("indicator_lookback", 250))
     squeeze_pct = float(cfg_all.get("bb_squeeze_pct", 20))
 
-    lookback = max(bb_len, kc_len, dc_len, vol_window, 14)
+    lookback = max(bb_len, kc_len, donchian_window, vol_window, 14)
     if len(df) < lookback:
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
@@ -133,8 +134,8 @@ def generate_signal(
     low = recent["low"]
     volume = recent["volume"]
 
-    dc_high = high.rolling(dc_len).max().shift(1)
-    dc_low = low.rolling(dc_len).min().shift(1)
+    dc_high = high.rolling(donchian_window).max().shift(1)
+    dc_low = low.rolling(donchian_window).min().shift(1)
     vol_ma = volume.rolling(vol_window).mean()
 
     rsi = ta.momentum.rsi(close, window=14)
@@ -153,7 +154,12 @@ def generate_signal(
     recent["rsi"] = rsi
     recent["macd_hist"] = macd_hist
 
-    vol_ok = volume.iloc[-1] > vol_ma.iloc[-1] * volume_mult if vol_ma.iloc[-1] > 0 else False
+    if vol_confirmation:
+        vol_ok = (
+            vol_ma.iloc[-1] > 0 and volume.iloc[-1] > vol_ma.iloc[-1] * vol_multiplier
+        )
+    else:
+        vol_ok = True
     atr_last = atr.iloc[-1]
     upper_break = dc_high.iloc[-1] + atr_last * atr_buffer_mult
     lower_break = dc_low.iloc[-1] - atr_last * atr_buffer_mult

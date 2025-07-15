@@ -56,6 +56,29 @@ def _fetch_eth_gas_price_wei(web3: Optional[object] = None) -> float:
     return 0.0
 
 
+def fetch_priority_fee_gwei(web3: Optional[object] = None) -> float:
+    """Return the current Ethereum priority fee in gwei.
+
+    When ``web3`` is supplied the value is retrieved from
+    ``web3.eth.max_priority_fee``. Otherwise the
+    ``MOCK_ETH_PRIORITY_FEE_GWEI`` environment variable is checked. If
+    neither source is available a fee of ``0.0`` is returned.
+    """
+    if web3 is not None:
+        try:
+            wei = web3.eth.max_priority_fee
+            return float(wei) / 1_000_000_000
+        except Exception:
+            return 0.0
+    mock = os.getenv("MOCK_ETH_PRIORITY_FEE_GWEI")
+    if mock is not None:
+        try:
+            return float(mock)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
 def estimate_gas_fee_usd(
     chain: str,
     gas_units: int,

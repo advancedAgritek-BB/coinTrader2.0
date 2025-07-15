@@ -126,6 +126,19 @@ def generate_signal(
     _ = params.get("trend_timeframe")
     trend_filter = bool(params.get("trend_filter", True))
 
+    book_data = book or params.get("order_book")
+    if isinstance(book_data, dict):
+        asks = book_data.get("asks") or []
+        bids = book_data.get("bids") or []
+        if asks and bids:
+            ask = float(asks[0][0])
+            bid = float(bids[0][0])
+            mid = (ask + bid) / 2 if ask + bid else 0
+            if mid > 0:
+                spread_ratio = (ask - bid) / mid
+                if spread_ratio > 0.003:
+                    return 0.0, "none"
+
     if len(df) < slow_window:
         return 0.0, "none"
 
