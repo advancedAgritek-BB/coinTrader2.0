@@ -93,6 +93,7 @@ from crypto_bot.fund_manager import (
 )
 from crypto_bot.regime.regime_classifier import CONFIG
 from crypto_bot.volatility_filter import calc_atr
+from crypto_bot.solana.exit import monitor_price
 
 
 def _fix_symbol(sym: str) -> str:
@@ -734,6 +735,9 @@ async def execute_signals(ctx: BotContext) -> None:
         except Exception:
             pass
 
+        if strategy == "micro_scalp":
+            asyncio.create_task(_monitor_micro_scalp_exit(ctx, sym))
+
     if executed == 0:
         logger.info("No trades executed from %d candidate signals", len(results[:top_n]))
 
@@ -796,9 +800,52 @@ async def handle_exits(ctx: BotContext) -> None:
                     current_price,
                     ctx.balance,
                 )
-            except Exception:
-                pass
+        except Exception:
+            pass
 
+
+async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
+    """Monitor a micro-scalp trade and exit based on :func:`monitor_price`."""
+    pos = ctx.positions.get(sym)
+    if not pos:
+        return
+
+    tf = ctx.config.get("scalp_timeframe", "1m")
+
+    def feed() -> float:
+        df = ctx.df_cache.get(tf, {}).get(sym)
+        if df is None or df.empty:
+            return pos["entry_price"]
+        return float(df["close"].iloc[-1])
+
+    res = await monitor_price(feed, pos["entry_price"], {})
+    exit_price = res.get("exit_price", feed())
+
+    await cex_trade_async(
+        ctx.exchange,
+        ctx.ws_client,
+        sym,
+        opposite_side(pos["side"]),
+        pos["size"],
+        ctx.notifier,
+        dry_run=ctx.config.get("execution_mode") == "dry_run",
+        use_websocket=ctx.config.get("use_websocket", False),
+        config=ctx.config,
+    )
+
+    if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
+        try:
+            ctx.paper_wallet.close(sym, pos["size"], exit_price)
+            ctx.balance = ctx.paper_wallet.balance
+        except Exception:
+            pass
+
+    ctx.risk_manager.deallocate_capital(pos.get("strategy", ""), pos["size"] * pos["entry_price"])
+    ctx.positions.pop(sym, None)
+    try:
+        log_position(sym, pos["side"], pos["size"], pos["entry_price"], exit_price, ctx.balance)
+    except Exception:
+        pass
 
 async def _rotation_loop(
     rotator: PortfolioRotator,
