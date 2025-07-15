@@ -323,3 +323,11 @@ def generate_signal(
         return score, "short"
 
     return 0.0, "none"
+
+
+class regime_filter:
+    """Match sideways regime for grid trading."""
+
+    @staticmethod
+    def matches(regime: str) -> bool:
+        return regime == "sideways"

@@ -12,3 +12,11 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     if df["close"].iloc[-1] < ma * 0.95:
         return 0.8, "long"
     return 0.0, "none"
+
+
+class regime_filter:
+    """DCA bot works across regimes."""
+
+    @staticmethod
+    def matches(regime: str) -> bool:
+        return True
