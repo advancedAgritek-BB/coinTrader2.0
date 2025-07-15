@@ -32,32 +32,32 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         return 0.0, "none"
 
     params = config or {}
-    lookback_cfg = int(params.get("indicator_lookback", 250))
+    lookback_cfg = int(params.get("indicator_lookback", 14))
     rsi_overbought_pct = float(params.get("rsi_overbought_pct", 90))
     rsi_oversold_pct = float(params.get("rsi_oversold_pct", 10))
-    adx_threshold = float(params.get("adx_threshold", 25))
+    adx_threshold = float(params.get("adx_threshold", 20))
     sl_mult = float(params.get("sl_mult", 1.5))
     tp_mult = float(params.get("tp_mult", 2.0))
-    ml_enabled = bool(params.get("ml_enabled", False))
+    ml_enabled = bool(params.get("ml_enabled", True))
 
-    lookback = 20
+    lookback = 14
     recent = df.iloc[-(lookback + 1) :]
 
     rsi = ta.momentum.rsi(recent["close"], window=14)
     rsi_z = stats.zscore(rsi, lookback_cfg)
-    mean = recent["close"].rolling(20).mean()
-    std = recent["close"].rolling(20).std()
+    mean = recent["close"].rolling(14).mean()
+    std = recent["close"].rolling(14).std()
     bb_z = (recent["close"] - mean) / std
 
     kc = ta.volatility.KeltnerChannel(
-        recent["high"], recent["low"], recent["close"], window=20
+        recent["high"], recent["low"], recent["close"], window=14
     )
     kc_h = kc.keltner_channel_hband()
     kc_l = kc.keltner_channel_lband()
 
-    bb_full = ta.volatility.BollingerBands(df["close"], window=20)
+    bb_full = ta.volatility.BollingerBands(df["close"], window=14)
     bb_width_full = bb_full.bollinger_wband()
-    median_bw_20_full = bb_width_full.rolling(20).median()
+    median_bw_20_full = bb_width_full.rolling(14).median()
     bb_width = bb_width_full.iloc[-(lookback + 1) :]
     median_bw_20 = median_bw_20_full.iloc[-(lookback + 1) :]
 
