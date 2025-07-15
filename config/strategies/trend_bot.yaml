@@ -2,3 +2,10 @@ atr_period: 14
 k: 1.0
 trend_ema_fast: 20
 trend_ema_slow: 50
+setup_window: 10
+trigger_window: 3
+risk:
+  stop_loss_pct: 0.01
+  take_profit_pct: 0.03
+  risk_pct: 0.01
+  max_drawdown: 0.4
