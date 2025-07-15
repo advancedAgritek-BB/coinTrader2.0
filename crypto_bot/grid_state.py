@@ -34,7 +34,7 @@ def active_leg_count(symbol: str) -> int:
 
 
 def update_spacing(symbol: str, spacing: float, atr: float) -> None:
-    """Persist grid spacing and ATR for ``symbol``."""
+    """Persist grid spacing and ATR% for ``symbol``."""
     _grid_spacing[symbol] = spacing
     _last_atr[symbol] = atr
 
@@ -55,12 +55,12 @@ def set_grid_step(symbol: str, step: float) -> None:
 
 
 def get_last_atr(symbol: str) -> float | None:
-    """Return most recent ATR value for ``symbol`` if known."""
+    """Return most recent ATR% value for ``symbol`` if known."""
     return _last_atr.get(symbol)
 
 
 def set_last_atr(symbol: str, atr: float) -> None:
-    """Persist latest ATR for ``symbol``."""
+    """Persist latest ATR% for ``symbol``."""
     _last_atr[symbol] = atr
 
 

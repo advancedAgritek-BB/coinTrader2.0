@@ -131,12 +131,20 @@ def evaluate_strategies(
         try:
             score, direction, _ = evaluate(strat, df, config)
         except Exception as exc:  # pragma: no cover - best effort
-            logger.warning("Strategy %s failed: %s", getattr(strat, "__name__", str(strat)), exc)
+            logger.warning(
+                "Strategy %s failed: %s",
+                getattr(strat, "__name__", getattr(getattr(strat, "func", None), "__name__", str(strat))),
+                exc,
+            )
             continue
 
         metric = score + sharpe + drawdown
         if metric > best_score:
             best_score = metric
-            best_res = {"score": score, "direction": direction, "name": getattr(strat, "__name__", "")}
+            best_res = {
+                "score": score,
+                "direction": direction,
+                "name": getattr(strat, "__name__", getattr(getattr(strat, "func", None), "__name__", "")),
+            }
 
     return best_res

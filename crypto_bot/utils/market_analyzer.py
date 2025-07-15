@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import functools
 import pandas as pd
 from typing import Dict, Iterable, Tuple, List
 
@@ -24,6 +25,7 @@ from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot import meta_selector
 from crypto_bot.signals.signal_scoring import evaluate_async, evaluate_strategies
 from crypto_bot.utils.rank_logger import log_second_place
+from crypto_bot.strategy import grid_bot
 from crypto_bot.volatility_filter import calc_atr
 from ta.volatility import BollingerBands
 from crypto_bot.utils import zscore
@@ -238,8 +240,15 @@ async def analyze_symbol(
         cfg = {**config, "symbol": symbol}
 
         atr = None
+        higher_df_1h = df_map.get("1h")
+
+        def wrap(fn):
+            if fn is grid_bot.generate_signal:
+                return functools.partial(fn, higher_df=higher_df_1h)
+            return fn
+
         if eval_mode == "best":
-            strategies = get_strategies_for_regime(regime, router_cfg)
+            strategies = [wrap(s) for s in get_strategies_for_regime(regime, router_cfg)]
             res = evaluate_strategies(strategies, df, cfg)
             name = res.get("name", strategy_name(regime, env))
             score = float(res.get("score", 0.0))
@@ -253,13 +262,15 @@ async def analyze_symbol(
                     log_second_place(symbol, regime, second.get("name", ""), second_score, edge)
         elif eval_mode == "ensemble":
             min_conf = float(config.get("ensemble_min_conf", 0.15))
-            candidates = [strategy_for(regime, router_cfg)]
+            candidates = [wrap(strategy_for(regime, router_cfg))]
             extra = meta_selector._scores_for(regime)
             for strat_name, val in extra.items():
                 if val >= min_conf:
                     fn = get_strategy_by_name(strat_name)
-                    if fn and fn not in candidates:
-                        candidates.append(fn)
+                    if fn:
+                        fn = wrap(fn)
+                        if fn not in candidates:
+                            candidates.append(fn)
             ranked = await run_candidates(df, candidates, symbol, cfg, regime)
             if ranked:
                 best_fn, raw_score, raw_dir = ranked[0]
@@ -280,7 +291,7 @@ async def analyze_symbol(
                 score = 0.0
                 direction = "none"
         else:
-            strategy_fn = route(regime, env, router_cfg, notifier, df=df)
+            strategy_fn = wrap(route(regime, env, router_cfg, notifier, df=df))
             name = strategy_name(regime, env)
             score, direction, atr = (await evaluate_async([strategy_fn], df, cfg))[0]
 
@@ -313,6 +324,7 @@ async def analyze_symbol(
                 fn = get_strategy_by_name(strat_name)
                 if fn is None:
                     continue
+                fn = wrap(fn)
                 try:
                     dir_vote = (await evaluate_async([fn], df, cfg))[0][1]
                 except Exception:  # pragma: no cover - safety
