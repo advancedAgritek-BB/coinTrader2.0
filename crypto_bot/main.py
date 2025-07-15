@@ -849,8 +849,8 @@ async def handle_exits(ctx: BotContext) -> None:
                     current_price,
                     ctx.balance,
                 )
-        except Exception:
-            pass
+            except Exception:
+                pass
 
 
 async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
