@@ -15,22 +15,22 @@ def generate_signal(
     df: pd.DataFrame,
     config: Optional[Dict[str, float | int | str]] = None,
     *,
-    breakout_pct: float = 0.1,
-    volume_multiple: float = 3.0,
-    max_history: int = 50,
+    breakout_pct: float = 0.05,
+    volume_multiple: float = 1.5,
+    max_history: int = 30,
     initial_window: int = 3,
     min_volume: float = 100.0,
     direction: str = "auto",
     high_freq: bool = False,
     atr_window: int = 14,
     volume_window: int = 5,
-) -> Tuple[float, str, float, bool]:
-    """Detect pumps for newly listed tokens using early price and volume
-    action.
+    price_fallback: bool = True,
+    fallback_atr_mult: float = 1.5,
+    fallback_volume_mult: float = 1.2,
     price_fallback: bool = False,
     fallback_atr_mult: float = 2.0,
     fallback_volume_mult: float = 2.0,
-) -> Tuple[float, str]:
+) -> Tuple[float, str, float, bool]:
     """Detect pumps for newly listed tokens using early price and volume action.
 
     Parameters
@@ -56,6 +56,10 @@ def generate_signal(
         When ``True`` the function expects 1m candles and shortens
         ``max_history`` and ``initial_window`` so signals can trigger
         right after a listing.
+    atr_window : int, optional
+        Window length used to compute ATR for event detection.
+    volume_window : int, optional
+        Window length used to compute average volume for event detection.
     price_fallback : bool, optional
         Enable ATR based fallback when breakout conditions fail.
     fallback_atr_mult : float, optional
@@ -93,6 +97,13 @@ def generate_signal(
         return 0.0, "none", 0.0, False
 
     price_change = df["close"].iloc[-1] / df["close"].iloc[0] - 1
+    if direction == "auto" and price_change < 0:
+        atr = calc_atr(df)
+        score = 1.0
+        if config is None or config.get("atr_normalization", True):
+            score = normalize_score_by_volatility(df, score)
+        return score, "short", atr, False
+
     base_volume = df["volume"].iloc[:initial_window].mean()
     vol_ratio = df["volume"].iloc[-1] / base_volume if base_volume > 0 else 0
 
@@ -133,29 +144,37 @@ def generate_signal(
             trade_direction = "short" if price_change < 0 else "long"
         return score, trade_direction, atr, event
 
-    return 0.0, "none", atr, event
-        else:
-            trade_direction = direction
-        return score, trade_direction
-    else:
-        trade_direction = direction
-        score = 0.0
+    trade_direction = direction
+    score = 0.0
 
     if price_fallback:
         atr = calc_atr(df)
         body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
         avg_vol = df["volume"].iloc[:-1].mean()
-        if atr > 0 and body > atr * fallback_atr_mult and avg_vol > 0 and df["volume"].iloc[-1] > avg_vol * fallback_volume_mult:
+        if (
+            atr > 0
+            and body > atr * fallback_atr_mult
+            and avg_vol > 0
+            and df["volume"].iloc[-1] > avg_vol * fallback_volume_mult
+        ):
             score = 1.0
             if config is None or config.get("atr_normalization", True):
                 score = normalize_score_by_volatility(df, score)
             if direction not in {"auto", "long", "short"}:
                 direction = "auto"
+            trade_direction = (
+                "short" if df["close"].iloc[-1] < df["open"].iloc[-1] else "long"
+            )
+            if direction != "auto":
+                trade_direction = direction
+            trade_direction = direction
             if direction == "auto":
-                trade_direction = "short" if df["close"].iloc[-1] < df["open"].iloc[-1] else "long"
-            return score, trade_direction
+                trade_direction = (
+                    "short" if df["close"].iloc[-1] < df["open"].iloc[-1] else "long"
+                )
+            return score, trade_direction, atr, event
 
-    return score, trade_direction
+    return 0.0, "none", atr, event
 
 
 class regime_filter:

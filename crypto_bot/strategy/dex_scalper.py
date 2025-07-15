@@ -66,10 +66,10 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         return 0.0, "none"
 
     params = config.get("dex_scalper", {}) if config else {}
-    fast_window = params.get("ema_fast", 5)
-    slow_window = params.get("ema_slow", 20)
+    fast_window = params.get("ema_fast", 3)
+    slow_window = params.get("ema_slow", 10)
     min_score = params.get("min_signal_score", 0.1)
-    gas_threshold_gwei = params.get("gas_threshold_gwei", 0.0)
+    gas_threshold_gwei = params.get("gas_threshold_gwei", 10.0)
 
     if gas_threshold_gwei > 0:
         fee = fetch_priority_fee_gwei()
