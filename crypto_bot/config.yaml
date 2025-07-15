@@ -34,6 +34,12 @@ bounce_scalper:
 sniper_bot:
   atr_window: 14
   volume_window: 5
+  breakout_pct: 0.05
+  volume_multiple: 1.5
+  max_history: 30
+  price_fallback: true
+  fallback_atr_mult: 1.5
+  fallback_volume_mult: 1.2
 breakout:
   atr_buffer_mult: 0.05
   bb_length: 20
