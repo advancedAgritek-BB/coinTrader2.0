@@ -242,3 +242,13 @@ def test_imbalance_filter_disabled_allows_signal(make_df):
     score, direction = micro_scalp_bot.generate_signal(df, cfg, book=book)
     assert direction == "long"
     assert score > 0
+
+
+def test_spread_ratio_blocks_signal(make_df):
+    prices = list(range(1, 11))
+    volumes = [100] * 10
+    df = make_df(prices, volumes)
+    book = {"bids": [(10.0, 1)], "asks": [(10.1, 1)]}
+    cfg = {"micro_scalp": {"fresh_cross_only": False}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg, book=book)
+    assert (score, direction) == (0.0, "none")
