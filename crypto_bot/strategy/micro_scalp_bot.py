@@ -106,20 +106,20 @@ def generate_signal(
         threshold = cfg.get("suspicious_fee_threshold", 0.0)
         if mempool_monitor.is_suspicious(threshold):
             return 0.0, "none"
-    fast_window = int(params.get("ema_fast", 3))
-    slow_window = int(params.get("ema_slow", 8))
+    fast_window = int(params.get("ema_fast", 2))
+    slow_window = int(params.get("ema_slow", 5))
     vol_window = int(params.get("volume_window", 20))
-    min_vol_z = float(params.get("min_vol_z", 0))
+    min_vol_z = float(params.get("min_vol_z", -0.5))
     atr_period = int(params.get("atr_period", 14))
-    min_atr_pct = float(params.get("min_atr_pct", 0))
+    min_atr_pct = float(params.get("min_atr_pct", 0.001))
     min_momentum_pct = float(params.get("min_momentum_pct", 0))
     wick_pct = float(params.get("wick_pct", 0))
     lower_wick_pct = float(params.get("lower_wick_pct", wick_pct))
     upper_wick_pct = float(params.get("upper_wick_pct", wick_pct))
-    confirm_bars = int(params.get("confirm_bars", 1))
-    fresh_cross_only = bool(params.get("fresh_cross_only", True))
+    confirm_bars = int(params.get("confirm_bars", 0))
+    fresh_cross_only = bool(params.get("fresh_cross_only", False))
     imbalance_ratio = float(params.get("imbalance_ratio", 0))
-    imbalance_penalty = float(params.get("imbalance_penalty", 0))
+    imbalance_penalty = float(params.get("imbalance_penalty", 0.2))
     imbalance_filter = bool(params.get("imbalance_filter", True))
     trend_fast = int(params.get("trend_fast", 0))
     trend_slow = int(params.get("trend_slow", 0))
@@ -263,6 +263,14 @@ def generate_signal(
             return 0.0, "none"
         if direction == "short" and trend_fast_val >= trend_slow_val:
             return 0.0, "none"
+
+    if mempool_monitor is not None:
+        try:
+            fee = mempool_monitor.fetch_priority_fee()
+        except Exception:
+            fee = None
+        if fee is not None and fee < 5:
+            score *= 1.2
 
     return score, direction
 
