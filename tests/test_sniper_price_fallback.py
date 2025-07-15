@@ -20,7 +20,6 @@ def make_df():
 
 def test_price_fallback_long_signal():
     df = make_df()
-    score, direction, _, _ = sniper_bot.generate_signal(df, {"price_fallback": True})
     score, direction, atr, event = sniper_bot.generate_signal(
         df, {"price_fallback": True}
     )
