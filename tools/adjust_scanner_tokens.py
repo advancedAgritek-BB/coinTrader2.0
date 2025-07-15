@@ -18,6 +18,18 @@ def load_config() -> dict:
             data = yaml.safe_load(f) or {}
     else:
         data = {}
+
+    strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
+    trend_file = strat_dir / "trend_bot.yaml"
+    if trend_file.exists():
+        with open(trend_file) as sf:
+            overrides = yaml.safe_load(sf) or {}
+        trend_cfg = data.get("trend", {})
+        if isinstance(trend_cfg, dict):
+            trend_cfg.update(overrides)
+        else:
+            trend_cfg = overrides
+        data["trend"] = trend_cfg
     if "symbol" in data:
         data["symbol"] = fix_symbol(data["symbol"])
     if "symbols" in data:
