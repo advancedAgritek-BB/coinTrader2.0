@@ -87,6 +87,12 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df["atr"] = atr
     df["adx"] = adx
 
+    width_series = (df["kc_h"] - df["kc_l"]).dropna()
+    if len(width_series) >= lookback:
+        median_width = width_series.iloc[-lookback:].median()
+        if width_series.iloc[-1] > median_width:
+            return 0.0, "none"
+
     latest = df.iloc[-1]
 
     if df["adx"].iloc[-1] > adx_threshold:

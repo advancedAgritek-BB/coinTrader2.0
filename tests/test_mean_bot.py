@@ -1,14 +1,27 @@
 import pandas as pd
+import pytest
 
 import crypto_bot.strategy.mean_bot as mean_bot
 
 
-def _df_with_drop(price: float) -> pd.DataFrame:
+def _df_with_drop(price: float, last_width: float = 5.0) -> pd.DataFrame:
+    """Return a dataframe with a final candle width of ``last_width``.
+
+    The preceding candles have a constant width of ``2`` which becomes the
+    bandwidth median. Passing a ``last_width`` larger than ``2`` simulates a
+    high bandwidth environment while values below ``2`` create a squeeze.
+    """
+
     base = [100.0] * 55 + [price]
+    highs = [p + 1 for p in base]
+    lows = [p - 1 for p in base]
+    highs[-1] = price + last_width / 2
+    lows[-1] = price - last_width / 2
+
     data = {
         "open": base,
-        "high": [p + 1 for p in base],
-        "low": [p - 1 for p in base],
+        "high": highs,
+        "low": lows,
         "close": base,
         "volume": [100] * len(base),
     }
@@ -16,16 +29,27 @@ def _df_with_drop(price: float) -> pd.DataFrame:
 
 
 def test_long_signal_on_big_drop():
+    """High bandwidth should block the signal."""
     df = _df_with_drop(80.0)
     score, direction = mean_bot.generate_signal(df)
-    assert direction == "long"
-    assert score > 0
+    assert direction == "none"
+    assert score == 0.0
 
 
 def test_short_signal_on_big_spike():
+    """High bandwidth should block the signal."""
     df = _df_with_drop(120.0)
     score, direction = mean_bot.generate_signal(df)
-    assert direction == "short"
+    assert direction == "none"
+    assert score == 0.0
+
+
+@pytest.mark.parametrize("price,expected", [(80.0, "long"), (120.0, "short")])
+def test_signal_during_squeeze(price: float, expected: str):
+    """A drop or spike during a squeeze should still generate a signal."""
+    df = _df_with_drop(price, last_width=1.0)
+    score, direction = mean_bot.generate_signal(df)
+    assert direction == expected
     assert score > 0
 
 
