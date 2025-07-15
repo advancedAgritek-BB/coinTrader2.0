@@ -69,6 +69,7 @@ class BounceScalperConfig:
     min_score: float = 0.3
     max_concurrent_signals: int = 1
     atr_normalization: bool = True
+    cooldown_enabled: bool = True
 
     # pattern detection
     pattern_timeframe: str = ""
@@ -200,7 +201,12 @@ def generate_signal(
     if FORCE_SIGNAL:
         FORCE_SIGNAL = False
 
-    if symbol and in_cooldown(symbol, strategy) and not force:
+    if (
+        cfg.cooldown_enabled
+        and symbol
+        and in_cooldown(symbol, strategy)
+        and not force
+    ):
         if get_recent_win_rate() >= 0.5:
             return 0.0, "none"
 
