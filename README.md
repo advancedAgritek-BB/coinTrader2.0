@@ -295,6 +295,13 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   outputs ATR for stop sizing.
 * **grid_bot.volume_filter** – require a volume spike before entering a grid
   trade. Turning this off increases trade frequency.
+* **grid_bot.dynamic_grid** – realign grid steps when the 1h ATR% changes by
+  more than 20%. Spacing is derived from ``spacing_pct = max(0.3, 1.2 × ATR%)``.
+```yaml
+grid_bot:
+  dynamic_grid: true
+  atr_period: 14
+```
 
 * **atr_normalization** – adjust signal scores using ATR.
 ```python

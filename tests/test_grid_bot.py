@@ -173,17 +173,31 @@ def test_small_range_no_signal(monkeypatch):
 
 
 def test_dynamic_grid_spacing_persists(monkeypatch):
-    atr_vals = iter([5.0, 5.2])
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: next(atr_vals))
+    atr_vals = iter([1.0, 1.1])
+    monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: next(atr_vals))
     grid_state.clear()
     cfg = GridConfig(symbol="XBT/USDT", dynamic_grid=True, atr_normalization=False)
     df = _df_with_price(111.0)
-    grid_bot.generate_signal(df, config=cfg)
-    first = grid_state.get_spacing("XBT/USDT")
+    grid_bot.generate_signal(df, config=cfg, higher_df=df)
+    first = grid_state.get_grid_step("XBT/USDT")
     df2 = _df_with_price(111.0)
-    grid_bot.generate_signal(df2, config=cfg)
-    second = grid_state.get_spacing("XBT/USDT")
+    grid_bot.generate_signal(df2, config=cfg, higher_df=df)
+    second = grid_state.get_grid_step("XBT/USDT")
     assert first == second
+
+
+def test_grid_step_realigns_on_large_atr_change(monkeypatch):
+    atr_vals = iter([1.0, 2.0])
+    monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: next(atr_vals))
+    grid_state.clear()
+    cfg = GridConfig(symbol="XBT/USDT", dynamic_grid=True, atr_normalization=False)
+    df = _df_with_price(111.0)
+    grid_bot.generate_signal(df, config=cfg, higher_df=df)
+    first = grid_state.get_grid_step("XBT/USDT")
+    df2 = _df_with_price(111.0)
+    grid_bot.generate_signal(df2, config=cfg, higher_df=df)
+    second = grid_state.get_grid_step("XBT/USDT")
+    assert second > first
 
 
 def test_long_blocked_by_trend_filter():
