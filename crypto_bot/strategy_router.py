@@ -3,12 +3,10 @@ from typing import Callable, Tuple, Dict, Iterable, Union, Mapping, Any
 import asyncio
 
 from dataclasses import dataclass, field, asdict
-import asyncio
 import redis.asyncio as redis
 
 import pandas as pd
 import numpy as np
-import asyncio
 
 from pathlib import Path
 import yaml
@@ -163,36 +161,28 @@ def score_bot(stats: BotStats) -> float:
     )
 
 
-def cfg_get(cfg: RouterConfig | Mapping[str, Any], key: str, default: Any = None) -> Any:
+def cfg_get(cfg: Mapping[str, Any] | RouterConfig, key: str, default: Any | None = None) -> Any:
     """Return configuration value ``key`` from ``cfg``.
 
-    The helper accepts either a :class:`RouterConfig` or a mapping based
-    configuration dictionary.
+    Supports both :class:`RouterConfig` instances and plain mapping objects. For
+    ``RouterConfig`` the dataclass attributes are checked first, then the
+    underlying ``raw`` mapping including the ``"strategy_router"`` section. For
+    mappings the lookup is performed on the top level and falls back to the
+    ``"strategy_router"`` subsection.
     """
     if isinstance(cfg, RouterConfig):
-        return getattr(cfg, key, default)
-    if isinstance(cfg, Mapping):
-        router = cfg.get("strategy_router", {})
-        if key in router:
-            return router.get(key, default)
-        return cfg.get(key, default)
-    return default
-
-def cfg_get(cfg: Mapping[str, Any] | RouterConfig, key: str, default: Any | None = None) -> Any:
-    """Return a configuration value for ``key`` from ``cfg``.
-
-    When ``cfg`` is a :class:`RouterConfig` the lookup is performed on
-    ``cfg.raw``. Keys missing at the top level are looked up under the
-    ``"strategy_router"`` section.  Otherwise ``dict.get`` is used on ``cfg``
-    directly.
-    """
-    if isinstance(cfg, RouterConfig):
+        if hasattr(cfg, key):
+            return getattr(cfg, key, default)
         if isinstance(cfg.raw, Mapping):
             if key in cfg.raw:
                 return cfg.raw.get(key, default)
             return cfg.raw.get("strategy_router", {}).get(key, default)
         return default
-    return cfg.get(key, default)
+    if isinstance(cfg, Mapping):
+        if key in cfg:
+            return cfg.get(key, default)
+        return cfg.get("strategy_router", {}).get(key, default)
+    return default
 
 
 # Path storing the last selected regime and timestamp
@@ -514,7 +504,7 @@ def route(
     """
 
     def _wrap(fn: Callable[[pd.DataFrame], Tuple[float, str]]):
-        async def wrapped(df: pd.DataFrame, cfg=None):
+        async def inner(df: pd.DataFrame, cfg=None):
             try:
                 res = fn(df, cfg)
             except TypeError:
@@ -533,27 +523,15 @@ def route(
                     f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
                 )
             return score, direction
+
         def wrapped(df: pd.DataFrame, cfg=None):
-            symbol = ""
-            if isinstance(cfg, dict):
-                symbol = cfg.get("symbol", "")
-            lock = _SYMBOL_LOCKS[symbol]
-            telemetry.inc("router.symbol_locked")
-            with lock:
-                try:
-                    res = fn(df, cfg)
-                except TypeError:
-                    res = fn(df)
-            if notifier is not None:
-                if isinstance(res, tuple):
-                    score, direction = res[0], res[1]
-                else:
-                    score, direction = res, "none"
-                notifier.notify(
-                    f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
-                )
-                return score, direction
-            return res
+            coro = inner(df, cfg)
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                return asyncio.run(coro)
+            else:
+                return coro
 
         wrapped.__name__ = fn.__name__
         return wrapped
