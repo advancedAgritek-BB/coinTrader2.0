@@ -23,7 +23,7 @@ bounce_scalper:
   up_candles: 3
   trend_ema_fast: 9
   trend_ema_slow: 21
-  pattern_timeframe: "1m"
+  pattern_timeframe: 1m
   atr_period: 14
   stop_loss_atr_mult: 1.2
   take_profit_atr_mult: 1.5
@@ -90,7 +90,7 @@ balance_poll_mod: 1
 max_age_days: 180
 max_change_pct: 10
 max_concurrent_ohlcv: 12
-max_parallel: 12  # number of symbols processed concurrently
+max_parallel: 12
 max_latency_ms: 1000
 max_ohlcv_failures: 3
 max_open_trades: 15
@@ -151,9 +151,9 @@ solana_scalping:
   macd_slow: 26
   macd_signal: 9
 min_agreeing_votes: 1
-min_confidence_score: 0.25  # baseline; actual min = baseline * (1 + bb_width_z/3)
+min_confidence_score: 0.25
 min_consistent_agreement: 1
-ensemble_min_conf: 0.15  # minimum confidence for ensemble strategies
+ensemble_min_conf: 0.15
 min_cooldown: 1
 min_symbol_age_days: 10
 min_symbol_score: 0.1
@@ -186,7 +186,9 @@ refresh_pairs:
   min_quote_volume_usd: 1000000
   refresh_interval: 6h
   top_k: 40
-  allowed_quote_currencies: [USD, USDT]
+  allowed_quote_currencies:
+  - USD
+  - USDT
   blacklist_assets: []
 regime_return_period: 5
 regime_timeframes:
@@ -218,7 +220,7 @@ scoring_weights:
   strategy_score: 0.4
   symbol_score: 0.1
   volume_score: 0.1
-drawdown_penalty_coef: 0.3  # weight applied to historical drawdown
+drawdown_penalty_coef: 0.3
 sentiment_filter:
   bull_fng: 65
   bull_sentiment: 55
@@ -229,9 +231,12 @@ signal_fusion:
   fusion_method: weight
   min_confidence: 0.25
   strategies:
-  - [trend, 0.4]
-  - [micro_scalp, 0.3]
-  - [sniper_bot, 0.3]
+  - - trend
+    - 0.4
+  - - micro_scalp
+    - 0.3
+  - - sniper_bot
+    - 0.3
 signal_threshold: 0.1
 signal_weight_optimizer:
   enabled: false
@@ -249,9 +254,9 @@ solana_scanner:
   max_tokens_per_scan: 20
 pyth:
   enabled: false
-  solana_endpoint: "https://api.mainnet-beta.solana.com"
-  solana_ws_endpoint: "wss://api.mainnet-beta.solana.com"
-  program_id: "FsJ3A3u2vn5cTVofAjvy6qM3HrjTXg5Gs1Y8D6fCt3m"
+  solana_endpoint: https://api.mainnet-beta.solana.com
+  solana_ws_endpoint: wss://api.mainnet-beta.solana.com
+  program_id: FsJ3A3u2vn5cTVofAjvy6qM3HrjTXg5Gs1Y8D6fCt3m
 strategy_allocation:
   grid_bot: 0.3
   sniper_bot: 0.3
@@ -289,15 +294,15 @@ adaptive_scan:
   atr_baseline: 0.01
   max_factor: 2.0
 symbol_filter:
-  change_pct_percentile: 40
-  max_correlation: 0.8
+  change_pct_percentile: 0
+  max_correlation: 1.0
   correlation_max_pairs: 100
-  max_spread_pct: 4
-  min_volume_usd: 30000
+  max_spread_pct: 5
+  min_volume_usd: 1000
   uncached_volume_multiplier: 4
-  volume_percentile: 40
-  kraken_batch_size: 100     # max symbols per fetch_tickers call
-  http_timeout: 10           # seconds for fallback /Ticker requests
+  volume_percentile: 0
+  kraken_batch_size: 100
+  http_timeout: 10
   ticker_retry_attempts: 3
   log_ticker_exceptions: false
 symbol_refresh_minutes: 5
@@ -338,7 +343,7 @@ trend:
 twap_enabled: true
 twap_interval_seconds: 10
 twap_slices: 4
-use_websocket: false          # (<- only for OHLCV; you can still use ws for tickers)
+use_websocket: false
 hidden_limit: false
 volatility_filter:
   max_funding_rate: 0.05
