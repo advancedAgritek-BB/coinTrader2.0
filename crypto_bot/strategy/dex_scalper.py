@@ -6,6 +6,7 @@ import ta
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.pair_cache import load_liquid_pairs
+from crypto_bot.utils.gas_estimator import fetch_priority_fee_gwei
 
 ALLOWED_PAIRS = load_liquid_pairs() or []
 
@@ -68,6 +69,12 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     fast_window = params.get("ema_fast", 5)
     slow_window = params.get("ema_slow", 20)
     min_score = params.get("min_signal_score", 0.1)
+    gas_threshold_gwei = params.get("gas_threshold_gwei", 0.0)
+
+    if gas_threshold_gwei > 0:
+        fee = fetch_priority_fee_gwei()
+        if fee > gas_threshold_gwei:
+            return 0.0, "none"
 
     if len(df) < slow_window:
         return 0.0, "none"
