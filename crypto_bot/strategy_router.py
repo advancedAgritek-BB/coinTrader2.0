@@ -1,5 +1,7 @@
 from typing import Callable, Tuple, Dict, Iterable, Union, Mapping, Any
 
+import asyncio
+
 from dataclasses import dataclass, field, asdict
 import asyncio
 import redis.asyncio as redis
@@ -43,6 +45,28 @@ _SYMBOL_LOCKS: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 with open(CONFIG_PATH) as f:
     DEFAULT_CONFIG = yaml.safe_load(f)
+
+# Map symbols to asyncio locks guarding order placement
+symbol_locks: Dict[str, asyncio.Lock] = {}
+
+# Event loop captured when locks are first acquired
+_LOCK_LOOP: asyncio.AbstractEventLoop | None = None
+
+
+async def acquire_symbol_lock(symbol: str) -> None:
+    """Acquire the asyncio lock associated with ``symbol``."""
+    global _LOCK_LOOP
+    if _LOCK_LOOP is None:
+        _LOCK_LOOP = asyncio.get_running_loop()
+    lock = symbol_locks.setdefault(symbol, asyncio.Lock())
+    await lock.acquire()
+
+
+async def release_symbol_lock(symbol: str) -> None:
+    """Release the lock for ``symbol`` if held."""
+    lock = symbol_locks.get(symbol)
+    if lock and lock.locked():
+        lock.release()
 
 
 @dataclass
@@ -490,6 +514,25 @@ def route(
     """
 
     def _wrap(fn: Callable[[pd.DataFrame], Tuple[float, str]]):
+        async def wrapped(df: pd.DataFrame, cfg=None):
+            try:
+                res = fn(df, cfg)
+            except TypeError:
+                res = fn(df)
+            if isinstance(res, tuple):
+                score, direction = res[0], res[1]
+            else:
+                score, direction = res, "none"
+            symbol = ""
+            if isinstance(cfg, dict):
+                symbol = cfg.get("symbol", "")
+            if direction != "none" and symbol:
+                await acquire_symbol_lock(symbol)
+            if notifier is not None:
+                notifier.notify(
+                    f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
+                )
+            return score, direction
         def wrapped(df: pd.DataFrame, cfg=None):
             symbol = ""
             if isinstance(cfg, dict):

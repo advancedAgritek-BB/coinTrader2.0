@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 
 from crypto_bot import strategy_router
 from crypto_bot.strategy_router import strategy_for, route, RouterConfig
@@ -74,7 +75,7 @@ def test_route_notifier(monkeypatch):
     cfg = RouterConfig.from_dict({"strategy_router": {"regimes": {"trending": ["dummy"]}}})
 
     fn = route("trending", "cex", cfg, DummyNotifier())
-    score, direction = fn(None, {"symbol": "AAA"})
+    score, direction = asyncio.run(fn(None, {"symbol": "AAA"}))
 
     assert score == 0.5
     assert direction == "long"
@@ -92,11 +93,12 @@ def test_route_multi_tf_combo(monkeypatch, tmp_path):
     )
 
     monkeypatch.setattr(strategy_router.commit_lock, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(strategy_router, "LAST_REGIME_FILE", tmp_path / "last.json")
 
     cfg = RouterConfig.from_dict({"timeframe": "1m", "strategy_router": {"regimes": {"breakout": ["dummy"]}}})
 
     fn = route({"1m": "breakout", "15m": "trending"}, "cex", cfg)
-    score, direction = fn(pd.DataFrame())
+    score, direction = asyncio.run(fn(pd.DataFrame()))
     assert (score, direction) == (0.1, "long")
 
 
@@ -165,7 +167,7 @@ def test_onchain_solana_route():
         "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
     }
     fn = route("breakout", "onchain", cfg)
-    assert fn is sniper_solana.generate_signal
+    assert fn.__name__ == sniper_solana.generate_signal.__name__
 
 
 def test_usdc_pair_breakout():
@@ -174,5 +176,5 @@ def test_usdc_pair_breakout():
         "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
     }
     fn = route("breakout", "cex", cfg)
-    assert fn is sniper_solana.generate_signal
+    assert fn.__name__ == sniper_solana.generate_signal.__name__
 
