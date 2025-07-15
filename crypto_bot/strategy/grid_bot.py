@@ -17,7 +17,7 @@ from crypto_bot.utils.volatility import normalize_score_by_volatility, atr_perce
 from crypto_bot.volatility_filter import calc_atr
 
 DYNAMIC_THRESHOLD = 1.5
-from . import breakout_bot
+from . import breakout_bot, micro_scalp_bot
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 
 
@@ -29,20 +29,20 @@ class GridConfig:
     grids, machine-learning centered ranges and simple arbitrage support.
     """
 
-    num_levels: int = 10
+    num_levels: int = 6
     breakout_mult: float = 1.5
-    cooldown_bars: int = 6
-    max_active_legs: int = 4
+    cooldown_bars: int = 2
+    max_active_legs: int = 8
     symbol: str = ""
     leverage: int = 1
 
     atr_normalization: bool = True
     atr_period: int = 14
     range_window: int = 20
-    spacing_factor: float = 0.5
-    dynamic_grid: bool = False
+    spacing_factor: float = 0.3
+    dynamic_grid: bool = True
     use_ml_center: bool = False
-    min_range_pct: float = 0.001
+    min_range_pct: float = 0.0005
     arbitrage_pairs: list[tuple[str, str]] = field(default_factory=list)
     arbitrage_threshold: float = 0.005
     trend_ema_fast: int = 50
@@ -171,7 +171,7 @@ def generate_signal(
     if symbol:
         grid_state.update_bar(symbol, len(df))
         win_rate = get_recent_win_rate(4, strategy="grid_bot")
-        skip_cd = win_rate == 1.0
+        skip_cd = win_rate > 0.7
         if not skip_cd and grid_state.in_cooldown(symbol, cfg.cooldown_bars):
             return 0.0, "none"
         if grid_state.active_leg_count(symbol) >= cfg.max_active_legs:
@@ -290,6 +290,18 @@ def generate_signal(
 
     lower_bound = levels[1]
     upper_bound = levels[-2]
+
+    if cfg.dynamic_grid and lower_bound < price < upper_bound:
+        near_lower = price - lower_bound <= grid_step
+        near_upper = upper_bound - price <= grid_step
+        if (near_lower or near_upper) and {"open", "high", "low", "close"}.issubset(df.columns):
+            scalp_score, scalp_dir = micro_scalp_bot.generate_signal(
+                df,
+                _as_dict(config),
+                higher_df=higher_df,
+            )
+            if scalp_dir != "none":
+                return scalp_score, scalp_dir
 
     if price <= lower_bound:
         if not is_in_trend(recent, cfg.trend_ema_fast, cfg.trend_ema_slow, "long"):

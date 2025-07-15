@@ -1,6 +1,23 @@
 import pandas as pd
+import importlib.util
+from pathlib import Path
+import sys, types
 
-from crypto_bot.strategy import sniper_solana
+sys.modules.setdefault("telegram", types.SimpleNamespace(Bot=None))
+sys.modules.setdefault(
+    "crypto_bot.strategy.sniper_bot", types.ModuleType("sniper_bot")
+)
+sys.modules.setdefault("scipy", types.ModuleType("scipy"))
+sys.modules.setdefault(
+    "scipy.stats", types.SimpleNamespace(pearsonr=lambda x, y: (0.0, 0.0))
+)
+
+_spec = importlib.util.spec_from_file_location(
+    "sniper_solana", Path(__file__).resolve().parents[1] / "crypto_bot/strategies/sniper_solana.py"
+)
+sniper_solana = importlib.util.module_from_spec(_spec)
+assert _spec.loader is not None
+_spec.loader.exec_module(sniper_solana)
 
 
 def make_df(prices):

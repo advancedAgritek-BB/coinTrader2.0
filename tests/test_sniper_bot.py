@@ -106,3 +106,41 @@ def test_event_trigger():
     assert direction == "long"
     assert score > 0
     assert event
+
+
+def test_defaults_trigger_on_small_breakout():
+    df = _df_with_volume_and_price(
+        [1.0, 1.0, 1.0, 1.06],
+        [100, 100, 100, 160],
+    )
+    score, direction, _, event = sniper_bot.generate_signal(df)
+    assert direction == "long"
+    assert score > 0
+    assert not event
+
+
+def test_fallback_short_no_breakout():
+    df = _df_with_volume_and_price(
+        [1.0, 0.99, 0.98, 0.97],
+        [120, 110, 100, 130],
+    )
+    score, direction, _, event = sniper_bot.generate_signal(df)
+    assert direction == "short"
+    assert score > 0
+    assert not event
+def test_price_fallback_long_signal():
+    bars = 15
+    df = pd.DataFrame({
+        "open": [1.0] * bars,
+        "high": [1.05] * (bars - 1) + [1.25],
+        "low": [0.95] * (bars - 1) + [1.0],
+        "close": [1.0] * (bars - 1) + [1.25],
+        "volume": [100] * (bars - 1) + [250],
+    })
+    score, direction, atr, event = sniper_bot.generate_signal(
+        df, {"price_fallback": True}
+    )
+    assert direction == "long"
+    assert score > 0
+    assert atr > 0
+    assert event

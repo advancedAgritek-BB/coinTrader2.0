@@ -1,12 +1,12 @@
 atr_normalization: true
-indicator_lookback: 250
+indicator_lookback: 14
 rsi_overbought_pct: 80
 rsi_oversold_pct: 20
 bb_squeeze_pct: 15
 adx_threshold: 20
 sl_mult: 1.2
 tp_mult: 1.5
-ml_enabled: false
+ml_enabled: true
 bounce_scalper:
   rsi_window: 14
   oversold: 30
@@ -34,17 +34,24 @@ bounce_scalper:
 sniper_bot:
   atr_window: 14
   volume_window: 5
+  breakout_pct: 0.05
+  volume_multiple: 1.5
+  max_history: 30
+  price_fallback: true
+  fallback_atr_mult: 1.5
+  fallback_volume_mult: 1.2
 breakout:
   atr_buffer_mult: 0.05
-  bb_length: 20
+  bb_length: 12
   bb_std: 2
   dc_length: 20
-  kc_length: 20
+  kc_length: 12
   kc_mult: 1.2
   momentum_filter: false
   squeeze_threshold: 0.02
-  volume_mult: 1.5
+  vol_multiplier: 1.2
   volume_window: 20
+  adx_threshold: 20
 cycle_bias:
   enabled: false
   mvrv_url: https://api.example.com/mvrv
@@ -71,11 +78,11 @@ grid_bot:
   atr_normalization: true
   atr_period: 14
   breakout_mult: 1.2
-  cooldown_bars: 4
-  max_active_legs: 6
+  cooldown_bars: 2
+  max_active_legs: 8
   range_window: 20
-  spacing_factor: 0.4
-  dynamic_grid: false
+  spacing_factor: 0.3
+  dynamic_grid: true
   use_ml_center: false
   min_range_pct: 0.0005
   leverage: 1
@@ -134,16 +141,16 @@ metrics_enabled: true
 metrics_output_file: crypto_bot/logs/metrics.csv
 micro_scalp:
   atr_period: 14
-  confirm_bars: 1
-  ema_fast: 3
-  ema_slow: 8
+  confirm_bars: 0
+  ema_fast: 2
+  ema_slow: 5
   fresh_cross_only: false
   imbalance_ratio: 0
-  imbalance_penalty: 0
+  imbalance_penalty: 0.2
   imbalance_filter: true
-  min_atr_pct: 0.0
+  min_atr_pct: 0.001
   min_momentum_pct: 0.0
-  min_vol_z: 1.0
+  min_vol_z: -0.5
   trend_fast: 21
   trend_slow: 50
   trend_timeframe: 5m
