@@ -27,6 +27,9 @@ def generate_signal(
     price_fallback: bool = False,
     fallback_atr_mult: float = 2.0,
     fallback_volume_mult: float = 2.0,
+    price_fallback: bool = True,
+    fallback_atr_mult: float = 1.5,
+    fallback_volume_mult: float = 1.2,
 ) -> Tuple[float, str, float, bool]:
     """Detect pumps for newly listed tokens using early price and volume action.
 
@@ -59,10 +62,13 @@ def generate_signal(
         Window length used to compute average volume for event detection.
     price_fallback : bool, optional
         Enable ATR based fallback when breakout conditions fail.
+        Defaults to ``True``.
     fallback_atr_mult : float, optional
         Required candle body multiple of ATR for the fallback.
+        Defaults to ``1.5``.
     fallback_volume_mult : float, optional
         Required volume multiple for the fallback.
+        Defaults to ``1.2``.
 
     Returns
     -------
@@ -159,15 +165,12 @@ def generate_signal(
                 score = normalize_score_by_volatility(df, score)
             if direction not in {"auto", "long", "short"}:
                 direction = "auto"
-            trade_direction = (
-                "short" if df["close"].iloc[-1] < df["open"].iloc[-1] else "long"
-            )
-            if direction != "auto":
-                trade_direction = direction
             trade_direction = direction
             if direction == "auto":
                 trade_direction = (
-                    "short" if df["close"].iloc[-1] < df["open"].iloc[-1] else "long"
+                    "short"
+                    if df["close"].iloc[-1] < df["open"].iloc[-1]
+                    else "long"
                 )
             return score, trade_direction, atr, event
 
