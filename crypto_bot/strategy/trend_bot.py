@@ -33,8 +33,8 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     lookback_cfg = int(params.get("indicator_lookback", 250))
     rsi_overbought_pct = float(params.get("rsi_overbought_pct", 90))
     rsi_oversold_pct = float(params.get("rsi_oversold_pct", 10))
-    fast_window = int(params.get("trend_ema_fast", 5))
-    slow_window = int(params.get("trend_ema_slow", 15))
+    fast_window = int(params.get("trend_ema_fast", 3))
+    slow_window = int(params.get("trend_ema_slow", 10))
     atr_period = int(params.get("atr_period", 14))
     k = float(params.get("k", 1.0))
     volume_window = int(params.get("volume_window", 20))
@@ -135,7 +135,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         and latest["volume"] > latest["volume_ma"]
     )
 
-    if params.get("donchian_confirmation", True):
+    if params.get("donchian_confirmation", False):
         window = params.get("donchian_window", 20)
         upper = df["high"].rolling(window=window).max().iloc[-1]
         lower = df["low"].rolling(window=window).min().iloc[-1]
@@ -172,7 +172,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     if config:
         torch_cfg = config.get("torch_signal_model", {})
         if torch_cfg.get("enabled") and score > 0:
-            weight = float(torch_cfg.get("weight", 0.5))
+            weight = float(torch_cfg.get("weight", 0.7))
             try:  # pragma: no cover - best effort
                 from crypto_bot.torch_signal_model import predict_signal as _pred
                 ml_score = _pred(df)

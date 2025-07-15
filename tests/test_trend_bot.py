@@ -1,8 +1,21 @@
 import pandas as pd
-
-from crypto_bot.strategy import trend_bot
+import importlib.util
+from pathlib import Path
+import sys
 import numpy as np
+import pytest
 import ta
+
+spec = importlib.util.spec_from_file_location(
+    "trend_bot",
+    Path(__file__).resolve().parents[1]
+    / "crypto_bot"
+    / "strategy"
+    / "trend_bot.py",
+)
+trend_bot = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(trend_bot)
 
 
 def _df_trend(volume_last: float, high_equals_close: bool = False):
@@ -92,3 +105,19 @@ def test_adx_threshold(monkeypatch):
     )
     assert direction != "none"
     assert score > 0
+
+
+def test_torch_signal_default_weight(monkeypatch):
+    df = _df_trend(150.0, high_equals_close=True)
+    base_score, _ = trend_bot.generate_signal(df, {"donchian_confirmation": False})
+
+    class _FakeTorch:
+        @staticmethod
+        def predict_signal(_df):
+            return 0.2
+
+    monkeypatch.setitem(sys.modules, "crypto_bot.torch_signal_model", _FakeTorch)
+    cfg = {"donchian_confirmation": False, "torch_signal_model": {"enabled": True}}
+    score, _ = trend_bot.generate_signal(df, cfg)
+    expected = base_score * 0.3 + 0.2 * 0.7
+    assert score == pytest.approx(expected)
