@@ -35,3 +35,4 @@ cachetools
 prometheus-client
 solders
 pythclient
+redis

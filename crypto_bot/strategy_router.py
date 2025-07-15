@@ -1,6 +1,8 @@
 from typing import Callable, Tuple, Dict, Iterable, Union, Mapping, Any
 
 from dataclasses import dataclass, field, asdict
+import asyncio
+import redis.asyncio as redis
 
 import pandas as pd
 import numpy as np
@@ -90,6 +92,46 @@ class RouterConfig:
 
 
 DEFAULT_ROUTER_CFG = RouterConfig.from_dict(DEFAULT_CONFIG)
+
+
+@dataclass
+class BotStats:
+    """Performance statistics for a trading bot."""
+
+    sharpe_30d: float = 0.0
+    win_rate_30d: float = 0.0
+    avg_r_multiple: float = 0.0
+
+
+def load_bot_stats(name: str) -> BotStats:
+    """Return statistics for ``name`` loaded from Redis."""
+    try:
+        r = redis.Redis()
+        raw = asyncio.run(r.get(f"bot-stats:{name}"))
+    except Exception:
+        return BotStats()
+    if not raw:
+        return BotStats()
+    try:
+        if isinstance(raw, bytes):
+            raw = raw.decode()
+        data = json.loads(raw)
+    except Exception:
+        return BotStats()
+    return BotStats(
+        sharpe_30d=float(data.get("sharpe_30d", 0.0)),
+        win_rate_30d=float(data.get("win_rate_30d", 0.0)),
+        avg_r_multiple=float(data.get("avg_r_multiple", 0.0)),
+    )
+
+
+def score_bot(stats: BotStats) -> float:
+    """Return a ranking score for ``stats``."""
+    return (
+        stats.sharpe_30d * 0.4
+        + stats.win_rate_30d * 0.3
+        + stats.avg_r_multiple * 0.3
+    )
 
 
 def cfg_get(cfg: RouterConfig | Mapping[str, Any], key: str, default: Any = None) -> Any:
@@ -263,10 +305,8 @@ def strategy_for(
     regime: str, config: RouterConfig | Mapping[str, Any] | None = None
 ) -> Callable[[pd.DataFrame], Tuple[float, str]]:
     """Return strategy callable for a given regime."""
-    cfg = config or DEFAULT_ROUTER_CFG
-    _register_config(cfg)
-    mapping, _ = _build_mappings_cached(id(cfg))
-    return mapping.get(regime, grid_bot.generate_signal)
+    strategies = get_strategies_for_regime(regime, config)
+    return strategies[0] if strategies else grid_bot.generate_signal
 
 
 def get_strategies_for_regime(
@@ -275,8 +315,22 @@ def get_strategies_for_regime(
     """Return list of strategies mapped to ``regime``."""
     cfg = config or DEFAULT_ROUTER_CFG
     _register_config(cfg)
-    _, mapping = _build_mappings_cached(id(cfg))
-    return mapping.get(regime, [grid_bot.generate_signal])
+    if isinstance(cfg, RouterConfig):
+        names = cfg.regimes.get(regime, [])
+    else:
+        names = cfg.get("strategy_router", {}).get("regimes", {}).get(regime, [])
+    if isinstance(names, str):
+        names = [names]
+    pairs: list[tuple[str, Callable[[pd.DataFrame], Tuple[float, str]]]] = []
+    for name in names:
+        fn = get_strategy_by_name(name)
+        if fn:
+            pairs.append((name, fn))
+    if not pairs:
+        _, mapping = _build_mappings_cached(id(cfg))
+        return mapping.get(regime, [grid_bot.generate_signal])
+    pairs.sort(key=lambda p: score_bot(load_bot_stats(p[0])), reverse=True)
+    return [fn for _, fn in pairs]
 
 
 def evaluate_regime(
