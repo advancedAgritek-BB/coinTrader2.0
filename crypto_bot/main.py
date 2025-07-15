@@ -67,6 +67,7 @@ from crypto_bot.utils.market_loader import (
     update_regime_tf_cache,
     timeframe_seconds,
     configure as market_loader_configure,
+    fetch_order_book_async,
 )
 from crypto_bot.utils.eval_queue import build_priority_queue
 from crypto_bot.solana import get_solana_new_tokens
@@ -93,6 +94,7 @@ from crypto_bot.fund_manager import (
 )
 from crypto_bot.regime.regime_classifier import CONFIG
 from crypto_bot.volatility_filter import calc_atr
+from crypto_bot.solana.exit import monitor_price
 
 
 def _fix_symbol(sym: str) -> str:
@@ -177,6 +179,24 @@ def opposite_side(side: str) -> str:
     return "sell" if side == "buy" else "buy"
 
 
+def _closest_wall_distance(book: dict, entry: float, side: str) -> float | None:
+    """Return distance to the nearest bid/ask wall from ``entry``."""
+    if not isinstance(book, dict):
+        return None
+    levels = book.get("asks") if side == "buy" else book.get("bids")
+    if not levels:
+        return None
+    dists = []
+    for price, _amount in levels:
+        if side == "buy" and price > entry:
+            dists.append(price - entry)
+        elif side == "sell" and price < entry:
+            dists.append(entry - price)
+    if not dists:
+        return None
+    return min(dists)
+
+
 def notify_balance_change(
     notifier: TelegramNotifier | None,
     previous: float | None,
@@ -240,6 +260,18 @@ def load_config() -> dict:
     with open(CONFIG_PATH) as f:
         logger.info("Loading config from %s", CONFIG_PATH)
         data = yaml.safe_load(f) or {}
+
+    strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
+    trend_file = strat_dir / "trend_bot.yaml"
+    if trend_file.exists():
+        with open(trend_file) as sf:
+            overrides = yaml.safe_load(sf) or {}
+        trend_cfg = data.get("trend", {})
+        if isinstance(trend_cfg, dict):
+            trend_cfg.update(overrides)
+        else:
+            trend_cfg = overrides
+        data["trend"] = trend_cfg
 
     if "symbol" in data:
         data["symbol"] = fix_symbol(data["symbol"])
@@ -699,6 +731,24 @@ async def execute_signals(ctx: BotContext) -> None:
             )
             if order:
                 executed += 1
+                take_profit = None
+                if strategy == "bounce_scalper":
+                    depth = int(ctx.config.get("liquidity_depth", 10))
+                    book = await fetch_order_book_async(ctx.exchange, sym, depth)
+                    dist = _closest_wall_distance(
+                        book, price, direction_to_side(candidate["direction"])
+                    )
+                    if dist is not None:
+                        take_profit = dist * 0.8
+                ctx.risk_manager.register_stop_order(
+                    order,
+                    strategy=strategy,
+                    symbol=sym,
+                    entry_price=price,
+                    confidence=score,
+                    direction=direction_to_side(candidate["direction"]),
+                    take_profit=take_profit,
+                )
         else:
             executed += 1
         ctx.timing["execution_latency"] = max(
@@ -733,6 +783,9 @@ async def execute_signals(ctx: BotContext) -> None:
             )
         except Exception:
             pass
+
+        if strategy == "micro_scalp":
+            asyncio.create_task(_monitor_micro_scalp_exit(ctx, sym))
 
     if executed == 0:
         logger.info("No trades executed from %d candidate signals", len(results[:top_n]))
@@ -796,9 +849,52 @@ async def handle_exits(ctx: BotContext) -> None:
                     current_price,
                     ctx.balance,
                 )
-            except Exception:
-                pass
+        except Exception:
+            pass
 
+
+async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
+    """Monitor a micro-scalp trade and exit based on :func:`monitor_price`."""
+    pos = ctx.positions.get(sym)
+    if not pos:
+        return
+
+    tf = ctx.config.get("scalp_timeframe", "1m")
+
+    def feed() -> float:
+        df = ctx.df_cache.get(tf, {}).get(sym)
+        if df is None or df.empty:
+            return pos["entry_price"]
+        return float(df["close"].iloc[-1])
+
+    res = await monitor_price(feed, pos["entry_price"], {})
+    exit_price = res.get("exit_price", feed())
+
+    await cex_trade_async(
+        ctx.exchange,
+        ctx.ws_client,
+        sym,
+        opposite_side(pos["side"]),
+        pos["size"],
+        ctx.notifier,
+        dry_run=ctx.config.get("execution_mode") == "dry_run",
+        use_websocket=ctx.config.get("use_websocket", False),
+        config=ctx.config,
+    )
+
+    if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
+        try:
+            ctx.paper_wallet.close(sym, pos["size"], exit_price)
+            ctx.balance = ctx.paper_wallet.balance
+        except Exception:
+            pass
+
+    ctx.risk_manager.deallocate_capital(pos.get("strategy", ""), pos["size"] * pos["entry_price"])
+    ctx.positions.pop(sym, None)
+    try:
+        log_position(sym, pos["side"], pos["size"], pos["entry_price"], exit_price, ctx.balance)
+    except Exception:
+        pass
 
 async def _rotation_loop(
     rotator: PortfolioRotator,

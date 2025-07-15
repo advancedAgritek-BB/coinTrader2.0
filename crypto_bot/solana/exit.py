@@ -18,6 +18,7 @@ async def monitor_price(
     trailing = float(cfg.get("trailing_stop_pct", 0))
     timeout = float(cfg.get("timeout", 60))
     poll = float(cfg.get("poll_interval", 1))
+    profit_tp = float(cfg.get("profit_tp_pct", 0.2))
 
     peak = entry_price
     start = time.time()
@@ -27,6 +28,9 @@ async def monitor_price(
         price = price_feed()
         if price > peak:
             peak = price
+        change_pct = (price - entry_price) / entry_price * 100
+        if change_pct >= profit_tp:
+            return {"exit_price": price, "reason": "tp"}
         if take_profit and price >= entry_price * (1 + take_profit / 100):
             return {"exit_price": price, "reason": "tp"}
         if trailing and price <= peak * (1 - trailing / 100):

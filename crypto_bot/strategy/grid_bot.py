@@ -13,7 +13,7 @@ import ta
 
 from crypto_bot import grid_state
 from crypto_bot.utils.indicator_cache import cache_series
-from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.utils.volatility import normalize_score_by_volatility, atr_percent
 from crypto_bot.volatility_filter import calc_atr
 
 DYNAMIC_THRESHOLD = 1.5
@@ -159,6 +159,7 @@ def generate_signal(
     df: pd.DataFrame,
     num_levels: int | None = None,
     config: ConfigType = None,
+    higher_df: pd.DataFrame | None = None,
 ) -> Tuple[float, str]:
     """Generate a grid based trading signal."""
     cfg = GridConfig.from_dict(_as_dict(config))
@@ -246,21 +247,23 @@ def generate_signal(
     else:
         centre = (high + low) / 2
 
-    atr = calc_atr(recent, window=atr_period)
-    range_step = (high - low) / max(num_levels - 1, 1)
-    grid_step = min(atr * cfg.spacing_factor, range_step)
+    atr_pct_1h = atr_percent(higher_df or df, atr_period)
+    spacing_pct = max(0.3, 1.2 * atr_pct_1h)
+    grid_step = price * spacing_pct / 100
 
     if cfg.dynamic_grid and symbol:
-        prev_step = grid_state.get_spacing(symbol)
-        prev_atr = grid_state.get_last_atr(symbol)
+        prev_step = grid_state.get_grid_step(symbol)
+        prev_pct = grid_state.get_last_atr(symbol)
         if (
-            prev_step is not None
-            and prev_atr is not None
-            and prev_atr > 0
-            and abs(atr - prev_atr) / prev_atr <= cfg.atr_change_threshold
+            prev_step is None
+            or prev_pct is None
+            or prev_pct == 0
+            or abs(atr_pct_1h - prev_pct) / prev_pct > 0.2
         ):
+            grid_state.set_grid_step(symbol, grid_step)
+        else:
             grid_step = prev_step
-        grid_state.update_spacing(symbol, grid_step, atr)
+        grid_state.set_last_atr(symbol, atr_pct_1h)
     centre = float("nan")
     if cfg.use_ml_center:
         try:  # pragma: no cover - best effort
@@ -274,22 +277,6 @@ def generate_signal(
         else:
             centre = (high + low) / 2
 
-    atr = calc_atr(recent, window=atr_period)
-    range_step = (high - low) / max(num_levels - 1, 1)
-    computed_step = min(atr * cfg.spacing_factor, range_step)
-    grid_step = computed_step
-    if cfg.dynamic_grid and symbol:
-        prev_step = grid_state.get_grid_step(symbol)
-        prev_atr = grid_state.get_last_atr(symbol)
-        grid_state.set_last_atr(symbol, atr)
-        if prev_step is not None and prev_atr is not None and prev_atr > 0:
-            ratio = max(atr / prev_atr, prev_atr / atr)
-            if ratio >= DYNAMIC_THRESHOLD:
-                grid_state.set_grid_step(symbol, computed_step)
-            else:
-                grid_step = prev_step
-        else:
-            grid_state.set_grid_step(symbol, computed_step)
     if not grid_step:
         return 0.0, "none"
 

@@ -42,3 +42,23 @@ def test_scalper_custom_config():
     score, direction = dex_scalper.generate_signal(df, cfg)
     assert direction == 'long'
     assert score > 0
+
+
+def test_priority_fee_aborts(monkeypatch):
+    close = pd.Series(range(1, 41))
+    df = pd.DataFrame({"close": close})
+    monkeypatch.setenv("MOCK_ETH_PRIORITY_FEE_GWEI", "50")
+    cfg = {"dex_scalper": {"gas_threshold_gwei": 10}}
+    score, direction = dex_scalper.generate_signal(df, cfg)
+    assert score == 0.0
+    assert direction == "none"
+
+
+def test_priority_fee_below_threshold(monkeypatch):
+    close = pd.Series(range(1, 41))
+    df = pd.DataFrame({"close": close})
+    monkeypatch.setenv("MOCK_ETH_PRIORITY_FEE_GWEI", "5")
+    cfg = {"dex_scalper": {"gas_threshold_gwei": 10}}
+    score, direction = dex_scalper.generate_signal(df, cfg)
+    assert direction == "long"
+    assert score > 0

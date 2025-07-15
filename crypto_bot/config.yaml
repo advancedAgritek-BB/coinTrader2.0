@@ -102,6 +102,7 @@ max_open_trades: 15
 max_slippage_pct: 0.1
 max_spread_pct: 5
 max_vol: 1000000
+gas_threshold_gwei: 80
 mempool_monitor:
   action: pause
   enabled: true

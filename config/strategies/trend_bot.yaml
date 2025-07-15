@@ -1,0 +1,4 @@
+atr_period: 14
+k: 1.0
+trend_ema_fast: 20
+trend_ema_slow: 50

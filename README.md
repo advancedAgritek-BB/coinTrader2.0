@@ -262,6 +262,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment to avoid bearish markets.
 * **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
 * **mempool_monitor** – pause or reprice when Solana fees spike.
+* **gas_threshold_gwei** – abort scalper trades when priority fees exceed this.
 * **min_cooldown** – minimum minutes between trades.
 * **cycle_bias** – optional on-chain metrics to bias trades.
 * **min_expected_value** – minimum expected value for a strategy based on
@@ -287,13 +288,20 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   imbalance filtering with an optional penalty. Set `trend_filter` or
   `imbalance_filter` to `false` to bypass the trend or order book checks.
 * **pattern_timeframe** – optional candle interval used by the bounce scalper to
-  confirm engulfing or hammer patterns.
+  confirm engulfing or hammer patterns. Defaults to `1m`.
 * **trigger_once** – bypass the cooldown and win-rate filter for one bounce scalper cycle.
 * **cooldown_enabled** – disable to ignore the cooldown and win-rate check.
 * **breakout** – Bollinger/Keltner squeeze, volume multiplier, ATR buffer and
   outputs ATR for stop sizing.
 * **grid_bot.volume_filter** – require a volume spike before entering a grid
   trade. Turning this off increases trade frequency.
+* **grid_bot.dynamic_grid** – realign grid steps when the 1h ATR% changes by
+  more than 20%. Spacing is derived from ``spacing_pct = max(0.3, 1.2 × ATR%)``.
+```yaml
+grid_bot:
+  dynamic_grid: true
+  atr_period: 14
+```
 
 * **sniper_bot.atr_window**/**sniper_bot.volume_window** – windows for ATR and
   volume averages when detecting news-like events.
@@ -337,7 +345,7 @@ ranks them by `score × edge` and executes the best result. Details about
 the second‑highest strategy are written to the CSV file defined by
 `second_place_csv`.
 #### Bounce Scalper
-The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry. Set `pattern_timeframe` to fetch a separate candle interval for confirming engulfing or hammer patterns. When in cooldown the scalper only signals if the recent win rate falls below 50%, effectively skipping the cooldown during a drawdown. Set `cooldown_enabled` to `false` to disable this behaviour.
+The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry. Set `pattern_timeframe` (default `1m`) to fetch a separate candle interval for confirming engulfing or hammer patterns. When in cooldown the scalper only signals if the recent win rate falls below 50%, effectively skipping the cooldown during a drawdown. Set `cooldown_enabled` to `false` to disable this behaviour.
 
 ```yaml
 bounce_scalper:
@@ -358,6 +366,9 @@ learning prediction. Enable the weighting in `crypto_bot/config.yaml`:
 mean_bot:
   ml_enabled: true
 ```
+The bot only opens positions when the current 20-bar Bollinger bandwidth is
+below its 20-bar median, reducing trades during ranging periods and improving
+the win rate.
 
 ### Data and Logging
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
@@ -906,6 +917,8 @@ mempool_monitor:
 
 When enabled, `execute_swap` checks the current priority fee and pauses
 or adjusts the trade according to the selected action.
+If `gas_threshold_gwei` is set, the scalper aborts the swap entirely when
+the priority fee exceeds this limit.
 
 ## Solana Meme-Wave Sniper
 
