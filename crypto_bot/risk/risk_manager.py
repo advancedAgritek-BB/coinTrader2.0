@@ -199,9 +199,12 @@ class RiskManager:
         tuple[bool, str]
             ``True``/``False`` along with the reason for the decision.
         """
-        if len(df) < 20:
+        df_len = len(df)
+        logger.info("[EVAL] Data length: %d", df_len)
+
+        if df_len < 20:
             reason = "Not enough data to trade"
-            logger.info("[EVAL] %s", reason)
+            logger.info("[EVAL] %s (len=%d)", reason, df_len)
             return False, reason
 
         if self.config.symbol and trade_memory.should_avoid(self.config.symbol):
@@ -234,8 +237,14 @@ class RiskManager:
         current_volume = df["volume"].iloc[-1]
         vol_threshold = vol_mean * self.config.volume_threshold_ratio
         logger.info(
-            f"[EVAL] {self.config.symbol} | Raw Volume: {current_volume} | Mean Volume: {vol_mean} | "
-            f"Min Volume: {self.config.min_volume} | Ratio Threshold: {vol_threshold}"
+            (
+                "[EVAL] len=%d volume=%.4f (mean %.4f | min %.4f | threshold %.4f)"
+            ),
+            df_len,
+            current_volume,
+            vol_mean,
+            self.config.min_volume,
+            vol_threshold,
         )
 
         # Modified volume checks for testing
@@ -243,19 +252,23 @@ class RiskManager:
         RATIO_THRESHOLD = 0.01
 
         if current_volume < MIN_VOLUME_ABS:
-            logger.info(
-                f"Trade blocked for {self.config.symbol}: raw volume {current_volume:.2f} < MIN_VOLUME_ABS"
-            )
             reason = "Volume < min absolute threshold"
-            logger.info("[EVAL] %s", reason)
+            logger.info(
+                "[EVAL] %s (%.2f < %.2f)",
+                reason,
+                current_volume,
+                MIN_VOLUME_ABS,
+            )
             return False, reason
 
         if current_volume < RATIO_THRESHOLD * vol_mean:
-            logger.info(
-                f"Trade blocked for {self.config.symbol}: raw volume {current_volume:.2f} < {RATIO_THRESHOLD*100:.1f}% of mean {vol_mean:.2f}"
-            )
             reason = f"Volume < {RATIO_THRESHOLD*100:.0f}% of mean volume"
-            logger.info("[EVAL] %s", reason)
+            logger.info(
+                "[EVAL] %s (%.2f < %.2f)",
+                reason,
+                current_volume,
+                RATIO_THRESHOLD * vol_mean,
+            )
             return False, reason
         vol_std = df["close"].rolling(20).std().iloc[-1]
         prev_period_std = (
@@ -263,7 +276,12 @@ class RiskManager:
         )
         if not isnan(prev_period_std) and vol_std < prev_period_std * 0.5:
             reason = "Volatility too low"
-            logger.info("[EVAL] %s", reason)
+            logger.info(
+                "[EVAL] %s (%.4f < %.4f)",
+                reason,
+                vol_std,
+                prev_period_std * 0.5,
+            )
             return False, reason
 
         if strategy is not None:

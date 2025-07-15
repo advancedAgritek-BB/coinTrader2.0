@@ -15,7 +15,8 @@
         </p>
         <p class="mb-2">Uptime: <span id="uptime">{{ uptime }}</span></p>
         <p class="mb-2">Last Trade: {{ last_trade }}</p>
-        <p class="mb-3">Current Regime: {{ regime }}</p>
+        <p class="mb-2">Current Regime: {{ regime }}</p>
+        <p class="mb-3">Last Decision: {{ last_reason }}</p>
         {% if running %}
           <a id="stop-link" class="btn btn-danger w-100" href="{{ url_for('stop') }}">Stop Bot</a>
         {% else %}

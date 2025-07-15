@@ -76,6 +76,7 @@ def index():
         uptime=get_uptime(),
         last_trade=utils.get_last_trade(TRADE_FILE),
         regime=utils.get_current_regime(LOG_FILE),
+        last_reason=utils.get_last_decision_reason(LOG_FILE),
     )
 
 
