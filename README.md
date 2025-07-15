@@ -297,7 +297,13 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **grid_bot.volume_filter** – require a volume spike before entering a grid
   trade. Turning this off increases trade frequency.
 * **grid_bot.dynamic_grid** – realign grid steps when the 1h ATR% changes by
-  more than 20%. Spacing is derived from ``spacing_pct = max(0.3, 1.2 × ATR%)``.
+  more than 20%. Spacing is derived from ``spacing_pct = max(0.3, 1.2 × ATR%)``
+  and is enabled by default.
+* **grid_bot.num_levels** – number of grid levels (default ``6``).
+* **grid_bot.cooldown_bars** – bars between fills (default ``2``).
+* **grid_bot.max_active_legs** – maximum simultaneously open grid legs (default ``8``).
+* **grid_bot.spacing_factor** – base spacing multiplier (default ``0.3``).
+* **grid_bot.min_range_pct** – required price range percentage (default ``0.0005``).
 ```yaml
 grid_bot:
   dynamic_grid: true

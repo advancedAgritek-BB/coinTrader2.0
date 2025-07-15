@@ -78,11 +78,11 @@ grid_bot:
   atr_normalization: true
   atr_period: 14
   breakout_mult: 1.2
-  cooldown_bars: 4
-  max_active_legs: 6
+  cooldown_bars: 2
+  max_active_legs: 8
   range_window: 20
-  spacing_factor: 0.4
-  dynamic_grid: false
+  spacing_factor: 0.3
+  dynamic_grid: true
   use_ml_center: false
   min_range_pct: 0.0005
   leverage: 1
