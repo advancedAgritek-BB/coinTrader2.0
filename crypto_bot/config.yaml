@@ -31,6 +31,9 @@ bounce_scalper:
   max_concurrent_signals: 3
   atr_normalization: true
   cooldown_enabled: true
+sniper_bot:
+  atr_window: 14
+  volume_window: 5
 breakout:
   atr_buffer_mult: 0.05
   bb_length: 20

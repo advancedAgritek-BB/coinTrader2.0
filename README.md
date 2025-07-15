@@ -303,6 +303,9 @@ grid_bot:
   atr_period: 14
 ```
 
+* **sniper_bot.atr_window**/**sniper_bot.volume_window** – windows for ATR and
+  volume averages when detecting news-like events.
+
 * **atr_normalization** – adjust signal scores using ATR.
 ```python
 score, direction, atr = breakout_bot.generate_signal(lower_df, cfg, higher_df)
