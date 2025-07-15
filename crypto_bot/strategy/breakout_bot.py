@@ -82,17 +82,18 @@ def generate_signal(
 
     cfg_all = config or {}
     cfg = cfg_all.get("breakout", {})
-    bb_len = int(cfg.get("bb_length", 20))
+    bb_len = int(cfg.get("bb_length", 12))
     bb_std = float(cfg.get("bb_std", 2))
-    kc_len = int(cfg.get("kc_length", 20))
+    kc_len = int(cfg.get("kc_length", 12))
     kc_mult = float(cfg.get("kc_mult", 1.5))
     donchian_window = int(cfg.get("donchian_window", cfg.get("dc_length", 30)))
-    atr_buffer_mult = float(cfg.get("atr_buffer_mult", 0.1))
+    atr_buffer_mult = float(cfg.get("atr_buffer_mult", 0.05))
     vol_window = int(cfg.get("volume_window", 20))
     vol_confirmation = bool(cfg.get("vol_confirmation", True))
-    vol_multiplier = float(cfg.get("vol_multiplier", cfg.get("volume_mult", 1.5)))
+    vol_multiplier = float(cfg.get("vol_multiplier", cfg.get("volume_mult", 1.2)))
     threshold = float(cfg.get("squeeze_threshold", 0.03))
     momentum_filter = bool(cfg.get("momentum_filter", False))
+    _ = float(cfg.get("adx_threshold", 20))  # placeholder for future use
     lookback_cfg = int(cfg_all.get("indicator_lookback", 250))
     squeeze_pct = float(cfg_all.get("bb_squeeze_pct", 20))
 
@@ -126,8 +127,7 @@ def generate_signal(
             lookback_cfg,
             squeeze_pct,
         )
-        if pd.isna(h_sq.iloc[-1]) or not h_sq.iloc[-1]:
-            return 0.0, "none"
+        # Higher timeframe squeeze is informative but no longer mandatory
 
     close = recent["close"]
     high = recent["high"]
