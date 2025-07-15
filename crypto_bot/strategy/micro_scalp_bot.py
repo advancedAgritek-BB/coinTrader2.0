@@ -227,6 +227,17 @@ def generate_signal(
     if direction == "short" and upper_wick_ratio < upper_wick_pct:
         return 0.0, "none"
 
+    book_data = book or params.get("order_book")
+    if isinstance(book_data, dict):
+        bids_list = book_data.get("bids")
+        asks_list = book_data.get("asks")
+        if bids_list and asks_list:
+            best_bid = bids_list[0][0]
+            best_ask = asks_list[0][0]
+            mid_price = (best_bid + best_ask) / 2
+            if mid_price > 0 and (best_ask - best_bid) / mid_price > 0.003:
+                return 0.0, "none"
+
     if (
         imbalance_filter
         and imbalance_ratio
