@@ -67,6 +67,7 @@ from crypto_bot.utils.market_loader import (
     update_regime_tf_cache,
     timeframe_seconds,
     configure as market_loader_configure,
+    fetch_order_book_async,
 )
 from crypto_bot.utils.eval_queue import build_priority_queue
 from crypto_bot.solana import get_solana_new_tokens
@@ -175,6 +176,24 @@ def direction_to_side(direction: str) -> str:
 def opposite_side(side: str) -> str:
     """Return the opposite trading side."""
     return "sell" if side == "buy" else "buy"
+
+
+def _closest_wall_distance(book: dict, entry: float, side: str) -> float | None:
+    """Return distance to the nearest bid/ask wall from ``entry``."""
+    if not isinstance(book, dict):
+        return None
+    levels = book.get("asks") if side == "buy" else book.get("bids")
+    if not levels:
+        return None
+    dists = []
+    for price, _amount in levels:
+        if side == "buy" and price > entry:
+            dists.append(price - entry)
+        elif side == "sell" and price < entry:
+            dists.append(entry - price)
+    if not dists:
+        return None
+    return min(dists)
 
 
 def notify_balance_change(
@@ -711,6 +730,24 @@ async def execute_signals(ctx: BotContext) -> None:
             )
             if order:
                 executed += 1
+                take_profit = None
+                if strategy == "bounce_scalper":
+                    depth = int(ctx.config.get("liquidity_depth", 10))
+                    book = await fetch_order_book_async(ctx.exchange, sym, depth)
+                    dist = _closest_wall_distance(
+                        book, price, direction_to_side(candidate["direction"])
+                    )
+                    if dist is not None:
+                        take_profit = dist * 0.8
+                ctx.risk_manager.register_stop_order(
+                    order,
+                    strategy=strategy,
+                    symbol=sym,
+                    entry_price=price,
+                    confidence=score,
+                    direction=direction_to_side(candidate["direction"]),
+                    take_profit=take_profit,
+                )
         else:
             executed += 1
         ctx.timing["execution_latency"] = max(
