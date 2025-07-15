@@ -6,6 +6,7 @@ import redis.asyncio as redis
 
 import pandas as pd
 import numpy as np
+import asyncio
 
 from pathlib import Path
 import yaml
@@ -17,6 +18,9 @@ from datetime import datetime
 from crypto_bot.utils import timeframe_seconds, commit_lock
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils.telemetry import telemetry
+import threading
+from collections import defaultdict
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.cache_helpers import cache_by_id
 from crypto_bot.selector import bandit
@@ -34,6 +38,7 @@ from crypto_bot.strategy import (
 )
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
+_SYMBOL_LOCKS: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 with open(CONFIG_PATH) as f:
@@ -359,11 +364,28 @@ def evaluate_regime(
         weights = compute_weights(regime)
 
     pairs: list[Tuple[Callable[[pd.DataFrame], Tuple[float, str]], float]] = []
+
+    def _instrument(fn: Callable[[pd.DataFrame], Tuple[float, str]]):
+        def wrapped(df_p: pd.DataFrame, cfg_p=None):
+            telemetry.inc("router.signals_checked")
+            try:
+                res = fn(df_p, cfg_p)
+            except TypeError:
+                res = fn(df_p)
+            except asyncio.TimeoutError:
+                telemetry.inc("router.signal_timeout")
+                raise
+            telemetry.inc("router.signal_returned")
+            return res
+
+        wrapped.__name__ = getattr(fn, "__name__", "wrapped")
+        return wrapped
+
     for fn in strategies:
         w = float(weights.get(fn.__name__, 1.0))
         if w < min_conf:
             continue
-        pairs.append((fn, w))
+        pairs.append((_instrument(fn), w))
 
     if not pairs:
         pairs.append((strategies[0], 1.0))
@@ -468,25 +490,27 @@ def route(
     """
 
     def _wrap(fn: Callable[[pd.DataFrame], Tuple[float, str]]):
-        if notifier is None:
-            return fn
-
         def wrapped(df: pd.DataFrame, cfg=None):
-            try:
-                res = fn(df, cfg)
-            except TypeError:
-                res = fn(df)
-            if isinstance(res, tuple):
-                score, direction = res[0], res[1]
-            else:
-                score, direction = res, "none"
             symbol = ""
             if isinstance(cfg, dict):
                 symbol = cfg.get("symbol", "")
-            notifier.notify(
-                f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
-            )
-            return score, direction
+            lock = _SYMBOL_LOCKS[symbol]
+            telemetry.inc("router.symbol_locked")
+            with lock:
+                try:
+                    res = fn(df, cfg)
+                except TypeError:
+                    res = fn(df)
+            if notifier is not None:
+                if isinstance(res, tuple):
+                    score, direction = res[0], res[1]
+                else:
+                    score, direction = res, "none"
+                notifier.notify(
+                    f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
+                )
+                return score, direction
+            return res
 
         wrapped.__name__ = fn.__name__
         return wrapped

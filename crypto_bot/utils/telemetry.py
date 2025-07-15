@@ -7,10 +7,11 @@ from typing import Dict, Any
 
 from prometheus_client import Counter
 
-from .logger import LOG_DIR
+from .logger import LOG_DIR, setup_logger
 from .metrics_logger import log_metrics_to_csv
 
 LOG_FILE = LOG_DIR / "telemetry.csv"
+logger = setup_logger(__name__, LOG_DIR / "telemetry.log")
 
 # Prometheus counters keyed by telemetry name
 PROM_COUNTERS: Dict[str, Counter] = {
@@ -70,5 +71,13 @@ def write_cycle_metrics(metrics: Dict[str, Any], cfg: Dict) -> None:
         telemetry.export_csv(
             cfg.get("metrics_output_file", str(LOG_DIR / "telemetry.csv"))
         )
+
+
+def dump() -> str:
+    """Log current counters and return formatted string."""
+    snap = telemetry.snapshot()
+    msg = ", ".join(f"{k}: {v}" for k, v in sorted(snap.items()))
+    logger.info("Telemetry snapshot - %s", msg)
+    return msg
 
 
