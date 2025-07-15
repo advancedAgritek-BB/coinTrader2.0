@@ -80,11 +80,32 @@ async def evaluate_async(
 
     async def run(fn: Callable[[pd.DataFrame], Tuple]):
         async with sem:
-            return await asyncio.to_thread(evaluate, fn, df, config)
+            async def call():
+                return await asyncio.to_thread(evaluate, fn, df, config)
+
+            return await asyncio.wait_for(call(), timeout=5)
 
     tasks = [asyncio.create_task(run(fn)) for fn in strategy_fns]
-    results = await asyncio.gather(*tasks)
-    return list(results)
+    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    results: List[Tuple[float, str, Optional[float]]] = []
+    for fn, res in zip(strategy_fns, raw_results):
+        if isinstance(res, Exception):
+            if isinstance(res, asyncio.TimeoutError):
+                logger.warning(
+                    "Strategy %s TIMEOUT", getattr(fn, "__name__", str(fn))
+                )
+            else:
+                logger.warning(
+                    "Strategy %s failed: %s",
+                    getattr(fn, "__name__", str(fn)),
+                    res,
+                )
+            results.append((0.0, "none", None))
+        else:
+            results.append(res)
+
+    return results
 
 
 def evaluate_strategies(

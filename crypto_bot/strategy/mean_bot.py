@@ -158,3 +158,11 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         score = normalize_score_by_volatility(df, score)
 
     return float(max(0.0, min(score, 1.0))), direction
+
+
+class regime_filter:
+    """Match mean-reverting regime."""
+
+    @staticmethod
+    def matches(regime: str) -> bool:
+        return regime == "mean-reverting"

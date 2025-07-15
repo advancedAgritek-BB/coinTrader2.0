@@ -57,3 +57,11 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
             score = normalize_score_by_volatility(df, score)
         return score, "short"
     return 0.0, "none"
+
+
+class regime_filter:
+    """DEX scalper works for any regime."""
+
+    @staticmethod
+    def matches(regime: str) -> bool:
+        return True

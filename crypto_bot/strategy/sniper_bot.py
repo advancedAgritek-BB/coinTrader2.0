@@ -90,8 +90,16 @@ def generate_signal(
             direction = "auto"
         if direction == "auto":
             trade_direction = "short" if price_change < 0 else "long"
-        else:
-            trade_direction = direction
+    else:
+        trade_direction = direction
         return score, trade_direction
 
     return 0.0, "none"
+
+
+class regime_filter:
+    """Match volatile regime."""
+
+    @staticmethod
+    def matches(regime: str) -> bool:
+        return regime == "volatile"

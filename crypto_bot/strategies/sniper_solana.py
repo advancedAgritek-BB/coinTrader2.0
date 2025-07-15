@@ -91,3 +91,11 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
 
     return 0.0, "none"
 
+
+class regime_filter:
+    """Match volatile regime on Solana."""
+
+    @staticmethod
+    def matches(regime: str) -> bool:
+        return regime == "volatile"
+

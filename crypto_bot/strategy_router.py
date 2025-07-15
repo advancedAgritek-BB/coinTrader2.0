@@ -3,9 +3,12 @@ from typing import Callable, Tuple, Dict, Iterable, Union, Mapping, Any
 import asyncio
 
 from dataclasses import dataclass, field, asdict
+import asyncio
+import redis.asyncio as redis
 
 import pandas as pd
 import numpy as np
+import asyncio
 
 from pathlib import Path
 import yaml
@@ -17,6 +20,9 @@ from datetime import datetime
 from crypto_bot.utils import timeframe_seconds, commit_lock
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils.telemetry import telemetry
+import threading
+from collections import defaultdict
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.cache_helpers import cache_by_id
 from crypto_bot.selector import bandit
@@ -34,6 +40,7 @@ from crypto_bot.strategy import (
 )
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
+_SYMBOL_LOCKS: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 with open(CONFIG_PATH) as f:
@@ -114,6 +121,46 @@ class RouterConfig:
 
 
 DEFAULT_ROUTER_CFG = RouterConfig.from_dict(DEFAULT_CONFIG)
+
+
+@dataclass
+class BotStats:
+    """Performance statistics for a trading bot."""
+
+    sharpe_30d: float = 0.0
+    win_rate_30d: float = 0.0
+    avg_r_multiple: float = 0.0
+
+
+def load_bot_stats(name: str) -> BotStats:
+    """Return statistics for ``name`` loaded from Redis."""
+    try:
+        r = redis.Redis()
+        raw = asyncio.run(r.get(f"bot-stats:{name}"))
+    except Exception:
+        return BotStats()
+    if not raw:
+        return BotStats()
+    try:
+        if isinstance(raw, bytes):
+            raw = raw.decode()
+        data = json.loads(raw)
+    except Exception:
+        return BotStats()
+    return BotStats(
+        sharpe_30d=float(data.get("sharpe_30d", 0.0)),
+        win_rate_30d=float(data.get("win_rate_30d", 0.0)),
+        avg_r_multiple=float(data.get("avg_r_multiple", 0.0)),
+    )
+
+
+def score_bot(stats: BotStats) -> float:
+    """Return a ranking score for ``stats``."""
+    return (
+        stats.sharpe_30d * 0.4
+        + stats.win_rate_30d * 0.3
+        + stats.avg_r_multiple * 0.3
+    )
 
 
 def cfg_get(cfg: RouterConfig | Mapping[str, Any], key: str, default: Any = None) -> Any:
@@ -287,10 +334,8 @@ def strategy_for(
     regime: str, config: RouterConfig | Mapping[str, Any] | None = None
 ) -> Callable[[pd.DataFrame], Tuple[float, str]]:
     """Return strategy callable for a given regime."""
-    cfg = config or DEFAULT_ROUTER_CFG
-    _register_config(cfg)
-    mapping, _ = _build_mappings_cached(id(cfg))
-    return mapping.get(regime, grid_bot.generate_signal)
+    strategies = get_strategies_for_regime(regime, config)
+    return strategies[0] if strategies else grid_bot.generate_signal
 
 
 def get_strategies_for_regime(
@@ -299,8 +344,22 @@ def get_strategies_for_regime(
     """Return list of strategies mapped to ``regime``."""
     cfg = config or DEFAULT_ROUTER_CFG
     _register_config(cfg)
-    _, mapping = _build_mappings_cached(id(cfg))
-    return mapping.get(regime, [grid_bot.generate_signal])
+    if isinstance(cfg, RouterConfig):
+        names = cfg.regimes.get(regime, [])
+    else:
+        names = cfg.get("strategy_router", {}).get("regimes", {}).get(regime, [])
+    if isinstance(names, str):
+        names = [names]
+    pairs: list[tuple[str, Callable[[pd.DataFrame], Tuple[float, str]]]] = []
+    for name in names:
+        fn = get_strategy_by_name(name)
+        if fn:
+            pairs.append((name, fn))
+    if not pairs:
+        _, mapping = _build_mappings_cached(id(cfg))
+        return mapping.get(regime, [grid_bot.generate_signal])
+    pairs.sort(key=lambda p: score_bot(load_bot_stats(p[0])), reverse=True)
+    return [fn for _, fn in pairs]
 
 
 def evaluate_regime(
@@ -329,11 +388,28 @@ def evaluate_regime(
         weights = compute_weights(regime)
 
     pairs: list[Tuple[Callable[[pd.DataFrame], Tuple[float, str]], float]] = []
+
+    def _instrument(fn: Callable[[pd.DataFrame], Tuple[float, str]]):
+        def wrapped(df_p: pd.DataFrame, cfg_p=None):
+            telemetry.inc("router.signals_checked")
+            try:
+                res = fn(df_p, cfg_p)
+            except TypeError:
+                res = fn(df_p)
+            except asyncio.TimeoutError:
+                telemetry.inc("router.signal_timeout")
+                raise
+            telemetry.inc("router.signal_returned")
+            return res
+
+        wrapped.__name__ = getattr(fn, "__name__", "wrapped")
+        return wrapped
+
     for fn in strategies:
         w = float(weights.get(fn.__name__, 1.0))
         if w < min_conf:
             continue
-        pairs.append((fn, w))
+        pairs.append((_instrument(fn), w))
 
     if not pairs:
         pairs.append((strategies[0], 1.0))
@@ -457,6 +533,27 @@ def route(
                     f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
                 )
             return score, direction
+        def wrapped(df: pd.DataFrame, cfg=None):
+            symbol = ""
+            if isinstance(cfg, dict):
+                symbol = cfg.get("symbol", "")
+            lock = _SYMBOL_LOCKS[symbol]
+            telemetry.inc("router.symbol_locked")
+            with lock:
+                try:
+                    res = fn(df, cfg)
+                except TypeError:
+                    res = fn(df)
+            if notifier is not None:
+                if isinstance(res, tuple):
+                    score, direction = res[0], res[1]
+                else:
+                    score, direction = res, "none"
+                notifier.notify(
+                    f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
+                )
+                return score, direction
+            return res
 
         wrapped.__name__ = fn.__name__
         return wrapped

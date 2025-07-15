@@ -180,3 +180,11 @@ def generate_signal(
     if higher_df is not None:
         return score, direction
     return score, direction, atr_last
+
+
+class regime_filter:
+    """Match breakout regime."""
+
+    @staticmethod
+    def matches(regime: str) -> bool:
+        return regime == "breakout"
