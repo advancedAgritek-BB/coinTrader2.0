@@ -242,3 +242,11 @@ def generate_signal(
             return 0.0, "none"
 
     return score, direction
+
+
+class regime_filter:
+    """Match scalp regime."""
+
+    @staticmethod
+    def matches(regime: str) -> bool:
+        return regime == "scalp"

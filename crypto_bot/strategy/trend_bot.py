@@ -181,3 +181,11 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
                 pass
 
     return score, direction
+
+
+class regime_filter:
+    """Match trending regime."""
+
+    @staticmethod
+    def matches(regime: str) -> bool:
+        return regime == "trending"

@@ -380,3 +380,11 @@ def generate_signal(
                         return 0.0, "none"
 
     return score, direction
+
+
+class regime_filter:
+    """Return True for the bounce regime."""
+
+    @staticmethod
+    def matches(regime: str) -> bool:
+        return regime == "bounce"

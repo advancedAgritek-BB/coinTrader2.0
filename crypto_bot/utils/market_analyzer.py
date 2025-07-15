@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import pandas as pd
 from typing import Dict, Iterable, Tuple, List
 
@@ -37,6 +38,7 @@ async def run_candidates(
     strategies: Iterable,
     symbol: str,
     cfg: Dict,
+    regime: str | None = None,
 ) -> List[Tuple[callable, float, str]]:
     """Evaluate ``strategies`` and rank them by score times edge."""
 
@@ -62,7 +64,28 @@ async def run_candidates(
         results.append((rank, strat, score, direction))
 
     results.sort(key=lambda x: x[0], reverse=True)
-    return [(s, sc, d) for (rank, s, sc, d) in results]
+    ranked = [(s, sc, d) for (rank, s, sc, d) in results]
+
+    if regime is not None and ranked:
+        scores = [sc for _fn, sc, _d in ranked]
+        dirs = [d for _fn, _sc, d in ranked]
+        if len(set(scores)) == 1 or all(s == 0.0 for s in scores) or all(d == "none" for d in dirs):
+            for idx, (fn, sc, d) in enumerate(ranked):
+                reg_filter = getattr(fn, "regime_filter", None)
+                if reg_filter is None:
+                    try:
+                        module = importlib.import_module(fn.__module__)
+                        reg_filter = getattr(module, "regime_filter", None)
+                    except Exception:  # pragma: no cover - safety
+                        reg_filter = None
+                try:
+                    if reg_filter and hasattr(reg_filter, "matches") and reg_filter.matches(regime):
+                        ranked.insert(0, ranked.pop(idx))
+                        break
+                except Exception:  # pragma: no cover - safety
+                    pass
+
+    return ranked
 
 
 async def analyze_symbol(
@@ -237,7 +260,7 @@ async def analyze_symbol(
                     fn = get_strategy_by_name(strat_name)
                     if fn and fn not in candidates:
                         candidates.append(fn)
-            ranked = await run_candidates(df, candidates, symbol, cfg)
+            ranked = await run_candidates(df, candidates, symbol, cfg, regime)
             if ranked:
                 best_fn, raw_score, raw_dir = ranked[0]
                 name = best_fn.__name__
