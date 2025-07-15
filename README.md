@@ -284,7 +284,8 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **exit_strategy** – partial profit taking and trailing stop logic.
 * **micro_scalp** – EMA settings plus volume z-score and ATR filters for the scalp bot.
   Supports tick-level aggregation, optional mempool fee checks and order-book
-  imbalance filtering with an optional penalty.
+  imbalance filtering with an optional penalty. Set `trend_filter` or
+  `imbalance_filter` to `false` to bypass the trend or order book checks.
 * **pattern_timeframe** – optional candle interval used by the bounce scalper to
   confirm engulfing or hammer patterns.
 * **trigger_once** – bypass the cooldown and win-rate filter for one bounce scalper cycle.

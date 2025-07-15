@@ -203,3 +203,42 @@ def test_tick_data_extends(make_df):
     tick = make_df([4], [50])
     cfg = {"micro_scalp": {"fresh_cross_only": False}}
     micro_scalp_bot.generate_signal(df, cfg, tick_data=tick)
+
+
+def test_trend_filter_disabled_allows_signal(make_df):
+    prices = list(range(1, 11))
+    volumes = [100] * 10
+    df = make_df(prices, volumes)
+
+    higher_prices = list(range(20, 9, -1))
+    higher_df = make_df(higher_prices, [100] * len(higher_prices))
+    cfg = {
+        "micro_scalp": {
+            "trend_fast": 3,
+            "trend_slow": 5,
+            "fresh_cross_only": False,
+            "trend_filter": False,
+        }
+    }
+
+    score, direction = micro_scalp_bot.generate_signal(df, cfg, higher_df=higher_df)
+    assert direction == "long"
+    assert score > 0
+
+
+def test_imbalance_filter_disabled_allows_signal(make_df):
+    prices = list(range(1, 11))
+    volumes = [100] * 10
+    df = make_df(prices, volumes)
+    book = {"bids": [(1, 10)], "asks": [(1, 20)]}
+    cfg = {
+        "micro_scalp": {
+            "fresh_cross_only": False,
+            "imbalance_ratio": 2,
+            "imbalance_filter": False,
+        }
+    }
+
+    score, direction = micro_scalp_bot.generate_signal(df, cfg, book=book)
+    assert direction == "long"
+    assert score > 0
