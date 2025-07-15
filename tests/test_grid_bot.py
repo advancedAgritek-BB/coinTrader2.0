@@ -1,5 +1,9 @@
 import pandas as pd
 import pytest
+import sys
+import types
+
+sys.modules['crypto_bot.strategy.sniper_bot'] = types.ModuleType('sniper_bot')
 from crypto_bot.strategy import grid_bot
 from crypto_bot.strategy.grid_bot import GridConfig
 from crypto_bot import grid_state
@@ -56,6 +60,7 @@ def _df_small_range(price: float = 100.0) -> pd.DataFrame:
 
 def test_short_signal_above_upper_grid(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: 1.0)
     df = _df_with_price(111.0)
     score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert direction == "short"
@@ -64,6 +69,7 @@ def test_short_signal_above_upper_grid(monkeypatch):
 
 def test_long_signal_below_lower_grid(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: 1.0)
     df = _df_with_price(89.0)
     score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert direction == "long"
@@ -72,6 +78,7 @@ def test_long_signal_below_lower_grid(monkeypatch):
 
 def test_no_signal_in_middle(monkeypatch):
     monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: 1.0)
     df = _df_with_price(102.0)
     score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert direction == "none"
@@ -157,9 +164,9 @@ def test_volume_filter_blocks_long_signal():
 
 def test_atr_spacing(monkeypatch):
     df = _df_with_price(106.0)
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 2.0)
+    monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: 2.0)
     narrow, _ = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 10.0)
+    monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: 10.0)
     wide, _ = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert narrow > wide
 
@@ -178,10 +185,10 @@ def test_dynamic_grid_spacing_persists(monkeypatch):
     grid_state.clear()
     cfg = GridConfig(symbol="XBT/USDT", dynamic_grid=True, atr_normalization=False)
     df = _df_with_price(111.0)
-    grid_bot.generate_signal(df, config=cfg, higher_df=df)
+    grid_bot.generate_signal(df, config=cfg)
     first = grid_state.get_grid_step("XBT/USDT")
     df2 = _df_with_price(111.0)
-    grid_bot.generate_signal(df2, config=cfg, higher_df=df)
+    grid_bot.generate_signal(df2, config=cfg)
     second = grid_state.get_grid_step("XBT/USDT")
     assert first == second
 
@@ -192,10 +199,10 @@ def test_grid_step_realigns_on_large_atr_change(monkeypatch):
     grid_state.clear()
     cfg = GridConfig(symbol="XBT/USDT", dynamic_grid=True, atr_normalization=False)
     df = _df_with_price(111.0)
-    grid_bot.generate_signal(df, config=cfg, higher_df=df)
+    grid_bot.generate_signal(df, config=cfg)
     first = grid_state.get_grid_step("XBT/USDT")
     df2 = _df_with_price(111.0)
-    grid_bot.generate_signal(df2, config=cfg, higher_df=df)
+    grid_bot.generate_signal(df2, config=cfg)
     second = grid_state.get_grid_step("XBT/USDT")
     assert second > first
 
@@ -215,11 +222,14 @@ def test_short_blocked_by_trend_filter():
 
 
 @pytest.mark.parametrize("cfg", [{"range_window": 10}, GridConfig(range_window=10)])
-def test_range_window_config(cfg):
+def test_range_window_config(cfg, monkeypatch):
     df = _df_range_change()
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: 18.0)
     _, default_direction = grid_bot.generate_signal(df)
     assert default_direction == "none"
 
+    monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: 1.0)
     score, direction = grid_bot.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0.0
