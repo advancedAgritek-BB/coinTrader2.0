@@ -248,12 +248,8 @@ solana_scanner:
   min_volume_usd: 10000
   max_tokens_per_scan: 20
 pyth:
-  url: https://hermes.pyth.network  # optional custom endpoint, no API key needed
-  enabled: false
-  solana_endpoint: "https://api.mainnet-beta.solana.com"
-  solana_ws_endpoint: "wss://api.mainnet-beta.solana.com"
-  program_id: ""
   enabled: true
+  url: https://hermes.pyth.network  # optional custom endpoint, no API key needed
   solana_endpoint: "https://api.mainnet-beta.solana.com"
   solana_ws_endpoint: "wss://api.mainnet-beta.solana.com"
   program_id: "FsJ3A3u2vn5cTVofAjvy6qM3HrjTXg5Gs1Y8D6fCt3m"
