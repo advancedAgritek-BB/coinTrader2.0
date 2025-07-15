@@ -177,9 +177,13 @@ Add a `pyth` section to `crypto_bot/config.yaml`:
 
 ```yaml
 pyth:
-  url: https://hermes.pyth.network  # optional custom endpoint, no API key needed
+  enabled: false
+  solana_endpoint: https://api.mainnet-beta.solana.com
+  solana_ws_endpoint: wss://api.mainnet-beta.solana.com
+  program_id: FsJ3A3u2vn5cTVofAjvy6qM3HrjTXg5Gs1Y8D6fCt3m
 ```
-No API key is required, and you can customize the endpoint if desired.
+These keys are required to connect to Pyth and can be adjusted for your
+environment.
 
 
 
