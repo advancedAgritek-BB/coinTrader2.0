@@ -30,6 +30,7 @@ bounce_scalper:
   min_score: 0.3
   max_concurrent_signals: 3
   atr_normalization: true
+  cooldown_enabled: true
 breakout:
   atr_buffer_mult: 0.05
   bb_length: 20

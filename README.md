@@ -288,6 +288,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **pattern_timeframe** – optional candle interval used by the bounce scalper to
   confirm engulfing or hammer patterns.
 * **trigger_once** – bypass the cooldown and win-rate filter for one bounce scalper cycle.
+* **cooldown_enabled** – disable to ignore the cooldown and win-rate check.
 * **breakout** – Bollinger/Keltner squeeze, volume multiplier, ATR buffer and
   outputs ATR for stop sizing.
 
@@ -330,11 +331,12 @@ ranks them by `score × edge` and executes the best result. Details about
 the second‑highest strategy are written to the CSV file defined by
 `second_place_csv`.
 #### Bounce Scalper
-The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry. Set `pattern_timeframe` to fetch a separate candle interval for confirming engulfing or hammer patterns. When in cooldown the scalper only signals if the recent win rate falls below 50%, effectively skipping the cooldown during a drawdown.
+The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry. Set `pattern_timeframe` to fetch a separate candle interval for confirming engulfing or hammer patterns. When in cooldown the scalper only signals if the recent win rate falls below 50%, effectively skipping the cooldown during a drawdown. Set `cooldown_enabled` to `false` to disable this behaviour.
 
 ```yaml
 bounce_scalper:
   pattern_timeframe: 5m  # confirm patterns using 5-minute candles
+  cooldown_enabled: false  # disable cooldown checks
 min_cooldown: 2          # minutes between entries
 ```
 
