@@ -1,5 +1,8 @@
 from typing import Dict, Optional, Tuple
+
 import pandas as pd
+import ta
+
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 
@@ -18,8 +21,11 @@ def generate_signal(
     min_volume: float = 100.0,
     direction: str = "auto",
     high_freq: bool = False,
-) -> Tuple[float, str]:
-    """Detect pumps for newly listed tokens using early price and volume action.
+    atr_window: int = 14,
+    volume_window: int = 5,
+) -> Tuple[float, str, float, bool]:
+    """Detect pumps for newly listed tokens using early price and volume
+    action.
 
     Parameters
     ----------
@@ -47,12 +53,12 @@ def generate_signal(
 
     Returns
     -------
-    Tuple[float, str]
-        Score between 0 and 1 and trade direction.
+    Tuple[float, str, float, bool]
+        Score between 0 and 1, trade direction, ATR value and event flag.
     """
     symbol = config.get("symbol") if config else ""
     if symbol and ALLOWED_PAIRS and symbol not in ALLOWED_PAIRS:
-        return 0.0, "none"
+        return 0.0, "none", 0.0, False
 
     if config:
         breakout_pct = config.get("breakout_pct", breakout_pct)
@@ -61,20 +67,39 @@ def generate_signal(
         initial_window = config.get("initial_window", initial_window)
         min_volume = config.get("min_volume", min_volume)
         direction = config.get("direction", direction)
+        atr_window = int(config.get("atr_window", atr_window))
+        volume_window = int(config.get("volume_window", volume_window))
 
     if high_freq:
         max_history = min(max_history, 20)
         initial_window = max(1, initial_window // 2)
 
     if len(df) < initial_window:
-        return 0.0, "none"
+        return 0.0, "none", 0.0, False
 
     price_change = df["close"].iloc[-1] / df["close"].iloc[0] - 1
     base_volume = df["volume"].iloc[:initial_window].mean()
     vol_ratio = df["volume"].iloc[-1] / base_volume if base_volume > 0 else 0
 
+    atr_window = min(atr_window, len(df))
+    atr_series = ta.volatility.average_true_range(
+        df["high"], df["low"], df["close"], window=atr_window
+    )
+    atr = float(atr_series.iloc[-1]) if len(atr_series) else 0.0
+
+    if len(df) > volume_window:
+        prev_vol = df["volume"].iloc[-(volume_window + 1):-1]
+    else:
+        prev_vol = df["volume"].iloc[:-1]
+    avg_vol = prev_vol.mean() if not prev_vol.empty else 0.0
+    body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
+    event = False
+    if atr > 0 and avg_vol > 0:
+        if body >= 2 * atr and df["volume"].iloc[-1] >= 2 * avg_vol:
+            event = True
+
     if df["volume"].iloc[-1] < min_volume:
-        return 0.0, "none"
+        return 0.0, "none", atr, event
 
     if (
         len(df) <= max_history
@@ -88,13 +113,12 @@ def generate_signal(
             score = normalize_score_by_volatility(df, score)
         if direction not in {"auto", "long", "short"}:
             direction = "auto"
+        trade_direction = direction
         if direction == "auto":
             trade_direction = "short" if price_change < 0 else "long"
-    else:
-        trade_direction = direction
-        return score, trade_direction
+        return score, trade_direction, atr, event
 
-    return 0.0, "none"
+    return 0.0, "none", atr, event
 
 
 class regime_filter:

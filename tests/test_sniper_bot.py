@@ -18,9 +18,10 @@ def test_sniper_triggers_on_breakout():
         [1.0, 1.05, 1.1, 1.2],
         [10, 12, 11, 200]
     )
-    score, direction = sniper_bot.generate_signal(df)
+    score, direction, _, event = sniper_bot.generate_signal(df)
     assert direction == "long"
     assert score > 0.8
+    assert not event
 
 
 def test_sniper_ignores_low_volume():
@@ -28,16 +29,18 @@ def test_sniper_ignores_low_volume():
         [1.0, 1.05, 1.1, 1.2],
         [1, 1, 1, 2]
     )
-    score, direction = sniper_bot.generate_signal(df)
+    score, direction, _, event = sniper_bot.generate_signal(df)
     assert direction == "none"
     assert score == 0.0
+    assert not event
 
 
 def test_sniper_respects_history_length():
     df = _df_with_volume_and_price([1.0] * 100, [10] * 100)
-    score, direction = sniper_bot.generate_signal(df)
+    score, direction, _, event = sniper_bot.generate_signal(df)
     assert direction == "none"
     assert score == 0.0
+    assert not event
 
 
 def test_direction_override_short():
@@ -46,9 +49,10 @@ def test_direction_override_short():
         [10, 12, 11, 200]
     )
     config = {"direction": "short"}
-    score, direction = sniper_bot.generate_signal(df, config)
+    score, direction, _, event = sniper_bot.generate_signal(df, config)
     assert direction == "short"
     assert score > 0.8
+    assert not event
 
 
 def test_auto_short_on_price_drop():
@@ -56,9 +60,10 @@ def test_auto_short_on_price_drop():
         [1.0, 0.95, 0.9, 0.8],
         [10, 12, 11, 200]
     )
-    score, direction = sniper_bot.generate_signal(df)
+    score, direction, _, event = sniper_bot.generate_signal(df)
     assert direction == "short"
     assert score > 0.8
+    assert not event
 
 
 def test_high_freq_short_window():
@@ -66,11 +71,12 @@ def test_high_freq_short_window():
         [1.0, 1.1, 1.2],
         [10, 12, 40]
     )
-    score, direction = sniper_bot.generate_signal(
+    score, direction, _, event = sniper_bot.generate_signal(
         df, high_freq=True, config={"min_volume": 1}
     )
     assert direction == "long"
     assert score > 0.8
+    assert not event
 
 
 def test_symbol_filter_blocks_disallowed():
@@ -78,6 +84,25 @@ def test_symbol_filter_blocks_disallowed():
         [1.0, 1.1, 1.2],
         [10, 12, 40]
     )
-    score, direction = sniper_bot.generate_signal(df, {"symbol": "XRP/USD"})
+    score, direction, _, event = sniper_bot.generate_signal(
+        df, {"symbol": "XRP/USD"}
+    )
     assert direction == "none"
     assert score == 0.0
+    assert not event
+
+
+def test_event_trigger():
+    df = pd.DataFrame({
+        "open": [1, 1, 1, 1, 1],
+        "high": [1.1, 1.1, 1.1, 1.1, 5],
+        "low": [0.9, 0.9, 0.9, 0.9, 1],
+        "close": [1, 1, 1, 1, 5],
+        "volume": [10, 10, 10, 10, 50],
+    })
+    score, direction, _, event = sniper_bot.generate_signal(
+        df, config={"atr_window": 4, "volume_window": 4, "min_volume": 1}
+    )
+    assert direction == "long"
+    assert score > 0
+    assert event

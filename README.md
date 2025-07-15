@@ -295,6 +295,9 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **grid_bot.volume_filter** – require a volume spike before entering a grid
   trade. Turning this off increases trade frequency.
 
+* **sniper_bot.atr_window**/**sniper_bot.volume_window** – windows for ATR and
+  volume averages when detecting news-like events.
+
 * **atr_normalization** – adjust signal scores using ATR.
 ```python
 score, direction, atr = breakout_bot.generate_signal(lower_df, cfg, higher_df)
