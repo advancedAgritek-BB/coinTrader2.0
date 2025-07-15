@@ -279,6 +279,8 @@ def test_spread_filter_blocks_signal(make_df):
     df = make_df(prices, volumes)
     book = {"bids": [(9.95, 1)], "asks": [(10.05, 1)]}
     cfg = {"micro_scalp": {"fresh_cross_only": False}}
+    score, direction = micro_scalp_bot.generate_signal(df, cfg, book=book)
+    assert (score, direction) == (0.0, "none")
 
 def test_spread_ratio_blocks_signal(make_df):
     prices = list(range(1, 11))
