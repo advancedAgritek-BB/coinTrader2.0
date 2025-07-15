@@ -55,6 +55,12 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     kc_h = kc.keltner_channel_hband()
     kc_l = kc.keltner_channel_lband()
 
+    bb_full = ta.volatility.BollingerBands(df["close"], window=20)
+    bb_width_full = bb_full.bollinger_wband()
+    median_bw_20_full = bb_width_full.rolling(20).median()
+    bb_width = bb_width_full.iloc[-(lookback + 1) :]
+    median_bw_20 = median_bw_20_full.iloc[-(lookback + 1) :]
+
     vwap = ta.volume.VolumeWeightedAveragePrice(
         recent["high"], recent["low"], recent["close"], recent["volume"], window=14
     )
@@ -71,6 +77,8 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     rsi = cache_series("rsi", df, rsi, lookback)
     rsi_z = cache_series("rsi_z", df, rsi_z, lookback)
     bb_z = cache_series("bb_z", df, bb_z, lookback)
+    bb_width = cache_series("bb_width", df, bb_width, lookback)
+    median_bw_20 = cache_series("median_bw_20", df, median_bw_20, lookback)
     kc_h = cache_series("kc_h", df, kc_h, lookback)
     kc_l = cache_series("kc_l", df, kc_l, lookback)
     vwap_series = cache_series("vwap", df, vwap_series, lookback)
@@ -81,6 +89,8 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df["rsi"] = rsi
     df["rsi_z"] = rsi_z
     df["bb_z"] = bb_z
+    df["bb_width"] = bb_width
+    df["median_bw_20"] = median_bw_20
     df["kc_h"] = kc_h
     df["kc_l"] = kc_l
     df["vwap"] = vwap_series
@@ -88,6 +98,13 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df["adx"] = adx
 
     latest = df.iloc[-1]
+
+    if (
+        pd.isna(df["bb_width"].iloc[-1])
+        or pd.isna(df["median_bw_20"].iloc[-1])
+        or df["bb_width"].iloc[-1] >= df["median_bw_20"].iloc[-1]
+    ):
+        return 0.0, "none"
 
     if df["adx"].iloc[-1] > adx_threshold:
         return 0.0, "none"
