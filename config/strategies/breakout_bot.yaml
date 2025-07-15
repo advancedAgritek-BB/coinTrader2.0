@@ -1,0 +1,3 @@
+donchian_window: 30
+vol_confirmation: true
+vol_multiplier: 1.5
