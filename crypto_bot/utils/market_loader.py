@@ -28,7 +28,7 @@ WS_OHLCV_TIMEOUT = 30
 # REST requests occasionally face Cloudflare delays up to a minute
 REST_OHLCV_TIMEOUT = 120
 MAX_OHLCV_FAILURES = 3
-MAX_WS_LIMIT = 50
+MAX_WS_LIMIT = 500
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 UNSUPPORTED_SYMBOL = object()
 STATUS_UPDATES = True
@@ -365,7 +365,13 @@ async def fetch_ohlcv_async(
                     "disabled": True,
                 }
                 return UNSUPPORTED_SYMBOL
-        if use_websocket and since is None and limit > MAX_WS_LIMIT and not force_websocket_history:
+        if (
+            use_websocket
+            and since is None
+            and timeframe == "1m"
+            and limit > MAX_WS_LIMIT
+            and not force_websocket_history
+        ):
             logger.info(
                 "Skipping WebSocket OHLCV for %s limit %d exceeds %d",
                 symbol,
