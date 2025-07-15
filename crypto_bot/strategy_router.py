@@ -3,7 +3,7 @@ from typing import Callable, Tuple, Dict, Iterable, Union, Mapping, Any
 import asyncio
 
 from dataclasses import dataclass, field, asdict
-import redis.asyncio as redis
+import redis
 
 import pandas as pd
 import numpy as np
@@ -134,7 +134,7 @@ def load_bot_stats(name: str) -> BotStats:
     """Return statistics for ``name`` loaded from Redis."""
     try:
         r = redis.Redis()
-        raw = asyncio.run(r.get(f"bot-stats:{name}"))
+        raw = r.get(f"bot-stats:{name}")
     except Exception:
         return BotStats()
     if not raw:
