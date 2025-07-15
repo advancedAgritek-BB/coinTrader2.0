@@ -1,7 +1,10 @@
 from typing import Dict, Optional, Tuple
+
 import pandas as pd
+
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.pair_cache import load_liquid_pairs
+from crypto_bot.volatility_filter import calc_atr
 
 DEFAULT_PAIRS = ["BTC/USD", "ETH/USD"]
 ALLOWED_PAIRS = load_liquid_pairs() or DEFAULT_PAIRS
@@ -18,6 +21,9 @@ def generate_signal(
     min_volume: float = 100.0,
     direction: str = "auto",
     high_freq: bool = False,
+    price_fallback: bool = False,
+    fallback_atr_mult: float = 2.0,
+    fallback_volume_mult: float = 2.0,
 ) -> Tuple[float, str]:
     """Detect pumps for newly listed tokens using early price and volume action.
 
@@ -44,6 +50,12 @@ def generate_signal(
         When ``True`` the function expects 1m candles and shortens
         ``max_history`` and ``initial_window`` so signals can trigger
         right after a listing.
+    price_fallback : bool, optional
+        Enable ATR based fallback when breakout conditions fail.
+    fallback_atr_mult : float, optional
+        Required candle body multiple of ATR for the fallback.
+    fallback_volume_mult : float, optional
+        Required volume multiple for the fallback.
 
     Returns
     -------
@@ -61,6 +73,9 @@ def generate_signal(
         initial_window = config.get("initial_window", initial_window)
         min_volume = config.get("min_volume", min_volume)
         direction = config.get("direction", direction)
+        price_fallback = config.get("price_fallback", price_fallback)
+        fallback_atr_mult = config.get("fallback_atr_mult", fallback_atr_mult)
+        fallback_volume_mult = config.get("fallback_volume_mult", fallback_volume_mult)
 
     if high_freq:
         max_history = min(max_history, 20)
@@ -90,11 +105,28 @@ def generate_signal(
             direction = "auto"
         if direction == "auto":
             trade_direction = "short" if price_change < 0 else "long"
+        else:
+            trade_direction = direction
+        return score, trade_direction
     else:
         trade_direction = direction
-        return score, trade_direction
+        score = 0.0
 
-    return 0.0, "none"
+    if price_fallback:
+        atr = calc_atr(df)
+        body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
+        avg_vol = df["volume"].iloc[:-1].mean()
+        if atr > 0 and body > atr * fallback_atr_mult and avg_vol > 0 and df["volume"].iloc[-1] > avg_vol * fallback_volume_mult:
+            score = 1.0
+            if config is None or config.get("atr_normalization", True):
+                score = normalize_score_by_volatility(df, score)
+            if direction not in {"auto", "long", "short"}:
+                direction = "auto"
+            if direction == "auto":
+                trade_direction = "short" if df["close"].iloc[-1] < df["open"].iloc[-1] else "long"
+            return score, trade_direction
+
+    return score, trade_direction
 
 
 class regime_filter:
