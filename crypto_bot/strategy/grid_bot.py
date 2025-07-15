@@ -51,6 +51,7 @@ class GridConfig:
     volume_multiple: float = 1.5
     vol_zscore_threshold: float = 2.0
     atr_change_threshold: float = 0.1
+    volume_filter: bool = True
 
     @classmethod
     def from_dict(cls, cfg: Optional[dict]) -> "GridConfig":
@@ -179,8 +180,15 @@ def generate_signal(
     if df.empty or len(df) < min_len:
         return 0.0, "none"
 
-    if "volume" in df and not volume_ok(
-        df["volume"], cfg.volume_ma_window, cfg.volume_multiple, cfg.vol_zscore_threshold
+    if (
+        cfg.volume_filter
+        and "volume" in df
+        and not volume_ok(
+            df["volume"],
+            cfg.volume_ma_window,
+            cfg.volume_multiple,
+            cfg.vol_zscore_threshold,
+        )
     ):
         return 0.0, "none"
 

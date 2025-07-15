@@ -290,6 +290,8 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **trigger_once** – bypass the cooldown and win-rate filter for one bounce scalper cycle.
 * **breakout** – Bollinger/Keltner squeeze, volume multiplier, ATR buffer and
   outputs ATR for stop sizing.
+* **grid_bot.volume_filter** – require a volume spike before entering a grid
+  trade. Turning this off increases trade frequency.
 
 * **atr_normalization** – adjust signal scores using ATR.
 ```python
