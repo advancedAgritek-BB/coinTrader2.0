@@ -36,6 +36,24 @@ _REGIMES = [
     "volatile",
 ]
 
+# Fallback parameters used when :data:`CONFIG` is empty or missing keys.
+_DEFAULT_CFG = {
+    "ema_fast": 8,
+    "ema_slow": 21,
+    "indicator_window": 14,
+    "bb_window": 20,
+    "ma_window": 20,
+    "adx_trending_min": 25,
+    "adx_sideways_max": 18,
+    "bb_width_sideways_max": 0.025,
+    "bb_width_breakout_max": 4,
+    "breakout_volume_mult": 1.5,
+    "rsi_mean_rev_min": 30,
+    "rsi_mean_rev_max": 70,
+    "ema_distance_mean_rev_max": 0.02,
+    "normalized_range_volatility_min": 1.5,
+}
+
 
 @dataclass
 class BacktestConfig:
@@ -61,11 +79,27 @@ class BacktestConfig:
 class BacktestRunner:
     """Execute regime aware backtests."""
 
-    def __init__(self, config: BacktestConfig, exchange: ccxt.Exchange | None = None) -> None:
+    def __init__(
+        self,
+        config: BacktestConfig,
+        exchange: ccxt.Exchange | None = None,
+        df: pd.DataFrame | None = None,
+    ) -> None:
         self.config = config
         self.exchange = exchange
         self.rng = np.random.default_rng(config.seed)
-        df_raw = self._fetch_data()
+        df_raw: pd.DataFrame | list | None
+        if df is not None:
+            df_raw = df
+        else:
+            df_raw = self._fetch_data()
+        if not isinstance(df_raw, pd.DataFrame):
+            df_raw = pd.DataFrame(
+                df_raw,
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
+            if not df_raw.empty:
+                df_raw["timestamp"] = pd.to_datetime(df_raw["timestamp"], unit="ms")
         self.df_prepared = self._prepare_data(df_raw)
 
     @staticmethod
@@ -96,7 +130,7 @@ class BacktestRunner:
         return df
 
     def _prepare_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        cfg = CONFIG
+        cfg = {**_DEFAULT_CFG, **CONFIG}
         df = df.copy()
         df["ema_fast"] = ta.trend.ema_indicator(df["close"], window=cfg["ema_fast"])
         df["ema_slow"] = ta.trend.ema_indicator(df["close"], window=cfg["ema_slow"])
@@ -116,7 +150,7 @@ class BacktestRunner:
         if classify_regime.__module__ != "crypto_bot.regime.regime_classifier":
             return [classify_regime(df_prepared.iloc[: i + 1])[0] for i in range(len(df_prepared))]
 
-        cfg = CONFIG
+        cfg = {**_DEFAULT_CFG, **CONFIG}
         trending = (df_prepared["adx"] > cfg["adx_trending_min"]) & (
             df_prepared["ema_fast"] > df_prepared["ema_slow"]
         )
@@ -291,12 +325,6 @@ class BacktestRunner:
     # ------------------------------------------------------------------
     def run_grid(self) -> pd.DataFrame:
         """Bayesian optimisation over stop loss and take profit."""
-        from skopt import BayesSearchCV
-        from skopt.space import Real
-        from sklearn.base import BaseEstimator
-        from tqdm import tqdm
-        from joblib import Parallel, delayed
-
         cfg = self.config
 
         if len(cfg.stop_loss_range) == 1 and len(cfg.take_profit_range) == 1:
@@ -307,6 +335,12 @@ class BacktestRunner:
                 self.rng,
             )
             return pd.DataFrame([metrics])
+
+        from skopt import BayesSearchCV
+        from skopt.space import Real
+        from sklearn.base import BaseEstimator
+        from tqdm import tqdm
+        from joblib import Parallel, delayed
 
         class Estimator(BaseEstimator):
             def __init__(self, runner: BacktestRunner, stop_loss: float = 0.02, take_profit: float = 0.04) -> None:
