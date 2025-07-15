@@ -291,8 +291,9 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   confirm engulfing or hammer patterns. Defaults to `1m`.
 * **trigger_once** – bypass the cooldown and win-rate filter for one bounce scalper cycle.
 * **cooldown_enabled** – disable to ignore the cooldown and win-rate check.
-* **breakout** – Bollinger/Keltner squeeze, volume multiplier, ATR buffer and
-  outputs ATR for stop sizing.
+* **breakout** – Bollinger/Keltner squeeze with `donchian_window`,
+  `vol_confirmation`/`vol_multiplier`, `setup_window`, `trigger_window` and a
+  `risk` section for stop sizing.
 * **grid_bot.volume_filter** – require a volume spike before entering a grid
   trade. Turning this off increases trade frequency.
 * **grid_bot.dynamic_grid** – realign grid steps when the 1h ATR% changes by
@@ -301,6 +302,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 grid_bot:
   dynamic_grid: true
   atr_period: 14
+  volume_filter: true
 ```
 
 * **sniper_bot.atr_window**/**sniper_bot.volume_window** – windows for ATR and
@@ -950,10 +952,10 @@ meme_wave_sniper:
   safety:
     min_liquidity: 10
   risk:
-    max_concurrent: 3
-    daily_loss_cap: 2
+    max_concurrent: 5
+    daily_loss_cap: 1.5
   execution:
-    dry_run: false
+    dry_run: true
 
 ```
 Set the `HELIUS_KEY` environment variable with your Helius API key.
