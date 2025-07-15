@@ -39,6 +39,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     k = float(params.get("k", 1.0))
     volume_window = int(params.get("volume_window", 20))
     volume_mult = float(params.get("volume_mult", 1.0))
+    adx_threshold = float(params.get("adx_threshold", 25))
 
     df["ema_fast"] = ta.trend.ema_indicator(df["close"], window=fast_window)
     df["ema_slow"] = ta.trend.ema_indicator(df["close"], window=slow_window)
@@ -123,14 +124,14 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         latest["close"] > latest["ema_fast"]
         and latest["ema_fast"] > latest["ema_slow"]
         and overbought_cond
-        and latest["adx"] > 25
+        and latest["adx"] > adx_threshold
         and latest["volume"] > latest["volume_ma"]
     )
     short_cond = (
         latest["close"] < latest["ema_fast"]
         and latest["ema_fast"] < latest["ema_slow"]
         and oversold_cond
-        and latest["adx"] > 25
+        and latest["adx"] > adx_threshold
         and latest["volume"] > latest["volume_ma"]
     )
 
