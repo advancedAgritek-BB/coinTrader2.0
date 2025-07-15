@@ -1,10 +1,27 @@
 import pandas as pd
+import importlib.util
+from pathlib import Path
+import sys, types
 
-from crypto_bot.strategy import dex_scalper
+sys.modules.setdefault("telegram", types.SimpleNamespace(Bot=None))
+sys.modules.setdefault(
+    "crypto_bot.strategy.sniper_bot", types.ModuleType("sniper_bot")
+)
+sys.modules.setdefault("scipy", types.ModuleType("scipy"))
+sys.modules.setdefault(
+    "scipy.stats", types.SimpleNamespace(pearsonr=lambda x, y: (0.0, 0.0))
+)
+
+_spec = importlib.util.spec_from_file_location(
+    "dex_scalper", Path(__file__).resolve().parents[1] / "crypto_bot/strategy/dex_scalper.py"
+)
+dex_scalper = importlib.util.module_from_spec(_spec)
+assert _spec.loader is not None
+_spec.loader.exec_module(dex_scalper)
 
 
 def test_scalper_long_signal():
-    close = pd.Series(range(1, 41))
+    close = pd.Series(range(1, 21))
     df = pd.DataFrame({'close': close})
     score, direction = dex_scalper.generate_signal(df)
     assert direction == 'long'
@@ -28,11 +45,19 @@ def test_scalper_neutral_signal():
 
 
 def test_scalper_min_data():
-    close = pd.Series([100.0] * 10)
+    close = pd.Series([100.0] * 5)
     df = pd.DataFrame({'close': close})
     score, direction = dex_scalper.generate_signal(df)
     assert direction == 'none'
     assert score == 0.0
+
+
+def test_accepts_short_history():
+    close = pd.Series(range(1, 11))
+    df = pd.DataFrame({'close': close})
+    score, direction = dex_scalper.generate_signal(df)
+    assert direction == 'long'
+    assert score > 0
 
 
 def test_scalper_custom_config():
@@ -45,7 +70,7 @@ def test_scalper_custom_config():
 
 
 def test_priority_fee_aborts(monkeypatch):
-    close = pd.Series(range(1, 41))
+    close = pd.Series(range(1, 21))
     df = pd.DataFrame({"close": close})
     monkeypatch.setenv("MOCK_ETH_PRIORITY_FEE_GWEI", "50")
     cfg = {"dex_scalper": {"gas_threshold_gwei": 10}}
@@ -55,7 +80,7 @@ def test_priority_fee_aborts(monkeypatch):
 
 
 def test_priority_fee_below_threshold(monkeypatch):
-    close = pd.Series(range(1, 41))
+    close = pd.Series(range(1, 21))
     df = pd.DataFrame({"close": close})
     monkeypatch.setenv("MOCK_ETH_PRIORITY_FEE_GWEI", "5")
     cfg = {"dex_scalper": {"gas_threshold_gwei": 10}}
