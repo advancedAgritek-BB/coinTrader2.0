@@ -739,23 +739,23 @@ undesirable markets before strategies run:
 ```yaml
 symbol_filter:
   min_volume_usd: 1000
-  volume_percentile: 0          # keep pairs above this volume percentile
-  change_pct_percentile: 0      # no 24h change requirement
-  max_spread_pct: 3             # allow wider spreads
-  min_volume_usd: 100          # ignore very tiny markets
-  volume_percentile: 40        # keep pairs above this volume percentile
-  uncached_volume_multiplier: 5 # extra volume when not cached
-  change_pct_percentile: 50    # require 24h change in the top half
-  max_spread_pct: 5            # allow spreads up to 5%
-  correlation_window: 30        # days of history for correlation
-  max_correlation: 0.85         # drop pairs above this threshold
-  correlation_max_pairs: 100    # limit pairwise correlation checks
-  kraken_batch_size: 100        # max symbols per fetch_tickers call
-  http_timeout: 10              # seconds for fallback /Ticker requests
+  volume_percentile: 40          # keep pairs above this volume percentile
+  change_pct_percentile: 50      # require 24h change in the top half
+  max_spread_pct: 5              # allow spreads up to 5%
+  uncached_volume_multiplier: 5  # extra volume when not cached
+  correlation_window: 30         # days of history for correlation
+  max_correlation: 0.85          # drop pairs above this threshold
+  correlation_max_pairs: 100     # limit pairwise correlation checks
+  kraken_batch_size: 100         # max symbols per fetch_tickers call
+  http_timeout: 10               # seconds for fallback /Ticker requests
+  ticker_retry_attempts: 3       # number of fetch_tickers retries
+  log_ticker_exceptions: false   # include stack traces when true
 ```
-  ticker_retry_attempts: 3      # number of fetch_tickers retries
-  log_ticker_exceptions: false  # include stack traces when true
-```
+`setup_window` controls how many candles of ticker history are gathered before
+a symbol is eligible to trade, while `trigger_window` defines the period after
+a setup is detected during which entry conditions must appear.  Each strategy
+can also include a `risk` section such as `max_concurrent` or
+`daily_loss_cap` to cap simultaneous positions and total daily losses.
 WebSocket streaming is enabled by default when scanning. Set
 `use_websocket: false` to force REST polling instead. You can disable
 WebSocket just for ticker scanning by adding
