@@ -68,8 +68,12 @@ async def execute_swap(
             if action == "reprice":
                 amount *= cfg.get("reprice_multiplier", 1.0)
         fee = mempool_monitor.fetch_priority_fee()
+        gas_limit = config.get("gas_threshold_gwei", 0.0)
+        if gas_limit and fee > gas_limit:
+            logger.warning("Swap aborted due to high priority fee: %s", fee)
+            return {}
         tp = config.get("take_profit_pct") or config.get("risk", {}).get("take_profit_pct", 0.0)
-        if tp and fee > tp * 0.05:
+        if not gas_limit and tp and fee > tp * 0.05:
             logger.warning("Swap aborted due to high priority fee: %s", fee)
             return {}
 

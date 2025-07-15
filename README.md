@@ -262,6 +262,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment to avoid bearish markets.
 * **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
 * **mempool_monitor** – pause or reprice when Solana fees spike.
+* **gas_threshold_gwei** – abort scalper trades when priority fees exceed this.
 * **min_cooldown** – minimum minutes between trades.
 * **cycle_bias** – optional on-chain metrics to bias trades.
 * **min_expected_value** – minimum expected value for a strategy based on
@@ -903,6 +904,8 @@ mempool_monitor:
 
 When enabled, `execute_swap` checks the current priority fee and pauses
 or adjusts the trade according to the selected action.
+If `gas_threshold_gwei` is set, the scalper aborts the swap entirely when
+the priority fee exceeds this limit.
 
 ## Solana Meme-Wave Sniper
 
