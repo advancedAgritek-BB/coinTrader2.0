@@ -45,11 +45,11 @@ class BounceScalperConfig:
 
     # core indicators
     rsi_window: int = 14
-    oversold: float = 30.0
-    overbought: float = 70.0
+    oversold: float = 35.0
+    overbought: float = 65.0
     vol_window: int = 20
     zscore_threshold: float = 1.5
-    volume_multiple: float = 2.0
+    volume_multiple: float = 1.5
     ema_window: int = 50
     atr_window: int = 14
     lookback: int = 250
@@ -69,7 +69,7 @@ class BounceScalperConfig:
     min_score: float = 0.3
     max_concurrent_signals: int = 1
     atr_normalization: bool = True
-    cooldown_enabled: bool = True
+    cooldown_enabled: bool = False
 
     # pattern detection
     pattern_timeframe: str = "1m"
