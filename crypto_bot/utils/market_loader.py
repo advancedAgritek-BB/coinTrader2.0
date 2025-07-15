@@ -735,6 +735,9 @@ async def fetch_dexscreener_ohlcv(
 
     async with aiohttp.ClientSession() as session:
         async with session.get(url, timeout=10) as resp:
+            if resp.status == 404:
+                logger.info("pair not available on DexScreener: %s", symbol)
+                return None
             resp.raise_for_status()
             data = await resp.json()
 
