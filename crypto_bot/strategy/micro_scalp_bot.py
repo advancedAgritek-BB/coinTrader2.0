@@ -74,6 +74,10 @@ def generate_signal(
         Order book imbalance threshold used to filter or penalize signals.
     ``imbalance_penalty``
         Factor applied to the score when imbalance is against the trade.
+    ``imbalance_filter``
+        If ``false``, skip the order book imbalance check.
+    ``trend_filter``
+        When ``false`` the higher timeframe EMA confirmation is ignored.
     """
     if tick_data is not None and not tick_data.empty:
         df = pd.concat([df, tick_data], ignore_index=True)
@@ -116,9 +120,11 @@ def generate_signal(
     fresh_cross_only = bool(params.get("fresh_cross_only", True))
     imbalance_ratio = float(params.get("imbalance_ratio", 0))
     imbalance_penalty = float(params.get("imbalance_penalty", 0))
+    imbalance_filter = bool(params.get("imbalance_filter", True))
     trend_fast = int(params.get("trend_fast", 0))
     trend_slow = int(params.get("trend_slow", 0))
     _ = params.get("trend_timeframe")
+    trend_filter = bool(params.get("trend_filter", True))
 
     if len(df) < slow_window:
         return 0.0, "none"
@@ -209,7 +215,11 @@ def generate_signal(
         return 0.0, "none"
 
     book_data = book or params.get("order_book")
-    if imbalance_ratio and isinstance(book_data, dict):
+    if (
+        imbalance_filter
+        and imbalance_ratio
+        and isinstance(book_data, dict)
+    ):
         bids = sum(v for _, v in book_data.get("bids", []))
         asks = sum(v for _, v in book_data.get("asks", []))
         if bids and asks:
@@ -225,7 +235,7 @@ def generate_signal(
                 else:
                     return 0.0, "none"
 
-    if trend_fast_val is not None and trend_slow_val is not None:
+    if trend_filter and trend_fast_val is not None and trend_slow_val is not None:
         if direction == "long" and trend_fast_val <= trend_slow_val:
             return 0.0, "none"
         if direction == "short" and trend_fast_val >= trend_slow_val:
