@@ -72,7 +72,7 @@ class BounceScalperConfig:
     cooldown_enabled: bool = True
 
     # pattern detection
-    pattern_timeframe: str = ""
+    pattern_timeframe: str = "1m"
 
     # metadata
     strategy: str = "bounce_scalper"

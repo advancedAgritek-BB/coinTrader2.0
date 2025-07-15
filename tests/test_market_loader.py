@@ -339,6 +339,7 @@ def test_watch_ohlcv_skipped_when_limit_exceeds(monkeypatch):
         market_loader.fetch_ohlcv_async(
             ex,
             "BTC/USD",
+            timeframe="1m",
             limit=100,
             use_websocket=True,
         )
@@ -357,6 +358,7 @@ def test_force_websocket_history_ignores_max_ws_limit(monkeypatch):
         market_loader.fetch_ohlcv_async(
             ex,
             "BTC/USD",
+            timeframe="1m",
             limit=100,
             use_websocket=True,
             force_websocket_history=True,
