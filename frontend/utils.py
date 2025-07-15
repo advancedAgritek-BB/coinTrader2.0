@@ -146,3 +146,13 @@ def get_current_regime(log_file: Path) -> str:
             if "Market regime classified as" in line:
                 return line.rsplit("Market regime classified as", 1)[1].strip()
     return "N/A"
+
+
+def get_last_decision_reason(log_file: Path) -> str:
+    """Return the last evaluation reason from bot log."""
+    if log_file.exists():
+        lines = log_file.read_text().splitlines()
+        for line in reversed(lines):
+            if "[EVAL]" in line:
+                return line.split("[EVAL]", 1)[1].strip()
+    return "N/A"
