@@ -355,6 +355,9 @@ learning prediction. Enable the weighting in `crypto_bot/config.yaml`:
 mean_bot:
   ml_enabled: true
 ```
+The bot only opens positions when the current 20-bar Bollinger bandwidth is
+below its 20-bar median, reducing trades during ranging periods and improving
+the win rate.
 
 ### Data and Logging
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
