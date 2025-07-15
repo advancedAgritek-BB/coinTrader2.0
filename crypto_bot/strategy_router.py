@@ -572,10 +572,10 @@ def route(
             #    concurrent volume spike
             from ta.volatility import BollingerBands
 
-            window = int(fp.get("breakout_squeeze_window", 20))
+            window = int(fp.get("breakout_squeeze_window", 15))
             bw_z_thr = float(fp.get("breakout_bandwidth_zscore", -0.84))
-            vol_mult = float(fp.get("breakout_volume_multiplier", 5))
-            max_bw = float(fp.get("breakout_max_bandwidth", 0.05))
+            vol_mult = float(fp.get("breakout_volume_multiplier", 4))
+            max_bw = float(fp.get("breakout_max_bandwidth", 0.04))
 
             bb = BollingerBands(df["close"], window=window)
             wband_series = bb.bollinger_wband()
@@ -607,7 +607,7 @@ def route(
             # 2) ultra-strong trend by ADX
             from ta.trend import ADXIndicator
 
-            adx_thr = float(fp.get("trend_adx_threshold", 35))
+            adx_thr = float(fp.get("trend_adx_threshold", 25))
             adx_val = (
                 ADXIndicator(df["high"], df["low"], df["close"], window=window)
                 .adx()
@@ -692,13 +692,28 @@ def route(
     )
 
     symbol = ""
+    chain = ""
     if isinstance(cfg, RouterConfig):
         symbol = str(cfg.raw.get("symbol", ""))
+        chain = str(cfg.raw.get("chain") or cfg.raw.get("preferred_chain", ""))
+        grid_cfg = cfg.raw.get("grid_bot", {})
     elif isinstance(cfg, Mapping):
         symbol = str(cfg.get("symbol", ""))
+        chain = str(cfg.get("chain") or cfg.get("preferred_chain", ""))
+        grid_cfg = cfg.get("grid_bot", {})
+    else:
+        grid_cfg = {}
     if symbol.endswith("/USDC") and regime == "breakout":
         logger.info("Routing USDC breakout to Solana sniper bot")
         return _wrap(sniper_solana.generate_signal)
+
+    if chain.lower().startswith("sol") and mode in {"auto", "onchain"} and regime in {"breakout", "volatile"}:
+        logger.info("Routing %s regime to Solana sniper bot (%s mode)", regime, mode)
+        return _wrap(sniper_solana.generate_signal)
+
+    if regime == "sideways" and grid_cfg.get("dynamic_grid") and symbol:
+        logger.info("Routing dynamic grid signal to micro scalp bot")
+        return _wrap(micro_scalp_bot.generate_signal)
 
     # Thompson sampling router
     bandit_active = (
@@ -731,16 +746,12 @@ def route(
             return _wrap(fn)
 
     if mode == "onchain":
-        chain = ""
-        if isinstance(cfg, RouterConfig):
-            chain = str(cfg.raw.get("chain") or cfg.raw.get("preferred_chain", ""))
-        elif isinstance(cfg, Mapping):
-            chain = str(cfg.get("chain") or cfg.get("preferred_chain", ""))
-
-        # Route Solana on-chain mode directly to the Solana sniper bot
         if chain.lower().startswith("sol"):
-            logger.info("Routing to Solana sniper bot (onchain)")
-            return _wrap(sniper_solana.generate_signal)
+            if regime in {"breakout", "volatile"}:
+                logger.info("Routing to Solana sniper bot (onchain)")
+                return _wrap(sniper_solana.generate_signal)
+            logger.info("Routing to DEX scalper (onchain)")
+            return _wrap(dex_scalper.generate_signal)
 
         if regime in {"breakout", "volatile"}:
             logger.info("Routing to sniper bot (onchain)")

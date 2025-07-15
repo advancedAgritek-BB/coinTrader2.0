@@ -24,13 +24,10 @@ def generate_signal(
     high_freq: bool = False,
     atr_window: int = 14,
     volume_window: int = 5,
-) -> Tuple[float, str, float, bool]:
-    """Detect pumps for newly listed tokens using early price and volume
-    action.
     price_fallback: bool = False,
     fallback_atr_mult: float = 2.0,
     fallback_volume_mult: float = 2.0,
-) -> Tuple[float, str]:
+) -> Tuple[float, str, float, bool]:
     """Detect pumps for newly listed tokens using early price and volume action.
 
     Parameters
@@ -133,13 +130,8 @@ def generate_signal(
             trade_direction = "short" if price_change < 0 else "long"
         return score, trade_direction, atr, event
 
-    return 0.0, "none", atr, event
-        else:
-            trade_direction = direction
-        return score, trade_direction
-    else:
-        trade_direction = direction
-        score = 0.0
+    trade_direction = direction
+    score = 0.0
 
     if price_fallback:
         atr = calc_atr(df)
@@ -155,7 +147,7 @@ def generate_signal(
                 trade_direction = "short" if df["close"].iloc[-1] < df["open"].iloc[-1] else "long"
             return score, trade_direction
 
-    return score, trade_direction
+    return 0.0, "none", atr, event
 
 
 class regime_filter:
