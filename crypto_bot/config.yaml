@@ -1,12 +1,12 @@
 atr_normalization: true
-indicator_lookback: 250
+indicator_lookback: 14
 rsi_overbought_pct: 80
 rsi_oversold_pct: 20
 bb_squeeze_pct: 15
 adx_threshold: 20
 sl_mult: 1.2
 tp_mult: 1.5
-ml_enabled: false
+ml_enabled: true
 bounce_scalper:
   rsi_window: 14
   oversold: 30
