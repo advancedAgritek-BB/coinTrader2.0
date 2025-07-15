@@ -1134,3 +1134,62 @@ def test_load_ohlcv_parallel_propagates_cancelled(caplog):
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1))
     assert len(caplog.records) == 0
+
+
+def test_fetch_dexscreener_ohlcv_404(monkeypatch, caplog):
+    from crypto_bot.utils import market_loader
+
+    class FakeResp:
+        status = 404
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def raise_for_status(self):
+            raise AssertionError("should not be called")
+
+        async def json(self):
+            return {}
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=None):
+            return FakeResp()
+
+    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
+
+    caplog.set_level(logging.INFO)
+    res = asyncio.run(market_loader.fetch_dexscreener_ohlcv("FOO/USDC"))
+    assert res is None
+    assert any("pair not available on DexScreener" in r.getMessage() for r in caplog.records)
+
+
+def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    async def fake_fetch(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(market_loader, "fetch_dexscreener_ohlcv", fake_fetch)
+
+    ex = DummyMultiTFExchange()
+    cache = {}
+    config = {"timeframes": ["1h"]}
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            cache,
+            ["FOO/USDC"],
+            config,
+            limit=1,
+        )
+    )
+    assert "FOO/USDC" not in cache["1h"]
