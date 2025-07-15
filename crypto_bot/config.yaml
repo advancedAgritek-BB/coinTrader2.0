@@ -154,9 +154,9 @@ min_agreeing_votes: 1
 min_confidence_score: 0.25
 min_consistent_agreement: 1
 ensemble_min_conf: 0.15
-min_cooldown: 1
-min_symbol_age_days: 10
-min_symbol_score: 0.1
+min_cooldown: 0
+min_symbol_age_days: 0
+min_symbol_score: 0
 ml_signal_model:
   enabled: true
   weight: 0.6
