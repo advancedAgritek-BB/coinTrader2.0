@@ -8,14 +8,14 @@ def _df(value: float) -> pd.DataFrame:
 
 
 def test_long_signal_when_below_ma():
-    df = _df(94.0)
+    df = _df(89.0)
     score, direction = dca_bot.generate_signal(df)
     assert direction == "long"
     assert score == 0.8
 
 
 def test_no_signal_above_ma():
-    df = _df(97.0)
+    df = _df(90.0)
     score, direction = dca_bot.generate_signal(df)
     assert direction == "none"
     assert score == 0.0
