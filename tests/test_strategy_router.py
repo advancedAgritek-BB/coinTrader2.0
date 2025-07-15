@@ -168,6 +168,8 @@ def test_onchain_solana_route():
     }
     fn = route("breakout", "onchain", cfg)
     assert fn.__name__ == sniper_solana.generate_signal.__name__
+    fn = route("volatile", "onchain", cfg)
+    assert fn.__name__ == sniper_solana.generate_signal.__name__
 
 
 def test_usdc_pair_breakout():
@@ -177,4 +179,23 @@ def test_usdc_pair_breakout():
     }
     fn = route("breakout", "cex", cfg)
     assert fn.__name__ == sniper_solana.generate_signal.__name__
+
+
+def test_auto_solana_breakout_route():
+    cfg = {
+        "preferred_chain": "solana",
+        "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
+    }
+    fn = route("breakout", "auto", cfg)
+    assert fn.__name__ == sniper_solana.generate_signal.__name__
+
+
+def test_dynamic_grid_uses_micro_scalp():
+    cfg = {
+        "symbol": "AAA/USDT",
+        "grid_bot": {"dynamic_grid": True},
+        "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
+    }
+    fn = route("sideways", "cex", cfg)
+    assert fn.__name__ == micro_scalp_bot.generate_signal.__name__
 

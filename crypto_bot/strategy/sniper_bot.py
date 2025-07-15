@@ -144,6 +144,9 @@ def generate_signal(
             trade_direction = "short" if price_change < 0 else "long"
         return score, trade_direction, atr, event
 
+    trade_direction = direction
+    score = 0.0
+
     if price_fallback:
         atr = calc_atr(df)
         body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
