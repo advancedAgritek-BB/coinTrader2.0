@@ -82,6 +82,7 @@ grid_bot:
   vol_zscore_threshold: 2.0
   volume_ma_window: 20
   volume_multiple: 1.2
+  volume_filter: true
 liquidity_check: false
 liquidity_depth: 10
 log_to_google: true
