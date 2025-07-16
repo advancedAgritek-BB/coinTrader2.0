@@ -199,6 +199,43 @@ def test_raw_id_mapping(monkeypatch):
     assert symbols == [("BTC/USDT", 0.6)]
 
 
+class USDCVolumeExchange:
+    def __init__(self):
+        self.has = {"fetchTickers": True}
+        self.markets_by_id = {
+            "XLOWUSDC": {"symbol": "LOW/USDC"},
+            "XLOWUSDT": {"symbol": "LOW/USDT"},
+        }
+
+    async def fetch_tickers(self, symbols):
+        assert symbols == ["LOW/USDC", "LOW/USDT"]
+        ticker = {
+            "a": ["101", "1", "1"],
+            "b": ["100", "1", "1"],
+            "c": ["101", "1"],
+            "v": ["300", "300"],
+            "p": ["100", "100"],
+            "o": "99",
+        }
+        return {"LOW/USDC": ticker, "LOW/USDT": ticker}
+
+
+def test_usdc_min_volume_halved(monkeypatch):
+    async def raise_if_called(_):
+        raise AssertionError("_fetch_ticker_async should not be called")
+
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", raise_if_called
+    )
+
+    ex = USDCVolumeExchange()
+    result = asyncio.run(
+        filter_symbols(ex, ["LOW/USDC", "LOW/USDT"], CONFIG)
+    )
+
+    assert result == [("LOW/USDC", 0.3)]
+
+
 class WatchTickersExchange(DummyExchange):
     def __init__(self):
         self.has = {"watchTickers": True}

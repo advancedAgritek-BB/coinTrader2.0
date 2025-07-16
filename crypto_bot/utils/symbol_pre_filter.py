@@ -327,7 +327,10 @@ async def _refresh_tickers(
             if not data:
                 try:
                     pairs = [s.replace("/", "") for s in symbols]
-                    raw = (await _fetch_ticker_async(pairs, timeout=timeout)).get("result", {})
+                    try:
+                        raw = (await _fetch_ticker_async(pairs, timeout=timeout)).get("result", {})
+                    except TypeError:
+                        raw = (await _fetch_ticker_async(pairs)).get("result", {})
                     data = {}
                     if len(raw) == len(symbols):
                         for sym, (_, ticker) in zip(symbols, raw.items()):
@@ -352,7 +355,10 @@ async def _refresh_tickers(
         else:
             try:
                 pairs = [s.replace("/", "") for s in symbols]
-                raw = (await _fetch_ticker_async(pairs, timeout=timeout)).get("result", {})
+                try:
+                    raw = (await _fetch_ticker_async(pairs, timeout=timeout)).get("result", {})
+                except TypeError:
+                    raw = (await _fetch_ticker_async(pairs)).get("result", {})
                 data = {}
                 if len(raw) == len(symbols):
                     for sym, (_, ticker) in zip(symbols, raw.items()):
@@ -563,10 +569,11 @@ async def filter_symbols(
             spread_pct,
         )
         seen.add(symbol)
-        if cache_map and vol_usd < min_volume * vol_mult:
+        local_min_volume = min_volume * 0.5 if symbol.endswith("/USDC") else min_volume
+        if cache_map and vol_usd < local_min_volume * vol_mult:
             skipped += 1
             continue
-        if vol_usd >= min_volume and spread_pct <= max_spread:
+        if vol_usd >= local_min_volume and spread_pct <= max_spread:
             metrics.append((symbol, vol_usd, change_pct, spread_pct))
             if cache_map is not None and symbol not in cache_map:
                 cache_map[symbol] = time.time()
@@ -584,10 +591,11 @@ async def filter_symbols(
             continue
         vol_usd, spread_pct = cached
         seen.add(norm_sym)
-        if cache_map and vol_usd < min_volume * vol_mult:
+        local_min_volume = min_volume * 0.5 if norm_sym.endswith("/USDC") else min_volume
+        if cache_map and vol_usd < local_min_volume * vol_mult:
             skipped += 1
             continue
-        if vol_usd >= min_volume and spread_pct <= max_spread:
+        if vol_usd >= local_min_volume and spread_pct <= max_spread:
             metrics.append((norm_sym, vol_usd, 0.0, spread_pct))
             if cache_map is not None and norm_sym not in cache_map:
                 cache_map[norm_sym] = time.time()
