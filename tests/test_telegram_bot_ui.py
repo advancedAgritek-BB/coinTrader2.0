@@ -8,6 +8,7 @@ from crypto_bot.telegram_bot_ui import (
     SIGNALS,
     BALANCE,
     TRADES,
+    MENU,
     RELOAD,
 )
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -115,6 +116,10 @@ def test_start_stop_toggle(monkeypatch, tmp_path):
     monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
     state = {"running": False, "mode": "cex"}
     ui, _ = make_ui(tmp_path, state)
+    ui.command_cooldown = 0
+    ui.command_cooldown = 0
+    ui.command_cooldown = 0
+    ui.command_cooldown = 0
 
     update = DummyUpdate()
     asyncio.run(ui.start_cmd(update, DummyContext()))
@@ -317,3 +322,112 @@ def test_reload(monkeypatch, tmp_path):
     asyncio.run(ui.reload_cmd(update, DummyContext()))
     assert state["reload"] is True
     assert update.message.text == "Config reload scheduled"
+
+
+def test_auto_menu_display(monkeypatch, tmp_path):
+    """Menu command should reply with inline keyboard both via command and callback."""
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
+    state = {"running": False, "mode": "cex"}
+    ui, _ = make_ui(tmp_path, state)
+
+    ui.command_cooldown = 0
+    # direct /menu command
+    update = DummyUpdate()
+    asyncio.run(ui.menu_cmd(update, DummyContext()))
+    assert update.message.text == "Select a command:"
+    assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
+
+    # callback invocation should edit the message in place
+    cb = DummyCallbackUpdate(MENU)
+    asyncio.run(ui.menu_cmd(cb, DummyContext()))
+    assert cb.callback_query.message.text == "Select a command:"
+    assert isinstance(cb.callback_query.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
+
+
+def test_pnl_stats_output(monkeypatch, tmp_path):
+    """show_trades should display PnL lines from console_monitor."""
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
+    state = {"running": True, "mode": "cex"}
+    ui, _ = make_ui(tmp_path, state, exchange=DummyExchange())
+
+    lines = ["BTC/USDT -- 100.00 -- +5.00"]
+    async def fake_lines(*_a, **_k):
+        return lines
+    monkeypatch.setattr(telegram_bot_ui.console_monitor, "trade_stats_lines", fake_lines)
+    trades_file = tmp_path / "trades.csv"
+    trades_file.write_text("sym,side,amt,price\n")
+    monkeypatch.setattr(telegram_bot_ui, "TRADES_FILE", trades_file)
+    update = DummyUpdate()
+    asyncio.run(ui.show_trades(update, DummyContext()))
+    assert "+5.00" in update.message.text
+
+
+def test_trade_history_pagination(monkeypatch, tmp_path):
+    """log_cmd should return only the last 20 lines of the log file."""
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
+    state = {"running": True, "mode": "cex"}
+    ui, log_file = make_ui(tmp_path, state)
+
+    # write 25 lines to log file
+    log_file.write_text("\n".join(f"line{i}" for i in range(25)))
+    update = DummyUpdate()
+    asyncio.run(ui.log_cmd(update, DummyContext()))
+    lines = update.message.text.splitlines()
+    assert len(lines) == 20
+    assert lines[0] == "line5"
+
+
+def test_config_edit_workflow(monkeypatch, tmp_path):
+    """Reload command should allow config to be refreshed via maybe_reload_config."""
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
+    state = {"running": True, "mode": "cex"}
+    ui, _ = make_ui(tmp_path, state)
+
+    import sys, types
+    stub = types.ModuleType("crypto_bot.main")
+    load_calls = []
+
+    def fake_load():
+        load_calls.append(True)
+        return {"risk": {"trade_size_pct": 1.5}}
+
+    def maybe_reload_config(state, config):
+        if state.get("reload"):
+            cfg = fake_load()
+            config.clear()
+            config.update(cfg)
+            state.pop("reload", None)
+
+    stub.load_config = fake_load
+    stub.maybe_reload_config = maybe_reload_config
+    monkeypatch.setitem(sys.modules, "crypto_bot.main", stub)
+    main = stub
+
+    update = DummyUpdate()
+    asyncio.run(ui.reload_cmd(update, DummyContext()))
+    assert state["reload"] is True
+
+    config = {}
+    main.maybe_reload_config(state, config)
+    assert state.get("reload") is None
+    assert config.get("risk", {}).get("trade_size_pct") == 1.5
+
+
+def test_back_to_menu_navigation(monkeypatch, tmp_path):
+    """User can return to the main menu after viewing another screen."""
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
+    state = {"running": True, "mode": "cex"}
+    ui, _ = make_ui(tmp_path, state)
+
+    scores = {"BTC": 1.0}
+    sig_file = tmp_path / "scores.json"
+    sig_file.write_text(json.dumps(scores))
+    monkeypatch.setattr(telegram_bot_ui, "ASSET_SCORES_FILE", sig_file)
+
+    cb = DummyCallbackUpdate(SIGNALS)
+    asyncio.run(ui.show_signals(cb, DummyContext()))
+    assert "BTC" in cb.callback_query.message.text
+
+    cb_menu = DummyCallbackUpdate(MENU)
+    asyncio.run(ui.menu_cmd(cb_menu, DummyContext()))
+    assert cb_menu.callback_query.message.text == "Select a command:"
