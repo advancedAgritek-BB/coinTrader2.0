@@ -1,6 +1,8 @@
 import asyncio
 import pytest
 
+pytestmark = pytest.mark.asyncio
+
 from crypto_bot.utils.symbol_scoring import score_symbol
 
 class DummyEx:
