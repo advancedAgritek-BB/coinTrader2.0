@@ -212,10 +212,14 @@ def notify_balance_change(
 async def fetch_balance(exchange, paper_wallet, config):
     """Return the latest wallet balance without logging."""
     if config["execution_mode"] != "dry_run":
-        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-            bal = await exchange.fetch_balance()
-        else:
-            bal = await asyncio.to_thread(exchange.fetch_balance)
+        timeout = config.get("http_timeout", 10)
+        try:
+            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+                bal = await asyncio.wait_for(exchange.fetch_balance(), timeout)
+            else:
+                bal = await asyncio.wait_for(asyncio.to_thread(exchange.fetch_balance), timeout)
+        except asyncio.TimeoutError:
+            raise
         return bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
     return paper_wallet.balance if paper_wallet else 0.0
 
@@ -989,6 +993,7 @@ async def _rotation_loop(
     state: dict,
     notifier: TelegramNotifier | None,
     check_balance_change: callable,
+    config: dict,
 ) -> None:
     """Periodically rotate portfolio holdings."""
 
@@ -996,10 +1001,11 @@ async def _rotation_loop(
     while True:
         try:
             if state.get("running") and rotator.config.get("enabled"):
+                timeout = config.get("http_timeout", 10)
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-                    bal = await exchange.fetch_balance()
+                    bal = await asyncio.wait_for(exchange.fetch_balance(), timeout)
                 else:
-                    bal = await asyncio.to_thread(exchange.fetch_balance)
+                    bal = await asyncio.wait_for(asyncio.to_thread(exchange.fetch_balance), timeout)
                 current_balance = (
                     bal.get("USDT", {}).get("free", 0)
                     if isinstance(bal.get("USDT"), dict)
@@ -1176,18 +1182,23 @@ async def _main_impl() -> TelegramNotifier:
         previous_balance = new_balance
 
     try:
-        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-            bal = await exchange.fetch_balance()
-        else:
-            bal = await asyncio.to_thread(exchange.fetch_balance)
-        init_bal = (
-            bal.get("USDT", {}).get("free", 0)
-            if isinstance(bal.get("USDT"), dict)
-            else bal.get("USDT", 0)
-        )
+        init_bal = await fetch_balance(exchange, None, config)
         log_balance(float(init_bal))
         last_balance = float(init_bal)
         previous_balance = float(init_bal)
+    except asyncio.TimeoutError:
+        timeout = config.get("http_timeout", 10)
+        logger.error(
+            "Exchange balance request timed out after %s seconds; aborting startup",
+            timeout,
+        )
+        if status_updates:
+            err = notifier.notify(
+                f"\u274c Startup aborted: balance request timed out after {timeout}s"
+            )
+            if err:
+                logger.error("Failed to notify user: %s", err)
+        return notifier
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)
         if status_updates:
@@ -1254,6 +1265,7 @@ async def _main_impl() -> TelegramNotifier:
             state,
             notifier,
             check_balance_change,
+            config,
         )
     )
     solana_scan_task: asyncio.Task | None = None
@@ -1399,10 +1411,11 @@ async def _main_impl() -> TelegramNotifier:
                     slippage_bps=config.get("solana_slippage_bps", 50),
                     notifier=notifier,
                 )
+                timeout = config.get("http_timeout", 10)
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-                    bal = await exchange.fetch_balance()
+                    bal = await asyncio.wait_for(exchange.fetch_balance(), timeout)
                 else:
-                    bal = await asyncio.to_thread(exchange.fetch_balance)
+                    bal = await asyncio.wait_for(asyncio.to_thread(exchange.fetch_balance), timeout)
                 bal_val = (
                     bal.get("USDT", {}).get("free", 0)
                     if isinstance(bal.get("USDT"), dict)
