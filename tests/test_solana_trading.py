@@ -3,6 +3,8 @@ import types
 
 import pytest
 
+pytestmark = pytest.mark.asyncio
+
 # Target module
 from crypto_bot import solana_trading
 
