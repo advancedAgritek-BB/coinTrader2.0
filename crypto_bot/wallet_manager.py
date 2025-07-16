@@ -16,6 +16,8 @@ except Exception:
 logger = setup_logger(__name__, LOG_DIR / "wallet.log")
 
 CONFIG_FILE = Path(__file__).resolve().parent / 'user_config.yaml'
+# legacy configuration location used by early versions
+LEGACY_CONFIG_FILE = Path.home() / '.cointrader' / 'user_config.yaml'
 
 FERNET_KEY = os.getenv("FERNET_KEY")
 _fernet = Fernet(FERNET_KEY) if FERNET_KEY and Fernet else None
@@ -137,6 +139,10 @@ def load_or_create() -> dict:
     if CONFIG_FILE.exists():
         logger.info("Loading user configuration from %s", CONFIG_FILE)
         with open(CONFIG_FILE) as f:
+            creds.update(yaml.safe_load(f))
+    elif LEGACY_CONFIG_FILE.exists():
+        logger.info("Loading user configuration from %s", LEGACY_CONFIG_FILE)
+        with open(LEGACY_CONFIG_FILE) as f:
             creds.update(yaml.safe_load(f))
     else:
         logger.info("user_config.yaml not found; prompting for credentials")

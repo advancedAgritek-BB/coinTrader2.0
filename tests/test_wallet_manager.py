@@ -1,3 +1,4 @@
+from pathlib import Path
 import yaml
 import pytest
 
@@ -6,16 +7,39 @@ from crypto_bot import wallet_manager
 
 def test_environment_overrides_config(tmp_path, monkeypatch):
     cfg = tmp_path / "user_config.yaml"
-    data = {
-        "exchange": "coinbase",
-        "coinbase_api_key": "file_key",
-        "coinbase_api_secret": "file_secret",
-    }
-    cfg.write_text(yaml.safe_dump(data))
+    cfg.write_text(
+        "exchange: coinbase\ncoinbase_api_key: file_key\ncoinbase_api_secret: file_secret\n"
+    )
+    def fake_load(stream):
+        text = stream.read() if hasattr(stream, "read") else str(stream)
+        return dict(line.split(": ", 1) for line in text.strip().splitlines())
+    monkeypatch.setattr(wallet_manager.yaml, "safe_load", fake_load)
     monkeypatch.setattr(wallet_manager, "CONFIG_FILE", cfg)
     monkeypatch.setenv("COINBASE_API_KEY", "env_key")
     creds = wallet_manager.load_or_create()
     assert creds["coinbase_api_key"] == "env_key"
+
+
+def test_loads_from_legacy_path(tmp_path, monkeypatch):
+    legacy_dir = tmp_path / ".cointrader"
+    legacy_dir.mkdir()
+    legacy_cfg = legacy_dir / "user_config.yaml"
+    legacy_cfg.write_text(
+        "exchange: coinbase\ncoinbase_api_key: legacy_key\ncoinbase_api_secret: legacy_secret\n"
+    )
+    def fake_load(stream):
+        text = stream.read() if hasattr(stream, "read") else str(stream)
+        return dict(line.split(": ", 1) for line in text.strip().splitlines())
+    monkeypatch.setattr(wallet_manager.yaml, "safe_load", fake_load)
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(wallet_manager, "CONFIG_FILE", tmp_path / "user_config.yaml")
+    monkeypatch.setattr(wallet_manager, "LEGACY_CONFIG_FILE", legacy_cfg)
+    monkeypatch.delenv("COINBASE_API_KEY", raising=False)
+    monkeypatch.delenv("API_KEY", raising=False)
+
+    creds = wallet_manager.load_or_create()
+    assert creds["coinbase_api_key"] == "legacy_key"
 
 
 def test_sanitize_secret_adds_padding():
