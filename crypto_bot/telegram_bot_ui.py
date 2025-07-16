@@ -17,6 +17,7 @@ from telegram.ext import (
     ContextTypes,
     CallbackQueryHandler,
 )
+from telegram_ctl import _paginate, get_page, set_page
 
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
@@ -37,6 +38,7 @@ RELOAD = "RELOAD"
 SIGNALS = "SIGNALS"
 BALANCE = "BALANCE"
 TRADES = "TRADES"
+TRADE_HISTORY = "TRADE_HISTORY"
 PANIC_SELL = "PANIC_SELL"
 
 ASSET_SCORES_FILE = LOG_DIR / "asset_scores.json"
@@ -85,6 +87,7 @@ class TelegramBotUI:
         self.app.add_handler(CommandHandler("signals", self.show_signals))
         self.app.add_handler(CommandHandler("balance", self.show_balance))
         self.app.add_handler(CommandHandler("trades", self.show_trades))
+        self.app.add_handler(CommandHandler("trade_history", self.show_trade_history))
         self.app.add_handler(CommandHandler("panic_sell", self.panic_sell_cmd))
         self.app.add_handler(CallbackQueryHandler(self.start_cmd, pattern=f"^{START}$"))
         self.app.add_handler(CallbackQueryHandler(self.stop_cmd, pattern=f"^{STOP}$"))
@@ -102,6 +105,12 @@ class TelegramBotUI:
         )
         self.app.add_handler(
             CallbackQueryHandler(self.show_trades, pattern=f"^{TRADES}$")
+        )
+        self.app.add_handler(
+            CallbackQueryHandler(self.show_trade_history, pattern=f"^{TRADE_HISTORY}$")
+        )
+        self.app.add_handler(
+            CallbackQueryHandler(self.show_trade_history, pattern="^(next|prev)$")
         )
         self.app.add_handler(
             CallbackQueryHandler(self.panic_sell_cmd, pattern=f"^{PANIC_SELL}$")
@@ -326,6 +335,7 @@ class TelegramBotUI:
                 InlineKeyboardButton("Signals", callback_data=SIGNALS),
                 InlineKeyboardButton("Balance", callback_data=BALANCE),
                 InlineKeyboardButton("Trades", callback_data=TRADES),
+                InlineKeyboardButton("Trade History", callback_data=TRADE_HISTORY),
             ],
         ]
         markup = InlineKeyboardMarkup(keyboard)
@@ -388,3 +398,29 @@ class TelegramBotUI:
         else:
             text = "No trades found"
         await self._reply(update, text)
+
+    async def show_trade_history(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not await self._check_cooldown(update, "trade_history"):
+            return
+        if not await self._check_admin(update):
+            return
+        chat_id = self._get_chat_id(update)
+        page = get_page(chat_id, "trade_history")
+        if getattr(update, "callback_query", None):
+            if update.callback_query.data == "next":
+                page += 1
+            elif update.callback_query.data == "prev":
+                page = max(0, page - 1)
+            else:
+                page = 0
+            await update.callback_query.answer()
+        else:
+            page = 0
+        set_page(chat_id, "trade_history", page)
+        lines: list[str] = []
+        if TRADES_FILE.exists():
+            lines = TRADES_FILE.read_text().splitlines()[-100:]
+        text, markup = _paginate(lines, page)
+        await self._reply(update, text, reply_markup=markup)
