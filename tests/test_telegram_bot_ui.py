@@ -179,10 +179,14 @@ def test_menu_signals_balance_trades(monkeypatch, tmp_path):
     update = DummyUpdate()
     asyncio.run(ui.show_signals(update, DummyContext()))
     assert "BTC" in update.message.text
+    assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
+    assert update.message.reply_markup.inline_keyboard[0][0].text == "Back to Menu"
 
     update = DummyUpdate()
     asyncio.run(ui.show_balance(update, DummyContext()))
     assert "BTC" in update.message.text
+    assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
+    assert update.message.reply_markup.inline_keyboard[0][0].text == "Back to Menu"
 
 
 
@@ -208,6 +212,8 @@ def test_commands_require_admin(monkeypatch, tmp_path):
     update = DummyUpdate()
     asyncio.run(ui.show_trades(update, DummyContext()))
     assert "XBT/USDT" in update.message.text
+    assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
+    assert update.message.reply_markup.inline_keyboard[0][0].text == "Back to Menu"
 
 
 def test_unauthorized_start_stop(monkeypatch, tmp_path):
@@ -254,16 +260,22 @@ def test_menu_callbacks(monkeypatch, tmp_path):
     update.callback_query.data = SIGNALS
     asyncio.run(ui.show_signals(update, DummyContext()))
     assert "XBT/USDT" in update.callback_query.message.text
+    assert isinstance(update.callback_query.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
+    assert update.callback_query.message.reply_markup.inline_keyboard[0][0].text == "Back to Menu"
 
     update = DummyCallbackUpdate()
     update.callback_query.data = BALANCE
     asyncio.run(ui.show_balance(update, DummyContext()))
     assert "Free USDT" in update.callback_query.message.text
+    assert isinstance(update.callback_query.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
+    assert update.callback_query.message.reply_markup.inline_keyboard[0][0].text == "Back to Menu"
 
     update = DummyCallbackUpdate()
     update.callback_query.data = TRADES
     asyncio.run(ui.show_trades(update, DummyContext()))
     assert "+5.00" in update.callback_query.message.text
+    assert isinstance(update.callback_query.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
+    assert update.callback_query.message.reply_markup.inline_keyboard[0][0].text == "Back to Menu"
 
 
 def test_async_exchange_balance_and_rotate(monkeypatch, tmp_path):
@@ -279,10 +291,14 @@ def test_async_exchange_balance_and_rotate(monkeypatch, tmp_path):
     update = DummyUpdate()
     asyncio.run(ui.rotate_now_cmd(update, DummyContext()))
     assert update.message.text == "Portfolio rotated"
+    assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
+    assert update.message.reply_markup.inline_keyboard[0][0].text == "Back to Menu"
 
     update = DummyUpdate()
     asyncio.run(ui.show_balance(update, DummyContext()))
     assert "BTC" in update.message.text
+    assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
+    assert update.message.reply_markup.inline_keyboard[0][0].text == "Back to Menu"
 
 
 def test_command_cooldown(monkeypatch, tmp_path):

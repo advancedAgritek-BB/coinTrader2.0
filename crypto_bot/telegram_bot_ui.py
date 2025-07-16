@@ -44,6 +44,13 @@ SIGNALS_FILE = LOG_DIR / "asset_scores.json"
 TRADES_FILE = LOG_DIR / "trades.csv"
 
 
+def _back_to_menu_markup() -> InlineKeyboardMarkup:
+    """Return a markup with a single 'Back to Menu' button."""
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Back to Menu", callback_data=MENU)]]
+    )
+
+
 class TelegramBotUI:
     """Simple Telegram UI for controlling the trading bot."""
 
@@ -195,7 +202,7 @@ class TelegramBotUI:
         text = await self.controller.start()
         await update.message.reply_text(text)
         self.state["running"] = True
-        await self._reply(update, "Trading started")
+        await self._reply(update, "Trading started", reply_markup=_back_to_menu_markup())
 
     async def stop_cmd(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -207,7 +214,7 @@ class TelegramBotUI:
         text = await self.controller.stop()
         await update.message.reply_text(text)
         self.state["running"] = False
-        await self._reply(update, "Trading stopped")
+        await self._reply(update, "Trading stopped", reply_markup=_back_to_menu_markup())
 
     async def status_cmd(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -215,7 +222,7 @@ class TelegramBotUI:
         if not await self._check_cooldown(update, "status"):
             return
         text = await self.controller.status()
-        await update.message.reply_text(text)
+        await self._reply(update, text, reply_markup=_back_to_menu_markup())
 
 
     async def log_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -228,7 +235,7 @@ class TelegramBotUI:
             text = "\n".join(lines) if lines else "(no logs)"
         else:
             text = "Log file not found"
-        await self._reply(update, text)
+        await self._reply(update, text, reply_markup=_back_to_menu_markup())
 
     async def rotate_now_cmd(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -238,7 +245,7 @@ class TelegramBotUI:
         if not await self._check_admin(update):
             return
         if not (self.rotator and self.exchange and self.wallet):
-            await self._reply(update, "Rotation not configured")
+            await self._reply(update, "Rotation not configured", reply_markup=_back_to_menu_markup())
             return
         try:
             if asyncio.iscoroutinefunction(getattr(self.exchange, "fetch_balance", None)):
@@ -254,10 +261,10 @@ class TelegramBotUI:
                 self.wallet,
                 holdings,
             )
-            await self._reply(update, "Portfolio rotated")
+            await self._reply(update, "Portfolio rotated", reply_markup=_back_to_menu_markup())
         except Exception as exc:  # pragma: no cover - network
             self.logger.error("Rotation failed: %s", exc)
-            await self._reply(update, "Rotation failed")
+            await self._reply(update, "Rotation failed", reply_markup=_back_to_menu_markup())
 
     def send_daily_summary(self) -> None:
         stats = log_reader.trade_summary(str(LOG_DIR / "trades.csv"))
@@ -282,7 +289,7 @@ class TelegramBotUI:
         mode = self.state.get("mode")
         mode = "onchain" if mode == "cex" else "cex"
         self.state["mode"] = mode
-        await self._reply(update, f"Mode set to {mode}")
+        await self._reply(update, f"Mode set to {mode}", reply_markup=_back_to_menu_markup())
 
     async def reload_cmd(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -292,7 +299,7 @@ class TelegramBotUI:
         if not await self._check_admin(update):
             return
         await self.controller.reload_config()
-        await self._reply(update, "Config reload scheduled")
+        await self._reply(update, "Config reload scheduled", reply_markup=_back_to_menu_markup())
 
     async def panic_sell_cmd(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -302,7 +309,7 @@ class TelegramBotUI:
         if not await self._check_admin(update):
             return
         text = await self.controller.close_all_positions()
-        await self._reply(update, text)
+        await self._reply(update, text, reply_markup=_back_to_menu_markup())
 
     async def menu_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "menu"):
@@ -346,7 +353,7 @@ class TelegramBotUI:
                 text = "Invalid signals file"
         else:
             text = "No signals found"
-        await self._reply(update, text)
+        await self._reply(update, text, reply_markup=_back_to_menu_markup())
 
     async def show_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "balance"):
@@ -354,7 +361,7 @@ class TelegramBotUI:
         if not await self._check_admin(update):
             return
         if not self.exchange:
-            await self._reply(update, "Exchange not configured")
+            await self._reply(update, "Exchange not configured", reply_markup=_back_to_menu_markup())
             return
         try:
             if asyncio.iscoroutinefunction(getattr(self.exchange, "fetch_balance", None)):
@@ -375,7 +382,7 @@ class TelegramBotUI:
         except Exception as exc:  # pragma: no cover - network
             self.logger.error("Balance fetch failed: %s", exc)
             text = "Balance fetch failed"
-        await self._reply(update, text)
+        await self._reply(update, text, reply_markup=_back_to_menu_markup())
 
     async def show_trades(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "trades"):
@@ -387,4 +394,4 @@ class TelegramBotUI:
             text = "\n".join(lines) if lines else "(no trades)"
         else:
             text = "No trades found"
-        await self._reply(update, text)
+        await self._reply(update, text, reply_markup=_back_to_menu_markup())
