@@ -73,9 +73,13 @@ needed.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
    The bot will not start if this file is missing or empty.
 4. Start the trading bot:
+4. From the **repository root**, start the trading bot using the module path:
    ```bash
    python -m crypto_bot.main
    ```
+   Launching the script directly with `python crypto_bot/main.py` may raise
+   `ModuleNotFoundError` because the package imports expect the project root to
+   be on `PYTHONPATH`.
    When dry-run mode is selected you will be prompted for the starting USDT balance.
    The console now refreshes with your wallet balance and any active
    trades in real time. Profitable positions are shown in green while
