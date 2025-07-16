@@ -135,6 +135,11 @@ class TradingBotController:
             config=self.config,
         )
 
+    async def close_all_positions(self) -> Dict[str, str]:
+        """Signal the trading bot to liquidate all open positions."""
+        self.state["liquidate_all"] = True
+        return {"status": "liquidation_requested"}
+
     async def fetch_logs(self, lines: int = 20) -> List[str]:
         """Return the last ``lines`` from the bot log."""
         if not self.log_file.exists():
