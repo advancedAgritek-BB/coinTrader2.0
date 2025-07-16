@@ -1,291 +1,295 @@
 atr_normalization: true
 indicator_lookback: 14
 rsi_overbought_pct: 80
-rsi_oversold_pct: 20
-bb_squeeze_pct: 15
-adx_threshold: 20
-sl_mult: 1.2
-tp_mult: 1.5
+rsi_oversold_pct: 25
+bb_squeeze_pct: 10
+adx_threshold: 15
+sl_mult: 1.0
+tp_mult: 2.0
 ml_enabled: true
 arbitrage_enabled: true
 bounce_scalper:
   rsi_window: 14
-  oversold: 30
-  overbought: 70
-  vol_window: 20
-  zscore_threshold: 1.5
-  volume_multiple: 2
-  ema_window: 50
-  atr_window: 14
-  lookback: 250
-  rsi_overbought_pct: 80
-  rsi_oversold_pct: 20
-  down_candles: 3
-  up_candles: 3
-  trend_ema_fast: 9
-  trend_ema_slow: 21
-  pattern_timeframe: 1m
-  atr_period: 14
-  stop_loss_atr_mult: 1.2
-  take_profit_atr_mult: 1.5
-  min_score: 0.3
-  max_concurrent_signals: 3
-  atr_normalization: true
-  cooldown_enabled: true
-sniper_bot:
-  atr_window: 14
-  volume_window: 5
-  breakout_pct: 0.05
+  oversold: 25
+  overbought: 75
+  vol_window: 15
+  zscore_threshold: 1.0
   volume_multiple: 1.5
-  max_history: 30
+  ema_window: 40
+  atr_window: 10
+  lookback: 200
+  rsi_overbought_pct: 75
+  rsi_oversold_pct: 25
+  down_candles: 2
+  up_candles: 2
+  trend_ema_fast: 8
+  trend_ema_slow: 18
+  pattern_timeframe: 1m
+  atr_period: 10
+  stop_loss_atr_mult: 1.0
+  take_profit_atr_mult: 2.0
+  min_score: 0.2
+  max_concurrent_signals: 8
+  atr_normalization: true
+  cooldown_enabled: false
+sniper_bot:
+  atr_window: 10
+  volume_window: 3
+  breakout_pct: 0.03
+  volume_multiple: 1.2
+  max_history: 20
   price_fallback: true
-  fallback_atr_mult: 1.5
-  fallback_volume_mult: 1.2
+  fallback_atr_mult: 1.2
+  fallback_volume_mult: 1.0
 breakout:
-  atr_buffer_mult: 0.05
-  bb_length: 12
-  bb_std: 2
-  dc_length: 20
-  kc_length: 12
-  kc_mult: 1.2
+  atr_buffer_mult: 0.03
+  bb_length: 10
+  bb_std: 1.5
+  dc_length: 15
+  kc_length: 10
+  kc_mult: 1.0
   momentum_filter: false
-  squeeze_threshold: 0.02
-  vol_multiplier: 1.2
-  volume_window: 20
-  adx_threshold: 20
+  squeeze_threshold: 0.01
+  vol_multiplier: 1.0
+  volume_window: 15
+  adx_threshold: 15
 cycle_bias:
-  enabled: false
+  enabled: true
   mvrv_url: https://api.example.com/mvrv
   nupl_url: https://api.example.com/nupl
   sopr_url: https://api.example.com/sopr
 exchange: kraken
 exchange_market_types:
 - spot
+- futures
 excluded_symbols: []
 execution_mode: dry_run
 exit_strategy:
   fib_tp_enabled: true
-  min_gain_to_trail: 0.02
+  min_gain_to_trail: 0.01
   partial_levels:
-  - 33
-  - 66
+  - 25
+  - 50
+  - 75
   - 100
   scale_out: true
-  trailing_stop_factor: 1.5
-  trailing_stop_pct: 0.015
-force_websocket_history: false
-max_ws_limit: 50
+  trailing_stop_factor: 1.2
+  trailing_stop_pct: 0.01
+force_websocket_history: true
+max_ws_limit: 100
 grid_bot:
   atr_normalization: true
-  atr_period: 14
-  breakout_mult: 1.2
-  cooldown_bars: 2
-  max_active_legs: 8
-  range_window: 20
-  spacing_factor: 0.3
+  atr_period: 10
+  breakout_mult: 1.0
+  cooldown_bars: 1
+  max_active_legs: 12
+  range_window: 15
+  spacing_factor: 0.2
   dynamic_grid: true
-  use_ml_center: false
-  min_range_pct: 0.0005
-  leverage: 1
-  arbitrage_pairs: []
-  arbitrage_threshold: 0.002
-  trend_ema_fast: 50
-  trend_ema_slow: 200
-  vol_zscore_threshold: 2.0
-  volume_ma_window: 20
-  volume_multiple: 1.2
-  volume_filter: true
-liquidity_check: false
-liquidity_depth: 10
+  use_ml_center: true
+  min_range_pct: 0.0003
+  leverage: 2
+  arbitrage_pairs: ['BTC/USDT', 'SOL/USDC']
+  arbitrage_threshold: 0.001
+  trend_ema_fast: 40
+  trend_ema_slow: 150
+  vol_zscore_threshold: 1.5
+  volume_ma_window: 15
+  volume_multiple: 1.0
+  volume_filter: false
+liquidity_check: true
+liquidity_depth: 5
 log_to_google: true
 loop_interval_minutes: 0.5
 balance_poll_mod: 1
-max_age_days: 180
-max_change_pct: 10
+max_age_days: 90
+max_change_pct: 20
 max_concurrent_ohlcv: 50
-max_parallel: 12
-max_latency_ms: 1000
-max_ohlcv_failures: 3
-max_open_trades: 15
-max_slippage_pct: 0.1
-max_spread_pct: 5
-max_vol: 1000000
-gas_threshold_gwei: 80
+max_parallel: 50
+max_latency_ms: 500
+max_ohlcv_failures: 5
+max_open_trades: 20
+max_slippage_pct: 0.2
+max_spread_pct: 3
+max_vol: 50000000
+gas_threshold_gwei: 50
 mempool_monitor:
-  action: pause
+  action: reprice
   enabled: true
-  reprice_multiplier: 1.05
-  suspicious_fee_threshold: 50
+  reprice_multiplier: 1.1
+  suspicious_fee_threshold: 30
 meme_wave_sniper:
   enabled: true
   pool:
     url: https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY
-    interval: 5
+    interval: 3
     websocket_url: wss://atlas-mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
     raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
   scoring:
-    weight_liquidity: 1.0
-    weight_tx: 1.0
-    weight_social: 0.5
+    weight_liquidity: 0.8
+    weight_tx: 1.2
+    weight_social: 0.7
   safety:
-    min_liquidity: 10
+    min_liquidity: 5
   risk:
-    max_concurrent: 20
-    daily_loss_cap: 1.5
+    max_concurrent: 15
+    daily_loss_cap: 2.0
   execution:
     dry_run: true
   risk_file: crypto_bot/logs/sniper_risk.json
 meta_selector:
-  enabled: false
+  enabled: true
 metrics_backend: csv
 metrics_enabled: true
 metrics_output_file: crypto_bot/logs/metrics.csv
 micro_scalp:
-  atr_period: 14
+  atr_period: 10
   confirm_bars: 0
   ema_fast: 2
-  ema_slow: 5
+  ema_slow: 4
   fresh_cross_only: false
   imbalance_ratio: 0
-  imbalance_penalty: 0.2
-  imbalance_filter: true
-  min_atr_pct: 0.001
+  imbalance_penalty: 0.1
+  imbalance_filter: false
+  min_atr_pct: 0.0005
   min_momentum_pct: 0.0
-  min_vol_z: -0.5
-  trend_fast: 21
-  trend_slow: 50
-  trend_timeframe: 5m
-  trend_filter: true
-  vol_window: 20
-  volume_window: 20
-  wick_pct: 0.15
+  min_vol_z: -1.0
+  trend_fast: 15
+  trend_slow: 40
+  trend_timeframe: 1m
+  trend_filter: false
+  vol_window: 15
+  volume_window: 15
+  wick_pct: 0.1
 solana_scalping:
-  rsi_window: 14
-  oversold: 30.0
-  overbought: 70.0
-  macd_fast: 12
-  macd_slow: 26
-  macd_signal: 9
+  rsi_window: 12
+  oversold: 25.0
+  overbought: 75.0
+  macd_fast: 10
+  macd_slow: 24
+  macd_signal: 8
 min_agreeing_votes: 1
-min_confidence_score: 0.25
+min_confidence_score: 0.15
 min_consistent_agreement: 1
-ensemble_min_conf: 0.15
+ensemble_min_conf: 0.1
 min_cooldown: 0
 min_symbol_age_days: 0
 min_symbol_score: 0
 ml_signal_model:
   enabled: true
-  weight: 0.6
+  weight: 0.7
 mode: auto
-mode_degrade_window: 20
-mode_threshold: 0.4
-ohlcv_snapshot_frequency_minutes: 1440
-ohlcv_snapshot_limit: 500
-ohlcv_timeout: 120
+mode_degrade_window: 15
+mode_threshold: 0.3
+ohlcv_snapshot_frequency_minutes: 720
+ohlcv_snapshot_limit: 1000
+ohlcv_timeout: 60
 optimization:
   enabled: true
-  interval_days: 1
+  interval_days: 0.5
   parameter_ranges:
     trend:
       stop_loss:
-      - 0.02
+      - 0.01
       take_profit:
-      - 0.04
+      - 0.05
 portfolio_rotation:
   enabled: true
-  interval_days: 1
-  rebalance_threshold: 0.08
+  interval_days: 0.5
+  rebalance_threshold: 0.05
   scoring_method: sharpe
-  top_assets: 10
+  top_assets: 20
 preferred_chain: solana
 refresh_pairs:
-  min_quote_volume_usd: 1000000
-  refresh_interval: 6h
-  top_k: 40
-  secondary_exchange: coinbase
+  min_quote_volume_usd: 1000
+  refresh_interval: 30m
+  top_k: 100
   allowed_quote_currencies:
   - USD
   - USDT
+  - USDC
   blacklist_assets: []
-regime_return_period: 5
+regime_return_period: 3
 regime_timeframes:
+- 30s
+- 1m
 - 5m
 - 15m
 - 1h
 risk:
-  atr_long_window: 50
-  atr_period: 14
-  atr_short_window: 14
-  max_drawdown: 0.4
-  max_volatility_factor: 1.2
-  min_expected_value: -0.05
-  min_volume: 1
-  stop_loss_atr_mult: 1.5
-  stop_loss_pct: 0.01
-  take_profit_atr_mult: 3.0
-  take_profit_pct: 0.03
-  volume_threshold_ratio: 0.01
+  atr_long_window: 40
+  atr_period: 10
+  atr_short_window: 10
+  max_drawdown: 0.5
+  max_volatility_factor: 3
+  min_expected_value: -0.1
+  min_volume: 0.5
+  stop_loss_atr_mult: 1.2
+  stop_loss_pct: 0.005
+  take_profit_atr_mult: 4.0
+  take_profit_pct: 0.04
+  volume_threshold_ratio: 0.005
 rl_selector:
   enabled: true
-scalp_timeframe: 1m
+scalp_timeframe: 30s
 scan_markets: true
 scan_in_background: true
 scoring_weights:
-  regime_confidence: 0.2
-  spread_penalty: -0.1
-  strategy_regime_strength: 0.2
-  strategy_score: 0.4
-  symbol_score: 0.1
-  volume_score: 0.1
-drawdown_penalty_coef: 0.3
+  regime_confidence: 0.15
+  spread_penalty: -0.05
+  strategy_regime_strength: 0.25
+  strategy_score: 0.5
+  symbol_score: 0.05
+  volume_score: 0.05
+drawdown_penalty_coef: 0.2
 sentiment_filter:
-  bull_fng: 65
-  bull_sentiment: 55
-  min_fng: -10
-  min_sentiment: -10
+  bull_fng: 50
+  bull_sentiment: 45
+  min_fng: -20
+  min_sentiment: -20
 signal_fusion:
   enabled: true
   fusion_method: weight
-  min_confidence: 0.25
+  min_confidence: 0.15
   strategies:
   - - trend
-    - 0.4
+    - 0.5
   - - micro_scalp
     - 0.3
   - - sniper_bot
-    - 0.3
-signal_threshold: 0.1
+    - 0.2
+signal_threshold: 0.05
 signal_weight_optimizer:
-  enabled: false
-  learning_rate: 0.1
-  min_weight: 0.05
-sl_pct: 0.03
-solana_slippage_bps: 20
+  enabled: true
+  learning_rate: 0.05
+  min_weight: 0.01
+sl_pct: 0.02
+solana_slippage_bps: 10
 solana_scanner:
   enabled: true
   interval_minutes: 0.5
   api_keys:
     moralis: YOUR_KEY
     bitquery: YOUR_KEY
-  min_volume_usd: 5000
-  max_tokens_per_scan: 50
+  min_volume_usd: 1000
+  max_tokens_per_scan: 100
 pyth:
-  enabled: false
+  enabled: true
   solana_endpoint: https://api.mainnet-beta.solana.com
   solana_ws_endpoint: wss://api.mainnet-beta.solana.com
   program_id: FsJ3A3u2vn5cTVofAjvy6qM3HrjTXg5Gs1Y8D6fCt3m
 strategy_allocation:
-  grid_bot: 0.3
-  sniper_bot: 0.3
+  grid_bot: 0.2
+  sniper_bot: 0.4
   trend_bot: 0.4
-strategy_evaluation_mode: voting
+strategy_evaluation_mode: ensemble
 strategy_router:
   bandit_enabled: true
   fast_path:
-    breakout_max_bandwidth: 0.04
-    breakout_squeeze_window: 15
-    breakout_volume_multiplier: 4
-    trend_adx_threshold: 25
+    breakout_max_bandwidth: 0.03
+    breakout_squeeze_window: 10
+    breakout_volume_multiplier: 3
+    trend_adx_threshold: 20
   regimes:
     bounce:
     - bounce_scalper
@@ -302,36 +306,36 @@ strategy_router:
     volatile:
     - sniper_bot
     - sniper_solana
-symbol: XBT/USDT
-symbol_batch_size: 50
-scan_lookback_limit: 50
-cycle_lookback_limit: null
+symbol: BTC/USDT
+symbol_batch_size: 100
+scan_lookback_limit: 100
+cycle_lookback_limit: 200
 adaptive_scan:
   enabled: true
-  atr_baseline: 0.01
-  max_factor: 5.0
+  atr_baseline: 0.005
+  max_factor: 10.0
 symbol_filter:
-  change_pct_percentile: 0
-  max_correlation: 1.0
-  correlation_max_pairs: 100
-  max_spread_pct: 2
-  min_volume_usd: 500
+  change_pct_percentile: 10
+  max_correlation: 0.8
+  correlation_max_pairs: 200
+  max_spread_pct: 3
+  min_volume_usd: 1000
   uncached_volume_multiplier: 1.5
-  volume_percentile: 20
-  kraken_batch_size: 100
-  http_timeout: 10
-  ticker_retry_attempts: 3
-  log_ticker_exceptions: false
-symbol_refresh_minutes: 5
+  volume_percentile: 10
+  kraken_batch_size: 200
+  http_timeout: 5
+  ticker_retry_attempts: 5
+  log_ticker_exceptions: true
+symbol_refresh_minutes: 1
 symbol_score_weights:
-  age: 0.05
-  change: 0.3
-  latency: 0.05
-  spread: 0.2
-  volume: 0.4
+  age: 0.02
+  change: 0.4
+  latency: 0.03
+  spread: 0.1
+  volume: 0.45
 symbols: []
 tax_tracking:
-  enabled: false
+  enabled: true
   export_path: crypto_bot/logs/tax_trades.csv
 telegram:
   # Enable Telegram notifications and bot commands
@@ -343,56 +347,61 @@ telegram:
   # Optional comma-separated admin IDs
   chat_admins: 827777274
   # Seconds between button presses
-  command_cooldown: 5
+  command_cooldown: 3
   # Send trade entry/exit notifications
   trade_updates: true
 telegram_ctl:
-  enabled: false
-  update_interval: 60
+  enabled: true
+  update_interval: 30
 testing_mode: true
-timeframe: 1m
+timeframe: 30s
 timeframes:
+- 30s
 - 1m
 - 5m
 - 15m
-top_n_symbols: 20
-tp_pct: 0.07
-trade_size_pct: 0.05
+- 1h
+top_n_symbols: 50
+tp_pct: 0.1
+trade_size_pct: 0.1
 trend:
-  atr_period: 14
-  k: 1.0
-  trend_ema_fast: 20
-  trend_ema_slow: 50
+  atr_period: 10
+  k: 0.8
+  trend_ema_fast: 15
+  trend_ema_slow: 40
 twap_enabled: true
-twap_interval_seconds: 10
-twap_slices: 4
-use_websocket: false
-hidden_limit: false
+twap_interval_seconds: 5
+twap_slices: 6
+use_websocket: true
+hidden_limit: true
 volatility_filter:
-  max_funding_rate: 0.05
-  min_atr_pct: 0.005
+  max_funding_rate: 0.1
+  min_atr_pct: 0.0003
 voting_strategies:
 - trend
 - momentum
 - mean_reversion
+- sniper_bot
 wallet_address: your_wallet
-ws_ping_interval: 20
+ws_ping_interval: 10
 bandit:
-  enabled: false
+  enabled: true
   alpha0: 1
   beta0: 1
-  explore_pct: 0.05
+  explore_pct: 0.1
 safety:
   restart_on_error: true
-  max_error_count: 5
+  max_error_count: 10
 scoring:
-  lookback_bars: 50
-  method: sharpe
-  use_numba_scoring: false
+  lookback_bars: 30
+  method: win_rate
+  use_numba_scoring: true
 exec:
-  allow_market_orders: false
-  order_retry_interval: 5
+  allow_market_orders: true
+  order_retry_interval: 3
 exits:
-  default_tp_pct: 0.05
-  default_sl_pct: 0.02
-  trailing_stop_pct: 0.03
+  default_tp_pct: 0.07
+  default_sl_pct: 0.015
+  trailing_stop_pct: 0.02
+secondary_exchange: coinbase
+arbitrage_enabled: true
