@@ -37,6 +37,7 @@ RELOAD = "RELOAD"
 SIGNALS = "SIGNALS"
 BALANCE = "BALANCE"
 TRADES = "TRADES"
+PANIC_SELL = "PANIC_SELL"
 
 ASSET_SCORES_FILE = LOG_DIR / "asset_scores.json"
 SIGNALS_FILE = LOG_DIR / "asset_scores.json"
@@ -84,6 +85,7 @@ class TelegramBotUI:
         self.app.add_handler(CommandHandler("signals", self.show_signals))
         self.app.add_handler(CommandHandler("balance", self.show_balance))
         self.app.add_handler(CommandHandler("trades", self.show_trades))
+        self.app.add_handler(CommandHandler("panic_sell", self.panic_sell_cmd))
         self.app.add_handler(CallbackQueryHandler(self.start_cmd, pattern=f"^{START}$"))
         self.app.add_handler(CallbackQueryHandler(self.stop_cmd, pattern=f"^{STOP}$"))
         self.app.add_handler(CallbackQueryHandler(self.status_cmd, pattern=f"^{STATUS}$"))
@@ -100,6 +102,9 @@ class TelegramBotUI:
         )
         self.app.add_handler(
             CallbackQueryHandler(self.show_trades, pattern=f"^{TRADES}$")
+        )
+        self.app.add_handler(
+            CallbackQueryHandler(self.panic_sell_cmd, pattern=f"^{PANIC_SELL}$")
         )
 
         self.scheduler_thread: threading.Thread | None = None
@@ -289,6 +294,16 @@ class TelegramBotUI:
         await self.controller.reload_config()
         await self._reply(update, "Config reload scheduled")
 
+    async def panic_sell_cmd(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        if not await self._check_cooldown(update, "panic_sell"):
+            return
+        if not await self._check_admin(update):
+            return
+        text = await self.controller.close_all_positions()
+        await self._reply(update, text)
+
     async def menu_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "menu"):
             return
@@ -305,6 +320,7 @@ class TelegramBotUI:
                 InlineKeyboardButton("Rotate Now", callback_data=ROTATE),
                 InlineKeyboardButton("Toggle Mode", callback_data=TOGGLE),
                 InlineKeyboardButton("Reload", callback_data=RELOAD),
+                InlineKeyboardButton("Panic Sell", callback_data=PANIC_SELL),
             ],
             [
                 InlineKeyboardButton("Signals", callback_data=SIGNALS),

@@ -214,6 +214,14 @@ async def logs_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _reply_or_edit(update, text, keyboard)
 
 
+async def panic_sell_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Close all open positions immediately."""
+    if not is_admin(update, context.bot_data.get("admin_id")):
+        return
+    text = await context.bot_data["controller"].close_all_positions()
+    await update.message.reply_text(text)
+
+
 async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_admin(update, context.bot_data.get("admin_id")):
         return
@@ -286,6 +294,9 @@ class TelegramCtl:
 
     async def trades_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self._call(update, "trades")
+
+    async def panic_sell_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._call(update, "close_all_positions")
 
     async def _send_pages(self, update: Update, pages: list[str]) -> None:
         for page in pages:
