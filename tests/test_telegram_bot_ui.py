@@ -12,6 +12,7 @@ from crypto_bot.telegram_bot_ui import (
     CONFIG,
     EDIT_TRADE_SIZE,
     EDIT_MAX_TRADES,
+    PNL_STATS,
 )
 from crypto_bot.utils.telegram import TelegramNotifier
 
@@ -19,12 +20,19 @@ from crypto_bot.utils.telegram import TelegramNotifier
 class DummyApplication:
     def __init__(self, *a, **k):
         self.handlers = []
+        self.updater = types.SimpleNamespace(start_polling=self._async_noop)
+
+    async def _async_noop(self, *a, **k):
+        return None
 
     def add_handler(self, handler):
         self.handlers.append(handler)
 
-    def run_polling(self, *a, **k):
-        pass
+    async def initialize(self):
+        return None
+
+    async def start(self):
+        return None
 
     def stop(self):
         pass
@@ -100,10 +108,11 @@ class DummyRotator:
         self.args = args
 
 
-def make_ui(tmp_path, state, rotator=None, exchange=None):
+def make_ui(tmp_path, state, rotator=None, exchange=None, notifier=None):
     log_file = tmp_path / "bot.log"
     log_file.write_text("line1\nline2\n")
-    notifier = TelegramNotifier("token", "chat")
+    if notifier is None:
+        notifier = TelegramNotifier("token", "chat")
     ui = TelegramBotUI(
         notifier,
         state,
@@ -115,6 +124,30 @@ def make_ui(tmp_path, state, rotator=None, exchange=None):
     return ui, log_file
 
 
+def test_menu_sent_on_run(monkeypatch, tmp_path):
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
+
+    messages = []
+
+    class DummyNotifier(TelegramNotifier):
+        def __init__(self):
+            super().__init__("token", "chat")
+
+        def notify(self, text):
+            messages.append(text)
+
+    notifier = DummyNotifier()
+    ui, _ = make_ui(tmp_path, {"running": False, "mode": "cex"}, notifier=notifier)
+
+    async def runner():
+        ui.run_async()
+        await asyncio.sleep(0)
+
+    asyncio.run(runner())
+
+    assert messages and messages[0] == telegram_bot_ui.MENU_TEXT
+
+
 def test_start_stop_toggle(monkeypatch, tmp_path):
     monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
     state = {"running": False, "mode": "cex"}
@@ -123,7 +156,8 @@ def test_start_stop_toggle(monkeypatch, tmp_path):
     update = DummyUpdate()
     asyncio.run(ui.start_cmd(update, DummyContext()))
     assert state["running"] is True
-    assert update.message.text == "Trading started"
+    assert update.message.text == "Select a command:"
+    assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
 
     asyncio.run(ui.stop_cmd(update, DummyContext()))
     assert state["running"] is False
@@ -179,6 +213,9 @@ def test_menu_signals_balance_trades(monkeypatch, tmp_path):
     asyncio.run(ui.menu_cmd(update, DummyContext()))
     assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
     assert len(update.message.reply_markup.inline_keyboard) == 4
+    assert len(update.message.reply_markup.inline_keyboard) == 3
+    texts = [btn.text for row in update.message.reply_markup.inline_keyboard for btn in row]
+    assert "PnL Stats" in texts
 
     update = DummyUpdate()
     asyncio.run(ui.show_signals(update, DummyContext()))
@@ -187,6 +224,10 @@ def test_menu_signals_balance_trades(monkeypatch, tmp_path):
     update = DummyUpdate()
     asyncio.run(ui.show_balance(update, DummyContext()))
     assert "BTC" in update.message.text
+
+    update = DummyUpdate()
+    asyncio.run(ui.show_pnl_stats(update, DummyContext()))
+    assert "Total PnL" in update.message.text
 
 
 
@@ -269,6 +310,11 @@ def test_menu_callbacks(monkeypatch, tmp_path):
     asyncio.run(ui.show_trades(update, DummyContext()))
     assert "+5.00" in update.callback_query.message.text
 
+    update = DummyCallbackUpdate()
+    update.callback_query.data = PNL_STATS
+    asyncio.run(ui.show_pnl_stats(update, DummyContext()))
+    assert "Total PnL" in update.callback_query.message.text
+
 
 def test_async_exchange_balance_and_rotate(monkeypatch, tmp_path):
     monkeypatch.setattr(
@@ -299,7 +345,7 @@ def test_command_cooldown(monkeypatch, tmp_path):
 
     update1 = DummyUpdate()
     asyncio.run(ui.start_cmd(update1, DummyContext()))
-    assert update1.message.text == "Trading started"
+    assert update1.message.text == "Select a command:"
 
     t["now"] = 2
     update2 = DummyUpdate()
@@ -309,7 +355,7 @@ def test_command_cooldown(monkeypatch, tmp_path):
     t["now"] = 6
     update3 = DummyUpdate()
     asyncio.run(ui.start_cmd(update3, DummyContext()))
-    assert update3.message.text == "Trading started"
+    assert update3.message.text == "Select a command:"
 
 
 def test_reload(monkeypatch, tmp_path):
@@ -324,6 +370,7 @@ def test_reload(monkeypatch, tmp_path):
 
 
 def test_config_edit(monkeypatch, tmp_path):
+def test_pnl_stats(monkeypatch, tmp_path):
     monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
     state = {"running": True, "mode": "cex"}
     ui, _ = make_ui(tmp_path, state)
@@ -358,3 +405,11 @@ def test_config_edit(monkeypatch, tmp_path):
     asyncio.run(ui.set_config_value(msg2, ctx2))
     data = json.loads(cfg.read_text())
     assert data["max_open_trades"] == 5
+    trades_file = tmp_path / "trades.csv"
+    trades_file.write_text("XBT/USDT,buy,1,100\nXBT/USDT,sell,1,110\n")
+    monkeypatch.setattr(telegram_bot_ui, "TRADES_FILE", trades_file)
+
+    update = DummyUpdate()
+    asyncio.run(ui.show_pnl_stats(update, DummyContext()))
+    assert "Total PnL: 10.00" in update.message.text
+    assert "Win rate: 100.0%" in update.message.text

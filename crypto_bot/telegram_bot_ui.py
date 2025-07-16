@@ -46,11 +46,15 @@ CONFIG = "CONFIG"
 EDIT_TRADE_SIZE = "EDIT_TRADE_SIZE"
 EDIT_MAX_TRADES = "EDIT_MAX_TRADES"
 EDIT_VALUE = 0
+PNL_STATS = "PNL_STATS"
 
 ASSET_SCORES_FILE = LOG_DIR / "asset_scores.json"
 SIGNALS_FILE = LOG_DIR / "asset_scores.json"
 TRADES_FILE = LOG_DIR / "trades.csv"
 CONFIG_FILE = Path("crypto_bot/config.yaml")
+
+# Text sent via ``TelegramNotifier`` when the bot starts.
+MENU_TEXT = "Select a command:"
 
 
 class TelegramBotUI:
@@ -95,6 +99,7 @@ class TelegramBotUI:
         self.app.add_handler(CommandHandler("balance", self.show_balance))
         self.app.add_handler(CommandHandler("trades", self.show_trades))
         self.app.add_handler(CommandHandler("config", self.show_config))
+        self.app.add_handler(CommandHandler("pnl_stats", self.show_pnl_stats))
         self.app.add_handler(CommandHandler("panic_sell", self.panic_sell_cmd))
         self.app.add_handler(CallbackQueryHandler(self.start_cmd, pattern=f"^{START}$"))
         self.app.add_handler(CallbackQueryHandler(self.stop_cmd, pattern=f"^{STOP}$"))
@@ -131,6 +136,8 @@ class TelegramBotUI:
             fallbacks=[],
         )
         self.app.add_handler(conv)
+            CallbackQueryHandler(self.show_pnl_stats, pattern=f"^{PNL_STATS}$")
+        )
 
         self.scheduler_thread: threading.Thread | None = None
 
@@ -147,6 +154,7 @@ class TelegramBotUI:
 
         async def run() -> None:
             await self.app.initialize()
+            self.notifier.notify(MENU_TEXT)
             await self.app.start()
             await self.app.updater.start_polling()
 
@@ -221,6 +229,7 @@ class TelegramBotUI:
         await update.message.reply_text(text)
         self.state["running"] = True
         await self._reply(update, "Trading started")
+        await self.menu_cmd(update, context)
 
     async def stop_cmd(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -351,6 +360,7 @@ class TelegramBotUI:
                 InlineKeyboardButton("Signals", callback_data=SIGNALS),
                 InlineKeyboardButton("Balance", callback_data=BALANCE),
                 InlineKeyboardButton("Trades", callback_data=TRADES),
+                InlineKeyboardButton("PnL Stats", callback_data=PNL_STATS),
             ],
             [
                 InlineKeyboardButton("Config Settings", callback_data=CONFIG),
@@ -486,3 +496,18 @@ class TelegramBotUI:
         await self.controller.reload_config()
         await self._reply(update, f"{key} updated to {val}")
         return ConversationHandler.END
+    async def show_pnl_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not await self._check_cooldown(update, "pnl_stats"):
+            return
+        if not await self._check_admin(update):
+            return
+        if TRADES_FILE.exists():
+            stats = log_reader.trade_summary(TRADES_FILE)
+            text = (
+                f"Total PnL: {stats['total_pnl']:.2f}\n"
+                f"Win rate: {stats['win_rate']*100:.1f}%\n"
+                f"Active positions: {stats['active_positions']}"
+            )
+        else:
+            text = "No trades found"
+        await self._reply(update, text)
