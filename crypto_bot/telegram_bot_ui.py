@@ -38,6 +38,7 @@ SIGNALS = "SIGNALS"
 BALANCE = "BALANCE"
 TRADES = "TRADES"
 PANIC_SELL = "PANIC_SELL"
+PNL_STATS = "PNL_STATS"
 
 ASSET_SCORES_FILE = LOG_DIR / "asset_scores.json"
 SIGNALS_FILE = LOG_DIR / "asset_scores.json"
@@ -85,6 +86,7 @@ class TelegramBotUI:
         self.app.add_handler(CommandHandler("signals", self.show_signals))
         self.app.add_handler(CommandHandler("balance", self.show_balance))
         self.app.add_handler(CommandHandler("trades", self.show_trades))
+        self.app.add_handler(CommandHandler("pnl_stats", self.show_pnl_stats))
         self.app.add_handler(CommandHandler("panic_sell", self.panic_sell_cmd))
         self.app.add_handler(CallbackQueryHandler(self.start_cmd, pattern=f"^{START}$"))
         self.app.add_handler(CallbackQueryHandler(self.stop_cmd, pattern=f"^{STOP}$"))
@@ -105,6 +107,9 @@ class TelegramBotUI:
         )
         self.app.add_handler(
             CallbackQueryHandler(self.panic_sell_cmd, pattern=f"^{PANIC_SELL}$")
+        )
+        self.app.add_handler(
+            CallbackQueryHandler(self.show_pnl_stats, pattern=f"^{PNL_STATS}$")
         )
 
         self.scheduler_thread: threading.Thread | None = None
@@ -326,6 +331,7 @@ class TelegramBotUI:
                 InlineKeyboardButton("Signals", callback_data=SIGNALS),
                 InlineKeyboardButton("Balance", callback_data=BALANCE),
                 InlineKeyboardButton("Trades", callback_data=TRADES),
+                InlineKeyboardButton("PnL Stats", callback_data=PNL_STATS),
             ],
         ]
         markup = InlineKeyboardMarkup(keyboard)
@@ -385,6 +391,22 @@ class TelegramBotUI:
         if TRADES_FILE.exists():
             lines = await console_monitor.trade_stats_lines(self.exchange, TRADES_FILE)
             text = "\n".join(lines) if lines else "(no trades)"
+        else:
+            text = "No trades found"
+        await self._reply(update, text)
+
+    async def show_pnl_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not await self._check_cooldown(update, "pnl_stats"):
+            return
+        if not await self._check_admin(update):
+            return
+        if TRADES_FILE.exists():
+            stats = log_reader.trade_summary(TRADES_FILE)
+            text = (
+                f"Total PnL: {stats['total_pnl']:.2f}\n"
+                f"Win rate: {stats['win_rate']*100:.1f}%\n"
+                f"Active positions: {stats['active_positions']}"
+            )
         else:
             text = "No trades found"
         await self._reply(update, text)
