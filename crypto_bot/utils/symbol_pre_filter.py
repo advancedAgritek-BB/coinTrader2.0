@@ -202,7 +202,7 @@ async def _refresh_tickers(
 
     try_ws = (
         getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
-        and exchange.options.get("ws_scan", True)
+        and getattr(exchange, "options", {}).get("ws_scan", True)
     )
     try_http = True
     data: dict = {}
