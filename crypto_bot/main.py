@@ -263,7 +263,13 @@ def load_config() -> dict:
     """Load YAML configuration for the bot."""
     with open(CONFIG_PATH) as f:
         logger.info("Loading config from %s", CONFIG_PATH)
-        data = yaml.safe_load(f) or {}
+        data = yaml.safe_load(f)
+
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            "Config file appears empty or corrupted. "
+            "Please restore crypto_bot/config.yaml from the repository."
+        )
 
     strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
     trend_file = strat_dir / "trend_bot.yaml"
