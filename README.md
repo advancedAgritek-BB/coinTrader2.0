@@ -71,10 +71,13 @@ needed.
    Exchange connectivity relies on [ccxt](https://github.com/ccxt/ccxt) which is installed with these requirements. Make sure the `ccxt` package is available when running the trading bot.
 2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
-4. Start the trading bot:
+4. From the **repository root**, start the trading bot using the module path:
    ```bash
    python -m crypto_bot.main
    ```
+   Launching the script directly with `python crypto_bot/main.py` may raise
+   `ModuleNotFoundError` because the package imports expect the project root to
+   be on `PYTHONPATH`.
    When dry-run mode is selected you will be prompted for the starting USDT balance.
    The console now refreshes with your wallet balance and any active
    trades in real time. Profitable positions are shown in green while
