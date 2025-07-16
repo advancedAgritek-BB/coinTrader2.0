@@ -1,22 +1,28 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional, Iterable, Any
 import asyncio
 import inspect
-import threading
 import os
+import threading
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Iterable, Optional
 
 from telegram import Bot
+from telegram.error import RetryAfter
 
 from .logger import LOG_DIR, setup_logger
-from pathlib import Path
-
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 # Store allowed Telegram admin IDs parsed from the environment or configuration
 _admin_ids: set[str] = set()
+
+# timestamp of the last successful message send
+_last_send: float = 0.0
+# lock to serialize rate-limited send attempts
+_send_lock = threading.Lock()
 
 
 def set_admin_ids(admins: Iterable[str] | str | Any | None) -> None:
@@ -51,17 +57,21 @@ def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
     try:
         bot = Bot(token)
 
-        async def _send() -> None:
-            try:
-                await bot.send_message(chat_id=chat_id, text=text)
-            except Exception as exc:  # pragma: no cover - network
-                logger.error(
-                    "Failed to send message: %s. Verify your Telegram token "
-                    "and chat ID and ensure the bot has started a chat.",
-                    exc,
-                )
-
         if inspect.iscoroutinefunction(bot.send_message):
+
+            async def _send() -> None:
+                global _last_send
+                with _send_lock:
+                    wait = 0.0 if _last_send <= 0 else 1.0 - (time.time() - _last_send)
+                    if wait > 0:
+                        await asyncio.sleep(wait)
+                    try:
+                        await bot.send_message(chat_id=chat_id, text=text)
+                    except RetryAfter as exc:
+                        await asyncio.sleep(float(exc.retry_after))
+                        await bot.send_message(chat_id=chat_id, text=text)
+                    _last_send = time.time()
+
             try:
                 loop = asyncio.get_running_loop()
             except RuntimeError:
@@ -72,7 +82,17 @@ def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
             else:
                 asyncio.run(_send())
         else:
-            bot.send_message(chat_id=chat_id, text=text)
+            global _last_send
+            with _send_lock:
+                wait = 0.0 if _last_send <= 0 else 1.0 - (time.time() - _last_send)
+                if wait > 0:
+                    time.sleep(wait)
+                try:
+                    bot.send_message(chat_id=chat_id, text=text)
+                except RetryAfter as exc:
+                    time.sleep(float(exc.retry_after))
+                    bot.send_message(chat_id=chat_id, text=text)
+                _last_send = time.time()
         return None
     except Exception as e:  # pragma: no cover - network
         logger.error("Failed to send message: %s", e)
@@ -86,6 +106,7 @@ class TelegramNotifier:
     token: str = ""
     chat_id: str = ""
     enabled: bool = True
+
     def __init__(
         self,
         enabled: bool = True,
