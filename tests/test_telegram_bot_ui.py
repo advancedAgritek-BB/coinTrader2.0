@@ -8,6 +8,7 @@ from crypto_bot.telegram_bot_ui import (
     SIGNALS,
     BALANCE,
     TRADES,
+    TRADE_HISTORY,
     MENU,
     RELOAD,
     CONFIG,
@@ -196,7 +197,7 @@ def test_log_and_rotate(monkeypatch, tmp_path):
     assert "Running: True" in update.message.text
 
 
-def test_menu_signals_balance_trades(monkeypatch, tmp_path):
+def test_menu_signals_balance_trades_history(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder
     )
@@ -219,6 +220,8 @@ def test_menu_signals_balance_trades(monkeypatch, tmp_path):
     assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
     assert len(update.message.reply_markup.inline_keyboard) == 4
     assert len(update.message.reply_markup.inline_keyboard) == 3
+    last_row = update.message.reply_markup.inline_keyboard[-1]
+    assert any(getattr(btn, "text", None) == "Trade History" for btn in last_row)
     texts = [btn.text for row in update.message.reply_markup.inline_keyboard for btn in row]
     assert "PnL Stats" in texts
 
@@ -237,6 +240,10 @@ def test_menu_signals_balance_trades(monkeypatch, tmp_path):
     update = DummyUpdate()
     asyncio.run(ui.show_pnl_stats(update, DummyContext()))
     assert "Total PnL" in update.message.text
+
+    update = DummyUpdate()
+    asyncio.run(ui.show_trade_history(update, DummyContext()))
+    assert "XBT/USDT" in update.message.text
 
 
 
@@ -383,6 +390,12 @@ def test_reload(monkeypatch, tmp_path):
     monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
     state = {"running": True, "mode": "cex"}
     ui, _ = make_ui(tmp_path, state)
+    ui.command_cooldown = 0
+    t = {"now": 0}
+    monkeypatch.setattr(telegram_bot_ui.time, "time", lambda: t["now"])
+    ui.command_cooldown = 0
+    t = {"now": 0}
+    monkeypatch.setattr(telegram_bot_ui.time, "time", lambda: t["now"])
 
     update = DummyUpdate()
     asyncio.run(ui.reload_cmd(update, DummyContext()))
@@ -390,6 +403,38 @@ def test_reload(monkeypatch, tmp_path):
     assert update.message.text == "Config reload scheduled"
 
 
+def test_trade_history_pagination(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "crypto_bot.telegram_bot_ui.ApplicationBuilder",
+        DummyBuilder,
+    )
+    state = {"running": True, "mode": "cex"}
+    ui, _ = make_ui(tmp_path, state)
+    ui.command_cooldown = 0
+    t = {"now": 0}
+    monkeypatch.setattr(telegram_bot_ui.time, "time", lambda: t["now"])
+
+    trades_file = tmp_path / "trades.csv"
+    trades = [f"t{i}" for i in range(12)]
+    trades_file.write_text("\n".join(trades))
+    monkeypatch.setattr(telegram_bot_ui, "TRADES_FILE", trades_file)
+
+    update = DummyUpdate()
+    asyncio.run(ui.show_trade_history(update, DummyContext()))
+    assert "t0" in update.message.text
+    assert "t5" not in update.message.text
+
+    t["now"] += 1
+
+    update_next = DummyCallbackUpdate("next")
+    asyncio.run(ui.show_trade_history(update_next, DummyContext()))
+    assert "t5" in update_next.callback_query.message.text
+
+    t["now"] += 1
+
+    update_prev = DummyCallbackUpdate("prev")
+    asyncio.run(ui.show_trade_history(update_prev, DummyContext()))
+    assert "t0" in update_prev.callback_query.message.text
 def test_auto_menu_display(monkeypatch, tmp_path):
     """Menu command should reply with inline keyboard both via command and callback."""
     monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
