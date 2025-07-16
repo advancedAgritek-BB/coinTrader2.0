@@ -449,6 +449,9 @@ The built-in Telegram interface is provided by the `TelegramBotUI` class in
    - `/signals` – show the latest scored assets
    - `/balance` – display your current exchange holdings
    - `/trades` – summarize executed trades
+   - `/panic_sell` – exit all open positions immediately (paper or live)
+   - HTTP `POST /close-all` – trigger the same exit via the web server,
+     also works in paper trading mode.
 4. If you see `Failed to send message: Not Found` in the logs, the chat ID or
    token is likely incorrect or the bot lacks permission to message the chat.
    Double-check the values in `config.yaml` and ensure you've started a
