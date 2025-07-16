@@ -1118,5 +1118,8 @@ settings can overload the exchange and lead to failed candle fetches.
 Increase `ohlcv_timeout` to give each request more time and lower
 `max_concurrent_ohlcv` if errors continue.
 
+DexScreener requests are throttled to prevent 429 errors. If you see rate limit
+messages, simply wait for the automatic backoff to finish.
+
 This project is provided for educational purposes only. Use it at your own risk, and remember that nothing here constitutes financial advice.
 
