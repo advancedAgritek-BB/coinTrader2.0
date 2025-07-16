@@ -441,9 +441,11 @@ The built-in Telegram interface is provided by the `TelegramBotUI` class in
 
    The bot reads these values only from `config.yaml`. Disable
    `trade_updates` if you don't want trade entry and exit messages.
-   Set `chat_admins` to a comma-separated list of Telegram chat IDs allowed to
-   control the bot. You can also provide this list via the `TELE_CHAT_ADMINS`
-   environment variable.
+    Set `chat_admins` to a comma-separated list of Telegram chat IDs allowed to
+    control the bot. You can also provide this list via the `TELE_CHAT_ADMINS`
+    environment variable.
+    Messages are rate limited to one per second. If Telegram responds with a
+    `RetryAfter` error, the bot automatically waits and retries once.
 2. Send `/start` to your bot so it can message you. Use `/menu` at any time to
    open an interactive button menu—**Start**, **Stop**, **Status**, **Log**,
    **Rotate Now**, **Toggle Mode**, **PnL**, **Trades**, **Edit Config**,
