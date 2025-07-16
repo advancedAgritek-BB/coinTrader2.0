@@ -326,6 +326,7 @@ size = risk_manager.position_size(score, balance, lower_df, atr=atr)
 * **twap_enabled**, **twap_slices**, **twap_interval_seconds** – settings for time-weighted order execution.
 * **optimization** – periodic parameter optimisation.
 * **portfolio_rotation** – rotate holdings based on scoring metrics.
+* **arbitrage_enabled** – enable cross-exchange arbitrage features.
 * **scoring_weights** - weighting factors for regime confidence, symbol score and volume metrics.
 * **signal_fusion** - combine scores from multiple strategies via a `fusion_method`.
 * **strategy_router** - maps market regimes to lists of strategy names.
@@ -538,11 +539,11 @@ twap_slices: 4               # number of slices when TWAP is enabled
 twap_interval_seconds: 10    # delay between TWAP slices
 timeframe: 1h                # candles for regime detection
 scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
-loop_interval_minutes: 5     # wait time between trading cycles
+loop_interval_minutes: 0.5   # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
 max_ws_limit: 50             # skip WebSocket when request exceeds this
 ohlcv_timeout: 120            # request timeout for OHLCV fetches
-max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
+max_concurrent_ohlcv: 50     # limit simultaneous OHLCV fetches
 metrics:
   enabled: true              # write cycle statistics to metrics.csv
   file: crypto_bot/logs/metrics.csv
@@ -701,7 +702,7 @@ symbols: []            # automatically populated
 excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 2           # skip pairs with less history
-symbol_batch_size: 20            # symbols processed per cycle
+symbol_batch_size: 50            # symbols processed per cycle
 scan_lookback_limit: 50          # candles loaded during startup
 cycle_lookback_limit: null       # override per-cycle candle load (default min(150, timeframe_minutes × 2))
 max_spread_pct: 3.0              # skip pairs with wide spreads
@@ -729,7 +730,7 @@ during volatile periods.
 adaptive_scan:
   enabled: true
   atr_baseline: 0.01
-  max_factor: 2.0
+  max_factor: 5.0
 ```
 
 OHLCV data for these symbols is now fetched concurrently using
@@ -750,11 +751,11 @@ undesirable markets before strategies run:
 
 ```yaml
 symbol_filter:
-  min_volume_usd: 1000
-  volume_percentile: 40          # keep pairs above this volume percentile
+  min_volume_usd: 500
+  volume_percentile: 20          # keep pairs above this volume percentile
   change_pct_percentile: 50      # require 24h change in the top half
-  max_spread_pct: 5              # allow spreads up to 5%
-  uncached_volume_multiplier: 5  # extra volume when not cached
+  max_spread_pct: 2              # allow spreads up to 2%
+  uncached_volume_multiplier: 1.5  # extra volume when not cached
   correlation_window: 30         # days of history for correlation
   max_correlation: 0.85          # drop pairs above this threshold
   correlation_max_pairs: 100     # limit pairwise correlation checks
@@ -799,6 +800,7 @@ refresh_pairs:
   min_quote_volume_usd: 1000000
   refresh_interval: 6h
   top_k: 40
+  secondary_exchange: coinbase
   allowed_quote_currencies: [USD, USDT]
   blacklist_assets: []
 ```
@@ -962,7 +964,7 @@ meme_wave_sniper:
   safety:
     min_liquidity: 10
   risk:
-    max_concurrent: 5
+    max_concurrent: 20
     daily_loss_cap: 1.5
   execution:
     dry_run: true

@@ -7,6 +7,7 @@ adx_threshold: 20
 sl_mult: 1.2
 tp_mult: 1.5
 ml_enabled: true
+arbitrage_enabled: true
 bounce_scalper:
   rsi_window: 14
   oversold: 30
@@ -97,11 +98,11 @@ grid_bot:
 liquidity_check: false
 liquidity_depth: 10
 log_to_google: true
-loop_interval_minutes: 2
+loop_interval_minutes: 0.5
 balance_poll_mod: 1
 max_age_days: 180
 max_change_pct: 10
-max_concurrent_ohlcv: 12
+max_concurrent_ohlcv: 50
 max_parallel: 12
 max_latency_ms: 1000
 max_ohlcv_failures: 3
@@ -129,7 +130,7 @@ meme_wave_sniper:
   safety:
     min_liquidity: 10
   risk:
-    max_concurrent: 5
+    max_concurrent: 20
     daily_loss_cap: 1.5
   execution:
     dry_run: true
@@ -201,6 +202,7 @@ refresh_pairs:
   min_quote_volume_usd: 1000000
   refresh_interval: 6h
   top_k: 40
+  secondary_exchange: coinbase
   allowed_quote_currencies:
   - USD
   - USDT
@@ -261,12 +263,12 @@ sl_pct: 0.03
 solana_slippage_bps: 20
 solana_scanner:
   enabled: true
-  interval_minutes: 1
+  interval_minutes: 0.5
   api_keys:
     moralis: YOUR_KEY
     bitquery: YOUR_KEY
-  min_volume_usd: 10000
-  max_tokens_per_scan: 20
+  min_volume_usd: 5000
+  max_tokens_per_scan: 50
 pyth:
   enabled: false
   solana_endpoint: https://api.mainnet-beta.solana.com
@@ -301,21 +303,21 @@ strategy_router:
     - sniper_bot
     - sniper_solana
 symbol: XBT/USDT
-symbol_batch_size: 10
+symbol_batch_size: 50
 scan_lookback_limit: 50
 cycle_lookback_limit: null
 adaptive_scan:
   enabled: true
   atr_baseline: 0.01
-  max_factor: 2.0
+  max_factor: 5.0
 symbol_filter:
   change_pct_percentile: 0
   max_correlation: 1.0
   correlation_max_pairs: 100
-  max_spread_pct: 5
-  min_volume_usd: 1000
-  uncached_volume_multiplier: 4
-  volume_percentile: 0
+  max_spread_pct: 2
+  min_volume_usd: 500
+  uncached_volume_multiplier: 1.5
+  volume_percentile: 20
   kraken_batch_size: 100
   http_timeout: 10
   ticker_retry_attempts: 3
