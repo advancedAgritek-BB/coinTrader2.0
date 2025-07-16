@@ -252,6 +252,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **top_n_symbols** – maximum number of active markets.
 * **max_age_days**, **max_change_pct**, **max_spread_pct**, **max_latency_ms**, **max_vol** – additional scanning limits.
 * **use_numba_scoring** – enable numba acceleration for symbol scoring when available.
+* **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle.
 
 ### Risk Parameters
 * **risk** – default stop loss, take profit and drawdown limits.
