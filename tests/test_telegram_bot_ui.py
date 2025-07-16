@@ -490,9 +490,12 @@ def test_trade_history_pagination(monkeypatch, tmp_path):
 
 def test_config_edit_workflow(monkeypatch, tmp_path):
     """Reload command should allow config to be refreshed via maybe_reload_config."""
+    pass
 
 def test_config_edit(monkeypatch, tmp_path):
     pass
+
+
 def test_pnl_stats(monkeypatch, tmp_path):
     monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
     state = {"running": True, "mode": "cex"}

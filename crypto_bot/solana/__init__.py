@@ -8,6 +8,7 @@ from .api_helpers import helius_ws, fetch_jito_bundle
 from .scanner import get_solana_new_tokens
 from .token_utils import get_token_accounts
 from .pyth_utils import get_pyth_price
+from .prices import fetch_solana_prices
 
 __all__ = [
     "NewPoolEvent",
@@ -20,4 +21,5 @@ __all__ = [
     "score_new_pool",
     "get_token_accounts",
     "get_pyth_price",
+    "fetch_solana_prices",
 ]
