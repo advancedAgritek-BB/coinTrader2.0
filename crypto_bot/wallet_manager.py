@@ -4,6 +4,7 @@ import json
 import yaml
 from pathlib import Path
 from typing import Dict
+import logging
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
@@ -146,6 +147,7 @@ def load_or_create() -> dict:
             creds.update(yaml.safe_load(f))
     else:
         logger.info("user_config.yaml not found; prompting for credentials")
+        logging.getLogger("bot").info("Awaiting user credentials...")
         creds.update(prompt_user())
         logger.info("Creating new user configuration at %s", CONFIG_FILE)
         with open(CONFIG_FILE, "w") as f:
