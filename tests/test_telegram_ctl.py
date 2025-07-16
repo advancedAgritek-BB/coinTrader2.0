@@ -79,6 +79,7 @@ class DummyBotController:
         self.state["reload"] = True
     async def reload_config(self):
         self.calls.append("reload_config")
+        self.state["reload"] = True
 
 
 @pytest.mark.skipif(telegram_ctl is None, reason="telegram_ctl module missing")
@@ -162,7 +163,7 @@ class TestTelegramCtl:
 
         update = DummyUpdate()
         await self.tg.reload_cmd(update, DummyContext())
-        assert "reload" in self.controller.calls
+        assert "reload_config" in self.controller.calls
 
         config = {}
         main.maybe_reload_config(self.controller.state, config)
