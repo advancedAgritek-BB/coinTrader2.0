@@ -71,3 +71,24 @@ def test_reload_config_endpoint(monkeypatch):
     assert resp.status_code == 200
     assert resp.json()["status"] == "reloaded"
     assert dummy.called is True
+
+
+def test_close_all_endpoint(monkeypatch):
+    class Dummy:
+        def __init__(self):
+            self.called = False
+            self.state = {}
+
+        async def close_all_positions(self):
+            self.called = True
+            self.state["liquidate"] = True
+            return {"status": "liquidation_scheduled"}
+
+    dummy = Dummy()
+    monkeypatch.setattr(api, "CONTROLLER", dummy)
+    client = TestClient(api.app)
+    resp = client.post("/close-all")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "liquidation_scheduled"
+    assert dummy.called is True
+    assert dummy.state.get("liquidate") is True
