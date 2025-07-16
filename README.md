@@ -11,6 +11,7 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 * Portfolio rotation and auto optimizer utilities
 * Risk management with drawdown limits, cooldown management and volume/volatility filters
 * Telegram notifications and optional Google Sheets logging
+* Interactive Telegram menu with buttons for start/stop, PnL stats, trade history and config editing
 * Balance change alerts when USDT funds move
 * Capital tracker, sentiment filter and tax logger helpers
 * Solana mempool monitor to avoid swaps when fees spike
@@ -443,8 +444,8 @@ The built-in Telegram interface is provided by the `TelegramBotUI` class in
    environment variable.
 2. Send `/start` to your bot so it can message you. Use `/menu` at any time to
    open an interactive button menu—**Start**, **Stop**, **Status**, **Log**,
-   **Rotate Now**, **Toggle Mode**, **Signals**, **Balance** and **Trades**—for
-   quick interaction.
+   **Rotate Now**, **Toggle Mode**, **PnL**, **Trades**, **Edit Config**,
+   **Signals** and **Balance**—for quick interaction.
 3. You can also issue these commands directly:
    - `/signals` – show the latest scored assets
    - `/balance` – display your current exchange holdings
