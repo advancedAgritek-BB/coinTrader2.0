@@ -533,6 +533,47 @@ async def fetch_candidates(ctx: BotContext) -> None:
         ]
 
 
+async def scan_arbitrage(exchange: object, config: dict) -> list[str]:
+    """Return symbols with profitable Solana arbitrage opportunities."""
+    pairs: list[str] = config.get("arbitrage_pairs", [])
+    if not pairs:
+        return []
+
+    try:
+        from crypto_bot.solana import fetch_solana_prices
+    except Exception:
+        return []
+
+    dex_prices = await fetch_solana_prices(pairs)
+    results: list[str] = []
+    threshold = float(config.get("arbitrage_threshold", 0.0))
+
+    for sym in pairs:
+        dex_price = dex_prices.get(sym)
+        if not dex_price:
+            continue
+        try:
+            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
+                ticker = await exchange.fetch_ticker(sym)
+            else:
+                ticker = await asyncio.to_thread(exchange.fetch_ticker, sym)
+        except Exception:
+            continue
+        cex_price = ticker.get("last") or ticker.get("close")
+        if cex_price is None:
+            continue
+        try:
+            cex_val = float(cex_price)
+        except Exception:
+            continue
+        if cex_val <= 0:
+            continue
+        diff = abs(dex_price - cex_val) / cex_val
+        if diff >= threshold:
+            results.append(sym)
+    return results
+
+
 async def update_caches(ctx: BotContext) -> None:
     """Update OHLCV and regime caches for the current symbol batch."""
     batch = ctx.current_batch
@@ -1308,6 +1349,16 @@ async def _main_impl() -> TelegramNotifier:
             if state.get("liquidate_all"):
                 await force_exit_all(ctx)
                 state["liquidate_all"] = False
+
+            if config.get("arbitrage_enabled", True):
+                try:
+                    arb_syms = await scan_arbitrage(exchange, config)
+                    if arb_syms:
+                        async with QUEUE_LOCK:
+                            for sym in reversed(arb_syms):
+                                symbol_priority_queue.appendleft(sym)
+                except Exception as exc:  # pragma: no cover - best effort
+                    logger.error("Arbitrage scan error: %s", exc)
 
             cycle_start = time.perf_counter()
             ctx.timing = await runner.run(ctx)

@@ -496,7 +496,6 @@ def test_config_edit_workflow(monkeypatch, tmp_path):
     """Reload command should allow config to be refreshed via maybe_reload_config."""
     pass
 
-
 def test_config_edit(monkeypatch, tmp_path):
     pass
 

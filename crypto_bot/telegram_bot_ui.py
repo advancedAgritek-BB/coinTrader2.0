@@ -152,6 +152,7 @@ class TelegramBotUI:
             fallbacks=[],
         )
         self.app.add_handler(conv)
+        self.app.add_handler(
             CallbackQueryHandler(self.show_pnl_stats, pattern=f"^{PNL_STATS}$")
         )
 
