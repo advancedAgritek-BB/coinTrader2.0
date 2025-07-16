@@ -69,7 +69,7 @@ needed.
    The optional `rich` package is included and provides colorized
    console output when viewing live positions.
    Exchange connectivity relies on [ccxt](https://github.com/ccxt/ccxt) which is installed with these requirements. Make sure the `ccxt` package is available when running the trading bot.
-2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials.
+2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials. If this file does not exist, launching the bot will ask for these credentials in the console. The prompts and related messages are written to `crypto_bot/logs/wallet.log`.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
    The bot will not start if this file is missing or empty.
 4. Start the trading bot:
@@ -112,7 +112,7 @@ needed.
    Save the file and type `reload` in the console or send `/reload` via Telegram
    to apply the changes immediately.
 
-Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
+Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. When this file is missing, `python -m crypto_bot.main` will prompt for the same values interactively and log the prompts to `crypto_bot/logs/wallet.log`. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
 
 ## Configuration Files
 
