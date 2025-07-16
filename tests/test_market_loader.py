@@ -1174,6 +1174,72 @@ def test_fetch_dexscreener_ohlcv_404(monkeypatch, caplog):
     assert any("pair not available on DexScreener" in r.getMessage() for r in caplog.records)
 
 
+def test_fetch_dexscreener_ohlcv_retry_429(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    class DummyError(Exception):
+        def __init__(self, *, request_info=None, history=(), status=None, headers=None):
+            super().__init__("error")
+            self.status = status
+            self.headers = headers or {}
+
+    class FakeResp:
+        def __init__(self, status, headers=None):
+            self.status = status
+            self.headers = headers or {}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def raise_for_status(self):
+            if self.status != 200:
+                raise market_loader.aiohttp.ClientResponseError(
+                    request_info=None,
+                    history=(),
+                    status=self.status,
+                    headers=self.headers,
+                )
+
+        async def json(self):
+            return {"candles": [{"t": 1, "o": 1, "h": 1, "l": 1, "c": 1, "v": 1}]}
+
+    class FakeSession:
+        calls = 0
+
+        def __init__(self):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=None):
+            FakeSession.calls += 1
+            if FakeSession.calls == 1:
+                return FakeResp(429, {"Retry-After": "1.5"})
+            return FakeResp(200)
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(secs):
+        sleeps.append(secs)
+
+    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
+    monkeypatch.setattr(market_loader.aiohttp, "ClientResponseError", DummyError, raising=False)
+    monkeypatch.setattr(market_loader.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(market_loader, "DEXSCREENER_MIN_INTERVAL", 0)
+    market_loader._last_dex_request = 0
+
+    data = asyncio.run(market_loader.fetch_dexscreener_ohlcv("FOO/USDC"))
+    assert data == [[1, 1, 1, 1, 1, 1]]
+    assert sleeps == [1.5]
+
+
 def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
     from crypto_bot.utils import market_loader
 
