@@ -382,7 +382,7 @@ below its 20-bar median, reducing trades during ranging periods and improving
 the win rate.
 
 ### Data and Logging
-* **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
+* **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis. Valid units are `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks) and `M` (months).
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options.
 * **loop_interval_minutes** – delay between trading cycles.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.

@@ -421,6 +421,8 @@ def _timeframe_seconds(exchange, timeframe: str) -> int:
             pass
     unit = timeframe[-1]
     value = int(timeframe[:-1])
+    if unit == "s":
+        return value
     if unit == "m":
         return value * 60
     if unit == "h":
