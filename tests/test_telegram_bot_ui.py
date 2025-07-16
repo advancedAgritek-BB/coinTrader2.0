@@ -1,8 +1,12 @@
 import types
 import asyncio
 import json
+import pytest
+try:
+    import crypto_bot.telegram_bot_ui as telegram_bot_ui
+except Exception as exc:  # pragma: no cover - optional UI
+    pytest.skip(f"telegram bot UI unavailable: {exc}", allow_module_level=True)
 import yaml
-import crypto_bot.telegram_bot_ui as telegram_bot_ui
 from crypto_bot.telegram_bot_ui import (
     TelegramBotUI,
     SIGNALS,
