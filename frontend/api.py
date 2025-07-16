@@ -94,3 +94,9 @@ def strategy_scores() -> dict:
 async def reload_config() -> dict:
     """Reload ``crypto_bot`` configuration and return status."""
     return await get_controller().reload_config()
+
+
+@app.post("/close-all")
+async def close_all() -> dict:
+    """Request liquidation of all open positions."""
+    return await get_controller().close_all_positions()
