@@ -9,6 +9,7 @@ import logging
 
 import ccxt.async_support as ccxt
 import yaml
+import aiohttp
 from crypto_bot.utils import timeframe_seconds
 from crypto_bot.utils.symbol_utils import fix_symbol
 
@@ -90,6 +91,54 @@ async def _close_exchange(exchange: ccxt.Exchange) -> None:
             pass
 
 
+async def get_solana_liquid_pairs(min_volume: float) -> list[str]:
+    """Return Raydium symbols with liquidity above ``min_volume``."""
+    url = "https://api.raydium.io/v2/main/pairs"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
+        logger.error("Failed to fetch Solana pairs: %s", exc)
+        return []
+
+    items = data.get("data") if isinstance(data, dict) else data
+    if isinstance(items, dict):
+        items = list(items.values())
+    if not isinstance(items, list):
+        return []
+
+    results: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        if not isinstance(name, str):
+            continue
+        base, _, quote = name.partition("/")
+        if quote.upper() != "USDC" or not base:
+            continue
+        vol = (
+            item.get("liquidity")
+            or item.get("liquidityUsd")
+            or item.get("liquidity_usd")
+            or item.get("liquidityUSD")
+            or item.get("volumeUsd")
+            or item.get("volume_usd")
+            or item.get("volume24hQuote")
+            or 0.0
+        )
+        try:
+            amount = float(vol)
+        except Exception:
+            amount = 0.0
+        if amount >= min_volume:
+            results.append(f"{base.upper()}/USDC")
+
+    return results
+
+
 async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
     """Fetch tickers and update the cached liquid pairs list."""
     old_pairs: list[str] = []
@@ -139,6 +188,9 @@ async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -
                             tickers[sym] = data
                     else:
                         tickers[sym] = data
+        sol_pairs = await get_solana_liquid_pairs(min_volume_usd)
+        for sym in sol_pairs:
+            tickers.setdefault(sym, {"quoteVolume": min_volume_usd})
     except Exception as exc:  # pragma: no cover - network failures
         logger.error("Failed to fetch tickers: %s", exc)
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
