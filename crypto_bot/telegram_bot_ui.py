@@ -43,6 +43,9 @@ ASSET_SCORES_FILE = LOG_DIR / "asset_scores.json"
 SIGNALS_FILE = LOG_DIR / "asset_scores.json"
 TRADES_FILE = LOG_DIR / "trades.csv"
 
+# Text sent via ``TelegramNotifier`` when the bot starts.
+MENU_TEXT = "Select a command:"
+
 
 class TelegramBotUI:
     """Simple Telegram UI for controlling the trading bot."""
@@ -122,6 +125,7 @@ class TelegramBotUI:
 
         async def run() -> None:
             await self.app.initialize()
+            self.notifier.notify(MENU_TEXT)
             await self.app.start()
             await self.app.updater.start_polling()
 
@@ -196,6 +200,7 @@ class TelegramBotUI:
         await update.message.reply_text(text)
         self.state["running"] = True
         await self._reply(update, "Trading started")
+        await self.menu_cmd(update, context)
 
     async def stop_cmd(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE

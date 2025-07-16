@@ -16,12 +16,19 @@ from crypto_bot.utils.telegram import TelegramNotifier
 class DummyApplication:
     def __init__(self, *a, **k):
         self.handlers = []
+        self.updater = types.SimpleNamespace(start_polling=self._async_noop)
+
+    async def _async_noop(self, *a, **k):
+        return None
 
     def add_handler(self, handler):
         self.handlers.append(handler)
 
-    def run_polling(self, *a, **k):
-        pass
+    async def initialize(self):
+        return None
+
+    async def start(self):
+        return None
 
     def stop(self):
         pass
@@ -96,10 +103,11 @@ class DummyRotator:
         self.args = args
 
 
-def make_ui(tmp_path, state, rotator=None, exchange=None):
+def make_ui(tmp_path, state, rotator=None, exchange=None, notifier=None):
     log_file = tmp_path / "bot.log"
     log_file.write_text("line1\nline2\n")
-    notifier = TelegramNotifier("token", "chat")
+    if notifier is None:
+        notifier = TelegramNotifier("token", "chat")
     ui = TelegramBotUI(
         notifier,
         state,
@@ -111,6 +119,30 @@ def make_ui(tmp_path, state, rotator=None, exchange=None):
     return ui, log_file
 
 
+def test_menu_sent_on_run(monkeypatch, tmp_path):
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
+
+    messages = []
+
+    class DummyNotifier(TelegramNotifier):
+        def __init__(self):
+            super().__init__("token", "chat")
+
+        def notify(self, text):
+            messages.append(text)
+
+    notifier = DummyNotifier()
+    ui, _ = make_ui(tmp_path, {"running": False, "mode": "cex"}, notifier=notifier)
+
+    async def runner():
+        ui.run_async()
+        await asyncio.sleep(0)
+
+    asyncio.run(runner())
+
+    assert messages and messages[0] == telegram_bot_ui.MENU_TEXT
+
+
 def test_start_stop_toggle(monkeypatch, tmp_path):
     monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
     state = {"running": False, "mode": "cex"}
@@ -119,7 +151,8 @@ def test_start_stop_toggle(monkeypatch, tmp_path):
     update = DummyUpdate()
     asyncio.run(ui.start_cmd(update, DummyContext()))
     assert state["running"] is True
-    assert update.message.text == "Trading started"
+    assert update.message.text == "Select a command:"
+    assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
 
     asyncio.run(ui.stop_cmd(update, DummyContext()))
     assert state["running"] is False
@@ -295,7 +328,7 @@ def test_command_cooldown(monkeypatch, tmp_path):
 
     update1 = DummyUpdate()
     asyncio.run(ui.start_cmd(update1, DummyContext()))
-    assert update1.message.text == "Trading started"
+    assert update1.message.text == "Select a command:"
 
     t["now"] = 2
     update2 = DummyUpdate()
@@ -305,7 +338,7 @@ def test_command_cooldown(monkeypatch, tmp_path):
     t["now"] = 6
     update3 = DummyUpdate()
     asyncio.run(ui.start_cmd(update3, DummyContext()))
-    assert update3.message.text == "Trading started"
+    assert update3.message.text == "Select a command:"
 
 
 def test_reload(monkeypatch, tmp_path):
