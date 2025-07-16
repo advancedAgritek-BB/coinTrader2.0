@@ -4,6 +4,7 @@ import asyncio
 import threading
 import time
 import json
+import yaml
 from pathlib import Path
 from typing import Dict
 
@@ -16,6 +17,9 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     CallbackQueryHandler,
+    ConversationHandler,
+    MessageHandler,
+    filters,
 )
 
 from crypto_bot.portfolio_rotator import PortfolioRotator
@@ -38,11 +42,16 @@ SIGNALS = "SIGNALS"
 BALANCE = "BALANCE"
 TRADES = "TRADES"
 PANIC_SELL = "PANIC_SELL"
+CONFIG = "CONFIG"
+EDIT_TRADE_SIZE = "EDIT_TRADE_SIZE"
+EDIT_MAX_TRADES = "EDIT_MAX_TRADES"
+EDIT_VALUE = 0
 PNL_STATS = "PNL_STATS"
 
 ASSET_SCORES_FILE = LOG_DIR / "asset_scores.json"
 SIGNALS_FILE = LOG_DIR / "asset_scores.json"
 TRADES_FILE = LOG_DIR / "trades.csv"
+CONFIG_FILE = Path("crypto_bot/config.yaml")
 
 # Text sent via ``TelegramNotifier`` when the bot starts.
 MENU_TEXT = "Select a command:"
@@ -89,6 +98,7 @@ class TelegramBotUI:
         self.app.add_handler(CommandHandler("signals", self.show_signals))
         self.app.add_handler(CommandHandler("balance", self.show_balance))
         self.app.add_handler(CommandHandler("trades", self.show_trades))
+        self.app.add_handler(CommandHandler("config", self.show_config))
         self.app.add_handler(CommandHandler("pnl_stats", self.show_pnl_stats))
         self.app.add_handler(CommandHandler("panic_sell", self.panic_sell_cmd))
         self.app.add_handler(CallbackQueryHandler(self.start_cmd, pattern=f"^{START}$"))
@@ -112,6 +122,20 @@ class TelegramBotUI:
             CallbackQueryHandler(self.panic_sell_cmd, pattern=f"^{PANIC_SELL}$")
         )
         self.app.add_handler(
+            CallbackQueryHandler(self.show_config, pattern=f"^{CONFIG}$")
+        )
+
+        conv = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(self.edit_trade_size, pattern=f"^{EDIT_TRADE_SIZE}$"),
+                CallbackQueryHandler(self.edit_max_trades, pattern=f"^{EDIT_MAX_TRADES}$"),
+            ],
+            states={
+                EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_config_value)]
+            },
+            fallbacks=[],
+        )
+        self.app.add_handler(conv)
             CallbackQueryHandler(self.show_pnl_stats, pattern=f"^{PNL_STATS}$")
         )
 
@@ -338,6 +362,9 @@ class TelegramBotUI:
                 InlineKeyboardButton("Trades", callback_data=TRADES),
                 InlineKeyboardButton("PnL Stats", callback_data=PNL_STATS),
             ],
+            [
+                InlineKeyboardButton("Config Settings", callback_data=CONFIG),
+            ],
         ]
         markup = InlineKeyboardMarkup(keyboard)
         await self._reply(update, "Select a command:", reply_markup=markup)
@@ -400,6 +427,75 @@ class TelegramBotUI:
             text = "No trades found"
         await self._reply(update, text)
 
+    async def show_config(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not await self._check_cooldown(update, "config"):
+            return
+        if not await self._check_admin(update):
+            return
+        cfg = {}
+        if CONFIG_FILE.exists():
+            try:
+                cfg = yaml.safe_load(CONFIG_FILE.read_text()) or {}
+            except Exception:
+                cfg = {}
+        text = (
+            f"trade_size_pct: {cfg.get('trade_size_pct')}\n"
+            f"max_open_trades: {cfg.get('max_open_trades')}"
+        )
+        keyboard = [
+            [InlineKeyboardButton("Edit Trade Size %", callback_data=EDIT_TRADE_SIZE)],
+            [InlineKeyboardButton("Edit Max Open Trades", callback_data=EDIT_MAX_TRADES)],
+        ]
+        markup = InlineKeyboardMarkup(keyboard)
+        await self._reply(update, text, reply_markup=markup)
+
+    async def edit_trade_size(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not await self._check_admin(update):
+            return ConversationHandler.END
+        context.user_data["config_key"] = "trade_size_pct"
+        await self._reply(update, "Enter trade size percentage (0-1):")
+        return EDIT_VALUE
+
+    async def edit_max_trades(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not await self._check_admin(update):
+            return ConversationHandler.END
+        context.user_data["config_key"] = "max_open_trades"
+        await self._reply(update, "Enter max open trades (integer):")
+        return EDIT_VALUE
+
+    async def set_config_value(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        if not await self._check_admin(update):
+            return ConversationHandler.END
+        key = context.user_data.get("config_key")
+        if not key:
+            return ConversationHandler.END
+        value_text = update.message.text if update.message else ""
+        try:
+            if key == "trade_size_pct":
+                val = float(value_text)
+                if not 0 < val <= 1:
+                    raise ValueError
+            else:
+                val = int(value_text)
+                if val <= 0:
+                    raise ValueError
+        except ValueError:
+            await self._reply(update, "Invalid value, try again:")
+            return EDIT_VALUE
+        cfg = {}
+        if CONFIG_FILE.exists():
+            try:
+                cfg = yaml.safe_load(CONFIG_FILE.read_text()) or {}
+            except Exception:
+                cfg = {}
+        cfg[key] = val
+        if hasattr(yaml, "safe_dump"):
+            CONFIG_FILE.write_text(yaml.safe_dump(cfg, sort_keys=False))
+        else:
+            CONFIG_FILE.write_text(json.dumps(cfg))
+        await self.controller.reload_config()
+        await self._reply(update, f"{key} updated to {val}")
+        return ConversationHandler.END
     async def show_pnl_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "pnl_stats"):
             return
