@@ -853,6 +853,51 @@ async def handle_exits(ctx: BotContext) -> None:
                 pass
 
 
+async def force_exit_all(ctx: BotContext) -> None:
+    """Liquidate all open positions immediately."""
+    tf = ctx.config.get("timeframe", "1h")
+    tf_cache = ctx.df_cache.get(tf, {})
+    for sym, pos in list(ctx.positions.items()):
+        df = tf_cache.get(sym)
+        exit_price = pos["entry_price"]
+        if df is not None and not df.empty:
+            exit_price = float(df["close"].iloc[-1])
+
+        await cex_trade_async(
+            ctx.exchange,
+            ctx.ws_client,
+            sym,
+            opposite_side(pos["side"]),
+            pos["size"],
+            ctx.notifier,
+            dry_run=ctx.config.get("execution_mode") == "dry_run",
+            use_websocket=ctx.config.get("use_websocket", False),
+            config=ctx.config,
+        )
+
+        if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
+            try:
+                ctx.paper_wallet.close(sym, pos["size"], exit_price)
+                ctx.balance = ctx.paper_wallet.balance
+            except Exception:
+                pass
+
+        ctx.risk_manager.deallocate_capital(
+            pos.get("strategy", ""), pos["size"] * pos["entry_price"]
+        )
+        ctx.positions.pop(sym, None)
+        try:
+            log_position(
+                sym,
+                pos["side"],
+                pos["size"],
+                pos["entry_price"],
+                exit_price,
+                ctx.balance,
+            )
+        except Exception:
+            pass
+
 async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
     """Monitor a micro-scalp trade and exit based on :func:`monitor_price`."""
     pos = ctx.positions.get(sym)
@@ -1259,6 +1304,10 @@ async def _main_impl() -> TelegramNotifier:
                 force=state.get("reload", False),
             )
             state["reload"] = False
+
+            if state.get("liquidate_all"):
+                await force_exit_all(ctx)
+                state["liquidate_all"] = False
 
             cycle_start = time.perf_counter()
             ctx.timing = await runner.run(ctx)
