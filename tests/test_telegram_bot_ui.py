@@ -2,13 +2,13 @@ import types
 import asyncio
 import json
 import crypto_bot.telegram_bot_ui as telegram_bot_ui
-from crypto_bot.telegram_bot_ui import TelegramBotUI
 from crypto_bot.telegram_bot_ui import (
     TelegramBotUI,
     SIGNALS,
     BALANCE,
     TRADES,
     RELOAD,
+    PNL_STATS,
 )
 from crypto_bot.utils.telegram import TelegramNotifier
 
@@ -208,6 +208,8 @@ def test_menu_signals_balance_trades(monkeypatch, tmp_path):
     asyncio.run(ui.menu_cmd(update, DummyContext()))
     assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
     assert len(update.message.reply_markup.inline_keyboard) == 3
+    texts = [btn.text for row in update.message.reply_markup.inline_keyboard for btn in row]
+    assert "PnL Stats" in texts
 
     update = DummyUpdate()
     asyncio.run(ui.show_signals(update, DummyContext()))
@@ -216,6 +218,10 @@ def test_menu_signals_balance_trades(monkeypatch, tmp_path):
     update = DummyUpdate()
     asyncio.run(ui.show_balance(update, DummyContext()))
     assert "BTC" in update.message.text
+
+    update = DummyUpdate()
+    asyncio.run(ui.show_pnl_stats(update, DummyContext()))
+    assert "Total PnL" in update.message.text
 
 
 
@@ -298,6 +304,11 @@ def test_menu_callbacks(monkeypatch, tmp_path):
     asyncio.run(ui.show_trades(update, DummyContext()))
     assert "+5.00" in update.callback_query.message.text
 
+    update = DummyCallbackUpdate()
+    update.callback_query.data = PNL_STATS
+    asyncio.run(ui.show_pnl_stats(update, DummyContext()))
+    assert "Total PnL" in update.callback_query.message.text
+
 
 def test_async_exchange_balance_and_rotate(monkeypatch, tmp_path):
     monkeypatch.setattr(
@@ -350,3 +361,18 @@ def test_reload(monkeypatch, tmp_path):
     asyncio.run(ui.reload_cmd(update, DummyContext()))
     assert state["reload"] is True
     assert update.message.text == "Config reload scheduled"
+
+
+def test_pnl_stats(monkeypatch, tmp_path):
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
+    state = {"running": True, "mode": "cex"}
+    ui, _ = make_ui(tmp_path, state)
+
+    trades_file = tmp_path / "trades.csv"
+    trades_file.write_text("XBT/USDT,buy,1,100\nXBT/USDT,sell,1,110\n")
+    monkeypatch.setattr(telegram_bot_ui, "TRADES_FILE", trades_file)
+
+    update = DummyUpdate()
+    asyncio.run(ui.show_pnl_stats(update, DummyContext()))
+    assert "Total PnL: 10.00" in update.message.text
+    assert "Win rate: 100.0%" in update.message.text
