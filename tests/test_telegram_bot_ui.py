@@ -1,14 +1,17 @@
 import types
 import asyncio
 import json
+import yaml
 import crypto_bot.telegram_bot_ui as telegram_bot_ui
-from crypto_bot.telegram_bot_ui import TelegramBotUI
 from crypto_bot.telegram_bot_ui import (
     TelegramBotUI,
     SIGNALS,
     BALANCE,
     TRADES,
     RELOAD,
+    CONFIG,
+    EDIT_TRADE_SIZE,
+    EDIT_MAX_TRADES,
 )
 from crypto_bot.utils.telegram import TelegramNotifier
 
@@ -67,7 +70,8 @@ class DummyCallbackUpdate:
 
 
 class DummyContext:
-    pass
+    def __init__(self):
+        self.user_data = {}
 
 
 class DummyExchange:
@@ -174,7 +178,7 @@ def test_menu_signals_balance_trades(monkeypatch, tmp_path):
     update = DummyUpdate()
     asyncio.run(ui.menu_cmd(update, DummyContext()))
     assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
-    assert len(update.message.reply_markup.inline_keyboard) == 3
+    assert len(update.message.reply_markup.inline_keyboard) == 4
 
     update = DummyUpdate()
     asyncio.run(ui.show_signals(update, DummyContext()))
@@ -317,3 +321,40 @@ def test_reload(monkeypatch, tmp_path):
     asyncio.run(ui.reload_cmd(update, DummyContext()))
     assert state["reload"] is True
     assert update.message.text == "Config reload scheduled"
+
+
+def test_config_edit(monkeypatch, tmp_path):
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
+    state = {"running": True, "mode": "cex"}
+    ui, _ = make_ui(tmp_path, state)
+
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("trade_size_pct: 0.1\nmax_open_trades: 2\n")
+    monkeypatch.setattr(telegram_bot_ui, "CONFIG_FILE", cfg)
+
+    update = DummyUpdate()
+    asyncio.run(ui.show_config(update, DummyContext()))
+    assert "trade_size_pct" in update.message.text
+
+    ctx = DummyContext()
+    cb = DummyCallbackUpdate(EDIT_TRADE_SIZE)
+    r = asyncio.run(ui.edit_trade_size(cb, ctx))
+    assert r == telegram_bot_ui.EDIT_VALUE
+
+    msg = DummyUpdate()
+    msg.message.text = "0.2"
+    asyncio.run(ui.set_config_value(msg, ctx))
+    data = json.loads(cfg.read_text())
+    assert data["trade_size_pct"] == 0.2
+    assert state["reload"] is True
+
+    ctx2 = DummyContext()
+    cb = DummyCallbackUpdate(EDIT_MAX_TRADES)
+    r = asyncio.run(ui.edit_max_trades(cb, ctx2))
+    assert r == telegram_bot_ui.EDIT_VALUE
+
+    msg2 = DummyUpdate()
+    msg2.message.text = "5"
+    asyncio.run(ui.set_config_value(msg2, ctx2))
+    data = json.loads(cfg.read_text())
+    assert data["max_open_trades"] == 5
