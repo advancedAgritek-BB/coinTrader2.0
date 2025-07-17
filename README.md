@@ -1045,6 +1045,8 @@ real time:
 1. Obtain a Helius API key from your dashboard.
 2. Set `meme_wave_sniper.pool.websocket_url` in `crypto_bot/config.yaml` to
    `wss://mainnet.helius-rpc.com/?api-key=YOUR_KEY`.
+   `atlas-mainnet.helius-rpc.com` is only available for Business/Professional
+   plans; standard tiers should use the mainnet URL shown above.
 3. Run `python -m crypto_bot.solana.pool_ws_monitor`.
 
 `pool_ws_monitor.py` subscribes to the Raydium program and prints each update:
