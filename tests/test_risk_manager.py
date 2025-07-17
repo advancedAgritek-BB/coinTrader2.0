@@ -23,7 +23,7 @@ def test_allow_trade_rejects_low_volume():
     )
     allowed, reason = RiskManager(cfg).allow_trade(df)
     assert not allowed
-    assert "1% of mean" in reason
+    assert "min volume" in reason
 
 
 def test_allow_trade_respects_volume_threshold():
@@ -61,8 +61,9 @@ def test_allow_trade_allows_when_only_ratio_fails():
         min_volume=3,
         volume_threshold_ratio=0.5,
     )
-    allowed, _ = RiskManager(cfg).allow_trade(df)
-    assert allowed
+    allowed, reason = RiskManager(cfg).allow_trade(df)
+    assert not allowed
+    assert "50% of mean" in reason
 
 
 def test_allow_trade_allows_when_only_min_volume_fails():
@@ -81,8 +82,9 @@ def test_allow_trade_allows_when_only_min_volume_fails():
         min_volume=11,
         volume_threshold_ratio=0.5,
     )
-    allowed, _ = RiskManager(cfg).allow_trade(df)
-    assert allowed
+    allowed, reason = RiskManager(cfg).allow_trade(df)
+    assert not allowed
+    assert "min volume" in reason
 
 
 def test_allow_trade_logs_ratio_reason():
@@ -103,7 +105,7 @@ def test_allow_trade_logs_ratio_reason():
     )
     allowed, reason = RiskManager(cfg).allow_trade(df)
     assert not allowed
-    assert "1% of mean" in reason
+    assert "min volume" in reason
 
 
 def test_allow_trade_rejects_tiny_volume():
@@ -123,7 +125,7 @@ def test_allow_trade_rejects_tiny_volume():
     )
     allowed, reason = RiskManager(cfg).allow_trade(df)
     assert not allowed
-    assert "1% of mean" in reason
+    assert "min volume" in reason
 
 
 def test_allow_trade_rejects_when_volume_far_below_mean():
@@ -143,7 +145,7 @@ def test_allow_trade_rejects_when_volume_far_below_mean():
     )
     allowed, reason = RiskManager(cfg).allow_trade(df)
     assert not allowed
-    assert "1% of mean" in reason
+    assert "min volume" in reason
 
 
 def test_allow_trade_rejects_on_volatility_drop():
