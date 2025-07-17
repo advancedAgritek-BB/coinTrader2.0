@@ -9,6 +9,7 @@ import yaml
 import pandas as pd
 import ccxt
 import aiohttp
+import warnings
 
 from .telegram import TelegramNotifier
 from .logger import LOG_DIR, setup_logger
@@ -728,45 +729,186 @@ async def fetch_ohlcv_async(
         return exc
 
 
+async def fetch_geckoterminal_ohlcv(
+    mint: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+    *,
+    aggregate: int | None = None,
+) -> list | None:
+    """Return OHLCV data for ``mint`` from GeckoTerminal.
+
+    The function chooses the pool with the highest 24h volume and returns
+    OHLCV candles in ``[timestamp_ms, open, high, low, close, volume]`` format.
+    ``None`` is returned on API errors or if no pool data is available.
+    """
+
+    base = mint.split("/")[0]
+
+    tf_unit = timeframe
+    agg = aggregate or 1
+    if timeframe.endswith("m"):
+        tf_unit = "minute"
+        try:
+            agg = aggregate or int(timeframe[:-1])
+        except Exception:
+            agg = aggregate or 1
+    elif timeframe.endswith("h"):
+        tf_unit = "hour"
+        try:
+            agg = aggregate or int(timeframe[:-1])
+        except Exception:
+            agg = aggregate or 1
+    elif timeframe.endswith("d"):
+        tf_unit = "day"
+        try:
+            agg = aggregate or int(timeframe[:-1])
+        except Exception:
+            agg = aggregate or 1
+
+    pools_url = (
+        "https://api.geckoterminal.com/api/v2/networks/solana/tokens/"
+        f"{base}/pools"
+    )
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(pools_url, timeout=10) as resp:
+                if resp.status == 404:
+                    logger.info("token not available on GeckoTerminal: %s", mint)
+                    return None
+                resp.raise_for_status()
+                pools_data = await resp.json()
+    except Exception:  # pragma: no cover - network
+        return None
+
+    pools = pools_data.get("data") if isinstance(pools_data, dict) else []
+    best_pool = None
+    best_vol = -1.0
+    for item in pools or []:
+        attrs = item.get("attributes", {}) if isinstance(item, dict) else {}
+        vol_str = (attrs.get("volume_usd") or {}).get("h24")
+        try:
+            vol = float(vol_str) if vol_str is not None else 0.0
+        except Exception:
+            vol = 0.0
+        if vol > best_vol:
+            best_vol = vol
+            best_pool = attrs.get("address")
+
+    if not best_pool:
+        return None
+
+    candles_url = (
+        "https://api.geckoterminal.com/api/v2/networks/solana/pools/"
+        f"{best_pool}/ohlcv/{tf_unit}?aggregate={agg}&limit={limit}"
+    )
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(candles_url, timeout=10) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+    except Exception:  # pragma: no cover - network
+        return None
+
+    candles = (
+        data.get("data", {})
+        .get("attributes", {})
+        .get("ohlcv_list", [])
+    )
+
+    result: list[list[float]] = []
+    for c in candles[-limit:]:
+        if not isinstance(c, list) or len(c) < 6:
+            continue
+        try:
+            ts, o, h, l, cl, v = c[:6]
+            result.append(
+                [
+                    int(float(ts) * 1000),
+                    float(o),
+                    float(h),
+                    float(l),
+                    float(cl),
+                    float(v),
+                ]
+            )
+        except Exception:
+            continue
+
+    return result
+
+
 async def fetch_dexscreener_ohlcv(
     symbol: str,
     timeframe: str = "1h",
     limit: int = 100,
-) -> list:
-    """Return OHLCV data for ``symbol`` from the DexScreener API."""
+) -> list | None:
+    """Deprecated: use :func:`fetch_geckoterminal_ohlcv` instead."""
 
-    pair = symbol.replace("/", "-")
-    url = (
-        "https://api.dexscreener.com/latest/dex/charts/"
-        f"{pair}?interval={timeframe}&limit={limit}"
+    warnings.warn(
+        "fetch_dexscreener_ohlcv is deprecated; use fetch_geckoterminal_ohlcv",
+        DeprecationWarning,
+        stacklevel=2,
     )
+    return await fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
+
+
+async def fetch_geckoterminal_ohlcv(
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+) -> list | None:
+    """Return OHLCV data for ``symbol`` from the GeckoTerminal API."""
+
+    pair = symbol.replace("/", "_").lower()
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, timeout=10) as resp:
+        async with session.get(
+            f"https://api.geckoterminal.com/api/v2/search/pools?q={pair}",
+            timeout=10,
+        ) as resp:
             if resp.status == 404:
-                logger.info("pair not available on DexScreener: %s", symbol)
+                logger.info("pair not available on GeckoTerminal: %s", symbol)
                 return None
             resp.raise_for_status()
             data = await resp.json()
 
-    candles = (
-        data.get("candles")
-        or data.get("data")
-        or data.get("chart")
-        or []
-    )
+        pools = data.get("data") or []
+        if not pools:
+            logger.info("pair not available on GeckoTerminal: %s", symbol)
+            return None
+
+        pool_id = pools[0].get("id")
+        vol = pools[0].get("attributes", {}).get("volume_usd")
+        if pool_id is None or vol is None:
+            logger.info("pair not available on GeckoTerminal: %s", symbol)
+            return None
+
+        async with session.get(
+            f"https://api.geckoterminal.com/api/v2/pools/{pool_id}/ohlcv/{timeframe}?limit={limit}",
+            timeout=10,
+        ) as resp:
+            if resp.status == 404:
+                logger.info("pair not available on GeckoTerminal: %s", symbol)
+                return None
+            resp.raise_for_status()
+            data = await resp.json()
+
+    candles = data.get("data") or []
 
     result = []
     for c in candles[-limit:]:
-        ts = int(c.get("t") or c.get("timestamp") or c.get("time", 0))
+        attrs = c.get("attributes", {})
         result.append(
             [
-                ts,
-                float(c.get("o") or c.get("open", 0)),
-                float(c.get("h") or c.get("high", 0)),
-                float(c.get("l") or c.get("low", 0)),
-                float(c.get("c") or c.get("close", 0)),
-                float(c.get("v") or c.get("volume", 0)),
+                int(attrs.get("timestamp", 0)),
+                float(attrs.get("open", 0)),
+                float(attrs.get("high", 0)),
+                float(attrs.get("low", 0)),
+                float(attrs.get("close", 0)),
+                float(attrs.get("volume", 0)),
             ]
         )
 
@@ -1217,6 +1359,7 @@ async def update_multi_tf_ohlcv_cache(
         for sym in dex_symbols:
             try:
                 data, vol = await fetch_geckoterminal_ohlcv(sym, timeframe=tf, limit=limit)
+                data = await fetch_geckoterminal_ohlcv(sym, timeframe=tf, limit=limit)
             except Exception as exc:  # pragma: no cover - network
                 logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
                 continue
