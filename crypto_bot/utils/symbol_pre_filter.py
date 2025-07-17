@@ -176,7 +176,7 @@ async def _refresh_tickers(
 ) -> dict:
     """Return ticker data using WS/HTTP and fall back to per-symbol fetch."""
 
-    cfg = config or {}
+    cfg = config if config is not None else globals().get("cfg", {})
     sf = cfg.get("symbol_filter", {})
     attempts = int(sf.get("ticker_retry_attempts", 3))
     if attempts < 1:
@@ -206,7 +206,7 @@ async def _refresh_tickers(
 
     try_ws = (
         getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
-        and exchange.options.get("ws_scan", True)
+        and getattr(exchange, "options", {}).get("ws_scan", True)
     )
     try_http = True
     data: dict = {}
@@ -583,8 +583,9 @@ async def filter_symbols(
             if cache_map is not None and symbol not in cache_map:
                 cache_map[symbol] = time.time()
                 cache_changed = True
-        volumes.append(vol_usd)
-        raw.append((symbol, vol_usd, change_pct, spread_pct))
+        if vol_usd >= local_min_volume:
+            volumes.append(vol_usd)
+            raw.append((symbol, vol_usd, change_pct, spread_pct))
 
     for sym in symbols:
         norm_sym = _norm_symbol(sym)
@@ -605,8 +606,9 @@ async def filter_symbols(
             if cache_map is not None and norm_sym not in cache_map:
                 cache_map[norm_sym] = time.time()
                 cache_changed = True
-        volumes.append(vol_usd)
-        raw.append((norm_sym, vol_usd, 0.0, spread_pct))
+        if vol_usd >= local_min_volume:
+            volumes.append(vol_usd)
+            raw.append((norm_sym, vol_usd, 0.0, spread_pct))
 
     vol_cut = np.percentile(volumes, vol_pct) if volumes else 0
 

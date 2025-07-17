@@ -316,13 +316,13 @@ adaptive_scan:
   atr_baseline: 0.005
   max_factor: 10.0
 symbol_filter:
-  change_pct_percentile: 10
-  max_correlation: 0.8
+  change_pct_percentile: 5
+  max_correlation: 0.9
   correlation_max_pairs: 200
-  max_spread_pct: 3
-  min_volume_usd: 1000
+  max_spread_pct: 4
+  min_volume_usd: 500
   uncached_volume_multiplier: 1.5
-  volume_percentile: 10
+  volume_percentile: 5
   kraken_batch_size: 200
   http_timeout: 5
   ticker_retry_attempts: 5
@@ -330,11 +330,11 @@ symbol_filter:
 symbol_refresh_minutes: 1
 symbol_score_weights:
   age: 0.02
-  change: 0.4
+  change: 0.45
   latency: 0.03
-  liquidity: 0.0
+  liquidity: 0.15
   spread: 0.1
-  volume: 0.45
+  volume: 0.25
 symbols: []
 solana_symbols: []
 tax_tracking:
