@@ -8,8 +8,6 @@ rsi_mean_rev_max: 70
 ema_distance_mean_rev_max: 0.02
 atr_volatility_mult: 1.5
 normalized_range_volatility_min: 1.5
-atr_baseline: 0.01
-
 ema_fast: 8
 ema_slow: 21
 indicator_window: 14
@@ -19,9 +17,6 @@ higher_timeframe: "4h"
 confirm_trend_with_higher_tf: false
 use_ml_regime_classifier: true
 ml_min_bars: 20
-pattern_min_conf: 0.0
-pattern_min_conf: 0.1
-ml_blend_weight: 0.5
 log_level: INFO
 score_weights:
   trending: 1.0
