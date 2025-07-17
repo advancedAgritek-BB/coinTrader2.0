@@ -10,6 +10,7 @@ import pandas as pd
 import ccxt
 import aiohttp
 import warnings
+import base58
 
 from .telegram import TelegramNotifier
 from .logger import LOG_DIR, setup_logger
@@ -44,6 +45,21 @@ COINGECKO_IDS = {
 # Cache GeckoTerminal pool addresses and metadata per symbol
 # Mapping: symbol -> (pool_addr, volume, reserve, price, limit)
 GECKO_POOL_CACHE: dict[str, tuple[str, float, float, float, int]] = {}
+
+# Valid characters for Solana addresses
+BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def _is_valid_base_token(token: str) -> bool:
+    """Return True if ``token`` looks like a Solana mint address."""
+    if not isinstance(token, str):
+        return False
+    if not (32 <= len(token) <= 44):
+        return False
+    try:
+        return len(base58.b58decode(token)) == 32 and all(c in BASE58_ALPHABET for c in token)
+    except Exception:
+        return False
 
 
 def configure(
@@ -1314,8 +1330,14 @@ async def update_multi_tf_ohlcv_cache(
         logger.info("Starting update for timeframe %s", tf)
         tf_cache = cache.get(tf, {})
 
-        cex_symbols = [s for s in symbols if not s.endswith("/USDC")]
-        dex_symbols = [s for s in symbols if s.endswith("/USDC")]
+        cex_symbols: list[str] = []
+        dex_symbols: list[str] = []
+        for s in symbols:
+            base, _, quote = s.partition("/")
+            if quote.upper() == "USDC" and _is_valid_base_token(base):
+                dex_symbols.append(s)
+            else:
+                cex_symbols.append(s)
 
         if cex_symbols:
             tf_cache = await update_ohlcv_cache(
