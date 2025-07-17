@@ -13,6 +13,7 @@ bounce_scalper:
   oversold: 25
   overbought: 75
   vol_window: 15
+  vol_zscore_threshold: 2.0
   zscore_threshold: 1.0
   volume_multiple: 1.5
   ema_window: 40
@@ -272,6 +273,7 @@ solana_scanner:
     bitquery: YOUR_KEY
   min_volume_usd: 1000
   max_tokens_per_scan: 100
+  gecko_search: true
 pyth:
   enabled: true
   solana_endpoint: https://api.mainnet-beta.solana.com

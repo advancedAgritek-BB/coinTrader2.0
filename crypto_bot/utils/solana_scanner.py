@@ -16,6 +16,41 @@ RAYDIUM_URL = "https://api.raydium.io/pairs"
 PUMP_FUN_URL = "https://client-api.prod.pump.fun/v1/launches"
 
 
+async def search_geckoterminal_token(query: str) -> tuple[str, float] | None:
+    """Return ``(mint, volume)`` from GeckoTerminal token search.
+
+    The function queries ``/api/v2/search/tokens`` with ``query`` and
+    ``network=solana`` and returns the first result's address and 24h
+    volume in USD. ``None`` is returned when the request fails or no
+    results are available.
+    """
+
+    from urllib.parse import quote_plus
+
+    url = (
+        "https://api.geckoterminal.com/api/v2/search/tokens"
+        f"?query={quote_plus(query)}&network=solana"
+    )
+
+    data = await _fetch_json(url)
+    if not data:
+        return None
+
+    items = data.get("data") if isinstance(data, dict) else []
+    if not isinstance(items, list) or not items:
+        return None
+
+    item = items[0]
+    attrs = item.get("attributes", {}) if isinstance(item, dict) else {}
+    mint = str(attrs.get("address") or item.get("id") or query)
+    try:
+        volume = float(attrs.get("volume_usd_h24") or 0.0)
+    except Exception:
+        volume = 0.0
+
+    return mint, volume
+
+
 async def _fetch_json(url: str) -> list | dict | None:
     """Return parsed JSON from ``url`` using ``aiohttp``."""
     try:
@@ -93,27 +128,57 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
     _MIN_VOLUME_USD = float(config.get("min_volume_usd", 0.0))
     raydium_key = str(config.get("raydium_api_key", ""))
     pump_key = str(config.get("pump_fun_api_key", ""))
+    gecko_search = bool(config.get("gecko_search", True))
 
     tasks = []
     if raydium_key:
-        tasks.append(fetch_new_raydium_pools(raydium_key, limit))
+        coro = fetch_new_raydium_pools(raydium_key, limit)
+        if not asyncio.iscoroutine(coro):
+            async def _wrap(res=coro):
+                return res
+            coro = _wrap()
+        tasks.append(coro)
     if pump_key:
-        tasks.append(fetch_pump_fun_launches(pump_key, limit))
+        coro = fetch_pump_fun_launches(pump_key, limit)
+        if not asyncio.iscoroutine(coro):
+            async def _wrap(res=coro):
+                return res
+            coro = _wrap()
+        tasks.append(coro)
 
     if not tasks:
         return []
 
     results = await asyncio.gather(*tasks)
-    mints: List[str] = []
-    seen: set[str] = set()
+    candidates: list[str] = []
+    seen_raw: set[str] = set()
     for res in results:
         for mint in res:
-            if mint not in seen:
-                seen.add(mint)
-                mints.append(f"{mint}/USDC")
-            if len(mints) >= limit:
+            if mint not in seen_raw:
+                seen_raw.add(mint)
+                candidates.append(mint)
+            if len(candidates) >= limit:
                 break
-        if len(mints) >= limit:
+        if len(candidates) >= limit:
             break
 
-    return mints
+    if not gecko_search:
+        return [f"{m}/USDC" for m in candidates]
+
+    search_results = await asyncio.gather(
+        *[search_geckoterminal_token(m) for m in candidates]
+    )
+
+    final: list[str] = []
+    seen: set[str] = set()
+    for res in search_results:
+        if not res:
+            continue
+        mint, vol = res
+        if vol >= _MIN_VOLUME_USD and mint not in seen:
+            seen.add(mint)
+            final.append(f"{mint}/USDC")
+        if len(final) >= limit:
+            break
+
+    return final

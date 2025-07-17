@@ -21,6 +21,7 @@ except Exception:  # pragma: no cover - optional dependency
     ccxt = types.SimpleNamespace()
 
 import pandas as pd
+import numpy as np
 import yaml
 from dotenv import dotenv_values
 from pydantic import ValidationError
@@ -540,11 +541,30 @@ async def scan_arbitrage(exchange: object, config: dict) -> list[str]:
         return []
 
     try:
-        from crypto_bot.solana import fetch_solana_prices
+        from crypto_bot.utils.market_loader import fetch_geckoterminal_ohlcv
     except Exception:
-        return []
+        fetch_geckoterminal_ohlcv = None
 
-    dex_prices = await fetch_solana_prices(pairs)
+    gecko_prices: dict[str, float] = {}
+    if fetch_geckoterminal_ohlcv:
+        for sym in pairs:
+            try:
+                res = await fetch_geckoterminal_ohlcv(sym, limit=1, return_price=True)
+            except Exception:
+                res = None
+            if res:
+                _data, _vol, price = res
+                gecko_prices[sym] = price
+
+    remaining = [s for s in pairs if s not in gecko_prices]
+    dex_prices: dict[str, float] = gecko_prices.copy()
+    if remaining:
+        try:
+            from crypto_bot.solana import fetch_solana_prices
+        except Exception:
+            fetch_solana_prices = None
+        if fetch_solana_prices:
+            dex_prices.update(await fetch_solana_prices(remaining))
     results: list[str] = []
     threshold = float(config.get("arbitrage_threshold", 0.0))
 
@@ -609,6 +629,31 @@ async def update_caches(ctx: BotContext) -> None:
         notifier=ctx.notifier if ctx.config.get("telegram", {}).get("status_updates", True) else None,
         df_map=ctx.df_cache,
     )
+
+    vol_thresh = (
+        ctx.config.get("bounce_scalper", {}).get("vol_zscore_threshold")
+    )
+    if vol_thresh is not None:
+        tf = ctx.config.get("timeframe", "1h")
+        status_updates = ctx.config.get("telegram", {}).get("status_updates", True)
+        for sym in batch:
+            df = ctx.df_cache.get(tf, {}).get(sym)
+            if df is None or df.empty or "volume" not in df:
+                continue
+            vols = df["volume"].to_numpy(dtype=float)
+            mean = float(np.mean(vols)) if len(vols) else 0.0
+            std = float(np.std(vols))
+            if std <= 0:
+                continue
+            z_scores = (vols - mean) / std
+            z_max = float(np.max(z_scores))
+            if z_max > vol_thresh:
+                async with QUEUE_LOCK:
+                    symbol_priority_queue.appendleft(sym)
+                msg = f"Volume spike priority for {sym}: z={z_max:.2f}"
+                logger.info(msg)
+                if status_updates and ctx.notifier:
+                    ctx.notifier.notify(msg)
 
     ctx.timing["ohlcv_fetch_latency"] = time.perf_counter() - start
 

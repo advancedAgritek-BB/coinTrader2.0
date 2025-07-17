@@ -35,6 +35,13 @@ UNSUPPORTED_SYMBOL = object()
 STATUS_UPDATES = True
 SEMA: asyncio.Semaphore | None = None
 
+# Mapping of common symbols to CoinGecko IDs for OHLC fallback
+COINGECKO_IDS = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "SOL": "solana",
+}
+
 
 def configure(
     ohlcv_timeout: int | float | None = None,
@@ -729,53 +736,70 @@ async def fetch_ohlcv_async(
         return exc
 
 
+async def fetch_dexscreener_ohlcv(
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+) -> list | None:
+    """Deprecated: use :func:`fetch_geckoterminal_ohlcv` instead."""
+
+    warnings.warn(
+        "fetch_dexscreener_ohlcv is deprecated; use fetch_geckoterminal_ohlcv",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return await fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
+
+
 async def fetch_geckoterminal_ohlcv(
-    mint: str,
+    symbol: str,
     timeframe: str = "1h",
     limit: int = 100,
     *,
-    aggregate: int | None = None,
+    min_24h_volume: float = 0.0,
 ) -> list | None:
-    """Return OHLCV data for ``mint`` from GeckoTerminal.
+    """Return OHLCV data for ``symbol`` from the GeckoTerminal API.
 
-    The function chooses the pool with the highest 24h volume and returns
-    OHLCV candles in ``[timestamp_ms, open, high, low, close, volume]`` format.
-    ``None`` is returned on API errors or if no pool data is available.
+    The function queries GeckoTerminal for available pools of ``symbol`` on
+    Solana, picks the pool with the highest 24h USD volume and skips it if the
+    volume is below ``min_24h_volume``.  Candles are returned as a list of
+    ``[timestamp_ms, open, high, low, close, volume_usd]`` or ``None`` on
+    errors.
     """
 
-    base = mint.split("/")[0]
+    token = symbol.split("/")[0]
 
-    tf_unit = timeframe
-    agg = aggregate or 1
+    unit = "minute"
+    agg = 1
     if timeframe.endswith("m"):
-        tf_unit = "minute"
+        unit = "minute"
         try:
-            agg = aggregate or int(timeframe[:-1])
+            agg = max(1, int(timeframe[:-1]))
         except Exception:
-            agg = aggregate or 1
+            agg = 1
     elif timeframe.endswith("h"):
-        tf_unit = "hour"
+        unit = "hour"
         try:
-            agg = aggregate or int(timeframe[:-1])
+            agg = max(1, int(timeframe[:-1]))
         except Exception:
-            agg = aggregate or 1
+            agg = 1
     elif timeframe.endswith("d"):
-        tf_unit = "day"
+        unit = "day"
         try:
-            agg = aggregate or int(timeframe[:-1])
+            agg = max(1, int(timeframe[:-1]))
         except Exception:
-            agg = aggregate or 1
+            agg = 1
 
     pools_url = (
         "https://api.geckoterminal.com/api/v2/networks/solana/tokens/"
-        f"{base}/pools"
+        f"{token}/pools"
     )
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(pools_url, timeout=10) as resp:
                 if resp.status == 404:
-                    logger.info("token not available on GeckoTerminal: %s", mint)
+                    logger.info("token not available on GeckoTerminal: %s", symbol)
                     return None
                 resp.raise_for_status()
                 pools_data = await resp.json()
@@ -796,12 +820,12 @@ async def fetch_geckoterminal_ohlcv(
             best_vol = vol
             best_pool = attrs.get("address")
 
-    if not best_pool:
+    if not best_pool or best_vol < float(min_24h_volume or 0):
         return None
 
     candles_url = (
         "https://api.geckoterminal.com/api/v2/networks/solana/pools/"
-        f"{best_pool}/ohlcv/{tf_unit}?aggregate={agg}&limit={limit}"
+        f"{best_pool}/ohlcv/{unit}?aggregate={agg}&limit={limit}&currency=usd"
     )
 
     try:
@@ -840,25 +864,6 @@ async def fetch_geckoterminal_ohlcv(
     return result
 
 
-async def fetch_dexscreener_ohlcv(
-    symbol: str,
-    timeframe: str = "1h",
-    limit: int = 100,
-) -> list | None:
-    """Deprecated: use :func:`fetch_geckoterminal_ohlcv` instead."""
-
-    warnings.warn(
-        "fetch_dexscreener_ohlcv is deprecated; use fetch_geckoterminal_ohlcv",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return await fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
-
-
-async def fetch_geckoterminal_ohlcv(
-    symbol: str,
-    timeframe: str = "1h",
-    limit: int = 100,
 ) -> list | None:
     """Return OHLCV data for ``symbol`` from the GeckoTerminal API."""
 
@@ -921,6 +926,15 @@ async def fetch_geckoterminal_ohlcv(
     limit: int = 100,
 ) -> tuple[list, float, float] | None:
     """Return OHLCV data, 24h volume and pool liquidity for ``symbol``."""
+    *,
+    return_price: bool = False,
+) -> tuple[list, float] | tuple[list, float, float] | None:
+    """Return OHLCV data and 24h volume for ``symbol`` from the GeckoTerminal API.
+
+    If ``return_price`` is ``True`` the latest pool price is also returned.
+    """
+) -> tuple[list, float] | None:
+    """Return OHLCV data and 24h volume for ``symbol`` from the GeckoTerminal API."""
 
     from urllib.parse import quote_plus
 
@@ -951,6 +965,29 @@ async def fetch_geckoterminal_ohlcv(
             .get("attributes", {})
             .get("volume_usd", {})
             .get("h24", 0.0)
+        pool_id = str(items[0].get("id", ""))
+        pool_addr = pool_id.split("_", 1)[-1]
+        try:
+            volume = float(
+                items[0]
+                .get("attributes", {})
+                .get("volume_usd", {})
+                .get("h24", 0.0)
+            )
+        except Exception:
+            volume = 0.0
+        try:
+            price = float(
+                items[0]
+                .get("attributes", {})
+                .get("base_token_price_quote_token", 0.0)
+            )
+        except Exception:
+            price = 0.0
+
+        ohlcv_url = (
+            "https://api.geckoterminal.com/api/v2/networks/solana/pools/"
+            f"{pool_addr}/ohlcv/{timeframe}?aggregate=1&limit={limit}"
         )
     except Exception:
         volume = 0.0
@@ -986,6 +1023,82 @@ async def fetch_geckoterminal_ohlcv(
         )
 
     return result, volume, reserve
+    if return_price:
+        return result, volume, price
+    return result, volume
+
+
+async def fetch_coingecko_ohlc(
+    coin_id: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+) -> list | None:
+    """Return OHLC data from CoinGecko as [timestamp, open, high, low, close, 0]."""
+
+    days = 1
+    if timeframe.endswith("d"):
+        days = 90
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc"
+    params = {"vs_currency": "usd", "days": days}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, timeout=10) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+    except Exception:  # pragma: no cover - network
+        return None
+
+    result: list = []
+    for c in data[-limit:]:
+        if not isinstance(c, list) or len(c) < 5:
+            continue
+        try:
+            ts, o, h, l, cl = c[:5]
+            result.append(
+                [int(ts), float(o), float(h), float(l), float(cl), 0.0]
+            )
+        except Exception:
+            continue
+    return result
+
+
+async def fetch_dex_ohlcv(
+    exchange,
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+    *,
+    min_volume_usd: float = 0.0,
+) -> list | None:
+    """Fetch DEX OHLCV with fallback to CoinGecko then Kraken."""
+
+    try:
+        res = await fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("GeckoTerminal OHLCV error for %s: %s", symbol, exc)
+        res = None
+
+    data = None
+    if res:
+        if isinstance(res, tuple):
+            data, vol = res
+        else:
+            data = res
+            vol = min_volume_usd
+        if data and vol >= min_volume_usd:
+            return data
+
+    base = symbol.split("/")[0]
+    coin_id = COINGECKO_IDS.get(base)
+    if coin_id:
+        data = await fetch_coingecko_ohlc(coin_id, timeframe=timeframe, limit=limit)
+        if data:
+            return data
+
+    data = await fetch_ohlcv_async(exchange, symbol, timeframe=timeframe, limit=limit)
+    if isinstance(data, Exception):
+        return None
+    return data
 
 
 async def fetch_order_book_async(
@@ -1334,7 +1447,6 @@ async def update_multi_tf_ohlcv_cache(
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
-    min_volume_usd: float | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for multiple timeframes.
 
@@ -1348,7 +1460,7 @@ async def update_multi_tf_ohlcv_cache(
     tfs = config.get("timeframes", ["1h"])
     logger.info("Updating OHLCV cache for timeframes: %s", tfs)
 
-    min_volume_usd = float(min_volume_usd or 0)
+    min_volume_usd = float(config.get("min_volume_usd", 0) or 0)
 
     for tf in tfs:
         logger.info("Starting update for timeframe %s", tf)
@@ -1375,10 +1487,41 @@ async def update_multi_tf_ohlcv_cache(
                 data, vol, _ = await fetch_geckoterminal_ohlcv(
                     sym, timeframe=tf, limit=limit
                 )
+                data = await fetch_geckoterminal_ohlcv(
+                    sym,
+                    timeframe=tf,
+                    limit=limit,
+                    min_24h_volume=min_volume_usd,
+                )
+            except Exception as exc:  # pragma: no cover - network
+                logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
+                data = None
+            if data is None:
+                tf_cache = await update_ohlcv_cache(
+                    exchange,
+                    tf_cache,
+                    [sym],
+                    timeframe=tf,
+                    limit=limit,
+                    use_websocket=use_websocket,
+                    force_websocket_history=force_websocket_history,
+                    max_concurrent=max_concurrent,
+                    notifier=notifier,
+                    config=config,
+                )
+                data, vol = await fetch_geckoterminal_ohlcv(sym, timeframe=tf, limit=limit)
             except Exception as exc:  # pragma: no cover - network
                 logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
                 continue
             if not data or vol < min_volume_usd:
+            data = await fetch_dex_ohlcv(
+                exchange,
+                sym,
+                timeframe=tf,
+                limit=limit,
+                min_volume_usd=min_volume_usd,
+            )
+            if not data:
                 continue
             df_new = pd.DataFrame(
                 data,
