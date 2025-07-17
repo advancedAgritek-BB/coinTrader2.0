@@ -1344,7 +1344,11 @@ async def _main_impl() -> TelegramNotifier:
             start_bal = float(input("Enter paper trading balance in USDT: "))
         except Exception:
             start_bal = 1000.0
-        paper_wallet = PaperWallet(start_bal, config.get("max_open_trades", 1))
+        paper_wallet = PaperWallet(
+            start_bal,
+            config.get("max_open_trades", 1),
+            config.get("allow_short", False),
+        )
         log_balance(paper_wallet.balance)
         last_balance = notify_balance_change(
             notifier,

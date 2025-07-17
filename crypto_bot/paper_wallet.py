@@ -90,6 +90,9 @@ class PaperWallet:
         if len(self.positions) >= self.max_open_trades:
             raise RuntimeError("Position limit reached")
 
+        if side == "sell" and not self.allow_short:
+            raise RuntimeError("Short selling disabled")
+
         trade_id = identifier or symbol or str(uuid4())
 
         cost = amount * price
