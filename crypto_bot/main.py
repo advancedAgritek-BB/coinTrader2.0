@@ -171,6 +171,39 @@ def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> f
     return sum(atr_values) / len(atr_values) if atr_values else 0.0
 
 
+def is_market_pumping(
+    symbols: list[str], df_cache: dict, timeframe: str = "1h", lookback_hours: int = 24
+) -> bool:
+    """Return ``True`` when the average % change over ``lookback_hours`` exceeds ~10%."""
+
+    tf_cache = df_cache.get(timeframe, {})
+    if not tf_cache:
+        return False
+
+    sec = timeframe_seconds(None, timeframe)
+    candles = int(lookback_hours * 3600 / sec) if sec else 0
+    changes: list[float] = []
+    for sym in symbols:
+        df = tf_cache.get(sym)
+        if df is None or df.empty or "close" not in df:
+            continue
+        closes = df["close"]
+        if len(closes) == 0:
+            continue
+        start_idx = -candles - 1 if candles and len(closes) > candles else 0
+        try:
+            start = float(closes[start_idx])
+            end = float(closes[-1])
+        except Exception:
+            continue
+        if start == 0:
+            continue
+        changes.append((end - start) / start)
+
+    avg_change = sum(changes) / len(changes) if changes else 0.0
+    return avg_change >= 0.10
+
+
 def direction_to_side(direction: str) -> str:
     """Translate strategy direction to trade side."""
     return "buy" if direction == "long" else "sell"
@@ -491,7 +524,27 @@ async def initial_scan(
 async def fetch_candidates(ctx: BotContext) -> None:
     """Gather symbols for this cycle and build the evaluation batch."""
     t0 = time.perf_counter()
-    symbols = await get_filtered_symbols(ctx.exchange, ctx.config)
+
+    sf = ctx.config.setdefault("symbol_filter", {})
+    orig_min_volume = sf.get("min_volume_usd")
+    orig_volume_pct = sf.get("volume_percentile")
+
+    pump = is_market_pumping(
+        ctx.config.get("symbols") or [ctx.config.get("symbol")],
+        ctx.df_cache,
+        ctx.config.get("timeframe", "1h"),
+    )
+    if pump:
+        sf["min_volume_usd"] = 500
+        sf["volume_percentile"] = 5
+
+    try:
+        symbols = await get_filtered_symbols(ctx.exchange, ctx.config)
+    finally:
+        if pump:
+            sf["min_volume_usd"] = orig_min_volume
+            sf["volume_percentile"] = orig_volume_pct
+
     ctx.timing["symbol_time"] = time.perf_counter() - t0
 
     solana_tokens: list[str] = []
