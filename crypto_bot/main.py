@@ -929,12 +929,16 @@ async def execute_signals(ctx: BotContext) -> None:
             time.perf_counter() - start_exec,
         )
 
-        ctx.risk_manager.allocate_capital(strategy, size)
         if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
-            ctx.paper_wallet.open(
-                sym, direction_to_side(candidate["direction"]), amount, price
-            )
+            side = direction_to_side(candidate["direction"])
+            if side == "sell" and not ctx.config.get("allow_short", False):
+                logger.warning(
+                    "Short selling disabled; skipping paper trade for %s", sym
+                )
+                continue
+            ctx.paper_wallet.open(sym, side, amount, price)
             ctx.balance = ctx.paper_wallet.balance
+        ctx.risk_manager.allocate_capital(strategy, size)
         ctx.positions[sym] = {
             "side": direction_to_side(candidate["direction"]),
             "entry_price": price,
