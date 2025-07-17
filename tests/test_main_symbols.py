@@ -159,3 +159,17 @@ def test_get_filtered_symbols_invalid_usdc(monkeypatch, caplog):
     assert result == [("ETH/USD", 1.0)]
     assert calls == [["ETH/USD"]]
     assert any("invalid USDC" in r.getMessage() for r in caplog.records)
+
+
+def test_get_filtered_symbols_skip(monkeypatch):
+    async def fake_filter_symbols(ex, syms, cfg):
+        raise AssertionError("filter_symbols should not be called")
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    config = {"symbols": ["BTC/USD", "ETH/USD"], "skip_symbol_filters": True}
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+
+    result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
+    assert result == [("BTC/USD", 0.0), ("ETH/USD", 0.0)]
