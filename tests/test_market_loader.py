@@ -1177,6 +1177,8 @@ def test_load_ohlcv_parallel_propagates_cancelled(caplog):
 def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
     from crypto_bot.utils import market_loader
 
+    mint = "So11111111111111111111111111111111111111112"
+
     pool_data = {
         "data": [
             {
@@ -1233,7 +1235,7 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
             FakeSession.calls += 1
             if FakeSession.calls == 1:
                 assert "search/pools" in url
-                assert "query=FOO%2FUSDC" in url
+                assert f"query={mint}%2FUSDC" in url
                 return PoolResp()
             assert "/pools/pool1/ohlcv/1h" in url
             return OhlcvResp()
@@ -1241,21 +1243,35 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
     monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
 
     data, vol, reserve = asyncio.run(
-        market_loader.fetch_geckoterminal_ohlcv("FOO/USDC", timeframe="1h", limit=1)
+        market_loader.fetch_geckoterminal_ohlcv(f"{mint}/USDC", timeframe="1h", limit=1)
     )
     assert data == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
     assert vol == 123.0
     assert reserve == 0.0
     data, volume, reserve = asyncio.run(
-        market_loader.fetch_geckoterminal_ohlcv("FOO/USDC", timeframe="1h", limit=1)
+        market_loader.fetch_geckoterminal_ohlcv(f"{mint}/USDC", timeframe="1h", limit=1)
     )
     assert data == [[1000, 1.0, 2.0, 0.5, 1.5, 10.0]]
     assert volume == 123
     assert reserve == 0
 
 
+def test_fetch_geckoterminal_ohlcv_invalid_mint(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    def fail_session(*_a, **_k):
+        raise AssertionError("should not be called")
+
+    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", fail_session)
+
+    res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
+    assert res is None
+
+
 def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     from crypto_bot.utils import market_loader
+
+    mint = "So11111111111111111111111111111111111111112"
 
     class FakeResp:
         status = 404
@@ -1280,13 +1296,14 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
             pass
 
         def get(self, url, timeout=None):
-            assert "tokens/FOO/pools" in url
+            assert "search/pools" in url
+            assert f"query={mint}%2FUSDC" in url
             return FakeResp()
 
     monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
 
     caplog.set_level(logging.INFO)
-    res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
+    res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv(f"{mint}/USDC"))
     assert res is None
     assert any(
         "token not available on GeckoTerminal" in r.getMessage() for r in caplog.records
