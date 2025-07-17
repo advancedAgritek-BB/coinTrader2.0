@@ -8,6 +8,7 @@ sl_mult: 1.0
 tp_mult: 2.0
 ml_enabled: true
 arbitrage_enabled: true
+allow_short: false
 bounce_scalper:
   rsi_window: 14
   oversold: 25
@@ -417,3 +418,4 @@ exits:
   trailing_stop_pct: 0.02
 secondary_exchange: coinbase
 arbitrage_enabled: true
+allow_short: false
