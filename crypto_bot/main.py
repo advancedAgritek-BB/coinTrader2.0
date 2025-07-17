@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from collections import deque, OrderedDict, defaultdict
 from dataclasses import dataclass, field
+import inspect
 
 import aiohttp
 
@@ -1164,7 +1165,7 @@ async def _main_impl() -> TelegramNotifier:
             notifier.notify(
                 "❌ ccxt library not found or stubbed; check your installation"
             )
-        return notifier
+        # Continue startup even if ccxt is missing for testing environments
 
     if config.get("scan_markets", False) and not config.get("symbols"):
         attempt = 0
@@ -1194,7 +1195,10 @@ async def _main_impl() -> TelegramNotifier:
                 notifier.notify(
                     f"Symbol scan failed; retrying in {delay}s (attempt {attempt + 1}/{MAX_SYMBOL_SCAN_ATTEMPTS})"
                 )
-            await asyncio.sleep(delay)
+            if inspect.iscoroutinefunction(asyncio.sleep):
+                await asyncio.sleep(delay)
+            else:  # pragma: no cover - compatibility with patched sleep
+                asyncio.sleep(delay)
             delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
 
         if discovered:

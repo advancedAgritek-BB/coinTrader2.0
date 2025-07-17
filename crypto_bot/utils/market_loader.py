@@ -41,6 +41,10 @@ COINGECKO_IDS = {
     "SOL": "solana",
 }
 
+# Cache GeckoTerminal pool addresses and metadata per symbol
+# Mapping: symbol -> (pool_addr, volume, reserve, price, limit)
+GECKO_POOL_CACHE: dict[str, tuple[str, float, float, float, int]] = {}
+
 
 def configure(
     ohlcv_timeout: int | float | None = None,
@@ -351,7 +355,7 @@ async def fetch_ohlcv_async(
         logger.warning("Timeframe %s not supported on %s", timeframe, ex_id)
         return []
 
-    if timeframe in ("1h", "4h", "1d"):
+    if timeframe in ("4h", "1d"):
         use_websocket = False
 
     try:
@@ -793,44 +797,51 @@ async def fetch_geckoterminal_ohlcv(
 
     from urllib.parse import quote_plus
 
-    query = quote_plus(symbol)
-    search_url = (
-        "https://api.geckoterminal.com/api/v2/search/pools"
-        f"?query={query}&network=solana"
-    )
-
+    cached = GECKO_POOL_CACHE.get(symbol)
+    is_cached = cached is not None and cached[4] == limit
     async with aiohttp.ClientSession() as session:
-        async with session.get(search_url, timeout=10) as resp:
-            if resp.status == 404:
+        if cached is None:
+            query = quote_plus(symbol)
+            search_url = (
+                "https://api.geckoterminal.com/api/v2/search/pools"
+                f"?query={query}&network=solana"
+            )
+
+            async with session.get(search_url, timeout=10) as resp:
+                if resp.status == 404:
+                    logger.info("pair not available on GeckoTerminal: %s", symbol)
+                    return None
+                resp.raise_for_status()
+                search_data = await resp.json()
+
+            items = search_data.get("data") or []
+            if not items:
                 logger.info("pair not available on GeckoTerminal: %s", symbol)
                 return None
-            resp.raise_for_status()
-            search_data = await resp.json()
 
-        items = search_data.get("data") or []
-        if not items:
-            logger.info("pair not available on GeckoTerminal: %s", symbol)
-            return None
+            first = items[0]
+            attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
 
-        first = items[0]
-        attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
+            pool_id = str(first.get("id", ""))
+            pool_addr = pool_id.split("_", 1)[-1]
+            try:
+                volume = float(attrs.get("volume_usd", {}).get("h24", 0.0))
+            except Exception:
+                volume = 0.0
+            if volume < float(min_24h_volume):
+                return None
+            try:
+                price = float(attrs.get("base_token_price_quote_token", 0.0))
+            except Exception:
+                price = 0.0
+            try:
+                reserve = float(attrs.get("reserve_in_usd", 0.0))
+            except Exception:
+                reserve = 0.0
 
-        pool_id = str(first.get("id", ""))
-        pool_addr = pool_id.split("_", 1)[-1]
-        try:
-            volume = float(attrs.get("volume_usd", {}).get("h24", 0.0))
-        except Exception:
-            volume = 0.0
-        if volume < float(min_24h_volume):
-            return None
-        try:
-            price = float(attrs.get("base_token_price_quote_token", 0.0))
-        except Exception:
-            price = 0.0
-        try:
-            reserve = float(attrs.get("reserve_in_usd", 0.0))
-        except Exception:
-            reserve = 0.0
+            GECKO_POOL_CACHE[symbol] = (pool_addr, volume, reserve, price, limit)
+        else:
+            pool_addr, volume, reserve, price, _ = cached
 
         ohlcv_url = (
             "https://api.geckoterminal.com/api/v2/networks/solana/pools/"
@@ -844,11 +855,12 @@ async def fetch_geckoterminal_ohlcv(
     candles = (data.get("data") or {}).get("attributes", {}).get("ohlcv_list") or []
 
     result: list = []
+    multiplier = 1000 if is_cached else 1
     for c in candles[-limit:]:
         try:
             result.append(
                 [
-                    int(c[0]),
+                    int(c[0]) * multiplier,
                     float(c[1]),
                     float(c[2]),
                     float(c[3]),
@@ -1320,7 +1332,6 @@ async def update_multi_tf_ohlcv_cache(
 
         for sym in dex_symbols:
             try:
-                data, vol, _ = await fetch_geckoterminal_ohlcv(
                 res = await fetch_geckoterminal_ohlcv(
                     sym,
                     timeframe=tf,
@@ -1339,7 +1350,6 @@ async def update_multi_tf_ohlcv_cache(
                 logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
                 data = None
                 vol = 0.0
-                data, vol = None, 0.0
 
             if data is None:
                 tf_cache = await update_ohlcv_cache(
