@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 import asyncio
 import time
+import logging
 
 import pandas as pd
 import numpy as np
@@ -27,12 +28,23 @@ CONFIG = _load_config(CONFIG_PATH)
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
+
+def _configure_logger(cfg: dict) -> None:
+    level_str = str(cfg.get("log_level", "INFO")).upper()
+    level = getattr(logging, level_str, logging.INFO)
+    logger.setLevel(level)
+
+
+_configure_logger(CONFIG)
+
 _ALL_REGIMES = [
     "trending",
     "sideways",
     "mean-reverting",
     "breakout",
     "volatile",
+    "bullish_trending",
+    "bearish_volatile",
     "unknown",
 ]
 
@@ -46,6 +58,54 @@ PATTERN_WEIGHTS = {
     "doji": ("sideways", 0.2),
     "ascending_triangle": ("breakout", 1.5),
 }
+
+
+def adaptive_thresholds(cfg: dict, df: pd.DataFrame | None, symbol: str | None) -> dict:
+    """Return a copy of ``cfg`` with thresholds scaled based on volatility.
+
+    The average ATR over ``df`` is compared to ``cfg["atr_baseline"]`` and
+    multipliers are applied to selected thresholds. When ``statsmodels`` is
+    available an Augmented Dickey-Fuller and simple autoregression test are used
+    to detect drift. When drift is present the RSI limits are widened slightly
+    to reduce false mean-reversion signals.
+    """
+
+    if df is None or df.empty:
+        return cfg
+
+    out = cfg.copy()
+    baseline = cfg.get("atr_baseline")
+    if baseline:
+        try:
+            atr = ta.volatility.average_true_range(
+                df["high"], df["low"], df["close"], window=cfg.get("indicator_window", 14)
+            )
+            avg_atr = float(atr.mean())
+            factor = avg_atr / float(baseline) if baseline else 1.0
+            out["adx_trending_min"] = cfg["adx_trending_min"] * factor
+            out["normalized_range_volatility_min"] = cfg[
+                "normalized_range_volatility_min"
+            ] * factor
+        except Exception:
+            pass
+
+    try:  # pragma: no cover - optional dependency
+        from statsmodels.tsa.stattools import adfuller
+        from statsmodels.tsa.ar_model import AutoReg
+
+        close = df["close"].dropna()
+        if len(close) >= 20:
+            pval = adfuller(close, regression="ct")[1]
+            ar_res = AutoReg(close, lags=1, old_names=False).fit()
+            slope = float(ar_res.params.get("close.L1", 0.0))
+            if pval > 0.1 or abs(slope) > 0.9:
+                adj = 5
+                out["rsi_mean_rev_min"] = max(0, cfg["rsi_mean_rev_min"] - adj)
+                out["rsi_mean_rev_max"] = min(100, cfg["rsi_mean_rev_max"] + adj)
+    except Exception:
+        pass
+
+    return out
 
 
 def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
@@ -66,6 +126,14 @@ def _probabilities(label: str, confidence: float | None = None) -> Dict[str, flo
     if confidence is None:
         confidence = 1.0 if label in probs else 0.0
     probs[label] = confidence
+    return probs
+
+
+def _normalize(probs: Dict[str, float]) -> Dict[str, float]:
+    """Return normalized probability mapping."""
+    total = sum(probs.values())
+    if total > 0:
+        probs = {k: v / total for k, v in probs.items()}
     return probs
 
 
@@ -120,6 +188,20 @@ def _classify_core(
     else:
         df["volume_zscore"] = np.nan
 
+    for col in (
+        "ema20",
+        "ema50",
+        "adx",
+        "rsi",
+        "atr",
+        "bb_width",
+        "volume_change",
+        "volume_zscore",
+        "normalized_range",
+    ):
+        if col in df:
+            df[col] = df[col].fillna(df[col].mean())
+
     volume_ma20 = (
         df["volume"].rolling(cfg["ma_window"]).mean()
         if len(df) >= cfg["ma_window"]
@@ -142,6 +224,25 @@ def _classify_core(
             volume_jump = True
 
     latest = df.iloc[-1]
+
+    logger.debug(
+        "Indicators - ADX: %.2f (trending>%.2f, sideways<%.2f), BB width: %.4f "
+        "(breakout<%.2f, sideways<%.2f), RSI: %.2f (mean_rev %d-%d), EMA dist: "
+        "%.4f (max %.4f), Normalized range: %.4f (volatile>%.2f)",
+        latest["adx"],
+        cfg["adx_trending_min"],
+        cfg["adx_sideways_max"],
+        latest["bb_width"],
+        cfg["bb_width_breakout_max"],
+        cfg["bb_width_sideways_max"],
+        latest["rsi"],
+        cfg["rsi_mean_rev_min"],
+        cfg["rsi_mean_rev_max"],
+        abs(latest["close"] - latest["ema20"]) / latest["close"],
+        cfg["ema_distance_mean_rev_max"],
+        latest["normalized_range"],
+        cfg["normalized_range_volatility_min"],
+    )
 
     trending = latest["adx"] > cfg["adx_trending_min"] and latest["ema20"] > latest["ema50"]
 
@@ -225,7 +326,12 @@ def _classify_all(
             continue
         scores[target] = scores.get(target, 0.0) + weight * float(strength)
 
+    probs = {r: 0.0 for r in _ALL_REGIMES}
     if scores:
+        total = sum(scores.values())
+        if total > 0:
+            for r, sc in scores.items():
+                probs[r] = sc / total
         regime = max(scores, key=scores.get)
 
     rule_probs = _probabilities(regime)
@@ -240,6 +346,20 @@ def _classify_all(
             log_patterns(ml_label, patterns)
             return ml_label, ml_probs, patterns
     else:
+    latest = df.iloc[-1]
+    rsi = float(latest.get("rsi", 50))
+    if scores.get("trending", 0.0) > 0.5 and rsi > 50:
+        probs["bullish_trending"] = scores.get("trending", 0.0)
+    if scores.get("volatile", 0.0) > 0.5 and rsi < 50:
+        probs["bearish_volatile"] = scores.get("volatile", 0.0)
+
+    probs = _normalize(probs)
+
+    if regime == "unknown":
+        if cfg.get("use_ml_regime_classifier", False) and len(df) >= ml_min_bars:
+            label, conf = _ml_fallback(df)
+            log_patterns(label, patterns)
+            return label, _normalize(_probabilities(label, conf)), patterns
         if len(df) >= ml_min_bars:
             logger.info("Skipping ML fallback \u2014 ML disabled")
         else:
@@ -257,6 +377,10 @@ def _classify_all(
 
     log_patterns(regime, patterns)
     return regime, final_probs, patterns
+        return regime, _normalize(_probabilities(regime, 0.0)), patterns
+
+    log_patterns(regime, patterns)
+    return regime, probs, patterns
 
 
 def classify_regime(
@@ -265,6 +389,7 @@ def classify_regime(
     *,
     df_map: Optional[Dict[str, pd.DataFrame]] = None,
     config_path: Optional[str] = None,
+    symbol: Optional[str] = None,
 ) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Classify market regime.
 
@@ -279,6 +404,8 @@ def classify_regime(
     config_path : Optional[str], default None
         Optional path to override the default configuration. Primarily used for
         testing.
+    symbol : Optional[str], default None
+        Symbol name used for adaptive threshold calculations.
 
     Returns
     -------
@@ -305,6 +432,8 @@ def classify_regime(
     """
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
+    _configure_logger(cfg)
+    cfg = adaptive_thresholds(cfg, df, symbol)
 
     result = _classify_all(df, higher_df, cfg, df_map=df_map)
 
@@ -320,10 +449,13 @@ def classify_regime_with_patterns(
     higher_df: Optional[pd.DataFrame] = None,
     *,
     config_path: Optional[str] = None,
+    symbol: Optional[str] = None,
 ) -> Tuple[str, Dict[str, float]]:
     """Return the regime label and detected pattern scores."""
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
+    _configure_logger(cfg)
+    cfg = adaptive_thresholds(cfg, df, symbol)
     label, _, patterns = _classify_all(df, higher_df, cfg)
     return label, patterns
 
@@ -334,6 +466,7 @@ async def classify_regime_async(
     *,
     df_map: Optional[Dict[str, pd.DataFrame]] = None,
     config_path: Optional[str] = None,
+    symbol: Optional[str] = None,
 ) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Asynchronous wrapper around :func:`classify_regime`."""
     return await asyncio.to_thread(
@@ -342,6 +475,7 @@ async def classify_regime_async(
         higher_df,
         df_map=df_map,
         config_path=config_path,
+        symbol=symbol,
     )
 
 
@@ -350,10 +484,15 @@ async def classify_regime_with_patterns_async(
     higher_df: Optional[pd.DataFrame] = None,
     *,
     config_path: Optional[str] = None,
+    symbol: Optional[str] = None,
 ) -> Tuple[str, set[str]]:
     """Async wrapper around :func:`classify_regime_with_patterns`."""
     return await asyncio.to_thread(
-        classify_regime_with_patterns, df, higher_df, config_path=config_path
+        classify_regime_with_patterns,
+        df,
+        higher_df,
+        config_path=config_path,
+        symbol=symbol,
     )
 # Caching utilities -----------------------------------------------------
 
@@ -383,7 +522,9 @@ async def classify_regime_cached(
         return label, set()
 
     start = time.perf_counter() if profile else 0.0
-    label, info = await classify_regime_async(df, higher_df, config_path=config_path)
+    label, info = await classify_regime_async(
+        df, higher_df, config_path=config_path, symbol=symbol
+    )
     regime_cache[key] = label
     _regime_cache_ts[key] = ts
     if profile:
