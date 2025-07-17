@@ -473,6 +473,14 @@ async def fetch_ohlcv_async(
                         with contextlib.suppress(Exception):
                             await asyncio.to_thread(exchange.close)
                 raise
+            if ws_limit and len(data) < ws_limit and force_websocket_history:
+                logger.warning(
+                    "WebSocket OHLCV for %s %s returned %d of %d candles; disable force_websocket_history to allow REST fallback",
+                    symbol,
+                    timeframe,
+                    len(data),
+                    ws_limit,
+                )
             if (
                 ws_limit
                 and len(data) < ws_limit
