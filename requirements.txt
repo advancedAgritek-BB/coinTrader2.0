@@ -37,3 +37,4 @@ solders
 pythclient
 redis
 base58
+statsmodels

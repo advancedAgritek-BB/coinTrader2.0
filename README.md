@@ -54,6 +54,18 @@ By default the ML model only runs when at least **200** candles are available
 (tunable via `ml_min_bars`). You can replace that module with your own encoded
 model if desired.
 
+The regime configuration exposes additional tuning parameters:
+
+* **adx_trending_min** – ADX threshold for the trending regime.
+* **breakout_volume_mult** – volume multiplier for breakout detection.
+* **score_weights** – weighting factors for regime probabilities when patterns
+  are detected.
+* **pattern_min_conf** – minimum pattern confidence required to apply a score
+  weight.
+* **ml_blend_weight** – blend ratio for combining ML and indicator scores.
+* **bull_fng** – Fear & Greed index level considered bullish.
+* **atr_baseline** – ATR level corresponding to a 1× score factor.
+
 ## Fast-Path Checks
 
 The router performs quick checks for exceptionally strong setups before running
