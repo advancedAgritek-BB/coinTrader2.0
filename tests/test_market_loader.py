@@ -1449,3 +1449,37 @@ def test_dex_fetch_fallback_kraken(monkeypatch):
     )
     assert "FOO/USDC" in cache["1h"]
     assert calls["kraken"] == 1
+
+
+def test_gecko_volume_priority(monkeypatch):
+    from crypto_bot.utils import market_loader
+    from collections import deque
+
+    async def fake_gecko(*_a, **_k):
+        return [
+            [0, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1, 1],
+            [2, 1, 1, 1, 1, 10],
+        ], 100.0, 0.0
+
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
+    ex = DummyMultiTFExchange()
+    cache = {}
+    q = deque()
+    config = {
+        "timeframes": ["1h"],
+        "bounce_scalper": {"vol_zscore_threshold": 1.0},
+    }
+
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            cache,
+            ["FOO/USDC"],
+            config,
+            limit=3,
+            priority_queue=q,
+        )
+    )
+    assert "FOO/USDC" in cache["1h"]
+    assert list(q) == ["FOO/USDC"]
