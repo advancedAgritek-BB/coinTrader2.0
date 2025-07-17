@@ -1238,6 +1238,7 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
     assert res is None
     assert any("pair not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
+    assert any("token not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
 
 
 def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
