@@ -268,13 +268,13 @@ symbol_score_weights:
 * **solana_scanner.gecko_search** – query GeckoTerminal to verify volume for new Solana tokens.
 
 ### Risk Parameters
-* **risk** – default stop loss, take profit and drawdown limits.
+* **risk** – default stop loss, take profit and drawdown limits. `min_volume` is set to `0.1` to filter thin markets.
 * **trade_size_pct** – percent of capital used per trade.
 * **max_open_trades** – maximum simultaneous open trades.
 * **max_slippage_pct** – slippage tolerance for orders.
 * **liquidity_check**/**liquidity_depth** – verify order book depth.
 * **weight_liquidity** – scoring weight for available pool liquidity on Solana pairs.
-* **volatility_filter** - skips trading when ATR is too low or funding exceeds `max_funding_rate`.
+* **volatility_filter** - skips trading when ATR is too low or funding exceeds `max_funding_rate`. The minimum ATR percent is `0.0001`.
 * **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment to avoid bearish markets.
 * **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
 * **mempool_monitor** – pause or reprice when Solana fees spike.
@@ -336,7 +336,7 @@ score, direction, atr = breakout_bot.generate_signal(lower_df, cfg, higher_df)
 size = risk_manager.position_size(score, balance, lower_df, atr=atr)
 ```
 * **ml_signal_model**/**signal_weight_optimizer** – blend strategy scores with machine-learning predictions.
-* **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade.
+* **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade. `min_confidence_score` and `signal_fusion.min_confidence` default to `0.05`.
 * **regime_timeframes**/**regime_return_period** – windows used for regime detection.
 * **twap_enabled**, **twap_slices**, **twap_interval_seconds** – settings for time-weighted order execution.
 * **optimization** – periodic parameter optimisation.
@@ -344,7 +344,7 @@ size = risk_manager.position_size(score, balance, lower_df, atr=atr)
 * **arbitrage_enabled** – enable cross-exchange arbitrage features.
 * **scoring_weights** - weighting factors for regime confidence, symbol score and volume metrics.
 * **signal_fusion** - combine scores from multiple strategies via a `fusion_method`.
-* **strategy_router** - maps market regimes to lists of strategy names.
+* **strategy_router** - maps market regimes to lists of strategy names. Each regime also accepts a `<regime>_timeframe` key (e.g. `trending_timeframe: 1h`, `volatile_timeframe: 1m`).
 * **mode_threshold**/**mode_degrade_window** - degrade to manual mode when auto selection underperforms.
 * **meta_selector**/**rl_selector** – experimental strategy routers.
 * **bandit_router** – Thompson sampling router that favors historically profitable strategies.
@@ -396,8 +396,8 @@ below its 20-bar median, reducing trades during ranging periods and improving
 the win rate.
 
 ### Data and Logging
-* **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
-* **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options.
+* **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis. Default `timeframe` is `15m` and `timeframes` include `1m`, `5m`, `15m`, `1h`, and `4h`.
+* **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options. The snapshot limit defaults to `500`.
 * **loop_interval_minutes** – delay between trading cycles.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
 * **max_parallel** – number of markets processed concurrently.
@@ -553,13 +553,13 @@ weight_liquidity: 0.0        # symbol score weight for pool liquidity
 twap_enabled: false          # split large orders into slices
 twap_slices: 4               # number of slices when TWAP is enabled
 twap_interval_seconds: 10    # delay between TWAP slices
-timeframe: 1h                # candles for regime detection
+timeframe: 15m               # candles for regime detection
 scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
 loop_interval_minutes: 0.5   # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
 max_ws_limit: 50             # skip WebSocket when request exceeds this
 ohlcv_timeout: 120            # request timeout for OHLCV fetches
-max_concurrent_ohlcv: 50     # limit simultaneous OHLCV fetches
+max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
 metrics:
   enabled: true              # write cycle statistics to metrics.csv
   file: crypto_bot/logs/metrics.csv
