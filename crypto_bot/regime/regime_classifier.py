@@ -209,11 +209,6 @@ def _classify_core(
         if len(df) >= cfg["ma_window"]
         else pd.Series(np.nan, index=df.index)
     )
-    atr_ma20 = (
-        df["atr"].rolling(cfg["ma_window"]).mean()
-        if len(df) >= cfg["ma_window"]
-        else pd.Series(np.nan, index=df.index)
-    )
 
     volume_jump = False
     if len(df) > 1:
@@ -226,9 +221,6 @@ def _classify_core(
 
     latest = df.iloc[-1]
 
-    trending = (
-        latest["adx"] > cfg["adx_trending_min"] and latest["ema20"] > latest["ema50"]
-    )
     logger.debug(
         "Indicators - ADX: %.2f (trending>%.2f, sideways<%.2f), BB width: %.4f "
         "(breakout<%.2f, sideways<%.2f), RSI: %.2f (mean_rev %d-%d), EMA dist: "
