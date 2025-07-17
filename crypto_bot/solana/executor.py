@@ -9,20 +9,20 @@ from .watcher import NewPoolEvent
 
 
 async def snipe(event: NewPoolEvent, score: float, cfg: Mapping[str, object]) -> Dict:
-    """Execute a snipe trade for ``event`` using :func:`solana_trading.sniper_trade`."""
+    """Execute a snipe trade for ``event`` using :func:`crypto_bot.solana_trading.sniper_trade`."""
 
-    from solana_trading import sniper_trade
+    from crypto_bot.solana_trading import sniper_trade
 
-    details = {
-        "pool": event.pool_address,
-        "mint": event.token_mint,
-        "creator": event.creator,
-        "liquidity": event.liquidity,
-        "tx_count": event.tx_count,
-        "freeze_authority": event.freeze_authority,
-        "mint_authority": event.mint_authority,
-        "timestamp": event.timestamp,
-        "score": score,
-    }
+    wallet = str(cfg.get("wallet_address", ""))
+    base_token = str(cfg.get("base_token", "USDC"))
+    amount = float(cfg.get("amount", 0))
 
-    return await sniper_trade(details, cfg)
+    return await sniper_trade(
+        wallet,
+        base_token,
+        event.token_mint,
+        amount,
+        dry_run=bool(cfg.get("dry_run", True)),
+        slippage_bps=int(cfg.get("slippage_bps", 50)),
+        notifier=cfg.get("notifier"),
+    )
