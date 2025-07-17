@@ -1090,13 +1090,15 @@ and caps the result between 0 and 1.
 
 ## Development Setup
 
-1. Install the Python dependencies:
+Create and activate a virtual environment, then install the Python dependencies:
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-2. Run the test suite to verify your environment:
+Run the test suite to verify your environment:
 
 ```bash
 pytest -q
@@ -1105,7 +1107,7 @@ pytest -q
 ## Testing
 
 The repository includes an automated test suite. Some tests rely on optional
-packages such as `rich` and `pandas`.  Lightweight stubs allow the suite to run
+packages such as `numpy`, `pandas`, and `ccxt`.  Lightweight stubs allow the suite to run
 in very small environments, but the **full** set of tests requires the
 dependencies listed in `requirements.txt`.
 
