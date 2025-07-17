@@ -120,6 +120,7 @@ def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
     except Exception:
         return "unknown", 0.0
 
+
 def _probabilities(label: str, confidence: float | None = None) -> Dict[str, float]:
     """Return a probability mapping for all regimes."""
     probs = {r: 0.0 for r in _ALL_REGIMES}
@@ -217,14 +218,16 @@ def _classify_core(
     if len(df) > 1:
         vol_change = df["volume_change"].iloc[-1]
         vol_z = df["volume_zscore"].iloc[-1]
-        if (
-            (not np.isnan(vol_change) and vol_change > 1.0)
-            or (not np.isnan(vol_z) and vol_z > 3)
+        if (not np.isnan(vol_change) and vol_change > 1.0) or (
+            not np.isnan(vol_z) and vol_z > 3
         ):
             volume_jump = True
 
     latest = df.iloc[-1]
 
+    trending = (
+        latest["adx"] > cfg["adx_trending_min"] and latest["ema20"] > latest["ema50"]
+    )
     logger.debug(
         "Indicators - ADX: %.2f (trending>%.2f, sideways<%.2f), BB width: %.4f "
         "(breakout<%.2f, sideways<%.2f), RSI: %.2f (mean_rev %d-%d), EMA dist: "
@@ -312,7 +315,7 @@ def _classify_all(
         return "unknown", {"unknown": 0.0}, {}
 
     regime = _classify_core(df, cfg, higher_df)
-    patterns = detect_patterns(df)
+    patterns = detect_patterns(df, min_conf=cfg.get("pattern_min_conf", 0.0))
 
     # Score regimes based on indicator result and detected patterns
     scores: Dict[str, float] = {}
@@ -363,6 +366,10 @@ def _classify_all(
         if len(df) >= ml_min_bars:
             logger.info("Skipping ML fallback \u2014 ML disabled")
         else:
+            logger.info(
+                "Skipping ML fallback \u2014 insufficient data (%d rows)", len(df)
+            )
+        return regime, _probabilities(regime, 0.0), patterns
             logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
 
     if ml_label != "unknown" and use_ml and len(df) >= ml_min_bars:
@@ -494,6 +501,8 @@ async def classify_regime_with_patterns_async(
         config_path=config_path,
         symbol=symbol,
     )
+
+
 # Caching utilities -----------------------------------------------------
 
 regime_cache: Dict[tuple[str, str], str] = {}
@@ -541,5 +550,3 @@ def clear_regime_cache(symbol: str, timeframe: str) -> None:
     """Remove cached regime entry for ``symbol`` and ``timeframe``."""
     regime_cache.pop((symbol, timeframe), None)
     _regime_cache_ts.pop((symbol, timeframe), None)
-
-
