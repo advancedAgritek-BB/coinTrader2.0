@@ -1143,22 +1143,17 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
 
     pool_data = {
         "data": [
-            {"id": "pool1", "attributes": {"volume_usd": 123}},
+            {"id": "solana_pool1", "attributes": {"volume_usd": {"h24": 123}}},
         ]
     }
     ohlcv_data = {
-        "data": [
-            {
-                "attributes": {
-                    "timestamp": 1,
-                    "open": 1,
-                    "high": 2,
-                    "low": 0.5,
-                    "close": 1.5,
-                    "volume": 10,
-                }
+        "data": {
+            "attributes": {
+                "ohlcv_list": [
+                    [1, 1, 2, 0.5, 1.5, 10],
+                ]
             }
-        ]
+        }
     }
 
     class PoolResp:
@@ -1198,9 +1193,10 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
 
     monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
 
-    res = asyncio.run(
+    res, vol = asyncio.run(
         market_loader.fetch_geckoterminal_ohlcv("FOO/USDC", timeframe="1h", limit=1)
     )
+    assert vol == 123
     assert res == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
 
 
@@ -1238,7 +1234,6 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
     assert res is None
     assert any("pair not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
-    assert any("token not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
 
 
 def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
@@ -1248,6 +1243,10 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
         return None
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
+    monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", lambda *a, **k: None)
+    async def fake_ohlcv(*a, **k):
+        return [[1, 1, 1, 1, 1, 1]]
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_ohlcv)
 
     ex = DummyMultiTFExchange()
     cache = {}
@@ -1261,7 +1260,7 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
             limit=1,
         )
     )
-    assert "FOO/USDC" not in cache["1h"]
+    assert "FOO/USDC" in cache["1h"]
 
 
 def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
@@ -1271,6 +1270,10 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
         return [[0, 1, 2, 3, 4, 5]], 50.0
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
+    monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", lambda *a, **k: None)
+    async def fake_ohlcv2(*a, **k):
+        return [[1, 1, 1, 1, 1, 1]]
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_ohlcv2)
 
     ex = DummyMultiTFExchange()
     cache = {}
@@ -1286,7 +1289,7 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
             min_volume_usd=100,
         )
     )
-    assert "BAR/USDC" not in cache["1h"]
+    assert "BAR/USDC" in cache.get("1h", {})
 
     cache = asyncio.run(
         update_multi_tf_ohlcv_cache(
@@ -1299,3 +1302,75 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
         )
     )
     assert "BAR/USDC" in cache["1h"]
+
+
+def test_dex_fetch_fallback_coingecko(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    async def fail_gecko(*_a, **_k):
+        raise Exception("boom")
+
+    async def fake_coingecko(*_a, **_k):
+        return [[0, 1, 2, 3, 4, 5]]
+
+    calls = {"kraken": 0}
+
+    async def fake_fetch(ex, *a, **k):
+        calls["kraken"] += 1
+        return [[9, 9, 9, 9, 9, 9]]
+
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
+    monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", fake_coingecko)
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+
+    ex = DummyMultiTFExchange()
+    cache = {}
+    config = {"timeframes": ["1h"]}
+
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USDC"],
+            config,
+            limit=1,
+        )
+    )
+    assert "BTC/USDC" in cache["1h"]
+    assert calls["kraken"] == 0
+
+
+def test_dex_fetch_fallback_kraken(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    async def fail_gecko(*_a, **_k):
+        return None
+
+    async def fail_coingecko(*_a, **_k):
+        return None
+
+    calls = {"kraken": 0}
+
+    async def fake_fetch(ex, *a, **k):
+        calls["kraken"] += 1
+        return [[8, 8, 8, 8, 8, 8]]
+
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
+    monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", fail_coingecko)
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+
+    ex = DummyMultiTFExchange()
+    cache = {}
+    config = {"timeframes": ["1h"]}
+
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            cache,
+            ["FOO/USDC"],
+            config,
+            limit=1,
+        )
+    )
+    assert "FOO/USDC" in cache["1h"]
+    assert calls["kraken"] == 1
