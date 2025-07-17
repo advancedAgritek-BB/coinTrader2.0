@@ -66,6 +66,7 @@ class SolanaScannerConfig(BaseModel):
     api_keys: SolanaScannerApiKeys = Field(default_factory=SolanaScannerApiKeys)
     min_volume_usd: float = 0.0
     max_tokens_per_scan: int = 20
+    gecko_search: bool = True
 
     class Config:
         extra = "forbid"

@@ -27,6 +27,7 @@ def test_solana_scanner_defaults():
     assert cfg.interval_minutes == 5
     assert cfg.api_keys.moralis == "YOUR_KEY"
     assert cfg.max_tokens_per_scan == 20
+    assert cfg.gecko_search is True
 
 
 def test_solana_scanner_invalid_type():
