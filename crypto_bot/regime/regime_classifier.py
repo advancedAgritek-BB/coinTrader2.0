@@ -56,7 +56,8 @@ PATTERN_WEIGHTS = {
     "hammer": ("mean-reverting", 0.5),
     "shooting_star": ("mean-reverting", 0.5),
     "doji": ("sideways", 0.2),
-    "ascending_triangle": ("breakout", 1.5),
+    "bullish_engulfing": ("mean-reverting", 1.2),
+    "ascending_triangle": ("breakout", 2.0),
 }
 
 
@@ -314,20 +315,24 @@ def _classify_all(
     if df is None:
         return "unknown", {"unknown": 0.0}, {}
 
+    patterns = detect_patterns(df)
+    pattern_min = float(cfg.get("pattern_min_conf", 0.0))
     regime = _classify_core(df, cfg, higher_df)
     patterns = detect_patterns(df, min_conf=cfg.get("pattern_min_conf", 0.0))
 
     # Score regimes based on indicator result and detected patterns
     scores: Dict[str, float] = {}
-    if regime != "unknown":
-        scores[regime] = 1.0
     for name, strength in patterns.items():
+        if strength < pattern_min:
+            continue
         target, weight = PATTERN_WEIGHTS.get(name, (None, 0.0))
         if target is None:
             continue
-        if regime == "unknown" and name not in {"breakout", "ascending_triangle"}:
-            continue
         scores[target] = scores.get(target, 0.0) + weight * float(strength)
+
+    regime = _classify_core(df, cfg, higher_df)
+    if regime != "unknown":
+        scores[regime] = scores.get(regime, 0.0) + 1.0
 
     probs = {r: 0.0 for r in _ALL_REGIMES}
     if scores:
@@ -336,6 +341,10 @@ def _classify_all(
             for r, sc in scores.items():
                 probs[r] = sc / total
         regime = max(scores, key=scores.get)
+        total = sum(scores.values())
+        probabilities = {r: scores.get(r, 0.0) / total for r in _ALL_REGIMES}
+        log_patterns(regime, patterns)
+        return regime, probabilities, patterns
 
     rule_probs = _probabilities(regime)
 
