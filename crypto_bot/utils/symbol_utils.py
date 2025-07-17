@@ -39,6 +39,14 @@ async def get_filtered_symbols(exchange, config) -> list:
         return _cached_symbols
 
     symbols = config.get("symbols", [config.get("symbol")])
+    filtered_syms: list[str] = []
+    for sym in symbols:
+        if isinstance(sym, str) and sym.upper().endswith("/USDC"):
+            base = sym.split("/", 1)[0]
+            if not _is_valid_base_token(base):
+                continue
+        filtered_syms.append(sym)
+    symbols = filtered_syms
 
     cleaned_symbols = []
     for sym in symbols:
