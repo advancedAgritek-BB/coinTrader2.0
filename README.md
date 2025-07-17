@@ -222,7 +222,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **exchange** – target CEX (`coinbase` or `kraken`).
 * **execution_mode** – choose `dry_run` for simulation or `live` for real orders.
 * **use_websocket** – enable WebSocket data via `ccxt.pro`.
-* **force_websocket_history** – disable REST fallbacks when streaming.
+* **force_websocket_history** – disable REST fallbacks when streaming (default: false).
 * **max_ws_limit** – skip WebSocket OHLCV when `limit` exceeds this value.
 * **exchange_market_types** – market types to trade (spot, margin, futures).
 * **preferred_chain** – chain used for on-chain swaps (e.g. `solana`).
