@@ -32,6 +32,13 @@ from crypto_bot.utils import zscore
 from crypto_bot.utils.telemetry import telemetry
 
 
+def _fn_name(fn: callable) -> str:
+    """Return the underlying function name even for functools.partial."""
+    if isinstance(fn, functools.partial):
+        return getattr(fn.func, "__name__", str(fn))
+    return getattr(fn, "__name__", str(fn))
+
+
 analysis_logger = setup_logger("strategy_rank", LOG_DIR / "strategy_rank.log")
 
 
@@ -59,7 +66,7 @@ async def run_candidates(
     results: List[Tuple[float, callable, float, str]] = []
     for strat, (score, direction, _atr) in zip(strategy_list, evals):
         try:
-            edge = perf.edge(strat.__name__, symbol, cfg.get("drawdown_penalty_coef", 0.0))
+            edge = perf.edge(_fn_name(strat), symbol, cfg.get("drawdown_penalty_coef", 0.0))
         except Exception:  # pragma: no cover - if perf fails use neutral edge
             edge = 1.0
         rank = score * edge
@@ -264,7 +271,7 @@ async def analyze_symbol(
             score = float(res.get("score", 0.0))
             direction = res.get("direction", "none")
             if len(strategies) > 1:
-                remaining = [s for s in strategies if getattr(s, "__name__", "") != name]
+                remaining = [s for s in strategies if _fn_name(s) != name]
                 if remaining:
                     second = evaluate_strategies(remaining, df, cfg)
                     second_score = float(second.get("score", 0.0))
@@ -284,7 +291,7 @@ async def analyze_symbol(
             ranked = await run_candidates(df, candidates, symbol, cfg, regime)
             if ranked:
                 best_fn, raw_score, raw_dir = ranked[0]
-                name = best_fn.__name__
+                name = _fn_name(best_fn)
                 score = raw_score
                 direction = raw_dir if raw_score >= min_conf else "none"
                 if len(ranked) > 1:
@@ -292,7 +299,7 @@ async def analyze_symbol(
                     analysis_logger.info(
                         "%s second %s %.4f %s",
                         symbol,
-                        second[0].__name__,
+                        _fn_name(second[0]),
                         second[1],
                         second[2],
                     )
