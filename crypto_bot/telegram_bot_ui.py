@@ -12,6 +12,7 @@ from typing import Dict
 import schedule
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -195,7 +196,11 @@ class TelegramBotUI:
         reply_markup: InlineKeyboardMarkup | None = None,
     ) -> None:
         if getattr(update, "callback_query", None):
-            await update.callback_query.message.edit_text(text, reply_markup=reply_markup)
+            try:
+                await update.callback_query.message.edit_text(text, reply_markup=reply_markup)
+            except BadRequest as exc:
+                if "Message is not modified" not in str(exc):
+                    raise
         else:
             await update.message.reply_text(text, reply_markup=reply_markup)
 
@@ -246,7 +251,6 @@ class TelegramBotUI:
         await update.message.reply_text(text)
         self.state["running"] = True
         await self._reply(update, "Trading started", reply_markup=_back_to_menu_markup())
-        await self._reply(update, "Trading started")
         await self.menu_cmd(update, context)
 
     async def stop_cmd(
@@ -445,7 +449,6 @@ class TelegramBotUI:
         else:
             text = "No trades found"
         await self._reply(update, text, reply_markup=_back_to_menu_markup())
-        await self._reply(update, text)
 
     async def show_config(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "config"):
