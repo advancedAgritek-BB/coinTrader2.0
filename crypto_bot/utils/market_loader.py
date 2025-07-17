@@ -13,7 +13,6 @@ import warnings
 
 from .telegram import TelegramNotifier
 from .logger import LOG_DIR, setup_logger
-from pathlib import Path
 
 
 _last_snapshot_time = 0
