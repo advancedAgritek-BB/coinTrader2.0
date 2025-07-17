@@ -1226,6 +1226,11 @@ async def _main_impl() -> TelegramNotifier:
 
     exchange, ws_client = get_exchange(config)
 
+    ping_interval = int(config.get("ws_ping_interval", 0) or 0)
+    if ping_interval > 0 and hasattr(exchange, "ping"):
+        task = asyncio.create_task(_ws_ping_loop(exchange, ping_interval))
+        WS_PING_TASKS.add(task)
+
     if not hasattr(exchange, "load_markets"):
         logger.error(
             "The installed ccxt package is missing or a local stub is in use."
