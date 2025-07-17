@@ -33,6 +33,8 @@ _ALL_REGIMES = [
     "mean-reverting",
     "breakout",
     "volatile",
+    "bullish_trending",
+    "bearish_volatile",
     "unknown",
 ]
 
@@ -114,6 +116,14 @@ def _probabilities(label: str, confidence: float | None = None) -> Dict[str, flo
     if confidence is None:
         confidence = 1.0 if label in probs else 0.0
     probs[label] = confidence
+    return probs
+
+
+def _normalize(probs: Dict[str, float]) -> Dict[str, float]:
+    """Return normalized probability mapping."""
+    total = sum(probs.values())
+    if total > 0:
+        probs = {k: v / total for k, v in probs.items()}
     return probs
 
 
@@ -273,22 +283,36 @@ def _classify_all(
             continue
         scores[target] = scores.get(target, 0.0) + weight * float(strength)
 
+    probs = {r: 0.0 for r in _ALL_REGIMES}
     if scores:
+        total = sum(scores.values())
+        if total > 0:
+            for r, sc in scores.items():
+                probs[r] = sc / total
         regime = max(scores, key=scores.get)
+
+    latest = df.iloc[-1]
+    rsi = float(latest.get("rsi", 50))
+    if scores.get("trending", 0.0) > 0.5 and rsi > 50:
+        probs["bullish_trending"] = scores.get("trending", 0.0)
+    if scores.get("volatile", 0.0) > 0.5 and rsi < 50:
+        probs["bearish_volatile"] = scores.get("volatile", 0.0)
+
+    probs = _normalize(probs)
 
     if regime == "unknown":
         if cfg.get("use_ml_regime_classifier", False) and len(df) >= ml_min_bars:
             label, conf = _ml_fallback(df)
             log_patterns(label, patterns)
-            return label, _probabilities(label, conf), patterns
+            return label, _normalize(_probabilities(label, conf)), patterns
         if len(df) >= ml_min_bars:
             logger.info("Skipping ML fallback \u2014 ML disabled")
         else:
             logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
-        return regime, _probabilities(regime, 0.0), patterns
+        return regime, _normalize(_probabilities(regime, 0.0)), patterns
 
     log_patterns(regime, patterns)
-    return regime, _probabilities(regime), patterns
+    return regime, probs, patterns
 
 
 def classify_regime(
