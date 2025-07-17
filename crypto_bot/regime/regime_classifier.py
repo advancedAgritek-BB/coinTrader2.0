@@ -424,26 +424,17 @@ def classify_regime(
 
     Returns
     -------
-    Tuple[str, object]
-        When sufficient history is available the function returns ``(label,
-        pattern_scores)`` where ``pattern_scores`` is a ``dict`` mapping pattern
-        names to confidence values.  If insufficient history triggers the ML
-        fallback the return value is ``(label, confidence)`` where ``confidence``
-        is a float between 0 and 1.
-        patterns)`` where ``patterns`` is a mapping of pattern names to
-        confidence scores. If insufficient history triggers the ML fallback the
-        return value is ``(label, confidence)`` where ``confidence`` is a float
-        between 0 and 1.
-        patterns)`` where ``patterns`` is a ``dict`` mapping formation name to
-        strength. If insufficient history triggers the ML fallback the return
-        value is ``(label, confidence)`` where ``confidence`` is a float between
-        0 and 1.
-    Tuple[str, object] | Dict[str, str] | Tuple[str, str]
-        When a single dataframe is supplied the function behaves like before
-        and returns ``(label, patterns)`` or ``(label, confidence)``. When a
-        mapping of dataframes is provided the regimes for each timeframe are
-        returned either as a dictionary or, if exactly two timeframes are
-        supplied, as a tuple respecting the insertion order of ``df_map``.
+    Tuple[str, Dict[str, float]] or Tuple[str, float]
+        If ``df_map`` is ``None`` the function returns ``(label, patterns)``
+        when enough history is available, where ``patterns`` maps pattern
+        names to confidence values.  When the ML fallback is used due to
+        insufficient history it returns ``(label, confidence)`` with
+        ``confidence`` in ``[0, 1]``.
+    Dict[str, str] or Tuple[str, str]
+        When ``df_map`` is provided the regime for each timeframe is returned.
+        If exactly two timeframes are supplied the result is a tuple preserving
+        ``df_map`` insertion order; otherwise a ``{timeframe: label}`` mapping
+        is produced.
     """
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
