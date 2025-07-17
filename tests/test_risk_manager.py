@@ -448,3 +448,44 @@ def test_ev_tracker_logs_missing_file_once(tmp_path, monkeypatch, caplog):
 
     messages = [r.getMessage() for r in caplog.records if "Strategy stats file" in r.getMessage()]
     assert len(messages) == 1
+
+
+def test_allow_trade_rejects_on_pair_drawdown():
+    data = {
+        "open": [100] * 19 + [80],
+        "high": [100] * 19 + [80],
+        "low": [100] * 19 + [80],
+        "close": [100] * 19 + [80],
+        "volume": [10] * 20,
+    }
+    df = pd.DataFrame(data)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        max_pair_drawdown=10,
+        pair_drawdown_lookback=20,
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(df)
+    assert not allowed
+    assert "drawdown" in reason.lower()
+
+
+def test_allow_trade_allows_within_pair_drawdown():
+    data = {
+        "open": [100] * 19 + [95],
+        "high": [100] * 19 + [95],
+        "low": [100] * 19 + [95],
+        "close": [100] * 19 + [95],
+        "volume": [10] * 20,
+    }
+    df = pd.DataFrame(data)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        max_pair_drawdown=10,
+        pair_drawdown_lookback=20,
+    )
+    allowed, _ = RiskManager(cfg).allow_trade(df)
+    assert allowed
