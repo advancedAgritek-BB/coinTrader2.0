@@ -1,4 +1,6 @@
+import asyncio
 import pandas as pd
+import crypto_bot.utils.market_analyzer as ma
 from crypto_bot.utils.strategy_utils import compute_strategy_weights, compute_drawdown
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 
@@ -30,3 +32,24 @@ def test_compute_drawdown_basic():
     df = pd.DataFrame({"close": [10, 12, 11, 15, 14]})
     dd = compute_drawdown(df, lookback=5)
     assert dd == -1
+
+
+def test_run_candidates_weighting(monkeypatch):
+    df = pd.DataFrame({"close": [1, 2]})
+
+    def a(df, cfg=None):
+        return 0.5, "long"
+
+    def b(df, cfg=None):
+        return 0.5, "long"
+
+    async def fake_eval(strats, df_, cfg_, max_parallel=4):
+        return [(0.5, "long", None) for _ in strats]
+
+    monkeypatch.setattr(ma, "evaluate_async", fake_eval)
+    monkeypatch.setattr(ma.perf, "edge", lambda name, sym, coef=0.0: 1.0)
+    monkeypatch.setattr(ma, "compute_strategy_weights", lambda: {"a": 0.1, "b": 0.9})
+
+    res = asyncio.run(ma.run_candidates(df, [a, b], "AAA", {}, None))
+    names = [fn.__name__ for fn, _s, _d in res]
+    assert names == ["b", "a"]
