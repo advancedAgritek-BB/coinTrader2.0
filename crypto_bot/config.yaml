@@ -328,6 +328,7 @@ symbol_filter:
   ticker_retry_attempts: 5
   log_ticker_exceptions: true
 symbol_refresh_minutes: 1
+skip_symbol_filters: false
 symbol_score_weights:
   age: 0.02
   change: 0.4

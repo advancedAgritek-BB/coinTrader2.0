@@ -246,6 +246,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **adaptive_scan.max_factor** – cap multiplier for batch size and scan rate.
 * **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
 * **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
+* **skip_symbol_filters** – bypass the volume and spread checks and use the provided symbol list as-is.
 * **symbol_score_weights** – weights for volume, spread, change, age and liquidity. The weights must sum to a positive value.
 * **uncached_volume_multiplier** – extra volume factor applied when a pair is missing from `cache/liquid_pairs.json`.
 * **min_symbol_age_days** – skip newly listed pairs.
@@ -753,7 +754,8 @@ in trading rotations.
 
 The bot evaluates each candidate pair using Kraken ticker data. By
 setting options under `symbol_filter` you can weed out illiquid or
-undesirable markets before strategies run:
+undesirable markets before strategies run. Set `skip_symbol_filters: true`
+to use the provided list without any filtering:
 
 ```yaml
 symbol_filter:
