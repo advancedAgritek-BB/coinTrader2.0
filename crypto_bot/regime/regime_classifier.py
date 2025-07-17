@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 import asyncio
 import time
+import logging
 
 import pandas as pd
 import numpy as np
@@ -26,6 +27,15 @@ CONFIG = _load_config(CONFIG_PATH)
 
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
+
+
+def _configure_logger(cfg: dict) -> None:
+    level_str = str(cfg.get("log_level", "INFO")).upper()
+    level = getattr(logging, level_str, logging.INFO)
+    logger.setLevel(level)
+
+
+_configure_logger(CONFIG)
 
 _ALL_REGIMES = [
     "trending",
@@ -178,6 +188,20 @@ def _classify_core(
     else:
         df["volume_zscore"] = np.nan
 
+    for col in (
+        "ema20",
+        "ema50",
+        "adx",
+        "rsi",
+        "atr",
+        "bb_width",
+        "volume_change",
+        "volume_zscore",
+        "normalized_range",
+    ):
+        if col in df:
+            df[col] = df[col].fillna(df[col].mean())
+
     volume_ma20 = (
         df["volume"].rolling(cfg["ma_window"]).mean()
         if len(df) >= cfg["ma_window"]
@@ -200,6 +224,25 @@ def _classify_core(
             volume_jump = True
 
     latest = df.iloc[-1]
+
+    logger.debug(
+        "Indicators - ADX: %.2f (trending>%.2f, sideways<%.2f), BB width: %.4f "
+        "(breakout<%.2f, sideways<%.2f), RSI: %.2f (mean_rev %d-%d), EMA dist: "
+        "%.4f (max %.4f), Normalized range: %.4f (volatile>%.2f)",
+        latest["adx"],
+        cfg["adx_trending_min"],
+        cfg["adx_sideways_max"],
+        latest["bb_width"],
+        cfg["bb_width_breakout_max"],
+        cfg["bb_width_sideways_max"],
+        latest["rsi"],
+        cfg["rsi_mean_rev_min"],
+        cfg["rsi_mean_rev_max"],
+        abs(latest["close"] - latest["ema20"]) / latest["close"],
+        cfg["ema_distance_mean_rev_max"],
+        latest["normalized_range"],
+        cfg["normalized_range_volatility_min"],
+    )
 
     trending = latest["adx"] > cfg["adx_trending_min"] and latest["ema20"] > latest["ema50"]
 
@@ -364,6 +407,7 @@ def classify_regime(
     """
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
+    _configure_logger(cfg)
     cfg = adaptive_thresholds(cfg, df, symbol)
 
     result = _classify_all(df, higher_df, cfg, df_map=df_map)
@@ -385,6 +429,7 @@ def classify_regime_with_patterns(
     """Return the regime label and detected pattern scores."""
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
+    _configure_logger(cfg)
     cfg = adaptive_thresholds(cfg, df, symbol)
     label, _, patterns = _classify_all(df, higher_df, cfg)
     return label, patterns

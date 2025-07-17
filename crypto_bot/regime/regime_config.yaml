@@ -19,6 +19,7 @@ higher_timeframe: '4h'
 confirm_trend_with_higher_tf: false
 use_ml_regime_classifier: true
 ml_min_bars: 20
+log_level: INFO
 score_weights:
   trending: 1.0
   sideways: 1.0
