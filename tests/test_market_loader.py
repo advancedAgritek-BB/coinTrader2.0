@@ -1143,6 +1143,10 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
 
     pool_data = {
         "data": [
+            {
+                "id": "pool1",
+                "attributes": {"volume_usd": {"h24": 123}, "address": "pool1"},
+            },
             {"id": "solana_pool1", "attributes": {"volume_usd": {"h24": 123}}},
         ]
     }
@@ -1150,6 +1154,7 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
         "data": {
             "attributes": {
                 "ohlcv_list": [
+                    [1, 1, 2, 0.5, 1.5, 10]
                     [1, 1, 2, 0.5, 1.5, 10],
                 ]
             }
@@ -1176,8 +1181,7 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
             return ohlcv_data
 
     class FakeSession:
-        def __init__(self):
-            self.calls = 0
+        calls = 0
 
         async def __aenter__(self):
             return self
@@ -1186,9 +1190,11 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
             pass
 
         def get(self, url, timeout=None):
-            self.calls += 1
-            if self.calls == 1:
+            FakeSession.calls += 1
+            if FakeSession.calls == 1:
+                assert "tokens/FOO/pools" in url
                 return PoolResp()
+            assert "/pools/pool1/ohlcv/hour" in url
             return OhlcvResp()
 
     monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
@@ -1196,6 +1202,7 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
     res, vol = asyncio.run(
         market_loader.fetch_geckoterminal_ohlcv("FOO/USDC", timeframe="1h", limit=1)
     )
+    assert res == [[1000, 1.0, 2.0, 0.5, 1.5, 10.0]]
     assert vol == 123
     assert res == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
 
@@ -1226,6 +1233,7 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
             pass
 
         def get(self, url, timeout=None):
+            assert "tokens/FOO/pools" in url
             return FakeResp()
 
     monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
@@ -1233,6 +1241,7 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     caplog.set_level(logging.INFO)
     res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
     assert res is None
+    assert any("token not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
     assert any("pair not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
 
 
@@ -1266,8 +1275,13 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
 def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    async def fake_fetch(*_a, **_k):
-        return [[0, 1, 2, 3, 4, 5]], 50.0
+    calls: list[float] = []
+
+    async def fake_fetch(*_a, min_24h_volume=0, **_k):
+        calls.append(min_24h_volume)
+        if min_24h_volume > 50:
+            return None
+        return [[0, 1, 2, 3, 4, 5]]
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", lambda *a, **k: None)
@@ -1279,6 +1293,7 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
     cache = {}
     config = {"timeframes": ["1h"]}
 
+    config["min_volume_usd"] = 100
     cache = asyncio.run(
         update_multi_tf_ohlcv_cache(
             ex,
@@ -1286,11 +1301,13 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
             ["BAR/USDC"],
             config,
             limit=1,
-            min_volume_usd=100,
         )
     )
+    assert calls[-1] == 100
+    assert "BAR/USDC" in cache["1h"]
     assert "BAR/USDC" in cache.get("1h", {})
 
+    config["min_volume_usd"] = 10
     cache = asyncio.run(
         update_multi_tf_ohlcv_cache(
             ex,
@@ -1298,9 +1315,9 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
             ["BAR/USDC"],
             config,
             limit=1,
-            min_volume_usd=10,
         )
     )
+    assert calls[-1] == 10
     assert "BAR/USDC" in cache["1h"]
 
 
