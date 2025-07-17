@@ -1026,6 +1026,8 @@ results = runner.run_grid(
 )
 print(results.head())  # best combo appears first
 ```
+For Solana pairs ending with `/USDC`, backtesting automatically pulls up to
+`1000` candles from GeckoTerminal so longer histories are available.
 The resulting statistics are written automatically to
 `crypto_bot/logs/strategy_stats.json`. The home page indicates whether the bot
 is running so you can quickly see if it has stopped.
