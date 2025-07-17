@@ -703,6 +703,39 @@ bb_window: 20
 ma_window: 20
 """
     )
-    regime, _ = classify_regime(df, config_path=str(cfg))
+    regime, info = classify_regime(df, config_path=str(cfg))
     assert regime != "volatile"
-    assert isinstance(patterns, set)
+    assert isinstance(info, dict)
+
+
+def test_classify_regime_probabilities_sum_to_one():
+    df = _make_trending_df()
+    label, probs = classify_regime(df)
+    assert label == "trending"
+    assert pytest.approx(sum(probs.values())) == 1.0
+
+
+def test_patterns_override_unknown(monkeypatch):
+    df = _make_breakout_df()
+    monkeypatch.setattr(
+        "crypto_bot.regime.regime_classifier._classify_core", lambda *_a, **_k: "unknown"
+    )
+    regime, probs = classify_regime(df)
+    assert regime == "breakout"
+    assert probs["breakout"] == 1.0
+
+
+def test_ml_blending(monkeypatch, tmp_path):
+    df = _make_sideways_df(30)
+    monkeypatch.setattr(
+        "crypto_bot.regime.regime_classifier._classify_core", lambda *_a, **_k: "unknown"
+    )
+    monkeypatch.setattr(
+        "crypto_bot.regime.ml_fallback.predict_regime",
+        lambda _df: ("trending", 0.7),
+    )
+    cfg = tmp_path / "regime.yaml"
+    cfg.write_text("use_ml_regime_classifier: true\nml_min_bars: 20\n")
+    regime, probs = classify_regime(df, config_path=str(cfg))
+    assert regime == "trending"
+    assert probs["trending"] == pytest.approx(0.7)
