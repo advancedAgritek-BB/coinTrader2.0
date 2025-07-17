@@ -48,6 +48,7 @@ class BounceScalperConfig:
     oversold: float = 35.0
     overbought: float = 65.0
     vol_window: int = 20
+    vol_zscore_threshold: float = 2.0
     zscore_threshold: float = 1.5
     volume_multiple: float = 1.5
     ema_window: int = 50
