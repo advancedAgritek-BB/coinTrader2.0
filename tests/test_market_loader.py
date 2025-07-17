@@ -1346,6 +1346,72 @@ def test_fetch_geckoterminal_ohlcv_network_error(monkeypatch):
     assert res is None
 
 
+def test_fetch_geckoterminal_ohlcv_retry(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(secs):
+        sleeps.append(secs)
+
+    class FakeResp:
+        status = 200
+
+        def __init__(self, url):
+            self.url = url
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def raise_for_status(self):
+            pass
+
+        async def json(self):
+            if "search/pools" in self.url:
+                return {
+                    "data": [
+                        {
+                            "id": "pool1",
+                            "attributes": {
+                                "volume_usd": {"h24": 123},
+                                "reserve_in_usd": 0,
+                            },
+                        }
+                    ]
+                }
+            return {"data": {"attributes": {"ohlcv_list": [[1, 1, 2, 0.5, 1.5, 10]]}}}
+
+    class RetrySession:
+        calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=None):
+            RetrySession.calls += 1
+            if RetrySession.calls < 3:
+                raise market_loader.aiohttp.ClientError("boom")
+            return FakeResp(url)
+
+    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: RetrySession())
+    monkeypatch.setattr(market_loader.asyncio, "sleep", fake_sleep)
+
+    data, vol, reserve = asyncio.run(
+        market_loader.fetch_geckoterminal_ohlcv(f"{VALID_MINT}/USDC", limit=1)
+    )
+
+    assert RetrySession.calls >= 3
+    assert sleeps == [1, 2]
+    assert data == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
+    assert vol == 123.0
+
+
 def test_geckoterminal_semaphore_limits(monkeypatch):
     from crypto_bot.utils import market_loader
 
@@ -1372,7 +1438,9 @@ def test_geckoterminal_semaphore_limits(monkeypatch):
 
         async def json(self):
             if "search/pools" in self.url:
-                return {"data": [{"id": "pool1", "attributes": {"volume_usd": {"h24": 0}}}]}
+                return {
+                    "data": [{"id": "pool1", "attributes": {"volume_usd": {"h24": 0}}}]
+                }
             return {"data": {"attributes": {"ohlcv_list": [[1, 1, 1, 1, 1, 1]]}}}
 
     class FakeSession:
@@ -1573,16 +1641,22 @@ def test_update_multi_tf_ohlcv_cache_fallback_exchange(monkeypatch):
     ex = DummyMultiTFExchange()
     cache = {}
     config = {"timeframes": ["1h"]}
+
+
 def test_gecko_volume_priority(monkeypatch):
     from crypto_bot.utils import market_loader
     from collections import deque
 
     async def fake_gecko(*_a, **_k):
-        return [
-            [0, 1, 1, 1, 1, 1],
-            [1, 1, 1, 1, 1, 1],
-            [2, 1, 1, 1, 1, 10],
-        ], 100.0, 0.0
+        return (
+            [
+                [0, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1],
+                [2, 1, 1, 1, 1, 10],
+            ],
+            100.0,
+            0.0,
+        )
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
     ex = DummyMultiTFExchange()
