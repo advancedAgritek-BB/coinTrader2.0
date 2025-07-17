@@ -6,6 +6,7 @@ from typing import Dict, Iterable, Tuple, List
 
 from .logger import LOG_DIR, setup_logger
 from . import perf
+from crypto_bot.utils.strategy_utils import compute_strategy_weights
 
 from crypto_bot.regime.pattern_detector import detect_patterns
 from crypto_bot.regime.regime_classifier import (
@@ -52,6 +53,7 @@ async def run_candidates(
     """Evaluate ``strategies`` and rank them by score times edge."""
 
     strategy_list = list(strategies)
+    weights = compute_strategy_weights()
     try:
         evals = await evaluate_async(
             strategy_list,
@@ -65,11 +67,13 @@ async def run_candidates(
 
     results: List[Tuple[float, callable, float, str]] = []
     for strat, (score, direction, _atr) in zip(strategy_list, evals):
+        name = _fn_name(strat)
         try:
-            edge = perf.edge(_fn_name(strat), symbol, cfg.get("drawdown_penalty_coef", 0.0))
+            edge = perf.edge(name, symbol, cfg.get("drawdown_penalty_coef", 0.0))
         except Exception:  # pragma: no cover - if perf fails use neutral edge
             edge = 1.0
-        rank = score * edge
+        weight = weights.get(name, 1.0)
+        rank = score * edge * weight
         results.append((rank, strat, score, direction))
 
     results.sort(key=lambda x: x[0], reverse=True)
