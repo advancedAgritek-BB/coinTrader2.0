@@ -116,9 +116,11 @@ log_to_google: true
 loop_interval_minutes: 0.5
 max_age_days: 90
 max_change_pct: 20
+max_concurrent_ohlcv: 4
+max_parallel: 50
 max_concurrent_ohlcv: 8
 max_latency_ms: 500
-max_ohlcv_failures: 5
+max_ohlcv_failures: 10
 max_open_trades: 20
 max_parallel: 50
 max_slippage_pct: 0.2
@@ -189,7 +191,7 @@ mode_degrade_window: 15
 mode_threshold: 0.3
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
-ohlcv_timeout: 120
+ohlcv_timeout: 300
 optimization:
   enabled: true
   interval_days: 0.5
@@ -351,6 +353,13 @@ strategy_router:
   trending_timeframe: 1h
   volatile_timeframe: 1m
 symbol: BTC/USDT
+symbol_batch_size: 50
+scan_lookback_limit: 200
+cycle_lookback_limit: 200
+adaptive_scan:
+  enabled: true
+  atr_baseline: 0.005
+  max_factor: 10.0
 symbol_batch_size: 100
 symbol_filter:
   change_pct_percentile: 5
