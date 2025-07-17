@@ -199,3 +199,25 @@ def test_dynamic_grid_uses_micro_scalp():
     fn = route("sideways", "cex", cfg)
     assert fn.__name__ == micro_scalp_bot.generate_signal.__name__
 
+
+def test_strategy_timeframe_routing(monkeypatch):
+    captured = {}
+
+    def dummy(df, cfg=None):
+        captured['df'] = df
+        return 0.2, "long"
+
+    monkeypatch.setattr(strategy_router, "get_strategy_by_name", lambda n: dummy if n == "dummy" else None)
+
+    data = {
+        "timeframe": "1m",
+        "breakout_timeframe": "5m",
+        "strategy_router": {"regimes": {"breakout": ["dummy"]}},
+    }
+    cfg = RouterConfig.from_dict(data)
+
+    df_map = {"1m": pd.DataFrame({"v": [1]}), "5m": pd.DataFrame({"v": [5]})}
+    fn = route("breakout", "cex", cfg)
+    asyncio.run(fn(df_map))
+    assert captured.get('df') is df_map["5m"]
+

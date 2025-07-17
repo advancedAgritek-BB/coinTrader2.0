@@ -83,6 +83,11 @@ class RouterConfig:
     bandit_enabled: bool = False
     timeframe: str = "1h"
     timeframe_minutes: int = 60
+    trending_timeframe: str | None = None
+    volatile_timeframe: str | None = None
+    sideways_timeframe: str | None = None
+    scalp_timeframe: str | None = None
+    breakout_timeframe: str | None = None
     commit_lock_intervals: int = 0
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
@@ -107,6 +112,11 @@ class RouterConfig:
             bandit_enabled=bool(data.get("bandit", {}).get("enabled", False)),
             timeframe=tf,
             timeframe_minutes=int(pd.Timedelta(tf).total_seconds() // 60),
+            trending_timeframe=str(router.get("trending_timeframe", data.get("trending_timeframe", tf))) or None,
+            volatile_timeframe=str(router.get("volatile_timeframe", data.get("volatile_timeframe", tf))) or None,
+            sideways_timeframe=str(router.get("sideways_timeframe", data.get("sideways_timeframe", tf))) or None,
+            scalp_timeframe=str(router.get("scalp_timeframe", data.get("scalp_timeframe", tf))) or None,
+            breakout_timeframe=str(router.get("breakout_timeframe", data.get("breakout_timeframe", tf))) or None,
             commit_lock_intervals=int(router.get("commit_lock_intervals", 0)),
             raw=data,
         )
@@ -183,6 +193,24 @@ def cfg_get(cfg: Mapping[str, Any] | RouterConfig, key: str, default: Any | None
             return cfg.get(key, default)
         return cfg.get("strategy_router", {}).get(key, default)
     return default
+
+
+def wrap_with_tf(fn: Callable[[pd.DataFrame], Tuple[float, str]], tf: str):
+    """Return ``fn`` wrapped to extract ``tf`` from a dataframe map."""
+
+    def wrapped(df_or_map: Any, cfg=None):
+        df = None
+        if isinstance(df_or_map, Mapping):
+            df = df_or_map.get(tf)
+        if df is None:
+            df = df_or_map if not isinstance(df_or_map, Mapping) else pd.DataFrame()
+        try:
+            return fn(df, cfg)
+        except TypeError:
+            return fn(df)
+
+    wrapped.__name__ = getattr(fn, "__name__", "wrapped")
+    return wrapped
 
 
 # Path storing the last selected regime and timestamp
@@ -324,8 +352,12 @@ def strategy_for(
     regime: str, config: RouterConfig | Mapping[str, Any] | None = None
 ) -> Callable[[pd.DataFrame], Tuple[float, str]]:
     """Return strategy callable for a given regime."""
-    strategies = get_strategies_for_regime(regime, config)
-    return strategies[0] if strategies else grid_bot.generate_signal
+    cfg = config or DEFAULT_ROUTER_CFG
+    strategies = get_strategies_for_regime(regime, cfg)
+    base = strategies[0] if strategies else grid_bot.generate_signal
+    tf_key = f"{regime.replace('-', '_')}_timeframe"
+    tf = cfg_get(cfg, tf_key, cfg_get(cfg, "timeframe", "1h"))
+    return wrap_with_tf(base, tf)
 
 
 def get_strategies_for_regime(
@@ -359,7 +391,9 @@ def evaluate_regime(
 ) -> Tuple[float, str]:
     """Evaluate and fuse all strategies assigned to ``regime``."""
     cfg = config or DEFAULT_ROUTER_CFG
-    strategies = get_strategies_for_regime(regime, cfg)
+    tf_key = f"{regime.replace('-', '_')}_timeframe"
+    tf = cfg_get(cfg, tf_key, cfg_get(cfg, "timeframe", "1h"))
+    strategies = [wrap_with_tf(s, tf) for s in get_strategies_for_regime(regime, cfg)]
 
     if isinstance(cfg, RouterConfig):
         method = cfg.fusion_method
@@ -477,8 +511,8 @@ def route(
     mode: str,
     config: RouterConfig | Mapping[str, Any] | None = None,
     notifier: TelegramNotifier | None = None,
-    df: pd.DataFrame | None = None,
-) -> Callable[[pd.DataFrame], Tuple[float, str]]:
+    df_map: Mapping[str, pd.DataFrame] | pd.DataFrame | None = None,
+) -> Callable[[pd.DataFrame | Mapping[str, pd.DataFrame]], Tuple[float, str]]:
     """Select a strategy based on market regime and operating mode.
 
     Parameters
@@ -493,13 +527,14 @@ def route(
     notifier : TelegramNotifier | None
         Optional notifier used to send a message when the strategy is called.
 
-    df : pd.DataFrame | None
-        Optional dataframe used for fast-path checks. When provided the router
-        may immediately return a strategy without additional context.
+    df_map : Mapping[str, pd.DataFrame] | pd.DataFrame | None
+        Optional dataframe or mapping used for fast-path checks. When provided
+        the router may immediately return a strategy without additional
+        context.
 
     Returns
     -------
-    Callable[[pd.DataFrame], Tuple[float, str]]
+    Callable[[pd.DataFrame | Mapping[str, pd.DataFrame]], Tuple[float, str]]
         Strategy function returning a score and trade direction.
     """
 
