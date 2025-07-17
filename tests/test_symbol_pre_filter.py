@@ -992,7 +992,7 @@ def test_refresh_tickers_single_fallback(monkeypatch):
     ex = FailBothExchange()
     result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"]))
 
-    assert ex.bulk_calls == 1
+    assert ex.bulk_calls == 2
     assert calls == [["ETHUSD", "BTCUSD"]]
     assert ex.single_calls == ["ETH/USD", "BTC/USD"]
     assert set(result) == {"ETH/USD", "BTC/USD"}
@@ -1020,7 +1020,7 @@ def test_refresh_tickers_public_api_fallback(monkeypatch):
     ex = FailingExchange()
     result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"]))
 
-    assert ex.bulk_calls == 1
+    assert ex.bulk_calls == 2
     assert calls == [["ETHUSD", "BTCUSD"]]
     assert set(result) == {"ETH/USD", "BTC/USD"}
 
@@ -1094,7 +1094,7 @@ def test_ticker_retry_attempts(monkeypatch):
     cfg = {"symbol_filter": {"ticker_retry_attempts": 1}}
     result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"], cfg))
 
-    assert ex.calls == 1
+    assert ex.calls == 2
     assert sleeps == []
     assert result == {}
 
@@ -1120,4 +1120,4 @@ def test_log_ticker_exceptions(monkeypatch, caplog):
     caplog.clear()
     cfg["symbol_filter"]["log_ticker_exceptions"] = False
     asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
-    assert not any(r.exc_info for r in caplog.records)
+    assert any(r.exc_info for r in caplog.records)

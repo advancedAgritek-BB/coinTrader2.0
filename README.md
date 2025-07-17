@@ -248,6 +248,16 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
 * **skip_symbol_filters** – bypass the volume and spread checks and use the provided symbol list as-is.
 * **symbol_score_weights** – weights for volume, spread, change, age and liquidity. The weights must sum to a positive value.
+
+```yaml
+symbol_score_weights:
+  volume: 0.25
+  spread: 0.1
+  change: 0.45
+  liquidity: 0.15
+  latency: 0.03
+  age: 0.02
+```
 * **uncached_volume_multiplier** – extra volume factor applied when a pair is missing from `cache/liquid_pairs.json`.
 * **min_symbol_age_days** – skip newly listed pairs.
 * **min_symbol_score** – minimum score required for trading.
@@ -712,7 +722,7 @@ min_symbol_age_days: 2           # skip pairs with less history
 symbol_batch_size: 50            # symbols processed per cycle
 scan_lookback_limit: 50          # candles loaded during startup
 cycle_lookback_limit: null       # override per-cycle candle load (default min(150, timeframe_minutes × 2))
-max_spread_pct: 3.0              # skip pairs with wide spreads
+max_spread_pct: 4.0              # skip pairs with wide spreads
 ```
 
 To avoid loading every market on startup, populate `symbols` with the
@@ -760,12 +770,12 @@ to use the provided list without any filtering:
 ```yaml
 symbol_filter:
   min_volume_usd: 500
-  volume_percentile: 20          # keep pairs above this volume percentile
-  change_pct_percentile: 50      # require 24h change in the top half
-  max_spread_pct: 2              # allow spreads up to 2%
+  volume_percentile: 5           # keep pairs above this volume percentile
+  change_pct_percentile: 5       # require 24h change in the top movers
+  max_spread_pct: 4              # allow spreads up to 4%
   uncached_volume_multiplier: 1.5  # extra volume when not cached
   correlation_window: 30         # days of history for correlation
-  max_correlation: 0.85          # drop pairs above this threshold
+  max_correlation: 0.9           # drop pairs above this threshold
   correlation_max_pairs: 100     # limit pairwise correlation checks
   kraken_batch_size: 100         # max symbols per fetch_tickers call
   http_timeout: 10               # seconds for fallback /Ticker requests
