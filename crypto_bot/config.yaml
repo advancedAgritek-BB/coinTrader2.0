@@ -332,6 +332,7 @@ symbol_score_weights:
   age: 0.02
   change: 0.4
   latency: 0.03
+  liquidity: 0.0
   spread: 0.1
   volume: 0.45
 symbols: []

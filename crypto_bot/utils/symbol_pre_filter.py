@@ -18,7 +18,11 @@ import yaml
 from cachetools import TTLCache
 
 from .logger import LOG_DIR, setup_logger
-from .market_loader import fetch_ohlcv_async, update_ohlcv_cache
+from .market_loader import (
+    fetch_ohlcv_async,
+    update_ohlcv_cache,
+    fetch_geckoterminal_ohlcv,
+)
 from .correlation import incremental_correlation
 from .symbol_scoring import score_symbol
 from .telemetry import telemetry
@@ -159,9 +163,9 @@ def _parse_metrics(symbol: str, ticker: dict) -> tuple[float, float, float]:
     change_pct = ((last - open_price) / open_price) * 100 if open_price else 0.0
 
     spread_pct = abs(ask - bid) / last * 100 if last else 0.0
-    liq_cache[symbol] = (volume_usd, spread_pct)
+    liq_cache[symbol] = (volume_usd, spread_pct, 1.0)
 
-    cached_vol, cached_spread = liq_cache[symbol]
+    cached_vol, cached_spread, _ = liq_cache[symbol]
     return cached_vol, change_pct, cached_spread
 
 
@@ -448,13 +452,14 @@ async def _bounded_score(
     volume_usd: float,
     change_pct: float,
     spread_pct: float,
+    liquidity_score: float,
     cfg: dict,
 ) -> tuple[str, float]:
     """Return ``(symbol, score)`` using the global semaphore."""
 
     async with SEMA:
         score = await score_symbol(
-            exchange, symbol, volume_usd, change_pct, spread_pct, cfg
+            exchange, symbol, volume_usd, change_pct, spread_pct, liquidity_score, cfg
         )
     return symbol, score
 
@@ -483,7 +488,7 @@ async def filter_symbols(
     telemetry.inc("scan.symbols_considered", len(list(symbols)))
     skipped = 0
 
-    cached_data: dict[str, tuple[float, float]] = {}
+    cached_data: dict[str, tuple[float, float, float]] = {}
     for sym in symbols:
         if sym in liq_cache:
             cached_data[sym] = liq_cache[sym]
@@ -589,7 +594,7 @@ async def filter_symbols(
         if cached is None:
             skipped += 1
             continue
-        vol_usd, spread_pct = cached
+        vol_usd, spread_pct, _ = cached
         seen.add(norm_sym)
         local_min_volume = min_volume * 0.5 if norm_sym.endswith("/USDC") else min_volume
         if cache_map and vol_usd < local_min_volume * vol_mult:
@@ -616,11 +621,37 @@ async def filter_symbols(
         threshold = np.percentile([abs(m[2]) for m in metrics], pct)
         metrics = [m for m in metrics if abs(m[2]) >= threshold]
 
+    liq_scores: Dict[str, float] = {}
+    if metrics:
+        denom = float(cfg.get("trade_size_pct", 0.1)) * float(cfg.get("balance", 1))
+        if denom <= 0:
+            denom = 1.0
+
+        async def _fetch_liq(sym: str) -> tuple[str, float]:
+            try:
+                _, _, reserve = await fetch_geckoterminal_ohlcv(sym, limit=1)
+                return sym, reserve / denom
+            except Exception:
+                return sym, 0.0
+
+        liq_results = await asyncio.gather(
+            *[_fetch_liq(sym) for sym, *_ in metrics if sym.endswith("/USDC")]
+        )
+        liq_scores = {s: sc for s, sc in liq_results}
+
     scored: List[tuple[str, float]] = []
     if metrics:
         results = await asyncio.gather(
             *[
-                _bounded_score(exchange, sym, vol, chg, spr, cfg)
+                _bounded_score(
+                    exchange,
+                    sym,
+                    vol,
+                    chg,
+                    spr,
+                    liq_scores.get(sym, 1.0),
+                    cfg,
+                )
                 for sym, vol, chg, spr in metrics
             ]
         )

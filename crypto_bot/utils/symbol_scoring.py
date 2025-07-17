@@ -37,6 +37,7 @@ DEFAULT_WEIGHTS = {
     "spread": 0.2,
     "age": 0.1,
     "latency": 0.1,
+    "liquidity": 0.0,
 }
 
 
@@ -112,6 +113,7 @@ def _score_vectorised_py(
     spread_pct: np.ndarray,
     age_days: np.ndarray,
     latency_ms: np.ndarray,
+    liquidity: np.ndarray,
     weights: np.ndarray,
     max_vals: np.ndarray,
     total: float,
@@ -121,12 +123,14 @@ def _score_vectorised_py(
     spread_norm = 1.0 - np.minimum(spread_pct / max_vals[2], 1.0)
     age_norm = np.minimum(age_days / max_vals[3], 1.0)
     latency_norm = 1.0 - np.minimum(latency_ms / max_vals[4], 1.0)
+    liq_norm = np.minimum(liquidity, 1.0)
     score = (
         volume_norm * weights[0]
         + change_norm * weights[1]
         + spread_norm * weights[2]
         + age_norm * weights[3]
         + latency_norm * weights[4]
+        + liq_norm * weights[5]
     )
     return score / total
 
@@ -138,6 +142,7 @@ def _score_vectorised_numba(
     spread_pct,
     age_days,
     latency_ms,
+    liquidity,
     weights,
     max_vals,
     total,
@@ -160,12 +165,16 @@ def _score_vectorised_numba(
         l_norm = 1.0 - latency_ms[i] / max_vals[4]
         if l_norm < 0.0:
             l_norm = 0.0
+        liq_norm = liquidity[i]
+        if liq_norm > 1.0:
+            liq_norm = 1.0
         val = (
             v_norm * weights[0]
             + c_norm * weights[1]
             + s_norm * weights[2]
             + a_norm * weights[3]
             + l_norm * weights[4]
+            + liq_norm * weights[5]
         )
         out[i] = val / total
     return out
@@ -177,6 +186,7 @@ def score_vectorised(
     spread_pct: np.ndarray,
     age_days: np.ndarray,
     latency_ms: np.ndarray,
+    liquidity: np.ndarray,
     config: Mapping[str, object],
 ) -> np.ndarray:
     """Vectorised symbol scoring with optional numba acceleration."""
@@ -190,6 +200,7 @@ def score_vectorised(
             weights_dict.get("spread", 0.0),
             weights_dict.get("age", 0.0),
             weights_dict.get("latency", 0.0),
+            weights_dict.get("liquidity", 0.0),
         ],
         dtype=np.float64,
     )
@@ -204,6 +215,7 @@ def score_vectorised(
             float(config.get("max_spread_pct", 2)),
             float(config.get("max_age_days", 180)),
             float(config.get("max_latency_ms", 1000)),
+            1.0,
         ],
         dtype=np.float64,
     )
@@ -216,6 +228,7 @@ def score_vectorised(
             spread_pct,
             age_days,
             latency_ms,
+            liquidity,
             weight_arr,
             max_vals,
             total,
@@ -226,6 +239,7 @@ def score_vectorised(
         spread_pct,
         age_days,
         latency_ms,
+        liquidity,
         weight_arr,
         max_vals,
         total,
@@ -238,6 +252,7 @@ async def score_symbol(
     volume_usd: float,
     change_pct: float,
     spread_pct: float,
+    liquidity: float,
     config: Mapping[str, object],
 ) -> float:
     """Return a normalized score for ``symbol``."""
@@ -259,6 +274,7 @@ async def score_symbol(
     spread_norm = 1.0 - min(spread_pct / max_spread, 1.0)
     age_norm = min(get_symbol_age(exchange, symbol) / max_age, 1.0)
     latency_norm = 1.0 - min(await get_latency(exchange, symbol) / max_latency, 1.0)
+    liq_norm = min(liquidity, 1.0)
 
     score = (
         volume_norm * weights.get("volume", 0)
@@ -266,6 +282,7 @@ async def score_symbol(
         + spread_norm * weights.get("spread", 0)
         + age_norm * weights.get("age", 0)
         + latency_norm * weights.get("latency", 0)
+        + liq_norm * weights.get("liquidity", 0)
     )
 
     return score / total
@@ -296,11 +313,13 @@ def score_vectorised(df: pd.DataFrame, config: Mapping[str, object]) -> pd.Serie
     volume_norm = np.minimum(df["vol"] / max_vol, 1.0)
     change_norm = np.minimum(df["chg"].abs() / max_change, 1.0)
     spread_norm = 1.0 - np.minimum(df["spr"] / max_spread, 1.0)
+    liq_norm = np.minimum(df.get("liq", 1.0), 1.0)
 
     score = (
         volume_norm * weights.get("volume", 0)
         + change_norm * weights.get("change", 0)
         + spread_norm * weights.get("spread", 0)
+        + liq_norm * weights.get("liquidity", 0)
     )
 
     # Age and latency are ignored by the vectorised implementation. Set the

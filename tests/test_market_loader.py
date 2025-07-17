@@ -1143,6 +1143,7 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
 
     pool_data = {
         "data": [
+            {"id": "pool1", "attributes": {"volume_usd": {"h24": 123}, "reserve_in_usd": 0}},
             {
                 "id": "pool1",
                 "attributes": {"volume_usd": {"h24": 123}, "address": "pool1"},
@@ -1202,6 +1203,7 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
     res, vol = asyncio.run(
         market_loader.fetch_geckoterminal_ohlcv("FOO/USDC", timeframe="1h", limit=1)
     )
+    assert res == ([[1, 1.0, 2.0, 0.5, 1.5, 10.0]], 123.0, 0.0)
     assert res == [[1000, 1.0, 2.0, 0.5, 1.5, 10.0]]
     assert vol == 123
     assert res == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
@@ -1275,6 +1277,8 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
 def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
     from crypto_bot.utils import market_loader
 
+    async def fake_fetch(*_a, **_k):
+        return [[0, 1, 2, 3, 4, 5]], 50.0, 1000.0
     calls: list[float] = []
 
     async def fake_fetch(*_a, min_24h_volume=0, **_k):
