@@ -35,6 +35,13 @@ UNSUPPORTED_SYMBOL = object()
 STATUS_UPDATES = True
 SEMA: asyncio.Semaphore | None = None
 
+# Mapping of common symbols to CoinGecko IDs for OHLC fallback
+COINGECKO_IDS = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "SOL": "solana",
+}
+
 
 def configure(
     ohlcv_timeout: int | float | None = None,
@@ -984,6 +991,79 @@ async def fetch_geckoterminal_ohlcv(
     return result, volume
 
 
+async def fetch_coingecko_ohlc(
+    coin_id: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+) -> list | None:
+    """Return OHLC data from CoinGecko as [timestamp, open, high, low, close, 0]."""
+
+    days = 1
+    if timeframe.endswith("d"):
+        days = 90
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc"
+    params = {"vs_currency": "usd", "days": days}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, timeout=10) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+    except Exception:  # pragma: no cover - network
+        return None
+
+    result: list = []
+    for c in data[-limit:]:
+        if not isinstance(c, list) or len(c) < 5:
+            continue
+        try:
+            ts, o, h, l, cl = c[:5]
+            result.append(
+                [int(ts), float(o), float(h), float(l), float(cl), 0.0]
+            )
+        except Exception:
+            continue
+    return result
+
+
+async def fetch_dex_ohlcv(
+    exchange,
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+    *,
+    min_volume_usd: float = 0.0,
+) -> list | None:
+    """Fetch DEX OHLCV with fallback to CoinGecko then Kraken."""
+
+    try:
+        res = await fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("GeckoTerminal OHLCV error for %s: %s", symbol, exc)
+        res = None
+
+    data = None
+    if res:
+        if isinstance(res, tuple):
+            data, vol = res
+        else:
+            data = res
+            vol = min_volume_usd
+        if data and vol >= min_volume_usd:
+            return data
+
+    base = symbol.split("/")[0]
+    coin_id = COINGECKO_IDS.get(base)
+    if coin_id:
+        data = await fetch_coingecko_ohlc(coin_id, timeframe=timeframe, limit=limit)
+        if data:
+            return data
+
+    data = await fetch_ohlcv_async(exchange, symbol, timeframe=timeframe, limit=limit)
+    if isinstance(data, Exception):
+        return None
+    return data
+
+
 async def fetch_order_book_async(
     exchange,
     symbol: str,
@@ -1367,13 +1447,14 @@ async def update_multi_tf_ohlcv_cache(
             )
 
         for sym in dex_symbols:
-            try:
-                data, vol = await fetch_geckoterminal_ohlcv(sym, timeframe=tf, limit=limit)
-                data = await fetch_geckoterminal_ohlcv(sym, timeframe=tf, limit=limit)
-            except Exception as exc:  # pragma: no cover - network
-                logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
-                continue
-            if not data or vol < min_volume_usd:
+            data = await fetch_dex_ohlcv(
+                exchange,
+                sym,
+                timeframe=tf,
+                limit=limit,
+                min_volume_usd=min_volume_usd,
+            )
+            if not data:
                 continue
             df_new = pd.DataFrame(
                 data,
