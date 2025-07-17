@@ -6,6 +6,9 @@ import asyncio
 import logging
 from typing import List
 import aiohttp
+import ccxt.async_support as ccxt
+
+from . import symbol_scoring
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +64,19 @@ async def _fetch_json(url: str) -> list | dict | None:
     except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
         logger.error("Solana scanner request failed: %s", exc)
         return None
+
+
+async def _close_exchange(exchange) -> None:
+    """Close ``exchange`` ignoring errors."""
+    close = getattr(exchange, "close", None)
+    if close:
+        try:
+            if asyncio.iscoroutinefunction(close):
+                await close()
+            else:
+                close()
+        except Exception:  # pragma: no cover - best effort
+            pass
 
 
 def _extract_tokens(data: list | dict) -> List[str]:
@@ -169,7 +185,7 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
         *[search_geckoterminal_token(m) for m in candidates]
     )
 
-    final: list[str] = []
+    final: list[tuple[str, float]] = []
     seen: set[str] = set()
     for res in search_results:
         if not res:
@@ -177,8 +193,34 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
         mint, vol = res
         if vol >= _MIN_VOLUME_USD and mint not in seen:
             seen.add(mint)
-            final.append(f"{mint}/USDC")
+            final.append((f"{mint}/USDC", vol))
         if len(final) >= limit:
             break
 
-    return final
+    if not final:
+        return []
+
+    min_score = float(config.get("min_symbol_score", 0.0))
+    ex_name = str(config.get("exchange", "kraken")).lower()
+    exchange_cls = getattr(ccxt, ex_name)
+    exchange = exchange_cls({"enableRateLimit": True})
+
+    try:
+        scores = await asyncio.gather(
+            *[
+                symbol_scoring.score_symbol(
+                    exchange, sym, vol, 0.0, 0.0, 1.0, config
+                )
+                for sym, vol in final
+            ]
+        )
+    finally:
+        await _close_exchange(exchange)
+
+    scored = [
+        (sym, score)
+        for (sym, _), score in zip(final, scores)
+        if score >= min_score
+    ]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [sym for sym, _ in scored]
