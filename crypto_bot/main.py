@@ -488,13 +488,15 @@ async def initial_scan(
     for i in range(0, total, batch_size):
         batch = symbols[i : i + batch_size]
 
+        limit = min(config.get("scan_lookback_limit", 50), 700)
+
         state.df_cache = await update_multi_tf_ohlcv_cache(
             exchange,
             state.df_cache,
             batch,
             config,
-            limit=config.get("scan_lookback_limit", 50),
-            use_websocket=config.get("use_websocket", False),
+            limit=limit,
+            use_websocket=False,
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
             notifier=notifier,
@@ -506,8 +508,8 @@ async def initial_scan(
             state.regime_cache,
             batch,
             config,
-            limit=config.get("scan_lookback_limit", 50),
-            use_websocket=config.get("use_websocket", False),
+            limit=limit,
+            use_websocket=False,
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
             notifier=notifier,
