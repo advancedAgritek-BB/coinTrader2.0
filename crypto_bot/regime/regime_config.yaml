@@ -1,13 +1,14 @@
-adx_trending_min: 25
+adx_trending_min: 20
 adx_sideways_max: 18
 bb_width_sideways_max: 0.025
 bb_width_breakout_max: 4
-breakout_volume_mult: 1.5
+breakout_volume_mult: 1.2
 rsi_mean_rev_min: 30
 rsi_mean_rev_max: 70
 ema_distance_mean_rev_max: 0.02
 atr_volatility_mult: 1.5
 normalized_range_volatility_min: 1.5
+atr_baseline: 0.01
 
 ema_fast: 8
 ema_slow: 21
@@ -19,3 +20,13 @@ confirm_trend_with_higher_tf: false
 use_ml_regime_classifier: true
 ml_min_bars: 20
 pattern_min_conf: 0.1
+score_weights:
+  trending: 1.0
+  sideways: 1.0
+  breakout: 1.0
+  mean-reverting: 1.0
+  volatile: 1.0
+pattern_min_conf: 0.2
+ml_blend_weight: 0.5
+bull_fng: 50
+atr_baseline: 0.01

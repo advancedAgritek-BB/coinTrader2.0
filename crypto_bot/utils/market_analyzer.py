@@ -82,7 +82,11 @@ async def run_candidates(
     if regime is not None and ranked:
         scores = [sc for _fn, sc, _d in ranked]
         dirs = [d for _fn, _sc, d in ranked]
-        if len(set(scores)) == 1 or all(s == 0.0 for s in scores) or all(d == "none" for d in dirs):
+        if (
+            len(set(scores)) == 1
+            or all(s == 0.0 for s in scores)
+            or all(d == "none" for d in dirs)
+        ):
             for idx, (fn, sc, d) in enumerate(ranked):
                 reg_filter = getattr(fn, "regime_filter", None)
                 if reg_filter is None:
@@ -92,7 +96,11 @@ async def run_candidates(
                     except Exception:  # pragma: no cover - safety
                         reg_filter = None
                 try:
-                    if reg_filter and hasattr(reg_filter, "matches") and reg_filter.matches(regime):
+                    if (
+                        reg_filter
+                        and hasattr(reg_filter, "matches")
+                        and reg_filter.matches(regime)
+                    ):
                         ranked.insert(0, ranked.pop(idx))
                         break
                 except Exception:  # pragma: no cover - safety
@@ -261,6 +269,7 @@ async def analyze_symbol(
         "future_return": future_return,
         "confidence": confidence,
         "min_confidence": min_conf_adaptive,
+        "probabilities": probs,
     }
 
     if regime != "unknown":
@@ -277,7 +286,9 @@ async def analyze_symbol(
             return fn
 
         if eval_mode == "best":
-            strategies = [wrap(s) for s in get_strategies_for_regime(regime, router_cfg)]
+            strategies = [
+                wrap(s) for s in get_strategies_for_regime(regime, router_cfg)
+            ]
             res = evaluate_strategies(strategies, df, cfg)
             name = res.get("name", strategy_name(regime, env))
             score = float(res.get("score", 0.0))
@@ -288,7 +299,9 @@ async def analyze_symbol(
                     second = evaluate_strategies(remaining, df, cfg)
                     second_score = float(second.get("score", 0.0))
                     edge = score - second_score
-                    log_second_place(symbol, regime, second.get("name", ""), second_score, edge)
+                    log_second_place(
+                        symbol, regime, second.get("name", ""), second_score, edge
+                    )
         elif eval_mode == "ensemble":
             min_conf = float(config.get("ensemble_min_conf", 0.15))
             candidates = [wrap(strategy_for(regime, router_cfg))]
@@ -322,7 +335,9 @@ async def analyze_symbol(
         else:
             strategy_fn = wrap(route(regime, env, router_cfg, notifier, df_map=df_map))
             name = strategy_name(regime, env)
-            score, direction, atr = (await evaluate_async([strategy_fn], df_map, cfg))[0]
+            score, direction, atr = (await evaluate_async([strategy_fn], df_map, cfg))[
+                0
+            ]
 
         atr_period = int(config.get("risk", {}).get("atr_period", 14))
         if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
@@ -338,13 +353,15 @@ async def analyze_symbol(
             + weights.get("strategy_regime_strength", 0.0) * 1.0
         )
 
-        result.update({
-            "env": env,
-            "name": name,
-            "score": final,
-            "direction": direction,
-            "atr": atr,
-        })
+        result.update(
+            {
+                "env": env,
+                "name": name,
+                "score": final,
+                "direction": direction,
+                "atr": atr,
+            }
+        )
 
         votes = []
         voting = config.get("voting_strategies", [])
@@ -371,4 +388,3 @@ async def analyze_symbol(
             else:
                 result["direction"] = "none"
     return result
-
