@@ -118,3 +118,25 @@ def test_get_filtered_symbols_basic(monkeypatch):
 
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     assert result == [("ETH/USD", 0.5)]
+
+
+def test_get_filtered_symbols_invalid_usdc_token(monkeypatch):
+    calls: list[list[str]] = []
+
+    async def fake_filter_symbols(ex, syms, cfg):
+        calls.append(syms)
+        return []
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    config = {
+        "symbol": "BTC/USD",
+        "symbols": ["ALGO/USDC", "BTC/USD"],
+    }
+
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+
+    asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
+
+    assert calls and calls[0] == ["BTC/USD"]

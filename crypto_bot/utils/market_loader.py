@@ -822,9 +822,7 @@ async def fetch_geckoterminal_ohlcv(
         token_mint, quote = symbol, ""
     if quote != "USDC":
         return None
-    try:
-        base58.b58decode(token_mint)
-    except Exception:
+    if not _is_valid_base_token(token_mint):
         return None
 
     cached = GECKO_POOL_CACHE.get(symbol)
