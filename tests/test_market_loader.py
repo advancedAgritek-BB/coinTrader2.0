@@ -1176,6 +1176,52 @@ def test_load_ohlcv_parallel_propagates_cancelled(caplog):
     assert len(caplog.records) == 0
 
 
+class PendingWSExchange:
+    has = {"fetchOHLCV": True}
+
+    def __init__(self):
+        self.closed = False
+        self.calls: list[str] = []
+
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.calls.append("watch")
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            self.calls.append("cancel")
+            raise
+        return [[0] * 6]
+
+    async def close(self):
+        self.closed = True
+        self.calls.append("close")
+
+
+def test_fetch_ohlcv_async_cancel_pending_ws(caplog):
+    from crypto_bot.utils import market_loader
+
+    async def runner():
+        ex = PendingWSExchange()
+        task = asyncio.create_task(
+            market_loader.fetch_ohlcv_async(
+                ex, "BTC/USD", use_websocket=True, limit=1
+            )
+        )
+        await asyncio.sleep(0)
+        await asyncio.sleep(0.05)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        return ex.calls
+
+    caplog.set_level(logging.ERROR)
+    calls = asyncio.run(runner())
+    assert "watch" in calls
+    assert not caplog.records
+
+
 def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
     from crypto_bot.utils import market_loader
 

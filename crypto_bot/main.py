@@ -1583,6 +1583,13 @@ async def _main_impl() -> TelegramNotifier:
             await asyncio.sleep(delay * 60)
     
     finally:
+        if hasattr(exchange, "close"):
+            if asyncio.iscoroutinefunction(getattr(exchange, "close")):
+                with contextlib.suppress(Exception):
+                    await exchange.close()
+            else:
+                with contextlib.suppress(Exception):
+                    await asyncio.to_thread(exchange.close)
         if solana_scan_task:
             solana_scan_task.cancel()
             try:
@@ -1641,13 +1648,6 @@ async def _main_impl() -> TelegramNotifier:
             except asyncio.CancelledError:
                 pass
         WS_PING_TASKS.clear()
-        if hasattr(exchange, "close"):
-            if asyncio.iscoroutinefunction(getattr(exchange, "close")):
-                with contextlib.suppress(Exception):
-                    await exchange.close()
-            else:
-                with contextlib.suppress(Exception):
-                    await asyncio.to_thread(exchange.close)
 
     return notifier
 
