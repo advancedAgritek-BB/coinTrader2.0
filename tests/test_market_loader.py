@@ -1296,6 +1296,25 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     )
 
 
+def test_fetch_geckoterminal_ohlcv_network_error(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, *a, **k):
+            raise market_loader.aiohttp.ClientError("boom")
+
+    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
+
+    res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
+    assert res is None
+
+
 def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
     from crypto_bot.utils import market_loader
 
@@ -1451,6 +1470,25 @@ def test_dex_fetch_fallback_kraken(monkeypatch):
     assert calls["kraken"] == 1
 
 
+def test_update_multi_tf_ohlcv_cache_fallback_exchange(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    async def fail_gecko(*_a, **_k):
+        raise Exception("boom")
+
+    calls = {"fetch": 0}
+
+    async def fake_fetch(ex, *a, **k):
+        calls["fetch"] += 1
+        return [[7, 7, 7, 7, 7, 7]]
+
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
+    monkeypatch.setattr(market_loader, "fetch_dex_ohlcv", lambda *a, **k: None)
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+
+    ex = DummyMultiTFExchange()
+    cache = {}
+    config = {"timeframes": ["1h"]}
 def test_gecko_volume_priority(monkeypatch):
     from crypto_bot.utils import market_loader
     from collections import deque
@@ -1475,6 +1513,13 @@ def test_gecko_volume_priority(monkeypatch):
         update_multi_tf_ohlcv_cache(
             ex,
             cache,
+            ["BAR/USDC"],
+            config,
+            limit=1,
+        )
+    )
+    assert "BAR/USDC" in cache["1h"]
+    assert calls["fetch"] == 1
             ["FOO/USDC"],
             config,
             limit=3,
