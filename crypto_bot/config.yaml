@@ -184,7 +184,7 @@ mode_degrade_window: 15
 mode_threshold: 0.3
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
-ohlcv_timeout: 60
+ohlcv_timeout: 120
 optimization:
   enabled: true
   interval_days: 0.5
