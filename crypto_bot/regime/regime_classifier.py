@@ -315,7 +315,6 @@ def _classify_all(
     if df is None:
         return "unknown", {"unknown": 0.0}, {}
 
-    patterns = detect_patterns(df)
     pattern_min = float(cfg.get("pattern_min_conf", 0.0))
     regime = _classify_core(df, cfg, higher_df)
     patterns = detect_patterns(df, min_conf=cfg.get("pattern_min_conf", 0.0))
