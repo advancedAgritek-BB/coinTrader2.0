@@ -1125,6 +1125,7 @@ class CancelWSExchange:
 
     def __init__(self):
         self.fetch_called = False
+        self.closed = False
 
     async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
         raise asyncio.CancelledError
@@ -1133,12 +1134,29 @@ class CancelWSExchange:
         self.fetch_called = True
         return [[0] * 6]
 
+    async def close(self):
+        self.closed = True
+
+
+class CancelWSSyncCloseExchange(CancelWSExchange):
+    def close(self):
+        self.closed = True
+
 
 def test_fetch_ohlcv_async_cancelled_error():
     ex = CancelWSExchange()
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", use_websocket=True, limit=1))
     assert ex.fetch_called is False
+    assert ex.closed is True
+
+
+def test_fetch_ohlcv_async_cancelled_error_sync_close():
+    ex = CancelWSSyncCloseExchange()
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", use_websocket=True, limit=1))
+    assert ex.fetch_called is False
+    assert ex.closed is True
 
 
 def test_load_ohlcv_parallel_cancelled_error(monkeypatch, caplog):
@@ -1159,6 +1177,7 @@ def test_load_ohlcv_parallel_cancelled_error(monkeypatch, caplog):
         )
     assert "BTC/USD" not in market_loader.failed_symbols
     assert not caplog.records
+    assert ex.closed is True
 
 
 class CancelExchange:

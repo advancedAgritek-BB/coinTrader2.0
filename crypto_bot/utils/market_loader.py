@@ -12,7 +12,7 @@ import ccxt
 import aiohttp
 import base58
 import warnings
-import base58
+import contextlib
 
 from .telegram import TelegramNotifier
 from .logger import LOG_DIR, setup_logger
