@@ -315,6 +315,9 @@ def _classify_all(
     if df is None:
         return "unknown", {"unknown": 0.0}, {}
 
+    if len(df) < ml_min_bars:
+        return "unknown", _probabilities("unknown"), {}
+
     patterns = detect_patterns(df)
     pattern_min = float(cfg.get("pattern_min_conf", 0.0))
     regime = _classify_core(df, cfg, higher_df)
@@ -358,12 +361,12 @@ def _classify_all(
             log_patterns(ml_label, patterns)
             return ml_label, ml_probs, patterns
     else:
-    latest = df.iloc[-1]
-    rsi = float(latest.get("rsi", 50))
-    if scores.get("trending", 0.0) > 0.5 and rsi > 50:
-        probs["bullish_trending"] = scores.get("trending", 0.0)
-    if scores.get("volatile", 0.0) > 0.5 and rsi < 50:
-        probs["bearish_volatile"] = scores.get("volatile", 0.0)
+        latest = df.iloc[-1]
+        rsi = float(latest.get("rsi", 50))
+        if scores.get("trending", 0.0) > 0.5 and rsi > 50:
+            probs["bullish_trending"] = scores.get("trending", 0.0)
+        if scores.get("volatile", 0.0) > 0.5 and rsi < 50:
+            probs["bearish_volatile"] = scores.get("volatile", 0.0)
 
     probs = _normalize(probs)
 
@@ -379,7 +382,6 @@ def _classify_all(
                 "Skipping ML fallback \u2014 insufficient data (%d rows)", len(df)
             )
         return regime, _probabilities(regime, 0.0), patterns
-            logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
 
     if ml_label != "unknown" and use_ml and len(df) >= ml_min_bars:
         weight = cfg.get("ml_blend_weight", 0.5)
@@ -393,10 +395,6 @@ def _classify_all(
 
     log_patterns(regime, patterns)
     return regime, final_probs, patterns
-        return regime, _normalize(_probabilities(regime, 0.0)), patterns
-
-    log_patterns(regime, patterns)
-    return regime, probs, patterns
 
 
 def classify_regime(
