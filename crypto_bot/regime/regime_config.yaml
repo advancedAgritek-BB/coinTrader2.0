@@ -14,7 +14,8 @@ ema_slow: 21
 indicator_window: 14
 bb_window: 20
 ma_window: 20
-higher_timeframe: '4h'
+higher_timeframe: "4h"
 confirm_trend_with_higher_tf: false
 use_ml_regime_classifier: true
 ml_min_bars: 20
+pattern_min_conf: 0.0
