@@ -7,13 +7,16 @@ from uuid import uuid4
 class PaperWallet:
     """Simple wallet for paper trading supporting multiple positions."""
 
-    def __init__(self, balance: float, max_open_trades: int = 10) -> None:
+    def __init__(
+        self, balance: float, max_open_trades: int = 10, allow_short: bool = True
+    ) -> None:
         self.balance = balance
         # mapping of identifier (symbol or trade id) -> position details
         # each position: {"symbol": str | None, "side": str, "amount": float, "entry_price": float}
         self.positions: Dict[str, Dict[str, Any]] = {}
         self.realized_pnl = 0.0
         self.max_open_trades = max_open_trades
+        self.allow_short = allow_short
 
     # ------------------------------------------------------------------
     # Properties
@@ -83,6 +86,9 @@ class PaperWallet:
 
         if len(self.positions) >= self.max_open_trades:
             raise RuntimeError("Position limit reached")
+
+        if side == "sell" and not self.allow_short:
+            raise RuntimeError("Short selling disabled")
 
         trade_id = identifier or symbol or str(uuid4())
 
