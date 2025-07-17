@@ -76,7 +76,7 @@ exit_strategy:
   scale_out: true
   trailing_stop_factor: 1.2
   trailing_stop_pct: 0.01
-force_websocket_history: true
+force_websocket_history: false
 max_ws_limit: 100
 grid_bot:
   atr_normalization: true
