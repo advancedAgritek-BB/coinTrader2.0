@@ -1138,6 +1138,72 @@ def test_load_ohlcv_parallel_propagates_cancelled(caplog):
     assert len(caplog.records) == 0
 
 
+def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    pool_data = {
+        "data": [
+            {"id": "pool1", "attributes": {"volume_usd": 123}},
+        ]
+    }
+    ohlcv_data = {
+        "data": [
+            {
+                "attributes": {
+                    "timestamp": 1,
+                    "open": 1,
+                    "high": 2,
+                    "low": 0.5,
+                    "close": 1.5,
+                    "volume": 10,
+                }
+            }
+        ]
+    }
+
+    class PoolResp:
+        status = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def raise_for_status(self):
+            pass
+
+        async def json(self):
+            return pool_data
+
+    class OhlcvResp(PoolResp):
+        async def json(self):
+            return ohlcv_data
+
+    class FakeSession:
+        def __init__(self):
+            self.calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=None):
+            self.calls += 1
+            if self.calls == 1:
+                return PoolResp()
+            return OhlcvResp()
+
+    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
+
+    res = asyncio.run(
+        market_loader.fetch_geckoterminal_ohlcv("FOO/USDC", timeframe="1h", limit=1)
+    )
+    assert res == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
+
+
 def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     from crypto_bot.utils import market_loader
 
@@ -1171,6 +1237,7 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     caplog.set_level(logging.INFO)
     res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
     assert res is None
+    assert any("pair not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
     assert any("token not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
 
 
