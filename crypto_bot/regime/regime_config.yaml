@@ -8,6 +8,7 @@ rsi_mean_rev_max: 70
 ema_distance_mean_rev_max: 0.02
 atr_volatility_mult: 1.5
 normalized_range_volatility_min: 1.5
+atr_baseline: 0.01
 
 ema_fast: 8
 ema_slow: 21

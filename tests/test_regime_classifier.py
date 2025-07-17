@@ -8,6 +8,7 @@ from crypto_bot.regime.regime_classifier import (
     classify_regime_async,
     classify_regime_with_patterns,
 )
+from crypto_bot.regime import regime_classifier as rc
 from crypto_bot.utils.market_analyzer import analyze_symbol
 from crypto_bot.strategy_router import strategy_for
 import crypto_bot.strategy_router as strategy_router
@@ -706,3 +707,32 @@ ma_window: 20
     regime, _ = classify_regime(df, config_path=str(cfg))
     assert regime != "volatile"
     assert isinstance(patterns, set)
+
+
+def test_adaptive_thresholds(tmp_path):
+    df = _make_volatility_df(0.1, 0.1)
+    cfg_file = tmp_path / "regime.yaml"
+    cfg_file.write_text(
+        """\
+adx_trending_min: 25
+adx_sideways_max: 18
+bb_width_sideways_max: 0.025
+bb_width_breakout_max: 4
+breakout_volume_mult: 1.5
+rsi_mean_rev_min: 30
+rsi_mean_rev_max: 70
+ema_distance_mean_rev_max: 0.02
+atr_volatility_mult: 1.5
+normalized_range_volatility_min: 1.5
+atr_baseline: 0.01
+ema_fast: 8
+ema_slow: 21
+indicator_window: 14
+bb_window: 20
+ma_window: 20
+"""
+    )
+    cfg = rc._load_config(cfg_file)
+    adapted = rc.adaptive_thresholds(cfg, df, "AAA")
+    assert adapted["adx_trending_min"] > cfg["adx_trending_min"]
+    assert adapted["rsi_mean_rev_max"] >= cfg["rsi_mean_rev_max"]
