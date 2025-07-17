@@ -1270,6 +1270,18 @@ def test_fetch_geckoterminal_ohlcv_invalid_mint(monkeypatch):
     assert res is None
 
 
+def test_fetch_geckoterminal_ohlcv_invalid_length(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    def fail_session(*_a, **_k):
+        raise AssertionError("should not be called")
+
+    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", fail_session)
+
+    res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("abcd/USDC"))
+    assert res is None
+
+
 def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     from crypto_bot.utils import market_loader
 

@@ -4,6 +4,7 @@ import time
 from .logger import LOG_DIR, setup_logger
 from .symbol_pre_filter import filter_symbols
 from .telemetry import telemetry
+from .market_loader import _is_valid_base_token
 
 
 def fix_symbol(sym: str) -> str:
@@ -38,6 +39,27 @@ async def get_filtered_symbols(exchange, config) -> list:
         return _cached_symbols
 
     symbols = config.get("symbols", [config.get("symbol")])
+    filtered_syms: list[str] = []
+    for sym in symbols:
+        if isinstance(sym, str) and sym.upper().endswith("/USDC"):
+            base = sym.split("/", 1)[0]
+            if not _is_valid_base_token(base):
+                continue
+        filtered_syms.append(sym)
+    symbols = filtered_syms
+
+    cleaned_symbols = []
+    for sym in symbols:
+        if not isinstance(sym, str):
+            cleaned_symbols.append(sym)
+            continue
+        base, _, quote = sym.partition("/")
+        if quote.upper() == "USDC" and not _is_valid_base_token(base):
+            logger.info("Dropping invalid USDC pair %s", sym)
+            continue
+        cleaned_symbols.append(sym)
+
+    symbols = cleaned_symbols
     skipped_before = telemetry.snapshot().get("scan.symbols_skipped", 0)
     if asyncio.iscoroutinefunction(filter_symbols):
         scored = await filter_symbols(exchange, symbols, config)
