@@ -304,10 +304,10 @@ def _classify_all(
     if len(df) < ml_min_bars:
         return "unknown", _probabilities("unknown"), {}
 
-    patterns = detect_patterns(df)
     pattern_min = float(cfg.get("pattern_min_conf", 0.0))
+    patterns = detect_patterns(df, min_conf=pattern_min)
+
     regime = _classify_core(df, cfg, higher_df)
-    patterns = detect_patterns(df, min_conf=cfg.get("pattern_min_conf", 0.0))
 
     # Score regimes based on indicator result and detected patterns
     scores: Dict[str, float] = {}
@@ -323,15 +323,10 @@ def _classify_all(
     if regime != "unknown":
         scores[regime] = scores.get(regime, 0.0) + 1.0
 
-    probs = {r: 0.0 for r in _ALL_REGIMES}
     if scores:
         total = sum(scores.values())
-        if total > 0:
-            for r, sc in scores.items():
-                probs[r] = sc / total
-        regime = max(scores, key=scores.get)
-        total = sum(scores.values())
         probabilities = {r: scores.get(r, 0.0) / total for r in _ALL_REGIMES}
+        regime = max(scores, key=scores.get)
         log_patterns(regime, patterns)
         return regime, probabilities, patterns
 
@@ -346,15 +341,6 @@ def _classify_all(
         if regime == "unknown" and ml_label != "unknown":
             log_patterns(ml_label, patterns)
             return ml_label, ml_probs, patterns
-    else:
-        latest = df.iloc[-1]
-        rsi = float(latest.get("rsi", 50))
-        if scores.get("trending", 0.0) > 0.5 and rsi > 50:
-            probs["bullish_trending"] = scores.get("trending", 0.0)
-        if scores.get("volatile", 0.0) > 0.5 and rsi < 50:
-            probs["bearish_volatile"] = scores.get("volatile", 0.0)
-
-    probs = _normalize(probs)
 
     if regime == "unknown":
         if cfg.get("use_ml_regime_classifier", False) and len(df) >= ml_min_bars:
@@ -410,9 +396,9 @@ def classify_regime(
     Returns
     -------
     Tuple[str, Dict[str, float]] or Tuple[str, float]
-        If ``df_map`` is ``None`` the function returns ``(label, patterns)``
-        when enough history is available, where ``patterns`` maps pattern
-        names to confidence values.  When the ML fallback is used due to
+        If ``df_map`` is ``None`` the function returns ``(label, probabilities)``
+        when enough history is available, where ``probabilities`` maps each
+        regime to its probability.  When the ML fallback is used due to
         insufficient history it returns ``(label, confidence)`` with
         ``confidence`` in ``[0, 1]``.
     Dict[str, str] or Tuple[str, str]
@@ -425,6 +411,11 @@ def classify_regime(
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
     _configure_logger(cfg)
     cfg = adaptive_thresholds(cfg, df, symbol)
+
+    ml_min_bars = cfg.get("ml_min_bars", 20)
+
+    if df_map is None and (df is None or len(df) < ml_min_bars):
+        return "unknown", set()
 
     result = _classify_all(df, higher_df, cfg, df_map=df_map)
 
@@ -476,7 +467,7 @@ async def classify_regime_with_patterns_async(
     *,
     config_path: Optional[str] = None,
     symbol: Optional[str] = None,
-) -> Tuple[str, set[str]]:
+) -> Tuple[str, Dict[str, float]]:
     """Async wrapper around :func:`classify_regime_with_patterns`."""
     return await asyncio.to_thread(
         classify_regime_with_patterns,
