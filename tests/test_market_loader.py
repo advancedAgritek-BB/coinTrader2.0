@@ -15,6 +15,7 @@ from crypto_bot.utils.market_loader import (
     update_regime_tf_cache,
 )
 
+
 class DummyExchange:
     exchange_market_types = {"spot"}
 
@@ -26,10 +27,12 @@ class DummyExchange:
             "XRP/USD": {"active": False, "type": "spot"},
         }
 
+
 def test_load_kraken_symbols_returns_active():
     ex = DummyExchange()
     symbols = asyncio.run(load_kraken_symbols(ex))
     assert set(symbols) == {"BTC/USD"}
+
 
 def test_excluded_symbols_are_removed():
     ex = DummyExchange()
@@ -40,6 +43,7 @@ def test_excluded_symbols_are_removed():
 def test_load_kraken_symbols_logs_exclusions(caplog):
     ex = DummyExchange()
     from crypto_bot.utils import market_loader
+
     with caplog.at_level(logging.DEBUG):
         market_loader.logger.setLevel(logging.DEBUG)
         symbols = asyncio.run(load_kraken_symbols(ex, exclude=["ETH/USD"]))
@@ -56,6 +60,8 @@ def test_load_kraken_symbols_market_type_filter():
     ex.exchange_market_types = {"margin", "futures"}
     symbols = asyncio.run(load_kraken_symbols(ex))
     assert set(symbols) == {"ETH/USD", "XBT/USD-PERP"}
+
+
 class DummyTypeExchange:
     def load_markets(self):
         return {
@@ -116,12 +122,14 @@ def test_load_kraken_symbols_handles_symbol_column():
 
 class DummyAsyncExchange:
     has = {"fetchOHLCV": True}
+
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         return [[0, 1, 2, 3, 4, 5]]
 
 
 class DummyWSExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.fetch_called = False
 
@@ -162,6 +170,7 @@ def test_watch_ohlcv_no_fallback_when_enough():
 
 class IncompleteExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.calls = 0
 
@@ -175,9 +184,7 @@ class IncompleteExchange:
 def test_incomplete_ohlcv_warns_and_retries(caplog):
     ex = IncompleteExchange()
     caplog.set_level(logging.WARNING)
-    data = asyncio.run(
-        fetch_ohlcv_async(ex, "BTC/USD", limit=5, since=1000)
-    )
+    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=5, since=1000))
     assert ex.calls >= 2
     assert len(data) == 5
     assert any(
@@ -188,6 +195,7 @@ def test_incomplete_ohlcv_warns_and_retries(caplog):
 
 class DummySyncExchange:
     has = {"fetchOHLCV": True}
+
     def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         return [[0, 1, 2, 3, 4, 5]]
 
@@ -222,6 +230,7 @@ def test_load_ohlcv_parallel():
 
 class DummyWSEchange:
     has = {"fetchOHLCV": True}
+
     async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
         return [[0, 1, 2, 3, 4, 5]]
 
@@ -231,6 +240,7 @@ class DummyWSEchange:
 
 class DummyWSExceptionExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.fetch_called = False
 
@@ -285,6 +295,7 @@ def test_watch_ohlcv_exception_falls_back_to_fetch():
 
 class LimitCaptureExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.watch_limit = None
         self.fetch_called = False
@@ -371,6 +382,7 @@ def test_force_websocket_history_ignores_max_ws_limit(monkeypatch):
 
 class DummyIncExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.data = [[i] * 6 for i in range(100, 400, 100)]
 
@@ -389,23 +401,34 @@ class DummyFailExchange(DummyIncExchange):
 def test_update_ohlcv_cache_appends():
     ex = DummyIncExchange()
     cache: dict[str, pd.DataFrame] = {}
-    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=2, max_concurrent=2))
+    cache = asyncio.run(
+        update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=2, max_concurrent=2)
+    )
     assert len(cache["BTC/USD"]) == 2
     ex.data.append([400] * 6)
-    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2))
+    cache = asyncio.run(
+        update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2)
+    )
     assert len(cache["BTC/USD"]) == 4
 
 
 def test_update_ohlcv_cache_fallback_full_history():
     ex = DummyFailExchange()
     cache: dict[str, pd.DataFrame] = {}
-    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=3, max_concurrent=2))
+    cache = asyncio.run(
+        update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=3, max_concurrent=2)
+    )
     assert len(cache["BTC/USD"]) == 3
     ex.data.append([400] * 6)
-    cache = asyncio.run(update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2))
+    cache = asyncio.run(
+        update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2)
+    )
     assert len(cache["BTC/USD"]) == 4
+
+
 class CountingExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.active = 0
         self.max_active = 0
@@ -470,6 +493,7 @@ def test_load_ohlcv_parallel_invalid_max_concurrent():
 
 class DummyMultiTFExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.calls: list[str] = []
 
@@ -502,7 +526,10 @@ def test_update_regime_tf_cache():
     ex = DummyMultiTFExchange()
     cache: dict[str, dict[str, pd.DataFrame]] = {}
     config = {"regime_timeframes": ["5m", "15m", "1h"]}
-    df = pd.DataFrame([[0, 1, 2, 3, 4, 5]], columns=["timestamp", "open", "high", "low", "close", "volume"])
+    df = pd.DataFrame(
+        [[0, 1, 2, 3, 4, 5]],
+        columns=["timestamp", "open", "high", "low", "close", "volume"],
+    )
     df_map = {"5m": {"BTC/USD": df}, "1h": {"BTC/USD": df}}
     cache = asyncio.run(
         update_regime_tf_cache(
@@ -519,8 +546,11 @@ def test_update_regime_tf_cache():
     for tf in config["regime_timeframes"]:
         assert "BTC/USD" in cache[tf]
     assert set(ex.calls) == {"15m"}
+
+
 class FailOnceExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.calls = 0
 
@@ -533,6 +563,7 @@ class FailOnceExchange:
 
 class AlwaysFailExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.calls = 0
 
@@ -543,6 +574,7 @@ class AlwaysFailExchange:
 
 class FailSuccessExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.calls = 0
 
@@ -732,22 +764,16 @@ def test_symbol_disabled_after_max_failures(monkeypatch):
     monkeypatch.setattr(market_loader, "RETRY_DELAY", 0)
     monkeypatch.setattr(market_loader, "MAX_OHLCV_FAILURES", 2)
 
-    asyncio.run(
-        market_loader.load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1)
-    )
+    asyncio.run(market_loader.load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1))
     assert market_loader.failed_symbols["BTC/USD"]["count"] == 1
     assert not market_loader.failed_symbols["BTC/USD"].get("disabled")
 
-    asyncio.run(
-        market_loader.load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1)
-    )
+    asyncio.run(market_loader.load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1))
     assert market_loader.failed_symbols["BTC/USD"]["count"] == 2
     assert market_loader.failed_symbols["BTC/USD"].get("disabled") is True
 
     calls = ex.calls
-    asyncio.run(
-        market_loader.load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1)
-    )
+    asyncio.run(market_loader.load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1))
     assert ex.calls == calls
 
 
@@ -757,6 +783,7 @@ class StopLoop(Exception):
 
 def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
     import sys, types
+
     monkeypatch.setitem(sys.modules, "ccxt", types.SimpleNamespace())
     import crypto_bot.main as main
 
@@ -818,6 +845,7 @@ def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
 
 class SlowExchange:
     has = {"fetchOHLCV": True}
+
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         await asyncio.sleep(0.05)
         return [[0] * 6]
@@ -825,6 +853,7 @@ class SlowExchange:
 
 class SlowWSExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.fetch_called = False
 
@@ -874,9 +903,7 @@ def test_fetch_ohlcv_async_timeout_fallback(monkeypatch):
     monkeypatch.setattr(market_loader, "REST_OHLCV_TIMEOUT", 0.01)
 
     data = asyncio.run(
-        market_loader.fetch_ohlcv_async(
-            ex, "BTC/USD", limit=2, use_websocket=True
-        )
+        market_loader.fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True)
     )
     assert ex.fetch_called is True
     assert isinstance(data, list)
@@ -909,6 +936,7 @@ def test_load_ohlcv_parallel_timeout_fallback(monkeypatch):
 
 class LimitCaptureWS:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.limit = None
 
@@ -938,6 +966,7 @@ def test_watch_ohlcv_since_reduces_limit(monkeypatch):
 
 class RateLimitExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.times: list[float] = []
         self.rateLimit = 50
@@ -959,8 +988,11 @@ def test_load_ohlcv_parallel_rate_limit_sleep():
     )
     assert len(ex.times) == 2
     assert ex.times[1] - ex.times[0] >= ex.rateLimit / 1000
+
+
 class SymbolCheckExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.symbols: list[str] = []
         self.calls: list[str] = []
@@ -1003,6 +1035,8 @@ def test_invalid_symbol_marked_disabled():
     result = asyncio.run(market_loader.fetch_ohlcv_async(ex, "ETH/USD"))
     assert result is market_loader.UNSUPPORTED_SYMBOL
     assert market_loader.failed_symbols["ETH/USD"].get("disabled") is True
+
+
 class MissingTFExchange:
     has = {"fetchOHLCV": True}
     timeframes = {"5m": "5m"}
@@ -1086,6 +1120,7 @@ def test_fetch_ohlcv_retry_520_network(monkeypatch):
 
 class CancelWSExchange:
     has = {"fetchOHLCV": True}
+
     def __init__(self):
         self.fetch_called = False
 
@@ -1123,6 +1158,7 @@ def test_load_ohlcv_parallel_cancelled_error(monkeypatch, caplog):
     assert "BTC/USD" not in market_loader.failed_symbols
     assert not caplog.records
 
+
 class CancelExchange:
     has = {"fetchOHLCV": True}
 
@@ -1143,7 +1179,10 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
 
     pool_data = {
         "data": [
-            {"id": "pool1", "attributes": {"volume_usd": {"h24": 123}, "reserve_in_usd": 0}},
+            {
+                "id": "pool1",
+                "attributes": {"volume_usd": {"h24": 123}, "reserve_in_usd": 0},
+            },
             {
                 "id": "pool1",
                 "attributes": {"volume_usd": {"h24": 123}, "address": "pool1"},
@@ -1155,7 +1194,7 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
         "data": {
             "attributes": {
                 "ohlcv_list": [
-                    [1, 1, 2, 0.5, 1.5, 10]
+                    [1, 1, 2, 0.5, 1.5, 10],
                     [1, 1, 2, 0.5, 1.5, 10],
                 ]
             }
@@ -1193,20 +1232,20 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
         def get(self, url, timeout=None):
             FakeSession.calls += 1
             if FakeSession.calls == 1:
-                assert "tokens/FOO/pools" in url
+                assert "search/pools" in url
+                assert "query=FOO%2FUSDC" in url
                 return PoolResp()
-            assert "/pools/pool1/ohlcv/hour" in url
+            assert "/pools/pool1/ohlcv/1h" in url
             return OhlcvResp()
 
     monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
 
-    res, vol = asyncio.run(
+    data, vol, reserve = asyncio.run(
         market_loader.fetch_geckoterminal_ohlcv("FOO/USDC", timeframe="1h", limit=1)
     )
-    assert res == ([[1, 1.0, 2.0, 0.5, 1.5, 10.0]], 123.0, 0.0)
-    assert res == [[1000, 1.0, 2.0, 0.5, 1.5, 10.0]]
-    assert vol == 123
-    assert res == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
+    assert data == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
+    assert vol == 123.0
+    assert reserve == 0.0
 
 
 def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
@@ -1243,8 +1282,12 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     caplog.set_level(logging.INFO)
     res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
     assert res is None
-    assert any("token not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
-    assert any("pair not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
+    assert any(
+        "token not available on GeckoTerminal" in r.getMessage() for r in caplog.records
+    )
+    assert any(
+        "pair not available on GeckoTerminal" in r.getMessage() for r in caplog.records
+    )
 
 
 def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
@@ -1255,8 +1298,10 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", lambda *a, **k: None)
+
     async def fake_ohlcv(*a, **k):
         return [[1, 1, 1, 1, 1, 1]]
+
     monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_ohlcv)
 
     ex = DummyMultiTFExchange()
@@ -1279,6 +1324,7 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
 
     async def fake_fetch(*_a, **_k):
         return [[0, 1, 2, 3, 4, 5]], 50.0, 1000.0
+
     calls: list[float] = []
 
     async def fake_fetch(*_a, min_24h_volume=0, **_k):
@@ -1289,8 +1335,10 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", lambda *a, **k: None)
+
     async def fake_ohlcv2(*a, **k):
         return [[1, 1, 1, 1, 1, 1]]
+
     monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_ohlcv2)
 
     ex = DummyMultiTFExchange()
