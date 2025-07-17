@@ -386,7 +386,7 @@ class DummyIncExchange:
     has = {"fetchOHLCV": True}
 
     def __init__(self):
-        self.data = [[i] * 6 for i in range(100, 400, 100)]
+        self.data = [[i] * 6 for i in range(200)]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
         rows = [r for r in self.data if since is None or r[0] > since]
@@ -401,31 +401,57 @@ class DummyFailExchange(DummyIncExchange):
 
 
 def test_update_ohlcv_cache_appends():
-    ex = DummyIncExchange()
+    from crypto_bot.utils import market_loader
+    market_loader._last_snapshot_time = 0
+    ex = DummyLargeExchange()
     cache: dict[str, pd.DataFrame] = {}
     cache = asyncio.run(
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=2, max_concurrent=2)
     )
-    assert len(cache["BTC/USD"]) == 2
-    ex.data.append([400] * 6)
+    assert len(cache["BTC/USD"]) == 200
+    ex.data.extend([[i] * 6 for i in range(200, 301)])
     cache = asyncio.run(
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2)
     )
-    assert len(cache["BTC/USD"]) == 4
+    assert len(cache["BTC/USD"]) == 200
 
 
 def test_update_ohlcv_cache_fallback_full_history():
+    from crypto_bot.utils import market_loader
+    market_loader._last_snapshot_time = 0
     ex = DummyFailExchange()
     cache: dict[str, pd.DataFrame] = {}
     cache = asyncio.run(
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=3, max_concurrent=2)
     )
-    assert len(cache["BTC/USD"]) == 3
-    ex.data.append([400] * 6)
+    assert len(cache["BTC/USD"]) == 200
+    ex.data.extend([[i] * 6 for i in range(200, 301)])
     cache = asyncio.run(
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2)
     )
-    assert len(cache["BTC/USD"]) == 4
+    assert len(cache["BTC/USD"]) == 200
+
+
+class DummyLargeExchange:
+    has = {"fetchOHLCV": True}
+
+    def __init__(self):
+        self.data = [[i] * 6 for i in range(200)]
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
+        rows = [r for r in self.data if since is None or r[0] > since]
+        return rows[:limit]
+
+
+def test_update_ohlcv_cache_enforces_min_limit():
+    from crypto_bot.utils import market_loader
+    market_loader._last_snapshot_time = 0
+    ex = DummyLargeExchange()
+    cache: dict[str, pd.DataFrame] = {}
+    cache = asyncio.run(
+        update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=50, max_concurrent=2)
+    )
+    assert len(cache["BTC/USD"]) == 200
 
 
 class CountingExchange:

@@ -18,6 +18,9 @@ from .strategy_analytics import compute_metrics, write_scores, write_stats
 from .stats import zscore
 from .commit_lock import check_and_update
 from .telemetry import telemetry
-from .solana_scanner import get_solana_new_tokens as utils_get_solana_new_tokens
+try:
+    from .solana_scanner import get_solana_new_tokens as utils_get_solana_new_tokens
+except Exception:  # pragma: no cover - optional dependency
+    utils_get_solana_new_tokens = None
 from .pyth import get_pyth_price
 from .pyth_utils import get_pyth_price
