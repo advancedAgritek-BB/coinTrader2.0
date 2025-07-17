@@ -113,6 +113,16 @@ async def analyze_symbol(
         Optional notifier used to send a message when the strategy is invoked.
     """
     router_cfg = RouterConfig.from_dict(config)
+    lookback = config.get("indicator_lookback", 14) * 2
+    for tf, df in df_map.items():
+        if df is None or len(df) < lookback:
+            analysis_logger.info(
+                "Skipping analysis for %s on %s: insufficient data (%d candles)",
+                symbol,
+                tf,
+                0 if df is None else len(df),
+            )
+            return {"symbol": symbol, "skip": True}
     base_tf = router_cfg.timeframe
     higher_tf = config.get("higher_timeframe", "1d")
     df = df_map.get(base_tf)
