@@ -225,6 +225,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 ### Exchange and Execution
 * **exchange** – target CEX (`coinbase` or `kraken`).
 * **execution_mode** – choose `dry_run` for simulation or `live` for real orders.
+  Paper trading defaults to long-only on spot exchanges.
 * **use_websocket** – enable WebSocket data via `ccxt.pro`.
 * **force_websocket_history** – disable REST fallbacks when streaming (default: false).
 * **max_ws_limit** – skip WebSocket OHLCV when `limit` exceeds this value.
@@ -237,6 +238,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **scan_in_background** – start the initial scan in the background so trading can begin immediately.
 * **excluded_symbols** – markets to skip during scanning.
 * **solana_symbols** – base tokens traded on Solana; each is appended with `/USDC`.
+* **allow_short** – enable short selling. Set to `true` only when your exchange account supports short selling.
 
 ### Market Scanning
 * **symbol_batch_size** – number of symbols processed each cycle.
