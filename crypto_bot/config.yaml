@@ -105,7 +105,7 @@ loop_interval_minutes: 0.5
 balance_poll_mod: 1
 max_age_days: 90
 max_change_pct: 20
-max_concurrent_ohlcv: 50
+max_concurrent_ohlcv: 20
 max_parallel: 50
 max_latency_ms: 500
 max_ohlcv_failures: 5
@@ -170,7 +170,7 @@ solana_scalping:
   macd_slow: 24
   macd_signal: 8
 min_agreeing_votes: 1
-min_confidence_score: 0.0
+min_confidence_score: 0.05
 min_consistent_agreement: 1
 ensemble_min_conf: 0.1
 min_cooldown: 0
@@ -183,7 +183,7 @@ mode: auto
 mode_degrade_window: 15
 mode_threshold: 0.3
 ohlcv_snapshot_frequency_minutes: 720
-ohlcv_snapshot_limit: 1000
+ohlcv_snapshot_limit: 500
 ohlcv_timeout: 60
 optimization:
   enabled: true
@@ -216,6 +216,7 @@ regime_timeframes:
 - 5m
 - 15m
 - 1h
+- 4h
 risk:
   atr_long_window: 40
   atr_period: 10
@@ -223,7 +224,7 @@ risk:
   max_drawdown: 0.5
   max_volatility_factor: 3
   min_expected_value: -0.1
-  min_volume: 0.0
+  min_volume: 0.1
   stop_loss_atr_mult: 1.2
   stop_loss_pct: 0.005
   take_profit_atr_mult: 4.0
@@ -250,7 +251,7 @@ sentiment_filter:
 signal_fusion:
   enabled: false
   fusion_method: weight
-  min_confidence: 0.0
+  min_confidence: 0.05
   strategies:
   - - trend
     - 0.5
@@ -291,6 +292,13 @@ strategy_router:
     breakout_squeeze_window: 10
     breakout_volume_multiplier: 3
     trend_adx_threshold: 20
+  bounce_timeframe: 5m
+  breakout_timeframe: 15m
+  mean_reverting_timeframe: 1h
+  scalp_timeframe: 1m
+  sideways_timeframe: 1h
+  trending_timeframe: 1h
+  volatile_timeframe: 1m
   regimes:
     bounce:
     - bounce_scalper
@@ -358,12 +366,13 @@ telegram_ctl:
   enabled: true
   update_interval: 30
 testing_mode: true
-timeframe: 1m
+timeframe: 15m
 timeframes:
 - 1m
 - 5m
 - 15m
 - 1h
+- 4h
 top_n_symbols: 50
 tp_pct: 0.1
 trade_size_pct: 0.1
@@ -379,7 +388,7 @@ use_websocket: true
 hidden_limit: true
 volatility_filter:
   max_funding_rate: 0.1
-  min_atr_pct: 0.0
+  min_atr_pct: 0.0001
 voting_strategies:
 - trend
 - momentum
