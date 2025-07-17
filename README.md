@@ -632,6 +632,11 @@ Increase this threshold in `crypto_bot/config.yaml` when large history
 requests should still use WebSocket. For example set
 `max_ws_limit: 200` if you regularly request 200 candles.
 
+During the startup scan the bot always loads historical candles over REST
+regardless of the WebSocket setting. It calls `fetch_ohlcv` for up to
+`scan_lookback_limit` candles per pair (700 by default on Kraken) to build the
+cache before realtime updates begin over WebSocket.
+
 The client now records heartbeat events and exposes `is_alive(conn_type)` to
 check if a connection has received a heartbeat within the last 10 seconds. Call
 `ping()` periodically to keep the session active.
