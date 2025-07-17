@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 import ccxt
 import aiohttp
+import base58
 import warnings
 
 from .telegram import TelegramNotifier
@@ -797,6 +798,18 @@ async def fetch_geckoterminal_ohlcv(
     """
 
     from urllib.parse import quote_plus
+
+    # Validate symbol before making any requests
+    try:
+        token_mint, quote = symbol.split("/", 1)
+    except ValueError:
+        token_mint, quote = symbol, ""
+    if quote != "USDC":
+        return None
+    try:
+        base58.b58decode(token_mint)
+    except Exception:
+        return None
 
     cached = GECKO_POOL_CACHE.get(symbol)
     is_cached = cached is not None and cached[4] == limit

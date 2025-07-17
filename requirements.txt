@@ -36,3 +36,4 @@ prometheus-client
 solders
 pythclient
 redis
+base58
