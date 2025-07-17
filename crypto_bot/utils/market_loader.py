@@ -47,6 +47,7 @@ COINGECKO_IDS = {
 # Cache GeckoTerminal pool addresses and metadata per symbol
 # Mapping: symbol -> (pool_addr, volume, reserve, price, limit)
 GECKO_POOL_CACHE: dict[str, tuple[str, float, float, float, int]] = {}
+GECKO_SEMAPHORE = asyncio.Semaphore(25)
 
 # Valid characters for Solana addresses
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -72,9 +73,10 @@ def configure(
     ws_ohlcv_timeout: int | float | None = None,
     rest_ohlcv_timeout: int | float | None = None,
     max_concurrent: int | None = None,
+    gecko_limit: int | None = None,
 ) -> None:
     """Configure module-wide settings."""
-    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES, SEMA
+    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES, SEMA, GECKO_SEMAPHORE
     if ohlcv_timeout is not None:
         try:
             val = max(1, int(ohlcv_timeout))
@@ -154,6 +156,17 @@ def configure(
                 "Invalid max_concurrent %s; disabling semaphore", max_concurrent
             )
             SEMA = None
+
+    if gecko_limit is not None:
+        try:
+            val = int(gecko_limit)
+            if val < 1:
+                raise ValueError
+            GECKO_SEMAPHORE = asyncio.Semaphore(val)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid gecko_limit %s; using default", gecko_limit
+            )
 
 
 def is_symbol_type(pair_info: dict, allowed: List[str]) -> bool:
@@ -815,67 +828,68 @@ async def fetch_geckoterminal_ohlcv(
 
     from urllib.parse import quote_plus
 
-    # Validate symbol before making any requests
-    try:
-        token_mint, quote = symbol.split("/", 1)
-    except ValueError:
-        token_mint, quote = symbol, ""
-    if quote != "USDC":
-        return None
-    try:
-        base58.b58decode(token_mint)
-    except Exception:
-        return None
+    async with GECKO_SEMAPHORE:
+        # Validate symbol before making any requests
+        try:
+            token_mint, quote = symbol.split("/", 1)
+        except ValueError:
+            token_mint, quote = symbol, ""
+        if quote != "USDC":
+            return None
+        try:
+            base58.b58decode(token_mint)
+        except Exception:
+            return None
 
-    cached = GECKO_POOL_CACHE.get(symbol)
-    is_cached = cached is not None and cached[4] == limit
-    async with aiohttp.ClientSession() as session:
-        if cached is None:
-            query = quote_plus(symbol)
-            search_url = (
-                "https://api.geckoterminal.com/api/v2/search/pools"
-                f"?query={query}&network=solana"
-            )
+        cached = GECKO_POOL_CACHE.get(symbol)
+        is_cached = cached is not None and cached[4] == limit
+        async with aiohttp.ClientSession() as session:
+            if cached is None:
+                query = quote_plus(symbol)
+                search_url = (
+                    "https://api.geckoterminal.com/api/v2/search/pools"
+                    f"?query={query}&network=solana"
+                )
 
-            try:
-                async with session.get(search_url, timeout=10) as resp:
-                    if resp.status == 404:
-                        logger.info("pair not available on GeckoTerminal: %s", symbol)
-                        return None
-                    resp.raise_for_status()
-                    search_data = await resp.json()
-            except Exception as exc:  # pragma: no cover - network
-                logger.error("GeckoTerminal search error for %s: %s", symbol, exc)
-                return None
+                try:
+                    async with session.get(search_url, timeout=10) as resp:
+                        if resp.status == 404:
+                            logger.info("pair not available on GeckoTerminal: %s", symbol)
+                            return None
+                        resp.raise_for_status()
+                        search_data = await resp.json()
+                except Exception as exc:  # pragma: no cover - network
+                    logger.error("GeckoTerminal search error for %s: %s", symbol, exc)
+                    return None
 
-            items = search_data.get("data") or []
-            if not items:
-                logger.info("pair not available on GeckoTerminal: %s", symbol)
-                return None
+                items = search_data.get("data") or []
+                if not items:
+                    logger.info("pair not available on GeckoTerminal: %s", symbol)
+                    return None
 
-            first = items[0]
-            attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
+                first = items[0]
+                attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
 
-            pool_id = str(first.get("id", ""))
-            pool_addr = pool_id.split("_", 1)[-1]
-            try:
-                volume = float(attrs.get("volume_usd", {}).get("h24", 0.0))
-            except Exception:
-                volume = 0.0
-            if volume < float(min_24h_volume):
-                return None
-            try:
-                price = float(attrs.get("base_token_price_quote_token", 0.0))
-            except Exception:
-                price = 0.0
-            try:
-                reserve = float(attrs.get("reserve_in_usd", 0.0))
-            except Exception:
-                reserve = 0.0
+                pool_id = str(first.get("id", ""))
+                pool_addr = pool_id.split("_", 1)[-1]
+                try:
+                    volume = float(attrs.get("volume_usd", {}).get("h24", 0.0))
+                except Exception:
+                    volume = 0.0
+                if volume < float(min_24h_volume):
+                    return None
+                try:
+                    price = float(attrs.get("base_token_price_quote_token", 0.0))
+                except Exception:
+                    price = 0.0
+                try:
+                    reserve = float(attrs.get("reserve_in_usd", 0.0))
+                except Exception:
+                    reserve = 0.0
 
-            GECKO_POOL_CACHE[symbol] = (pool_addr, volume, reserve, price, limit)
-        else:
-            pool_addr, volume, reserve, price, _ = cached
+                GECKO_POOL_CACHE[symbol] = (pool_addr, volume, reserve, price, limit)
+            else:
+                pool_addr, volume, reserve, price, _ = cached
 
         ohlcv_url = (
             "https://api.geckoterminal.com/api/v2/networks/solana/pools/"

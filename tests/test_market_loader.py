@@ -1334,6 +1334,59 @@ def test_fetch_geckoterminal_ohlcv_network_error(monkeypatch):
     assert res is None
 
 
+def test_geckoterminal_semaphore_limits(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    market_loader.configure(gecko_limit=1)
+    market_loader.GECKO_POOL_CACHE.clear()
+
+    calls = {"active": 0, "max": 0}
+
+    class FakeResp:
+        status = 200
+
+        def __init__(self, url):
+            self.url = url
+
+        async def __aenter__(self):
+            calls["max"] = max(calls["max"], calls["active"])
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            calls["active"] -= 1
+
+        def raise_for_status(self):
+            pass
+
+        async def json(self):
+            if "search/pools" in self.url:
+                return {"data": [{"id": "pool1", "attributes": {"volume_usd": {"h24": 0}}}]}
+            return {"data": {"attributes": {"ohlcv_list": [[1, 1, 1, 1, 1, 1]]}}}
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=None):
+            calls["active"] += 1
+            return FakeResp(url)
+
+    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
+
+    async def worker():
+        await market_loader.fetch_geckoterminal_ohlcv(f"{VALID_MINT}/USDC", limit=1)
+
+    async def main():
+        await asyncio.gather(*(worker() for _ in range(3)))
+
+    asyncio.run(main())
+
+    assert calls["max"] == 1
+
+
 def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
     from crypto_bot.utils import market_loader
 
@@ -1539,6 +1592,10 @@ def test_gecko_volume_priority(monkeypatch):
     )
     assert "BAR/USDC" in cache["1h"]
     assert calls["fetch"] == 1
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            cache,
             ["FOO/USDC"],
             config,
             limit=3,
