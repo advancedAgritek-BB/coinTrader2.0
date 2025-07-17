@@ -1,10 +1,6 @@
 import time
 import telegram_ctl as ctl
 
-import pytest
-
-pytestmark = pytest.mark.asyncio
-
 
 def test_set_get_page():
     ctl.callback_state.clear()
@@ -25,6 +21,7 @@ def test_expiration(monkeypatch):
     assert ctl.callback_state == {}
 import asyncio
 import types
+import pytest
 
 try:
     import crypto_bot.telegram_ctl as telegram_ctl

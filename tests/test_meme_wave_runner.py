@@ -1,8 +1,6 @@
 import asyncio
 import pytest
 
-pytestmark = pytest.mark.asyncio
-
 from crypto_bot.solana import meme_wave_runner
 from crypto_bot.solana.watcher import NewPoolEvent, PoolWatcher
 from crypto_bot.main import SessionState, initial_scan

@@ -16,9 +16,6 @@ from pathlib import Path
 
 
 _last_snapshot_time = 0
-_last_dex_request = 0
-
-DEXSCREENER_MIN_INTERVAL = 0.75
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
@@ -192,8 +189,6 @@ def timeframe_seconds(exchange, timeframe: str) -> int:
             pass
     unit = timeframe[-1]
     value = int(timeframe[:-1])
-    if unit == "s":
-        return value
     if unit == "m":
         return value * 60
     if unit == "h":
@@ -743,34 +738,14 @@ async def fetch_dexscreener_ohlcv(
         "https://api.dexscreener.com/latest/dex/charts/"
         f"{pair}?interval={timeframe}&limit={limit}"
     )
-    attempt = 0
-    while True:
-        global _last_dex_request
-        wait = _last_dex_request + DEXSCREENER_MIN_INTERVAL - time.time()
-        if wait > 0:
-            await asyncio.sleep(wait)
-        _last_dex_request = time.time()
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=10) as resp:
-                    if resp.status == 404:
-                        logger.info("pair not available on DexScreener: %s", symbol)
-                        return None
-                    resp.raise_for_status()
-                    data = await resp.json()
-            break
-        except aiohttp.ClientResponseError as exc:
-            if exc.status == 429 and attempt == 0:
-                retry_after = exc.headers.get("Retry-After")
-                try:
-                    delay = float(retry_after)
-                except (TypeError, ValueError):
-                    delay = 1
-                await asyncio.sleep(delay)
-                attempt += 1
-                continue
-            raise
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, timeout=10) as resp:
+            if resp.status == 404:
+                logger.info("pair not available on DexScreener: %s", symbol)
+                return None
+            resp.raise_for_status()
+            data = await resp.json()
 
     candles = (
         data.get("candles")

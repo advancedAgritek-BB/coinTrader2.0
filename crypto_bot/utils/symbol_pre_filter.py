@@ -202,7 +202,7 @@ async def _refresh_tickers(
 
     try_ws = (
         getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
-        and getattr(exchange, "options", {}).get("ws_scan", True)
+        and exchange.options.get("ws_scan", True)
     )
     try_http = True
     data: dict = {}
@@ -421,8 +421,6 @@ def _timeframe_seconds(exchange, timeframe: str) -> int:
             pass
     unit = timeframe[-1]
     value = int(timeframe[:-1])
-    if unit == "s":
-        return value
     if unit == "m":
         return value * 60
     if unit == "h":
