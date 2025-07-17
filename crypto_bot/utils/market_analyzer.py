@@ -320,9 +320,9 @@ async def analyze_symbol(
                 score = 0.0
                 direction = "none"
         else:
-            strategy_fn = wrap(route(regime, env, router_cfg, notifier, df=df))
+            strategy_fn = wrap(route(regime, env, router_cfg, notifier, df_map=df_map))
             name = strategy_name(regime, env)
-            score, direction, atr = (await evaluate_async([strategy_fn], df, cfg))[0]
+            score, direction, atr = (await evaluate_async([strategy_fn], df_map, cfg))[0]
 
         atr_period = int(config.get("risk", {}).get("atr_period", 14))
         if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
