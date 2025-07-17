@@ -1292,6 +1292,16 @@ async def update_ohlcv_cache(
         df_new = pd.DataFrame(
             data, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
+        min_candles_required = int(limit * 0.5)
+        if len(df_new) < min_candles_required:
+            logger.warning(
+                "Skipping %s on %s: only %d candles (need >= %d)",
+                sym,
+                timeframe,
+                len(df_new),
+                min_candles_required,
+            )
+            continue
         changed = False
         if sym in cache and not cache[sym].empty:
             last_ts = cache[sym]["timestamp"].iloc[-1]
