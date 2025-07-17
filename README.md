@@ -245,7 +245,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **adaptive_scan.max_factor** – cap multiplier for batch size and scan rate.
 * **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
 * **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
-* **symbol_score_weights** – weights for volume, spread, change and age. The weights must sum to a positive value.
+* **symbol_score_weights** – weights for volume, spread, change, age and liquidity. The weights must sum to a positive value.
 * **uncached_volume_multiplier** – extra volume factor applied when a pair is missing from `cache/liquid_pairs.json`.
 * **min_symbol_age_days** – skip newly listed pairs.
 * **min_symbol_score** – minimum score required for trading.
@@ -260,6 +260,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **max_open_trades** – maximum simultaneous open trades.
 * **max_slippage_pct** – slippage tolerance for orders.
 * **liquidity_check**/**liquidity_depth** – verify order book depth.
+* **weight_liquidity** – scoring weight for available pool liquidity on Solana pairs.
 * **volatility_filter** - skips trading when ATR is too low or funding exceeds `max_funding_rate`.
 * **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment to avoid bearish markets.
 * **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
@@ -535,6 +536,7 @@ Additional execution flags:
 ```yaml
 liquidity_check: true        # verify order book liquidity before placing orders
 liquidity_depth: 10          # order book depth levels to inspect
+weight_liquidity: 0.0        # symbol score weight for pool liquidity
 twap_enabled: false          # split large orders into slices
 twap_slices: 4               # number of slices when TWAP is enabled
 twap_interval_seconds: 10    # delay between TWAP slices

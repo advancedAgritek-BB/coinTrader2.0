@@ -919,8 +919,8 @@ async def fetch_geckoterminal_ohlcv(
     symbol: str,
     timeframe: str = "1h",
     limit: int = 100,
-) -> tuple[list, float] | None:
-    """Return OHLCV data and 24h volume for ``symbol`` from the GeckoTerminal API."""
+) -> tuple[list, float, float] | None:
+    """Return OHLCV data, 24h volume and pool liquidity for ``symbol``."""
 
     from urllib.parse import quote_plus
 
@@ -943,26 +943,30 @@ async def fetch_geckoterminal_ohlcv(
             logger.info("pair not available on GeckoTerminal: %s", symbol)
             return None
 
-        pool_id = str(items[0].get("id", ""))
-        pool_addr = pool_id.split("_", 1)[-1]
-        try:
-            volume = float(
-                items[0]
-                .get("attributes", {})
-                .get("volume_usd", {})
-                .get("h24", 0.0)
-            )
-        except Exception:
-            volume = 0.0
-
-        ohlcv_url = (
-            "https://api.geckoterminal.com/api/v2/networks/solana/pools/"
-            f"{pool_addr}/ohlcv/{timeframe}?aggregate=1&limit={limit}"
+    pool_id = str(items[0].get("id", ""))
+    pool_addr = pool_id.split("_", 1)[-1]
+    try:
+        volume = float(
+            items[0]
+            .get("attributes", {})
+            .get("volume_usd", {})
+            .get("h24", 0.0)
         )
+    except Exception:
+        volume = 0.0
+    try:
+        reserve = float(items[0].get("attributes", {}).get("reserve_in_usd", 0.0))
+    except Exception:
+        reserve = 0.0
 
-        async with session.get(ohlcv_url, timeout=10) as resp:
-            resp.raise_for_status()
-            data = await resp.json()
+    ohlcv_url = (
+        "https://api.geckoterminal.com/api/v2/networks/solana/pools/"
+        f"{pool_addr}/ohlcv/{timeframe}?aggregate=1&limit={limit}"
+    )
+
+    async with session.get(ohlcv_url, timeout=10) as resp:
+        resp.raise_for_status()
+        data = await resp.json()
 
     candles = (
         (data.get("data") or {}).get("attributes", {}).get("ohlcv_list") or []
@@ -981,7 +985,7 @@ async def fetch_geckoterminal_ohlcv(
             ]
         )
 
-    return result, volume
+    return result, volume, reserve
 
 
 async def fetch_order_book_async(
@@ -1368,8 +1372,9 @@ async def update_multi_tf_ohlcv_cache(
 
         for sym in dex_symbols:
             try:
-                data, vol = await fetch_geckoterminal_ohlcv(sym, timeframe=tf, limit=limit)
-                data = await fetch_geckoterminal_ohlcv(sym, timeframe=tf, limit=limit)
+                data, vol, _ = await fetch_geckoterminal_ohlcv(
+                    sym, timeframe=tf, limit=limit
+                )
             except Exception as exc:  # pragma: no cover - network
                 logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
                 continue

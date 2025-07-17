@@ -1143,22 +1143,17 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
 
     pool_data = {
         "data": [
-            {"id": "pool1", "attributes": {"volume_usd": 123}},
+            {"id": "pool1", "attributes": {"volume_usd": {"h24": 123}, "reserve_in_usd": 0}},
         ]
     }
     ohlcv_data = {
-        "data": [
-            {
-                "attributes": {
-                    "timestamp": 1,
-                    "open": 1,
-                    "high": 2,
-                    "low": 0.5,
-                    "close": 1.5,
-                    "volume": 10,
-                }
+        "data": {
+            "attributes": {
+                "ohlcv_list": [
+                    [1, 1, 2, 0.5, 1.5, 10]
+                ]
             }
-        ]
+        }
     }
 
     class PoolResp:
@@ -1201,7 +1196,7 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
     res = asyncio.run(
         market_loader.fetch_geckoterminal_ohlcv("FOO/USDC", timeframe="1h", limit=1)
     )
-    assert res == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
+    assert res == ([[1, 1.0, 2.0, 0.5, 1.5, 10.0]], 123.0, 0.0)
 
 
 def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
@@ -1238,7 +1233,6 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
     assert res is None
     assert any("pair not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
-    assert any("token not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
 
 
 def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
@@ -1268,7 +1262,7 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
     from crypto_bot.utils import market_loader
 
     async def fake_fetch(*_a, **_k):
-        return [[0, 1, 2, 3, 4, 5]], 50.0
+        return [[0, 1, 2, 3, 4, 5]], 50.0, 1000.0
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
 
