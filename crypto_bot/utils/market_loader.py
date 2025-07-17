@@ -773,6 +773,66 @@ async def fetch_dexscreener_ohlcv(
     return result
 
 
+async def fetch_geckoterminal_ohlcv(
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+) -> list | None:
+    """Return OHLCV data for ``symbol`` from the GeckoTerminal API."""
+
+    pair = symbol.replace("/", "_").lower()
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            f"https://api.geckoterminal.com/api/v2/search/pools?q={pair}",
+            timeout=10,
+        ) as resp:
+            if resp.status == 404:
+                logger.info("pair not available on GeckoTerminal: %s", symbol)
+                return None
+            resp.raise_for_status()
+            data = await resp.json()
+
+        pools = data.get("data") or []
+        if not pools:
+            logger.info("pair not available on GeckoTerminal: %s", symbol)
+            return None
+
+        pool_id = pools[0].get("id")
+        vol = pools[0].get("attributes", {}).get("volume_usd")
+        if pool_id is None or vol is None:
+            logger.info("pair not available on GeckoTerminal: %s", symbol)
+            return None
+
+        async with session.get(
+            f"https://api.geckoterminal.com/api/v2/pools/{pool_id}/ohlcv/{timeframe}?limit={limit}",
+            timeout=10,
+        ) as resp:
+            if resp.status == 404:
+                logger.info("pair not available on GeckoTerminal: %s", symbol)
+                return None
+            resp.raise_for_status()
+            data = await resp.json()
+
+    candles = data.get("data") or []
+
+    result = []
+    for c in candles[-limit:]:
+        attrs = c.get("attributes", {})
+        result.append(
+            [
+                int(attrs.get("timestamp", 0)),
+                float(attrs.get("open", 0)),
+                float(attrs.get("high", 0)),
+                float(attrs.get("low", 0)),
+                float(attrs.get("close", 0)),
+                float(attrs.get("volume", 0)),
+            ]
+        )
+
+    return result
+
+
 async def fetch_order_book_async(
     exchange,
     symbol: str,
