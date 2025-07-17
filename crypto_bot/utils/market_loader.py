@@ -35,6 +35,13 @@ UNSUPPORTED_SYMBOL = object()
 STATUS_UPDATES = True
 SEMA: asyncio.Semaphore | None = None
 
+# Mapping of common symbols to CoinGecko IDs for OHLC fallback
+COINGECKO_IDS = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "SOL": "solana",
+}
+
 
 def configure(
     ohlcv_timeout: int | float | None = None,
@@ -729,6 +736,21 @@ async def fetch_ohlcv_async(
         return exc
 
 
+async def fetch_dexscreener_ohlcv(
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+) -> list | None:
+    """Deprecated: use :func:`fetch_geckoterminal_ohlcv` instead."""
+
+    warnings.warn(
+        "fetch_dexscreener_ohlcv is deprecated; use fetch_geckoterminal_ohlcv",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return await fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
+
+
 async def fetch_geckoterminal_ohlcv(
     symbol: str,
     timeframe: str = "1h",
@@ -842,6 +864,219 @@ async def fetch_geckoterminal_ohlcv(
     return result
 
 
+) -> list | None:
+    """Return OHLCV data for ``symbol`` from the GeckoTerminal API."""
+
+    pair = symbol.replace("/", "_").lower()
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            f"https://api.geckoterminal.com/api/v2/search/pools?q={pair}",
+            timeout=10,
+        ) as resp:
+            if resp.status == 404:
+                logger.info("pair not available on GeckoTerminal: %s", symbol)
+                return None
+            resp.raise_for_status()
+            data = await resp.json()
+
+        pools = data.get("data") or []
+        if not pools:
+            logger.info("pair not available on GeckoTerminal: %s", symbol)
+            return None
+
+        pool_id = pools[0].get("id")
+        vol = pools[0].get("attributes", {}).get("volume_usd")
+        if pool_id is None or vol is None:
+            logger.info("pair not available on GeckoTerminal: %s", symbol)
+            return None
+
+        async with session.get(
+            f"https://api.geckoterminal.com/api/v2/pools/{pool_id}/ohlcv/{timeframe}?limit={limit}",
+            timeout=10,
+        ) as resp:
+            if resp.status == 404:
+                logger.info("pair not available on GeckoTerminal: %s", symbol)
+                return None
+            resp.raise_for_status()
+            data = await resp.json()
+
+    candles = data.get("data") or []
+
+    result = []
+    for c in candles[-limit:]:
+        attrs = c.get("attributes", {})
+        result.append(
+            [
+                int(attrs.get("timestamp", 0)),
+                float(attrs.get("open", 0)),
+                float(attrs.get("high", 0)),
+                float(attrs.get("low", 0)),
+                float(attrs.get("close", 0)),
+                float(attrs.get("volume", 0)),
+            ]
+        )
+
+    return result
+
+
+async def fetch_geckoterminal_ohlcv(
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+    *,
+    return_price: bool = False,
+) -> tuple[list, float] | tuple[list, float, float] | None:
+    """Return OHLCV data and 24h volume for ``symbol`` from the GeckoTerminal API.
+
+    If ``return_price`` is ``True`` the latest pool price is also returned.
+    """
+) -> tuple[list, float] | None:
+    """Return OHLCV data and 24h volume for ``symbol`` from the GeckoTerminal API."""
+
+    from urllib.parse import quote_plus
+
+    query = quote_plus(symbol)
+    search_url = (
+        "https://api.geckoterminal.com/api/v2/search/pools"
+        f"?query={query}&network=solana"
+    )
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(search_url, timeout=10) as resp:
+            if resp.status == 404:
+                logger.info("pair not available on GeckoTerminal: %s", symbol)
+                return None
+            resp.raise_for_status()
+            search_data = await resp.json()
+
+        items = search_data.get("data") or []
+        if not items:
+            logger.info("pair not available on GeckoTerminal: %s", symbol)
+            return None
+
+        pool_id = str(items[0].get("id", ""))
+        pool_addr = pool_id.split("_", 1)[-1]
+        try:
+            volume = float(
+                items[0]
+                .get("attributes", {})
+                .get("volume_usd", {})
+                .get("h24", 0.0)
+            )
+        except Exception:
+            volume = 0.0
+        try:
+            price = float(
+                items[0]
+                .get("attributes", {})
+                .get("base_token_price_quote_token", 0.0)
+            )
+        except Exception:
+            price = 0.0
+
+        ohlcv_url = (
+            "https://api.geckoterminal.com/api/v2/networks/solana/pools/"
+            f"{pool_addr}/ohlcv/{timeframe}?aggregate=1&limit={limit}"
+        )
+
+        async with session.get(ohlcv_url, timeout=10) as resp:
+            resp.raise_for_status()
+            data = await resp.json()
+
+    candles = (
+        (data.get("data") or {}).get("attributes", {}).get("ohlcv_list") or []
+    )
+
+    result: list = []
+    for c in candles[-limit:]:
+        result.append(
+            [
+                int(c[0]),
+                float(c[1]),
+                float(c[2]),
+                float(c[3]),
+                float(c[4]),
+                float(c[5]),
+            ]
+        )
+
+    if return_price:
+        return result, volume, price
+    return result, volume
+
+
+async def fetch_coingecko_ohlc(
+    coin_id: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+) -> list | None:
+    """Return OHLC data from CoinGecko as [timestamp, open, high, low, close, 0]."""
+
+    days = 1
+    if timeframe.endswith("d"):
+        days = 90
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc"
+    params = {"vs_currency": "usd", "days": days}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, timeout=10) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+    except Exception:  # pragma: no cover - network
+        return None
+
+    result: list = []
+    for c in data[-limit:]:
+        if not isinstance(c, list) or len(c) < 5:
+            continue
+        try:
+            ts, o, h, l, cl = c[:5]
+            result.append(
+                [int(ts), float(o), float(h), float(l), float(cl), 0.0]
+            )
+        except Exception:
+            continue
+    return result
+
+
+async def fetch_dex_ohlcv(
+    exchange,
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+    *,
+    min_volume_usd: float = 0.0,
+) -> list | None:
+    """Fetch DEX OHLCV with fallback to CoinGecko then Kraken."""
+
+    try:
+        res = await fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("GeckoTerminal OHLCV error for %s: %s", symbol, exc)
+        res = None
+
+    data = None
+    if res:
+        if isinstance(res, tuple):
+            data, vol = res
+        else:
+            data = res
+            vol = min_volume_usd
+        if data and vol >= min_volume_usd:
+            return data
+
+    base = symbol.split("/")[0]
+    coin_id = COINGECKO_IDS.get(base)
+    if coin_id:
+        data = await fetch_coingecko_ohlc(coin_id, timeframe=timeframe, limit=limit)
+        if data:
+            return data
+
+    data = await fetch_ohlcv_async(exchange, symbol, timeframe=timeframe, limit=limit)
+    if isinstance(data, Exception):
+        return None
+    return data
 
 
 async def fetch_order_book_async(
@@ -1249,6 +1484,19 @@ async def update_multi_tf_ohlcv_cache(
                     notifier=notifier,
                     config=config,
                 )
+                data, vol = await fetch_geckoterminal_ohlcv(sym, timeframe=tf, limit=limit)
+            except Exception as exc:  # pragma: no cover - network
+                logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
+                continue
+            if not data or vol < min_volume_usd:
+            data = await fetch_dex_ohlcv(
+                exchange,
+                sym,
+                timeframe=tf,
+                limit=limit,
+                min_volume_usd=min_volume_usd,
+            )
+            if not data:
                 continue
             df_new = pd.DataFrame(
                 data,

@@ -540,11 +540,30 @@ async def scan_arbitrage(exchange: object, config: dict) -> list[str]:
         return []
 
     try:
-        from crypto_bot.solana import fetch_solana_prices
+        from crypto_bot.utils.market_loader import fetch_geckoterminal_ohlcv
     except Exception:
-        return []
+        fetch_geckoterminal_ohlcv = None
 
-    dex_prices = await fetch_solana_prices(pairs)
+    gecko_prices: dict[str, float] = {}
+    if fetch_geckoterminal_ohlcv:
+        for sym in pairs:
+            try:
+                res = await fetch_geckoterminal_ohlcv(sym, limit=1, return_price=True)
+            except Exception:
+                res = None
+            if res:
+                _data, _vol, price = res
+                gecko_prices[sym] = price
+
+    remaining = [s for s in pairs if s not in gecko_prices]
+    dex_prices: dict[str, float] = gecko_prices.copy()
+    if remaining:
+        try:
+            from crypto_bot.solana import fetch_solana_prices
+        except Exception:
+            fetch_solana_prices = None
+        if fetch_solana_prices:
+            dex_prices.update(await fetch_solana_prices(remaining))
     results: list[str] = []
     threshold = float(config.get("arbitrage_threshold", 0.0))
 
