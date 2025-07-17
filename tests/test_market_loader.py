@@ -1155,7 +1155,7 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
         "data": {
             "attributes": {
                 "ohlcv_list": [
-                    [1, 1, 2, 0.5, 1.5, 10]
+                    [1, 1, 2, 0.5, 1.5, 10],
                     [1, 1, 2, 0.5, 1.5, 10],
                 ]
             }
@@ -1200,13 +1200,12 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
 
     monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
 
-    res, vol = asyncio.run(
+    data, volume, reserve = asyncio.run(
         market_loader.fetch_geckoterminal_ohlcv("FOO/USDC", timeframe="1h", limit=1)
     )
-    assert res == ([[1, 1.0, 2.0, 0.5, 1.5, 10.0]], 123.0, 0.0)
-    assert res == [[1000, 1.0, 2.0, 0.5, 1.5, 10.0]]
-    assert vol == 123
-    assert res == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
+    assert data == [[1000, 1.0, 2.0, 0.5, 1.5, 10.0]]
+    assert volume == 123
+    assert reserve == 0
 
 
 def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
