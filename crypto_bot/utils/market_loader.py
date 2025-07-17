@@ -54,6 +54,9 @@ GECKO_SEMAPHORE = asyncio.Semaphore(25)
 # Valid characters for Solana addresses
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
+# Quote currencies eligible for Coinbase fallback
+SUPPORTED_USD_QUOTES = {"USD", "USDC", "USDT"}
+
 
 def _is_valid_base_token(token: str) -> bool:
     """Return True if ``token`` looks like a Solana mint address."""
@@ -997,7 +1000,7 @@ async def fetch_dex_ohlcv(
     *,
     min_volume_usd: float = 0.0,
 ) -> list | None:
-    """Fetch DEX OHLCV with fallback to CoinGecko then Kraken."""
+    """Fetch DEX OHLCV with fallback to CoinGecko, Coinbase then Kraken."""
 
     try:
         res = await fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
@@ -1015,11 +1018,28 @@ async def fetch_dex_ohlcv(
         if data and vol >= min_volume_usd:
             return data
 
-    base = symbol.split("/")[0]
+    base, _, quote = symbol.partition("/")
     coin_id = COINGECKO_IDS.get(base)
     if coin_id:
         data = await fetch_coingecko_ohlc(coin_id, timeframe=timeframe, limit=limit)
         if data:
+            return data
+
+    if quote.upper() in SUPPORTED_USD_QUOTES:
+        try:
+            cb = ccxt.coinbase({"enableRateLimit": True})
+            data = await fetch_ohlcv_async(cb, symbol, timeframe=timeframe, limit=limit)
+        finally:
+            close = getattr(cb, "close", None)
+            if close:
+                try:
+                    if asyncio.iscoroutinefunction(close):
+                        await close()
+                    else:
+                        close()
+                except Exception:
+                    pass
+        if data and not isinstance(data, Exception):
             return data
 
     data = await fetch_ohlcv_async(exchange, symbol, timeframe=timeframe, limit=limit)
