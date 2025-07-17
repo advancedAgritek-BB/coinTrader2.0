@@ -879,16 +879,17 @@ async def execute_signals(ctx: BotContext) -> None:
 
             sol_score, _ = sniper_solana.generate_signal(df)
             if sol_score > 0.7:
-                from solana_trading import sniper_trade
+                from crypto_bot.solana_trading import sniper_trade
 
+                base, quote = sym.split("/")
                 await sniper_trade(
-                    {
-                        "symbol": sym,
-                        "side": direction_to_side(candidate["direction"]),
-                        "size": size,
-                        "score": score,
-                    },
-                    ctx.config.get("execution", {}),
+                    ctx.config.get("wallet_address", ""),
+                    quote,
+                    base,
+                    size,
+                    dry_run=ctx.config.get("execution_mode") == "dry_run",
+                    slippage_bps=ctx.config.get("solana_slippage_bps", 50),
+                    notifier=ctx.notifier,
                 )
                 executed_via_sniper = True
 
