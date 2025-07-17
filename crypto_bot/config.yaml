@@ -223,12 +223,12 @@ risk:
   max_drawdown: 0.5
   max_volatility_factor: 3
   min_expected_value: -0.1
-  min_volume: 0.5
+  min_volume: 0.0
   stop_loss_atr_mult: 1.2
   stop_loss_pct: 0.005
   take_profit_atr_mult: 4.0
   take_profit_pct: 0.04
-  volume_threshold_ratio: 0.005
+  volume_threshold_ratio: 0.0001
 rl_selector:
   enabled: false
 scalp_timeframe: 1m
@@ -245,8 +245,8 @@ drawdown_penalty_coef: 0.2
 sentiment_filter:
   bull_fng: 50
   bull_sentiment: 45
-  min_fng: -20
-  min_sentiment: -20
+  min_fng: -100
+  min_sentiment: -100
 signal_fusion:
   enabled: false
   fusion_method: weight
@@ -379,7 +379,7 @@ use_websocket: true
 hidden_limit: true
 volatility_filter:
   max_funding_rate: 0.1
-  min_atr_pct: 0.0003
+  min_atr_pct: 0.0
 voting_strategies:
 - trend
 - momentum
