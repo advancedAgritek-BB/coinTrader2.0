@@ -247,27 +247,25 @@ class RiskManager:
             vol_threshold,
         )
 
-        # Modified volume checks for testing
-        MIN_VOLUME_ABS = 0
-        RATIO_THRESHOLD = 0.01
-
-        if current_volume < MIN_VOLUME_ABS:
-            reason = "Volume < min absolute threshold"
+        # Volume checks using configured thresholds
+        if current_volume < self.config.min_volume:
+            reason = "Volume < min volume threshold"
             logger.info(
                 "[EVAL] %s (%.2f < %.2f)",
                 reason,
                 current_volume,
-                MIN_VOLUME_ABS,
+                self.config.min_volume,
             )
             return False, reason
 
-        if current_volume < RATIO_THRESHOLD * vol_mean:
-            reason = f"Volume < {RATIO_THRESHOLD*100:.0f}% of mean volume"
+        if current_volume < vol_threshold:
+            percent = self.config.volume_threshold_ratio * 100
+            reason = f"Volume < {percent:.0f}% of mean volume"
             logger.info(
                 "[EVAL] %s (%.2f < %.2f)",
                 reason,
                 current_volume,
-                RATIO_THRESHOLD * vol_mean,
+                vol_threshold,
             )
             return False, reason
         vol_std = df["close"].rolling(20).std().iloc[-1]

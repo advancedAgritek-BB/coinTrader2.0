@@ -47,6 +47,19 @@ async def get_filtered_symbols(exchange, config) -> list:
                 continue
         filtered_syms.append(sym)
     symbols = filtered_syms
+
+    cleaned_symbols = []
+    for sym in symbols:
+        if not isinstance(sym, str):
+            cleaned_symbols.append(sym)
+            continue
+        base, _, quote = sym.partition("/")
+        if quote.upper() == "USDC" and not _is_valid_base_token(base):
+            logger.info("Dropping invalid USDC pair %s", sym)
+            continue
+        cleaned_symbols.append(sym)
+
+    symbols = cleaned_symbols
     skipped_before = telemetry.snapshot().get("scan.symbols_skipped", 0)
     if asyncio.iscoroutinefunction(filter_symbols):
         scored = await filter_symbols(exchange, symbols, config)

@@ -140,3 +140,22 @@ def test_get_filtered_symbols_invalid_usdc_token(monkeypatch):
     asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
 
     assert calls and calls[0] == ["BTC/USD"]
+def test_get_filtered_symbols_invalid_usdc(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+
+    calls = []
+
+    async def fake_filter_symbols(ex, syms, cfg):
+        calls.append(syms)
+        return [(s, 1.0) for s in syms]
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    config = {"symbols": ["BAD/USDC", "ETH/USD"]}
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+
+    result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
+    assert result == [("ETH/USD", 1.0)]
+    assert calls == [["ETH/USD"]]
+    assert any("invalid USDC" in r.getMessage() for r in caplog.records)
