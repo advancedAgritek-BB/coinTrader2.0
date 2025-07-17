@@ -463,6 +463,7 @@ async def initial_scan(
             force_websocket_history=config.get("force_websocket_history", False),
             max_concurrent=config.get("max_concurrent_ohlcv"),
             notifier=notifier,
+            priority_queue=symbol_priority_queue,
         )
 
         state.regime_cache = await update_regime_tf_cache(
@@ -618,6 +619,7 @@ async def update_caches(ctx: BotContext) -> None:
         force_websocket_history=ctx.config.get("force_websocket_history", False),
         max_concurrent=ctx.config.get("max_concurrent_ohlcv"),
         notifier=ctx.notifier if ctx.config.get("telegram", {}).get("status_updates", True) else None,
+        priority_queue=symbol_priority_queue,
     )
 
     ctx.regime_cache = await update_regime_tf_cache(
