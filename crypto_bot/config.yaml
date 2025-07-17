@@ -336,6 +336,7 @@ symbol_score_weights:
   spread: 0.1
   volume: 0.45
 symbols: []
+solana_symbols: []
 tax_tracking:
   enabled: true
   export_path: crypto_bot/logs/tax_trades.csv

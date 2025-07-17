@@ -279,6 +279,8 @@ def load_config() -> dict:
         data["symbol"] = fix_symbol(data["symbol"])
     if "symbols" in data:
         data["symbols"] = [fix_symbol(s) for s in data.get("symbols", [])]
+    if "solana_symbols" in data:
+        data["solana_symbols"] = [fix_symbol(s) for s in data.get("solana_symbols", [])]
     try:
         if hasattr(ScannerConfig, "model_validate"):
             ScannerConfig.model_validate(data)
@@ -1077,6 +1079,11 @@ async def _main_impl() -> TelegramNotifier:
 
     logger.info("Starting bot")
     config = load_config()
+    sol_syms = [fix_symbol(s) for s in config.get("solana_symbols", [])]
+    sol_syms = [f"{s}/USDC" if "/" not in s else s for s in sol_syms]
+    if sol_syms:
+        merged = list(dict.fromkeys((config.get("symbols") or []) + sol_syms))
+        config["symbols"] = merged
     global _LAST_CONFIG_MTIME
     try:
         _LAST_CONFIG_MTIME = CONFIG_PATH.stat().st_mtime
