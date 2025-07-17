@@ -258,7 +258,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **symbol_batch_size** – number of symbols processed each cycle.
   The same batch size controls the initial market scan at startup where
   progress is logged after each batch.
-* **scan_lookback_limit** – candles of history loaded during the initial scan (default `150`).
+* **scan_lookback_limit** – candles of history loaded during the initial scan (default `700`).
   The caches store at least this many bars per timeframe before strategies run.
 * **cycle_lookback_limit** – candles fetched each cycle. Defaults to `150`.
 * **adaptive_scan.enabled** – turn on dynamic sizing.
@@ -631,6 +631,11 @@ Increase this threshold in `crypto_bot/config.yaml` when large history
 requests should still use WebSocket. For example set
 `max_ws_limit: 200` if you regularly request 200 candles.
 
+During the startup scan the bot always loads historical candles over REST
+regardless of the WebSocket setting. It calls `fetch_ohlcv` for up to
+`scan_lookback_limit` candles per pair (700 by default on Kraken) to build the
+cache before realtime updates begin over WebSocket.
+
 The client now records heartbeat events and exposes `is_alive(conn_type)` to
 check if a connection has received a heartbeat within the last 10 seconds. Call
 `ping()` periodically to keep the session active.
@@ -756,7 +761,7 @@ excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 2           # skip pairs with less history
 symbol_batch_size: 50            # symbols processed per cycle
-scan_lookback_limit: 150         # candles loaded during startup
+scan_lookback_limit: 700         # candles loaded during startup
 cycle_lookback_limit: 150        # candles fetched each cycle
 max_spread_pct: 4.0              # skip pairs with wide spreads
 ```
