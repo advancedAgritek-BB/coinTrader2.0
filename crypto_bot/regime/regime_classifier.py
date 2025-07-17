@@ -334,6 +334,18 @@ def _classify_all(
                 probs[r] = sc / total
         regime = max(scores, key=scores.get)
 
+    rule_probs = _probabilities(regime)
+
+    ml_label = "unknown"
+    ml_probs = {r: 0.0 for r in _ALL_REGIMES}
+    use_ml = cfg.get("use_ml_regime_classifier", False)
+    if use_ml and len(df) >= ml_min_bars:
+        ml_label, conf = _ml_fallback(df)
+        ml_probs = _probabilities(ml_label, conf)
+        if regime == "unknown" and ml_label != "unknown":
+            log_patterns(ml_label, patterns)
+            return ml_label, ml_probs, patterns
+    else:
     latest = df.iloc[-1]
     rsi = float(latest.get("rsi", 50))
     if scores.get("trending", 0.0) > 0.5 and rsi > 50:
@@ -352,6 +364,19 @@ def _classify_all(
             logger.info("Skipping ML fallback \u2014 ML disabled")
         else:
             logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
+
+    if ml_label != "unknown" and use_ml and len(df) >= ml_min_bars:
+        weight = cfg.get("ml_blend_weight", 0.5)
+        final_probs = {
+            r: (1 - weight) * rule_probs.get(r, 0.0) + weight * ml_probs.get(r, 0.0)
+            for r in _ALL_REGIMES
+        }
+        regime = max(final_probs, key=final_probs.get)
+    else:
+        final_probs = rule_probs
+
+    log_patterns(regime, patterns)
+    return regime, final_probs, patterns
         return regime, _normalize(_probabilities(regime, 0.0)), patterns
 
     log_patterns(regime, patterns)
