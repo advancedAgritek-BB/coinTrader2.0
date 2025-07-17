@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import types
 import pytest
 
 from crypto_bot.solana import watcher
@@ -219,3 +220,49 @@ def test_watcher_raises_after_consecutive_404(monkeypatch):
         asyncio.run(run_once())
     assert session.json["method"] == "dex.getNewPools"
     assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
+
+
+def test_watch_ws_unauthorized(monkeypatch, caplog):
+    class DummyHandshakeError(Exception):
+        def __init__(self, status=401):
+            self.status = status
+
+    class DummySession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def ws_connect(self, url):
+            raise DummyHandshakeError()
+
+    aiohttp_mod = type(
+        "M",
+        (),
+        {
+            "ClientSession": lambda: DummySession(),
+            "WSServerHandshakeError": DummyHandshakeError,
+            "WSMsgType": types.SimpleNamespace(TEXT="text"),
+        },
+    )
+    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
+
+    w = PoolWatcher(
+        "http://test",
+        interval=0,
+        websocket_url="ws://x",
+        raydium_program_id="PGM",
+    )
+
+    async def run_once():
+        gen = w.watch()
+        with pytest.raises(StopAsyncIteration):
+            await gen.__anext__()
+
+    with caplog.at_level(logging.ERROR):
+        asyncio.run(run_once())
+    assert not w._running
+    assert any(
+        "Unauthorized WebSocket connection" in rec.message for rec in caplog.records
+    )
