@@ -1138,7 +1138,7 @@ def test_load_ohlcv_parallel_propagates_cancelled(caplog):
     assert len(caplog.records) == 0
 
 
-def test_fetch_dexscreener_ohlcv_404(monkeypatch, caplog):
+def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     from crypto_bot.utils import market_loader
 
     class FakeResp:
@@ -1169,9 +1169,9 @@ def test_fetch_dexscreener_ohlcv_404(monkeypatch, caplog):
     monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
 
     caplog.set_level(logging.INFO)
-    res = asyncio.run(market_loader.fetch_dexscreener_ohlcv("FOO/USDC"))
+    res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
     assert res is None
-    assert any("pair not available on DexScreener" in r.getMessage() for r in caplog.records)
+    assert any("pair not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
 
 
 def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
@@ -1180,7 +1180,7 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
     async def fake_fetch(*_a, **_k):
         return None
 
-    monkeypatch.setattr(market_loader, "fetch_dexscreener_ohlcv", fake_fetch)
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
 
     ex = DummyMultiTFExchange()
     cache = {}
@@ -1195,3 +1195,40 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
         )
     )
     assert "FOO/USDC" not in cache["1h"]
+
+
+def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    async def fake_fetch(*_a, **_k):
+        return [[0, 1, 2, 3, 4, 5]], 50.0
+
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
+
+    ex = DummyMultiTFExchange()
+    cache = {}
+    config = {"timeframes": ["1h"]}
+
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            cache,
+            ["BAR/USDC"],
+            config,
+            limit=1,
+            min_volume_usd=100,
+        )
+    )
+    assert "BAR/USDC" not in cache["1h"]
+
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            cache,
+            ["BAR/USDC"],
+            config,
+            limit=1,
+            min_volume_usd=10,
+        )
+    )
+    assert "BAR/USDC" in cache["1h"]

@@ -773,6 +773,75 @@ async def fetch_dexscreener_ohlcv(
     return result
 
 
+async def fetch_geckoterminal_ohlcv(
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+) -> tuple[list, float] | None:
+    """Return OHLCV data and 24h volume for ``symbol`` from the GeckoTerminal API."""
+
+    from urllib.parse import quote_plus
+
+    query = quote_plus(symbol)
+    search_url = (
+        "https://api.geckoterminal.com/api/v2/search/pools"
+        f"?query={query}&network=solana"
+    )
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(search_url, timeout=10) as resp:
+            if resp.status == 404:
+                logger.info("pair not available on GeckoTerminal: %s", symbol)
+                return None
+            resp.raise_for_status()
+            search_data = await resp.json()
+
+        items = search_data.get("data") or []
+        if not items:
+            logger.info("pair not available on GeckoTerminal: %s", symbol)
+            return None
+
+        pool_id = str(items[0].get("id", ""))
+        pool_addr = pool_id.split("_", 1)[-1]
+        try:
+            volume = float(
+                items[0]
+                .get("attributes", {})
+                .get("volume_usd", {})
+                .get("h24", 0.0)
+            )
+        except Exception:
+            volume = 0.0
+
+        ohlcv_url = (
+            "https://api.geckoterminal.com/api/v2/networks/solana/pools/"
+            f"{pool_addr}/ohlcv/{timeframe}?aggregate=1&limit={limit}"
+        )
+
+        async with session.get(ohlcv_url, timeout=10) as resp:
+            resp.raise_for_status()
+            data = await resp.json()
+
+    candles = (
+        (data.get("data") or {}).get("attributes", {}).get("ohlcv_list") or []
+    )
+
+    result: list = []
+    for c in candles[-limit:]:
+        result.append(
+            [
+                int(c[0]),
+                float(c[1]),
+                float(c[2]),
+                float(c[3]),
+                float(c[4]),
+                float(c[5]),
+            ]
+        )
+
+    return result, volume
+
+
 async def fetch_order_book_async(
     exchange,
     symbol: str,
@@ -1109,6 +1178,7 @@ async def update_multi_tf_ohlcv_cache(
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
+    min_volume_usd: float | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for multiple timeframes.
 
@@ -1121,6 +1191,8 @@ async def update_multi_tf_ohlcv_cache(
 
     tfs = config.get("timeframes", ["1h"])
     logger.info("Updating OHLCV cache for timeframes: %s", tfs)
+
+    min_volume_usd = float(min_volume_usd or 0)
 
     for tf in tfs:
         logger.info("Starting update for timeframe %s", tf)
@@ -1144,11 +1216,11 @@ async def update_multi_tf_ohlcv_cache(
 
         for sym in dex_symbols:
             try:
-                data = await fetch_dexscreener_ohlcv(sym, timeframe=tf, limit=limit)
+                data, vol = await fetch_geckoterminal_ohlcv(sym, timeframe=tf, limit=limit)
             except Exception as exc:  # pragma: no cover - network
-                logger.error("DexScreener OHLCV error for %s: %s", sym, exc)
+                logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
                 continue
-            if not data:
+            if not data or vol < min_volume_usd:
                 continue
             df_new = pd.DataFrame(
                 data,
