@@ -1262,3 +1262,40 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
         )
     )
     assert "FOO/USDC" not in cache["1h"]
+
+
+def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    async def fake_fetch(*_a, **_k):
+        return [[0, 1, 2, 3, 4, 5]], 50.0
+
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
+
+    ex = DummyMultiTFExchange()
+    cache = {}
+    config = {"timeframes": ["1h"]}
+
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            cache,
+            ["BAR/USDC"],
+            config,
+            limit=1,
+            min_volume_usd=100,
+        )
+    )
+    assert "BAR/USDC" not in cache["1h"]
+
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            cache,
+            ["BAR/USDC"],
+            config,
+            limit=1,
+            min_volume_usd=10,
+        )
+    )
+    assert "BAR/USDC" in cache["1h"]
