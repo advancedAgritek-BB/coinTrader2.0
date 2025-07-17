@@ -56,6 +56,7 @@ cycle_bias:
   nupl_url: https://api.example.com/nupl
   sopr_url: https://api.example.com/sopr
 cycle_lookback_limit: 200
+cycle_lookback_limit: 150
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.1
 exchange: kraken
@@ -78,11 +79,13 @@ exit_strategy:
   scale_out: true
   trailing_stop_factor: 1.2
   trailing_stop_pct: 0.02
+  trailing_stop_pct: 0.01
 exits:
   default_sl_pct: 0.015
   default_tp_pct: 0.07
   trailing_stop_pct: 0.02
 force_websocket_history: false
+force_websocket_history: true
 gas_threshold_gwei: 50
 grid_bot:
   arbitrage_pairs:
@@ -114,15 +117,18 @@ log_to_google: true
 loop_interval_minutes: 0.5
 max_age_days: 90
 max_change_pct: 20
+max_concurrent_ohlcv: 4
+max_parallel: 50
 max_concurrent_ohlcv: 8
 max_latency_ms: 500
-max_ohlcv_failures: 5
+max_ohlcv_failures: 10
 max_open_trades: 20
 max_parallel: 50
 max_slippage_pct: 0.2
 max_spread_pct: 3
 max_vol: 50000000
 max_ws_limit: 100
+max_ws_limit: 200
 meme_wave_sniper:
   enabled: true
   execution:
@@ -186,7 +192,7 @@ mode_degrade_window: 15
 mode_threshold: 0.3
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
-ohlcv_timeout: 120
+ohlcv_timeout: 300
 optimization:
   enabled: true
   interval_days: 0.5
@@ -247,6 +253,7 @@ safety:
 scalp_timeframe: 1m
 scan_in_background: true
 scan_lookback_limit: 200
+scan_lookback_limit: 150
 scan_markets: true
 scoring:
   lookback_bars: 30
@@ -347,6 +354,13 @@ strategy_router:
   trending_timeframe: 1h
   volatile_timeframe: 1m
 symbol: BTC/USDT
+symbol_batch_size: 50
+scan_lookback_limit: 200
+cycle_lookback_limit: 200
+adaptive_scan:
+  enabled: true
+  atr_baseline: 0.005
+  max_factor: 10.0
 symbol_batch_size: 100
 symbol_filter:
   change_pct_percentile: 5
@@ -356,6 +370,10 @@ symbol_filter:
   log_ticker_exceptions: true
   max_correlation: 0.9
   max_spread_pct: 4
+  min_volume_usd: 100
+  ticker_retry_attempts: 5
+  uncached_volume_multiplier: 1.5
+  volume_percentile: 10
   min_volume_usd: 500
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
