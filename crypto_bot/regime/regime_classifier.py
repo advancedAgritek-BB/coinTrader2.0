@@ -12,7 +12,6 @@ import yaml
 from .pattern_detector import detect_patterns
 from crypto_bot.utils.pattern_logger import log_patterns
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from pathlib import Path
 
 
 CONFIG_PATH = Path(__file__).with_name("regime_config.yaml")
@@ -166,11 +165,6 @@ def _classify_core(
             )
             df["normalized_range"] = (df["high"] - df["low"]) / df["atr"]
         except IndexError:
-            return "unknown"
-            df["adx"] = np.nan
-            df["rsi"] = np.nan
-            df["atr"] = np.nan
-            df["normalized_range"] = np.nan
             return "unknown"
     else:
         df["adx"] = np.nan
