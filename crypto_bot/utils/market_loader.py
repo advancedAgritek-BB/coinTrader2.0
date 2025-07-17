@@ -1014,14 +1014,18 @@ async def fetch_dex_ohlcv(
     limit: int = 100,
     *,
     min_volume_usd: float = 0.0,
+    gecko_res: list | tuple | None = None,
+    use_gecko: bool = True,
 ) -> list | None:
     """Fetch DEX OHLCV with fallback to CoinGecko, Coinbase then Kraken."""
 
-    try:
-        res = await fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
-    except Exception as exc:  # pragma: no cover - network
-        logger.error("GeckoTerminal OHLCV error for %s: %s", symbol, exc)
-        res = None
+    res = gecko_res
+    if res is None and use_gecko:
+        try:
+            res = await fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
+        except Exception as exc:  # pragma: no cover - network
+            logger.error("GeckoTerminal OHLCV error for %s: %s", symbol, exc)
+            res = None
 
     data = None
     if res:
@@ -1476,6 +1480,8 @@ async def update_multi_tf_ohlcv_cache(
             )
 
         for sym in dex_symbols:
+            data = None
+            vol = 0.0
             try:
                 res = await fetch_geckoterminal_ohlcv(
                     sym,
@@ -1483,49 +1489,18 @@ async def update_multi_tf_ohlcv_cache(
                     limit=limit,
                     min_24h_volume=min_volume_usd,
                 )
-                if res:
-                    if isinstance(res, tuple):
-                        data, vol, *_ = res
-                    else:
-                        data = res
-                        vol = min_volume_usd
-                    add_priority(data, sym)
-                else:
-                    data, vol = None, 0.0
             except Exception as exc:  # pragma: no cover - network
                 logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
                 res = None
 
-            if not res:
-                data = await fetch_ohlcv_async(
-                    exchange,
-                    sym,
-                    timeframe=tf,
-                    limit=limit,
-                    use_websocket=use_websocket,
-                    force_websocket_history=force_websocket_history,
-                    max_concurrent=max_concurrent,
-                    notifier=notifier,
-                    config=config,
-                )
-                try:
-                    data, vol, _ = await fetch_geckoterminal_ohlcv(
-                        sym, timeframe=tf, limit=limit
-                    )
-                    if data:
-                        add_priority(data, sym)
-                except Exception as exc:  # pragma: no cover - network
-                    logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
-                    continue
-                res = await fetch_geckoterminal_ohlcv(sym, timeframe=tf, limit=limit)
-                if res:
-                    if isinstance(res, tuple):
-                        data, vol, *_ = res
-                    else:
-                        data = res
-                        vol = min_volume_usd
+            if res:
+                if isinstance(res, tuple):
+                    data, vol, *_ = res
                 else:
-                    data, vol = None, 0.0
+                    data = res
+                    vol = min_volume_usd
+                add_priority(data, sym)
+
             if not data or vol < min_volume_usd:
                 data = await fetch_dex_ohlcv(
                     exchange,
@@ -1533,26 +1508,11 @@ async def update_multi_tf_ohlcv_cache(
                     timeframe=tf,
                     limit=limit,
                     min_volume_usd=min_volume_usd,
+                    gecko_res=res,
+                    use_gecko=False,
                 )
                 if isinstance(data, Exception) or not data:
                     continue
-                vol = 0.0
-            else:
-                if isinstance(res, tuple):
-                    data, vol, *_ = res
-                else:
-                    data = res
-                    vol = min_volume_usd
-                if not data or vol < min_volume_usd:
-                    data = await fetch_dex_ohlcv(
-                        exchange,
-                        sym,
-                        timeframe=tf,
-                        limit=limit,
-                        min_volume_usd=min_volume_usd,
-                    )
-                    if not data:
-                        continue
 
             if not data:
                 continue
