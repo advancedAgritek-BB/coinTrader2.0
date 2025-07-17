@@ -232,6 +232,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **scan_markets** – load all exchange pairs when `symbols` is empty.
 * **scan_in_background** – start the initial scan in the background so trading can begin immediately.
 * **excluded_symbols** – markets to skip during scanning.
+* **solana_symbols** – base tokens traded on Solana; each is appended with `/USDC`.
 
 ### Market Scanning
 * **symbol_batch_size** – number of symbols processed each cycle.
@@ -703,6 +704,7 @@ wait for scanning to complete before trading begins.
 scan_markets: true
 scan_in_background: true
 symbols: []            # automatically populated
+solana_symbols: []     # base tokens traded on Solana
 excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 2           # skip pairs with less history

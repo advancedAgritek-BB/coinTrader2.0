@@ -1,12 +1,13 @@
 """Utilities for loading trading symbols and fetching OHLCV data."""
 
-from typing import Iterable, List, Dict, Any
+from typing import Iterable, List, Dict, Any, Deque
 import asyncio
 import inspect
 import time
 from pathlib import Path
 import yaml
 import pandas as pd
+import numpy as np
 import ccxt
 import aiohttp
 import warnings
@@ -1303,6 +1304,7 @@ async def update_multi_tf_ohlcv_cache(
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
+    priority_queue: Deque[str] | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for multiple timeframes.
 
@@ -1313,10 +1315,27 @@ async def update_multi_tf_ohlcv_cache(
     """
     from crypto_bot.regime.regime_classifier import clear_regime_cache
 
+    def add_priority(data: list, symbol: str) -> None:
+        """Push ``symbol`` to ``priority_queue`` if volume spike detected."""
+        if priority_queue is None or vol_thresh is None or not data:
+            return
+        try:
+            vols = np.array([row[5] for row in data], dtype=float)
+            mean = float(np.mean(vols)) if len(vols) else 0.0
+            std = float(np.std(vols))
+            if std <= 0:
+                return
+            z_max = float(np.max((vols - mean) / std))
+            if z_max > vol_thresh:
+                priority_queue.appendleft(symbol)
+        except Exception:
+            return
+
     tfs = config.get("timeframes", ["1h"])
     logger.info("Updating OHLCV cache for timeframes: %s", tfs)
 
     min_volume_usd = float(config.get("min_volume_usd", 0) or 0)
+    vol_thresh = config.get("bounce_scalper", {}).get("vol_zscore_threshold")
 
     for tf in tfs:
         logger.info("Starting update for timeframe %s", tf)
@@ -1346,6 +1365,15 @@ async def update_multi_tf_ohlcv_cache(
                     limit=limit,
                     min_24h_volume=min_volume_usd,
                 )
+                if res:
+                    if isinstance(res, tuple):
+                        data, vol, *_ = res
+                    else:
+                        data = res
+                        vol = min_volume_usd
+                    add_priority(data, sym)
+                else:
+                    data, vol = None, 0.0
             except Exception as exc:  # pragma: no cover - network
                 logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
                 res = None
@@ -1358,6 +1386,35 @@ async def update_multi_tf_ohlcv_cache(
                     limit=limit,
                     use_websocket=use_websocket,
                     force_websocket_history=force_websocket_history,
+                    max_concurrent=max_concurrent,
+                    notifier=notifier,
+                    config=config,
+                )
+                try:
+                    data, vol, _ = await fetch_geckoterminal_ohlcv(
+                        sym, timeframe=tf, limit=limit
+                    )
+                    if data:
+                        add_priority(data, sym)
+                except Exception as exc:  # pragma: no cover - network
+                    logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
+                    continue
+                res = await fetch_geckoterminal_ohlcv(sym, timeframe=tf, limit=limit)
+                if res:
+                    if isinstance(res, tuple):
+                        data, vol, *_ = res
+                    else:
+                        data = res
+                        vol = min_volume_usd
+                else:
+                    data, vol = None, 0.0
+            if not data or vol < min_volume_usd:
+                data = await fetch_dex_ohlcv(
+                    exchange,
+                    sym,
+                    timeframe=tf,
+                    limit=limit,
+                    min_volume_usd=min_volume_usd,
                 )
                 if isinstance(data, Exception) or not data:
                     continue
@@ -1452,6 +1509,7 @@ async def update_regime_tf_cache(
             force_websocket_history=force_websocket_history,
             max_concurrent=max_concurrent,
             notifier=notifier,
+            priority_queue=None,
         )
 
     return cache

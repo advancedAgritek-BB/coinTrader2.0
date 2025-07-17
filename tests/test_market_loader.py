@@ -1489,6 +1489,25 @@ def test_update_multi_tf_ohlcv_cache_fallback_exchange(monkeypatch):
     ex = DummyMultiTFExchange()
     cache = {}
     config = {"timeframes": ["1h"]}
+def test_gecko_volume_priority(monkeypatch):
+    from crypto_bot.utils import market_loader
+    from collections import deque
+
+    async def fake_gecko(*_a, **_k):
+        return [
+            [0, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1, 1],
+            [2, 1, 1, 1, 1, 10],
+        ], 100.0, 0.0
+
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
+    ex = DummyMultiTFExchange()
+    cache = {}
+    q = deque()
+    config = {
+        "timeframes": ["1h"],
+        "bounce_scalper": {"vol_zscore_threshold": 1.0},
+    }
 
     cache = asyncio.run(
         update_multi_tf_ohlcv_cache(
@@ -1501,3 +1520,11 @@ def test_update_multi_tf_ohlcv_cache_fallback_exchange(monkeypatch):
     )
     assert "BAR/USDC" in cache["1h"]
     assert calls["fetch"] == 1
+            ["FOO/USDC"],
+            config,
+            limit=3,
+            priority_queue=q,
+        )
+    )
+    assert "FOO/USDC" in cache["1h"]
+    assert list(q) == ["FOO/USDC"]
