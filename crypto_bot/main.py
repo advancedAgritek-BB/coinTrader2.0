@@ -659,7 +659,7 @@ async def update_caches(ctx: BotContext) -> None:
 
     start = time.perf_counter()
     tf_minutes = int(pd.Timedelta(ctx.config.get("timeframe", "1h")).total_seconds() // 60)
-    limit = min(150, tf_minutes * 2)
+    limit = max(200, tf_minutes * 2)
     limit = int(ctx.config.get("cycle_lookback_limit") or limit)
 
     max_concurrent = ctx.config.get("max_concurrent_ohlcv")
