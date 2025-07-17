@@ -241,7 +241,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **execution_mode** – choose `dry_run` for simulation or `live` for real orders.
   Paper trading defaults to long-only on spot exchanges.
 * **use_websocket** – enable WebSocket data via `ccxt.pro`.
-* **force_websocket_history** – disable REST fallbacks when streaming (default: false).
+* **force_websocket_history** – disable REST fallbacks when streaming (default: true).
 * **max_ws_limit** – skip WebSocket OHLCV when `limit` exceeds this value.
 * **exchange_market_types** – market types to trade (spot, margin, futures).
 * **preferred_chain** – chain used for on-chain swaps (e.g. `solana`).
@@ -258,10 +258,9 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **symbol_batch_size** – number of symbols processed each cycle.
   The same batch size controls the initial market scan at startup where
   progress is logged after each batch.
-* **scan_lookback_limit** – candles of history loaded during the initial scan (default `200`).
+* **scan_lookback_limit** – candles of history loaded during the initial scan (default `150`).
   The caches store at least this many bars per timeframe before strategies run.
-* **cycle_lookback_limit** – candles fetched each cycle. Defaults to
-  `min(150, timeframe_minutes × 2)`.
+* **cycle_lookback_limit** – candles fetched each cycle. Defaults to `150`.
 * **adaptive_scan.enabled** – turn on dynamic sizing.
 * **adaptive_scan.atr_baseline** – ATR level corresponding to a 1× factor.
 * **adaptive_scan.max_factor** – cap multiplier for batch size and scan rate.
@@ -593,6 +592,10 @@ force_websocket_history: false  # set true to disable REST fallback
 max_ws_limit: 50             # skip WebSocket when request exceeds this
 ohlcv_timeout: 300            # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
+force_websocket_history: true  # set false to enable REST fallback
+max_ws_limit: 200            # skip WebSocket when request exceeds this
+ohlcv_timeout: 120            # request timeout for OHLCV fetches
+max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
 metrics:
   enabled: true              # write cycle statistics to metrics.csv
   file: crypto_bot/logs/metrics.csv
@@ -621,12 +624,12 @@ websockets if you do not have access to `ccxt.pro`.
 When OHLCV streaming returns fewer candles than requested the bot calculates
 how many bars are missing and fetches only that remainder via REST. This
 adaptive limit keeps history current without waiting for a full response.
-Disable this fallback by setting `force_websocket_history` to `true`.
+Enable this fallback by setting `force_websocket_history` to `false`.
 Large history requests skip streaming entirely when `limit` exceeds
 `max_ws_limit`.
 Increase this threshold in `crypto_bot/config.yaml` when large history
 requests should still use WebSocket. For example set
-`max_ws_limit: 100` if you regularly request 100 candles.
+`max_ws_limit: 200` if you regularly request 200 candles.
 
 The client now records heartbeat events and exposes `is_alive(conn_type)` to
 check if a connection has received a heartbeat within the last 10 seconds. Call
@@ -753,8 +756,8 @@ excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 2           # skip pairs with less history
 symbol_batch_size: 50            # symbols processed per cycle
-scan_lookback_limit: 200         # candles loaded during startup
-cycle_lookback_limit: null       # override per-cycle candle load (default min(150, timeframe_minutes × 2))
+scan_lookback_limit: 150         # candles loaded during startup
+cycle_lookback_limit: 150        # candles fetched each cycle
 max_spread_pct: 4.0              # skip pairs with wide spreads
 ```
 
@@ -802,8 +805,8 @@ to use the provided list without any filtering:
 
 ```yaml
 symbol_filter:
-  min_volume_usd: 500
-  volume_percentile: 5           # keep pairs above this volume percentile
+  min_volume_usd: 100
+  volume_percentile: 10          # keep pairs above this volume percentile
   change_pct_percentile: 5       # require 24h change in the top movers
   max_spread_pct: 4              # allow spreads up to 4%
   uncached_volume_multiplier: 1.5  # extra volume when not cached
