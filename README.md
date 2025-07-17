@@ -289,7 +289,7 @@ symbol_score_weights:
 * **solana_scanner.gecko_search** – query GeckoTerminal to verify volume for new Solana tokens.
 
 ### Risk Parameters
-* **risk** – default stop loss, take profit and drawdown limits. `min_volume` is set to `0.1` to filter thin markets.
+* **risk** – default stop loss, take profit and drawdown limits. `min_volume` is set to `0.1` to filter thin markets. The stop is 1.5× ATR and the take profit is 3× ATR by default.
 * **trade_size_pct** – percent of capital used per trade.
 * **max_open_trades** – maximum simultaneous open trades.
 * **max_slippage_pct** – slippage tolerance for orders.
@@ -319,7 +319,7 @@ symbol_score_weights:
 * **ensemble_min_conf** – minimum confidence required for a strategy to
   participate in ensemble evaluation.
 * **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
-* **exit_strategy** – partial profit taking and trailing stop logic.
+* **exit_strategy** – partial profit taking and trailing stop logic. The trailing stop follows price by 2% after at least 1% gain.
 * **micro_scalp** – EMA settings plus volume z-score and ATR filters for the scalp bot.
   Supports tick-level aggregation, optional mempool fee checks and order-book
   imbalance filtering with an optional penalty. Set `trend_filter` or
