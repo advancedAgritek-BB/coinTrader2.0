@@ -12,7 +12,7 @@ import ccxt
 import aiohttp
 import base58
 import warnings
-import base58
+import contextlib
 
 from .telegram import TelegramNotifier
 from .logger import LOG_DIR, setup_logger
@@ -460,6 +460,13 @@ async def fetch_ohlcv_async(
                     exchange.watch_ohlcv, timeout=WS_OHLCV_TIMEOUT, **kwargs
                 )
             except asyncio.CancelledError:
+                if hasattr(exchange, "close"):
+                    if asyncio.iscoroutinefunction(getattr(exchange, "close")):
+                        with contextlib.suppress(Exception):
+                            await exchange.close()
+                    else:
+                        with contextlib.suppress(Exception):
+                            await asyncio.to_thread(exchange.close)
                 raise
             if (
                 ws_limit
