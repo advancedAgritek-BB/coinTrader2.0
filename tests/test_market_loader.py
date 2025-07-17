@@ -1138,7 +1138,7 @@ def test_load_ohlcv_parallel_propagates_cancelled(caplog):
     assert len(caplog.records) == 0
 
 
-def test_fetch_dexscreener_ohlcv_404(monkeypatch, caplog):
+def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     from crypto_bot.utils import market_loader
 
     class FakeResp:
@@ -1169,9 +1169,9 @@ def test_fetch_dexscreener_ohlcv_404(monkeypatch, caplog):
     monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
 
     caplog.set_level(logging.INFO)
-    res = asyncio.run(market_loader.fetch_dexscreener_ohlcv("FOO/USDC"))
+    res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
     assert res is None
-    assert any("pair not available on DexScreener" in r.getMessage() for r in caplog.records)
+    assert any("token not available on GeckoTerminal" in r.getMessage() for r in caplog.records)
 
 
 def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
@@ -1180,7 +1180,7 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
     async def fake_fetch(*_a, **_k):
         return None
 
-    monkeypatch.setattr(market_loader, "fetch_dexscreener_ohlcv", fake_fetch)
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
 
     ex = DummyMultiTFExchange()
     cache = {}
