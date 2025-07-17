@@ -13,6 +13,7 @@ from crypto_bot.volatility_filter import too_flat, too_hot, calc_atr
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils import trade_memory
 from crypto_bot.utils import ev_tracker
+from crypto_bot.utils.strategy_utils import compute_drawdown
 
 
 # Log to the main bot file so risk messages are consolidated
@@ -47,6 +48,8 @@ class RiskConfig:
     atr_period: int = 14
     stop_loss_atr_mult: float = 2.0
     take_profit_atr_mult: float = 4.0
+    max_pair_drawdown: float = 0.0
+    pair_drawdown_lookback: int = 20
 
 
 class RiskManager:
@@ -297,6 +300,19 @@ class RiskManager:
                 )
                 logger.info("[EVAL] %s", reason)
                 return False, reason
+
+        drawdown = compute_drawdown(
+            df, lookback=self.config.pair_drawdown_lookback
+        )
+        if (
+            self.config.max_pair_drawdown > 0
+            and abs(drawdown) > self.config.max_pair_drawdown
+        ):
+            reason = (
+                f"Pair drawdown {abs(drawdown):.2f} exceeds {self.config.max_pair_drawdown}"
+            )
+            logger.info("[EVAL] %s", reason)
+            return False, reason
 
         self.boost = boost_factor(self.config.bull_fng, self.config.bull_sentiment)
         logger.info(
