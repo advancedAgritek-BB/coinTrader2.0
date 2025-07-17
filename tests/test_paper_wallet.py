@@ -148,3 +148,9 @@ def test_buy_rejected_when_insufficient_balance():
         wallet.open("buy", 2.0, 60.0)
     assert wallet.balance == 100.0
     assert wallet.positions == {}
+
+
+def test_short_sell_rejected():
+    wallet = PaperWallet(1000.0, allow_short=False)
+    with pytest.raises(RuntimeError):
+        wallet.open("XBT/USDT", "sell", 1.0, 100.0)
