@@ -1,7 +1,20 @@
 import pandas as pd
+import numpy as np
+
+try:  # pragma: no cover - optional scipy dependency
+    from scipy.signal import find_peaks  # type: ignore
+except Exception:  # pragma: no cover - fallback when scipy missing
+
+    def find_peaks(data, distance=1, *a, **k):
+        arr = np.asarray(data)
+        idx = []
+        for i in range(1, len(arr) - 1):
+            if arr[i] > arr[i - 1] and arr[i] > arr[i + 1]:
+                idx.append(i)
+        return np.array(idx), {}
 
 
-def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
+def detect_patterns(df: pd.DataFrame, *, min_conf: float = 0.0) -> dict[str, float]:
     """Return confidence scores for simple chart patterns detected in ``df``.
 
     The latest candle and recent history are inspected for a small
@@ -33,6 +46,9 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
     if df is None or len(df) < 2:
         return patterns
 
+    ema = df["close"].ewm(span=20, adjust=False).mean()
+    ema_slope = float(ema.diff().iloc[-1]) if len(ema) > 1 else 0.0
+
     prev = df.iloc[-2]
     last = df.iloc[-1]
     prev = df.iloc[-2]
@@ -51,9 +67,14 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
 
     if body_ratio <= 0.4:
         hammer_score = max(0.0, (lower_ratio - upper_ratio) * (1 - body_ratio))
+        if ema_slope < 0:
+            hammer_score *= 1.2
         if hammer_score > 0:
             patterns["hammer"] = min(hammer_score, 1.0)
+
         shooting_score = max(0.0, (upper_ratio - lower_ratio) * (1 - body_ratio))
+        if ema_slope > 0:
+            shooting_score *= 1.2
         if shooting_score > 0:
             patterns["shooting_star"] = min(shooting_score, 1.0)
 
@@ -132,4 +153,27 @@ def detect_patterns(df: pd.DataFrame) -> dict[str, float]:
     ):
         patterns["ascending_triangle"] = 1.5
 
-    return patterns
+    # Head and shoulders pattern using peak detection
+    hs_lookback = min(len(df), 25)
+    series = df["close"].iloc[-hs_lookback:]
+    peaks, _ = find_peaks(series, distance=2)
+    if len(peaks) >= 3:
+        p1, p2, p3 = peaks[-3:]
+        h1, h2, h3 = series.iloc[[p1, p2, p3]]
+        if h2 > h1 and h2 > h3:
+            tol = series.iloc[-1] * 0.02
+            if abs(h1 - h3) <= tol and h2 - max(h1, h3) >= tol:
+                if hs_lookback - 1 - p3 <= 3:
+                    patterns["head_and_shoulders"] = 1.0
+
+    troughs, _ = find_peaks(-series, distance=2)
+    if len(troughs) >= 3:
+        t1, t2, t3 = troughs[-3:]
+        l1, l2, l3 = series.iloc[[t1, t2, t3]]
+        if l2 < l1 and l2 < l3:
+            tol = series.iloc[-1] * 0.02
+            if abs(l1 - l3) <= tol and min(l1, l3) - l2 >= tol:
+                if hs_lookback - 1 - t3 <= 3:
+                    patterns["inverse_head_and_shoulders"] = 1.0
+
+    return {k: v for k, v in patterns.items() if v >= min_conf}
