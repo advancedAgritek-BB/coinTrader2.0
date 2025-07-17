@@ -3,8 +3,6 @@ import time
 
 import pytest
 
-pytestmark = pytest.mark.asyncio
-
 from crypto_bot import strategy_router
 
 def dummy_signal(df, cfg=None):
@@ -63,6 +61,7 @@ def test_strategy_timeout_logged(monkeypatch, caplog):
     res = asyncio.run(run())
     assert res == [(0.0, "none", None)]
     assert any("TIMEOUT" in r.getMessage() for r in caplog.records)
+import pytest
 import crypto_bot.strategy_router as sr
 from crypto_bot.strategy_router import RouterConfig, BotStats
 

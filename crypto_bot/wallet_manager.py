@@ -4,7 +4,6 @@ import json
 import yaml
 from pathlib import Path
 from typing import Dict
-import logging
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
@@ -17,8 +16,6 @@ except Exception:
 logger = setup_logger(__name__, LOG_DIR / "wallet.log")
 
 CONFIG_FILE = Path(__file__).resolve().parent / 'user_config.yaml'
-# legacy configuration location used by early versions
-LEGACY_CONFIG_FILE = Path.home() / '.cointrader' / 'user_config.yaml'
 
 FERNET_KEY = os.getenv("FERNET_KEY")
 _fernet = Fernet(FERNET_KEY) if FERNET_KEY and Fernet else None
@@ -141,13 +138,8 @@ def load_or_create() -> dict:
         logger.info("Loading user configuration from %s", CONFIG_FILE)
         with open(CONFIG_FILE) as f:
             creds.update(yaml.safe_load(f))
-    elif LEGACY_CONFIG_FILE.exists():
-        logger.info("Loading user configuration from %s", LEGACY_CONFIG_FILE)
-        with open(LEGACY_CONFIG_FILE) as f:
-            creds.update(yaml.safe_load(f))
     else:
         logger.info("user_config.yaml not found; prompting for credentials")
-        logging.getLogger("bot").info("Awaiting user credentials...")
         creds.update(prompt_user())
         logger.info("Creating new user configuration at %s", CONFIG_FILE)
         with open(CONFIG_FILE, "w") as f:
@@ -193,6 +185,8 @@ def load_or_create() -> dict:
 
 def get_wallet() -> "Keypair":
     """Return a Keypair loaded from ``SOLANA_PRIVATE_KEY`` env variable."""
+    from solana.keypair import Keypair
+
     private_key = os.getenv("SOLANA_PRIVATE_KEY")
     if not private_key:
         raise ValueError("SOLANA_PRIVATE_KEY environment variable not set")
@@ -200,9 +194,6 @@ def get_wallet() -> "Keypair":
         key_bytes = bytes(json.loads(private_key))
     except Exception as exc:  # pragma: no cover - should be rare
         raise ValueError("Invalid SOLANA_PRIVATE_KEY") from exc
-
-    from solana.keypair import Keypair
-
     return Keypair.from_secret_key(key_bytes)
 
 
@@ -212,10 +203,3 @@ __all__ = [
     "load_external_secrets",
     "get_wallet",
 ]
-
-
-if __name__ == "__main__":
-    _created = not CONFIG_FILE.exists()
-    load_or_create()
-    if _created and CONFIG_FILE.exists():
-        print(f"User configuration written to {CONFIG_FILE}")

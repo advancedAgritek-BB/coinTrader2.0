@@ -164,16 +164,7 @@ class PoolWatcher:
         """Yield events from a websocket subscription."""
         self._running = True
         async with aiohttp.ClientSession() as session:
-            try:
-                ws = await session.ws_connect(self.websocket_url)
-            except aiohttp.WSServerHandshakeError as e:
-                logger.error(
-                    "WebSocket connection failed. Your API key may be invalid or lacks access: %s",
-                    e,
-                )
-                self._running = False
-                return
-            async with ws:
+            async with session.ws_connect(self.websocket_url) as ws:
                 await ws.send_json(
                     {
                         "jsonrpc": "2.0",

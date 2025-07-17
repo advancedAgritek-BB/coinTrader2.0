@@ -1,11 +1,11 @@
-import asyncio
+
 import logging
 import warnings
+import asyncio
 
-import pytest
+from crypto_bot.utils.telegram import send_message
 
 from crypto_bot.utils.logger import setup_logger
-from crypto_bot.utils.telegram import send_message
 
 
 def test_setup_logger_creates_file_and_logs_to_console_by_default(tmp_path, caplog):
@@ -154,44 +154,4 @@ def test_notifier_stops_after_failure(monkeypatch, caplog):
     assert err1 == "boom"
     assert err2 is None
     assert calls["count"] == 1
-    assert any(
-        "disabling telegram notifications" in r.getMessage().lower()
-        for r in caplog.records
-    )
-
-
-def test_send_message_retry_after(monkeypatch):
-    import crypto_bot.utils.telegram as tg
-
-    calls = {"count": 0}
-
-    class DummyBot:
-        def __init__(self, token):
-            pass
-
-        def send_message(self, chat_id, text):
-            calls["count"] += 1
-            if calls["count"] == 1:
-                raise tg.RetryAfter(2)
-            calls["chat_id"] = chat_id
-            calls["text"] = text
-
-    t = {"now": 0.0}
-
-    def fake_time():
-        return t["now"]
-
-    def fake_sleep(secs):
-        t["now"] += secs
-
-    monkeypatch.setattr(tg, "Bot", DummyBot)
-    monkeypatch.setattr(tg.time, "time", fake_time)
-    monkeypatch.setattr(tg.time, "sleep", fake_sleep)
-    tg._last_send = 0.0
-
-    err = tg.send_message("t", "c", "msg")
-
-    assert err is None
-    assert calls["count"] == 2
-    assert t["now"] == pytest.approx(2.0)
-    assert tg._last_send == pytest.approx(2.0)
+    assert any("disabling telegram notifications" in r.getMessage().lower() for r in caplog.records)

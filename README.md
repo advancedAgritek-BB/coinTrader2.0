@@ -69,17 +69,12 @@ needed.
    The optional `rich` package is included and provides colorized
    console output when viewing live positions.
    Exchange connectivity relies on [ccxt](https://github.com/ccxt/ccxt) which is installed with these requirements. Make sure the `ccxt` package is available when running the trading bot.
-2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials. If this file does not exist, launching the bot will ask for these credentials in the console. The prompts and related messages are written to `crypto_bot/logs/wallet.log`.
+2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
-   The bot will not start if this file is missing or empty.
 4. Start the trading bot:
-4. From the **repository root**, start the trading bot using the module path:
    ```bash
    python -m crypto_bot.main
    ```
-   Launching the script directly with `python crypto_bot/main.py` may raise
-   `ModuleNotFoundError` because the package imports expect the project root to
-   be on `PYTHONPATH`.
    When dry-run mode is selected you will be prompted for the starting USDT balance.
    The console now refreshes with your wallet balance and any active
    trades in real time. Profitable positions are shown in green while
@@ -112,7 +107,7 @@ needed.
    Save the file and type `reload` in the console or send `/reload` via Telegram
    to apply the changes immediately.
 
-Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. When this file is missing, `python -m crypto_bot.main` will prompt for the same values interactively and log the prompts to `crypto_bot/logs/wallet.log`. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
+Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
 
 ## Configuration Files
 
@@ -387,7 +382,7 @@ below its 20-bar median, reducing trades during ranging periods and improving
 the win rate.
 
 ### Data and Logging
-* **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis. Valid units are `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks) and `M` (months).
+* **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis.
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options.
 * **loop_interval_minutes** – delay between trading cycles.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
@@ -446,11 +441,9 @@ The built-in Telegram interface is provided by the `TelegramBotUI` class in
 
    The bot reads these values only from `config.yaml`. Disable
    `trade_updates` if you don't want trade entry and exit messages.
-    Set `chat_admins` to a comma-separated list of Telegram chat IDs allowed to
-    control the bot. You can also provide this list via the `TELE_CHAT_ADMINS`
-    environment variable.
-    Messages are rate limited to one per second. If Telegram responds with a
-    `RetryAfter` error, the bot automatically waits and retries once.
+   Set `chat_admins` to a comma-separated list of Telegram chat IDs allowed to
+   control the bot. You can also provide this list via the `TELE_CHAT_ADMINS`
+   environment variable.
 2. Send `/start` to your bot so it can message you. Use `/menu` at any time to
    open an interactive button menu—**Start**, **Stop**, **Status**, **Log**,
    **Rotate Now**, **Toggle Mode**, **PnL**, **Trades**, **Edit Config**,
@@ -1122,9 +1115,6 @@ High `max_concurrent_ohlcv` values combined with short `ohlcv_timeout`
 settings can overload the exchange and lead to failed candle fetches.
 Increase `ohlcv_timeout` to give each request more time and lower
 `max_concurrent_ohlcv` if errors continue.
-
-DexScreener requests are throttled to prevent 429 errors. If you see rate limit
-messages, simply wait for the automatic backoff to finish.
 
 This project is provided for educational purposes only. Use it at your own risk, and remember that nothing here constitutes financial advice.
 

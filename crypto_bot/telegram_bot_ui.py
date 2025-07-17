@@ -361,23 +361,30 @@ class TelegramBotUI:
             return
         if not await self._check_admin(update):
             return
-        buttons = [
-            InlineKeyboardButton("Start", callback_data=START),
-            InlineKeyboardButton("Stop", callback_data=STOP),
-            InlineKeyboardButton("Status", callback_data=STATUS),
-            InlineKeyboardButton("Log", callback_data=LOG),
-            InlineKeyboardButton("Rotate Now", callback_data=ROTATE),
-            InlineKeyboardButton("Toggle Mode", callback_data=TOGGLE),
-            InlineKeyboardButton("Reload", callback_data=RELOAD),
-            InlineKeyboardButton("Panic Sell", callback_data=PANIC_SELL),
-            InlineKeyboardButton("Signals", callback_data=SIGNALS),
-            InlineKeyboardButton("Balance", callback_data=BALANCE),
-            InlineKeyboardButton("Trades", callback_data=TRADES),
-            InlineKeyboardButton("Trade History", callback_data=TRADE_HISTORY),
-            InlineKeyboardButton("PnL Stats", callback_data=PNL_STATS),
-            InlineKeyboardButton("Config Settings", callback_data=CONFIG),
+        keyboard = [
+            [
+                InlineKeyboardButton("Start", callback_data=START),
+                InlineKeyboardButton("Stop", callback_data=STOP),
+                InlineKeyboardButton("Status", callback_data=STATUS),
+            ],
+            [
+                InlineKeyboardButton("Log", callback_data=LOG),
+                InlineKeyboardButton("Rotate Now", callback_data=ROTATE),
+                InlineKeyboardButton("Toggle Mode", callback_data=TOGGLE),
+                InlineKeyboardButton("Reload", callback_data=RELOAD),
+                InlineKeyboardButton("Panic Sell", callback_data=PANIC_SELL),
+            ],
+            [
+                InlineKeyboardButton("Signals", callback_data=SIGNALS),
+                InlineKeyboardButton("Balance", callback_data=BALANCE),
+                InlineKeyboardButton("Trades", callback_data=TRADES),
+                InlineKeyboardButton("Trade History", callback_data=TRADE_HISTORY),
+                InlineKeyboardButton("PnL Stats", callback_data=PNL_STATS),
+            ],
+            [
+                InlineKeyboardButton("Config Settings", callback_data=CONFIG),
+            ],
         ]
-        keyboard = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
         markup = InlineKeyboardMarkup(keyboard)
         await self._reply(update, "Select a command:", reply_markup=markup)
 

@@ -44,12 +44,6 @@ CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 with open(CONFIG_PATH) as f:
     DEFAULT_CONFIG = yaml.safe_load(f)
 
-if not isinstance(DEFAULT_CONFIG, dict):
-    raise RuntimeError(
-        "Config file appears empty or corrupted. "
-        "Please restore crypto_bot/config.yaml from the repository."
-    )
-
 # Map symbols to asyncio locks guarding order placement
 symbol_locks: Dict[str, asyncio.Lock] = {}
 
