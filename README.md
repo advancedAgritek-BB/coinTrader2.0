@@ -591,8 +591,8 @@ scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
 loop_interval_minutes: 0.5   # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
 max_ws_limit: 50             # skip WebSocket when request exceeds this
-ohlcv_timeout: 120            # request timeout for OHLCV fetches
-max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
+ohlcv_timeout: 300            # request timeout for OHLCV fetches
+max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
 metrics:
   enabled: true              # write cycle statistics to metrics.csv
   file: crypto_bot/logs/metrics.csv
