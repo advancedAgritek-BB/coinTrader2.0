@@ -29,9 +29,13 @@ On-chain DEX execution submits real transactions when not running in dry-run mod
 The bot selects a strategy by first classifying the current market regime. The
 `classify_regime` function computes EMA, ADX, RSI and Bollinger Band width to
 label conditions as `trending`, `sideways`, `breakout`, `mean-reverting` or
-`volatile`. At least **20** OHLCV entries are required for these indicators to
+`volatile`. At least **200** candles are required for these indicators to
 be calculated reliably. When fewer rows are available the function returns
-`"unknown"` so the router can avoid making a poor decision.
+`"unknown"` so the router can avoid making a poor decision. Strategies may
+operate on different candle intervals, so the loader keeps a multi‑timeframe
+cache populated for each pair. The `timeframes` list in
+`crypto_bot/config.yaml` defines which intervals are stored and reused across
+the various bots.
 
 ### Optional ML Fallback
 
@@ -46,7 +50,7 @@ machine learning model whenever the indicator rules return `"unknown"`.
 The EMA windows have been shortened to **8** and **21** and the ADX threshold
 lowered to switch regimes more quickly. The fallback model is bundled in
 `crypto_bot.regime.model_data` as a base64 string and loaded automatically.
-By default the ML model only runs when at least **20** candles are available
+By default the ML model only runs when at least **200** candles are available
 (tunable via `ml_min_bars`). You can replace that module with your own encoded
 model if desired.
 
@@ -238,7 +242,8 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **symbol_batch_size** – number of symbols processed each cycle.
   The same batch size controls the initial market scan at startup where
   progress is logged after each batch.
-* **scan_lookback_limit** – candles of history loaded during the initial scan.
+* **scan_lookback_limit** – candles of history loaded during the initial scan (default `200`).
+  The caches store at least this many bars per timeframe before strategies run.
 * **cycle_lookback_limit** – candles fetched each cycle. Defaults to
   `min(150, timeframe_minutes × 2)`.
 * **adaptive_scan.enabled** – turn on dynamic sizing.
@@ -338,6 +343,14 @@ size = risk_manager.position_size(score, balance, lower_df, atr=atr)
 * **ml_signal_model**/**signal_weight_optimizer** – blend strategy scores with machine-learning predictions.
 * **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade. `min_confidence_score` and `signal_fusion.min_confidence` default to `0.05`.
 * **regime_timeframes**/**regime_return_period** – windows used for regime detection.
+* **regime_overrides** – optional settings that replace values in the `risk` or strategy sections when a specific regime is active.
+```yaml
+regime_overrides:
+  trending:
+    risk:
+      sl_mult: 1.2
+      tp_mult: 2.5
+```
 * **twap_enabled**, **twap_slices**, **twap_interval_seconds** – settings for time-weighted order execution.
 * **optimization** – periodic parameter optimisation.
 * **portfolio_rotation** – rotate holdings based on scoring metrics.
@@ -396,6 +409,10 @@ below its 20-bar median, reducing trades during ranging periods and improving
 the win rate.
 
 ### Data and Logging
+* **timeframe** – base interval for most indicators (default `15m`).
+* **timeframes** – list of additional intervals cached for reuse by strategies.
+* **scalp_timeframe** – short interval used by the scalping bots.
+* **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options. A separate cache is maintained for each timeframe listed in `timeframes`.
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis. Default `timeframe` is `15m` and `timeframes` include `1m`, `5m`, `15m`, `1h`, and `4h`.
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options. The snapshot limit defaults to `500`.
 * **loop_interval_minutes** – delay between trading cycles.
@@ -720,7 +737,7 @@ excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 2           # skip pairs with less history
 symbol_batch_size: 50            # symbols processed per cycle
-scan_lookback_limit: 50          # candles loaded during startup
+scan_lookback_limit: 200         # candles loaded during startup
 cycle_lookback_limit: null       # override per-cycle candle load (default min(150, timeframe_minutes × 2))
 max_spread_pct: 4.0              # skip pairs with wide spreads
 ```
@@ -1036,7 +1053,7 @@ maximum drawdown and Sharpe ratio for each combination.
 ```python
 from crypto_bot.backtest.backtest_runner import BacktestRunner
 
-runner = BacktestRunner('XBT/USDT', '1h', since=0)
+runner = BacktestRunner('XBT/USDT', '15m', since=0)
 results = runner.run_grid(
     stop_loss_range=[0.01, 0.02],
     take_profit_range=[0.02, 0.04],
