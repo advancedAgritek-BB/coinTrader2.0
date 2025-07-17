@@ -234,6 +234,14 @@ async def analyze_symbol(
     if votes < min_agree:
         regime = "unknown"
 
+    analysis_logger.info(
+        "%s regime=%s conf=%.2f votes=%d",
+        symbol,
+        regime,
+        confidence,
+        votes,
+    )
+
     period = int(config.get("regime_return_period", 5))
     future_return = 0.0
     if len(df) > period:

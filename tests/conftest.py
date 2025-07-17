@@ -171,6 +171,17 @@ except Exception:  # pragma: no cover - ta not installed
             def ema_indicator(series, window=14):
                 return Series([80.0] * len(series))
 
+            @staticmethod
+            def adx(high, low, close, window=14):
+                return Series([50.0] * len(close))
+
+            class ADXIndicator:
+                def __init__(self, *a, **k):
+                    pass
+
+                def adx(self):
+                    return Series([20.0])
+
         class momentum:
             @staticmethod
             def rsi(series, window=14):
@@ -193,15 +204,38 @@ except Exception:  # pragma: no cover - ta not installed
             def average_true_range(high, low, close, window=14):
                 return Series([1.0] * len(close))
 
+            class BollingerBands:
+                def __init__(self, series, window=14, window_dev=2):
+                    self.series = series
+
+                def bollinger_wband(self):
+                    return Series([0.05] * len(self.series))
+
+            class KeltnerChannel:
+                def __init__(self, high, low, close, window=14):
+                    self.series = close
+
+                def keltner_channel_hband(self):
+                    return Series([1.0] * len(self.series))
+
+                def keltner_channel_lband(self):
+                    return Series([0.0] * len(self.series))
+
     sys.modules.setdefault("ta", _FakeTa())
+    sys.modules.setdefault("ta.trend", _FakeTa.trend)
+    sys.modules.setdefault("ta.momentum", _FakeTa.momentum)
+    sys.modules.setdefault("ta.volatility", _FakeTa.volatility)
 
 # Lightweight stub for PyYAML
-class _FakeYaml:
-    @staticmethod
-    def safe_load(*args, **kwargs):
-        return {}
+try:  # pragma: no cover - optional dependency
+    import yaml  # type: ignore  # noqa: F401
+except Exception:  # pragma: no cover - PyYAML not installed
+    class _FakeYaml:
+        @staticmethod
+        def safe_load(*args, **kwargs):
+            return {}
 
-sys.modules.setdefault("yaml", _FakeYaml())
+    sys.modules.setdefault("yaml", _FakeYaml())
 
 # Basic stub for aiohttp
 class _FakeAioHttp:
