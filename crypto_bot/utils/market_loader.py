@@ -919,8 +919,13 @@ async def fetch_geckoterminal_ohlcv(
     symbol: str,
     timeframe: str = "1h",
     limit: int = 100,
-) -> tuple[list, float] | None:
-    """Return OHLCV data and 24h volume for ``symbol`` from the GeckoTerminal API."""
+    *,
+    return_price: bool = False,
+) -> tuple[list, float] | tuple[list, float, float] | None:
+    """Return OHLCV data and 24h volume for ``symbol`` from the GeckoTerminal API.
+
+    If ``return_price`` is ``True`` the latest pool price is also returned.
+    """
 
     from urllib.parse import quote_plus
 
@@ -954,6 +959,14 @@ async def fetch_geckoterminal_ohlcv(
             )
         except Exception:
             volume = 0.0
+        try:
+            price = float(
+                items[0]
+                .get("attributes", {})
+                .get("base_token_price_quote_token", 0.0)
+            )
+        except Exception:
+            price = 0.0
 
         ohlcv_url = (
             "https://api.geckoterminal.com/api/v2/networks/solana/pools/"
@@ -981,6 +994,8 @@ async def fetch_geckoterminal_ohlcv(
             ]
         )
 
+    if return_price:
+        return result, volume, price
     return result, volume
 
 
