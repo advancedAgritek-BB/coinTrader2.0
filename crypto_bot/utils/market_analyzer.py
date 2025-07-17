@@ -170,8 +170,24 @@ async def analyze_symbol(
     min_conf_adaptive = baseline * (1 + bb_z / 3)
     higher_df = df_map.get("1d")
     regime, probs = await classify_regime_async(df, higher_df)
+    sub_regime = regime
+    regime = regime.split("_")[-1]
     patterns = detect_patterns(df)
-    base_conf = float(probs.get(regime, 0.0))
+    base_conf = float(probs.get(sub_regime, 0.0))
+    bias_cfg = config.get("sentiment_filter", {})
+    try:
+        from crypto_bot.sentiment_filter import boost_factor
+
+        bias = boost_factor(bias_cfg.get("bull_fng", 50), bias_cfg.get("bull_sentiment", 50))
+    except Exception:
+        bias = 1.0
+    if bias > 1:
+        for k in list(probs.keys()):
+            if k.startswith("bullish"):
+                probs[k] *= bias
+        total = sum(probs.values())
+        if total > 0:
+            probs = {kk: vv / total for kk, vv in probs.items()}
     profile = bool(config.get("profile_regime", False))
     regime, _ = await classify_regime_cached(
         symbol,
@@ -180,10 +196,13 @@ async def analyze_symbol(
         higher_df,
         profile,
     )
+    regime = regime.split("_")[-1]
     higher_df = df_map.get(higher_tf)
 
     if df is not None:
-        regime, info = await classify_regime_async(df, higher_df)
+        regime_tmp, info = await classify_regime_async(df, higher_df)
+        sub_regime = regime_tmp
+        regime = regime_tmp.split("_")[-1]
         if isinstance(info, dict):
             patterns = info
         elif isinstance(info, set):
@@ -208,6 +227,7 @@ async def analyze_symbol(
             higher_df,
             profile,
         )
+        r = r.split("_")[-1]
         regime_counts[r] = regime_counts.get(r, 0) + 1
         if tf_df is not None:
             vote_map[tf] = tf_df
@@ -223,6 +243,7 @@ async def analyze_symbol(
         for tf in regime_tfs:
             r = label_map.get(tf)
             if r:
+                r = r.split("_")[-1]
                 regime_counts[r] = regime_counts.get(r, 0) + 1
 
     if regime_counts:
@@ -257,6 +278,7 @@ async def analyze_symbol(
         "symbol": symbol,
         "df": df,
         "regime": regime,
+        "sub_regime": sub_regime,
         "patterns": patterns,
         "future_return": future_return,
         "confidence": confidence,
