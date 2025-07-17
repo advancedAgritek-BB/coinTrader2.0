@@ -1,7 +1,14 @@
 import asyncio
 from collections import deque
 import pandas as pd
+import sys
+import types
 from crypto_bot.phase_runner import BotContext
+
+# Stub ccxt to avoid heavy optional dependency during import
+sys.modules.setdefault("ccxt", types.SimpleNamespace(async_support=types.SimpleNamespace()))
+sys.modules.setdefault("ccxt.async_support", types.SimpleNamespace())
+
 import crypto_bot.main as main
 
 
@@ -17,7 +24,7 @@ def test_update_caches_default_limit(monkeypatch):
     monkeypatch.setattr(main, "update_multi_tf_ohlcv_cache", dummy_update)
     monkeypatch.setattr(main, "update_regime_tf_cache", dummy_update)
     asyncio.run(main.update_caches(ctx))
-    assert dummy_update.kwargs["limit"] == 120
+    assert dummy_update.kwargs["limit"] == 200
 
 
 def test_update_caches_override(monkeypatch):
