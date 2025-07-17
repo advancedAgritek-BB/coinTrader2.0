@@ -166,6 +166,7 @@ def _parse_metrics(symbol: str, ticker: dict) -> tuple[float, float, float]:
     liq_cache[symbol] = (volume_usd, spread_pct, 1.0)
 
     cached_vol, cached_spread, _ = liq_cache[symbol]
+    logger.info("%s: vol=%.2f chg=%.2f%% spr=%.2f%%", symbol, cached_vol, change_pct, cached_spread)
     return cached_vol, change_pct, cached_spread
 
 
