@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 import asyncio
 import time
+import logging
 
 import pandas as pd
 import numpy as np
@@ -27,12 +28,23 @@ CONFIG = _load_config(CONFIG_PATH)
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
+
+def _configure_logger(cfg: dict) -> None:
+    level_str = str(cfg.get("log_level", "INFO")).upper()
+    level = getattr(logging, level_str, logging.INFO)
+    logger.setLevel(level)
+
+
+_configure_logger(CONFIG)
+
 _ALL_REGIMES = [
     "trending",
     "sideways",
     "mean-reverting",
     "breakout",
     "volatile",
+    "bullish_trending",
+    "bearish_volatile",
     "unknown",
 ]
 
@@ -119,6 +131,14 @@ def _probabilities(label: str, confidence: float | None = None) -> Dict[str, flo
     return probs
 
 
+def _normalize(probs: Dict[str, float]) -> Dict[str, float]:
+    """Return normalized probability mapping."""
+    total = sum(probs.values())
+    if total > 0:
+        probs = {k: v / total for k, v in probs.items()}
+    return probs
+
+
 def _classify_core(
     data: pd.DataFrame, cfg: dict, higher_df: Optional[pd.DataFrame] = None
 ) -> str:
@@ -170,6 +190,20 @@ def _classify_core(
     else:
         df["volume_zscore"] = np.nan
 
+    for col in (
+        "ema20",
+        "ema50",
+        "adx",
+        "rsi",
+        "atr",
+        "bb_width",
+        "volume_change",
+        "volume_zscore",
+        "normalized_range",
+    ):
+        if col in df:
+            df[col] = df[col].fillna(df[col].mean())
+
     volume_ma20 = (
         df["volume"].rolling(cfg["ma_window"]).mean()
         if len(df) >= cfg["ma_window"]
@@ -195,6 +229,26 @@ def _classify_core(
     trending = (
         latest["adx"] > cfg["adx_trending_min"] and latest["ema20"] > latest["ema50"]
     )
+    logger.debug(
+        "Indicators - ADX: %.2f (trending>%.2f, sideways<%.2f), BB width: %.4f "
+        "(breakout<%.2f, sideways<%.2f), RSI: %.2f (mean_rev %d-%d), EMA dist: "
+        "%.4f (max %.4f), Normalized range: %.4f (volatile>%.2f)",
+        latest["adx"],
+        cfg["adx_trending_min"],
+        cfg["adx_sideways_max"],
+        latest["bb_width"],
+        cfg["bb_width_breakout_max"],
+        cfg["bb_width_sideways_max"],
+        latest["rsi"],
+        cfg["rsi_mean_rev_min"],
+        cfg["rsi_mean_rev_max"],
+        abs(latest["close"] - latest["ema20"]) / latest["close"],
+        cfg["ema_distance_mean_rev_max"],
+        latest["normalized_range"],
+        cfg["normalized_range_volatility_min"],
+    )
+
+    trending = latest["adx"] > cfg["adx_trending_min"] and latest["ema20"] > latest["ema50"]
 
     if trending and cfg.get("confirm_trend_with_higher_tf", False):
         if higher_df is None:
@@ -263,6 +317,10 @@ def _classify_all(
 
     patterns = detect_patterns(df)
     pattern_min = float(cfg.get("pattern_min_conf", 0.0))
+    regime = _classify_core(df, cfg, higher_df)
+    patterns = detect_patterns(df, min_conf=cfg.get("pattern_min_conf", 0.0))
+
+    # Score regimes based on indicator result and detected patterns
     scores: Dict[str, float] = {}
     for name, strength in patterns.items():
         if strength < pattern_min:
@@ -276,18 +334,44 @@ def _classify_all(
     if regime != "unknown":
         scores[regime] = scores.get(regime, 0.0) + 1.0
 
+    probs = {r: 0.0 for r in _ALL_REGIMES}
     if scores:
+        total = sum(scores.values())
+        if total > 0:
+            for r, sc in scores.items():
+                probs[r] = sc / total
         regime = max(scores, key=scores.get)
         total = sum(scores.values())
         probabilities = {r: scores.get(r, 0.0) / total for r in _ALL_REGIMES}
         log_patterns(regime, patterns)
         return regime, probabilities, patterns
 
+    rule_probs = _probabilities(regime)
+
+    ml_label = "unknown"
+    ml_probs = {r: 0.0 for r in _ALL_REGIMES}
+    use_ml = cfg.get("use_ml_regime_classifier", False)
+    if use_ml and len(df) >= ml_min_bars:
+        ml_label, conf = _ml_fallback(df)
+        ml_probs = _probabilities(ml_label, conf)
+        if regime == "unknown" and ml_label != "unknown":
+            log_patterns(ml_label, patterns)
+            return ml_label, ml_probs, patterns
+    else:
+    latest = df.iloc[-1]
+    rsi = float(latest.get("rsi", 50))
+    if scores.get("trending", 0.0) > 0.5 and rsi > 50:
+        probs["bullish_trending"] = scores.get("trending", 0.0)
+    if scores.get("volatile", 0.0) > 0.5 and rsi < 50:
+        probs["bearish_volatile"] = scores.get("volatile", 0.0)
+
+    probs = _normalize(probs)
+
     if regime == "unknown":
         if cfg.get("use_ml_regime_classifier", False) and len(df) >= ml_min_bars:
             label, conf = _ml_fallback(df)
             log_patterns(label, patterns)
-            return label, _probabilities(label, conf), patterns
+            return label, _normalize(_probabilities(label, conf)), patterns
         if len(df) >= ml_min_bars:
             logger.info("Skipping ML fallback \u2014 ML disabled")
         else:
@@ -295,9 +379,24 @@ def _classify_all(
                 "Skipping ML fallback \u2014 insufficient data (%d rows)", len(df)
             )
         return regime, _probabilities(regime, 0.0), patterns
+            logger.info("Skipping ML fallback \u2014 insufficient data (%d rows)", len(df))
+
+    if ml_label != "unknown" and use_ml and len(df) >= ml_min_bars:
+        weight = cfg.get("ml_blend_weight", 0.5)
+        final_probs = {
+            r: (1 - weight) * rule_probs.get(r, 0.0) + weight * ml_probs.get(r, 0.0)
+            for r in _ALL_REGIMES
+        }
+        regime = max(final_probs, key=final_probs.get)
+    else:
+        final_probs = rule_probs
 
     log_patterns(regime, patterns)
-    return regime, _probabilities(regime), patterns
+    return regime, final_probs, patterns
+        return regime, _normalize(_probabilities(regime, 0.0)), patterns
+
+    log_patterns(regime, patterns)
+    return regime, probs, patterns
 
 
 def classify_regime(
@@ -349,6 +448,7 @@ def classify_regime(
     """
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
+    _configure_logger(cfg)
     cfg = adaptive_thresholds(cfg, df, symbol)
 
     result = _classify_all(df, higher_df, cfg, df_map=df_map)
@@ -370,6 +470,7 @@ def classify_regime_with_patterns(
     """Return the regime label and detected pattern scores."""
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
+    _configure_logger(cfg)
     cfg = adaptive_thresholds(cfg, df, symbol)
     label, _, patterns = _classify_all(df, higher_df, cfg)
     return label, patterns

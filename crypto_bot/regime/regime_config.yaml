@@ -20,6 +20,9 @@ confirm_trend_with_higher_tf: false
 use_ml_regime_classifier: true
 ml_min_bars: 20
 pattern_min_conf: 0.0
+pattern_min_conf: 0.1
+ml_blend_weight: 0.5
+log_level: INFO
 score_weights:
   trending: 1.0
   sideways: 1.0
