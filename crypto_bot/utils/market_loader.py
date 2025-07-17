@@ -13,7 +13,6 @@ import warnings
 
 from .telegram import TelegramNotifier
 from .logger import LOG_DIR, setup_logger
-from pathlib import Path
 
 
 _last_snapshot_time = 0
@@ -1322,15 +1321,26 @@ async def update_multi_tf_ohlcv_cache(
         for sym in dex_symbols:
             try:
                 data, vol, _ = await fetch_geckoterminal_ohlcv(
+                res = await fetch_geckoterminal_ohlcv(
                     sym,
                     timeframe=tf,
                     limit=limit,
                     min_24h_volume=min_volume_usd,
                 )
+                if res:
+                    if isinstance(res, tuple):
+                        data, vol, *_ = res
+                    else:
+                        data = res
+                        vol = min_volume_usd
+                else:
+                    data, vol = None, 0.0
             except Exception as exc:  # pragma: no cover - network
                 logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
                 data = None
                 vol = 0.0
+                data, vol = None, 0.0
+
             if data is None:
                 tf_cache = await update_ohlcv_cache(
                     exchange,
@@ -1361,6 +1371,18 @@ async def update_multi_tf_ohlcv_cache(
                 )
                 if not data:
                     continue
+            elif vol < min_volume_usd:
+                data = await fetch_dex_ohlcv(
+                    exchange,
+                    sym,
+                    timeframe=tf,
+                    limit=limit,
+                    min_volume_usd=min_volume_usd,
+                )
+
+            if not data:
+                continue
+
             df_new = pd.DataFrame(
                 data,
                 columns=["timestamp", "open", "high", "low", "close", "volume"],

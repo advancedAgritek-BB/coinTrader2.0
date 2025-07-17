@@ -1246,6 +1246,12 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
     assert data == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
     assert vol == 123.0
     assert reserve == 0.0
+    data, volume, reserve = asyncio.run(
+        market_loader.fetch_geckoterminal_ohlcv("FOO/USDC", timeframe="1h", limit=1)
+    )
+    assert data == [[1000, 1.0, 2.0, 0.5, 1.5, 10.0]]
+    assert volume == 123
+    assert reserve == 0
 
 
 def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
