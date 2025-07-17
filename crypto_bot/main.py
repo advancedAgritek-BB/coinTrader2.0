@@ -811,6 +811,7 @@ async def execute_signals(ctx: BotContext) -> None:
     executed = 0
 
     for candidate in results[:top_n]:
+        logger.info("Analysis result: %s", candidate)
         if not ctx.position_guard or not ctx.position_guard.can_open(ctx.positions):
             logger.info("Max open trades reached; skipping remaining signals")
             break
