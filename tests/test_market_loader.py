@@ -5,6 +5,8 @@ import logging
 import time
 import ccxt
 
+VALID_MINT = "So11111111111111111111111111111111111111112"
+
 from crypto_bot.utils.market_loader import (
     load_kraken_symbols,
     fetch_ohlcv_async,
@@ -1392,27 +1394,27 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
         update_multi_tf_ohlcv_cache(
             ex,
             cache,
-            ["BAR/USDC"],
+            [f"{VALID_MINT}/USDC"],
             config,
             limit=1,
         )
     )
     assert calls[-1] == 100
-    assert "BAR/USDC" in cache["1h"]
-    assert "BAR/USDC" in cache.get("1h", {})
+    assert f"{VALID_MINT}/USDC" in cache["1h"]
+    assert f"{VALID_MINT}/USDC" in cache.get("1h", {})
 
     config["min_volume_usd"] = 10
     cache = asyncio.run(
         update_multi_tf_ohlcv_cache(
             ex,
             cache,
-            ["BAR/USDC"],
+            [f"{VALID_MINT}/USDC"],
             config,
             limit=1,
         )
     )
     assert calls[-1] == 10
-    assert "BAR/USDC" in cache["1h"]
+    assert f"{VALID_MINT}/USDC" in cache["1h"]
 
 
 def test_dex_fetch_fallback_coingecko(monkeypatch):
@@ -1442,12 +1444,12 @@ def test_dex_fetch_fallback_coingecko(monkeypatch):
         update_multi_tf_ohlcv_cache(
             ex,
             cache,
-            ["BTC/USDC"],
+            [f"{VALID_MINT}/USDC"],
             config,
             limit=1,
         )
     )
-    assert "BTC/USDC" in cache["1h"]
+    assert f"{VALID_MINT}/USDC" in cache["1h"]
     assert calls["kraken"] == 0
 
 
