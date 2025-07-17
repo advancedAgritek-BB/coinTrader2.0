@@ -1364,13 +1364,15 @@ async def update_multi_tf_ohlcv_cache(
                     notifier=notifier,
                     config=config,
                 )
-                try:
-                    data, vol, _ = await fetch_geckoterminal_ohlcv(
-                        sym, timeframe=tf, limit=limit
-                    )
-                except Exception as exc:  # pragma: no cover - network
-                    logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
-                    continue
+                res = await fetch_geckoterminal_ohlcv(sym, timeframe=tf, limit=limit)
+                if res:
+                    if isinstance(res, tuple):
+                        data, vol, *_ = res
+                    else:
+                        data = res
+                        vol = min_volume_usd
+                else:
+                    data, vol = None, 0.0
             if not data or vol < min_volume_usd:
                 data = await fetch_dex_ohlcv(
                     exchange,
