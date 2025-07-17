@@ -609,6 +609,12 @@ async def update_caches(ctx: BotContext) -> None:
     limit = min(150, tf_minutes * 2)
     limit = int(ctx.config.get("cycle_lookback_limit") or limit)
 
+    max_concurrent = ctx.config.get("max_concurrent_ohlcv")
+    if isinstance(max_concurrent, (int, float)):
+        max_concurrent = int(max_concurrent)
+        if ctx.volatility_factor > 5:
+            max_concurrent = max(1, max_concurrent // 2)
+
     ctx.df_cache = await update_multi_tf_ohlcv_cache(
         ctx.exchange,
         ctx.df_cache,
@@ -617,7 +623,7 @@ async def update_caches(ctx: BotContext) -> None:
         limit=limit,
         use_websocket=ctx.config.get("use_websocket", False),
         force_websocket_history=ctx.config.get("force_websocket_history", False),
-        max_concurrent=ctx.config.get("max_concurrent_ohlcv"),
+        max_concurrent=max_concurrent,
         notifier=ctx.notifier if ctx.config.get("telegram", {}).get("status_updates", True) else None,
         priority_queue=symbol_priority_queue,
     )
@@ -630,7 +636,7 @@ async def update_caches(ctx: BotContext) -> None:
         limit=limit,
         use_websocket=ctx.config.get("use_websocket", False),
         force_websocket_history=ctx.config.get("force_websocket_history", False),
-        max_concurrent=ctx.config.get("max_concurrent_ohlcv"),
+        max_concurrent=max_concurrent,
         notifier=ctx.notifier if ctx.config.get("telegram", {}).get("status_updates", True) else None,
         df_map=ctx.df_cache,
     )
