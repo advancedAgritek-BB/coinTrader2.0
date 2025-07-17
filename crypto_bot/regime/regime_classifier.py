@@ -12,7 +12,6 @@ import yaml
 from .pattern_detector import detect_patterns
 from crypto_bot.utils.pattern_logger import log_patterns
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from pathlib import Path
 
 
 CONFIG_PATH = Path(__file__).with_name("regime_config.yaml")
@@ -167,11 +166,6 @@ def _classify_core(
             df["normalized_range"] = (df["high"] - df["low"]) / df["atr"]
         except IndexError:
             return "unknown"
-            df["adx"] = np.nan
-            df["rsi"] = np.nan
-            df["atr"] = np.nan
-            df["normalized_range"] = np.nan
-            return "unknown"
     else:
         df["adx"] = np.nan
         df["rsi"] = np.nan
@@ -209,11 +203,6 @@ def _classify_core(
         if len(df) >= cfg["ma_window"]
         else pd.Series(np.nan, index=df.index)
     )
-    atr_ma20 = (
-        df["atr"].rolling(cfg["ma_window"]).mean()
-        if len(df) >= cfg["ma_window"]
-        else pd.Series(np.nan, index=df.index)
-    )
 
     volume_jump = False
     if len(df) > 1:
@@ -226,9 +215,6 @@ def _classify_core(
 
     latest = df.iloc[-1]
 
-    trending = (
-        latest["adx"] > cfg["adx_trending_min"] and latest["ema20"] > latest["ema50"]
-    )
     logger.debug(
         "Indicators - ADX: %.2f (trending>%.2f, sideways<%.2f), BB width: %.4f "
         "(breakout<%.2f, sideways<%.2f), RSI: %.2f (mean_rev %d-%d), EMA dist: "
@@ -423,26 +409,17 @@ def classify_regime(
 
     Returns
     -------
-    Tuple[str, object]
-        When sufficient history is available the function returns ``(label,
-        pattern_scores)`` where ``pattern_scores`` is a ``dict`` mapping pattern
-        names to confidence values.  If insufficient history triggers the ML
-        fallback the return value is ``(label, confidence)`` where ``confidence``
-        is a float between 0 and 1.
-        patterns)`` where ``patterns`` is a mapping of pattern names to
-        confidence scores. If insufficient history triggers the ML fallback the
-        return value is ``(label, confidence)`` where ``confidence`` is a float
-        between 0 and 1.
-        patterns)`` where ``patterns`` is a ``dict`` mapping formation name to
-        strength. If insufficient history triggers the ML fallback the return
-        value is ``(label, confidence)`` where ``confidence`` is a float between
-        0 and 1.
-    Tuple[str, object] | Dict[str, str] | Tuple[str, str]
-        When a single dataframe is supplied the function behaves like before
-        and returns ``(label, patterns)`` or ``(label, confidence)``. When a
-        mapping of dataframes is provided the regimes for each timeframe are
-        returned either as a dictionary or, if exactly two timeframes are
-        supplied, as a tuple respecting the insertion order of ``df_map``.
+    Tuple[str, Dict[str, float]] or Tuple[str, float]
+        If ``df_map`` is ``None`` the function returns ``(label, patterns)``
+        when enough history is available, where ``patterns`` maps pattern
+        names to confidence values.  When the ML fallback is used due to
+        insufficient history it returns ``(label, confidence)`` with
+        ``confidence`` in ``[0, 1]``.
+    Dict[str, str] or Tuple[str, str]
+        When ``df_map`` is provided the regime for each timeframe is returned.
+        If exactly two timeframes are supplied the result is a tuple preserving
+        ``df_map`` insertion order; otherwise a ``{timeframe: label}`` mapping
+        is produced.
     """
 
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))

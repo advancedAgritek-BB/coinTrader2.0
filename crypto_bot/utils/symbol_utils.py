@@ -18,7 +18,6 @@ logger = setup_logger("bot", LOG_DIR / "bot.log")
 
 _cached_symbols: list | None = None
 _last_refresh: float = 0.0
-_sym_lock = asyncio.Lock()
 
 
 async def get_filtered_symbols(exchange, config) -> list:
@@ -46,16 +45,6 @@ async def get_filtered_symbols(exchange, config) -> list:
         return result
 
     symbols = config.get("symbols", [config.get("symbol")])
-    filtered_syms: list[str] = []
-    for sym in symbols:
-        if isinstance(sym, str) and sym.upper().endswith("/USDC"):
-            base = sym.split("/", 1)[0]
-            if not _is_valid_base_token(base):
-                logger.info("Dropping invalid USDC pair %s", sym)
-                continue
-        filtered_syms.append(sym)
-    symbols = filtered_syms
-
     cleaned_symbols = []
     for sym in symbols:
         if not isinstance(sym, str):
