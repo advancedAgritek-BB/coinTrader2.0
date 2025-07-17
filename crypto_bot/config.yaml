@@ -139,7 +139,7 @@ meme_wave_sniper:
     dry_run: true
   risk_file: crypto_bot/logs/sniper_risk.json
 meta_selector:
-  enabled: true
+  enabled: false
 metrics_backend: csv
 metrics_enabled: true
 metrics_output_file: crypto_bot/logs/metrics.csv
@@ -170,7 +170,7 @@ solana_scalping:
   macd_slow: 24
   macd_signal: 8
 min_agreeing_votes: 1
-min_confidence_score: 0.15
+min_confidence_score: 0.0
 min_consistent_agreement: 1
 ensemble_min_conf: 0.1
 min_cooldown: 0
@@ -230,7 +230,7 @@ risk:
   take_profit_pct: 0.04
   volume_threshold_ratio: 0.005
 rl_selector:
-  enabled: true
+  enabled: false
 scalp_timeframe: 1m
 scan_markets: true
 scan_in_background: true
@@ -248,9 +248,9 @@ sentiment_filter:
   min_fng: -20
   min_sentiment: -20
 signal_fusion:
-  enabled: true
+  enabled: false
   fusion_method: weight
-  min_confidence: 0.15
+  min_confidence: 0.0
   strategies:
   - - trend
     - 0.5
@@ -285,7 +285,7 @@ strategy_allocation:
   trend_bot: 0.4
 strategy_evaluation_mode: ensemble
 strategy_router:
-  bandit_enabled: true
+  bandit_enabled: false
   fast_path:
     breakout_max_bandwidth: 0.03
     breakout_squeeze_window: 10
@@ -388,7 +388,7 @@ voting_strategies:
 wallet_address: your_wallet
 ws_ping_interval: 10
 bandit:
-  enabled: true
+  enabled: false
   alpha0: 1
   beta0: 1
   explore_pct: 0.1
