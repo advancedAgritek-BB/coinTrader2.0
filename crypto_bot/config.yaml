@@ -309,7 +309,7 @@ strategy_router:
     - sniper_solana
 symbol: BTC/USDT
 symbol_batch_size: 100
-scan_lookback_limit: 100
+scan_lookback_limit: 200
 cycle_lookback_limit: 200
 adaptive_scan:
   enabled: true

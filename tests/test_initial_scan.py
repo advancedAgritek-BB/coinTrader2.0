@@ -1,0 +1,33 @@
+import asyncio
+import types
+import sys
+import pytest
+
+stub = types.ModuleType('solana_scanner')
+async def get_solana_new_tokens(*args, **kwargs):
+    return []
+stub.get_solana_new_tokens = get_solana_new_tokens
+sys.modules['crypto_bot.utils.solana_scanner'] = stub
+
+from crypto_bot.main import initial_scan, SessionState
+
+class DummyExchange:
+    pass
+
+@pytest.mark.asyncio
+async def test_initial_scan_fetches_200_candles(monkeypatch):
+    limits = []
+
+    async def fake_update_multi(exchange, cache, batch, cfg, limit=0, **kwargs):
+        limits.append(limit)
+        return {}
+
+    async def fake_update_regime(*args, **kwargs):
+        return {}
+
+    monkeypatch.setattr('crypto_bot.main.update_multi_tf_ohlcv_cache', fake_update_multi)
+    monkeypatch.setattr('crypto_bot.main.update_regime_tf_cache', fake_update_regime)
+
+    cfg = {'symbols': ['BTC/USD'], 'timeframes': ['1h'], 'scan_lookback_limit': 200}
+    await initial_scan(DummyExchange(), cfg, SessionState())
+    assert limits and limits[0] >= 200
