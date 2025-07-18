@@ -1290,14 +1290,24 @@ async def _main_impl() -> TelegramNotifier:
         attempt = 0
         delay = SYMBOL_SCAN_RETRY_DELAY
         discovered: list[str] | None = None
+        timeout = float(config.get("http_timeout", 10))
         while attempt < MAX_SYMBOL_SCAN_ATTEMPTS:
             start_scan = time.perf_counter()
             try:
-                discovered = await load_kraken_symbols(
-                    exchange,
-                    config.get("excluded_symbols", []),
-                    config,
+                discovered = await asyncio.wait_for(
+                    load_kraken_symbols(
+                        exchange,
+                        config.get("excluded_symbols", []),
+                        config,
+                    ),
+                    timeout=timeout,
                 )
+            except asyncio.TimeoutError:
+                logger.error("Symbol scan timed out after %s seconds", timeout)
+                if config.get("execution_mode") != "dry_run":
+                    return notifier
+                discovered = []
+                break
             except Exception as exc:  # pragma: no cover - network errors
                 logger.exception("Symbol scan failed: %s", exc)
                 if status_updates:
@@ -1326,7 +1336,7 @@ async def _main_impl() -> TelegramNotifier:
                 asyncio.sleep(delay)
             delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
 
-        if discovered:
+        if discovered is not None:
             config["symbols"] = discovered
         else:
             logger.error(
