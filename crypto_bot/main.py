@@ -1237,7 +1237,6 @@ async def _main_impl() -> TelegramNotifier:
     os.environ.update(secrets)
 
     user = load_or_create()
-    logger.info("User credentials loaded")
 
     trade_updates = config.get("telegram", {}).get("trade_updates", True)
     status_updates = config.get("telegram", {}).get("status_updates", True)
@@ -1267,11 +1266,6 @@ async def _main_impl() -> TelegramNotifier:
         config["exchange"] = user["exchange"]
 
     exchange, ws_client = get_exchange(config)
-    logger.info(
-        "Using %s exchange (websocket=%s)",
-        config.get("exchange", "coinbase"),
-        bool(config.get("use_websocket", False)),
-    )
 
     ping_interval = int(config.get("ws_ping_interval", 0) or 0)
     if ping_interval > 0 and hasattr(exchange, "ping"):
@@ -1287,35 +1281,16 @@ async def _main_impl() -> TelegramNotifier:
         # Continue startup even if ccxt is missing for testing environments
 
     if config.get("scan_markets", False) and not config.get("symbols"):
-        logger.info("Starting initial market scan...")
-        if status_updates:
-            notifier.notify("Starting initial market scan...")
         attempt = 0
         delay = SYMBOL_SCAN_RETRY_DELAY
         discovered: list[str] | None = None
-        timeout = float(config.get("http_timeout", 10))
         while attempt < MAX_SYMBOL_SCAN_ATTEMPTS:
             start_scan = time.perf_counter()
-            try:
-                discovered = await asyncio.wait_for(
-                    load_kraken_symbols(
-                        exchange,
-                        config.get("excluded_symbols", []),
-                        config,
-                    ),
-                    timeout=timeout,
-                )
-            except asyncio.TimeoutError:
-                logger.error("Symbol scan timed out after %s seconds", timeout)
-                if config.get("execution_mode") != "dry_run":
-                    return notifier
-                discovered = []
-                break
-            except Exception as exc:  # pragma: no cover - network errors
-                logger.exception("Symbol scan failed: %s", exc)
-                if status_updates:
-                    notifier.notify(f"❌ Symbol scan failed: {exc}")
-                return notifier
+            discovered = await load_kraken_symbols(
+                exchange,
+                config.get("excluded_symbols", []),
+                config,
+            )
             latency = time.perf_counter() - start_scan
             record_sol_scanner_metrics(len(discovered or []), latency, config)
             if discovered:
@@ -1339,25 +1314,18 @@ async def _main_impl() -> TelegramNotifier:
                 asyncio.sleep(delay)
             delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
 
-        if discovered is not None:
-            logger.info("Market scan finished")
+        if discovered:
+            config["symbols"] = discovered
+        else:
+            logger.error(
+                "No symbols discovered after %d attempts; aborting startup",
+                MAX_SYMBOL_SCAN_ATTEMPTS,
+            )
             if status_updates:
-                notifier.notify("Market scan finished")
-
-            if discovered:
-                config["symbols"] = discovered
-            else:
-                logger.error(
-                    "No symbols discovered after %d attempts; aborting startup. "
-                    "Check network connectivity or adjust excluded_symbols and scan_markets settings",
-                    MAX_SYMBOL_SCAN_ATTEMPTS,
+                notifier.notify(
+                    f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
                 )
-                if status_updates:
-                    notifier.notify(
-                        f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts. "
-                        "Check network connectivity or adjust excluded_symbols and scan_markets settings"
-                    )
-                return notifier
+            return notifier
 
     balance_threshold = config.get("balance_change_threshold", 0.01)
     previous_balance = 0.0
@@ -1388,11 +1356,7 @@ async def _main_impl() -> TelegramNotifier:
             err = notifier.notify(f"API error: {exc}")
             if err:
                 logger.error("Failed to notify user: %s", err)
-        if config.get("execution_mode") == "dry_run":
-            last_balance = 0.0
-            previous_balance = 0.0
-        else:
-            return notifier
+        return notifier
     risk_params = {**config.get("risk", {})}
     risk_params.update(config.get("sentiment_filter", {}))
     risk_params.update(config.get("volatility_filter", {}))

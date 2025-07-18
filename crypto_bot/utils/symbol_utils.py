@@ -4,7 +4,7 @@ import time
 from .logger import LOG_DIR, setup_logger
 from .symbol_pre_filter import filter_symbols
 from .telemetry import telemetry
-from .market_loader import _is_valid_base_token, failed_symbols
+from .market_loader import _is_valid_base_token
 
 
 def fix_symbol(sym: str) -> str:
@@ -62,11 +62,6 @@ async def get_filtered_symbols(exchange, config) -> list:
         scored = await filter_symbols(exchange, symbols, config)
     else:
         scored = await asyncio.to_thread(filter_symbols, exchange, symbols, config)
-    # Drop symbols that repeatedly failed OHLCV fetches
-    scored = [
-        item for item in scored
-        if failed_symbols.get(item[0], {}).get("count", 0) < 5
-    ]
     skipped_main = telemetry.snapshot().get("scan.symbols_skipped", 0) - skipped_before
     if not scored:
         fallback = config.get("symbol")
@@ -102,10 +97,6 @@ async def get_filtered_symbols(exchange, config) -> list:
             fallback,
         )
         scored = [(fallback, 0.0)]
-        scored = [
-            item for item in scored
-            if failed_symbols.get(item[0], {}).get("count", 0) < 5
-        ]
 
     logger.info("%d symbols passed filtering", len(scored))
 
