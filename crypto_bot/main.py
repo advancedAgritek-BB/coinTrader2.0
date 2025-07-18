@@ -1286,11 +1286,17 @@ async def _main_impl() -> TelegramNotifier:
         discovered: list[str] | None = None
         while attempt < MAX_SYMBOL_SCAN_ATTEMPTS:
             start_scan = time.perf_counter()
-            discovered = await load_kraken_symbols(
-                exchange,
-                config.get("excluded_symbols", []),
-                config,
-            )
+            try:
+                discovered = await load_kraken_symbols(
+                    exchange,
+                    config.get("excluded_symbols", []),
+                    config,
+                )
+            except Exception as exc:  # pragma: no cover - network errors
+                logger.exception("Symbol scan failed: %s", exc)
+                if status_updates:
+                    notifier.notify(f"❌ Symbol scan failed: {exc}")
+                return notifier
             latency = time.perf_counter() - start_scan
             record_sol_scanner_metrics(len(discovered or []), latency, config)
             if discovered:
