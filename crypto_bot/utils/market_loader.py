@@ -515,7 +515,7 @@ async def fetch_ohlcv_async(
                         except Exception:
                             pass
                     if len(data) < expected:
-                        logger.warning(
+                        logger.info(
                             "Incomplete OHLCV for %s: got %d of %d",
                             symbol,
                             len(data),
@@ -546,7 +546,7 @@ async def fetch_ohlcv_async(
                     except Exception:
                         pass
                 if len(data) < expected:
-                    logger.warning(
+                    logger.info(
                         "Incomplete OHLCV for %s: got %d of %d",
                         symbol,
                         len(data),
@@ -562,7 +562,7 @@ async def fetch_ohlcv_async(
                 except Exception:
                     pass
             if len(data) < expected:
-                logger.warning(
+                logger.info(
                     "Incomplete OHLCV for %s: got %d of %d",
                     symbol,
                     len(data),
@@ -623,7 +623,7 @@ async def fetch_ohlcv_async(
                 except Exception:
                     pass
             if len(data) < expected:
-                logger.warning(
+                logger.info(
                     "Incomplete OHLCV for %s: got %d of %d",
                     symbol,
                     len(data),
@@ -671,7 +671,7 @@ async def fetch_ohlcv_async(
             except Exception:
                 pass
         if len(data) < expected:
-            logger.warning(
+            logger.info(
                 "Incomplete OHLCV for %s: got %d of %d",
                 symbol,
                 len(data),

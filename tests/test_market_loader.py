@@ -185,7 +185,7 @@ class IncompleteExchange:
 
 def test_incomplete_ohlcv_warns_and_retries(caplog):
     ex = IncompleteExchange()
-    caplog.set_level(logging.WARNING)
+    caplog.set_level(logging.INFO)
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=5, since=1000))
     assert ex.calls >= 2
     assert len(data) == 5
