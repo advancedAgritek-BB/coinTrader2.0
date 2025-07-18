@@ -188,6 +188,7 @@ async def _refresh_tickers(
     now = time.time()
     batch = cfg.get("symbol_filter", {}).get("kraken_batch_size", 100)
     timeout = cfg.get("symbol_filter", {}).get("http_timeout", 10)
+    symbols = list(symbols)
     markets = getattr(exchange, "markets", None)
     if markets is not None:
         if not markets and hasattr(exchange, "load_markets"):
@@ -205,6 +206,7 @@ async def _refresh_tickers(
                 "Skipping symbols not in exchange.markets: %s",
                 ", ".join(missing),
             )
+        symbols = [s for s in symbols if s in markets]
             symbols = [s for s in symbols if s not in missing]
 
     try_ws = (
