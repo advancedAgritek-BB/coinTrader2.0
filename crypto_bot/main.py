@@ -1287,6 +1287,9 @@ async def _main_impl() -> TelegramNotifier:
         # Continue startup even if ccxt is missing for testing environments
 
     if config.get("scan_markets", False) and not config.get("symbols"):
+        logger.info("Starting initial market scan...")
+        if status_updates:
+            notifier.notify("Starting initial market scan...")
         attempt = 0
         delay = SYMBOL_SCAN_RETRY_DELAY
         discovered: list[str] | None = None
@@ -1337,15 +1340,22 @@ async def _main_impl() -> TelegramNotifier:
             delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
 
         if discovered is not None:
+        logger.info("Market scan finished")
+        if status_updates:
+            notifier.notify("Market scan finished")
+
+        if discovered:
             config["symbols"] = discovered
         else:
             logger.error(
-                "No symbols discovered after %d attempts; aborting startup",
+                "No symbols discovered after %d attempts; aborting startup. "
+                "Check network connectivity or adjust excluded_symbols and scan_markets settings",
                 MAX_SYMBOL_SCAN_ATTEMPTS,
             )
             if status_updates:
                 notifier.notify(
-                    f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
+                    f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts. "
+                    "Check network connectivity or adjust excluded_symbols and scan_markets settings"
                 )
             return notifier
 
