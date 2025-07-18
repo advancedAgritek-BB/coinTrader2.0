@@ -892,7 +892,12 @@ async def fetch_geckoterminal_ohlcv(
                     async with session.get(search_url, timeout=10) as resp:
                         if resp.status == 404:
                             logger.info(
-                                "pair not available on GeckoTerminal: %s", symbol
+                                "token not available on GeckoTerminal: %s",
+                                symbol,
+                            )
+                            logger.info(
+                                "pair not available on GeckoTerminal: %s",
+                                symbol,
                             )
                             return None
                         resp.raise_for_status()
@@ -969,6 +974,13 @@ async def fetch_geckoterminal_ohlcv(
             )
         except Exception:
             continue
+
+    logger.info(
+        "Fetched Gecko OHLCV for %s: %d candles, volume %.2f",
+        symbol,
+        len(result),
+        volume,
+    )
 
     if return_price:
         return result, volume, price
