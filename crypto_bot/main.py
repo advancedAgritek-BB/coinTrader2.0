@@ -454,6 +454,7 @@ async def _ws_ping_loop(exchange: object, interval: float) -> None:
                                 await ping(client)
                             else:
                                 await asyncio.to_thread(ping, client)
+                            logger.info("Sent WebSocket ping to Kraken")
                     else:
                         continue
                 else:
@@ -461,6 +462,7 @@ async def _ws_ping_loop(exchange: object, interval: float) -> None:
                         await ping()
                     else:
                         await asyncio.to_thread(ping)
+                    logger.info("Sent WebSocket ping to Kraken")
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # pragma: no cover - ping failures
