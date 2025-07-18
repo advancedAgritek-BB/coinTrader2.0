@@ -22,6 +22,7 @@ from .market_loader import (
     fetch_ohlcv_async,
     update_ohlcv_cache,
     fetch_geckoterminal_ohlcv,
+    timeframe_seconds,
 )
 from .correlation import incremental_correlation
 from .symbol_scoring import score_symbol
@@ -71,7 +72,7 @@ async def has_enough_history(
     exchange, symbol: str, days: int = 30, timeframe: str = "1d"
 ) -> bool:
     """Return ``True`` when ``symbol`` has at least ``days`` days of history."""
-    seconds = _timeframe_seconds(exchange, timeframe)
+    seconds = timeframe_seconds(exchange, timeframe)
     candles_needed = int((days * 86400) / seconds)
     try:
         async with SEMA:
@@ -189,6 +190,8 @@ async def _refresh_tickers(
     batch = cfg.get("symbol_filter", {}).get("kraken_batch_size", 100)
     timeout = cfg.get("symbol_filter", {}).get("http_timeout", 10)
     symbols = list(symbols)
+    if not hasattr(exchange, "options"):
+        exchange.options = {}
     markets = getattr(exchange, "markets", None)
     if markets is not None:
         if not markets and hasattr(exchange, "load_markets"):
@@ -441,25 +444,6 @@ async def _refresh_tickers(
     return result
 
 
-def _timeframe_seconds(exchange, timeframe: str) -> int:
-    if hasattr(exchange, "parse_timeframe"):
-        try:
-            return exchange.parse_timeframe(timeframe)
-        except Exception:
-            pass
-    unit = timeframe[-1]
-    value = int(timeframe[:-1])
-    if unit == "m":
-        return value * 60
-    if unit == "h":
-        return value * 3600
-    if unit == "d":
-        return value * 86400
-    if unit == "w":
-        return value * 604800
-    if unit == "M":
-        return value * 2592000
-    raise ValueError(f"Unknown timeframe {timeframe}")
 
 
 def _history_in_cache(df: pd.DataFrame | None, days: int, seconds: int) -> bool:
@@ -706,7 +690,7 @@ async def filter_symbols(
         else:
             corr_map = {}
 
-    seconds = _timeframe_seconds(exchange, "1h") if min_age > 0 else 0
+    seconds = timeframe_seconds(exchange, "1h") if min_age > 0 else 0
     if min_age > 0:
         missing = [
             s
