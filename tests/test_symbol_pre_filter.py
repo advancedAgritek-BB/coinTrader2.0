@@ -900,6 +900,31 @@ def test_refresh_tickers_bad_symbol(monkeypatch, caplog):
     assert any("BTC/USD" in r.getMessage() for r in caplog.records)
 
 
+def test_refresh_tickers_filters_missing(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+
+    calls = []
+
+    class DummyExchange:
+        has = {"fetchTickers": True}
+        markets = {"ETH/USD": {}}
+
+        async def fetch_tickers(self, symbols):
+            calls.append(list(symbols))
+            return {"ETH/USD": {}}
+
+    async def never_call(_):
+        raise AssertionError("_fetch_ticker_async should not be called")
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", never_call)
+
+    ex = DummyExchange()
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"]))
+
+    assert calls == [["ETH/USD"]]
+    assert not any("BadSymbol" in r.getMessage() for r in caplog.records)
+
+
 def test_refresh_tickers_retry_520(monkeypatch):
     class RetryExchange(DummyExchange):
         def __init__(self):
