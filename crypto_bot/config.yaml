@@ -114,7 +114,7 @@ log_to_google: true
 loop_interval_minutes: 0.5
 max_age_days: 90
 max_change_pct: 20
-max_concurrent_ohlcv: 4
+max_concurrent_ohlcv: 2
 max_latency_ms: 500
 max_ohlcv_failures: 10
 max_open_trades: 20

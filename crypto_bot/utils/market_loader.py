@@ -1152,6 +1152,7 @@ async def load_ohlcv_parallel(
             rl = getattr(exchange, "rateLimit", None)
             if rl:
                 await asyncio.sleep(rl / 1000)
+            await asyncio.sleep(1)
             return data
 
         if sem:
