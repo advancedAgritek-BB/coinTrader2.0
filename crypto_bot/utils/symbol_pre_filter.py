@@ -232,6 +232,7 @@ async def _refresh_tickers(
                 exchange.options["ws_failures"] = failures
                 if failures >= ws_limit:
                     exchange.options["ws_scan"] = False
+                telemetry.inc("scan.ws_errors")
                 try_ws = False
                 try_http = True
         for sym, ticker in data.items():
