@@ -519,6 +519,65 @@ def test_load_ohlcv_parallel_invalid_max_concurrent():
         )
 
 
+class RetryIncompleteExchange:
+    has = {"fetchOHLCV": True}
+
+    def __init__(self):
+        self.fetch_calls = 0
+
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        return [[0] * 6 for _ in range(2)]
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.fetch_calls += 1
+        if self.fetch_calls == 1:
+            return [[1] * 6 for _ in range(4)]
+        return [[i] * 6 for i in range(limit)]
+
+
+class AlwaysIncompleteExchange(RetryIncompleteExchange):
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.fetch_calls += 1
+        return [[1] * 6 for _ in range(4)]
+
+
+def test_update_ohlcv_cache_retry_incomplete_ws():
+    ex = RetryIncompleteExchange()
+    cache: dict[str, pd.DataFrame] = {}
+    res = asyncio.run(
+        update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=10,
+            use_websocket=True,
+            max_concurrent=1,
+        )
+    )
+    assert len(res["BTC/USD"]) == 200
+    assert ex.fetch_calls == 2
+
+
+def test_update_ohlcv_cache_skip_after_retry(caplog):
+    ex = AlwaysIncompleteExchange()
+    cache: dict[str, pd.DataFrame] = {}
+    caplog.set_level(logging.WARNING)
+    res = asyncio.run(
+        update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=10,
+            use_websocket=True,
+            max_concurrent=1,
+        )
+    )
+    assert "BTC/USD" not in res
+    assert any(
+        "Skipping BTC/USD: only 4/200 candles" in r.getMessage() for r in caplog.records
+    )
+
+
 class DummyMultiTFExchange:
     has = {"fetchOHLCV": True}
 

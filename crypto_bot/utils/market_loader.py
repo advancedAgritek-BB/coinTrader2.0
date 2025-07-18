@@ -1382,14 +1382,33 @@ async def update_ohlcv_cache(
         )
         min_candles_required = int(limit * 0.5)
         if len(df_new) < min_candles_required:
-            logger.warning(
-                "Skipping %s on %s: only %d candles (need >= %d)",
-                sym,
+            since_val = since_map.get(sym)
+            retry = await load_ohlcv_parallel(
+                exchange,
+                [sym],
                 timeframe,
-                len(df_new),
-                min_candles_required,
+                limit,
+                {sym: since_val},
+                False,
+                force_websocket_history,
+                max_concurrent,
+                notifier,
             )
-            continue
+            retry_data = retry.get(sym)
+            if retry_data and len(retry_data) > len(data):
+                data = retry_data
+                df_new = pd.DataFrame(
+                    data,
+                    columns=["timestamp", "open", "high", "low", "close", "volume"],
+                )
+            if len(df_new) < min_candles_required:
+                logger.warning(
+                    "Skipping %s: only %d/%d candles",
+                    sym,
+                    len(df_new),
+                    limit,
+                )
+                continue
         changed = False
         if sym in cache and not cache[sym].empty:
             last_ts = cache[sym]["timestamp"].iloc[-1]
