@@ -109,6 +109,19 @@ def test_extract_features_window():
     pd.testing.assert_series_equal(last_a, last_b)
 
 
+def test_train_model_insufficient_data(tmp_path, monkeypatch, caplog):
+    caplog.set_level("WARNING")
+    df = _synthetic_df(1)
+    features = ml.extract_features(df)
+    targets = df.loc[features.index, "label"]
+    monkeypatch.setattr(ml, "MODEL_PATH", tmp_path / "model.pkl")
+    monkeypatch.setattr(ml, "REPORT_PATH", tmp_path / "report.json")
+    monkeypatch.setattr(ml, "SCALER_PATH", tmp_path / "scaler.pkl")
+    model = ml.train_model(features, targets)
+    assert model is None
+    assert any("Not enough data" in r.getMessage() for r in caplog.records)
+
+
 def test_order_book_imbalance_feature():
     df = _synthetic_df(60)
     df["bid_qty_0"] = 1.0

@@ -2,6 +2,7 @@ import pandas as pd
 import ta
 import numpy as np
 from pathlib import Path
+import logging
 
 from crypto_bot.utils.logger import LOG_DIR
 from crypto_bot.utils import stats
@@ -12,6 +13,7 @@ from datetime import datetime
 import hashlib
 from crypto_bot.regime.regime_classifier import classify_regime
 
+logger = logging.getLogger(__name__)
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import (
     StratifiedKFold,
@@ -142,8 +144,12 @@ def extract_latest_features(df: pd.DataFrame, lookback: int = 200) -> pd.DataFra
     return feats.iloc[[-1]]
 
 
-def train_model(features: pd.DataFrame, targets: pd.Series) -> LogisticRegression:
+def train_model(features: pd.DataFrame, targets: pd.Series) -> Optional[LogisticRegression]:
     """Train a classification model and save it along with a report."""
+
+    if len(features) < 2 or targets.nunique() < 2:
+        logger.warning("Not enough data to train model")
+        return None
 
     has_fit = hasattr(LogisticRegression, "fit") and hasattr(GridSearchCV, "fit")
 
@@ -162,24 +168,6 @@ def train_model(features: pd.DataFrame, targets: pd.Series) -> LogisticRegressio
         model.fit(features, targets)
         preds = model.predict(features)
         proba = [0.5] * len(features)
-    elif len(features) < 2:
-        pipeline = Pipeline(
-            [
-                ("scaler", StandardScaler()),
-                ("model", LogisticRegression(max_iter=200, solver="liblinear")),
-            ]
-        )
-        pipeline.fit(features, targets)
-        preds = pipeline.predict(features)
-        proba = pipeline.predict_proba(features)[:, 1]
-        model = pipeline.named_steps["model"]
-        scaler = pipeline.named_steps["scaler"]
-        val_metrics = {
-            "auc": roc_auc_score(targets, proba),
-            "accuracy": accuracy_score(targets, preds),
-            "precision": precision_score(targets, preds, zero_division=0),
-            "recall": recall_score(targets, preds, zero_division=0),
-        }
     else:
         train_feats, val_feats, train_tgt, val_tgt = train_test_split(
             features,
