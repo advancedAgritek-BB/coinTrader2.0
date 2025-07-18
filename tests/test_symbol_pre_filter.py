@@ -1122,3 +1122,63 @@ def test_log_ticker_exceptions(monkeypatch, caplog):
     cfg["symbol_filter"]["log_ticker_exceptions"] = False
     asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
     assert any(r.exc_info for r in caplog.records)
+
+
+class AlwaysFailWatchExchange(DummyExchange):
+    def __init__(self):
+        self.has = {"watchTickers": True, "fetchTickers": True}
+        self.watch_calls = 0
+        self.fetch_calls = 0
+        self.markets_by_id = DummyExchange.markets_by_id
+        self.options = {"ws_scan": True}
+
+    async def watch_tickers(self, symbols):
+        self.watch_calls += 1
+        raise RuntimeError("ws boom")
+
+    async def fetch_tickers(self, symbols):
+        self.fetch_calls += 1
+        data = (await fake_fetch(None))["result"]
+        return {"ETH/USD": data["XETHZUSD"], "BTC/USD": data["XXBTZUSD"]}
+
+
+def test_ws_failures_disable_scan(monkeypatch):
+    monkeypatch.setattr(sp, "_fetch_ticker_async", lambda _p: {"result": {}})
+
+    sp.ticker_cache.clear()
+    sp.ticker_ts.clear()
+    ex = AlwaysFailWatchExchange()
+
+    t = {"now": 0}
+    monkeypatch.setattr(sp.time, "time", lambda: t["now"])
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(secs):
+        sleeps.append(secs)
+
+    monkeypatch.setattr(sp.asyncio, "sleep", fake_sleep)
+
+    cfg = dict(CONFIG)
+    cfg["ws_failures_before_disable"] = 2
+
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"], cfg))
+    assert ex.watch_calls == 1
+    assert ex.fetch_calls == 1
+    assert ex.options.get("ws_failures") == 1
+    assert ex.options.get("ws_scan") is True
+    assert sleeps == []
+
+    t["now"] += 6
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"], cfg))
+    assert sleeps == [1]
+    assert ex.watch_calls == 2
+    assert ex.fetch_calls == 1
+    assert ex.options.get("ws_failures") == 2
+    assert ex.options.get("ws_scan") is False
+
+    t["now"] += 6
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"], cfg))
+    assert ex.watch_calls == 2
+    assert ex.fetch_calls == 2
+    assert sleeps == [1]
