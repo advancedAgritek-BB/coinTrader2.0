@@ -48,7 +48,6 @@ class TradingBotController:
         self.state = {
             "running": False,
             "mode": self.config.get("execution_mode", "dry_run"),
-            "liquidate": False,
         }
 
     # ------------------------------------------------------------------
@@ -139,7 +138,7 @@ class TradingBotController:
     async def close_all_positions(self) -> Dict[str, str]:
         """Signal the trading bot to liquidate all open positions."""
         self.state["liquidate_all"] = True
-        return {"status": "liquidation_requested"}
+        return {"status": "liquidation_scheduled"}
 
     async def fetch_logs(self, lines: int = 20) -> List[str]:
         """Return the last ``lines`` from the bot log."""
@@ -148,10 +147,6 @@ class TradingBotController:
         data = self.log_file.read_text().splitlines()
         return data[-lines:]
 
-    async def close_all_positions(self) -> Dict[str, object]:
-        """Set liquidation flag so running bot exits all positions."""
-        self.state["liquidate"] = True
-        return {"status": "liquidation_scheduled"}
 
     async def reload_config(self) -> Dict[str, object]:
         """Reload configuration from ``self.config_path``."""
