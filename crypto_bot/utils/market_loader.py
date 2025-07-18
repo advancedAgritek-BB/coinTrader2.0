@@ -1016,8 +1016,8 @@ async def fetch_coingecko_ohlc(
         if not isinstance(c, list) or len(c) < 5:
             continue
         try:
-            ts, o, h, l, cl = c[:5]
-            result.append([int(ts), float(o), float(h), float(l), float(cl), 0.0])
+            ts, o, h, low, cl = c[:5]
+            result.append([int(ts), float(o), float(h), float(low), float(cl), 0.0])
         except Exception:
             continue
     return result
