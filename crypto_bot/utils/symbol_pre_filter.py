@@ -177,6 +177,7 @@ async def _refresh_tickers(
 ) -> dict:
     """Return ticker data using WS/HTTP and fall back to per-symbol fetch."""
 
+    symbols = list(symbols)
     cfg = config if config is not None else globals().get("cfg", {})
     sf = cfg.get("symbol_filter", {})
     attempts = int(sf.get("ticker_retry_attempts", 3))
@@ -201,9 +202,10 @@ async def _refresh_tickers(
         missing = [s for s in symbols if s not in markets]
         if missing:
             logger.warning(
-                "Symbols not in exchange.markets: %s",
+                "Skipping symbols not in exchange.markets: %s",
                 ", ".join(missing),
             )
+            symbols = [s for s in symbols if s not in missing]
 
     try_ws = (
         getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
@@ -236,6 +238,8 @@ async def _refresh_tickers(
                 try_ws = False
                 try_http = True
         for sym, ticker in data.items():
+            if sym not in symbols:
+                continue
             ticker_cache[sym] = ticker.get("info", ticker)
             ticker_ts[sym] = now
         result = {s: ticker_cache[s] for s in symbols if s in ticker_cache}
@@ -398,9 +402,11 @@ async def _refresh_tickers(
 
         if data:
             for sym, ticker in data.items():
+                if sym not in symbols:
+                    continue
                 ticker_cache[sym] = ticker.get("info", ticker)
                 ticker_ts[sym] = now
-            return {s: t.get("info", t) for s, t in data.items()}
+            return {s: t.get("info", t) for s, t in data.items() if s in symbols}
 
     result: dict[str, dict] = {}
     if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTicker"):
@@ -423,6 +429,8 @@ async def _refresh_tickers(
                 telemetry.inc("scan.api_errors")
     if result:
         for sym, ticker in result.items():
+            if sym not in symbols:
+                continue
             ticker_cache[sym] = ticker
             ticker_ts[sym] = now
     return result
