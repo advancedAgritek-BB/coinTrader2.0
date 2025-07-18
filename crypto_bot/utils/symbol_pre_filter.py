@@ -207,7 +207,6 @@ async def _refresh_tickers(
                 ", ".join(missing),
             )
         symbols = [s for s in symbols if s in markets]
-            symbols = [s for s in symbols if s not in missing]
 
     try_ws = (
         getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
@@ -227,15 +226,19 @@ async def _refresh_tickers(
                 await asyncio.sleep(min(2 ** (ws_failures - 1), 30))
             try:
                 data = await exchange.watch_tickers(to_fetch)
-                exchange.options["ws_failures"] = 0
+                opts = getattr(exchange, "options", None)
+                if opts is not None:
+                    opts["ws_failures"] = 0
             except Exception as exc:  # pragma: no cover - network
                 logger.warning("watch_tickers failed: %s", exc, exc_info=log_exc)
                 logger.info("watch_tickers failed, falling back to HTTP fetch")
                 telemetry.inc("scan.api_errors")
-                failures = exchange.options.get("ws_failures", 0) + 1
-                exchange.options["ws_failures"] = failures
-                if failures >= ws_limit:
-                    exchange.options["ws_scan"] = False
+                opts = getattr(exchange, "options", None)
+                if opts is not None:
+                    failures = opts.get("ws_failures", 0) + 1
+                    opts["ws_failures"] = failures
+                    if failures >= ws_limit:
+                        opts["ws_scan"] = False
                 telemetry.inc("scan.ws_errors")
                 try_ws = False
                 try_http = True
@@ -715,14 +718,23 @@ async def filter_symbols(
         if missing:
             if df_cache is None:
                 df_cache = {}
-            df_cache = await update_ohlcv_cache(
-                exchange,
-                df_cache,
-                missing,
-                timeframe="1h",
-                limit=int((min_age * 86400) / seconds),
-                max_concurrent=len(missing),
+            history_ok = await asyncio.gather(
+                *[has_enough_history(exchange, s, min_age, "1h") for s in missing]
             )
+            candles_needed = int((min_age * 86400) / seconds)
+            for sym, ok in zip(missing, history_ok):
+                if ok:
+                    df_cache[sym] = pd.DataFrame({"close": [0] * candles_needed})
+            missing = [s for s, ok in zip(missing, history_ok) if not ok]
+            if missing:
+                df_cache = await update_ohlcv_cache(
+                    exchange,
+                    df_cache,
+                    missing,
+                    timeframe="1h",
+                    limit=int((min_age * 86400) / seconds),
+                    max_concurrent=len(missing),
+                )
 
     result: List[tuple[str, float]] = []
     for sym, score in scored:
