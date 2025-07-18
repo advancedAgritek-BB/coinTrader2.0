@@ -933,6 +933,9 @@ include:
 - `weights.json` – persistent optimizer weights saved after each update
   at `crypto_bot/logs/weights.json`.
 - `second_place.csv` – the runner‑up strategy from each evaluation cycle.
+- `tools/split_log_levels.py` – split `bot.log` into separate files for
+  INFO and WARNING messages. Run `python tools/split_log_levels.py` to
+  produce `info.log` and `warning.log`.
 
 Example short trade:
 
