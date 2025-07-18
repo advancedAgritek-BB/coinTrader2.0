@@ -25,6 +25,7 @@ class DummyPG:
 
 
 def load_execute_signals():
+    called = {"called": False}
     src = Path("crypto_bot/main.py").read_text()
     module = ast.parse(src)
     funcs = {}
@@ -32,6 +33,7 @@ def load_execute_signals():
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in {"direction_to_side", "execute_signals"}:
             funcs[node.name] = ast.get_source_segment(src, node)
     async def _trade(*a, **k):
+        called["called"] = True
         return {"id": "1"}
 
     ns = {
@@ -48,7 +50,7 @@ def load_execute_signals():
     }
     exec(funcs["direction_to_side"], ns)
     exec(funcs["execute_signals"], ns)
-    return ns["execute_signals"]
+    return ns["execute_signals"], called
 
 
 @pytest.mark.asyncio
@@ -79,9 +81,10 @@ async def test_execute_signals_respects_allow_short(monkeypatch, caplog):
     ctx.analysis_results = [candidate]
     ctx.timing = {}
 
-    execute_signals = load_execute_signals()
-    caplog.set_level(logging.WARNING)
+    execute_signals, called = load_execute_signals()
+    caplog.set_level(logging.INFO)
     await execute_signals(ctx)
 
     assert ctx.positions == {}
+    assert not called["called"]
     assert "Short selling disabled" in caplog.text
