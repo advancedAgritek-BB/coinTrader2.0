@@ -376,6 +376,14 @@ regime_overrides:
 * **strategy_router** - maps market regimes to lists of strategy names. Each regime also accepts a `<regime>_timeframe` key (e.g. `trending_timeframe: 1h`, `volatile_timeframe: 1m`).
 * **mode_threshold**/**mode_degrade_window** - degrade to manual mode when auto selection underperforms.
 * **meta_selector**/**rl_selector** – experimental strategy routers.
+  Train the meta selector on your historical trade results with:
+
+  ```bash
+  python crypto_bot/tools/train_meta_selector.py
+  ```
+
+  The script reads `crypto_bot/logs/strategy_performance.json` and saves the
+  resulting LightGBM model to `crypto_bot/models/meta_selector_lgbm.pkl`.
 * **bandit_router** – Thompson sampling router that favors historically profitable strategies.
 * **bandit** – Thompson sampling selector; tune `explore_pct` for exploration.
 * **mode** – `auto` or `manual` evaluation of strategies.
