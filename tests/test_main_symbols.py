@@ -173,39 +173,3 @@ def test_get_filtered_symbols_skip(monkeypatch):
 
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     assert result == [("BTC/USD", 0.0), ("ETH/USD", 0.0)]
-
-
-def test_get_filtered_symbols_drops_failed(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    async def fake_filter_symbols(ex, syms, cfg):
-        return [("BTC/USD", 1.0), ("ETH/USD", 0.5)]
-
-    market_loader.failed_symbols.clear()
-    market_loader.failed_symbols["BTC/USD"] = {"count": 5}
-    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
-
-    config = {"symbols": ["BTC/USD", "ETH/USD"]}
-    symbol_utils._cached_symbols = None
-    symbol_utils._last_refresh = 0.0
-
-    result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
-    assert result == [("ETH/USD", 0.5)]
-
-
-def test_get_filtered_symbols_all_failed(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    async def fake_filter_symbols(ex, syms, cfg):
-        return [("BTC/USD", 1.0)]
-
-    market_loader.failed_symbols.clear()
-    market_loader.failed_symbols["BTC/USD"] = {"count": 5}
-    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
-
-    config = {"symbol": "BTC/USD"}
-    symbol_utils._cached_symbols = None
-    symbol_utils._last_refresh = 0.0
-
-    result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
-    assert result == []

@@ -473,69 +473,34 @@ async def fetch_ohlcv_async(
                         with contextlib.suppress(Exception):
                             await asyncio.to_thread(exchange.close)
                 raise
-            if isinstance(data, Exception) or not data:
-                logger.info("WS failed for %s, forcing REST fallback", symbol)
-                use_websocket = False
-            else:
-                if ws_limit and len(data) < ws_limit and force_websocket_history:
-                    logger.warning(
-                        "WebSocket OHLCV for %s %s returned %d of %d candles; disable force_websocket_history to allow REST fallback",
-                        symbol,
-                        timeframe,
-                        len(data),
+            if ws_limit and len(data) < ws_limit and force_websocket_history:
+                logger.warning(
+                    "WebSocket OHLCV for %s %s returned %d of %d candles; disable force_websocket_history to allow REST fallback",
+                    symbol,
+                    timeframe,
+                    len(data),
                     ws_limit,
                 )
-                if (
-                    ws_limit
-                    and len(data) < ws_limit
-                    and not force_websocket_history
-                    and hasattr(exchange, "fetch_ohlcv")
-                ):
-                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-                        params_f = inspect.signature(exchange.fetch_ohlcv).parameters
-                        kwargs_f = {
-                            "symbol": symbol,
-                            "timeframe": timeframe,
-                            "limit": limit,
-                        }
-                        if since is not None and "since" in params_f:
-                            kwargs_f["since"] = since
-                        try:
-                            data = await _call_with_retry(
-                                exchange.fetch_ohlcv,
-                                timeout=REST_OHLCV_TIMEOUT,
-                                **kwargs_f,
-                            )
-                        except asyncio.CancelledError:
-                            raise
-                        expected = limit
-                        if since is not None:
-                            try:
-                                tf_sec = timeframe_seconds(exchange, timeframe)
-                                now_ms = int(time.time() * 1000)
-                                expected = min(
-                                    limit, int((now_ms - since) // (tf_sec * 1000)) + 1
-                                )
-                            except Exception:
-                                pass
-                        if len(data) < expected:
-                            logger.info(
-                                "Incomplete OHLCV for %s: got %d of %d",
-                                symbol,
-                                len(data),
-                                expected,
-                            )
-                        return data
+            if (
+                ws_limit
+                and len(data) < ws_limit
+                and not force_websocket_history
+                and hasattr(exchange, "fetch_ohlcv")
+            ):
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
                     params_f = inspect.signature(exchange.fetch_ohlcv).parameters
-                    kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                    kwargs_f = {
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                        "limit": limit,
+                    }
                     if since is not None and "since" in params_f:
                         kwargs_f["since"] = since
                     try:
                         data = await _call_with_retry(
-                            asyncio.to_thread,
                             exchange.fetch_ohlcv,
-                            **kwargs_f,
                             timeout=REST_OHLCV_TIMEOUT,
+                            **kwargs_f,
                         )
                     except asyncio.CancelledError:
                         raise
@@ -557,12 +522,27 @@ async def fetch_ohlcv_async(
                             expected,
                         )
                     return data
+                params_f = inspect.signature(exchange.fetch_ohlcv).parameters
+                kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
+                if since is not None and "since" in params_f:
+                    kwargs_f["since"] = since
+                try:
+                    data = await _call_with_retry(
+                        asyncio.to_thread,
+                        exchange.fetch_ohlcv,
+                        **kwargs_f,
+                        timeout=REST_OHLCV_TIMEOUT,
+                    )
+                except asyncio.CancelledError:
+                    raise
                 expected = limit
                 if since is not None:
                     try:
                         tf_sec = timeframe_seconds(exchange, timeframe)
                         now_ms = int(time.time() * 1000)
-                        expected = min(limit, int((now_ms - since) // (tf_sec * 1000)) + 1)
+                        expected = min(
+                            limit, int((now_ms - since) // (tf_sec * 1000)) + 1
+                        )
                     except Exception:
                         pass
                 if len(data) < expected:
@@ -572,39 +552,55 @@ async def fetch_ohlcv_async(
                         len(data),
                         expected,
                     )
-                    if since is not None and hasattr(exchange, "fetch_ohlcv"):
-                        try:
-                            kwargs_r = {
-                                "symbol": symbol,
-                                "timeframe": timeframe,
-                                "limit": limit,
-                            }
-                            if asyncio.iscoroutinefunction(
-                                getattr(exchange, "fetch_ohlcv", None)
-                            ):
-                                try:
-                                    data_r = await _call_with_retry(
-                                        exchange.fetch_ohlcv,
-                                        timeout=REST_OHLCV_TIMEOUT,
-                                        **kwargs_r,
-                                    )
-                                except asyncio.CancelledError:
-                                    raise
-                            else:
-                                try:
-                                    data_r = await _call_with_retry(
-                                        asyncio.to_thread,
-                                        exchange.fetch_ohlcv,
-                                        **kwargs_r,
-                                        timeout=REST_OHLCV_TIMEOUT,
-                                    )
-                                except asyncio.CancelledError:
-                                    raise
-                            if len(data_r) > len(data):
-                                data = data_r
-                        except Exception:
-                            pass
                 return data
+            expected = limit
+            if since is not None:
+                try:
+                    tf_sec = timeframe_seconds(exchange, timeframe)
+                    now_ms = int(time.time() * 1000)
+                    expected = min(limit, int((now_ms - since) // (tf_sec * 1000)) + 1)
+                except Exception:
+                    pass
+            if len(data) < expected:
+                logger.info(
+                    "Incomplete OHLCV for %s: got %d of %d",
+                    symbol,
+                    len(data),
+                    expected,
+                )
+                if since is not None and hasattr(exchange, "fetch_ohlcv"):
+                    try:
+                        kwargs_r = {
+                            "symbol": symbol,
+                            "timeframe": timeframe,
+                            "limit": limit,
+                        }
+                        if asyncio.iscoroutinefunction(
+                            getattr(exchange, "fetch_ohlcv", None)
+                        ):
+                            try:
+                                data_r = await _call_with_retry(
+                                    exchange.fetch_ohlcv,
+                                    timeout=REST_OHLCV_TIMEOUT,
+                                    **kwargs_r,
+                                )
+                            except asyncio.CancelledError:
+                                raise
+                        else:
+                            try:
+                                data_r = await _call_with_retry(
+                                    asyncio.to_thread,
+                                    exchange.fetch_ohlcv,
+                                    **kwargs_r,
+                                    timeout=REST_OHLCV_TIMEOUT,
+                                )
+                            except asyncio.CancelledError:
+                                raise
+                        if len(data_r) > len(data):
+                            data = data_r
+                    except Exception:
+                        pass
+            return data
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
             params_f = inspect.signature(exchange.fetch_ohlcv).parameters
             kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
@@ -896,12 +892,7 @@ async def fetch_geckoterminal_ohlcv(
                     async with session.get(search_url, timeout=10) as resp:
                         if resp.status == 404:
                             logger.info(
-                                "token not available on GeckoTerminal: %s",
-                                symbol,
-                            )
-                            logger.info(
-                                "pair not available on GeckoTerminal: %s",
-                                symbol,
+                                "pair not available on GeckoTerminal: %s", symbol
                             )
                             return None
                         resp.raise_for_status()
@@ -979,13 +970,6 @@ async def fetch_geckoterminal_ohlcv(
         except Exception:
             continue
 
-    logger.info(
-        "Fetched Gecko OHLCV for %s: %d candles, volume %.2f",
-        symbol,
-        len(result),
-        volume,
-    )
-
     if return_price:
         return result, volume, price
     return result, volume, reserve
@@ -1016,8 +1000,8 @@ async def fetch_coingecko_ohlc(
         if not isinstance(c, list) or len(c) < 5:
             continue
         try:
-            ts, o, h, low, cl = c[:5]
-            result.append([int(ts), float(o), float(h), float(low), float(cl), 0.0])
+            ts, o, h, l, cl = c[:5]
+            result.append([int(ts), float(o), float(h), float(l), float(cl), 0.0])
         except Exception:
             continue
     return result

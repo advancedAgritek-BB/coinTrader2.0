@@ -6,7 +6,6 @@ import asyncio
 import inspect
 import threading
 import os
-import time
 
 from telegram import Bot
 
@@ -47,57 +46,21 @@ set_admin_ids(None)
 def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
     """Send ``text`` to ``chat_id`` using ``token``.
 
-    Returns ``None`` on success or an error string on failure. On timeout
-    errors, the send is retried up to three times with exponential backoff.
+    Returns ``None`` on success or an error string on failure.
     """
+    try:
+        bot = Bot(token)
 
-    bot = Bot(token)
-
-    async def _send_async() -> Optional[str]:
-        err: Optional[str] = None
-        for attempt in range(3):
+        async def _send() -> None:
             try:
                 await bot.send_message(chat_id=chat_id, text=text)
-                return None
             except Exception as exc:  # pragma: no cover - network
-                err = str(exc)
-                if "timeout" in err.lower() and attempt < 2:
-                    delay = 2 ** attempt
-                    logger.warning("Telegram send timeout, retrying in %s seconds", delay)
-                    await asyncio.sleep(delay)
-                    continue
                 logger.error(
                     "Failed to send message: %s. Verify your Telegram token "
                     "and chat ID and ensure the bot has started a chat.",
                     exc,
                 )
-                break
-        return err
 
-    def _send_sync() -> Optional[str]:
-        err: Optional[str] = None
-        for attempt in range(3):
-            try:
-                bot.send_message(chat_id=chat_id, text=text)
-                return None
-            except Exception as exc:  # pragma: no cover - network
-                err = str(exc)
-                if "timeout" in err.lower() and attempt < 2:
-                    delay = 2 ** attempt
-                    logger.warning(
-                        "Telegram send timeout, retrying in %s seconds", delay
-                    )
-                    time.sleep(delay)
-                    continue
-                logger.error(
-                    "Failed to send message: %s. Verify your Telegram token "
-                    "and chat ID and ensure the bot has started a chat.",
-                    exc,
-                )
-                break
-        return err
-
-    try:
         if inspect.iscoroutinefunction(bot.send_message):
             try:
                 loop = asyncio.get_running_loop()
@@ -105,13 +68,12 @@ def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
                 loop = None
 
             if loop and loop.is_running():
-                # schedule and wait so that errors can be handled
-                fut = asyncio.run_coroutine_threadsafe(_send_async(), loop)
-                return fut.result()
+                loop.create_task(_send())
             else:
-                return asyncio.run(_send_async())
+                asyncio.run(_send())
         else:
-            return _send_sync()
+            bot.send_message(chat_id=chat_id, text=text)
+        return None
     except Exception as e:  # pragma: no cover - network
         logger.error("Failed to send message: %s", e)
         return str(e)
@@ -149,24 +111,13 @@ class TelegramNotifier:
         with self._lock:
             if self._disabled:
                 return None
-            err: Optional[str] = None
-            for attempt in range(3):
-                err = send_message(self.token, self.chat_id, text)
-                if err is None:
-                    return None
-                if "timeout" in err.lower() and attempt < 2:
-                    delay = 2 ** attempt
-                    logger.warning(
-                        "Telegram send timeout, retrying in %s seconds", delay
-                    )
-                    time.sleep(delay)
-                    continue
+            err = send_message(self.token, self.chat_id, text)
+            if err is not None:
                 self._disabled = True
                 logger.error(
                     "Disabling Telegram notifications due to send failure: %s",
                     err,
                 )
-                break
             return err
 
     @classmethod
