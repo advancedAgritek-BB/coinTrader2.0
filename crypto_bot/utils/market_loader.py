@@ -1387,7 +1387,7 @@ async def update_ohlcv_cache(
                 exchange,
                 [sym],
                 timeframe,
-                limit,
+                limit * 2,
                 {sym: since_val},
                 False,
                 force_websocket_history,
