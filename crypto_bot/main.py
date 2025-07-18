@@ -1237,6 +1237,7 @@ async def _main_impl() -> TelegramNotifier:
     os.environ.update(secrets)
 
     user = load_or_create()
+    logger.info("User credentials loaded")
 
     trade_updates = config.get("telegram", {}).get("trade_updates", True)
     status_updates = config.get("telegram", {}).get("status_updates", True)
@@ -1266,6 +1267,11 @@ async def _main_impl() -> TelegramNotifier:
         config["exchange"] = user["exchange"]
 
     exchange, ws_client = get_exchange(config)
+    logger.info(
+        "Using %s exchange (websocket=%s)",
+        config.get("exchange", "coinbase"),
+        bool(config.get("use_websocket", False)),
+    )
 
     ping_interval = int(config.get("ws_ping_interval", 0) or 0)
     if ping_interval > 0 and hasattr(exchange, "ping"):
