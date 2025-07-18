@@ -1362,7 +1362,11 @@ async def _main_impl() -> TelegramNotifier:
             err = notifier.notify(f"API error: {exc}")
             if err:
                 logger.error("Failed to notify user: %s", err)
-        return notifier
+        if config.get("execution_mode") == "dry_run":
+            last_balance = 0.0
+            previous_balance = 0.0
+        else:
+            return notifier
     risk_params = {**config.get("risk", {})}
     risk_params.update(config.get("sentiment_filter", {}))
     risk_params.update(config.get("volatility_filter", {}))
