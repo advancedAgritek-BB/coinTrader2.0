@@ -979,6 +979,67 @@ def test_main_aborts_on_symbol_scan_error(monkeypatch, caplog):
     assert any("boom" in m for m in notifier.sent)
 
 
+def test_main_logs_market_scan_messages(monkeypatch, caplog):
+    import sys, types
+
+    monkeypatch.setitem(sys.modules, "ccxt", types.SimpleNamespace())
+    import crypto_bot.main as main
+
+    caplog.set_level(logging.INFO)
+
+    class DummyNotifier:
+        def __init__(self):
+            self.token = "t"
+            self.chat_id = "c"
+            self.enabled = True
+            self.sent: list[str] = []
+
+        def notify(self, text):
+            self.sent.append(text)
+
+    class DummyExchange:
+        def fetch_balance(self):
+            return {"USDT": {"free": 0}}
+
+    async def good_loader(*_a, **_kw):
+        return ["BTC/USD"]
+
+    cfg = {"symbol": "BTC/USD", "scan_markets": True, "telegram": {"status_updates": True}}
+
+    monkeypatch.setattr(main, "load_config", lambda: cfg)
+    monkeypatch.setattr(main, "load_kraken_symbols", good_loader)
+    monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
+    monkeypatch.setattr(main, "market_loader_configure", lambda *_a, **_k: None)
+    monkeypatch.setattr(main, "dotenv_values", lambda path: {})
+    monkeypatch.setattr(main, "load_or_create", lambda: {})
+    monkeypatch.setattr(main, "send_test_message", lambda *_a, **_k: True)
+
+    notifier = DummyNotifier()
+    monkeypatch.setattr(main.TelegramNotifier, "from_config", lambda cfg: notifier)
+    monkeypatch.setattr(main, "log_balance", lambda *_a, **_k: None)
+    monkeypatch.setattr(main, "RiskConfig", lambda *_a, **_k: None)
+
+    class DummyRM:
+        def __init__(self, *_a, **_k):
+            raise StopLoop
+
+    monkeypatch.setattr(main, "RiskManager", DummyRM)
+    monkeypatch.setattr(main, "get_exchange", lambda cfg: (DummyExchange(), None))
+    monkeypatch.setattr(main.asyncio, "sleep", lambda *_a: None)
+    monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_ATTEMPTS", 1)
+    monkeypatch.setattr(main, "SYMBOL_SCAN_RETRY_DELAY", 0)
+    monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_DELAY", 0)
+
+    with pytest.raises(StopLoop):
+        asyncio.run(main._main_impl())
+
+    messages = [rec.getMessage() for rec in caplog.records]
+    assert any("Starting initial market scan..." in m for m in messages)
+    assert any("Market scan finished" in m for m in messages)
+    assert "Starting initial market scan..." in notifier.sent
+    assert "Market scan finished" in notifier.sent
+
+
 class SlowExchange:
     has = {"fetchOHLCV": True}
 
