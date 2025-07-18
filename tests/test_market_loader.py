@@ -926,7 +926,7 @@ def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
     asyncio.run(main.main())
 
     assert "symbols" not in captured["cfg"]
-    assert any("aborting startup" in r.getMessage() for r in caplog.records)
+    assert any("Check network connectivity" in r.getMessage() for r in caplog.records)
     assert calls["loader"] == 2
 
 
