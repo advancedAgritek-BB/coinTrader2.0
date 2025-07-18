@@ -223,6 +223,7 @@ async def _refresh_tickers(
                 logger.warning("watch_tickers failed: %s", exc, exc_info=log_exc)
                 logger.info("watch_tickers failed, falling back to HTTP fetch")
                 telemetry.inc("scan.api_errors")
+                telemetry.inc("scan.ws_errors")
                 try_ws = False
                 try_http = True
         for sym, ticker in data.items():

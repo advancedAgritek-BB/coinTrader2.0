@@ -311,6 +311,7 @@ def test_watch_tickers_fallback(monkeypatch, caplog, tmp_path):
     assert ex.fetch_calls == 1
     assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
     assert any("falling back" in r.getMessage() for r in caplog.records)
+    assert telemetry.snapshot().get("scan.ws_errors", 0) == 1
 
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
     assert ex.watch_calls == 1
