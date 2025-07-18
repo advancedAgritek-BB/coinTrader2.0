@@ -1348,12 +1348,14 @@ async def _main_impl() -> TelegramNotifier:
             config["symbols"] = discovered
         else:
             logger.error(
-                "No symbols discovered after %d attempts; aborting startup",
+                "No symbols discovered after %d attempts; aborting startup. "
+                "Check network connectivity or adjust excluded_symbols and scan_markets settings",
                 MAX_SYMBOL_SCAN_ATTEMPTS,
             )
             if status_updates:
                 notifier.notify(
-                    f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
+                    f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts. "
+                    "Check network connectivity or adjust excluded_symbols and scan_markets settings"
                 )
             return notifier
 
