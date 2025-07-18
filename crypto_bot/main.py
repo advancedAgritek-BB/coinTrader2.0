@@ -1340,24 +1340,24 @@ async def _main_impl() -> TelegramNotifier:
             delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
 
         if discovered is not None:
-        logger.info("Market scan finished")
-        if status_updates:
-            notifier.notify("Market scan finished")
-
-        if discovered:
-            config["symbols"] = discovered
-        else:
-            logger.error(
-                "No symbols discovered after %d attempts; aborting startup. "
-                "Check network connectivity or adjust excluded_symbols and scan_markets settings",
-                MAX_SYMBOL_SCAN_ATTEMPTS,
-            )
+            logger.info("Market scan finished")
             if status_updates:
-                notifier.notify(
-                    f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts. "
-                    "Check network connectivity or adjust excluded_symbols and scan_markets settings"
+                notifier.notify("Market scan finished")
+
+            if discovered:
+                config["symbols"] = discovered
+            else:
+                logger.error(
+                    "No symbols discovered after %d attempts; aborting startup. "
+                    "Check network connectivity or adjust excluded_symbols and scan_markets settings",
+                    MAX_SYMBOL_SCAN_ATTEMPTS,
                 )
-            return notifier
+                if status_updates:
+                    notifier.notify(
+                        f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts. "
+                        "Check network connectivity or adjust excluded_symbols and scan_markets settings"
+                    )
+                return notifier
 
     balance_threshold = config.get("balance_change_threshold", 0.01)
     previous_balance = 0.0
