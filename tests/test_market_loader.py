@@ -906,7 +906,6 @@ def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
 
     monkeypatch.setattr(main, "RiskConfig", DummyRC)
     monkeypatch.setattr(main, "RiskManager", DummyRM)
-    monkeypatch.setattr(main.asyncio, "sleep", lambda *_a: None)
     monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_ATTEMPTS", 2)
     monkeypatch.setattr(main, "SYMBOL_SCAN_RETRY_DELAY", 0)
     monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_DELAY", 0)
@@ -968,7 +967,6 @@ def test_main_aborts_on_symbol_scan_error(monkeypatch, caplog):
     monkeypatch.setattr(main, "RiskConfig", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("RiskConfig used")))
     monkeypatch.setattr(main, "RiskManager", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("RiskManager used")))
     monkeypatch.setattr(main, "get_exchange", lambda cfg: (DummyExchange(), None))
-    monkeypatch.setattr(main.asyncio, "sleep", lambda *_a: None)
     monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_ATTEMPTS", 1)
     monkeypatch.setattr(main, "SYMBOL_SCAN_RETRY_DELAY", 0)
     monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_DELAY", 0)
@@ -977,6 +975,56 @@ def test_main_aborts_on_symbol_scan_error(monkeypatch, caplog):
 
     assert any("Symbol scan failed" in r.getMessage() for r in caplog.records)
     assert any("boom" in m for m in notifier.sent)
+
+
+def test_main_symbol_scan_timeout(monkeypatch, caplog):
+    import sys, types
+
+    monkeypatch.setitem(sys.modules, "ccxt", types.SimpleNamespace())
+    import crypto_bot.main as main
+
+    caplog.set_level(logging.ERROR)
+
+    class DummyNotifier:
+        def __init__(self):
+            self.token = "t"
+            self.chat_id = "c"
+            self.enabled = True
+            self.sent: list[str] = []
+
+        def notify(self, text):
+            self.sent.append(text)
+
+    class DummyExchange:
+        def fetch_balance(self):
+            return {"USDT": {"free": 0}}
+
+    async def slow_loader(*_a, **_kw):
+        await asyncio.sleep(0.05)
+        return ["BTC/USD"]
+
+    cfg = {"symbol": "BTC/USD", "scan_markets": True, "http_timeout": 0.01}
+
+    monkeypatch.setattr(main, "load_config", lambda: cfg)
+    monkeypatch.setattr(main, "load_kraken_symbols", slow_loader)
+    monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
+    monkeypatch.setattr(main, "dotenv_values", lambda path: {})
+    monkeypatch.setattr(main, "load_or_create", lambda: {})
+    monkeypatch.setattr(main, "send_test_message", lambda *_a, **_k: True)
+    monkeypatch.setattr(main, "log_balance", lambda *_a, **_k: None)
+    dummy_notifier = DummyNotifier()
+    monkeypatch.setattr(main.TelegramNotifier, "from_config", lambda cfg: dummy_notifier)
+    monkeypatch.setattr(main, "RiskConfig", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("RiskConfig used")))
+    monkeypatch.setattr(main, "RiskManager", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("RiskManager used")))
+    monkeypatch.setattr(main, "get_exchange", lambda cfg: (DummyExchange(), None))
+    monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_ATTEMPTS", 1)
+    monkeypatch.setattr(main, "SYMBOL_SCAN_RETRY_DELAY", 0)
+    monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_DELAY", 0)
+
+    notifier = asyncio.run(main._main_impl())
+
+    assert notifier is dummy_notifier
+    assert any("Symbol scan timed out" in r.getMessage() for r in caplog.records)
 
 
 class SlowExchange:
