@@ -209,6 +209,8 @@ async def _refresh_tickers(
         getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
         and getattr(exchange, "options", {}).get("ws_scan", True)
     )
+    ws_failures = int(getattr(exchange, "options", {}).get("ws_failures", 0))
+    ws_limit = int(cfg.get("ws_failures_before_disable", 3))
     try_http = True
     data: dict = {}
 
@@ -217,12 +219,19 @@ async def _refresh_tickers(
             s for s in symbols if now - ticker_ts.get(s, 0) > 5 or s not in ticker_cache
         ]
         if to_fetch:
+            if ws_failures:
+                await asyncio.sleep(min(2 ** (ws_failures - 1), 30))
             try:
                 data = await exchange.watch_tickers(to_fetch)
+                exchange.options["ws_failures"] = 0
             except Exception as exc:  # pragma: no cover - network
                 logger.warning("watch_tickers failed: %s", exc, exc_info=log_exc)
                 logger.info("watch_tickers failed, falling back to HTTP fetch")
                 telemetry.inc("scan.api_errors")
+                failures = exchange.options.get("ws_failures", 0) + 1
+                exchange.options["ws_failures"] = failures
+                if failures >= ws_limit:
+                    exchange.options["ws_scan"] = False
                 try_ws = False
                 try_http = True
         for sym, ticker in data.items():

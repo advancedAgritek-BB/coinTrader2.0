@@ -409,4 +409,5 @@ voting_strategies:
 - mean_reversion
 - sniper_bot
 wallet_address: your_wallet
+ws_failures_before_disable: 3
 ws_ping_interval: 10
