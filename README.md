@@ -846,6 +846,8 @@ requests tickers in batches controlled by
 `symbol_filter.kraken_batch_size` to avoid Kraken's occasional `520`
 errors. The public `/Ticker` calls also obey
 `symbol_filter.http_timeout`.
+The internal `_refresh_tickers` helper now skips any symbols missing from
+`exchange.markets` to avoid unnecessary fetch attempts.
 Pairs passing these checks are then scored with `analyze_symbol` which
 computes a strategy confidence score. Only the highest scoring symbols
 are traded each cycle.
@@ -885,6 +887,8 @@ To automate updates you can run the script periodically via cron:
 0 * * * * cd /path/to/coinTrader2.0 && /usr/bin/python3 tasks/refresh_pairs.py
 ```
 Delete `cache/liquid_pairs.json` to force a full rebuild on the next run.
+If you see warnings about unsupported markets in the logs, regenerate the file
+with `tasks/refresh_pairs.py --once`.
 
 ## Web UI
 
