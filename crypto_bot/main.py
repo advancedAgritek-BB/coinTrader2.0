@@ -872,6 +872,10 @@ async def execute_signals(ctx: BotContext) -> None:
             continue
 
         amount = size / price if price > 0 else 0.0
+        side = direction_to_side(candidate["direction"])
+        if side == "sell" and not ctx.config.get("allow_short", False):
+            logger.info("Short selling disabled; skipping signal for %s", sym)
+            continue
         start_exec = time.perf_counter()
         executed_via_sniper = False
         if sym.endswith("/USDC"):
@@ -898,7 +902,7 @@ async def execute_signals(ctx: BotContext) -> None:
                 ctx.exchange,
                 ctx.ws_client,
                 sym,
-                direction_to_side(candidate["direction"]),
+                side,
                 amount,
                 ctx.notifier,
                 dry_run=ctx.config.get("execution_mode") == "dry_run",
@@ -911,9 +915,7 @@ async def execute_signals(ctx: BotContext) -> None:
                 if strategy == "bounce_scalper":
                     depth = int(ctx.config.get("liquidity_depth", 10))
                     book = await fetch_order_book_async(ctx.exchange, sym, depth)
-                    dist = _closest_wall_distance(
-                        book, price, direction_to_side(candidate["direction"])
-                    )
+                    dist = _closest_wall_distance(book, price, side)
                     if dist is not None:
                         take_profit = dist * 0.8
                 ctx.risk_manager.register_stop_order(
@@ -922,7 +924,7 @@ async def execute_signals(ctx: BotContext) -> None:
                     symbol=sym,
                     entry_price=price,
                     confidence=score,
-                    direction=direction_to_side(candidate["direction"]),
+                    direction=side,
                     take_profit=take_profit,
                 )
         else:
@@ -933,17 +935,11 @@ async def execute_signals(ctx: BotContext) -> None:
         )
 
         if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
-            side = direction_to_side(candidate["direction"])
-            if side == "sell" and not ctx.config.get("allow_short", False):
-                logger.warning(
-                    "Short selling disabled; skipping paper trade for %s", sym
-                )
-                continue
             ctx.paper_wallet.open(sym, side, amount, price)
             ctx.balance = ctx.paper_wallet.balance
         ctx.risk_manager.allocate_capital(strategy, size)
         ctx.positions[sym] = {
-            "side": direction_to_side(candidate["direction"]),
+            "side": side,
             "entry_price": price,
             "entry_time": datetime.utcnow().isoformat(),
             "regime": candidate.get("regime"),
@@ -957,7 +953,7 @@ async def execute_signals(ctx: BotContext) -> None:
         try:
             log_position(
                 sym,
-                direction_to_side(candidate["direction"]),
+                side,
                 amount,
                 price,
                 price,
