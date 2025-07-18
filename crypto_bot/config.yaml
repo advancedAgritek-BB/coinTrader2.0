@@ -209,10 +209,7 @@ pyth:
   solana_endpoint: https://api.mainnet-beta.solana.com
   solana_ws_endpoint: wss://api.mainnet-beta.solana.com
 refresh_pairs:
-  allowed_quote_currencies:
-  - USD
-  - USDT
-  - USDC
+  allowed_quote_currencies: []
   blacklist_assets: []
   min_quote_volume_usd: 1000
   refresh_interval: 30m
