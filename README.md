@@ -784,7 +784,7 @@ wait for scanning to complete before trading begins.
 scan_markets: true
 scan_in_background: true
 symbols: []            # automatically populated
-solana_symbols: []     # base tokens traded on Solana
+solana_symbols: ["SOL/USDC", "BONK/USDC"]     # base tokens traded on Solana
 excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 2           # skip pairs with less history
@@ -839,7 +839,7 @@ to use the provided list without any filtering:
 
 ```yaml
 symbol_filter:
-  min_volume_usd: 50
+  min_volume_usd: 100
   volume_percentile: 5           # keep pairs above this volume percentile
   change_pct_percentile: 5       # require 24h change in the top movers
   max_spread_pct: 4              # allow spreads up to 4%

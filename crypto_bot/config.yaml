@@ -312,7 +312,9 @@ solana_scanner:
   max_tokens_per_scan: 100
   min_volume_usd: 1000
 solana_slippage_bps: 10
-solana_symbols: []
+solana_symbols:
+- SOL/USDC
+- BONK/USDC
 strategy_allocation:
   grid_bot: 0.2
   sniper_bot: 0.4
@@ -358,7 +360,7 @@ symbol_filter:
   log_ticker_exceptions: true
   max_correlation: 0.9
   max_spread_pct: 4
-  min_volume_usd: 50
+  min_volume_usd: 100
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
   volume_percentile: 5
