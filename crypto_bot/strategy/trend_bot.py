@@ -89,24 +89,20 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         upper_thr = np.nan
         lower_thr = np.nan
 
-    overbought_cond = (
-        rsi_z_last > upper_thr
-        if not pd.isna(upper_thr) and not pd.isna(rsi_z_last)
-        else latest["rsi"] > dynamic_overbought
-    )
-    oversold_cond = (
-        rsi_z_last < lower_thr
-        if not pd.isna(lower_thr) and not pd.isna(rsi_z_last)
-        else latest["rsi"] < dynamic_oversold
-    )
+    # Derive overbought/oversold thresholds from the distribution of recent
+    # RSI z-scores.  These quantile based levels adapt to the data and proved
+    # more robust in practice than theoretical values from `norm.ppf`.  The
+    # old behaviour using `scipy_stats.norm.ppf` has been removed but left
+    # here for reference:
+    #
+    #    upper_thr_norm = scipy_stats.norm.ppf(rsi_overbought_pct / 100)
+    #    lower_thr_norm = scipy_stats.norm.ppf(rsi_oversold_pct / 100)
 
-    upper_thr = scipy_stats.norm.ppf(rsi_overbought_pct / 100)
-    lower_thr = scipy_stats.norm.ppf(rsi_oversold_pct / 100)
     volume_ok = latest["volume"] > latest["volume_ma"] * volume_mult
     overbought_cond = (
         (
             rsi_z_last > upper_thr
-            if not pd.isna(rsi_z_last)
+            if not pd.isna(upper_thr) and not pd.isna(rsi_z_last)
             else latest["rsi"] > dynamic_overbought
         )
         and volume_ok
@@ -114,7 +110,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     oversold_cond = (
         (
             rsi_z_last < lower_thr
-            if not pd.isna(rsi_z_last)
+            if not pd.isna(lower_thr) and not pd.isna(rsi_z_last)
             else latest["rsi"] < dynamic_oversold
         )
         and volume_ok

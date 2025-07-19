@@ -79,8 +79,21 @@ def test_rsi_zscore(monkeypatch):
     )
     cfg = {"indicator_lookback": 3, "rsi_overbought_pct": 90, "donchian_confirmation": False}
     score, direction = trend_bot.generate_signal(df, cfg)
+    assert direction == "none"
+    assert score == 0.0
+
+
+def test_rsi_zscore_quantile_threshold(monkeypatch):
+    df = _df_trend(150.0)
+    monkeypatch.setattr(
+        trend_bot.stats,
+        "zscore",
+        lambda s, lookback=3: pd.Series(range(len(s)), index=s.index, dtype=float),
+    )
+    cfg = {"indicator_lookback": 3, "rsi_overbought_pct": 90, "donchian_confirmation": False}
+    score, direction = trend_bot.generate_signal(df, cfg)
     assert direction == "long"
-    assert score > 0
+    assert score > 0.0
 
 
 def test_adx_threshold(monkeypatch):
@@ -91,7 +104,7 @@ def test_adx_threshold(monkeypatch):
     monkeypatch.setattr(
         trend_bot.stats,
         "zscore",
-        lambda s, lookback=250: pd.Series([2] * len(s), index=s.index),
+        lambda s, lookback=250: pd.Series(range(len(s)), index=s.index, dtype=float),
     )
 
     score, direction = trend_bot.generate_signal(
