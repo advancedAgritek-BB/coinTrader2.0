@@ -98,6 +98,7 @@ from crypto_bot.fund_manager import (
 from crypto_bot.regime.regime_classifier import CONFIG, classify_regime_async
 from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.solana.exit import monitor_price
+from crypto_bot.strategy import dca_bot
 
 
 def _fix_symbol(sym: str) -> str:
@@ -1076,6 +1077,52 @@ async def handle_exits(ctx: BotContext) -> None:
             except Exception:
                 pass
         else:
+            score, direction = dca_bot.generate_signal(df)
+            dca_cfg = ctx.config.get("dca", {})
+            max_entries = dca_cfg.get("max_entries", 0)
+            size_pct = dca_cfg.get("size_pct", 1.0)
+            if (
+                direction == "long"
+                and pos.get("dca_count", 0) < max_entries
+                and ctx.risk_manager.capital_tracker.can_allocate(
+                    pos.get("strategy", ""), pos["size"] * size_pct * current_price, ctx.balance
+                )
+            ):
+                new_size = pos["size"] * size_pct
+                await cex_trade_async(
+                    ctx.exchange,
+                    ctx.ws_client,
+                    sym,
+                    pos["side"],
+                    new_size,
+                    ctx.notifier,
+                    dry_run=ctx.config.get("execution_mode") == "dry_run",
+                    use_websocket=ctx.config.get("use_websocket", False),
+                    config=ctx.config,
+                )
+                if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
+                    try:
+                        ctx.paper_wallet.open(sym, pos["side"], new_size, current_price)
+                        ctx.balance = ctx.paper_wallet.balance
+                    except Exception:
+                        pass
+                ctx.risk_manager.allocate_capital(
+                    pos.get("strategy", ""), new_size * current_price
+                )
+                pos["size"] += new_size
+                pos["dca_count"] = pos.get("dca_count", 0) + 1
+                try:
+                    log_position(
+                        sym,
+                        pos["side"],
+                        pos["size"],
+                        pos["entry_price"],
+                        current_price,
+                        ctx.balance,
+                    )
+                except Exception:
+                    pass
+
             # persist updated fields like 'dca_count'
             ctx.positions[sym] = pos
 
