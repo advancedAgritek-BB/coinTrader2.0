@@ -1381,7 +1381,12 @@ async def update_ohlcv_cache(
         df_new = pd.DataFrame(
             data, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
-        min_candles_required = int(limit * 0.5)
+        frac = config.get("min_history_fraction", 0.5)
+        try:
+            frac_val = float(frac)
+        except (TypeError, ValueError):
+            frac_val = 0.5
+        min_candles_required = int(limit * frac_val)
         if len(df_new) < min_candles_required:
             since_val = since_map.get(sym)
             retry = await load_ohlcv_parallel(

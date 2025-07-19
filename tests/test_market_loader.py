@@ -578,6 +578,35 @@ def test_update_ohlcv_cache_skip_after_retry(caplog):
     )
 
 
+class PartialHistoryExchange:
+    has = {"fetchOHLCV": True}
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        return [[i] * 6 for i in range(142)]
+
+
+def test_min_history_fraction_allows_partial_history():
+    from crypto_bot.utils import market_loader
+
+    market_loader._last_snapshot_time = 0
+    ex = PartialHistoryExchange()
+    cache: dict[str, pd.DataFrame] = {}
+    config = {"min_history_fraction": 0.2}
+
+    cache = asyncio.run(
+        update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=700,
+            config=config,
+            max_concurrent=1,
+        )
+    )
+    assert len(cache["BTC/USD"]) == 142
+    market_loader._last_snapshot_time = 0
+
+
 class DummyMultiTFExchange:
     has = {"fetchOHLCV": True}
 
