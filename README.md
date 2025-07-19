@@ -822,8 +822,8 @@ to use the provided list without any filtering:
 
 ```yaml
 symbol_filter:
-  min_volume_usd: 100
-  volume_percentile: 10          # keep pairs above this volume percentile
+  min_volume_usd: 50
+  volume_percentile: 5           # keep pairs above this volume percentile
   change_pct_percentile: 5       # require 24h change in the top movers
   max_spread_pct: 4              # allow spreads up to 4%
   uncached_volume_multiplier: 1.5  # extra volume when not cached
