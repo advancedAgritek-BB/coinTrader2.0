@@ -189,13 +189,17 @@ class RiskManager:
         )
         return size
 
-    def allow_trade(self, df: Any, strategy: str | None = None) -> tuple[bool, str]:
+    def allow_trade(
+        self, df: Any, strategy: str | None = None, symbol: str | None = None
+        ) -> tuple[bool, str]:
         """Assess whether market conditions merit taking a trade.
 
         Parameters
         ----------
         df : Any
             DataFrame of OHLCV data.
+        symbol : str, optional
+            Trading pair being evaluated. Defaults to ``self.config.symbol``.
 
         Returns
         -------
@@ -205,12 +209,14 @@ class RiskManager:
         df_len = len(df)
         logger.info("[EVAL] Data length: %d", df_len)
 
+        pair = symbol or self.config.symbol
+
         if df_len < 20:
             reason = "Not enough data to trade"
             logger.info("[EVAL] %s (len=%d)", reason, df_len)
             return False, reason
 
-        if self.config.symbol and trade_memory.should_avoid(self.config.symbol):
+        if pair and trade_memory.should_avoid(pair):
             reason = "Symbol blocked by trade memory"
             logger.info("[EVAL] %s", reason)
             return False, reason
@@ -225,16 +231,14 @@ class RiskManager:
             logger.info("[EVAL] %s", reason)
             return False, reason
 
-        if self.config.symbol and too_hot(self.config.symbol, self.config.max_funding_rate):
+        if pair and too_hot(pair, self.config.max_funding_rate):
             reason = "Funding rate too high"
             logger.info("[EVAL] %s", reason)
             return False, reason
 
         last_close = df["close"].iloc[-1]
         last_time = str(df.index[-1])
-        logger.info(
-            f"{self.config.symbol} | Last close: {last_close:.2f}, Time: {last_time}"
-        )
+        logger.info(f"{pair} | Last close: {last_close:.2f}, Time: {last_time}")
 
         vol_mean = df["volume"].rolling(20).mean().iloc[-1]
         current_volume = df["volume"].iloc[-1]
@@ -316,7 +320,7 @@ class RiskManager:
 
         self.boost = boost_factor(self.config.bull_fng, self.config.bull_sentiment)
         logger.info(
-            f"[EVAL] Trade allowed for {self.config.symbol} – Volume {current_volume:.4f} >= {self.config.volume_threshold_ratio*100}% of mean {vol_mean:.4f}"
+            f"[EVAL] Trade allowed for {pair} – Volume {current_volume:.4f} >= {self.config.volume_threshold_ratio*100}% of mean {vol_mean:.4f}"
         )
         reason = f"Trade allowed (boost {self.boost:.2f})"
         logger.info("[EVAL] %s", reason)

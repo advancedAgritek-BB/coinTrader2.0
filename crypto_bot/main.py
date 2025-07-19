@@ -851,7 +851,7 @@ async def execute_signals(ctx: BotContext) -> None:
         price = df["close"].iloc[-1]
         score = candidate.get("score", 0.0)
         strategy = candidate.get("name", "")
-        allowed, reason = ctx.risk_manager.allow_trade(df, strategy)
+        allowed, reason = ctx.risk_manager.allow_trade(df, strategy, sym)
         if not allowed:
             logger.info("Trade blocked for %s: %s", sym, reason)
             continue
