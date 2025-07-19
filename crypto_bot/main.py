@@ -88,6 +88,7 @@ from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import telemetry, write_cycle_metrics
 from crypto_bot.utils.correlation import compute_correlation_matrix
 from crypto_bot.utils.strategy_analytics import write_scores, write_stats
+from crypto_bot.strategy import dca_bot
 from crypto_bot.monitoring import record_sol_scanner_metrics
 from crypto_bot.fund_manager import (
     auto_convert_funds,
@@ -997,6 +998,43 @@ async def handle_exits(ctx: BotContext) -> None:
                 pd.Series([pos.get("highest_price", current_price)]),
                 ctx.config.get("exit_strategy", {}).get("trailing_stop_pct", 0.1),
             )
+
+        # DCA before evaluating exit conditions
+        dca_cfg = ctx.config.get("dca", {})
+        dca_score, dca_dir = dca_bot.generate_signal(df)
+        if (
+            dca_dir == "long"
+            and dca_score > 0
+            and pos.get("dca_count", 0) < dca_cfg.get("max_entries", 0)
+        ):
+            add_amount = pos["size"] * dca_cfg.get("size_multiplier", 1.0)
+            add_value = add_amount * current_price
+            if ctx.risk_manager.can_allocate(pos.get("strategy", ""), add_value, ctx.balance):
+                await cex_trade_async(
+                    ctx.exchange,
+                    ctx.ws_client,
+                    sym,
+                    pos["side"],
+                    add_amount,
+                    ctx.notifier,
+                    dry_run=ctx.config.get("execution_mode") == "dry_run",
+                    use_websocket=ctx.config.get("use_websocket", False),
+                    config=ctx.config,
+                )
+                if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
+                    try:
+                        ctx.paper_wallet.open(sym, pos["side"], add_amount, current_price)
+                        ctx.balance = ctx.paper_wallet.balance
+                    except Exception:
+                        pass
+                ctx.risk_manager.allocate_capital(pos.get("strategy", ""), add_value)
+                prev_amount = pos["size"]
+                pos["size"] += add_amount
+                pos["entry_price"] = (
+                    pos["entry_price"] * prev_amount + current_price * add_amount
+                ) / pos["size"]
+                pos["dca_count"] = pos.get("dca_count", 0) + 1
+                ctx.risk_manager.update_stop_order(pos["size"], symbol=sym)
         exit_signal, new_stop = should_exit(
             df,
             current_price,
@@ -1085,6 +1123,8 @@ async def handle_exits(ctx: BotContext) -> None:
                 except Exception:
                     pass
 
+            # persist updated fields like 'dca_count'
+            ctx.positions[sym] = pos
 
 async def force_exit_all(ctx: BotContext) -> None:
     """Liquidate all open positions immediately."""

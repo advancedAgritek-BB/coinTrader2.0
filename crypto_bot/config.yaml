@@ -56,6 +56,10 @@ cycle_bias:
   nupl_url: https://api.example.com/nupl
   sopr_url: https://api.example.com/sopr
 cycle_lookback_limit: 150
+dca:
+  enabled: false
+  max_entries: 2
+  size_multiplier: 1.0
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.1
 exchange: kraken
