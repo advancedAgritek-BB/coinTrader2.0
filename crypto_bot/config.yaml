@@ -278,7 +278,7 @@ signal_fusion:
     - 0.3
   - - sniper_bot
     - 0.2
-signal_threshold: 0.05
+signal_threshold: 0.03
 signal_weight_optimizer:
   enabled: true
   learning_rate: 0.05
