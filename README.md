@@ -835,6 +835,11 @@ symbol_filter:
   ticker_retry_attempts: 3       # number of fetch_tickers retries
   log_ticker_exceptions: false   # include stack traces when true
 ```
+
+Kraken labels Bitcoin as `XBT` in its market identifiers. The bot
+automatically converts canonical symbols using `exchange.market_id`,
+so configuration files may still list pairs like `BTC/USDT`.
+
 `setup_window` controls how many candles of ticker history are gathered before
 a symbol is eligible to trade, while `trigger_window` defines the period after
 a setup is detected during which entry conditions must appear.  Each strategy
