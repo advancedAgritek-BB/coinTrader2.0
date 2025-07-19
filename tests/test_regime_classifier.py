@@ -371,6 +371,19 @@ def test_analyze_symbol_handles_missing_df():
     assert telemetry.snapshot().get("analysis.skipped_no_df", 0) == 1
 
 
+def test_analyze_symbol_probabilities_match_regime():
+    df = _make_trending_df()
+
+    async def run():
+        cfg = {"timeframe": "1h"}
+        df_map = {"1h": df}
+        return await analyze_symbol("AAA", df_map, "cex", cfg, None)
+
+    res = asyncio.run(run())
+    assert res["regime"] in res["probabilities"]
+    assert res["sub_regime"] in res["probabilities"]
+
+
 def test_voting_direction_override(monkeypatch):
     df = _make_trending_df()
 
