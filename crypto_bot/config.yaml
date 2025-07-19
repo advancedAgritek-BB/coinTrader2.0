@@ -12,7 +12,7 @@ bandit:
   beta0: 1
   enabled: false
   explore_pct: 0.1
-bb_squeeze_pct: 10
+bb_squeeze_pct: 15
 bounce_scalper:
   atr_normalization: true
   atr_period: 10
@@ -47,8 +47,8 @@ breakout:
   kc_length: 10
   kc_mult: 1.0
   momentum_filter: false
-  squeeze_threshold: 0.01
-  vol_multiplier: 1.0
+  squeeze_threshold: 0.02
+  vol_multiplier: 0.8
   volume_window: 15
 cycle_bias:
   enabled: true
