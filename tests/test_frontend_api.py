@@ -81,7 +81,7 @@ def test_close_all_endpoint(monkeypatch):
 
         async def close_all_positions(self):
             self.called = True
-            self.state["liquidate"] = True
+            self.state["liquidate_all"] = True
             return {"status": "liquidation_scheduled"}
 
     dummy = Dummy()
@@ -91,4 +91,4 @@ def test_close_all_endpoint(monkeypatch):
     assert resp.status_code == 200
     assert resp.json()["status"] == "liquidation_scheduled"
     assert dummy.called is True
-    assert dummy.state.get("liquidate") is True
+    assert dummy.state.get("liquidate_all") is True

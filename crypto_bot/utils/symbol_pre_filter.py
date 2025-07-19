@@ -110,14 +110,31 @@ async def has_enough_history(
     return True
 
 
-async def _fetch_ticker_async(pairs: Iterable[str], timeout: int = 10) -> dict:
-    """Return ticker data for ``pairs`` in batches of 20 using aiohttp."""
+async def _fetch_ticker_async(
+    pairs: Iterable[str], timeout: int = 10, exchange=None
+) -> dict:
+    """Return ticker data for ``pairs`` in batches of 20 using aiohttp.
+
+    If ``exchange`` is provided each input symbol is converted to the
+    exchange specific market id (via ``exchange.market_id``) before
+    sending the request.  This ensures, for example, that Kraken receives
+    ``XBTUSDT`` instead of ``BTCUSDT``.
+    """
 
     mock = os.getenv("MOCK_KRAKEN_TICKER")
     if mock:
         return json.loads(mock)
 
-    pairs_list = list(pairs)
+    pairs_list = []
+    for sym in pairs:
+        if exchange is not None and hasattr(exchange, "market_id"):
+            try:
+                market_id = exchange.market_id(sym)
+            except Exception:
+                market_id = sym
+        else:
+            market_id = sym
+        pairs_list.append(market_id.replace("/", ""))
     combined: dict = {"result": {}, "error": []}
     async with aiohttp.ClientSession() as session:
         tasks = []
@@ -356,7 +373,17 @@ async def _refresh_tickers(
 
             if not data:
                 try:
-                    pairs = [s.replace("/", "") for s in symbols]
+                    pairs = []
+                    for s in symbols:
+                        if hasattr(exchange, "market_id"):
+                            try:
+                                pid = exchange.market_id(s)
+                            except Exception:
+                                pid = s
+                        else:
+                            pid = s
+                        pairs.append(pid.replace("/", ""))
+
                     try:
                         resp = await _fetch_ticker_async(pairs, timeout=timeout)
                     except TypeError:
@@ -368,6 +395,13 @@ async def _refresh_tickers(
                             ", ".join(pairs),
                             "; ".join(resp["error"]),
                         )
+                        raw = (
+                            await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
+                        ).get("result", {})
+                    except TypeError:
+                        raw = (
+                            await _fetch_ticker_async(symbols, exchange=exchange)
+                        ).get("result", {})
                     data = {}
                     if len(raw) == len(symbols):
                         for sym, (_, ticker) in zip(symbols, raw.items()):
@@ -396,7 +430,17 @@ async def _refresh_tickers(
                     data = {}
         else:
             try:
-                pairs = [s.replace("/", "") for s in symbols]
+                pairs = []
+                for s in symbols:
+                    if hasattr(exchange, "market_id"):
+                        try:
+                            pid = exchange.market_id(s)
+                        except Exception:
+                            pid = s
+                    else:
+                        pid = s
+                    pairs.append(pid.replace("/", ""))
+
                 try:
                     resp = await _fetch_ticker_async(pairs, timeout=timeout)
                 except TypeError:
@@ -408,6 +452,13 @@ async def _refresh_tickers(
                         ", ".join(pairs),
                         "; ".join(resp["error"]),
                     )
+                    raw = (
+                        await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
+                    ).get("result", {})
+                except TypeError:
+                    raw = (
+                        await _fetch_ticker_async(symbols, exchange=exchange)
+                    ).get("result", {})
                 data = {}
                 if len(raw) == len(symbols):
                     for sym, (_, ticker) in zip(symbols, raw.items()):
