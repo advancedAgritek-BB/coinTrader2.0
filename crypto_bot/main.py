@@ -811,6 +811,9 @@ async def analyse_batch(ctx: BotContext) -> None:
     for res in ctx.analysis_results:
         if res.get("skip"):
             continue
+        logger.info(
+            f"Analysis for {res['symbol']}: regime={res['regime']}, score={res['score']}"
+        )
         TOTAL_ANALYSES += 1
         if res.get("regime") == "unknown":
             UNKNOWN_COUNT += 1

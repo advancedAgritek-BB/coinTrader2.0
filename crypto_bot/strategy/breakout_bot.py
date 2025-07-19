@@ -1,5 +1,7 @@
 from typing import Optional, Tuple
 
+import logging
+
 import pandas as pd
 import ta
 try:  # pragma: no cover - optional dependency
@@ -20,6 +22,8 @@ except Exception:  # pragma: no cover - fallback
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
+
+logger = logging.getLogger(__name__)
 
 
 def _squeeze(
@@ -170,6 +174,10 @@ def generate_signal(
     if momentum_filter:
         long_cond = long_cond and (rsi.iloc[-1] > 50 or macd_hist.iloc[-1] > 0)
         short_cond = short_cond and (rsi.iloc[-1] < 50 or macd_hist.iloc[-1] < 0)
+
+    logger.info(
+        f"{df.index[-1]} Squeeze: {squeeze.iloc[-1]}, long_cond: {long_cond}, vol_ok: {vol_ok}"
+    )
 
     direction = "none"
     score = 0.0

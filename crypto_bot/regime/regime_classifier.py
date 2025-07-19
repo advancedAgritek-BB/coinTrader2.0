@@ -247,11 +247,15 @@ def _classify_core(
 
     regime = "sideways"
 
-    if (
+    squeeze = (
         latest["bb_width"] < cfg["bb_width_breakout_max"]
         and not np.isnan(volume_ma20.iloc[-1])
         and latest["volume"] > volume_ma20.iloc[-1] * cfg["breakout_volume_mult"]
-    ) or volume_jump:
+    )
+    if not squeeze:
+        logger.debug("No squeeze")
+
+    if squeeze or volume_jump:
         regime = "breakout"
     elif trending:
         regime = "trending"
