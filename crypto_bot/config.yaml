@@ -81,11 +81,11 @@ exit_strategy:
   - 100
   scale_out: true
   trailing_stop_factor: 1.2
-  trailing_stop_pct: 0.02
+  trailing_stop_pct: 0.01
 exits:
   default_sl_pct: 0.015
   default_tp_pct: 0.07
-  trailing_stop_pct: 0.02
+  trailing_stop_pct: 0.01
 force_websocket_history: false
 gas_threshold_gwei: 50
 grid_bot:
@@ -285,7 +285,7 @@ signal_weight_optimizer:
   min_weight: 0.01
 skip_symbol_filters: false
 sl_mult: 1.0
-sl_pct: 0.02
+sl_pct: 0.03
 sniper_bot:
   atr_window: 10
   breakout_pct: 0.03
@@ -396,7 +396,7 @@ timeframes:
 - 4h
 top_n_symbols: 50
 tp_mult: 2.0
-tp_pct: 0.1
+tp_pct: 0.2
 trade_size_pct: 0.1
 trend:
   atr_period: 10
