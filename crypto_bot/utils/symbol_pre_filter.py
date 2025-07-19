@@ -358,13 +358,23 @@ async def _refresh_tickers(
                 try:
                     pairs = [s.replace("/", "") for s in symbols]
                     try:
-                        raw = (await _fetch_ticker_async(pairs, timeout=timeout)).get("result", {})
+                        resp = await _fetch_ticker_async(pairs, timeout=timeout)
                     except TypeError:
-                        raw = (await _fetch_ticker_async(pairs)).get("result", {})
+                        resp = await _fetch_ticker_async(pairs)
+                    raw = resp.get("result", {})
+                    if resp.get("error"):
+                        logger.warning(
+                            "Ticker API errors for %s: %s",
+                            ", ".join(pairs),
+                            "; ".join(resp["error"]),
+                        )
                     data = {}
                     if len(raw) == len(symbols):
                         for sym, (_, ticker) in zip(symbols, raw.items()):
-                            data[sym] = ticker
+                            if ticker:
+                                data[sym] = ticker
+                            else:
+                                logger.warning("Empty ticker result for %s", sym)
                     else:
                         extra = iter(raw.values())
                         for sym, pair in zip(symbols, pairs):
@@ -377,8 +387,10 @@ async def _refresh_tickers(
                                         break
                             if ticker is None:
                                 ticker = next(extra, None)
-                            if ticker is not None:
+                            if ticker:
                                 data[sym] = ticker
+                            else:
+                                logger.warning("Empty ticker result for %s", sym)
                 except Exception:  # pragma: no cover - network
                     telemetry.inc("scan.api_errors")
                     data = {}
@@ -386,13 +398,23 @@ async def _refresh_tickers(
             try:
                 pairs = [s.replace("/", "") for s in symbols]
                 try:
-                    raw = (await _fetch_ticker_async(pairs, timeout=timeout)).get("result", {})
+                    resp = await _fetch_ticker_async(pairs, timeout=timeout)
                 except TypeError:
-                    raw = (await _fetch_ticker_async(pairs)).get("result", {})
+                    resp = await _fetch_ticker_async(pairs)
+                raw = resp.get("result", {})
+                if resp.get("error"):
+                    logger.warning(
+                        "Ticker API errors for %s: %s",
+                        ", ".join(pairs),
+                        "; ".join(resp["error"]),
+                    )
                 data = {}
                 if len(raw) == len(symbols):
                     for sym, (_, ticker) in zip(symbols, raw.items()):
-                        data[sym] = ticker
+                        if ticker:
+                            data[sym] = ticker
+                        else:
+                            logger.warning("Empty ticker result for %s", sym)
                 else:
                     extra = iter(raw.values())
                     for sym, pair in zip(symbols, pairs):
@@ -405,8 +427,10 @@ async def _refresh_tickers(
                                     break
                         if ticker is None:
                             ticker = next(extra, None)
-                        if ticker is not None:
+                        if ticker:
                             data[sym] = ticker
+                        else:
+                            logger.warning("Empty ticker result for %s", sym)
             except Exception:  # pragma: no cover - network
                 telemetry.inc("scan.api_errors")
                 data = {}
@@ -415,9 +439,16 @@ async def _refresh_tickers(
             for sym, ticker in data.items():
                 if sym not in symbols:
                     continue
+                if not ticker:
+                    logger.warning("Empty ticker result for %s", sym)
+                    continue
                 ticker_cache[sym] = ticker.get("info", ticker)
                 ticker_ts[sym] = now
-            return {s: t.get("info", t) for s, t in data.items() if s in symbols}
+            return {
+                s: t.get("info", t)
+                for s, t in data.items()
+                if s in symbols and t
+            }
 
     result: dict[str, dict] = {}
     if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTicker"):
@@ -428,7 +459,10 @@ async def _refresh_tickers(
                     ticker = await fetcher(sym)
                 else:
                     ticker = await asyncio.to_thread(fetcher, sym)
-                result[sym] = ticker.get("info", ticker)
+                if ticker:
+                    result[sym] = ticker.get("info", ticker)
+                else:
+                    logger.warning("Empty ticker result for %s", sym)
             except ccxt.BadSymbol as exc:  # pragma: no cover - network
                 logger.warning("fetch_ticker BadSymbol for %s: %s", sym, exc)
                 telemetry.inc("scan.api_errors")
@@ -441,6 +475,9 @@ async def _refresh_tickers(
     if result:
         for sym, ticker in result.items():
             if sym not in symbols:
+                continue
+            if not ticker:
+                logger.warning("Empty ticker result for %s", sym)
                 continue
             ticker_cache[sym] = ticker
             ticker_ts[sym] = now

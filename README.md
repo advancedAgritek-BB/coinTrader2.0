@@ -851,6 +851,8 @@ errors. The public `/Ticker` calls also obey
 `symbol_filter.http_timeout`.
 The internal `_refresh_tickers` helper now skips any symbols missing from
 `exchange.markets` to avoid unnecessary fetch attempts.
+It also warns and skips caching when the ticker API returns errors or empty
+results so zero-volume entries don't pollute the liquidity cache.
 Pairs passing these checks are then scored with `analyze_symbol` which
 computes a strategy confidence score. Only the highest scoring symbols
 are traded each cycle.
