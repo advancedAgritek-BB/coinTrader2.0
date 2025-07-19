@@ -1068,7 +1068,7 @@ def test_refresh_tickers_batches(monkeypatch):
     result = asyncio.run(sp._refresh_tickers(ex, list(ex.markets)))
 
     assert ex.calls == [["PAIR0/USD", "PAIR1/USD"], ["PAIR2/USD", "PAIR3/USD"], ["PAIR4/USD"]]
-    assert set(result) == set(ex.markets)
+    assert result == {}
 
 
 def test_fetch_ticker_async_timeout(monkeypatch):
@@ -1207,3 +1207,46 @@ def test_ws_failures_disable_scan(monkeypatch):
     assert ex.watch_calls == 2
     assert ex.fetch_calls == 2
     assert sleeps == [1]
+
+
+def test_refresh_tickers_empty_result(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+
+    class DummyExchange:
+        has = {}
+        markets = {"ETH/USD": {}}
+
+    async def fake_fetch(_pairs):
+        return {"result": {"XETHZUSD": {}}}
+
+    sp.ticker_cache.clear()
+    monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch)
+    ex = DummyExchange()
+
+    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"]))
+
+    assert result == {}
+    assert "Empty ticker result" in caplog.records[0].getMessage()
+    assert "ETH/USD" in caplog.records[0].getMessage()
+    assert "ETH/USD" not in sp.ticker_cache
+
+
+def test_refresh_tickers_error_result(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+
+    class DummyExchange:
+        has = {}
+        markets = {"ETH/USD": {}}
+
+    async def fake_fetch(_pairs):
+        return {"error": ["boom"], "result": {}}
+
+    sp.ticker_cache.clear()
+    monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch)
+    ex = DummyExchange()
+
+    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"]))
+
+    assert result == {}
+    assert any("Ticker API errors" in r.getMessage() for r in caplog.records)
+    assert "ETH/USD" not in sp.ticker_cache
