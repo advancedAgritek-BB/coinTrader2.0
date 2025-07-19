@@ -47,7 +47,7 @@ breakout:
   kc_length: 10
   kc_mult: 1.0
   momentum_filter: false
-  squeeze_threshold: 0.02
+  squeeze_threshold: 0.01
   vol_multiplier: 0.8
   volume_window: 15
 cycle_bias:
@@ -81,11 +81,11 @@ exit_strategy:
   - 100
   scale_out: true
   trailing_stop_factor: 1.2
-  trailing_stop_pct: 0.02
+  trailing_stop_pct: 0.01
 exits:
   default_sl_pct: 0.015
   default_tp_pct: 0.07
-  trailing_stop_pct: 0.02
+  trailing_stop_pct: 0.01
 force_websocket_history: false
 gas_threshold_gwei: 50
 grid_bot:
@@ -141,7 +141,7 @@ meme_wave_sniper:
     max_concurrent: 15
   risk_file: crypto_bot/logs/sniper_risk.json
   safety:
-    min_liquidity: 5
+    min_liquidity: 50
   scoring:
     weight_liquidity: 0.8
     weight_social: 0.7
@@ -191,10 +191,10 @@ mode_degrade_window: 15
 mode_threshold: 0.3
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
-ohlcv_timeout: 300
+ohlcv_timeout: 60
 optimization:
   enabled: true
-  interval_days: 0.5
+  interval_days: 0.25
   parameter_ranges:
     trend:
       stop_loss:
@@ -278,14 +278,14 @@ signal_fusion:
     - 0.3
   - - sniper_bot
     - 0.2
-signal_threshold: 0.05
+signal_threshold: 0.03
 signal_weight_optimizer:
   enabled: true
   learning_rate: 0.05
   min_weight: 0.01
 skip_symbol_filters: false
 sl_mult: 1.0
-sl_pct: 0.02
+sl_pct: 0.03
 sniper_bot:
   atr_window: 10
   breakout_pct: 0.03
@@ -312,7 +312,9 @@ solana_scanner:
   max_tokens_per_scan: 100
   min_volume_usd: 1000
 solana_slippage_bps: 10
-solana_symbols: []
+solana_symbols:
+- SOL/USDC
+- BONK/USDC
 strategy_allocation:
   grid_bot: 0.2
   sniper_bot: 0.4
@@ -358,7 +360,7 @@ symbol_filter:
   log_ticker_exceptions: true
   max_correlation: 0.9
   max_spread_pct: 4
-  min_volume_usd: 50
+  min_volume_usd: 100
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
   volume_percentile: 5
@@ -394,7 +396,7 @@ timeframes:
 - 4h
 top_n_symbols: 50
 tp_mult: 2.0
-tp_pct: 0.1
+tp_pct: 0.2
 trade_size_pct: 0.1
 trend:
   atr_period: 10

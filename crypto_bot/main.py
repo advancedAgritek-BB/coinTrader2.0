@@ -1,4 +1,5 @@
 import os
+import sys
 import asyncio
 import contextlib
 import json
@@ -88,7 +89,6 @@ from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import telemetry, write_cycle_metrics
 from crypto_bot.utils.correlation import compute_correlation_matrix
 from crypto_bot.utils.strategy_analytics import write_scores, write_stats
-from crypto_bot.strategy import dca_bot
 from crypto_bot.monitoring import record_sol_scanner_metrics
 from crypto_bot.fund_manager import (
     auto_convert_funds,
@@ -98,12 +98,7 @@ from crypto_bot.fund_manager import (
 from crypto_bot.regime.regime_classifier import CONFIG, classify_regime_async
 from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.solana.exit import monitor_price
-from crypto_bot.strategy import dca_bot
 
-
-def _fix_symbol(sym: str) -> str:
-    """Internal wrapper for tests to normalize symbols."""
-    return fix_symbol(sym)
 
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
@@ -277,6 +272,12 @@ async def refresh_balance(ctx: BotContext) -> None:
         float(latest),
         ctx.config.get("telegram", {}).get("balance_updates", False),
     )
+async def refresh_balance(ctx: BotContext) -> float:
+    """Update ctx.balance from the exchange or paper wallet."""
+    ctx.balance = await fetch_and_log_balance(
+        ctx.exchange, ctx.paper_wallet, ctx.config
+    )
+    return ctx.balance
 
 
 def _emit_timing(
@@ -545,6 +546,9 @@ async def fetch_candidates(ctx: BotContext) -> None:
     t0 = time.perf_counter()
 
     sf = ctx.config.setdefault("symbol_filter", {})
+
+    if not ctx.config.get("symbols") and not ctx.config.get("symbol"):
+        ctx.config["symbol"] = "BTC/USDT"
     orig_min_volume = sf.get("min_volume_usd")
     orig_volume_pct = sf.get("volume_percentile")
 
@@ -854,6 +858,15 @@ async def execute_signals(ctx: BotContext) -> None:
             logger.info("Max open trades reached; skipping remaining signals")
             break
         sym = candidate["symbol"]
+        if ctx.balance <= 0:
+            old_balance = ctx.balance
+            latest = await refresh_balance(ctx)
+            logger.info(
+                "Balance was %.2f; refreshed to %.2f for %s",
+                old_balance,
+                latest,
+                sym,
+            )
         if sym in ctx.positions:
             logger.info("Existing position for %s - skipping", sym)
             continue
@@ -862,7 +875,7 @@ async def execute_signals(ctx: BotContext) -> None:
         price = df["close"].iloc[-1]
         score = candidate.get("score", 0.0)
         strategy = candidate.get("name", "")
-        allowed, reason = ctx.risk_manager.allow_trade(df, strategy)
+        allowed, reason = ctx.risk_manager.allow_trade(df, strategy, sym)
         if not allowed:
             logger.info("Trade blocked for %s: %s", sym, reason)
             continue
@@ -981,6 +994,8 @@ async def execute_signals(ctx: BotContext) -> None:
         except Exception:
             pass
 
+        await refresh_balance(ctx)
+
         if strategy == "micro_scalp":
             asyncio.create_task(_monitor_micro_scalp_exit(ctx, sym))
 
@@ -1038,6 +1053,7 @@ async def handle_exits(ctx: BotContext) -> None:
                         ctx.balance = ctx.paper_wallet.balance
                     except Exception:
                         pass
+                await refresh_balance(ctx)
                 ctx.risk_manager.allocate_capital(pos.get("strategy", ""), add_value)
                 prev_amount = pos["size"]
                 pos["size"] += add_amount
@@ -1072,6 +1088,7 @@ async def handle_exits(ctx: BotContext) -> None:
                     ctx.balance = ctx.paper_wallet.balance
                 except Exception:
                     pass
+            await refresh_balance(ctx)
             ctx.risk_manager.deallocate_capital(
                 pos.get("strategy", ""), pos["size"] * pos["entry_price"]
             )
@@ -1166,6 +1183,8 @@ async def force_exit_all(ctx: BotContext) -> None:
             except Exception:
                 pass
 
+        await refresh_balance(ctx)
+
         ctx.risk_manager.deallocate_capital(
             pos.get("strategy", ""), pos["size"] * pos["entry_price"]
         )
@@ -1218,6 +1237,8 @@ async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
             ctx.balance = ctx.paper_wallet.balance
         except Exception:
             pass
+
+    await refresh_balance(ctx)
 
     ctx.risk_manager.deallocate_capital(
         pos.get("strategy", ""), pos["size"] * pos["entry_price"]
@@ -1513,7 +1534,9 @@ async def _main_impl() -> TelegramNotifier:
     session_state = SessionState(last_balance=last_balance)
     last_candle_ts: dict[str, int] = {}
 
-    control_task = asyncio.create_task(console_control.control_loop(state))
+    control_task = None
+    if sys.stdin.isatty():
+        control_task = asyncio.create_task(console_control.control_loop(state))
     rotation_task = asyncio.create_task(
         _rotation_loop(
             rotator,
@@ -1541,7 +1564,7 @@ async def _main_impl() -> TelegramNotifier:
             user.get("wallet_address", ""),
             command_cooldown=config.get("telegram", {}).get("command_cooldown", 5),
         )
-        if notifier.enabled
+        if notifier.enabled and notifier.token and notifier.chat_id
         else None
     )
 
@@ -1589,7 +1612,8 @@ async def _main_impl() -> TelegramNotifier:
     ctx.notifier = notifier
     ctx.paper_wallet = paper_wallet
     ctx.position_guard = position_guard
-    ctx.balance = last_balance
+    ctx.balance = await fetch_and_log_balance(exchange, paper_wallet, config)
+    last_balance = ctx.balance
     runner = PhaseRunner(
         [
             fetch_candidates,
@@ -1751,7 +1775,9 @@ async def _main_impl() -> TelegramNotifier:
             unknown_rate = UNKNOWN_COUNT / max(TOTAL_ANALYSES, 1)
             if unknown_rate > 0.2 and ctx.notifier:
                 ctx.notifier.notify(f"⚠️ Unknown regime rate {unknown_rate:.1%}")
-            delay = config["loop_interval_minutes"] / max(ctx.volatility_factor, 1e-6)
+            delay = config.get("loop_interval_minutes", 1) / max(
+                ctx.volatility_factor, 1e-6
+            )
             logger.info("Sleeping for %.2f minutes", delay)
             await asyncio.sleep(delay * 60)
 
@@ -1776,7 +1802,8 @@ async def _main_impl() -> TelegramNotifier:
             except asyncio.CancelledError:
                 pass
         monitor_task.cancel()
-        control_task.cancel()
+        if control_task:
+            control_task.cancel()
         rotation_task.cancel()
         if sniper_task:
             sniper_task.cancel()
@@ -1809,10 +1836,11 @@ async def _main_impl() -> TelegramNotifier:
                 await sniper_task
             except asyncio.CancelledError:
                 pass
-        try:
-            await control_task
-        except asyncio.CancelledError:
-            pass
+        if control_task:
+            try:
+                await control_task
+            except asyncio.CancelledError:
+                pass
         for task in list(WS_PING_TASKS):
             task.cancel()
         for task in list(WS_PING_TASKS):

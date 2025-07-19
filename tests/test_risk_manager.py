@@ -21,7 +21,7 @@ def test_allow_trade_rejects_low_volume():
         take_profit_pct=0.01,
         min_volume=1,
     )
-    allowed, reason = RiskManager(cfg).allow_trade(df)
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
     assert "min volume" in reason
 
@@ -41,7 +41,7 @@ def test_allow_trade_respects_volume_threshold():
         take_profit_pct=0.01,
         volume_threshold_ratio=0.5,
     )
-    allowed, _ = RiskManager(cfg).allow_trade(df)
+    allowed, _ = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert allowed
 
 
@@ -61,7 +61,7 @@ def test_allow_trade_allows_when_only_ratio_fails():
         min_volume=3,
         volume_threshold_ratio=0.5,
     )
-    allowed, reason = RiskManager(cfg).allow_trade(df)
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
     assert "50% of mean" in reason
 
@@ -82,7 +82,7 @@ def test_allow_trade_allows_when_only_min_volume_fails():
         min_volume=11,
         volume_threshold_ratio=0.5,
     )
-    allowed, reason = RiskManager(cfg).allow_trade(df)
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
     assert "min volume" in reason
 
@@ -103,7 +103,7 @@ def test_allow_trade_logs_ratio_reason():
         min_volume=1,
         volume_threshold_ratio=0.5,
     )
-    allowed, reason = RiskManager(cfg).allow_trade(df)
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
     assert "min volume" in reason
 
@@ -123,7 +123,7 @@ def test_allow_trade_rejects_tiny_volume():
         take_profit_pct=0.01,
         min_volume=5,
     )
-    allowed, reason = RiskManager(cfg).allow_trade(df)
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
     assert "min volume" in reason
 
@@ -143,7 +143,7 @@ def test_allow_trade_rejects_when_volume_far_below_mean():
         take_profit_pct=0.01,
         min_volume=10,
     )
-    allowed, reason = RiskManager(cfg).allow_trade(df)
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
     assert "min volume" in reason
 
@@ -158,7 +158,7 @@ def test_allow_trade_rejects_on_volatility_drop():
     }
     df = pd.DataFrame(data)
     cfg = RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
-    allowed, reason = RiskManager(cfg).allow_trade(df)
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
     assert "volatility" in reason.lower()
 
@@ -372,7 +372,7 @@ def test_allow_trade_blocks_when_memory_hits_threshold(tmp_path, monkeypatch):
         take_profit_pct=0.01,
         symbol="XBT/USDT",
     )
-    allowed, reason = RiskManager(cfg).allow_trade(df)
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
     assert "trade memory" in reason
 
@@ -400,7 +400,7 @@ def test_allow_trade_rejects_on_negative_ev(tmp_path, monkeypatch):
         take_profit_pct=0.01,
         min_expected_value=0.0,
     )
-    allowed, reason = RiskManager(cfg).allow_trade(_df(), "trend_bot")
+    allowed, reason = RiskManager(cfg).allow_trade(_df(), "trend_bot", symbol="XBT/USDT")
     assert not allowed
     assert "expected value" in reason.lower()
 
@@ -417,7 +417,7 @@ def test_allow_trade_allows_on_positive_ev(tmp_path, monkeypatch):
         take_profit_pct=0.01,
         min_expected_value=0.0,
     )
-    allowed, _ = RiskManager(cfg).allow_trade(_df(), "trend_bot")
+    allowed, _ = RiskManager(cfg).allow_trade(_df(), "trend_bot", symbol="XBT/USDT")
     assert allowed
 
 
@@ -432,7 +432,7 @@ def test_allow_trade_ignores_ev_when_stats_missing(tmp_path, monkeypatch):
         take_profit_pct=0.01,
         min_expected_value=0.5,
     )
-    allowed, _ = RiskManager(cfg).allow_trade(_df(), "trend_bot")
+    allowed, _ = RiskManager(cfg).allow_trade(_df(), "trend_bot", symbol="XBT/USDT")
     assert allowed
 
 
@@ -466,7 +466,7 @@ def test_allow_trade_rejects_on_pair_drawdown():
         max_pair_drawdown=10,
         pair_drawdown_lookback=20,
     )
-    allowed, reason = RiskManager(cfg).allow_trade(df)
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
     assert "drawdown" in reason.lower()
 
@@ -487,5 +487,5 @@ def test_allow_trade_allows_within_pair_drawdown():
         max_pair_drawdown=10,
         pair_drawdown_lookback=20,
     )
-    allowed, _ = RiskManager(cfg).allow_trade(df)
+    allowed, _ = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert allowed

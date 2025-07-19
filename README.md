@@ -618,11 +618,11 @@ scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
 loop_interval_minutes: 0.5   # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
 max_ws_limit: 50             # skip WebSocket when request exceeds this
-ohlcv_timeout: 300            # request timeout for OHLCV fetches
+ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
 force_websocket_history: true  # set false to enable REST fallback
 max_ws_limit: 200            # skip WebSocket when request exceeds this
-ohlcv_timeout: 120            # request timeout for OHLCV fetches
+ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
 metrics:
   enabled: true              # write cycle statistics to metrics.csv
@@ -784,7 +784,7 @@ wait for scanning to complete before trading begins.
 scan_markets: true
 scan_in_background: true
 symbols: []            # automatically populated
-solana_symbols: []     # base tokens traded on Solana
+solana_symbols: ["SOL/USDC", "BONK/USDC"]     # base tokens traded on Solana
 excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 2           # skip pairs with less history
@@ -839,7 +839,7 @@ to use the provided list without any filtering:
 
 ```yaml
 symbol_filter:
-  min_volume_usd: 50
+  min_volume_usd: 100
   volume_percentile: 5           # keep pairs above this volume percentile
   change_pct_percentile: 5       # require 24h change in the top movers
   max_spread_pct: 4              # allow spreads up to 4%
@@ -1065,7 +1065,7 @@ meme_wave_sniper:
     weight_tx: 1.0
     weight_social: 0.5
   safety:
-    min_liquidity: 10
+    min_liquidity: 50
   risk:
     max_concurrent: 20
     daily_loss_cap: 1.5
