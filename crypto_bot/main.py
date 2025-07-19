@@ -954,6 +954,7 @@ async def execute_signals(ctx: BotContext) -> None:
             "size": amount,
             "trailing_stop": 0.0,
             "highest_price": price,
+            "dca_count": 0,
         }
         try:
             log_position(
@@ -1036,7 +1037,9 @@ async def handle_exits(ctx: BotContext) -> None:
                 )
             except Exception:
                 pass
-
+        else:
+            # persist updated fields like 'dca_count'
+            ctx.positions[sym] = pos
 
 async def force_exit_all(ctx: BotContext) -> None:
     """Liquidate all open positions immediately."""
