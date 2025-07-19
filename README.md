@@ -434,6 +434,23 @@ The bot only opens positions when the current 20-bar Bollinger bandwidth is
 below its 20-bar median, reducing trades during ranging periods and improving
 the win rate.
 
+#### DCA Bot
+Dollar-cost averaging gradually accumulates a position by buying when the price
+closes 10% below the 20-period moving average. Adjust the behaviour in
+`crypto_bot/config.yaml`:
+
+```yaml
+dca_bot:
+  enabled: true          # turn on the strategy
+  interval_minutes: 60   # wait time between DCA orders
+  max_entries: 5         # total DCA steps
+  order_size_pct: 0.02   # fraction of balance per order
+```
+
+Repeatedly adding exposure can amplify losses during prolonged downtrends, so
+keep the order size small and stop averaging if drawdown exceeds your risk
+tolerance.
+
 ### Data and Logging
 * **timeframe** – base interval for most indicators (default `15m`).
 * **timeframes** – list of additional intervals cached for reuse by strategies.
