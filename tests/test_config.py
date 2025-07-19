@@ -65,6 +65,12 @@ def test_load_config_returns_dict():
     ]:
         assert key in grid_bot
 
+    assert "dca" in config
+    dca_cfg = config["dca"]
+    assert isinstance(dca_cfg, dict)
+    for key in ["enabled", "max_entries", "size_multiplier"]:
+        assert key in dca_cfg
+
     assert "telegram" in config
     assert "command_cooldown" in config["telegram"]
     assert "solana_scanner" in config
