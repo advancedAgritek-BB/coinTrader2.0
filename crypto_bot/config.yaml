@@ -141,7 +141,7 @@ meme_wave_sniper:
     max_concurrent: 15
   risk_file: crypto_bot/logs/sniper_risk.json
   safety:
-    min_liquidity: 5
+    min_liquidity: 50
   scoring:
     weight_liquidity: 0.8
     weight_social: 0.7
