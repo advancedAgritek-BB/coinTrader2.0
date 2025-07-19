@@ -153,6 +153,17 @@ async def _fetch_ticker_async(
     return combined
 
 
+def _id_for_symbol(exchange, symbol: str) -> str:
+    """Return Kraken pair id for ``symbol`` using ``exchange.market_id`` when available."""
+    try:
+        market_id = getattr(exchange, "market_id", None)
+        if callable(market_id):
+            return market_id(symbol)
+    except Exception:  # pragma: no cover - best effort
+        pass
+    return symbol.replace("/", "")
+
+
 def _parse_metrics(symbol: str, ticker: dict) -> tuple[float, float, float]:
     """Return volume USD, percent change and spread percentage using cache."""
 
@@ -373,6 +384,7 @@ async def _refresh_tickers(
 
             if not data:
                 try:
+                    pairs = [_id_for_symbol(exchange, s) for s in symbols]
                     pairs = []
                     for s in symbols:
                         if hasattr(exchange, "market_id"):
@@ -430,6 +442,7 @@ async def _refresh_tickers(
                     data = {}
         else:
             try:
+                pairs = [_id_for_symbol(exchange, s) for s in symbols]
                 pairs = []
                 for s in symbols:
                     if hasattr(exchange, "market_id"):

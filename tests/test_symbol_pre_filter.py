@@ -1209,6 +1209,50 @@ def test_ws_failures_disable_scan(monkeypatch):
     assert sleeps == [1]
 
 
+class MarketIDExchange:
+    has = {}
+    markets_by_id = {"XXBTZUSD": {"symbol": "BTC/USDT"}}
+
+    def market_id(self, symbol):
+        assert symbol == "BTC/USDT"
+        return "XBTUSDT"
+
+
+def test_market_id_used_for_public_api(monkeypatch):
+    calls: list[list[str]] = []
+
+    async def fake_fetch_market_id(pairs):
+        calls.append(list(pairs))
+        return {
+            "result": {
+                "XBTUSDT": {
+                    "a": ["51", "1", "1"],
+                    "b": ["50", "1", "1"],
+                    "c": ["51", "1"],
+                    "v": ["600", "600"],
+                    "p": ["100", "100"],
+                    "o": "49",
+                }
+            }
+        }
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch_market_id)
+    result = asyncio.run(sp.filter_symbols(MarketIDExchange(), ["BTC/USDT"], CONFIG))
+    assert calls == [["XBTUSDT"]]
+    assert result == [("BTC/USDT", 0.6)]
+
+
+async def fake_fetch_unknown(pairs):
+    assert list(pairs) == ["XBTUSDT"]
+    return {"error": ["EQuery:Unknown asset pair"], "result": {}}
+
+
+def test_unknown_pair_not_cached(monkeypatch):
+    sp.liq_cache.clear()
+    monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch_unknown)
+    result = asyncio.run(sp.filter_symbols(MarketIDExchange(), ["BTC/USDT"], CONFIG))
+    assert result == []
+    assert "BTC/USDT" not in sp.liq_cache
 def test_refresh_tickers_empty_result(monkeypatch, caplog):
     caplog.set_level("WARNING")
 
