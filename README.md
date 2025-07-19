@@ -1065,7 +1065,7 @@ meme_wave_sniper:
     weight_tx: 1.0
     weight_social: 0.5
   safety:
-    min_liquidity: 10
+    min_liquidity: 50
   risk:
     max_concurrent: 20
     daily_loss_cap: 1.5
