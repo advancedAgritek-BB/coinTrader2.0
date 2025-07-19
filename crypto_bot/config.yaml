@@ -175,6 +175,7 @@ min_agreeing_votes: 1
 min_confidence_score: 0.05
 min_consistent_agreement: 1
 min_cooldown: 0
+min_history_fraction: 0.5
 min_symbol_age_days: 0
 min_symbol_score: 0
 ml_enabled: true
@@ -244,7 +245,6 @@ safety:
 scalp_timeframe: 1m
 scan_in_background: true
 scan_lookback_limit: 700
-min_history_fraction: 0.5
 scan_markets: true
 scoring:
   lookback_bars: 30
@@ -354,10 +354,10 @@ symbol_filter:
   log_ticker_exceptions: true
   max_correlation: 0.9
   max_spread_pct: 4
-  min_volume_usd: 100
+  min_volume_usd: 50
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
-  volume_percentile: 10
+  volume_percentile: 5
 symbol_refresh_minutes: 1
 symbol_score_weights:
   age: 0.02
