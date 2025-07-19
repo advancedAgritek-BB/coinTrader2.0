@@ -12,6 +12,7 @@ from crypto_bot.regime.pattern_detector import detect_patterns
 from crypto_bot.regime.regime_classifier import (
     classify_regime_async,
     classify_regime_cached,
+    classify_regime_with_patterns_async,
 )
 from crypto_bot.strategy_router import (
     route,
@@ -208,13 +209,17 @@ async def analyze_symbol(
     higher_df = df_map.get(higher_tf)
 
     if df is not None:
-        regime_tmp, info = await classify_regime_async(df, higher_df)
+        regime_tmp, patterns = await classify_regime_with_patterns_async(df, higher_df)
         sub_regime = regime_tmp
         regime = regime_tmp.split("_")[-1]
+        # Refresh probabilities based on the final regime determination
+        _label, info = await classify_regime_async(df, higher_df)
         if isinstance(info, dict):
-            patterns = info
+            probs = info
+            base_conf = float(info.get(sub_regime, 0.0))
         elif isinstance(info, set):
-            patterns = {p: 1.0 for p in info}
+            probs = {p: 1.0 for p in info}
+            base_conf = float(probs.get(sub_regime, 0.0))
         else:
             base_conf = float(info)
 
