@@ -263,6 +263,14 @@ async def fetch_and_log_balance(exchange, paper_wallet, config):
     return latest_balance
 
 
+async def refresh_balance(ctx: BotContext) -> float:
+    """Update ctx.balance from the exchange or paper wallet."""
+    ctx.balance = await fetch_and_log_balance(
+        ctx.exchange, ctx.paper_wallet, ctx.config
+    )
+    return ctx.balance
+
+
 def _emit_timing(
     symbol_t: float,
     ohlcv_t: float,
@@ -841,6 +849,15 @@ async def execute_signals(ctx: BotContext) -> None:
             logger.info("Max open trades reached; skipping remaining signals")
             break
         sym = candidate["symbol"]
+        if ctx.balance <= 0:
+            old_balance = ctx.balance
+            latest = await refresh_balance(ctx)
+            logger.info(
+                "Balance was %.2f; refreshed to %.2f for %s",
+                old_balance,
+                latest,
+                sym,
+            )
         if sym in ctx.positions:
             logger.info("Existing position for %s - skipping", sym)
             continue
@@ -968,6 +985,8 @@ async def execute_signals(ctx: BotContext) -> None:
         except Exception:
             pass
 
+        await refresh_balance(ctx)
+
         if strategy == "micro_scalp":
             asyncio.create_task(_monitor_micro_scalp_exit(ctx, sym))
 
@@ -1025,6 +1044,7 @@ async def handle_exits(ctx: BotContext) -> None:
                         ctx.balance = ctx.paper_wallet.balance
                     except Exception:
                         pass
+                await refresh_balance(ctx)
                 ctx.risk_manager.allocate_capital(pos.get("strategy", ""), add_value)
                 prev_amount = pos["size"]
                 pos["size"] += add_amount
@@ -1059,6 +1079,7 @@ async def handle_exits(ctx: BotContext) -> None:
                     ctx.balance = ctx.paper_wallet.balance
                 except Exception:
                     pass
+            await refresh_balance(ctx)
             ctx.risk_manager.deallocate_capital(
                 pos.get("strategy", ""), pos["size"] * pos["entry_price"]
             )
@@ -1153,6 +1174,8 @@ async def force_exit_all(ctx: BotContext) -> None:
             except Exception:
                 pass
 
+        await refresh_balance(ctx)
+
         ctx.risk_manager.deallocate_capital(
             pos.get("strategy", ""), pos["size"] * pos["entry_price"]
         )
@@ -1205,6 +1228,8 @@ async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
             ctx.balance = ctx.paper_wallet.balance
         except Exception:
             pass
+
+    await refresh_balance(ctx)
 
     ctx.risk_manager.deallocate_capital(
         pos.get("strategy", ""), pos["size"] * pos["entry_price"]
@@ -1578,7 +1603,8 @@ async def _main_impl() -> TelegramNotifier:
     ctx.notifier = notifier
     ctx.paper_wallet = paper_wallet
     ctx.position_guard = position_guard
-    ctx.balance = last_balance
+    ctx.balance = await fetch_and_log_balance(exchange, paper_wallet, config)
+    last_balance = ctx.balance
     runner = PhaseRunner(
         [
             fetch_candidates,
