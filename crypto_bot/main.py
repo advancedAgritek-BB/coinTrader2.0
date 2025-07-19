@@ -268,6 +268,17 @@ async def fetch_and_log_balance(exchange, paper_wallet, config):
     return latest_balance
 
 
+async def refresh_balance(ctx: BotContext) -> None:
+    """Update context balance from the exchange or paper wallet."""
+    latest = await fetch_balance(ctx.exchange, ctx.paper_wallet, ctx.config)
+    ctx.balance = notify_balance_change(
+        ctx.notifier,
+        ctx.balance,
+        float(latest),
+        ctx.config.get("telegram", {}).get("balance_updates", False),
+    )
+
+
 def _emit_timing(
     symbol_t: float,
     ohlcv_t: float,
@@ -1585,6 +1596,7 @@ async def _main_impl() -> TelegramNotifier:
             update_caches,
             enrich_with_pyth,
             analyse_batch,
+            refresh_balance,
             execute_signals,
             handle_exits,
         ]
