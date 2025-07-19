@@ -194,7 +194,7 @@ ohlcv_snapshot_limit: 500
 ohlcv_timeout: 60
 optimization:
   enabled: true
-  interval_days: 0.5
+  interval_days: 0.25
   parameter_ranges:
     trend:
       stop_loss:
