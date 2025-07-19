@@ -244,6 +244,7 @@ safety:
 scalp_timeframe: 1m
 scan_in_background: true
 scan_lookback_limit: 700
+min_history_fraction: 0.5
 scan_markets: true
 scoring:
   lookback_bars: 30
