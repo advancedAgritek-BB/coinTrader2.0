@@ -51,7 +51,6 @@ def detect_patterns(df: pd.DataFrame, *, min_conf: float = 0.0) -> dict[str, flo
 
     prev = df.iloc[-2]
     last = df.iloc[-1]
-    prev = df.iloc[-2]
 
     body = abs(last["close"] - last["open"])
     candle_range = last["high"] - last["low"]
