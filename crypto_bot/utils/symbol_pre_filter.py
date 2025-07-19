@@ -233,8 +233,11 @@ async def _refresh_tickers(
                 if opts is not None:
                     opts["ws_failures"] = 0
             except Exception as exc:  # pragma: no cover - network
-                logger.warning("watch_tickers failed: %s", exc, exc_info=log_exc)
-                logger.info("watch_tickers failed, falling back to HTTP fetch")
+                logger.warning(
+                    "watch_tickers failed: %s \u2013 falling back to HTTP. Consider setting exchange.options.ws_scan to False if this continues.",
+                    exc,
+                    exc_info=log_exc,
+                )
                 telemetry.inc("scan.api_errors")
                 opts = getattr(exchange, "options", None)
                 if opts is not None:
