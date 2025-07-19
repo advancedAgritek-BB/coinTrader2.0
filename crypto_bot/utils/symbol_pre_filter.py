@@ -385,16 +385,6 @@ async def _refresh_tickers(
             if not data:
                 try:
                     pairs = [_id_for_symbol(exchange, s) for s in symbols]
-                    pairs = []
-                    for s in symbols:
-                        if hasattr(exchange, "market_id"):
-                            try:
-                                pid = exchange.market_id(s)
-                            except Exception:
-                                pid = s
-                        else:
-                            pid = s
-                        pairs.append(pid.replace("/", ""))
 
                     try:
                         resp = await _fetch_ticker_async(pairs, timeout=timeout)
@@ -407,13 +397,14 @@ async def _refresh_tickers(
                             ", ".join(pairs),
                             "; ".join(resp["error"]),
                         )
-                        raw = (
-                            await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
-                        ).get("result", {})
-                    except TypeError:
-                        raw = (
-                            await _fetch_ticker_async(symbols, exchange=exchange)
-                        ).get("result", {})
+                        try:
+                            raw = (
+                                await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
+                            ).get("result", {})
+                        except TypeError:
+                            raw = (
+                                await _fetch_ticker_async(symbols, exchange=exchange)
+                            ).get("result", {})
                     data = {}
                     if len(raw) == len(symbols):
                         for sym, (_, ticker) in zip(symbols, raw.items()):
@@ -443,16 +434,6 @@ async def _refresh_tickers(
         else:
             try:
                 pairs = [_id_for_symbol(exchange, s) for s in symbols]
-                pairs = []
-                for s in symbols:
-                    if hasattr(exchange, "market_id"):
-                        try:
-                            pid = exchange.market_id(s)
-                        except Exception:
-                            pid = s
-                    else:
-                        pid = s
-                    pairs.append(pid.replace("/", ""))
 
                 try:
                     resp = await _fetch_ticker_async(pairs, timeout=timeout)
@@ -465,13 +446,14 @@ async def _refresh_tickers(
                         ", ".join(pairs),
                         "; ".join(resp["error"]),
                     )
-                    raw = (
-                        await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
-                    ).get("result", {})
-                except TypeError:
-                    raw = (
-                        await _fetch_ticker_async(symbols, exchange=exchange)
-                    ).get("result", {})
+                    try:
+                        raw = (
+                            await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
+                        ).get("result", {})
+                    except TypeError:
+                        raw = (
+                            await _fetch_ticker_async(symbols, exchange=exchange)
+                        ).get("result", {})
                 data = {}
                 if len(raw) == len(symbols):
                     for sym, (_, ticker) in zip(symbols, raw.items()):
