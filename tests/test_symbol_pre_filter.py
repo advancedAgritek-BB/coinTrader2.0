@@ -236,6 +236,50 @@ def test_usdc_min_volume_halved(monkeypatch):
     assert result == [("LOW/USDC", 0.3)]
 
 
+class DummyOnchainEx:
+    has = {}
+    markets_by_id = {}
+    markets = {}
+
+
+def test_onchain_volume_below_threshold(monkeypatch):
+    async def no_fetch(*_a, **_k):
+        return {}
+    monkeypatch.setattr(sp, "_refresh_tickers", no_fetch)
+
+    async def fake_gecko(*_a, **_k):
+        return [], 500_000.0, 0.0
+
+    from crypto_bot.utils import token_registry
+    monkeypatch.setitem(token_registry.TOKEN_MINTS, "AAA", "mint")
+    monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
+
+    res = asyncio.run(
+        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 1_000_000})
+    )
+
+    assert res == ([], [])
+
+
+def test_onchain_volume_above_threshold(monkeypatch):
+    async def no_fetch(*_a, **_k):
+        return {}
+    monkeypatch.setattr(sp, "_refresh_tickers", no_fetch)
+
+    async def fake_gecko(*_a, **_k):
+        return [], 2_000_000.0, 0.0
+
+    from crypto_bot.utils import token_registry
+    monkeypatch.setitem(token_registry.TOKEN_MINTS, "AAA", "mint")
+    monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
+
+    res = asyncio.run(
+        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 1_000_000})
+    )
+
+    assert res == ([], [("AAA/USDC", 2.0)])
+
+
 class WatchTickersExchange(DummyExchange):
     def __init__(self):
         self.has = {"watchTickers": True}
