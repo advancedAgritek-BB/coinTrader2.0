@@ -498,7 +498,7 @@ async def _refresh_tickers(
 
     result: dict[str, dict] = {}
     if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTicker"):
-        for sym in symbols:
+        for sym in cex_syms:
             try:
                 fetcher = getattr(exchange, "fetch_ticker", None)
                 if asyncio.iscoroutinefunction(fetcher):
@@ -563,8 +563,8 @@ async def filter_symbols(
     symbols: Iterable[str],
     config: dict | None = None,
     df_cache: Dict[str, pd.DataFrame] | None = None,
-) -> List[tuple[str, float]]:
-    """Return ``symbols`` passing liquidity checks sorted by score."""
+) -> tuple[List[tuple[str, float]], List[tuple[str, float]]]:
+    """Return CEX symbols and onchain symbols with basic scoring."""
 
     cfg = config or {}
     sf = cfg.get("symbol_filter", {})
@@ -579,22 +579,26 @@ async def filter_symbols(
     min_score = float(cfg.get("min_symbol_score", 0.0))
     cache_changed = False
 
-    telemetry.inc("scan.symbols_considered", len(list(symbols)))
+    symbols = list(symbols)
+    cex_syms = [s for s in symbols if not str(s).upper().endswith("/USDC")]
+    onchain_syms = [s for s in symbols if str(s).upper().endswith("/USDC")]
+
+    telemetry.inc("scan.symbols_considered", len(symbols))
     skipped = 0
 
     cached_data: dict[str, tuple[float, float, float]] = {}
-    for sym in symbols:
+    for sym in cex_syms:
         if sym in liq_cache:
             cached_data[sym] = liq_cache[sym]
 
     try:
-        data = await _refresh_tickers(exchange, symbols, cfg)
+        data = await _refresh_tickers(exchange, cex_syms, cfg)
     except Exception:
         raise
 
     # map of ids returned by Kraken to human readable symbols
     id_map: dict[str, str] = {}
-    request_map = {_norm_symbol(s.replace("/", "")): _norm_symbol(s) for s in symbols}
+    request_map = {_norm_symbol(s.replace("/", "")): _norm_symbol(s) for s in cex_syms}
 
     if hasattr(exchange, "markets_by_id"):
         if not exchange.markets_by_id and hasattr(exchange, "load_markets"):
@@ -681,7 +685,7 @@ async def filter_symbols(
             volumes.append(vol_usd)
             raw.append((symbol, vol_usd, change_pct, spread_pct))
 
-    for sym in symbols:
+    for sym in cex_syms:
         norm_sym = _norm_symbol(sym)
         if norm_sym in seen:
             continue
@@ -835,4 +839,25 @@ async def filter_symbols(
                 json.dump(cache_map, f, indent=2)
         except Exception as exc:  # pragma: no cover - best effort
             logger.warning("Failed to update %s: %s", PAIR_FILE, exc)
-    return result
+
+    from crypto_bot.utils.token_registry import TOKEN_MINTS
+
+    resolved_onchain: List[tuple[str, float]] = []
+    for sym in onchain_syms:
+        base = sym.split("/")[0].upper()
+        mint = TOKEN_MINTS.get(base)
+        if not mint:
+            logger.warning("No mint for %s; dropping", sym)
+            continue
+        logger.info("Resolved %s to mint %s for onchain", sym, mint)
+        try:
+            _, vol, _ = await fetch_geckoterminal_ohlcv(sym, limit=1)
+            score = vol / 1000.0
+            resolved_onchain.append((sym, score))
+        except Exception:  # pragma: no cover - network
+            logger.warning("Gecko fetch failed for %s; skipping", sym)
+
+    return (
+        sorted(result, key=lambda x: x[1], reverse=True),
+        sorted(resolved_onchain, key=lambda x: x[1], reverse=True),
+    )
