@@ -84,6 +84,21 @@ def configure(
 ) -> None:
     """Configure module-wide settings."""
     global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES, SEMA, GECKO_SEMAPHORE
+    cfg = None
+    if ohlcv_timeout is None or max_failures is None:
+        try:
+            with open(CONFIG_PATH) as f:
+                cfg = yaml.safe_load(f) or {}
+        except Exception:
+            cfg = {}
+    if ohlcv_timeout is None and cfg is not None:
+        cfg_val = cfg.get("ohlcv_timeout")
+        if cfg_val is not None:
+            ohlcv_timeout = cfg_val
+    if max_failures is None and cfg is not None:
+        cfg_val = cfg.get("max_ohlcv_failures")
+        if cfg_val is not None:
+            max_failures = cfg_val
     if ohlcv_timeout is not None:
         try:
             val = max(1, int(ohlcv_timeout))
