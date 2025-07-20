@@ -108,8 +108,8 @@ needed.
    python -m frontend.app
    ```
 5. Run the meme-wave sniper separately with Raydium v3 integration.
-   Profits are automatically converted to BTC. Set `SOLANA_PRIVATE_KEY` and
-   `HELIUS_KEY` or provide a custom `SOLANA_RPC_URL` before launching:
+   Profits are automatically converted to BTC. Set `SOLANA_PRIVATE_KEY` and the
+   required `HELIUS_KEY` or provide a custom `SOLANA_RPC_URL` before launching:
    ```bash
    python -m crypto_bot.solana.runner
    ```
@@ -159,9 +159,10 @@ SOLANA_PRIVATE_KEY="[1,2,3,...]"       # required for Solana trades
 SOLANA_RPC_URL=https://devnet.solana.com  # optional custom endpoint
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
 # SOLANA_RPC_URL=https://api.devnet.solana.com      # devnet example
-HELIUS_KEY=your_helius_api_key          # optional, for Helius RPC endpoints
+HELIUS_KEY=your_helius_api_key          # required for Jupiter/Helius registry
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
+token_registry.refresh_interval_minutes=720  # optional cache update interval
 ```
 
 `TELE_CHAT_ADMINS` lets the Telegram bot accept commands from multiple
@@ -253,9 +254,10 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **scan_in_background** – start the initial scan in the background so trading can begin immediately.
 * **excluded_symbols** – markets to skip during scanning.
 * **onchain_symbols** – base tokens traded on-chain. Tickers are automatically
-  converted to mint addresses using the Solana token list and each pair is
-  appended with `/USDC`. If a ticker isn't found in the registry, the base value
-  must be a valid mint address. If your configuration still contains
+  resolved to mint addresses using a hybrid Jupiter/Helius registry cached at
+  `cache/token_mints.json`. Each entry is appended with `/USDC`. If a ticker
+  isn't found in the registry, the base value must be a valid mint address. If
+  your configuration still contains
   `solana_symbols`, rename that section to `onchain_symbols`.
 * **allow_short** – enable short selling. Set to `true` only when your exchange account supports short selling.
 
@@ -794,7 +796,8 @@ wait for scanning to complete before trading begins.
 scan_markets: true    # default
 scan_in_background: true
 symbols: []            # automatically populated
-onchain_symbols: ["SOL/USDC", "BONK/USDC", "AI16Z/USDC"]    # tickers auto-convert via token list
+onchain_symbols: ["SOL/USDC", "BONK/USDC", "AI16Z/USDC"]    # tickers auto-resolve
+                                                # to mints via Jupiter/Helius
                                                 # base must be mint if unknown
 excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
