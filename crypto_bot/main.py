@@ -561,6 +561,9 @@ async def initial_scan(
 
     onchain_symbols = [s for s in config.get("onchain_symbols", []) if s]
 
+    # Save the local sync fetch function so it isn't shadowed later
+    fetch_solana_historical_sync = fetch_solana_historical
+
     batch_size = int(config.get("symbol_batch_size", 10))
     total = len(symbols)
     processed = 0
@@ -620,7 +623,7 @@ async def initial_scan(
             mint = TOKEN_MINTS.get(base.upper(), base)
             for tf in config.get("timeframes", ["1h"]):
                 df = await asyncio.to_thread(
-                    fetch_solana_historical, mint, tf, limit=scan_limit
+                    fetch_solana_historical_sync, mint, tf, limit=scan_limit
                 )
                 if isinstance(df, pd.DataFrame) and not df.empty:
                     update_df_cache(state.df_cache, tf, sym, df)
@@ -634,15 +637,15 @@ async def initial_scan(
     onchain_syms = config.get("onchain_symbols", [])
     if onchain_syms:
         try:
-            from crypto_bot.solana import fetch_solana_historical
+            from crypto_bot.solana import fetch_solana_historical as fetch_solana_historical_async
         except Exception:
-            fetch_solana_historical = None
-        if fetch_solana_historical:
+            fetch_solana_historical_async = None
+        if fetch_solana_historical_async:
             timeframes = config.get("timeframes", ["1h"])
             for sym in onchain_syms:
                 for tf in timeframes:
                     try:
-                        df = await fetch_solana_historical(
+                        df = await fetch_solana_historical_async(
                             sym, timeframe=tf, limit=scan_limit
                         )
                     except Exception:
