@@ -120,7 +120,7 @@ max_age_days: 90
 max_change_pct: 20
 max_concurrent_ohlcv: 2
 max_latency_ms: 500
-max_ohlcv_failures: 10
+max_ohlcv_failures: 5
 max_open_trades: 20
 max_parallel: 50
 max_slippage_pct: 0.2
@@ -191,7 +191,7 @@ mode_degrade_window: 15
 mode_threshold: 0.3
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
-ohlcv_timeout: 60
+ohlcv_timeout: 120
 optimization:
   enabled: true
   interval_days: 0.25
