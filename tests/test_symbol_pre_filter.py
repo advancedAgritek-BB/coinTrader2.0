@@ -236,6 +236,30 @@ def test_usdc_min_volume_halved(monkeypatch):
     assert result == [("LOW/USDC", 0.3)]
 
 
+def test_blacklisted_base_omitted(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+    import crypto_bot.utils.token_registry as tr
+
+    tr.TOKEN_MINTS.clear()
+    tr.TOKEN_MINTS["SOL"] = "So11111111111111111111111111111111111111112"
+
+    async def fake_gecko(*_a, **_k):
+        return [], 1000.0, 0.0
+
+    monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
+
+    class DummyEx:
+        has = {}
+        markets_by_id = {}
+
+    result = asyncio.run(
+        sp.filter_symbols(DummyEx(), ["SOL/USDC", "BNB/USDC"], CONFIG)
+    )
+
+    assert result == ([], [("SOL/USDC", 1.0)])
+    assert not any("No mint" in r.getMessage() for r in caplog.records)
+
+
 class WatchTickersExchange(DummyExchange):
     def __init__(self):
         self.has = {"watchTickers": True}
