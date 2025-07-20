@@ -121,6 +121,8 @@ SYMBOL_EVAL_QUEUE: deque[str] = deque()
 
 # Protects shared queues for future multi-tasking scenarios
 QUEUE_LOCK = asyncio.Lock()
+# Protects OHLCV cache updates
+OHLCV_LOCK = asyncio.Lock()
 
 # Retry parameters for the initial symbol scan
 MAX_SYMBOL_SCAN_ATTEMPTS = 3
@@ -531,31 +533,32 @@ async def initial_scan(
 
         limit = min(config.get("scan_lookback_limit", 50), 700)
 
-        state.df_cache = await update_multi_tf_ohlcv_cache(
-            exchange,
-            state.df_cache,
-            batch,
-            config,
-            limit=limit,
-            use_websocket=False,
-            force_websocket_history=config.get("force_websocket_history", False),
-            max_concurrent=config.get("max_concurrent_ohlcv"),
-            notifier=notifier,
-            priority_queue=symbol_priority_queue,
-        )
+        async with OHLCV_LOCK:
+            state.df_cache = await update_multi_tf_ohlcv_cache(
+                exchange,
+                state.df_cache,
+                batch,
+                config,
+                limit=limit,
+                use_websocket=False,
+                force_websocket_history=config.get("force_websocket_history", False),
+                max_concurrent=config.get("max_concurrent_ohlcv"),
+                notifier=notifier,
+                priority_queue=symbol_priority_queue,
+            )
 
-        state.regime_cache = await update_regime_tf_cache(
-            exchange,
-            state.regime_cache,
-            batch,
-            config,
-            limit=limit,
-            use_websocket=False,
-            force_websocket_history=config.get("force_websocket_history", False),
-            max_concurrent=config.get("max_concurrent_ohlcv"),
-            notifier=notifier,
-            df_map=state.df_cache,
-        )
+            state.regime_cache = await update_regime_tf_cache(
+                exchange,
+                state.regime_cache,
+                batch,
+                config,
+                limit=limit,
+                use_websocket=False,
+                force_websocket_history=config.get("force_websocket_history", False),
+                max_concurrent=config.get("max_concurrent_ohlcv"),
+                notifier=notifier,
+                df_map=state.df_cache,
+            )
 
         processed += len(batch)
         pct = processed / total * 100
@@ -754,6 +757,7 @@ async def update_caches(ctx: BotContext) -> None:
         if ctx.volatility_factor > 5:
             max_concurrent = max(1, max_concurrent // 2)
 
+    async with OHLCV_LOCK:
     try:
         ctx.df_cache = await update_multi_tf_ohlcv_cache(
             ctx.exchange,
@@ -790,22 +794,22 @@ async def update_caches(ctx: BotContext) -> None:
             priority_queue=symbol_priority_queue,
         )
 
-    ctx.regime_cache = await update_regime_tf_cache(
-        ctx.exchange,
-        ctx.regime_cache,
-        batch,
-        ctx.config,
-        limit=limit,
-        use_websocket=ctx.config.get("use_websocket", False),
-        force_websocket_history=ctx.config.get("force_websocket_history", False),
-        max_concurrent=max_concurrent,
-        notifier=(
-            ctx.notifier
-            if ctx.config.get("telegram", {}).get("status_updates", True)
-            else None
-        ),
-        df_map=ctx.df_cache,
-    )
+        ctx.regime_cache = await update_regime_tf_cache(
+            ctx.exchange,
+            ctx.regime_cache,
+            batch,
+            ctx.config,
+            limit=limit,
+            use_websocket=ctx.config.get("use_websocket", False),
+            force_websocket_history=ctx.config.get("force_websocket_history", False),
+            max_concurrent=max_concurrent,
+            notifier=(
+                ctx.notifier
+                if ctx.config.get("telegram", {}).get("status_updates", True)
+                else None
+            ),
+            df_map=ctx.df_cache,
+        )
 
     tf = ctx.config.get("timeframe", "1h")
     for sym in batch:
@@ -886,10 +890,11 @@ async def enrich_with_pyth(ctx: BotContext) -> None:
                 10 ** price_info.get("expo", 0)
             )
 
-            for cache in ctx.df_cache.values():
-                df = cache.get(sym)
-                if df is not None and not df.empty:
-                    df.loc[df.index[-1], "close"] = price
+            async with OHLCV_LOCK:
+                for cache in ctx.df_cache.values():
+                    df = cache.get(sym)
+                    if df is not None and not df.empty:
+                        df.loc[df.index[-1], "close"] = price
 
 
 async def analyse_batch(ctx: BotContext) -> None:
@@ -1824,21 +1829,22 @@ async def _main_impl() -> TelegramNotifier:
                 if time.time() - last_ts >= tf_sec:
                     open_syms.append(sym)
             if open_syms:
-                tf_cache = ctx.df_cache.get(tf, {})
-                tf_cache = await update_ohlcv_cache(
-                    exchange,
-                    tf_cache,
-                    open_syms,
-                    timeframe=tf,
-                    limit=2,
-                    use_websocket=config.get("use_websocket", False),
-                    force_websocket_history=config.get(
-                        "force_websocket_history", False
-                    ),
-                    max_concurrent=config.get("max_concurrent_ohlcv"),
-                )
-                ctx.df_cache[tf] = tf_cache
-                session_state.df_cache[tf] = tf_cache
+                async with OHLCV_LOCK:
+                    tf_cache = ctx.df_cache.get(tf, {})
+                    tf_cache = await update_ohlcv_cache(
+                        exchange,
+                        tf_cache,
+                        open_syms,
+                        timeframe=tf,
+                        limit=2,
+                        use_websocket=config.get("use_websocket", False),
+                        force_websocket_history=config.get(
+                            "force_websocket_history", False
+                        ),
+                        max_concurrent=config.get("max_concurrent_ohlcv"),
+                    )
+                    ctx.df_cache[tf] = tf_cache
+                    session_state.df_cache[tf] = tf_cache
                 for sym in open_syms:
                     df = tf_cache.get(sym)
                     if df is not None and not df.empty:
