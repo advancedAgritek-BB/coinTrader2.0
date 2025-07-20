@@ -840,15 +840,19 @@ async def filter_symbols(
         except Exception as exc:  # pragma: no cover - best effort
             logger.warning("Failed to update %s: %s", PAIR_FILE, exc)
 
-    from crypto_bot.utils.token_registry import TOKEN_MINTS
+    from crypto_bot.utils.token_registry import TOKEN_MINTS, get_mint_from_gecko
 
     resolved_onchain: List[tuple[str, float]] = []
     for sym in onchain_syms:
         base = sym.split("/")[0].upper()
         mint = TOKEN_MINTS.get(base)
         if not mint:
-            logger.warning("No mint for %s; dropping", sym)
-            continue
+            mint = await get_mint_from_gecko(base)
+            if mint:
+                TOKEN_MINTS[base] = mint
+            else:
+                logger.warning("No mint for %s; dropping", sym)
+                continue
         logger.info("Resolved %s to mint %s for onchain", sym, mint)
         try:
             _, vol, _ = await fetch_geckoterminal_ohlcv(sym, limit=1)
