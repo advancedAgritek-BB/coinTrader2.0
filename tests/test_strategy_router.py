@@ -201,6 +201,16 @@ def test_auto_usdc_pair_route(monkeypatch):
     assert fn.__name__ == sniper_solana.generate_signal.__name__
 
 
+def test_auto_usdc_pair_cex_fallback(monkeypatch):
+    monkeypatch.setattr(strategy_router, "TOKEN_MINTS", {})
+    cfg = {
+        "symbol": "XYZ/USDC",
+        "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
+    }
+    fn = route("breakout", "auto", cfg)
+    assert fn.__name__ == breakout_bot.generate_signal.__name__
+
+
 def test_dynamic_grid_uses_micro_scalp():
     cfg = {
         "symbol": "AAA/USDT",

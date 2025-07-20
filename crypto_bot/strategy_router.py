@@ -727,6 +727,10 @@ def route(
         if base.upper() in TOKEN_MINTS:
             logger.info("Routing %s pair to Solana sniper bot (auto)", symbol)
             return _wrap(sniper_solana.generate_signal)
+        logger.info("Mint for %s not found; falling back to CEX", base.upper())
+        select_df = df if df is not None else pd.DataFrame()
+        strategy_fn = Selector(cfg).select(select_df, regime, "cex", notifier)
+        return _wrap(strategy_fn)
     if symbol.endswith("/USDC") and regime == "breakout":
         base = symbol.split("/")[0]
         if base.upper() in TOKEN_MINTS:
