@@ -965,19 +965,8 @@ async def fetch_geckoterminal_ohlcv(
             token_mint, quote = symbol, ""
         if quote != "USDC":
             return None
-        try:
-            base58.b58decode(token_mint)
-        except Exception:
+        if not _is_valid_base_token(token_mint):
             return None
-    # Validate symbol before making any requests
-    try:
-        token_mint, quote = symbol.split("/", 1)
-    except ValueError:
-        token_mint, quote = symbol, ""
-    if quote != "USDC":
-        return None
-    if not _is_valid_base_token(token_mint):
-        return None
 
     volume = 0.0
     reserve = 0.0
