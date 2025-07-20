@@ -239,6 +239,11 @@ except Exception:  # pragma: no cover - PyYAML not installed
 
 # Basic stub for aiohttp
 class _FakeAioHttp:
+    class WSMsgType:
+        TEXT = "text"
+        CLOSED = "closed"
+        ERROR = "error"
+
     class ClientSession:
         def __init__(self, *a, **k):
             pass

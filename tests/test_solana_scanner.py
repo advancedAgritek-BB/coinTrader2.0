@@ -11,12 +11,37 @@ sol_pkg = types.ModuleType("crypto_bot.solana")
 utils_pkg = types.ModuleType("crypto_bot.utils")
 pkg_root.solana = sol_pkg
 pkg_root.utils = utils_pkg
+import importlib.machinery
+pkg_root.__spec__ = importlib.machinery.ModuleSpec(
+    "crypto_bot", None, is_package=True
+)
+pkg_root.__spec__.submodule_search_locations = []
+pkg_root.__path__ = []
+sol_pkg.__spec__ = importlib.machinery.ModuleSpec(
+    "crypto_bot.solana", None, is_package=True
+)
+sol_pkg.__spec__.submodule_search_locations = [str(pathlib.Path("crypto_bot/solana"))]
 sol_pkg.__path__ = [str(pathlib.Path("crypto_bot/solana"))]
+utils_pkg.__spec__ = importlib.machinery.ModuleSpec(
+    "crypto_bot.utils", None, is_package=True
+)
+utils_pkg.__spec__.submodule_search_locations = [str(pathlib.Path("crypto_bot/utils"))]
 utils_pkg.__path__ = [str(pathlib.Path("crypto_bot/utils"))]
 
 sys.modules.setdefault("crypto_bot", pkg_root)
 sys.modules.setdefault("crypto_bot.solana", sol_pkg)
 sys.modules.setdefault("crypto_bot.utils", utils_pkg)
+
+# Ensure the real solana_scanner module is loaded even if another test
+# inserted a stub under this name.
+real_spec = importlib.util.spec_from_file_location(
+    "crypto_bot.utils.solana_scanner",
+    pathlib.Path(__file__).resolve().parents[1]
+    / "crypto_bot" / "utils" / "solana_scanner.py",
+)
+solana_scanner = importlib.util.module_from_spec(real_spec)
+sys.modules["crypto_bot.utils.solana_scanner"] = solana_scanner
+real_spec.loader.exec_module(solana_scanner)
 
 sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
 sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))

@@ -158,7 +158,6 @@ def test_load_token_mints_error(monkeypatch, tmp_path):
 
 
 def test_set_token_mints_updates_cache(monkeypatch, tmp_path):
-def test_get_mint_from_gecko(monkeypatch):
     data = {"data": [{"attributes": {"address": "M"}}]}
 
     class DummyResp:
@@ -202,7 +201,6 @@ def test_get_mint_from_gecko(monkeypatch):
         / "crypto_bot"
         / "utils"
         / "token_registry.py",
-        / "crypto_bot" / "utils" / "token_registry.py",
     )
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr

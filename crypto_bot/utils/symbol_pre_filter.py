@@ -853,8 +853,7 @@ async def filter_symbols(
             continue
         mint = TOKEN_MINTS.get(base)
         if not mint:
-            logger.debug("No mint for %s; dropping", sym)
-            continue
+            logger.debug("No mint for %s; attempting lookup", sym)
             mint = await get_mint_from_gecko(base)
             if mint:
                 TOKEN_MINTS[base] = mint
