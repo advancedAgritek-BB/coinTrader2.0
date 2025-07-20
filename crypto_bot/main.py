@@ -564,10 +564,12 @@ async def initial_scan(
     batch_size = int(config.get("symbol_batch_size", 10))
     total = len(symbols)
     processed = 0
+    scan_limit = min(config.get("scan_lookback_limit", 50), 700)
 
     for i in range(0, total, batch_size):
         batch = symbols[i:i + batch_size]
 
+        limit = scan_limit
         history_since = int((time.time() - 365 * 86400) * 1000)
         limit = int(config.get("scan_deep_limit", config.get("scan_lookback_limit", 50) * 10))
         logger.info("Loading deep OHLCV history starting %s", datetime.utcfromtimestamp(history_since / 1000).isoformat())
@@ -578,7 +580,7 @@ async def initial_scan(
                 state.df_cache,
                 batch,
                 config,
-                limit=limit,
+                limit=scan_limit,
                 use_websocket=False,
                 force_websocket_history=config.get("force_websocket_history", False),
                 max_concurrent=config.get("max_concurrent_ohlcv"),
@@ -592,7 +594,7 @@ async def initial_scan(
                 state.regime_cache,
                 batch,
                 config,
-                limit=limit,
+                limit=scan_limit,
                 use_websocket=False,
                 force_websocket_history=config.get("force_websocket_history", False),
                 max_concurrent=config.get("max_concurrent_ohlcv"),
@@ -618,6 +620,25 @@ async def initial_scan(
         logger.info("Initial scan %.1f%% complete", pct)
         if notifier and config.get("telegram", {}).get("status_updates", True):
             notifier.notify(f"Initial scan {pct:.1f}% complete")
+
+    onchain_syms = config.get("onchain_symbols", [])
+    if onchain_syms:
+        try:
+            from crypto_bot.solana import fetch_solana_historical
+        except Exception:
+            fetch_solana_historical = None
+        if fetch_solana_historical:
+            timeframes = config.get("timeframes", ["1h"])
+            for sym in onchain_syms:
+                for tf in timeframes:
+                    try:
+                        df = await fetch_solana_historical(
+                            sym, timeframe=tf, limit=scan_limit
+                        )
+                    except Exception:
+                        continue
+                    if isinstance(df, pd.DataFrame):
+                        update_df_cache(state.df_cache, tf, sym, df)
 
     return
 
