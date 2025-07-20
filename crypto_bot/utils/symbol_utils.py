@@ -20,8 +20,8 @@ _cached_symbols: list | None = None
 _last_refresh: float = 0.0
 
 
-async def get_filtered_symbols(exchange, config) -> list:
-    """Return user symbols filtered by liquidity/volatility or fallback.
+async def get_filtered_symbols(exchange, config) -> tuple[list, list]:
+    """Return filtered CEX symbols and onchain tokens.
 
     Results are cached for ``symbol_refresh_minutes`` minutes to avoid
     unnecessary API calls.
@@ -35,16 +35,21 @@ async def get_filtered_symbols(exchange, config) -> list:
         _cached_symbols is not None
         and now - _last_refresh < refresh_m * 60
     ):
-        return _cached_symbols
+        return _cached_symbols, list(config.get("onchain_symbols", []))
 
     if config.get("skip_symbol_filters"):
         syms = config.get("symbols", [config.get("symbol")])
         result = [(s, 0.0) for s in syms]
         _cached_symbols = result
         _last_refresh = now
-        return result
+        return result, list(config.get("onchain_symbols", []))
 
     symbols = config.get("symbols", [config.get("symbol")])
+    onchain = list(config.get("onchain_symbols", []))
+    if not symbols:
+        _cached_symbols = []
+        _last_refresh = now
+        return [], onchain
     cleaned_symbols = []
     for sym in symbols:
         if not isinstance(sym, str):
@@ -72,7 +77,7 @@ async def get_filtered_symbols(exchange, config) -> list:
                 "No symbols met volume/spread requirements; consider adjusting symbol_filter in config. Rejected %d symbols",
                 skipped_main,
             )
-            return []
+            return [], onchain
 
         skipped_before = telemetry.snapshot().get("scan.symbols_skipped", 0)
         if asyncio.iscoroutinefunction(filter_symbols):
@@ -90,7 +95,7 @@ async def get_filtered_symbols(exchange, config) -> list:
                 skipped_main,
                 skipped_fb,
             )
-            return []
+            return [], onchain
 
         logger.warning(
             "No symbols passed filters, falling back to %s",
@@ -110,4 +115,4 @@ async def get_filtered_symbols(exchange, config) -> list:
         _cached_symbols = scored
         _last_refresh = now
 
-    return scored
+    return scored, onchain

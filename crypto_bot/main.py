@@ -330,8 +330,10 @@ def load_config() -> dict:
         data["symbol"] = fix_symbol(data["symbol"])
     if "symbols" in data:
         data["symbols"] = [fix_symbol(s) for s in data.get("symbols", [])]
-    if "solana_symbols" in data:
-        data["solana_symbols"] = [fix_symbol(s) for s in data.get("solana_symbols", [])]
+    if "onchain_symbols" in data:
+        data["onchain_symbols"] = [fix_symbol(s) for s in data.get("onchain_symbols", [])]
+    elif "solana_symbols" in data:
+        data["onchain_symbols"] = [fix_symbol(s) for s in data.get("solana_symbols", [])]
     try:
         if hasattr(ScannerConfig, "model_validate"):
             ScannerConfig.model_validate(data)
@@ -561,7 +563,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
         sf["volume_percentile"] = 5
 
     try:
-        symbols = await get_filtered_symbols(ctx.exchange, ctx.config)
+        symbols, onchain_tokens = await get_filtered_symbols(ctx.exchange, ctx.config)
     finally:
         if pump:
             sf["min_volume_usd"] = orig_min_volume
@@ -574,7 +576,6 @@ async def fetch_candidates(ctx: BotContext) -> None:
     if sol_cfg.get("enabled"):
         try:
             solana_tokens = await get_solana_new_tokens(sol_cfg)
-            symbols.extend((m, 0.0) for m in solana_tokens)
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("Solana scanner failed: %s", exc)
 
@@ -601,12 +602,18 @@ async def fetch_candidates(ctx: BotContext) -> None:
     batch_size = int(base_size * volatility_factor)
     async with QUEUE_LOCK:
         if not symbol_priority_queue:
-            symbol_priority_queue = build_priority_queue(symbols)
+            all_scores = symbols + [(s, 0.0) for s in onchain_tokens]
+            symbol_priority_queue = build_priority_queue(all_scores)
+        if onchain_tokens:
+            for sym in reversed(onchain_tokens):
+                symbol_priority_queue.appendleft(sym)
         if solana_tokens:
             for sym in reversed(solana_tokens):
                 symbol_priority_queue.appendleft(sym)
         if len(symbol_priority_queue) < batch_size:
-            symbol_priority_queue.extend(build_priority_queue(symbols))
+            symbol_priority_queue.extend(
+                build_priority_queue(symbols + [(s, 0.0) for s in onchain_tokens])
+            )
         ctx.current_batch = [
             symbol_priority_queue.popleft()
             for _ in range(min(batch_size, len(symbol_priority_queue)))
@@ -1308,11 +1315,10 @@ async def _main_impl() -> TelegramNotifier:
     config = load_config()
     from crypto_bot.utils.token_registry import TOKEN_MINTS, load_token_mints
     TOKEN_MINTS.update(await load_token_mints())
-    sol_syms = [fix_symbol(s) for s in config.get("solana_symbols", [])]
-    sol_syms = [f"{s}/USDC" if "/" not in s else s for s in sol_syms]
-    if sol_syms:
-        merged = list(dict.fromkeys((config.get("symbols") or []) + sol_syms))
-        config["symbols"] = merged
+    onchain_syms = [fix_symbol(s) for s in config.get("onchain_symbols", [])]
+    onchain_syms = [f"{s}/USDC" if "/" not in s else s for s in onchain_syms]
+    if onchain_syms:
+        config["onchain_symbols"] = onchain_syms
     global _LAST_CONFIG_MTIME
     try:
         _LAST_CONFIG_MTIME = CONFIG_PATH.stat().st_mtime

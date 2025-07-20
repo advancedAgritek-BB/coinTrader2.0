@@ -5,6 +5,13 @@ import pandas as pd
 import types
 import sys
 from crypto_bot.phase_runner import BotContext
+dummy = types.ModuleType("dummy")
+for mod in ["telegram", "gspread", "scipy", "scipy.stats", "redis"]:
+    sys.modules.setdefault(mod, dummy)
+oauth_module = types.ModuleType("oauth2client")
+oauth_module.service_account = types.SimpleNamespace(ServiceAccountCredentials=object)
+sys.modules.setdefault("oauth2client", oauth_module)
+sys.modules.setdefault("oauth2client.service_account", oauth_module.service_account)
 
 dummy = types.ModuleType("crypto_bot.utils.regime_pnl_tracker")
 dummy.log_trade = lambda *a, **k: None
@@ -30,7 +37,7 @@ def test_fetch_candidates_adapts(monkeypatch):
     ctx.exchange = object()
 
     async def fake_get_filtered_symbols(ex, cfg):
-        return [("BTC/USD", 1.0), ("ETH/USD", 0.9)]
+        return [("BTC/USD", 1.0), ("ETH/USD", 0.9)], []
 
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
