@@ -83,10 +83,9 @@ from crypto_bot.utils.pnl_logger import log_pnl
 from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 from crypto_bot.paper_wallet import PaperWallet
-from crypto_bot import grid_state
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.auto_optimizer import optimize_strategies
-from crypto_bot.utils.telemetry import telemetry, write_cycle_metrics
+from crypto_bot.utils.telemetry import write_cycle_metrics
 from crypto_bot.utils.correlation import compute_correlation_matrix
 from crypto_bot.utils.strategy_analytics import write_scores, write_stats
 from crypto_bot.monitoring import record_sol_scanner_metrics
@@ -116,8 +115,6 @@ logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
 
-# Queue tracking symbols evaluated across cycles
-SYMBOL_EVAL_QUEUE: deque[str] = deque()
 
 # Protects shared queues for future multi-tasking scenarios
 QUEUE_LOCK = asyncio.Lock()
