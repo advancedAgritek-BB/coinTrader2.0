@@ -181,8 +181,8 @@ def test_load_token_mints_error(monkeypatch, tmp_path):
     spec.loader.exec_module(tr)
     tr.TOKEN_MINTS.clear()
     monkeypatch.setattr(tr, "aiohttp", aiohttp_mod)
-    monkeypatch.setattr(tr, "CACHE_FILE", file, raising=False)
     file = mod.CACHE_FILE
+    monkeypatch.setattr(tr, "CACHE_FILE", file, raising=False)
     file.write_text(json.dumps({"OLD": "M"}))
 
     mapping = asyncio.run(mod.load_token_mints(force_refresh=True))
