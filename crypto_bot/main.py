@@ -1408,7 +1408,7 @@ async def _main_impl() -> TelegramNotifier:
             )
         # Continue startup even if ccxt is missing for testing environments
 
-    if config.get("scan_markets", False) and not config.get("symbols"):
+    if config.get("scan_markets", True) and not config.get("symbols"):
         attempt = 0
         delay = SYMBOL_SCAN_RETRY_DELAY
         discovered: list[str] | None = None

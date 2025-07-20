@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, ValidationError, validator
 class ScannerConfig(BaseModel):
     """Configuration for market scanning."""
 
-    scan_markets: bool = Field(False, description="Load all exchange pairs")
+    scan_markets: bool = Field(True, description="Load all exchange pairs")
     symbols: list[str] | None = Field(default_factory=list, description="Symbols to trade")
     excluded_symbols: list[str] = Field(default_factory=list, description="Symbols to skip")
     exchange_market_types: list[str] = Field(default_factory=lambda: ["spot"], description="Market types")
