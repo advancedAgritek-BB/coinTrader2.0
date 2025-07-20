@@ -39,7 +39,6 @@ REST_OHLCV_TIMEOUT = 90
 MAX_OHLCV_FAILURES = 10
 MAX_WS_LIMIT = 500
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
-UNSUPPORTED_SYMBOL = object()
 STATUS_UPDATES = True
 SEMA: asyncio.Semaphore | None = None
 
@@ -61,10 +60,16 @@ BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 # Quote currencies eligible for Coinbase fallback
 SUPPORTED_USD_QUOTES = {"USD", "USDC", "USDT"}
 
+# Known non-Solana base tickers that may be misclassified as mint addresses
+NON_SOLANA_BASES = {"ADA", "BNB", "AVAX", "APE"}
+
 
 def _is_valid_base_token(token: str) -> bool:
     """Return ``True`` if ``token`` is known or looks like a Solana mint."""
-    if token.upper() in TOKEN_MINTS:
+    token_upper = token.upper()
+    if token_upper in NON_SOLANA_BASES:
+        return False
+    if token_upper in TOKEN_MINTS:
         return True
     if not isinstance(token, str):
         return False
@@ -435,13 +440,7 @@ async def fetch_ohlcv_async(
                     symbol,
                     getattr(exchange, "id", "unknown"),
                 )
-                failed_symbols[symbol] = {
-                    "time": time.time(),
-                    "delay": MAX_RETRY_DELAY,
-                    "count": MAX_OHLCV_FAILURES,
-                    "disabled": True,
-                }
-                return UNSUPPORTED_SYMBOL
+                return []
 
         if not use_websocket and limit > 0:
             data_all: list = []
@@ -1371,8 +1370,6 @@ async def load_ohlcv_parallel(
     ex_id = getattr(exchange, "id", "unknown")
     mode = "websocket" if use_websocket else "REST"
     for sym, res in zip(symbols, results):
-        if res is UNSUPPORTED_SYMBOL:
-            continue
         if isinstance(res, asyncio.CancelledError):
             raise res
         if isinstance(res, asyncio.TimeoutError):
@@ -1748,6 +1745,15 @@ async def update_multi_tf_ohlcv_cache(
                     continue
 
             if not data:
+                continue
+
+            if not isinstance(data, list):
+                logger.error(
+                    "Invalid OHLCV data type for %s on %s (type: %s), skipping",
+                    sym,
+                    tf,
+                    type(data),
+                )
                 continue
 
             df_new = pd.DataFrame(

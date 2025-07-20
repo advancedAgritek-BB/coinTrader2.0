@@ -120,7 +120,7 @@ max_age_days: 90
 max_change_pct: 20
 max_concurrent_ohlcv: 2
 max_latency_ms: 500
-max_ohlcv_failures: 10
+max_ohlcv_failures: 3
 max_open_trades: 20
 max_parallel: 50
 max_slippage_pct: 0.2
