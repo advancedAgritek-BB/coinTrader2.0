@@ -494,7 +494,12 @@ async def initial_scan(
 ) -> None:
     """Populate OHLCV and regime caches before trading begins."""
 
-    symbols = config.get("symbols") or [config.get("symbol")]
+    symbols = (
+        (config.get("symbols") or [config.get("symbol")])
+        + config.get("onchain_symbols", [])
+    )
+    symbols = [s for s in symbols if s]
+    symbols = list(dict.fromkeys(symbols))
     if not symbols:
         return
 
@@ -548,13 +553,18 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     sf = ctx.config.setdefault("symbol_filter", {})
 
-    if not ctx.config.get("symbols") and not ctx.config.get("symbol"):
+    if (
+        not ctx.config.get("symbols")
+        and not ctx.config.get("onchain_symbols")
+        and not ctx.config.get("symbol")
+    ):
         ctx.config["symbol"] = "BTC/USDT"
     orig_min_volume = sf.get("min_volume_usd")
     orig_volume_pct = sf.get("volume_percentile")
 
     pump = is_market_pumping(
-        ctx.config.get("symbols") or [ctx.config.get("symbol")],
+        (ctx.config.get("symbols") or [ctx.config.get("symbol")])
+        + ctx.config.get("onchain_symbols", []),
         ctx.df_cache,
         ctx.config.get("timeframe", "1h"),
     )
@@ -564,6 +574,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     try:
         symbols, onchain_tokens = await get_filtered_symbols(ctx.exchange, ctx.config)
+        symbols, onchain_syms = await get_filtered_symbols(ctx.exchange, ctx.config)
     finally:
         if pump:
             sf["min_volume_usd"] = orig_min_volume
@@ -571,11 +582,14 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     ctx.timing["symbol_time"] = time.perf_counter() - t0
 
-    solana_tokens: list[str] = []
+    solana_tokens: list[str] = list(onchain_syms)
     sol_cfg = ctx.config.get("solana_scanner", {})
     if sol_cfg.get("enabled"):
         try:
             solana_tokens = await get_solana_new_tokens(sol_cfg)
+            new_tokens = await get_solana_new_tokens(sol_cfg)
+            solana_tokens.extend(new_tokens)
+            symbols.extend((m, 0.0) for m in new_tokens)
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("Solana scanner failed: %s", exc)
 
@@ -592,7 +606,10 @@ async def fetch_candidates(ctx: BotContext) -> None:
         volatility_factor = 1.0
     ctx.volatility_factor = volatility_factor
 
-    total_available = len(ctx.config.get("symbols") or [ctx.config.get("symbol")])
+    total_available = len(
+        (ctx.config.get("symbols") or [ctx.config.get("symbol")])
+        + ctx.config.get("onchain_symbols", [])
+    )
     ctx.timing["symbol_filter_ratio"] = (
         len(symbols) / total_available if total_available else 1.0
     )
@@ -1319,6 +1336,10 @@ async def _main_impl() -> TelegramNotifier:
     onchain_syms = [f"{s}/USDC" if "/" not in s else s for s in onchain_syms]
     if onchain_syms:
         config["onchain_symbols"] = onchain_syms
+    sol_syms = [fix_symbol(s) for s in config.get("solana_symbols", [])]
+    sol_syms = [f"{s}/USDC" if "/" not in s else s for s in sol_syms]
+    if sol_syms:
+        config["onchain_symbols"] = sol_syms
     global _LAST_CONFIG_MTIME
     try:
         _LAST_CONFIG_MTIME = CONFIG_PATH.stat().st_mtime
@@ -1417,7 +1438,13 @@ async def _main_impl() -> TelegramNotifier:
             )
         # Continue startup even if ccxt is missing for testing environments
 
-    if config.get("scan_markets", True) and not config.get("symbols"):
+    if (
+        config.get("scan_markets", True)
+        and not config.get("symbols")
+        and not config.get("onchain_symbols")
+    if config.get("scan_markets", True) and (
+        not config.get("symbols") or config.get("mode") == "auto"
+    ):
         attempt = 0
         delay = SYMBOL_SCAN_RETRY_DELAY
         discovered: list[str] | None = None

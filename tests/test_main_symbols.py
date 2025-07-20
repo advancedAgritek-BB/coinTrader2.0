@@ -26,6 +26,7 @@ def test_get_filtered_symbols_fallback(monkeypatch, caplog):
     config = {"symbol": "BTC/USD"}
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     assert result[0] == [("BTC/USD", 0.0)]
+    assert result == ([("BTC/USD", 0.0)], [])
     assert calls == [config.get("symbols", [config.get("symbol")]), ["BTC/USD"]]
     assert any("falling back" in r.getMessage() for r in caplog.records)
 
@@ -44,6 +45,7 @@ def test_get_filtered_symbols_fallback_excluded(monkeypatch, caplog):
     config = {"symbol": "BTC/USD", "excluded_symbols": ["BTC/USD"]}
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     assert result[0] == []
+    assert result == ([], [])
     assert any("excluded" in r.getMessage() for r in caplog.records)
     assert any("No symbols met volume/spread requirements" in r.getMessage() for r in caplog.records)
     assert symbol_utils._cached_symbols is None
@@ -67,6 +69,7 @@ def test_get_filtered_symbols_fallback_volume_fail(monkeypatch, caplog):
     config = {"symbol": "BTC/USD"}
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     assert result[0] == []
+    assert result == ([], [])
     assert calls == [config.get("symbols", [config.get("symbol")]), ["BTC/USD"]]
     assert any("volume requirements" in r.getMessage() for r in caplog.records)
     assert any("No symbols met volume/spread requirements" in r.getMessage() for r in caplog.records)
@@ -100,12 +103,15 @@ def test_get_filtered_symbols_caching(monkeypatch):
 
     assert result1[0] == [("ETH/USD", 1.0)]
     assert result2[0] == [("ETH/USD", 1.0)]
+    assert result1 == ([("ETH/USD", 1.0)], [])
+    assert result2 == ([("ETH/USD", 1.0)], [])
     assert len(calls) == 1
 
     symbol_utils._last_refresh -= 61
 
     result3 = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     assert result3[0] == [("ETH/USD", 1.0)]
+    assert result3 == ([("ETH/USD", 1.0)], [])
     assert len(calls) == 2
 
 
@@ -121,6 +127,7 @@ def test_get_filtered_symbols_basic(monkeypatch):
 
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     assert result[0] == [("ETH/USD", 0.5)]
+    assert result == ([("ETH/USD", 0.5)], [])
 
 
 def test_get_filtered_symbols_invalid_usdc_token(monkeypatch):
@@ -160,6 +167,7 @@ def test_get_filtered_symbols_invalid_usdc(monkeypatch, caplog):
 
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     assert result[0] == [("ETH/USD", 1.0)]
+    assert result == ([("ETH/USD", 1.0)], [])
     assert calls == [["ETH/USD"]]
     assert any("invalid USDC" in r.getMessage() for r in caplog.records)
 
@@ -176,13 +184,14 @@ def test_get_filtered_symbols_skip(monkeypatch):
 
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     assert result[0] == [("BTC/USD", 0.0), ("ETH/USD", 0.0)]
+    assert result == ([("BTC/USD", 0.0), ("ETH/USD", 0.0)], [])
 
 
 def test_get_filtered_symbols_valid_sol(monkeypatch, caplog):
     caplog.set_level(logging.INFO)
 
     monkeypatch.setattr(
-        market_loader,
+        symbol_utils,
         "TOKEN_MINTS",
         {"SOL": "So11111111111111111111111111111111111111112"},
         raising=False,
@@ -202,4 +211,31 @@ def test_get_filtered_symbols_valid_sol(monkeypatch, caplog):
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
 
     assert result[0] == [("SOL/USDC", 1.0)]
+    assert result == ([("SOL/USDC", 1.0)], [])
     assert not any("Dropping invalid USDC pair" in r.getMessage() for r in caplog.records)
+
+
+def test_get_filtered_symbols_onchain_pair(monkeypatch):
+    monkeypatch.setattr(
+        symbol_utils,
+        "TOKEN_MINTS",
+        {"AAA": "mint"},
+        raising=False,
+    )
+    monkeypatch.setattr(symbol_utils, "_is_valid_base_token", lambda t: True)
+
+    async def fake_filter_symbols(_ex, syms, _cfg):
+        return [(s, 1.0) for s in syms]
+
+    class DummyEx:
+        markets = {"ETH/USD": {}}
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    config = {"symbols": ["AAA/USDC", "ETH/USD"]}
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+
+    result = asyncio.run(symbol_utils.get_filtered_symbols(DummyEx(), config))
+
+    assert result == ([("ETH/USD", 1.0)], ["AAA/USDC"])

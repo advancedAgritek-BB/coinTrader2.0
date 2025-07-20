@@ -38,6 +38,7 @@ def test_fetch_candidates_adapts(monkeypatch):
 
     async def fake_get_filtered_symbols(ex, cfg):
         return [("BTC/USD", 1.0), ("ETH/USD", 0.9)], []
+        return ([("BTC/USD", 1.0), ("ETH/USD", 0.9)], [])
 
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
