@@ -832,6 +832,14 @@ async def update_caches(ctx: BotContext) -> None:
                 if status_updates and ctx.notifier:
                     ctx.notifier.notify(msg)
 
+    if ctx.config.get("use_websocket", True):
+        timeframe = ctx.config.get("timeframe", "1h")
+        try:
+            # Subscribe to WS for live candles
+            await ctx.exchange.watch_ohlcv(batch, timeframe)
+        except Exception as exc:  # pragma: no cover - network
+            logger.warning("WS subscribe failed: %s", exc)
+
     ctx.timing["ohlcv_fetch_latency"] = time.perf_counter() - start
 
 
