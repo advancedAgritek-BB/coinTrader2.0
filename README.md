@@ -794,7 +794,7 @@ wait for scanning to complete before trading begins.
 scan_markets: true    # default
 scan_in_background: true
 symbols: []            # automatically populated
-onchain_symbols: ["SOL/USDC", "BONK/USDC"]    # tickers auto-convert via token list
+onchain_symbols: ["SOL/USDC", "BONK/USDC", "AI16Z/USDC"]    # tickers auto-convert via token list
                                                 # base must be mint if unknown
 excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
@@ -851,7 +851,7 @@ to use the provided list without any filtering:
 
 ```yaml
 symbol_filter:
-  min_volume_usd: 100
+  min_volume_usd: 500
   volume_percentile: 5           # keep pairs above this volume percentile
   change_pct_percentile: 5       # require 24h change in the top movers
   max_spread_pct: 4              # allow spreads up to 4%
