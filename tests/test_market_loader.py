@@ -1009,12 +1009,7 @@ def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
         def __init__(self, *_a, **_k):
             pass
 
-    class DummyRM:
-        def __init__(self, *_a, **_k):
-            raise StopLoop
-
     monkeypatch.setattr(main, "RiskConfig", DummyRC)
-    monkeypatch.setattr(main, "RiskManager", DummyRM)
     monkeypatch.setattr(main.asyncio, "sleep", lambda *_a: None)
     monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_ATTEMPTS", 2)
     monkeypatch.setattr(main, "SYMBOL_SCAN_RETRY_DELAY", 0)
@@ -1037,6 +1032,66 @@ def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
     assert "symbols" not in captured["cfg"]
     assert any("aborting startup" in r.getMessage() for r in caplog.records)
     assert calls["loader"] == 2
+
+
+def test_main_uses_pair_cache_when_scan_none(monkeypatch, caplog):
+    import sys, types
+
+    monkeypatch.setitem(sys.modules, "ccxt", types.SimpleNamespace())
+    import crypto_bot.main as main
+
+    caplog.set_level(logging.WARNING)
+
+    async def fake_loader(exchange, exclude=None, config=None):
+        return None
+
+    cfg = {"symbol": "BTC/USD", "scan_markets": True}
+
+    monkeypatch.setattr(main, "load_config", lambda: cfg)
+    monkeypatch.setattr(main, "load_kraken_symbols", fake_loader)
+    monkeypatch.setattr(main, "load_liquid_pairs", lambda: ["ETH/USD"])
+    monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
+    monkeypatch.setattr(main, "dotenv_values", lambda path: {})
+    monkeypatch.setattr(main, "load_or_create", lambda: {})
+    monkeypatch.setattr(main, "send_test_message", lambda *_a, **_k: True)
+    monkeypatch.setattr(main, "log_balance", lambda *_a, **_k: None)
+
+    class DummyRC:
+        def __init__(self, *_a, **_k):
+            pass
+
+    monkeypatch.setattr(main, "RiskConfig", DummyRC)
+    monkeypatch.setattr(main.asyncio, "sleep", lambda *_a: None)
+    monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_ATTEMPTS", 1)
+    monkeypatch.setattr(main, "SYMBOL_SCAN_RETRY_DELAY", 0)
+    monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_DELAY", 0)
+
+    captured = {}
+
+    class DummyExchange:
+        def fetch_balance(self):
+            return {"USDT": {"free": 0}}
+
+    def fake_get_exchange(config):
+        captured["cfg"] = config
+        return DummyExchange(), None
+
+    monkeypatch.setattr(main, "get_exchange", fake_get_exchange)
+
+    calls = {}
+
+    class DummyRM:
+        def __init__(self, *_a, **_k):
+            calls["rm"] = True
+            raise StopLoop
+
+    monkeypatch.setattr(main, "RiskManager", DummyRM)
+
+    asyncio.run(main.main())
+
+    assert captured["cfg"]["symbols"] == ["ETH/USD"]
+    assert any("cached pairs" in r.getMessage() for r in caplog.records)
+    assert calls.get("rm") is True
 
 
 class SlowExchange:
