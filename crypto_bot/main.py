@@ -2,11 +2,10 @@ import os
 import sys
 import asyncio
 import contextlib
-import json
 import time
 from pathlib import Path
 from datetime import datetime
-from collections import deque, OrderedDict, defaultdict
+from collections import deque, OrderedDict
 from dataclasses import dataclass, field
 import inspect
 
@@ -263,19 +262,18 @@ async def fetch_and_log_balance(exchange, paper_wallet, config):
     return latest_balance
 
 
-async def refresh_balance(ctx: BotContext) -> None:
-    """Update context balance from the exchange or paper wallet."""
-    latest = await fetch_balance(ctx.exchange, ctx.paper_wallet, ctx.config)
+async def refresh_balance(ctx: BotContext) -> float:
+    """Update ``ctx.balance`` from the exchange or paper wallet."""
+    latest = await fetch_and_log_balance(
+        ctx.exchange,
+        ctx.paper_wallet,
+        ctx.config,
+    )
     ctx.balance = notify_balance_change(
         ctx.notifier,
         ctx.balance,
         float(latest),
         ctx.config.get("telegram", {}).get("balance_updates", False),
-    )
-async def refresh_balance(ctx: BotContext) -> float:
-    """Update ctx.balance from the exchange or paper wallet."""
-    ctx.balance = await fetch_and_log_balance(
-        ctx.exchange, ctx.paper_wallet, ctx.config
     )
     return ctx.balance
 
@@ -1361,7 +1359,6 @@ async def _main_impl() -> TelegramNotifier:
 
     user = load_or_create()
 
-    trade_updates = config.get("telegram", {}).get("trade_updates", True)
     status_updates = config.get("telegram", {}).get("status_updates", True)
     balance_updates = config.get("telegram", {}).get("balance_updates", False)
 
@@ -1372,7 +1369,6 @@ async def _main_impl() -> TelegramNotifier:
         tg_cfg["chat_id"] = user["telegram_chat_id"]
     if os.getenv("TELE_CHAT_ADMINS"):
         tg_cfg["chat_admins"] = os.getenv("TELE_CHAT_ADMINS")
-    trade_updates = tg_cfg.get("trade_updates", True)
     status_updates = tg_cfg.get("status_updates", status_updates)
     balance_updates = tg_cfg.get("balance_updates", balance_updates)
 
