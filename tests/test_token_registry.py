@@ -106,7 +106,6 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
         def __init__(self, d):
             self.d = d
             self.url = None
-            self.body = None
 
         async def __aenter__(self):
             return self
@@ -114,9 +113,8 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
         async def __aexit__(self, exc_type, exc, tb):
             pass
 
-        def post(self, url, json=None, timeout=10):
+        def get(self, url, timeout=10):
             self.url = url
-            self.body = json
             return DummyResp(self.d)
 
     session = DummySession(data)
@@ -124,13 +122,14 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
 
     mod = _load_module(monkeypatch, tmp_path)
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
-    monkeypatch.setenv("HELIUS_API_KEY", "KEY")
-    monkeypatch.setattr(mod, "HELIUS_TOKEN_API", "http://helius")
+    monkeypatch.setenv("HELIUS_KEY", "KEY")
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
     assert mapping == {"AAA": "mmm"}
-    assert session.url == "http://helius?api-key=KEY"
-    assert session.body == {"symbols": ["AAA"]}
+    assert (
+        session.url
+        == "https://api.helius.xyz/v0/tokens/metadata?symbols=AAA&api-key=KEY"
+    )
 
 
 def test_load_token_mints(monkeypatch, tmp_path):

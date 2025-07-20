@@ -15,7 +15,9 @@ TOKEN_REGISTRY_URL = (
 )
 
 # Primary token list from Jupiter API
-JUPITER_TOKEN_URL = "https://station.jup.ag/api-v6/tokens?tags=all"
+# ``station.jup.ag`` now redirects to ``dev.jup.ag`` which returns ``404``.
+# The latest stable token list is hosted at ``https://token.jup.ag/all``.
+JUPITER_TOKEN_URL = "https://token.jup.ag/all"
 
 # Batch metadata endpoint for resolving unknown symbols
 HELIUS_TOKEN_API = "https://api.helius.xyz/v0/tokens/metadata"
