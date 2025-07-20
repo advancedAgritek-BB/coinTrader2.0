@@ -236,6 +236,72 @@ def test_usdc_min_volume_halved(monkeypatch):
     assert result == [("LOW/USDC", 0.3)]
 
 
+class DummyOnchainEx:
+    has = {}
+    markets_by_id = {}
+    markets = {}
+
+
+def test_onchain_volume_below_threshold(monkeypatch):
+    async def no_fetch(*_a, **_k):
+        return {}
+    monkeypatch.setattr(sp, "_refresh_tickers", no_fetch)
+
+    async def fake_gecko(*_a, **_k):
+        return [], 500_000.0, 0.0
+
+    from crypto_bot.utils import token_registry
+    monkeypatch.setitem(token_registry.TOKEN_MINTS, "AAA", "mint")
+    monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
+
+    res = asyncio.run(
+        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 1_000_000})
+    )
+
+    assert res == ([], [])
+
+
+def test_onchain_volume_above_threshold(monkeypatch):
+    async def no_fetch(*_a, **_k):
+        return {}
+    monkeypatch.setattr(sp, "_refresh_tickers", no_fetch)
+
+    async def fake_gecko(*_a, **_k):
+        return [], 2_000_000.0, 0.0
+
+    from crypto_bot.utils import token_registry
+    monkeypatch.setitem(token_registry.TOKEN_MINTS, "AAA", "mint")
+    monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
+
+    res = asyncio.run(
+        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 1_000_000})
+    )
+
+    assert res == ([], [("AAA/USDC", 2.0)])
+def test_blacklisted_base_omitted(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+    import crypto_bot.utils.token_registry as tr
+
+    tr.TOKEN_MINTS.clear()
+    tr.TOKEN_MINTS["SOL"] = "So11111111111111111111111111111111111111112"
+
+    async def fake_gecko(*_a, **_k):
+        return [], 1000.0, 0.0
+
+    monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
+
+    class DummyEx:
+        has = {}
+        markets_by_id = {}
+
+    result = asyncio.run(
+        sp.filter_symbols(DummyEx(), ["SOL/USDC", "BNB/USDC"], CONFIG)
+    )
+
+    assert result == ([], [("SOL/USDC", 1.0)])
+    assert not any("No mint" in r.getMessage() for r in caplog.records)
+
+
 class WatchTickersExchange(DummyExchange):
     def __init__(self):
         self.has = {"watchTickers": True}
@@ -1294,3 +1360,18 @@ def test_refresh_tickers_error_result(monkeypatch, caplog):
     assert result == {}
     assert any("Ticker API errors" in r.getMessage() for r in caplog.records)
     assert "ETH/USD" not in sp.ticker_cache
+
+
+def test_filter_symbols_missing_mint_logs_debug(monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG)
+    sp.logger.setLevel(logging.DEBUG)
+
+    monkeypatch.setattr(sp, "_refresh_tickers", lambda *_a, **_k: {})
+
+    result = asyncio.run(sp.filter_symbols(DummyExchange(), ["AAA/USDC"], CONFIG))
+
+    assert result == ([], [])
+    assert any(
+        r.levelno == logging.DEBUG and "No mint for AAA/USDC; dropping" in r.getMessage()
+        for r in caplog.records
+    )

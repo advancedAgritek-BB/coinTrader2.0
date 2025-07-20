@@ -86,3 +86,36 @@ def set_token_mints(mapping: dict[str, str]) -> None:
     TOKEN_MINTS.clear()
     TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
     _write_cache()
+
+
+async def get_mint_from_gecko(base: str) -> str | None:
+    """Return Solana mint address for ``base`` using GeckoTerminal.
+
+    ``None`` is returned if the request fails or no token matches the
+    given symbol.
+    """
+
+    from urllib.parse import quote_plus
+
+    url = (
+        "https://api.geckoterminal.com/api/v2/search/tokens"
+        f"?query={quote_plus(str(base))}&network=solana"
+    )
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+    except Exception as exc:  # pragma: no cover - network failures
+        logger.error("Gecko lookup failed for %s: %s", base, exc)
+        return None
+
+    items = data.get("data") if isinstance(data, dict) else []
+    if not isinstance(items, list) or not items:
+        return None
+
+    item = items[0]
+    attrs = item.get("attributes", {}) if isinstance(item, dict) else {}
+    mint = attrs.get("address") or item.get("id")
+    return str(mint) if isinstance(mint, str) else None
