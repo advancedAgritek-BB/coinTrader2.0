@@ -404,7 +404,7 @@ class DummyIncExchange:
     has = {"fetchOHLCV": True}
 
     def __init__(self):
-        self.data = [[i] * 6 for i in range(200)]
+        self.data = [[i * 3600] + [i] * 5 for i in range(200)]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
         rows = [r for r in self.data if since is None or r[0] > since]
@@ -427,7 +427,7 @@ def test_update_ohlcv_cache_appends():
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=2, max_concurrent=2)
     )
     assert len(cache["BTC/USD"]) == 200
-    ex.data.extend([[i] * 6 for i in range(200, 301)])
+    ex.data.extend([[i * 3600] + [i] * 5 for i in range(200, 301)])
     cache = asyncio.run(
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2)
     )
@@ -443,7 +443,7 @@ def test_update_ohlcv_cache_fallback_full_history():
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=3, max_concurrent=2)
     )
     assert len(cache["BTC/USD"]) == 200
-    ex.data.extend([[i] * 6 for i in range(200, 301)])
+    ex.data.extend([[i * 3600] + [i] * 5 for i in range(200, 301)])
     cache = asyncio.run(
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2)
     )
@@ -454,7 +454,7 @@ class DummyLargeExchange:
     has = {"fetchOHLCV": True}
 
     def __init__(self):
-        self.data = [[i] * 6 for i in range(200)]
+        self.data = [[i * 3600] + [i] * 5 for i in range(200)]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
         rows = [r for r in self.data if since is None or r[0] > since]
@@ -549,14 +549,14 @@ class RetryIncompleteExchange:
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         self.fetch_calls += 1
         if self.fetch_calls == 1:
-            return [[1] * 6 for _ in range(4)]
-        return [[i] * 6 for i in range(limit)]
+            return [[i * 3600] + [1] * 5 for i in range(4)]
+        return [[i * 3600] + [i] * 5 for i in range(limit)]
 
 
 class AlwaysIncompleteExchange(RetryIncompleteExchange):
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         self.fetch_calls += 1
-        return [[1] * 6 for _ in range(4)]
+        return [[i * 3600] + [1] * 5 for i in range(4)]
 
 
 def test_update_ohlcv_cache_retry_incomplete_ws():
@@ -600,7 +600,7 @@ class PartialHistoryExchange:
     has = {"fetchOHLCV": True}
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
-        return [[i] * 6 for i in range(142)]
+        return [[i * 3600] + [i] * 5 for i in range(142)]
 
 
 def test_min_history_fraction_allows_partial_history():
@@ -622,6 +622,41 @@ def test_min_history_fraction_allows_partial_history():
         )
     )
     assert len(cache["BTC/USD"]) == 142
+    market_loader._last_snapshot_time = 0
+
+
+class GapExchange:
+    has = {"fetchOHLCV": True}
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        return [
+            [0, 1, 1, 1, 1, 10],
+            [3600, 2, 2, 2, 2, 20],
+            [10800, 3, 3, 3, 3, 30],
+        ]
+
+
+def test_update_ohlcv_cache_ffill_missing_intervals():
+    from crypto_bot.utils import market_loader
+
+    market_loader._last_snapshot_time = time.time()
+    ex = GapExchange()
+    cache: dict[str, pd.DataFrame] = {}
+    config = {"min_history_fraction": 0}
+
+    cache = asyncio.run(
+        update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            config=config,
+            max_concurrent=1,
+        )
+    )
+    df = cache["BTC/USD"]
+    assert list(df["timestamp"]) == [0, 3600, 7200, 10800]
+    assert df.loc[2, "open"] == df.loc[1, "open"]
     market_loader._last_snapshot_time = 0
 
 
