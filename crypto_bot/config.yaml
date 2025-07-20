@@ -120,7 +120,7 @@ max_age_days: 90
 max_change_pct: 20
 max_concurrent_ohlcv: 2
 max_latency_ms: 500
-max_ohlcv_failures: 5
+max_ohlcv_failures: 10
 max_open_trades: 20
 max_parallel: 50
 max_slippage_pct: 0.2
@@ -409,7 +409,7 @@ trend:
 twap_enabled: true
 twap_interval_seconds: 5
 twap_slices: 6
-use_websocket: true
+use_websocket: false
 volatility_filter:
   max_funding_rate: 0.1
   min_atr_pct: 0.0001
