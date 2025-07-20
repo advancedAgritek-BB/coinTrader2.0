@@ -8,6 +8,10 @@ import os
 from typing import Mapping, List
 
 import aiohttp
+import ccxt.async_support as ccxt
+
+from crypto_bot.utils.solana_scanner import search_geckoterminal_token
+from crypto_bot.utils import symbol_scoring
 
 logger = logging.getLogger(__name__)
 
@@ -51,4 +55,55 @@ async def get_solana_new_tokens(cfg: Mapping[str, object]) -> List[str]:
                 results.append(mint)
     if limit:
         results = results[:limit]
-    return results
+
+    if not results:
+        return []
+
+    search_results = await asyncio.gather(
+        *[search_geckoterminal_token(m) for m in results]
+    )
+
+    resolved: list[tuple[str, float]] = []
+    seen: set[str] = set()
+    for res in search_results:
+        if not res:
+            continue
+        mint, vol = res
+        sym = f"{mint}/USDC"
+        if sym not in seen:
+            seen.add(sym)
+            resolved.append((sym, vol))
+
+    if not resolved:
+        return []
+
+    min_score = float(cfg.get("min_symbol_score", 0.0))
+    ex_name = str(cfg.get("exchange", "kraken")).lower()
+    exchange_cls = getattr(ccxt, ex_name)
+    exchange = exchange_cls({"enableRateLimit": True})
+
+    try:
+        scores = await asyncio.gather(
+            *[
+                symbol_scoring.score_symbol(
+                    exchange, sym, vol, 0.0, 0.0, 1.0, cfg
+                )
+                for sym, vol in resolved
+            ]
+        )
+    finally:
+        close = getattr(exchange, "close", None)
+        if close:
+            try:
+                if asyncio.iscoroutinefunction(close):
+                    await close()
+                else:
+                    close()
+            except Exception:  # pragma: no cover - best effort
+                pass
+
+    scored = [
+        (sym, score) for (sym, _), score in zip(resolved, scores) if score >= min_score
+    ]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [sym for sym, _ in scored]
