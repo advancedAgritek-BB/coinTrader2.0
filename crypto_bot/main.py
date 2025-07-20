@@ -748,7 +748,6 @@ async def update_caches(ctx: BotContext) -> None:
                 ctx.config,
                 limit=limit,
                 use_websocket=ctx.config.get("use_websocket", False),
-                force_websocket_history=ctx.config.get("force_websocket_history", False),
                 force_websocket_history=ctx.config.get(
                     "force_websocket_history", False
                 ),
@@ -769,7 +768,6 @@ async def update_caches(ctx: BotContext) -> None:
                 ctx.config,
                 limit=limit,
                 use_websocket=False,
-                force_websocket_history=ctx.config.get("force_websocket_history", False),
                 force_websocket_history=ctx.config.get(
                     "force_websocket_history", False
                 ),
@@ -789,7 +787,6 @@ async def update_caches(ctx: BotContext) -> None:
                 ctx.config,
                 limit=limit,
                 use_websocket=ctx.config.get("use_websocket", False),
-                force_websocket_history=ctx.config.get("force_websocket_history", False),
                 force_websocket_history=ctx.config.get(
                     "force_websocket_history", False
                 ),
