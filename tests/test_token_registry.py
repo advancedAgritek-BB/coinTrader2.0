@@ -219,6 +219,9 @@ def test_get_mint_from_gecko(monkeypatch):
     spec = importlib.util.spec_from_file_location(
         "crypto_bot.utils.token_registry",
         pathlib.Path(__file__).resolve().parents[1]
+        / "crypto_bot"
+        / "utils"
+        / "token_registry.py",
         / "crypto_bot" / "utils" / "token_registry.py",
     )
     tr = importlib.util.module_from_spec(spec)
