@@ -21,8 +21,6 @@ _cached_symbols: tuple[list[tuple[str, float]], list[str]] | None = None
 _last_refresh: float = 0.0
 
 
-async def get_filtered_symbols(exchange, config) -> tuple[list, list]:
-    """Return filtered CEX symbols and onchain tokens.
 async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]], list[str]]:
     """Return CEX symbols plus onchain symbols.
 
@@ -38,14 +36,13 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         _cached_symbols is not None
         and now - _last_refresh < refresh_m * 60
     ):
-        return _cached_symbols, list(config.get("onchain_symbols", []))
+        return _cached_symbols
 
     if config.get("skip_symbol_filters"):
         syms = config.get("symbols", [config.get("symbol")])
         result = [(s, 0.0) for s in syms]
         _cached_symbols = (result, [])
         _last_refresh = now
-        return result, list(config.get("onchain_symbols", []))
         return result, []
 
     symbols = config.get("symbols", [config.get("symbol")])
@@ -92,7 +89,6 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
                 skipped_main,
             )
             return [], onchain
-            return [], onchain_syms
 
         skipped_before = telemetry.snapshot().get("scan.symbols_skipped", 0)
         if asyncio.iscoroutinefunction(filter_symbols):
@@ -111,7 +107,6 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
                 skipped_fb,
             )
             return [], onchain
-            return [], onchain_syms
 
         logger.warning(
             "No symbols passed filters, falling back to %s",
@@ -131,5 +126,4 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         _cached_symbols = (scored, onchain_syms)
         _last_refresh = now
 
-    return scored, onchain
     return scored, onchain_syms

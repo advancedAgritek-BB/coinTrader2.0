@@ -573,7 +573,6 @@ async def fetch_candidates(ctx: BotContext) -> None:
         sf["volume_percentile"] = 5
 
     try:
-        symbols, onchain_tokens = await get_filtered_symbols(ctx.exchange, ctx.config)
         symbols, onchain_syms = await get_filtered_symbols(ctx.exchange, ctx.config)
     finally:
         if pump:
@@ -586,7 +585,6 @@ async def fetch_candidates(ctx: BotContext) -> None:
     sol_cfg = ctx.config.get("solana_scanner", {})
     if sol_cfg.get("enabled"):
         try:
-            solana_tokens = await get_solana_new_tokens(sol_cfg)
             new_tokens = await get_solana_new_tokens(sol_cfg)
             solana_tokens.extend(new_tokens)
             symbols.extend((m, 0.0) for m in new_tokens)
@@ -619,17 +617,17 @@ async def fetch_candidates(ctx: BotContext) -> None:
     batch_size = int(base_size * volatility_factor)
     async with QUEUE_LOCK:
         if not symbol_priority_queue:
-            all_scores = symbols + [(s, 0.0) for s in onchain_tokens]
+            all_scores = symbols + [(s, 0.0) for s in onchain_syms]
             symbol_priority_queue = build_priority_queue(all_scores)
-        if onchain_tokens:
-            for sym in reversed(onchain_tokens):
+        if onchain_syms:
+            for sym in reversed(onchain_syms):
                 symbol_priority_queue.appendleft(sym)
         if solana_tokens:
             for sym in reversed(solana_tokens):
                 symbol_priority_queue.appendleft(sym)
         if len(symbol_priority_queue) < batch_size:
             symbol_priority_queue.extend(
-                build_priority_queue(symbols + [(s, 0.0) for s in onchain_tokens])
+                build_priority_queue(symbols + [(s, 0.0) for s in onchain_syms])
             )
         ctx.current_batch = [
             symbol_priority_queue.popleft()
@@ -1442,8 +1440,6 @@ async def _main_impl() -> TelegramNotifier:
         config.get("scan_markets", True)
         and not config.get("symbols")
         and not config.get("onchain_symbols")
-    if config.get("scan_markets", True) and (
-        not config.get("symbols") or config.get("mode") == "auto"
     ):
         attempt = 0
         delay = SYMBOL_SCAN_RETRY_DELAY

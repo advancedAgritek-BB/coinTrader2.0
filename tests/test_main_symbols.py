@@ -80,9 +80,6 @@ def test_get_filtered_symbols_fallback_volume_fail(monkeypatch, caplog):
 def test_get_filtered_symbols_caching(monkeypatch):
     calls = []
 
-    async def fake_to_thread(fn, *a):
-        return fn(*a)
-
     async def fake_filter_symbols(ex, syms, cfg):
         calls.append(True)
         return [("ETH/USD", 1.0)]
