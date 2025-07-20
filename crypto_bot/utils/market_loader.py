@@ -25,6 +25,8 @@ _last_snapshot_time = 0
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 failed_symbols: Dict[str, Dict[str, Any]] = {}
+# Track WebSocket OHLCV failures per symbol
+WS_FAIL_COUNTS: Dict[str, int] = {}
 RETRY_DELAY = 300
 MAX_RETRY_DELAY = 3600
 # Default timeout when fetching OHLCV data
@@ -513,6 +515,7 @@ async def fetch_ohlcv_async(
                     data = await _call_with_retry(
                         exchange.watch_ohlcv, timeout=WS_OHLCV_TIMEOUT, **kwargs
                     )
+                    WS_FAIL_COUNTS[symbol] = 0
                     break
                 except asyncio.CancelledError:
                     if hasattr(exchange, "close"):
@@ -524,6 +527,20 @@ async def fetch_ohlcv_async(
                                 await asyncio.to_thread(exchange.close)
                     raise
                 except Exception as exc:
+                    WS_FAIL_COUNTS[symbol] = WS_FAIL_COUNTS.get(symbol, 0) + 1
+                    if WS_FAIL_COUNTS[symbol] > 2:
+                        logger.warning(
+                            "WS OHLCV failed: %s - falling back to REST", exc
+                        )
+                        return await fetch_ohlcv_async(
+                            exchange,
+                            symbol,
+                            timeframe=timeframe,
+                            limit=limit,
+                            since=since,
+                            use_websocket=False,
+                            force_websocket_history=force_websocket_history,
+                        )
                     if attempt >= 2:
                         raise
                     logger.warning(
