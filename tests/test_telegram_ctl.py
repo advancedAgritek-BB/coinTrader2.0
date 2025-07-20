@@ -81,6 +81,11 @@ class DummyBotController:
         self.calls.append("reload_config")
         self.state["reload"] = True
 
+    async def close_all_positions(self):
+        self.calls.append("close_all_positions")
+        self.state["liquidate_all"] = True
+        return "Liquidation scheduled"
+
 
 @pytest.mark.skipif(telegram_ctl is None, reason="telegram_ctl module missing")
 class TestTelegramCtl:
@@ -169,6 +174,14 @@ class TestTelegramCtl:
         main.maybe_reload_config(self.controller.state, config)
         assert not self.controller.state.get("reload")
         assert load_calls
+
+    @pytest.mark.asyncio
+    async def test_panic_sell_cmd_sets_flag_and_replies(self):
+        update = DummyUpdate()
+        await self.tg.panic_sell_cmd(update, DummyContext())
+        assert "close_all_positions" in self.controller.calls
+        assert self.controller.state.get("liquidate_all") is True
+        assert update.message.text == "Liquidation scheduled"
 from crypto_bot.telegram_ctl import status_loop
 from crypto_bot.utils.telegram import TelegramNotifier
 

@@ -153,6 +153,11 @@ class BotController:
         self.state["reload"] = True
         return "Config reload scheduled"
 
+    async def close_all_positions(self) -> str:
+        """Trigger liquidation of all open positions."""
+        self.state["liquidate_all"] = True
+        return "Liquidation scheduled"
+
 
 def _reply_or_edit(update: Update, text: str, reply_markup: Any | None = None) -> None:
     """Reply to message or edit callback text."""
@@ -218,7 +223,10 @@ async def panic_sell_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """Close all open positions immediately."""
     if not is_admin(update, context.bot_data.get("admin_id")):
         return
-    text = await context.bot_data["controller"].close_all_positions()
+    try:
+        text = await context.bot_data["controller"].close_all_positions()
+    except Exception as exc:  # pragma: no cover - unexpected
+        text = f"Error: {exc}"
     await update.message.reply_text(text)
 
 
