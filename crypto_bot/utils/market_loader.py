@@ -653,6 +653,23 @@ async def fetch_ohlcv_async(
                             data = data_r
                     except Exception:
                         pass
+                if (
+                    len(data) < expected
+                    and since is not None
+                    and hasattr(exchange, "fetch_trades")
+                ):
+                    try:
+                        trades_data = await fetch_ohlcv_from_trades(
+                            exchange,
+                            symbol,
+                            timeframe,
+                            since,
+                            limit,
+                        )
+                        if len(trades_data) > len(data):
+                            data = trades_data
+                    except Exception:
+                        pass
             return data
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
             params_f = inspect.signature(exchange.fetch_ohlcv).parameters
@@ -699,6 +716,23 @@ async def fetch_ohlcv_async(
                         raise
                     if len(data_r) > len(data):
                         data = data_r
+                except Exception:
+                    pass
+            if (
+                len(data) < expected
+                and since is not None
+                and hasattr(exchange, "fetch_trades")
+            ):
+                try:
+                    trades_data = await fetch_ohlcv_from_trades(
+                        exchange,
+                        symbol,
+                        timeframe,
+                        since,
+                        limit,
+                    )
+                    if len(trades_data) > len(data):
+                        data = trades_data
                 except Exception:
                     pass
             return data
@@ -750,6 +784,23 @@ async def fetch_ohlcv_async(
                         data = data_r
                 except Exception:
                     pass
+        if (
+            len(data) < expected
+            and since is not None
+            and hasattr(exchange, "fetch_trades")
+        ):
+            try:
+                trades_data = await fetch_ohlcv_from_trades(
+                    exchange,
+                    symbol,
+                    timeframe,
+                    since,
+                    limit,
+                )
+                if len(trades_data) > len(data):
+                    data = trades_data
+            except Exception:
+                pass
         return data
     except asyncio.TimeoutError as exc:
         ex_id = getattr(exchange, "id", "unknown")
@@ -1118,6 +1169,77 @@ async def fetch_dex_ohlcv(
     if isinstance(data, Exception):
         return None
     return data
+
+
+async def fetch_ohlcv_from_trades(
+    exchange,
+    symbol: str,
+    timeframe: str = "1h",
+    since: int | None = None,
+    limit: int = 100,
+) -> list:
+    """Aggregate trades into OHLCV format."""
+
+    if hasattr(exchange, "has") and not exchange.has.get("fetchTrades"):
+        return []
+
+    fetch_fn = getattr(exchange, "fetch_trades", None)
+    if fetch_fn is None:
+        return []
+
+    params = inspect.signature(fetch_fn).parameters
+    kwargs = {"symbol": symbol, "limit": limit * 100}
+    if since is not None and "since" in params:
+        kwargs["since"] = since
+
+    try:
+        if asyncio.iscoroutinefunction(fetch_fn):
+            trades = await _call_with_retry(
+                fetch_fn, timeout=REST_OHLCV_TIMEOUT, **kwargs
+            )
+        else:
+            trades = await _call_with_retry(
+                asyncio.to_thread,
+                fetch_fn,
+                **kwargs,
+                timeout=REST_OHLCV_TIMEOUT,
+            )
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        return []
+
+    if not trades:
+        return []
+
+    tf_ms = timeframe_seconds(exchange, timeframe) * 1000
+    trades.sort(key=lambda t: t[0])
+
+    ohlcv: list[list] = []
+    bucket = trades[0][0] - trades[0][0] % tf_ms
+    o = h = l = c = float(trades[0][1])
+    vol = float(trades[0][2]) if len(trades[0]) > 2 else 0.0
+
+    for t in trades[1:]:
+        ts = int(t[0])
+        price = float(t[1])
+        amount = float(t[2]) if len(t) > 2 else 0.0
+        b = ts - ts % tf_ms
+        if b != bucket:
+            ohlcv.append([bucket, o, h, l, c, vol])
+            if len(ohlcv) >= limit:
+                return ohlcv[:limit]
+            bucket = b
+            o = h = l = c = price
+            vol = amount
+        else:
+            h = max(h, price)
+            l = min(l, price)
+            c = price
+            vol += amount
+
+    ohlcv.append([bucket, o, h, l, c, vol])
+    return ohlcv[:limit]
 
 
 async def fetch_order_book_async(

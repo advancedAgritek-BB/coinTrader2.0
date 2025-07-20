@@ -195,6 +195,33 @@ def test_incomplete_ohlcv_warns_and_retries(caplog):
     )
 
 
+class TradeFillExchange:
+    has = {"fetchOHLCV": True, "fetchTrades": True}
+
+    def __init__(self):
+        self.fetch_calls = 0
+        self.trades_called = False
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
+        self.fetch_calls += 1
+        if self.fetch_calls == 1:
+            return [[0] * 6 for _ in range(2)]
+        return [[1] * 6 for _ in range(4)]
+
+    async def fetch_trades(self, symbol, since=None, limit=1000):
+        self.trades_called = True
+        tf_ms = 3600 * 1000
+        start = since or 0
+        return [[start + i * tf_ms, i + 1, 1.0] for i in range(limit)]
+
+
+def test_fetch_trades_used_for_missing_ohlcv():
+    ex = TradeFillExchange()
+    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=5, since=0))
+    assert ex.trades_called is True
+    assert len(data) == 5
+
+
 class DummySyncExchange:
     has = {"fetchOHLCV": True}
 
