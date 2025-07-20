@@ -1389,6 +1389,12 @@ async def _main_impl() -> TelegramNotifier:
         config["exchange"] = user["exchange"]
 
     exchange, ws_client = get_exchange(config)
+    if hasattr(exchange, "options"):
+        opts = getattr(exchange, "options", {})
+        ws_opts = opts.get("ws", {})
+        ws_opts.update({"ping_interval": 10, "ping_timeout": 30})
+        opts["ws"] = ws_opts
+        exchange.options = opts
 
     ping_interval = int(config.get("ws_ping_interval", 0) or 0)
     if ping_interval > 0 and hasattr(exchange, "ping"):
