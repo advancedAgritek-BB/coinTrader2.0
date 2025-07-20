@@ -38,7 +38,8 @@ async def load_token_mints(url: str | None = None) -> Dict[str, str]:
         async with aiohttp.ClientSession() as session:
             async with session.get(fetch_url, timeout=10) as resp:
                 resp.raise_for_status()
-                data = await resp.json()
+                # Allow JSON served with incorrect Content-Type like text/plain
+                data = await resp.json(content_type=None)
     except Exception as exc:  # pragma: no cover - network failures
         logger.error("Failed to fetch token registry: %s", exc)
         if CACHE_FILE.exists():
