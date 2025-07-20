@@ -3,6 +3,7 @@ import json
 import pandas as pd
 import pytest
 import ccxt
+import logging
 import crypto_bot.utils.symbol_scoring as sc
 import crypto_bot.utils.symbol_pre_filter as sp
 from crypto_bot.utils.telemetry import telemetry
