@@ -40,6 +40,7 @@ from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.wallet_manager import load_or_create
 from crypto_bot.utils.market_analyzer import analyze_symbol
 from crypto_bot.strategy_router import strategy_for, strategy_name
+from crypto_bot.strategy import dca_bot
 from crypto_bot.cooldown_manager import (
     configure as cooldown_configure,
     in_cooldown,
@@ -763,6 +764,7 @@ async def update_caches(ctx: BotContext) -> None:
                 ctx.config,
                 limit=limit,
                 use_websocket=ctx.config.get("use_websocket", False),
+                force_websocket_history=ctx.config.get("force_websocket_history", False),
                 force_websocket_history=ctx.config.get(
                     "force_websocket_history", False
                 ),
@@ -783,6 +785,7 @@ async def update_caches(ctx: BotContext) -> None:
                 ctx.config,
                 limit=limit,
                 use_websocket=False,
+                force_websocket_history=ctx.config.get("force_websocket_history", False),
                 force_websocket_history=ctx.config.get(
                     "force_websocket_history", False
                 ),
@@ -802,6 +805,7 @@ async def update_caches(ctx: BotContext) -> None:
                 ctx.config,
                 limit=limit,
                 use_websocket=ctx.config.get("use_websocket", False),
+                force_websocket_history=ctx.config.get("force_websocket_history", False),
                 force_websocket_history=ctx.config.get(
                     "force_websocket_history", False
                 ),
