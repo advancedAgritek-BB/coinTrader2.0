@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Iterable
 
 import aiohttp
 
@@ -155,3 +155,52 @@ async def get_mint_from_gecko(base: str) -> str | None:
     except Exception:
         pass
     return None
+
+
+async def fetch_from_helius(symbols: Iterable[str]) -> Dict[str, str]:
+    """Return mapping of ``symbols`` to mint addresses using Helius.
+
+    Parameters
+    ----------
+    symbols:
+        Iterable of token symbols to resolve.
+    """
+
+    api_key = os.getenv("HELIUS_KEY", "")
+    if not symbols:
+        return {}
+    url = (
+        "https://api.helius.xyz/v0/tokens/metadata"
+        f"?symbols={','.join(symbols)}"
+        + (f"&api-key={api_key}" if api_key else "")
+    )
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+    except aiohttp.ClientError as exc:  # pragma: no cover - network
+        logger.error("Helius lookup failed: %s", exc)
+        return {}
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("Helius lookup error: %s", exc)
+        return {}
+
+    result: Dict[str, str] = {}
+    if isinstance(data, list):
+        items = data
+    else:
+        items = data.get("tokens") or data.get("data") or []
+    if isinstance(items, dict):
+        items = list(items.values())
+    if not isinstance(items, list):
+        return {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        symbol = item.get("symbol") or item.get("ticker")
+        mint = item.get("mint") or item.get("address") or item.get("tokenMint")
+        if isinstance(symbol, str) and isinstance(mint, str):
+            result[symbol.upper()] = mint
+    return result
