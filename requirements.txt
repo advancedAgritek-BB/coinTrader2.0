@@ -21,7 +21,7 @@ boto3
 statsmodels
 hvac
 psutil
-aiohttp>=3.9.4
+aiohttp>=3.8,<4
 cryptography
 schedule
 fastapi==0.97.0
