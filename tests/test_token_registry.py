@@ -222,7 +222,6 @@ def test_get_mint_from_gecko(monkeypatch):
         / "crypto_bot"
         / "utils"
         / "token_registry.py",
-        / "crypto_bot" / "utils" / "token_registry.py",
     )
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr

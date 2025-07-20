@@ -501,7 +501,7 @@ async def _refresh_tickers(
 
     result: dict[str, dict] = {}
     if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTicker"):
-        for sym in cex_syms:
+        for sym in symbols:
             try:
                 fetcher = getattr(exchange, "fetch_ticker", None)
                 if asyncio.iscoroutinefunction(fetcher):
