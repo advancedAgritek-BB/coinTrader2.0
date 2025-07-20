@@ -1390,6 +1390,16 @@ async def update_ohlcv_cache(
         df_new = pd.DataFrame(
             data, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
+        tf_sec = timeframe_seconds(None, timeframe)
+        df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit="s")
+        df_new = (
+            df_new.set_index("timestamp")
+            .resample(f"{tf_sec}s")
+            .agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
+            .ffill()
+            .reset_index()
+        )
+        df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
         frac = config.get("min_history_fraction", 0.5)
         try:
             frac_val = float(frac)
