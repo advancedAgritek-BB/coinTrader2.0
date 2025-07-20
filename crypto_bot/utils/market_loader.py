@@ -1452,7 +1452,6 @@ async def update_ohlcv_cache(
     config: Dict | None = None,
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
-    start_since: int | None = None,
 ) -> Dict[str, pd.DataFrame]:
     """Update cached OHLCV DataFrames with new candles.
 
@@ -1460,6 +1459,8 @@ async def update_ohlcv_cache(
     ----------
     max_concurrent : int | None, optional
         Maximum number of concurrent OHLCV requests. ``None`` means no limit.
+    start_since : int | None, optional
+        When provided, fetch data starting from this timestamp in milliseconds.
     """
 
     from crypto_bot.regime.regime_classifier import clear_regime_cache
@@ -1658,7 +1659,6 @@ async def update_multi_tf_ohlcv_cache(
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
     priority_queue: Deque[str] | None = None,
-    start_since: int | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for multiple timeframes.
 
@@ -1667,10 +1667,8 @@ async def update_multi_tf_ohlcv_cache(
     config : Dict
         Configuration containing a ``timeframes`` list.
     start_since : int | None, optional
-        Timestamp in milliseconds to start fetching history from when no
-        cached data is available.
-    start_since : int | None
-        When provided, fetch historical data from this timestamp forward.
+        When provided, fetch historical data starting from this timestamp
+        in milliseconds when no cached data is available.
     """
     from crypto_bot.regime.regime_classifier import clear_regime_cache
 
@@ -1717,7 +1715,6 @@ async def update_multi_tf_ohlcv_cache(
             needed = int((time.time() * 1000 - start_since) // (tf_sec * 1000)) + 1
             tf_limit = max(limit, needed)
 
-        if cex_symbols:
         if cex_symbols and start_since is None:
             tf_cache = await update_ohlcv_cache(
                 exchange,
@@ -1730,7 +1727,6 @@ async def update_multi_tf_ohlcv_cache(
                 force_websocket_history=force_websocket_history,
                 max_concurrent=max_concurrent,
                 notifier=notifier,
-                start_since=start_since,
             )
         elif cex_symbols:
             from crypto_bot.main import update_df_cache
