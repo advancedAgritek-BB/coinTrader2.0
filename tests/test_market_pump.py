@@ -68,3 +68,92 @@ def test_fetch_candidates_no_pump(monkeypatch):
     assert len(ctx.current_batch) == 1
     assert ctx.config["symbol_filter"]["min_volume_usd"] == 1000
     assert ctx.config["symbol_filter"]["volume_percentile"] == 10
+
+
+def test_pump_allocates_solana(monkeypatch):
+    ctx = _setup_ctx()
+
+    async def fake_get_filtered_symbols(ex, cfg):
+        return [("BTC/USD", 1.0)], []
+
+    monkeypatch.setattr(main, "symbol_priority_queue", deque())
+    monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
+    monkeypatch.setattr(main, "is_market_pumping", lambda *a, **k: True)
+    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.02)
+    async def fake_regime(*_a, **_k):
+        return "trending"
+
+    monkeypatch.setattr(main, "get_market_regime", fake_regime)
+    async def fake_scan(*a, **k):
+        return []
+
+    monkeypatch.setattr(main, "scan_arbitrage", fake_scan)
+
+    class DummyRM:
+        def __init__(self):
+            self.weights = None
+
+        def update_allocation(self, w):
+            self.weights = w
+
+    ctx.risk_manager = DummyRM()
+
+    asyncio.run(main.fetch_candidates(ctx))
+
+    assert ctx.config["mode"] == "auto"
+    assert ctx.risk_manager.weights.get("sniper_solana") == 0.6
+
+
+def test_trending_queues_arb(monkeypatch):
+    ctx = _setup_ctx()
+
+    async def fake_get_filtered_symbols(ex, cfg):
+        return [("BTC/USD", 1.0)], []
+
+    monkeypatch.setattr(main, "symbol_priority_queue", deque())
+    monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
+    monkeypatch.setattr(main, "is_market_pumping", lambda *a, **k: False)
+    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.02)
+    async def fake_regime(*_a, **_k):
+        return "trending"
+
+    monkeypatch.setattr(main, "get_market_regime", fake_regime)
+
+    async def fake_scan(*a, **k):
+        return ["ARB/USD"]
+
+    monkeypatch.setattr(main, "scan_arbitrage", fake_scan)
+
+    asyncio.run(main.fetch_candidates(ctx))
+
+    assert "ARB/USD" in ctx.current_batch
+
+
+def test_volatile_queues_solana(monkeypatch):
+    ctx = _setup_ctx()
+    ctx.config["solana_scanner"] = {"enabled": True}
+
+    async def fake_get_filtered_symbols(ex, cfg):
+        return [("BTC/USD", 1.0)], []
+
+    monkeypatch.setattr(main, "symbol_priority_queue", deque())
+    monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
+    monkeypatch.setattr(main, "is_market_pumping", lambda *a, **k: False)
+    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.02)
+    async def fake_regime2(*_a, **_k):
+        return "volatile"
+
+    monkeypatch.setattr(main, "get_market_regime", fake_regime2)
+
+    async def fake_scan(*a, **k):
+        return []
+
+    async def fake_tokens(cfg):
+        return ["SOL/USDC"]
+
+    monkeypatch.setattr(main, "scan_arbitrage", fake_scan)
+    monkeypatch.setattr(main, "get_solana_new_tokens", fake_tokens)
+
+    asyncio.run(main.fetch_candidates(ctx))
+
+    assert "SOL/USDC" in ctx.current_batch
