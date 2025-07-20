@@ -31,6 +31,7 @@ _LOADED = False
 
 
 async def load_token_mints(
+    url: str | None = None, *, force_refresh: bool = False
     url: str | None = None,
     *,
 async def fetch_from_jupiter() -> Dict[str, str]:
