@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 import aiohttp
 
@@ -13,6 +13,12 @@ logger = logging.getLogger(__name__)
 TOKEN_REGISTRY_URL = (
     "https://raw.githubusercontent.com/solana-labs/token-list/main/src/tokens/solana.tokenlist.json"
 )
+
+# Primary token list from Jupiter API
+JUPITER_TOKEN_URL = "https://station.jup.ag/api-v6/tokens?tags=all"
+
+# Batch metadata endpoint for resolving unknown symbols
+HELIUS_TOKEN_API = "https://api.helius.xyz/v0/tokens/metadata"
 
 CACHE_FILE = Path(__file__).resolve().parents[2] / "cache" / "token_mints.json"
 
@@ -23,52 +29,113 @@ TOKEN_MINTS: Dict[str, str] = {}
 _LOADED = False
 
 
-async def load_token_mints(url: str | None = None) -> Dict[str, str]:
-    """Return mapping of token symbols to mint addresses.
+async def fetch_from_jupiter() -> Dict[str, str]:
+    """Return mapping of symbols to mints using Jupiter token list."""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(JUPITER_TOKEN_URL, timeout=10) as resp:
+            resp.raise_for_status()
+            data = await resp.json(content_type=None)
 
-    The list is fetched from ``url`` or ``TOKEN_MINTS_URL`` environment variable.
-    Results are cached on disk and subsequent calls return an empty dict.
-    """
-    global _LOADED
-    if _LOADED:
-        return {}
-
-    fetch_url = url or os.getenv("TOKEN_MINTS_URL", TOKEN_REGISTRY_URL)
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(fetch_url, timeout=10) as resp:
-                resp.raise_for_status()
-                # Allow JSON served with incorrect Content-Type like text/plain
-                data = await resp.json(content_type=None)
-    except Exception as exc:  # pragma: no cover - network failures
-        logger.error("Failed to fetch token registry: %s", exc)
-        if CACHE_FILE.exists():
-            try:
-                with open(CACHE_FILE) as f:
-                    cached = json.load(f)
-                if isinstance(cached, dict):
-                    _LOADED = True
-                    return {str(k): str(v) for k, v in cached.items()}
-            except Exception as err:  # pragma: no cover - best effort
-                logger.error("Failed to read cache: %s", err)
-        return {}
-
-    tokens = data.get("tokens") or data.get("data", {}).get("tokens") or []
     result: Dict[str, str] = {}
+    tokens = data if isinstance(data, list) else data.get("tokens") or []
     for item in tokens:
         symbol = item.get("symbol") or item.get("ticker")
         mint = item.get("address") or item.get("mint") or item.get("tokenMint")
         if isinstance(symbol, str) and isinstance(mint, str):
             result[symbol.upper()] = mint
-    if result:
+    return result
+
+
+async def fetch_from_helius(symbols: List[str]) -> Dict[str, str]:
+    """Lookup ``symbols`` via the Helius metadata API."""
+    api_key = os.getenv("HELIUS_API_KEY")
+    if not api_key:
+        return {}
+    url = f"{HELIUS_TOKEN_API}?api-key={api_key}"
+    payload = {"symbols": [s.upper() for s in symbols]}
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, json=payload, timeout=10) as resp:
+            resp.raise_for_status()
+            data = await resp.json(content_type=None)
+
+    result: Dict[str, str] = {}
+    items = data.get("result") if isinstance(data, dict) else data
+    if isinstance(items, list):
+        for item in items:
+            symbol = item.get("symbol") or item.get("ticker")
+            mint = item.get("address") or item.get("mint") or item.get("tokenMint")
+            if isinstance(symbol, str) and isinstance(mint, str):
+                result[symbol.upper()] = mint
+    return result
+
+
+async def load_token_mints(
+    url: str | None = None,
+    *,
+    unknown: List[str] | None = None,
+    force_refresh: bool = False,
+) -> Dict[str, str]:
+    """Return mapping of token symbols to mint addresses.
+
+    The Solana list is fetched from Jupiter first then GitHub as a fallback.
+    Cached results are reused unless ``force_refresh`` is ``True``.
+    Unknown ``symbols`` can be resolved via the Helius API.
+    """
+    global _LOADED
+    if _LOADED and not force_refresh:
+        return {}
+
+    mapping: Dict[str, str] = {}
+
+    try:
+        mapping.update(await fetch_from_jupiter())
+    except Exception as exc:  # pragma: no cover - network failures
+        logger.error("Failed to fetch Jupiter tokens: %s", exc)
+
+    if not mapping:
+        fetch_url = url or os.getenv("TOKEN_MINTS_URL", TOKEN_REGISTRY_URL)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(fetch_url, timeout=10) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json(content_type=None)
+            tokens = data.get("tokens") or data.get("data", {}).get("tokens") or []
+            for item in tokens:
+                symbol = item.get("symbol") or item.get("ticker")
+                mint = (
+                    item.get("address") or item.get("mint") or item.get("tokenMint")
+                )
+                if isinstance(symbol, str) and isinstance(mint, str):
+                    mapping[symbol.upper()] = mint
+        except Exception as exc:  # pragma: no cover - network failures
+            logger.error("Failed to fetch token registry: %s", exc)
+
+    if not mapping and CACHE_FILE.exists():
+        try:
+            with open(CACHE_FILE) as f:
+                cached = json.load(f)
+            if isinstance(cached, dict):
+                mapping.update({str(k).upper(): str(v) for k, v in cached.items()})
+        except Exception as err:  # pragma: no cover - best effort
+            logger.error("Failed to read cache: %s", err)
+
+    if unknown:
+        try:
+            mapping.update(await fetch_from_helius(unknown))
+        except Exception as exc:  # pragma: no cover - network failures
+            logger.error("Failed to fetch Helius metadata: %s", exc)
+
+    if mapping:
+        TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
         try:
             CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(CACHE_FILE, "w") as f:
-                json.dump(result, f, indent=2)
+                json.dump(TOKEN_MINTS, f, indent=2)
         except Exception as exc:  # pragma: no cover - optional cache
             logger.error("Failed to write %s: %s", CACHE_FILE, exc)
+
     _LOADED = True
-    return result
+    return mapping
 
 
 def _write_cache() -> None:
