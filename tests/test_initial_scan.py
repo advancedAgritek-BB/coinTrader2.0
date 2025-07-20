@@ -11,6 +11,7 @@ stub.get_solana_new_tokens = get_solana_new_tokens
 async def search_geckoterminal_token(*args, **kwargs):
     return None
 stub.search_geckoterminal_token = search_geckoterminal_token
+stub.search_geckoterminal_token = lambda *a, **k: None
 sys.modules['crypto_bot.utils.solana_scanner'] = stub
 
 from crypto_bot.main import initial_scan, SessionState
@@ -22,8 +23,11 @@ class DummyExchange:
 async def test_initial_scan_fetches_200_candles(monkeypatch):
     limits = []
 
-    async def fake_update_multi(exchange, cache, batch, cfg, limit=0, **kwargs):
+    start_vals = []
+
+    async def fake_update_multi(exchange, cache, batch, cfg, limit=0, start_since=None, **kwargs):
         limits.append(limit)
+        start_vals.append(start_since)
         return {}
 
     async def fake_update_regime(*args, **kwargs):
@@ -34,15 +38,18 @@ async def test_initial_scan_fetches_200_candles(monkeypatch):
 
     cfg = {'symbols': ['BTC/USD'], 'timeframes': ['1h'], 'scan_lookback_limit': 200}
     await initial_scan(DummyExchange(), cfg, SessionState())
-    assert limits and limits[0] >= 200
+    assert limits and limits[0] == 2000
+    assert start_vals and isinstance(start_vals[0], int)
 
 
 @pytest.mark.asyncio
 async def test_initial_scan_ws_disabled_and_limit_capped(monkeypatch):
     params = []
+    starts = []
 
-    async def fake_update_multi(exchange, cache, batch, cfg, **kwargs):
+    async def fake_update_multi(exchange, cache, batch, cfg, start_since=None, **kwargs):
         params.append(kwargs)
+        starts.append(start_since)
         return {}
 
     async def fake_update_regime(exchange, cache, batch, cfg, **kwargs):
@@ -100,3 +107,5 @@ async def test_initial_scan_onchain(monkeypatch):
 
     assert set(calls) == {('SOL/USDC', '1h', 100), ('SOL/USDC', '5m', 100)}
     assert [(c[0], c[1]) for c in updates] == [('1h', 'SOL/USDC'), ('5m', 'SOL/USDC')]
+        assert kw.get('limit') == 10000
+    assert starts and isinstance(starts[0], int)

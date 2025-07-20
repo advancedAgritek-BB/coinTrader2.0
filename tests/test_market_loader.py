@@ -2038,3 +2038,36 @@ def test_gecko_volume_priority(monkeypatch):
     )
     assert "FOO/USDC" in cache["1h"]
     assert list(q) == ["FOO/USDC"]
+
+
+def test_update_multi_tf_ohlcv_cache_start_since(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    calls: list[tuple[int | None, int]] = []
+
+    async def fake_fetch(_ex, _sym, timeframe="1s", limit=1000, since=None, **_k):
+        calls.append((since, limit))
+        start = since or 0
+        step = 1
+        count = 1000 if len(calls) == 1 else 500
+        return [[start + i * step, 1, 1, 1, 1, 1] for i in range(count)]
+
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+
+    ex = object()
+    cache: dict[str, dict[str, pd.DataFrame]] = {}
+    config = {"timeframes": ["1s"]}
+
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            config,
+            start_since=0,
+        )
+    )
+
+    df = cache["1s"]["BTC/USD"]
+    assert len(df) == 1500
+    assert calls == [(0, 1000), (1000, 1000)]
