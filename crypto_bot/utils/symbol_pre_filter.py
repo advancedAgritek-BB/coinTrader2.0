@@ -847,7 +847,7 @@ async def filter_symbols(
         base = sym.split("/")[0].upper()
         mint = TOKEN_MINTS.get(base)
         if not mint:
-            logger.warning("No mint for %s; dropping", sym)
+            logger.debug("No mint for %s; dropping", sym)
             continue
         logger.info("Resolved %s to mint %s for onchain", sym, mint)
         try:

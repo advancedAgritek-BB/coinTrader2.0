@@ -1294,3 +1294,18 @@ def test_refresh_tickers_error_result(monkeypatch, caplog):
     assert result == {}
     assert any("Ticker API errors" in r.getMessage() for r in caplog.records)
     assert "ETH/USD" not in sp.ticker_cache
+
+
+def test_filter_symbols_missing_mint_logs_debug(monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG)
+    sp.logger.setLevel(logging.DEBUG)
+
+    monkeypatch.setattr(sp, "_refresh_tickers", lambda *_a, **_k: {})
+
+    result = asyncio.run(sp.filter_symbols(DummyExchange(), ["AAA/USDC"], CONFIG))
+
+    assert result == ([], [])
+    assert any(
+        r.levelno == logging.DEBUG and "No mint for AAA/USDC; dropping" in r.getMessage()
+        for r in caplog.records
+    )
