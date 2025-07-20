@@ -185,8 +185,8 @@ def test_load_token_mints_error(monkeypatch, tmp_path):
     sys.modules["crypto_bot.utils.token_registry"] = tr
     spec.loader.exec_module(tr)
     tr.TOKEN_MINTS.clear()
-    monkeypatch.setattr(tr, "aiohttp", aiohttp_mod)
     file = mod.CACHE_FILE
+    monkeypatch.setattr(tr, "aiohttp", aiohttp_mod)
     monkeypatch.setattr(tr, "CACHE_FILE", file, raising=False)
     file.write_text(json.dumps({"OLD": "M"}))
 
