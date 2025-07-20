@@ -60,6 +60,7 @@ from crypto_bot.utils.market_loader import (
     timeframe_seconds,
     configure as market_loader_configure,
     fetch_order_book_async,
+    fetch_ohlcv_async,
 )
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.utils.eval_queue import build_priority_queue
@@ -513,7 +514,9 @@ async def initial_scan(
     for i in range(0, total, batch_size):
         batch = symbols[i:i + batch_size]
 
-        limit = min(config.get("scan_lookback_limit", 50), 700)
+        history_since = int((time.time() - 365 * 86400) * 1000)
+        limit = int(config.get("scan_deep_limit", config.get("scan_lookback_limit", 50) * 10))
+        logger.info("Loading deep OHLCV history starting %s", datetime.utcfromtimestamp(history_since / 1000).isoformat())
 
         async with OHLCV_LOCK:
             state.df_cache = await update_multi_tf_ohlcv_cache(
@@ -527,6 +530,7 @@ async def initial_scan(
                 max_concurrent=config.get("max_concurrent_ohlcv"),
                 notifier=notifier,
                 priority_queue=symbol_priority_queue,
+                start_since=history_since,
             )
 
             state.regime_cache = await update_regime_tf_cache(
@@ -541,6 +545,7 @@ async def initial_scan(
                 notifier=notifier,
                 df_map=state.df_cache,
             )
+        logger.info("Deep historical OHLCV loaded for %d symbols", len(batch))
 
         processed += len(batch)
         pct = processed / total * 100
