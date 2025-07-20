@@ -46,7 +46,20 @@ DEFAULT_VOLUME_PERCENTILE = 30
 DEFAULT_CHANGE_PCT_PERCENTILE = 50
 
 # Known non-Solana base tickers that may be misclassified as mints
-NON_SOLANA_BASES = {"ADA", "BNB", "AVAX", "APE"}
+NON_SOLANA_BASES = {
+    "ADA",
+    "BNB",
+    "AVAX",
+    "APE",
+    "BCH",
+    "XMR",
+    "XTZ",
+    "EURR",
+    "RLUSD",
+    "USDG",
+    "USDQ",
+    "USTC",
+}
 
 # Mapping of exchange specific symbols to standardized forms
 _ALIASES = {"XBT": "BTC", "XBTUSDT": "BTC/USDT"}
@@ -858,7 +871,10 @@ async def filter_symbols(
             if mint:
                 TOKEN_MINTS[base] = mint
             else:
-                logger.warning("No mint for %s; dropping", sym)
+                logger.error(
+                    "Mint lookup failed for %s - consider adding to TOKEN_MINTS or NON_SOLANA_BASES",
+                    sym,
+                )
                 continue
         logger.info("Resolved %s to mint %s for onchain", sym, mint)
         try:
