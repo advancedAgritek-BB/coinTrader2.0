@@ -78,6 +78,29 @@ def test_fetch_new_raydium_pools(monkeypatch):
     assert "k" in session.url
 
 
+def test_fetch_new_raydium_pools_helius(monkeypatch):
+    data = {"data": [{"tokenMint": "A", "volumeUsd": 150}]}
+    session = DummySession(data)
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
+    monkeypatch.setattr(solana_scanner, "aiohttp", aiohttp_mod)
+
+    async def fake_gecko(_base):
+        return None
+
+    async def fake_helius(symbols):
+        assert symbols == ["A"]
+        return {"A": "mint"}
+
+    monkeypatch.setattr(solana_scanner, "get_mint_from_gecko", fake_gecko)
+    monkeypatch.setattr(solana_scanner, "fetch_from_helius", fake_helius)
+    monkeypatch.setattr(solana_scanner, "TOKEN_MINTS", {})
+
+    solana_scanner._MIN_VOLUME_USD = 100
+    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools("k", 5))
+    assert tokens == ["A"]
+    assert solana_scanner.TOKEN_MINTS["A"] == "mint"
+
+
 def test_get_solana_new_tokens(monkeypatch):
     monkeypatch.setattr(
         solana_scanner,

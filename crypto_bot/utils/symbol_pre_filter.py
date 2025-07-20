@@ -856,7 +856,11 @@ async def filter_symbols(
         except Exception as exc:  # pragma: no cover - best effort
             logger.warning("Failed to update %s: %s", PAIR_FILE, exc)
 
-    from crypto_bot.utils.token_registry import TOKEN_MINTS, get_mint_from_gecko
+    from crypto_bot.utils.token_registry import (
+        TOKEN_MINTS,
+        get_mint_from_gecko,
+        fetch_from_helius,
+    )
 
     resolved_onchain: List[tuple[str, float]] = []
     onchain_min_volume = cfg.get("onchain_min_volume_usd", 1_000_000)
@@ -868,10 +872,13 @@ async def filter_symbols(
         if not mint:
             logger.debug("No mint for %s; attempting lookup", sym)
             mint = await get_mint_from_gecko(base)
+            if not mint:
+                helius = await fetch_from_helius([base])
+                mint = helius.get(base.upper()) if helius else None
             if mint:
                 TOKEN_MINTS[base] = mint
             else:
-                logger.error(
+                logger.warning(
                     "Mint lookup failed for %s - consider adding to TOKEN_MINTS or NON_SOLANA_BASES",
                     sym,
                 )

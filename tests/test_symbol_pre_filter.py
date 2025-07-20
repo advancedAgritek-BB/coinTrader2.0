@@ -279,6 +279,36 @@ def test_onchain_volume_above_threshold(monkeypatch):
     )
 
     assert res == ([], [("AAA/USDC", 2.0)])
+
+
+def test_onchain_lookup_via_helius(monkeypatch):
+    async def no_fetch(*_a, **_k):
+        return {}
+
+    monkeypatch.setattr(sp, "_refresh_tickers", no_fetch)
+
+    async def fake_gecko(*_a, **_k):
+        return [], 1_500_000.0, 0.0
+
+    from crypto_bot.utils import token_registry
+    token_registry.TOKEN_MINTS.clear()
+    async def none_gecko(*_a):
+        return None
+    monkeypatch.setattr(token_registry, "get_mint_from_gecko", none_gecko)
+
+    async def fake_helius(symbols):
+        assert symbols == ["AAA"]
+        return {"AAA": "mint"}
+
+    monkeypatch.setattr(token_registry, "fetch_from_helius", fake_helius)
+    monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
+
+    res = asyncio.run(
+        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 1_000_000})
+    )
+
+    assert res == ([], [("AAA/USDC", 1.5)])
+    assert token_registry.TOKEN_MINTS["AAA"] == "mint"
 def test_blacklisted_base_omitted(monkeypatch, caplog):
     caplog.set_level("WARNING")
     import crypto_bot.utils.token_registry as tr
@@ -1367,12 +1397,18 @@ def test_filter_symbols_missing_mint_logs_debug(monkeypatch, caplog):
     caplog.set_level(logging.DEBUG)
     sp.logger.setLevel(logging.DEBUG)
 
-    monkeypatch.setattr(sp, "_refresh_tickers", lambda *_a, **_k: {})
+    async def no_refresh(*_a, **_k):
+        return {}
+    monkeypatch.setattr(sp, "_refresh_tickers", no_refresh)
+    from crypto_bot.utils import token_registry
+    async def none_gecko(*_a):
+        return None
+    monkeypatch.setattr(token_registry, "get_mint_from_gecko", none_gecko)
+    async def helius_empty(*_a):
+        return {}
+    monkeypatch.setattr(token_registry, "fetch_from_helius", helius_empty)
 
     result = asyncio.run(sp.filter_symbols(DummyExchange(), ["AAA/USDC"], CONFIG))
 
     assert result == ([], [])
-    assert any(
-        r.levelno == logging.DEBUG and "No mint for AAA/USDC; dropping" in r.getMessage()
-        for r in caplog.records
-    )
+    assert any(r.levelno == logging.WARNING for r in caplog.records)

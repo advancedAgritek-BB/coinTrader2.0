@@ -8,7 +8,7 @@ from typing import List
 import aiohttp
 import ccxt.async_support as ccxt
 
-from .token_registry import TOKEN_MINTS, get_mint_from_gecko
+from .token_registry import TOKEN_MINTS, get_mint_from_gecko, fetch_from_helius
 
 from . import symbol_scoring
 
@@ -118,8 +118,16 @@ async def _extract_tokens(data: list | dict) -> List[str]:
             volume = 0.0
         if volume >= _MIN_VOLUME_USD:
             base = str(mint).split("/")[0]
-            if base not in TOKEN_MINTS and not await get_mint_from_gecko(base):
-                continue
+            if base not in TOKEN_MINTS:
+                resolved = await get_mint_from_gecko(base)
+                if not resolved:
+                    helius = await fetch_from_helius([base])
+                    resolved = helius.get(base.upper()) if helius else None
+                if resolved:
+                    TOKEN_MINTS[base] = resolved
+                else:
+                    logger.warning("Mint lookup failed for %s", base)
+                    continue
             results.append(str(mint))
     return results
 
