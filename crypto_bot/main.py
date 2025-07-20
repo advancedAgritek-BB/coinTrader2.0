@@ -725,6 +725,11 @@ async def update_caches(ctx: BotContext) -> None:
         df_map=ctx.df_cache,
     )
 
+    tf = ctx.config.get("timeframe", "1h")
+    for sym in batch:
+        df = ctx.df_cache.get(tf, {}).get(sym)
+        logger.info("%s OHLCV: %d candles", sym, len(df) if df is not None else 0)
+
     vol_thresh = ctx.config.get("bounce_scalper", {}).get("vol_zscore_threshold")
     if vol_thresh is not None:
         tf = ctx.config.get("timeframe", "1h")
