@@ -1199,7 +1199,7 @@ def test_fetch_ohlcv_retry_520(monkeypatch):
     data = asyncio.run(market_loader.fetch_ohlcv_async(ex, "BTC/USD"))
 
     assert ex.calls == 2
-    assert sleeps == [1]
+    assert sleeps == [5]
     assert data == [[1] * 6]
 
 
@@ -1230,7 +1230,7 @@ def test_fetch_ohlcv_retry_520_network(monkeypatch):
     data = asyncio.run(market_loader.fetch_ohlcv_async(ex, "BTC/USD"))
 
     assert ex.calls == 2
-    assert sleeps == [1]
+    assert sleeps == [5]
     assert data == [[1] * 6]
 
 
