@@ -315,9 +315,6 @@ def test_get_mint_from_gecko(monkeypatch):
 
 
 def test_get_mint_from_gecko_error(monkeypatch):
-    class DummyErr(Exception):
-        pass
-
     class FailingSession:
         async def __aenter__(self):
             return self
