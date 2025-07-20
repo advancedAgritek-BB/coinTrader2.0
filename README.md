@@ -293,6 +293,7 @@ symbol_score_weights:
 * **use_numba_scoring** – enable numba acceleration for symbol scoring when available.
 * **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle.
 * **solana_scanner.gecko_search** – query GeckoTerminal to verify volume for new Solana tokens.
+* Solana tokens are filtered using symbol scoring; adjust `min_symbol_score` to control the threshold.
 
 ### Risk Parameters
 * **risk** – default stop loss, take profit and drawdown limits. `min_volume` is set to `0.1` to filter thin markets. The stop is 1.5× ATR and the take profit is 3× ATR by default.
