@@ -1466,6 +1466,7 @@ async def update_ohlcv_cache(
     config: Dict | None = None,
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
+    start_since: int | None = None,
 ) -> Dict[str, pd.DataFrame]:
     """Update cached OHLCV DataFrames with new candles.
 
@@ -1503,6 +1504,8 @@ async def update_ohlcv_cache(
             if df is not None and not df.empty:
                 # convert cached second timestamps to milliseconds for ccxt
                 since_map[sym] = int(df["timestamp"].iloc[-1]) * 1000 + 1
+            elif start_since is not None:
+                since_map[sym] = start_since
     now = time.time()
     filtered_symbols: List[str] = []
     for s in symbols:
@@ -1657,6 +1660,9 @@ async def update_multi_tf_ohlcv_cache(
     ----------
     config : Dict
         Configuration containing a ``timeframes`` list.
+    start_since : int | None, optional
+        Timestamp in milliseconds to start fetching history from when no
+        cached data is available.
     start_since : int | None
         When provided, fetch historical data from this timestamp forward.
     """
@@ -1710,6 +1716,7 @@ async def update_multi_tf_ohlcv_cache(
                 force_websocket_history=force_websocket_history,
                 max_concurrent=max_concurrent,
                 notifier=notifier,
+                start_since=start_since,
             )
         elif cex_symbols:
             from crypto_bot.main import update_df_cache
