@@ -29,8 +29,8 @@ def test_fetch_candidates_market_pump(monkeypatch):
 
     async def fake_get_filtered_symbols(ex, cfg):
         if cfg["symbol_filter"]["min_volume_usd"] == 500:
-            return [("BTC/USD", 1.0), ("ETH/USD", 0.9)]
-        return [("BTC/USD", 1.0)]
+            return ([("BTC/USD", 1.0), ("ETH/USD", 0.9)], [])
+        return ([("BTC/USD", 1.0)], [])
 
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
@@ -48,7 +48,7 @@ def test_fetch_candidates_no_pump(monkeypatch):
     ctx = _setup_ctx()
 
     async def fake_get_filtered_symbols(ex, cfg):
-        return [("BTC/USD", 1.0)]
+        return ([("BTC/USD", 1.0)], [])
 
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
