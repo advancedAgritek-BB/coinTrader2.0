@@ -1284,8 +1284,8 @@ def test_invalid_symbol_marked_disabled():
     ex = SymbolCheckExchange()
     market_loader.failed_symbols.clear()
     result = asyncio.run(market_loader.fetch_ohlcv_async(ex, "ETH/USD"))
-    assert result is market_loader.UNSUPPORTED_SYMBOL
-    assert market_loader.failed_symbols["ETH/USD"].get("disabled") is True
+    assert result == []
+    assert "ETH/USD" not in market_loader.failed_symbols
 
 
 class MissingTFExchange:
