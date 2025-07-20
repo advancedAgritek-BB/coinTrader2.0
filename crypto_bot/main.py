@@ -492,7 +492,12 @@ async def initial_scan(
 ) -> None:
     """Populate OHLCV and regime caches before trading begins."""
 
-    symbols = config.get("symbols") or [config.get("symbol")]
+    symbols = (
+        (config.get("symbols") or [config.get("symbol")])
+        + config.get("onchain_symbols", [])
+    )
+    symbols = [s for s in symbols if s]
+    symbols = list(dict.fromkeys(symbols))
     if not symbols:
         return
 
@@ -546,13 +551,18 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     sf = ctx.config.setdefault("symbol_filter", {})
 
-    if not ctx.config.get("symbols") and not ctx.config.get("symbol"):
+    if (
+        not ctx.config.get("symbols")
+        and not ctx.config.get("onchain_symbols")
+        and not ctx.config.get("symbol")
+    ):
         ctx.config["symbol"] = "BTC/USDT"
     orig_min_volume = sf.get("min_volume_usd")
     orig_volume_pct = sf.get("volume_percentile")
 
     pump = is_market_pumping(
-        ctx.config.get("symbols") or [ctx.config.get("symbol")],
+        (ctx.config.get("symbols") or [ctx.config.get("symbol")])
+        + ctx.config.get("onchain_symbols", []),
         ctx.df_cache,
         ctx.config.get("timeframe", "1h"),
     )
@@ -591,7 +601,10 @@ async def fetch_candidates(ctx: BotContext) -> None:
         volatility_factor = 1.0
     ctx.volatility_factor = volatility_factor
 
-    total_available = len(ctx.config.get("symbols") or [ctx.config.get("symbol")])
+    total_available = len(
+        (ctx.config.get("symbols") or [ctx.config.get("symbol")])
+        + ctx.config.get("onchain_symbols", [])
+    )
     ctx.timing["symbol_filter_ratio"] = (
         len(symbols) / total_available if total_available else 1.0
     )
@@ -1311,8 +1324,7 @@ async def _main_impl() -> TelegramNotifier:
     sol_syms = [fix_symbol(s) for s in config.get("solana_symbols", [])]
     sol_syms = [f"{s}/USDC" if "/" not in s else s for s in sol_syms]
     if sol_syms:
-        merged = list(dict.fromkeys((config.get("symbols") or []) + sol_syms))
-        config["symbols"] = merged
+        config["onchain_symbols"] = sol_syms
     global _LAST_CONFIG_MTIME
     try:
         _LAST_CONFIG_MTIME = CONFIG_PATH.stat().st_mtime
@@ -1411,7 +1423,11 @@ async def _main_impl() -> TelegramNotifier:
             )
         # Continue startup even if ccxt is missing for testing environments
 
-    if config.get("scan_markets", True) and not config.get("symbols"):
+    if (
+        config.get("scan_markets", True)
+        and not config.get("symbols")
+        and not config.get("onchain_symbols")
+    ):
         attempt = 0
         delay = SYMBOL_SCAN_RETRY_DELAY
         discovered: list[str] | None = None
