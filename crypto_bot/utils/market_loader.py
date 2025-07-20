@@ -1504,7 +1504,8 @@ async def update_ohlcv_cache(
         for sym in symbols:
             df = cache.get(sym)
             if df is not None and not df.empty:
-                since_map[sym] = int(df["timestamp"].iloc[-1]) + 1
+                # convert cached second timestamps to milliseconds for ccxt
+                since_map[sym] = int(df["timestamp"].iloc[-1]) * 1000 + 1
     now = time.time()
     filtered_symbols: List[str] = []
     for s in symbols:
@@ -1578,7 +1579,8 @@ async def update_ohlcv_cache(
             data, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
         tf_sec = timeframe_seconds(None, timeframe)
-        df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit="s")
+        unit = "ms" if df_new["timestamp"].iloc[0] > 1e10 else "s"
+        df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit)
         df_new = (
             df_new.set_index("timestamp")
             .resample(f"{tf_sec}s")
