@@ -317,6 +317,8 @@ solana_scanner:
   max_tokens_per_scan: 100
   min_volume_usd: 500
 solana_slippage_bps: 10
+token_registry:
+  refresh_interval_minutes: 15
 strategy_allocation:
   grid_bot: 0.2
   sniper_bot: 0.4

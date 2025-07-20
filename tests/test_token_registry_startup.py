@@ -50,3 +50,27 @@ def test_load_token_mints_once(monkeypatch, tmp_path):
         asyncio.run(main._main_impl())
 
     assert calls["load"] == 1
+
+
+def test_registry_update_loop_refreshes(monkeypatch):
+    calls = {"load": 0, "sleep": 0}
+
+    async def fake_load(force_refresh=False):
+        calls["load"] += 1
+        return {}
+
+    registry = importlib.import_module("crypto_bot.utils.token_registry")
+    monkeypatch.setattr(registry, "load_token_mints", fake_load)
+    monkeypatch.setattr(registry, "set_token_mints", lambda *_a, **_k: None)
+
+    async def fake_sleep(_):
+        calls["sleep"] += 1
+        if calls["sleep"] >= 3:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(main.asyncio, "sleep", fake_sleep)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(main.registry_update_loop(0))
+
+    assert calls["load"] > 1
