@@ -4,7 +4,6 @@ import time
 from .logger import LOG_DIR, setup_logger
 from .symbol_pre_filter import filter_symbols
 from .telemetry import telemetry
-from .market_loader import _is_valid_base_token
 from .token_registry import TOKEN_MINTS
 
 
@@ -60,16 +59,14 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
             continue
         base, _, quote = sym.partition("/")
         if quote.upper() == "USDC":
-            if (
-                base.upper() in TOKEN_MINTS
-                and markets is not None
-                and sym not in markets
-            ):
+            if base.upper() in TOKEN_MINTS:
                 onchain_syms.append(sym)
                 continue
-            if not _is_valid_base_token(base):
-                logger.info("Dropping invalid USDC pair %s", sym)
+            if markets is not None and sym in markets:
+                cleaned_symbols.append(sym)
                 continue
+            logger.info("Dropping unsupported USDC pair %s (no mint/market)", sym)
+            continue
         cleaned_symbols.append(sym)
 
     symbols = cleaned_symbols
