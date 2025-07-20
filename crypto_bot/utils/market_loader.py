@@ -1461,6 +1461,7 @@ async def update_ohlcv_cache(
     symbols: Iterable[str],
     timeframe: str = "1h",
     limit: int = 100,
+    start_since: int | None = None,
     use_websocket: bool = False,
     force_websocket_history: bool = False,
     config: Dict | None = None,
@@ -1493,7 +1494,13 @@ async def update_ohlcv_cache(
     logger.info("Starting OHLCV update for timeframe %s", timeframe)
 
     since_map: Dict[str, int | None] = {}
-    if snapshot_due:
+    if start_since is not None:
+        tf_sec = timeframe_seconds(exchange, timeframe)
+        needed = int((time.time() * 1000 - start_since) // (tf_sec * 1000)) + 1
+        limit = max(limit, needed, 200)
+        since_map = {sym: start_since for sym in symbols}
+        snapshot_due = False
+    elif snapshot_due:
         _last_snapshot_time = now
         limit = max(config.get("ohlcv_snapshot_limit", limit), 200)
         since_map = {sym: None for sym in symbols}
@@ -1525,17 +1532,30 @@ async def update_ohlcv_cache(
         timeframe,
     )
 
-    data_map = await load_ohlcv_parallel(
-        exchange,
-        symbols,
-        timeframe,
-        limit,
-        since_map,
-        use_websocket,
-        force_websocket_history,
-        max_concurrent,
-        notifier,
-    )
+    data_map: Dict[str, list] = {s: [] for s in symbols}
+    remaining = limit
+    curr_since = since_map.copy()
+    while remaining > 0:
+        req_limit = min(remaining, 720)
+        batch = await load_ohlcv_parallel(
+            exchange,
+            symbols,
+            timeframe,
+            req_limit,
+            curr_since,
+            use_websocket,
+            force_websocket_history,
+            max_concurrent,
+            notifier,
+        )
+        for sym, rows in batch.items():
+            if rows:
+                data_map[sym].extend(rows)
+                last_ts = rows[-1][0]
+                curr_since[sym] = last_ts + timeframe_seconds(exchange, timeframe) * 1000
+        if all(len(batch.get(sym, [])) < req_limit for sym in symbols):
+            break
+        remaining -= req_limit
 
     logger.info(
         "Fetched OHLCV for %d/%d symbols on %s",
@@ -1644,6 +1664,7 @@ async def update_multi_tf_ohlcv_cache(
     symbols: Iterable[str],
     config: Dict,
     limit: int = 100,
+    start_since: int | None = None,
     use_websocket: bool = False,
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
@@ -1696,13 +1717,20 @@ async def update_multi_tf_ohlcv_cache(
             else:
                 cex_symbols.append(s)
 
+        tf_sec = timeframe_seconds(exchange, tf)
+        tf_limit = limit
+        if start_since is not None:
+            needed = int((time.time() * 1000 - start_since) // (tf_sec * 1000)) + 1
+            tf_limit = max(limit, needed)
+
         if cex_symbols:
             tf_cache = await update_ohlcv_cache(
                 exchange,
                 tf_cache,
                 cex_symbols,
                 timeframe=tf,
-                limit=limit,
+                limit=tf_limit,
+                start_since=start_since,
                 use_websocket=use_websocket,
                 force_websocket_history=force_websocket_history,
                 max_concurrent=max_concurrent,
@@ -1716,7 +1744,7 @@ async def update_multi_tf_ohlcv_cache(
                 res = await fetch_geckoterminal_ohlcv(
                     sym,
                     timeframe=tf,
-                    limit=limit,
+                    limit=tf_limit,
                     min_24h_volume=min_volume_usd,
                 )
             except Exception as exc:  # pragma: no cover - network
@@ -1736,7 +1764,7 @@ async def update_multi_tf_ohlcv_cache(
                     exchange,
                     sym,
                     timeframe=tf,
-                    limit=limit,
+                    limit=tf_limit,
                     min_volume_usd=min_volume_usd,
                     gecko_res=res,
                     use_gecko=False,
@@ -1787,6 +1815,7 @@ async def update_regime_tf_cache(
     symbols: Iterable[str],
     config: Dict,
     limit: int = 100,
+    start_since: int | None = None,
     use_websocket: bool = False,
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
@@ -1823,6 +1852,7 @@ async def update_regime_tf_cache(
             symbols,
             fetch_cfg,
             limit=limit,
+            start_since=start_since,
             use_websocket=use_websocket,
             force_websocket_history=force_websocket_history,
             max_concurrent=max_concurrent,

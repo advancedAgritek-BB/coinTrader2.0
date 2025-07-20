@@ -718,6 +718,41 @@ def test_update_multi_tf_ohlcv_cache():
     assert set(ex.calls) == {"1h", "4h", "1d"}
 
 
+class PagingMultiExchange:
+    has = {"fetchOHLCV": True}
+
+    def __init__(self):
+        self.calls = 0
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
+        self.calls += 1
+        start = since or 0
+        tf_ms = 3600 * 1000
+        return [[start + i * tf_ms, 1, 1, 1, 1, 1] for i in range(limit)]
+
+
+def test_update_multi_tf_ohlcv_cache_start_since_paging(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    ex = PagingMultiExchange()
+
+    monkeypatch.setattr(market_loader.time, "time", lambda: 720 * 2 * 3600)
+
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["BTC/USD"],
+            {"timeframes": ["1h"]},
+            start_since=0,
+        )
+    )
+
+    assert ex.calls > 1
+    df = cache["1h"]["BTC/USD"]
+    assert len(df) >= 720 * 2
+
+
 def test_update_regime_tf_cache():
     ex = DummyMultiTFExchange()
     cache: dict[str, dict[str, pd.DataFrame]] = {}
