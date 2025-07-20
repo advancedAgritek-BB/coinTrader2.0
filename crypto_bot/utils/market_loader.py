@@ -460,19 +460,28 @@ async def fetch_ohlcv_async(
                     kwargs["limit"] = ws_limit
                 except Exception:
                     pass
-            try:
-                data = await _call_with_retry(
-                    exchange.watch_ohlcv, timeout=WS_OHLCV_TIMEOUT, **kwargs
-                )
-            except asyncio.CancelledError:
-                if hasattr(exchange, "close"):
-                    if asyncio.iscoroutinefunction(getattr(exchange, "close")):
-                        with contextlib.suppress(Exception):
-                            await exchange.close()
-                    else:
-                        with contextlib.suppress(Exception):
-                            await asyncio.to_thread(exchange.close)
-                raise
+            for attempt in range(3):
+                try:
+                    data = await _call_with_retry(
+                        exchange.watch_ohlcv, timeout=WS_OHLCV_TIMEOUT, **kwargs
+                    )
+                    break
+                except asyncio.CancelledError:
+                    if hasattr(exchange, "close"):
+                        if asyncio.iscoroutinefunction(getattr(exchange, "close")):
+                            with contextlib.suppress(Exception):
+                                await exchange.close()
+                        else:
+                            with contextlib.suppress(Exception):
+                                await asyncio.to_thread(exchange.close)
+                    raise
+                except Exception as exc:
+                    if attempt >= 2:
+                        raise
+                    logger.warning(
+                        "watch_ohlcv failed on attempt %d: %s", attempt + 1, exc
+                    )
+                    await asyncio.sleep(5)
             if ws_limit and len(data) < ws_limit and force_websocket_history:
                 logger.warning(
                     "WebSocket OHLCV for %s %s returned %d of %d candles; disable force_websocket_history to allow REST fallback",
