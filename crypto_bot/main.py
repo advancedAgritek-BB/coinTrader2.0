@@ -561,7 +561,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
         sf["volume_percentile"] = 5
 
     try:
-        symbols = await get_filtered_symbols(ctx.exchange, ctx.config)
+        symbols, onchain_syms = await get_filtered_symbols(ctx.exchange, ctx.config)
     finally:
         if pump:
             sf["min_volume_usd"] = orig_min_volume
@@ -569,12 +569,13 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     ctx.timing["symbol_time"] = time.perf_counter() - t0
 
-    solana_tokens: list[str] = []
+    solana_tokens: list[str] = list(onchain_syms)
     sol_cfg = ctx.config.get("solana_scanner", {})
     if sol_cfg.get("enabled"):
         try:
-            solana_tokens = await get_solana_new_tokens(sol_cfg)
-            symbols.extend((m, 0.0) for m in solana_tokens)
+            new_tokens = await get_solana_new_tokens(sol_cfg)
+            solana_tokens.extend(new_tokens)
+            symbols.extend((m, 0.0) for m in new_tokens)
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("Solana scanner failed: %s", exc)
 

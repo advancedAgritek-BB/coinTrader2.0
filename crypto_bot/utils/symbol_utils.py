@@ -5,6 +5,7 @@ from .logger import LOG_DIR, setup_logger
 from .symbol_pre_filter import filter_symbols
 from .telemetry import telemetry
 from .market_loader import _is_valid_base_token
+from .token_registry import TOKEN_MINTS
 
 
 def fix_symbol(sym: str) -> str:
@@ -16,12 +17,12 @@ def fix_symbol(sym: str) -> str:
 logger = setup_logger("bot", LOG_DIR / "bot.log")
 
 
-_cached_symbols: list | None = None
+_cached_symbols: tuple[list[tuple[str, float]], list[str]] | None = None
 _last_refresh: float = 0.0
 
 
-async def get_filtered_symbols(exchange, config) -> list:
-    """Return user symbols filtered by liquidity/volatility or fallback.
+async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]], list[str]]:
+    """Return CEX symbols plus onchain symbols.
 
     Results are cached for ``symbol_refresh_minutes`` minutes to avoid
     unnecessary API calls.
@@ -40,20 +41,30 @@ async def get_filtered_symbols(exchange, config) -> list:
     if config.get("skip_symbol_filters"):
         syms = config.get("symbols", [config.get("symbol")])
         result = [(s, 0.0) for s in syms]
-        _cached_symbols = result
+        _cached_symbols = (result, [])
         _last_refresh = now
-        return result
+        return result, []
 
     symbols = config.get("symbols", [config.get("symbol")])
     cleaned_symbols = []
+    onchain_syms: list[str] = []
+    markets = getattr(exchange, "markets", None)
     for sym in symbols:
         if not isinstance(sym, str):
             cleaned_symbols.append(sym)
             continue
         base, _, quote = sym.partition("/")
-        if quote.upper() == "USDC" and not _is_valid_base_token(base):
-            logger.info("Dropping invalid USDC pair %s", sym)
-            continue
+        if quote.upper() == "USDC":
+            if (
+                base.upper() in TOKEN_MINTS
+                and markets is not None
+                and sym not in markets
+            ):
+                onchain_syms.append(sym)
+                continue
+            if not _is_valid_base_token(base):
+                logger.info("Dropping invalid USDC pair %s", sym)
+                continue
         cleaned_symbols.append(sym)
 
     symbols = cleaned_symbols
@@ -72,7 +83,7 @@ async def get_filtered_symbols(exchange, config) -> list:
                 "No symbols met volume/spread requirements; consider adjusting symbol_filter in config. Rejected %d symbols",
                 skipped_main,
             )
-            return []
+            return [], onchain_syms
 
         skipped_before = telemetry.snapshot().get("scan.symbols_skipped", 0)
         if asyncio.iscoroutinefunction(filter_symbols):
@@ -90,7 +101,7 @@ async def get_filtered_symbols(exchange, config) -> list:
                 skipped_main,
                 skipped_fb,
             )
-            return []
+            return [], onchain_syms
 
         logger.warning(
             "No symbols passed filters, falling back to %s",
@@ -106,8 +117,8 @@ async def get_filtered_symbols(exchange, config) -> list:
             skipped_main,
         )
 
-    if scored:
-        _cached_symbols = scored
+    if scored or onchain_syms:
+        _cached_symbols = (scored, onchain_syms)
         _last_refresh = now
 
-    return scored
+    return scored, onchain_syms
