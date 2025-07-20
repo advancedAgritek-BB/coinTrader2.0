@@ -54,6 +54,7 @@ def test_load_token_mints(monkeypatch, tmp_path):
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr
     spec.loader.exec_module(tr)
+    tr.TOKEN_MINTS.clear()
     monkeypatch.setattr(tr, "aiohttp", aiohttp_mod)
     monkeypatch.setattr(tr, "CACHE_FILE", tmp_path / "token_mints.json", raising=False)
 
@@ -149,12 +150,69 @@ def test_load_token_mints_error(monkeypatch, tmp_path):
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr
     spec.loader.exec_module(tr)
+    tr.TOKEN_MINTS.clear()
     monkeypatch.setattr(tr, "aiohttp", aiohttp_mod)
     monkeypatch.setattr(tr, "CACHE_FILE", file, raising=False)
 
     mapping = asyncio.run(tr.load_token_mints())
     assert mapping == {"OLD": "M"}
     assert tr.TOKEN_MINTS == {}
+
+
+def test_load_token_mints_force_refresh_creates_dir(monkeypatch, tmp_path):
+    data = {"tokens": [{"symbol": "Z", "address": "ZZZ"}]}
+
+    class DummyResp:
+        def __init__(self, d):
+            self._d = d
+
+        async def json(self, content_type=None):
+            return self._d
+
+        def raise_for_status(self):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+    class DummySession:
+        def __init__(self, d):
+            self.d = d
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=10):
+            return DummyResp(self.d)
+
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: DummySession(data), "ClientError": Exception})
+
+    import importlib.util, pathlib, shutil
+    spec = importlib.util.spec_from_file_location(
+        "crypto_bot.utils.token_registry",
+        pathlib.Path(__file__).resolve().parents[1]
+        / "crypto_bot" / "utils" / "token_registry.py",
+    )
+    tr = importlib.util.module_from_spec(spec)
+    sys.modules["crypto_bot.utils.token_registry"] = tr
+    spec.loader.exec_module(tr)
+    monkeypatch.setattr(tr, "aiohttp", aiohttp_mod)
+    cache_file = tmp_path / "cache" / "token_mints.json"
+    monkeypatch.setattr(tr, "CACHE_FILE", cache_file, raising=False)
+    tr._LOADED = True
+
+    if cache_file.parent.exists():
+        shutil.rmtree(cache_file.parent)
+
+    mapping = asyncio.run(tr.load_token_mints(force_refresh=True))
+    assert mapping == {"Z": "ZZZ"}
+    assert cache_file.exists()
 
 
 def test_set_token_mints_updates_cache(monkeypatch, tmp_path):
