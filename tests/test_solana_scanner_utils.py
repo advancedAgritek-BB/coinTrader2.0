@@ -65,6 +65,13 @@ def test_fetch_new_raydium_pools(monkeypatch):
     session = DummySession(data)
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
     monkeypatch.setattr(solana_scanner, "aiohttp", aiohttp_mod)
+
+    async def fake_gecko(base):
+        return base
+
+    monkeypatch.setattr(solana_scanner, "get_mint_from_gecko", fake_gecko)
+    monkeypatch.setattr(solana_scanner, "TOKEN_MINTS", {})
+
     solana_scanner._MIN_VOLUME_USD = 100
     tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools("k", 5))
     assert tokens == ["A"]
