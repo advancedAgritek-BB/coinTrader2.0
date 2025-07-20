@@ -14,6 +14,8 @@ import base58
 import warnings
 import contextlib
 
+from .token_registry import TOKEN_MINTS
+
 from .telegram import TelegramNotifier
 from .logger import LOG_DIR, setup_logger
 
@@ -59,7 +61,9 @@ SUPPORTED_USD_QUOTES = {"USD", "USDC", "USDT"}
 
 
 def _is_valid_base_token(token: str) -> bool:
-    """Return True if ``token`` looks like a Solana mint address."""
+    """Return ``True`` if ``token`` is known or looks like a Solana mint."""
+    if token.upper() in TOKEN_MINTS:
+        return True
     if not isinstance(token, str):
         return False
     if not (32 <= len(token) <= 44):
