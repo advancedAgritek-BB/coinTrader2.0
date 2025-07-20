@@ -11,9 +11,6 @@ import inspect
 
 import aiohttp
 
-# Track WebSocket ping tasks
-WS_PING_TASKS: set[asyncio.Task] = set()
-
 try:
     import ccxt  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
@@ -34,35 +31,27 @@ from schema.scanner import (
 )
 
 from crypto_bot.utils.telegram import TelegramNotifier, send_test_message
-from crypto_bot.utils.trade_reporter import report_entry, report_exit
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.wallet_manager import load_or_create
 from crypto_bot.utils.market_analyzer import analyze_symbol
-from crypto_bot.strategy_router import strategy_for, strategy_name
 from crypto_bot.strategy import dca_bot
 from crypto_bot.cooldown_manager import (
     configure as cooldown_configure,
-    in_cooldown,
-    mark_cooldown,
 )
 from crypto_bot.phase_runner import BotContext, PhaseRunner
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.risk.exit_manager import (
     calculate_trailing_stop,
     should_exit,
-    get_partial_exit_percent,
 )
 from crypto_bot.execution.cex_executor import (
     execute_trade_async as cex_trade_async,
     get_exchange,
-    place_stop_order,
 )
 from crypto_bot.open_position_guard import OpenPositionGuard
 from crypto_bot import console_monitor, console_control
-from crypto_bot.utils.performance_logger import log_performance
 from crypto_bot.utils.position_logger import log_position, log_balance
-from crypto_bot.utils.regime_logger import log_regime
 from crypto_bot.utils.market_loader import (
     load_kraken_symbols,
     update_ohlcv_cache,
@@ -76,19 +65,12 @@ from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.utils.eval_queue import build_priority_queue
 from crypto_bot.solana import get_solana_new_tokens
 from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
-
-# Backwards compatibility for tests
-_fix_symbol = fix_symbol
 from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
-from crypto_bot.utils.pnl_logger import log_pnl
-from crypto_bot.utils.regime_pnl_tracker import log_trade as log_regime_pnl
-from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import write_cycle_metrics
-from crypto_bot.utils.correlation import compute_correlation_matrix
-from crypto_bot.utils.strategy_analytics import write_scores, write_stats
+
 from crypto_bot.monitoring import record_sol_scanner_metrics
 from crypto_bot.fund_manager import (
     auto_convert_funds,
@@ -96,14 +78,14 @@ from crypto_bot.fund_manager import (
     detect_non_trade_tokens,
 )
 from crypto_bot.regime.regime_classifier import (
-    CONFIG,
     classify_regime_async,
     classify_regime_cached,
 )
 from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.solana.exit import monitor_price
 
-
+# Backwards compatibility for tests
+_fix_symbol = fix_symbol
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENV_PATH = Path(__file__).resolve().parent / ".env"
@@ -113,9 +95,11 @@ _LAST_CONFIG_MTIME = CONFIG_PATH.stat().st_mtime
 
 logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 
+# Track WebSocket ping tasks
+WS_PING_TASKS: set[asyncio.Task] = set()
+
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
-
 
 # Protects shared queues for future multi-tasking scenarios
 QUEUE_LOCK = asyncio.Lock()
@@ -527,7 +511,7 @@ async def initial_scan(
     processed = 0
 
     for i in range(0, total, batch_size):
-        batch = symbols[i : i + batch_size]
+        batch = symbols[i:i + batch_size]
 
         limit = min(config.get("scan_lookback_limit", 50), 700)
 
@@ -1250,6 +1234,7 @@ async def handle_exits(ctx: BotContext) -> None:
 
             # persist updated fields like 'dca_count'
             ctx.positions[sym] = pos
+
 
 async def force_exit_all(ctx: BotContext) -> None:
     """Liquidate all open positions immediately."""
