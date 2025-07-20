@@ -61,7 +61,7 @@ dca:
   max_entries: 2
   size_multiplier: 1.0
 drawdown_penalty_coef: 0.2
-ensemble_min_conf: 0.1
+ensemble_min_conf: 0.05
 exchange: kraken
 exchange_market_types:
 - spot
@@ -176,7 +176,7 @@ micro_scalp:
   volume_window: 15
   wick_pct: 0.1
 min_agreeing_votes: 1
-min_confidence_score: 0.05
+min_confidence_score: 0.01
 min_consistent_agreement: 1
 min_cooldown: 0
 min_history_fraction: 0.5
@@ -192,7 +192,7 @@ mode_threshold: 0.3
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
 ohlcv_timeout: 120
-onchain_min_volume_usd: 1000000
+onchain_min_volume_usd: 10000
 onchain_symbols:
 - SOL/USDC
 - BONK/USDC
@@ -237,13 +237,13 @@ risk:
   atr_short_window: 10
   max_drawdown: 0.5
   max_volatility_factor: 3
-  min_expected_value: -0.1
+  min_expected_value: -0.2
   min_volume: 0.1
   stop_loss_atr_mult: 1.5
-  stop_loss_pct: 0.005
+  stop_loss_pct: 0.01
   take_profit_atr_mult: 3.0
-  take_profit_pct: 0.04
-  volume_threshold_ratio: 0.0001
+  take_profit_pct: 0.1
+  volume_threshold_ratio: 0.00005
 rl_selector:
   enabled: false
 rsi_overbought_pct: 80
@@ -283,7 +283,7 @@ signal_fusion:
     - 0.3
   - - sniper_bot
     - 0.2
-signal_threshold: 0.03
+signal_threshold: 0.01
 signal_weight_optimizer:
   enabled: true
   learning_rate: 0.05
@@ -314,15 +314,13 @@ solana_scanner:
   enabled: true
   gecko_search: true
   interval_minutes: 0.5
-  max_tokens_per_scan: 100
+  max_tokens_per_scan: 200
   min_volume_usd: 500
 solana_slippage_bps: 10
-token_registry:
-  refresh_interval_minutes: 15
 strategy_allocation:
-  grid_bot: 0.2
-  sniper_bot: 0.4
-  trend_bot: 0.4
+  grid_bot: 0.1
+  sniper_bot: 0.6
+  trend_bot: 0.3
 strategy_evaluation_mode: ensemble
 strategy_router:
   bandit_enabled: false
@@ -357,7 +355,7 @@ strategy_router:
 symbol: BTC/USDT
 symbol_batch_size: 50
 symbol_filter:
-  change_pct_percentile: 5
+  change_pct_percentile: 2
   correlation_max_pairs: 200
   http_timeout: 5
   kraken_batch_size: 200
@@ -367,7 +365,7 @@ symbol_filter:
   min_volume_usd: 500
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
-  volume_percentile: 5
+  volume_percentile: 20
 symbol_refresh_minutes: 1
 symbol_score_weights:
   age: 0.02
@@ -398,10 +396,12 @@ timeframes:
 - 15m
 - 1h
 - 4h
+token_registry:
+  refresh_interval_minutes: 15
 top_n_symbols: 50
 tp_mult: 2.0
 tp_pct: 0.2
-trade_size_pct: 0.1
+trade_size_pct: 0.05
 trend:
   atr_period: 10
   k: 0.8
