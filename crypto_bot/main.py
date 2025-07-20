@@ -1436,11 +1436,7 @@ async def _main_impl() -> TelegramNotifier:
             )
         # Continue startup even if ccxt is missing for testing environments
 
-    if (
-        config.get("scan_markets", True)
-        and not config.get("symbols")
-        and not config.get("onchain_symbols")
-    ):
+    if config.get("scan_markets", True) and not config.get("symbols"):
         attempt = 0
         delay = SYMBOL_SCAN_RETRY_DELAY
         discovered: list[str] | None = None
@@ -1475,11 +1471,11 @@ async def _main_impl() -> TelegramNotifier:
             delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
 
         if discovered:
-            config["symbols"] = discovered
+            config["symbols"] = discovered + config.get("onchain_symbols", [])
         elif discovered is None:
             cached = load_liquid_pairs()
             if isinstance(cached, list):
-                config["symbols"] = cached
+                config["symbols"] = cached + config.get("onchain_symbols", [])
                 logger.warning("Using cached pairs due to symbol scan failure")
             else:
                 logger.error(
