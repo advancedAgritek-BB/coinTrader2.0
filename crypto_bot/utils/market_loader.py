@@ -11,7 +11,6 @@ import numpy as np
 import ccxt
 import aiohttp
 import base58
-import warnings
 import contextlib
 
 from .token_registry import TOKEN_MINTS
