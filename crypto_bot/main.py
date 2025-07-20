@@ -461,7 +461,7 @@ async def _ws_ping_loop(exchange: object, interval: float) -> None:
                 clients = getattr(exchange, "clients", None)
                 if isinstance(clients, dict):
                     if clients:
-                        for client in clients.values():
+                        for client in list(clients.values()):
                             if is_coro:
                                 await ping(client)
                             else:
