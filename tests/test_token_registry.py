@@ -157,6 +157,7 @@ def test_load_token_mints_error(monkeypatch, tmp_path):
     assert tr.TOKEN_MINTS == {}
 
 
+def test_set_token_mints_updates_cache(monkeypatch, tmp_path):
 def test_get_mint_from_gecko(monkeypatch):
     data = {"data": [{"attributes": {"address": "M"}}]}
 
@@ -198,11 +199,21 @@ def test_get_mint_from_gecko(monkeypatch):
     spec = importlib.util.spec_from_file_location(
         "crypto_bot.utils.token_registry",
         pathlib.Path(__file__).resolve().parents[1]
+        / "crypto_bot"
+        / "utils"
+        / "token_registry.py",
         / "crypto_bot" / "utils" / "token_registry.py",
     )
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr
     spec.loader.exec_module(tr)
+    monkeypatch.setattr(tr, "CACHE_FILE", tmp_path / "token_mints.json", raising=False)
+
+    tr.set_token_mints({"AAA": "mint"})
+    assert json.loads(tr.CACHE_FILE.read_text()) == {"AAA": "mint"}
+
+    tr.set_token_mints({"AAA": "mint", "BBB": "mint2"})
+    assert json.loads(tr.CACHE_FILE.read_text()) == {"AAA": "mint", "BBB": "mint2"}
     monkeypatch.setattr(tr, "aiohttp", aiohttp_mod)
 
     mint = asyncio.run(tr.get_mint_from_gecko("BONK"))

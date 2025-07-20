@@ -12,7 +12,7 @@ def _raise_stop(*_a, **_k):
     raise StopLoop
 
 
-def test_load_token_mints_once(monkeypatch):
+def test_load_token_mints_once(monkeypatch, tmp_path):
     cfg = {}
     monkeypatch.setattr(main, "load_config", lambda: cfg)
     monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
@@ -27,6 +27,7 @@ def test_load_token_mints_once(monkeypatch):
     registry = importlib.import_module("crypto_bot.utils.token_registry")
     registry.TOKEN_MINTS.clear()
     registry._LOADED = False
+    monkeypatch.setattr(registry, "CACHE_FILE", tmp_path / "token_mints.json", raising=False)
     calls = {"load": 0}
 
     async def fake_load_token_mints():

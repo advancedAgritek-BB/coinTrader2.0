@@ -1381,8 +1381,14 @@ async def _main_impl() -> TelegramNotifier:
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config = load_config()
-    from crypto_bot.utils.token_registry import TOKEN_MINTS, load_token_mints
-    TOKEN_MINTS.update(await load_token_mints())
+    from crypto_bot.utils.token_registry import (
+        TOKEN_MINTS,
+        load_token_mints,
+        set_token_mints,
+    )
+    mapping = await load_token_mints()
+    if mapping:
+        set_token_mints({**TOKEN_MINTS, **mapping})
     onchain_syms = [fix_symbol(s) for s in config.get("onchain_symbols", [])]
     onchain_syms = [f"{s}/USDC" if "/" not in s else s for s in onchain_syms]
     if onchain_syms:
