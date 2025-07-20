@@ -728,12 +728,16 @@ def route(
             logger.info("Routing %s pair to Solana sniper bot (auto)", symbol)
             return _wrap(sniper_solana.generate_signal)
     if symbol.endswith("/USDC") and regime == "breakout":
-        logger.info("Routing USDC breakout to Solana sniper bot")
-        return _wrap(sniper_solana.generate_signal)
+        base = symbol.split("/")[0]
+        if base.upper() in TOKEN_MINTS:
+            logger.info("Routing USDC breakout to Solana sniper bot")
+            return _wrap(sniper_solana.generate_signal)
 
     if chain.lower().startswith("sol") and mode in {"auto", "onchain"} and regime in {"breakout", "volatile"}:
-        logger.info("Routing %s regime to Solana sniper bot (%s mode)", regime, mode)
-        return _wrap(sniper_solana.generate_signal)
+        base = symbol.split("/")[0] if symbol else ""
+        if not symbol or base.upper() in TOKEN_MINTS:
+            logger.info("Routing %s regime to Solana sniper bot (%s mode)", regime, mode)
+            return _wrap(sniper_solana.generate_signal)
 
     if regime == "sideways" and grid_cfg.get("dynamic_grid") and symbol:
         logger.info("Routing dynamic grid signal to micro scalp bot")

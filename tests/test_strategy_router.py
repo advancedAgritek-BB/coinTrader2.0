@@ -178,7 +178,8 @@ def test_usdc_pair_breakout():
         "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
     }
     fn = route("breakout", "cex", cfg)
-    assert fn.__name__ == sniper_solana.generate_signal.__name__
+    # unsupported token should fall back to breakout_bot
+    assert fn.__name__ == breakout_bot.generate_signal.__name__
 
 
 def test_auto_solana_breakout_route():
