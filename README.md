@@ -248,7 +248,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **wallet_address** – destination wallet for DEX trades.
 * **solana_slippage_bps** – slippage tolerance for on-chain conversions.
 * **symbol**/**symbols** – pairs to trade when not scanning automatically.
-* **scan_markets** – load all exchange pairs when `symbols` is empty.
+* **scan_markets** – load all exchange pairs when `symbols` is empty (enabled by default).
 * **scan_in_background** – start the initial scan in the background so trading can begin immediately.
 * **excluded_symbols** – markets to skip during scanning.
 * **solana_symbols** – base tokens traded on Solana; each is appended with `/USDC`.
@@ -773,15 +773,15 @@ Binance.US is not recommended because of API limitations.
 
 ### Automatic Market Scanning
 
-When `scan_markets` is set to `true` and the `symbols` list is empty, the bot
-loads all active Kraken trading pairs at startup. Pairs listed under
-`excluded_symbols` are skipped. Disable this behaviour by setting
-`scan_markets` to `false`. When `scan_in_background` is `true` the scan runs as
+When the `symbols` list is empty, the bot loads all active Kraken trading pairs
+at startup by default. Pairs listed under `excluded_symbols` are skipped.
+Disable this behaviour by setting `scan_markets` to `false`. When
+`scan_in_background` is `true` the scan runs as
 a background task so trading phases start immediately. Set it to `false` to
 wait for scanning to complete before trading begins.
 
 ```yaml
-scan_markets: true
+scan_markets: true    # default
 scan_in_background: true
 symbols: []            # automatically populated
 solana_symbols: ["SOL/USDC", "BONK/USDC"]     # base tokens traded on Solana
@@ -796,8 +796,8 @@ max_spread_pct: 4.0              # skip pairs with wide spreads
 ```
 
 To avoid loading every market on startup, populate `symbols` with the
-top 200 pairs by volume from `tasks/refresh_pairs.py`. Only set
-`scan_markets: true` when you need to evaluate the entire exchange.
+top 200 pairs by volume from `tasks/refresh_pairs.py`. Set
+`scan_markets: false` when you don't want to evaluate the entire exchange.
 
 `exchange_market_types` filters the discovered pairs by market class. The bot
 also skips newly listed pairs using `min_symbol_age_days`.
