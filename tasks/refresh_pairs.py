@@ -14,7 +14,7 @@ from crypto_bot.utils import timeframe_seconds
 from crypto_bot.utils.symbol_utils import fix_symbol
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "crypto_bot" / "config.yaml"
-CACHE_DIR = Path("cache")
+CACHE_DIR = Path(__file__).resolve().parents[1] / "cache"
 PAIR_FILE = CACHE_DIR / "liquid_pairs.json"
 
 DEFAULT_MIN_VOLUME_USD = 1_000_000
