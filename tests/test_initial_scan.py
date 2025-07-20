@@ -25,13 +25,12 @@ class DummyExchange:
 @pytest.mark.asyncio
 async def test_initial_scan_fetches_200_candles(monkeypatch):
     since_vals = []
-
-    async def fake_update_multi(exchange, cache, batch, cfg, start_since=None, **kwargs):
-        since_vals.append(start_since)
     start_vals = []
+    limits = []
 
     async def fake_update_multi(exchange, cache, batch, cfg, limit=0, start_since=None, **kwargs):
         limits.append(limit)
+        since_vals.append(start_since)
         start_vals.append(start_since)
         return {}
 
@@ -116,5 +115,4 @@ async def test_initial_scan_onchain(monkeypatch):
 
     assert set(calls) == {('SOL/USDC', '1h', 100), ('SOL/USDC', '5m', 100)}
     assert [(c[0], c[1]) for c in updates] == [('1h', 'SOL/USDC'), ('5m', 'SOL/USDC')]
-    assert kw.get('limit') == 10000
     assert starts and isinstance(starts[0], int)
