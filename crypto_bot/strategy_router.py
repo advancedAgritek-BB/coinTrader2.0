@@ -23,6 +23,7 @@ import threading
 from collections import defaultdict
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.cache_helpers import cache_by_id
+from crypto_bot.utils.token_registry import TOKEN_MINTS
 from crypto_bot.selector import bandit
 
 from crypto_bot.strategy import (
@@ -572,6 +573,11 @@ def route(
         return wrapped
 
     cfg = config or DEFAULT_ROUTER_CFG
+    df = None
+    if isinstance(df_map, pd.DataFrame):
+        df = df_map
+    elif isinstance(df_map, Mapping):
+        df = next(iter(df_map.values()), None)
 
     # === FAST-PATH FOR STRONG SIGNALS ===
     fp = (
@@ -716,6 +722,11 @@ def route(
         grid_cfg = cfg.get("grid_bot", {})
     else:
         grid_cfg = {}
+    if symbol.endswith("/USDC") and mode == "auto":
+        base = symbol.split("/")[0]
+        if base.upper() in TOKEN_MINTS:
+            logger.info("Routing %s pair to Solana sniper bot (auto)", symbol)
+            return _wrap(sniper_solana.generate_signal)
     if symbol.endswith("/USDC") and regime == "breakout":
         logger.info("Routing USDC breakout to Solana sniper bot")
         return _wrap(sniper_solana.generate_signal)

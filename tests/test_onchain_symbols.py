@@ -76,7 +76,7 @@ def test_scan_runs_with_onchain_only(monkeypatch):
     asyncio.run(main.main())
 
     assert calls["loader"] == 1
-    assert captured["cfg"]["symbols"] == ["BTC/USD"]
+    assert captured["cfg"]["symbols"] == ["BTC/USD", "SOL/USDC"]
 
 
 def test_get_filtered_symbols_onchain(monkeypatch, caplog):

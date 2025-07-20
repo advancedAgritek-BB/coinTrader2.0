@@ -18,8 +18,8 @@ def test_get_filtered_symbols_fallback(monkeypatch, caplog):
     async def fake_filter_symbols(ex, syms, cfg):
         calls.append(syms)
         if len(calls) == 1:
-            return []
-        return [("BTC/USD", 1.0)]
+            return [], []
+        return [("BTC/USD", 1.0)], []
 
     monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
 
@@ -38,7 +38,7 @@ def test_get_filtered_symbols_fallback_excluded(monkeypatch, caplog):
     symbol_utils._last_refresh = 0.0
 
     async def fake_filter_symbols(ex, syms, cfg):
-        return []
+        return [], []
 
     monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
 
@@ -62,7 +62,7 @@ def test_get_filtered_symbols_fallback_volume_fail(monkeypatch, caplog):
 
     async def fake_filter_symbols(ex, syms, cfg):
         calls.append(syms)
-        return []
+        return [], []
 
     monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
 
@@ -82,7 +82,7 @@ def test_get_filtered_symbols_caching(monkeypatch):
 
     async def fake_filter_symbols(ex, syms, cfg):
         calls.append(True)
-        return [("ETH/USD", 1.0)]
+        return [("ETH/USD", 1.0)], []
 
     monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
 
@@ -114,7 +114,7 @@ def test_get_filtered_symbols_caching(monkeypatch):
 
 def test_get_filtered_symbols_basic(monkeypatch):
     async def fake_filter_symbols(ex, syms, cfg):
-        return [(syms[0], 0.5)]
+        return [(syms[0], 0.5)], []
 
     monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
 
@@ -132,7 +132,7 @@ def test_get_filtered_symbols_invalid_usdc_token(monkeypatch):
 
     async def fake_filter_symbols(ex, syms, cfg):
         calls.append(syms)
-        return []
+        return [], []
 
     monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
 
@@ -154,7 +154,7 @@ def test_get_filtered_symbols_invalid_usdc(monkeypatch, caplog):
 
     async def fake_filter_symbols(ex, syms, cfg):
         calls.append(syms)
-        return [(s, 1.0) for s in syms]
+        return [(s, 1.0) for s in syms], []
 
     monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
 
@@ -197,7 +197,7 @@ def test_get_filtered_symbols_valid_sol(monkeypatch, caplog):
     monkeypatch.setattr(symbol_utils, "_is_valid_base_token", lambda t: True)
 
     async def fake_filter_symbols(_ex, syms, _cfg):
-        return [("SOL/USDC", 1.0)]
+        return [("SOL/USDC", 1.0)], []
 
     monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
 
@@ -222,7 +222,7 @@ def test_get_filtered_symbols_onchain_pair(monkeypatch):
     monkeypatch.setattr(symbol_utils, "_is_valid_base_token", lambda t: True)
 
     async def fake_filter_symbols(_ex, syms, _cfg):
-        return [(s, 1.0) for s in syms]
+        return [(s, 1.0) for s in syms], []
 
     class DummyEx:
         markets = {"ETH/USD": {}}

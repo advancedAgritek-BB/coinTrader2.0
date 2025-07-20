@@ -95,7 +95,11 @@ from crypto_bot.fund_manager import (
     check_wallet_balances,
     detect_non_trade_tokens,
 )
-from crypto_bot.regime.regime_classifier import CONFIG, classify_regime_async
+from crypto_bot.regime.regime_classifier import (
+    CONFIG,
+    classify_regime_async,
+    classify_regime_cached,
+)
 from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.solana.exit import monitor_price
 
@@ -205,6 +209,21 @@ def is_market_pumping(
 
     avg_change = sum(changes) / len(changes) if changes else 0.0
     return avg_change >= 0.10
+
+
+async def get_market_regime(ctx: BotContext) -> str:
+    """Return the market regime for the first cached symbol."""
+
+    base_tf = ctx.config.get("timeframe", "1h")
+    tf_cache = ctx.df_cache.get(base_tf, {})
+    if not tf_cache:
+        return "unknown"
+
+    sym, df = next(iter(tf_cache.items()))
+    higher_tf = ctx.config.get("higher_timeframe", "1d")
+    higher_df = ctx.df_cache.get(higher_tf, {}).get(sym)
+    label, _ = await classify_regime_cached(sym, base_tf, df, higher_df)
+    return label.split("_")[-1]
 
 
 def direction_to_side(direction: str) -> str:
@@ -554,6 +573,8 @@ async def fetch_candidates(ctx: BotContext) -> None:
     """Gather symbols for this cycle and build the evaluation batch."""
     t0 = time.perf_counter()
 
+    global symbol_priority_queue
+
     sf = ctx.config.setdefault("symbol_filter", {})
 
     if (
@@ -574,6 +595,12 @@ async def fetch_candidates(ctx: BotContext) -> None:
     if pump:
         sf["min_volume_usd"] = 500
         sf["volume_percentile"] = 5
+        if ctx.risk_manager:
+            weights = ctx.config.get("strategy_allocation", {}).copy()
+            weights["sniper_solana"] = 0.6
+            ctx.config["strategy_allocation"] = weights
+            ctx.risk_manager.update_allocation(weights)
+        ctx.config["mode"] = "auto"
 
     try:
         symbols, onchain_syms = await get_filtered_symbols(ctx.exchange, ctx.config)
@@ -586,7 +613,21 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     solana_tokens: list[str] = list(onchain_syms)
     sol_cfg = ctx.config.get("solana_scanner", {})
-    if sol_cfg.get("enabled"):
+
+    regime = "unknown"
+    try:
+        regime = await get_market_regime(ctx)
+    except Exception:  # pragma: no cover - safety
+        pass
+
+    if regime == "trending" and ctx.config.get("arbitrage_enabled", True):
+        try:
+            arb_syms = await scan_arbitrage(ctx.exchange, ctx.config)
+            symbols.extend((s, 2.0) for s in arb_syms)
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.error("Arbitrage scan error: %s", exc)
+
+    if regime == "volatile" and sol_cfg.get("enabled"):
         try:
             new_tokens = await get_solana_new_tokens(sol_cfg)
             solana_tokens.extend(new_tokens)
@@ -615,7 +656,6 @@ async def fetch_candidates(ctx: BotContext) -> None:
         len(symbols) / total_available if total_available else 1.0
     )
 
-    global symbol_priority_queue
     base_size = ctx.config.get("symbol_batch_size", 10)
     batch_size = int(base_size * volatility_factor)
     async with QUEUE_LOCK:
@@ -718,6 +758,7 @@ async def update_caches(ctx: BotContext) -> None:
             max_concurrent = max(1, max_concurrent // 2)
 
     async with OHLCV_LOCK:
+    try:
         ctx.df_cache = await update_multi_tf_ohlcv_cache(
             ctx.exchange,
             ctx.df_cache,
@@ -725,6 +766,24 @@ async def update_caches(ctx: BotContext) -> None:
             ctx.config,
             limit=limit,
             use_websocket=ctx.config.get("use_websocket", False),
+            force_websocket_history=ctx.config.get("force_websocket_history", False),
+            max_concurrent=max_concurrent,
+            notifier=(
+                ctx.notifier
+                if ctx.config.get("telegram", {}).get("status_updates", True)
+                else None
+            ),
+            priority_queue=symbol_priority_queue,
+        )
+    except Exception as exc:
+        logger.warning("WS OHLCV failed: %s - falling back to REST", exc)
+        ctx.df_cache = await update_multi_tf_ohlcv_cache(
+            ctx.exchange,
+            ctx.df_cache,
+            batch,
+            ctx.config,
+            limit=limit,
+            use_websocket=False,
             force_websocket_history=ctx.config.get("force_websocket_history", False),
             max_concurrent=max_concurrent,
             notifier=(
@@ -1441,11 +1500,7 @@ async def _main_impl() -> TelegramNotifier:
             )
         # Continue startup even if ccxt is missing for testing environments
 
-    if (
-        config.get("scan_markets", True)
-        and not config.get("symbols")
-        and not config.get("onchain_symbols")
-    ):
+    if config.get("scan_markets", True) and not config.get("symbols"):
         attempt = 0
         delay = SYMBOL_SCAN_RETRY_DELAY
         discovered: list[str] | None = None
@@ -1480,11 +1535,11 @@ async def _main_impl() -> TelegramNotifier:
             delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
 
         if discovered:
-            config["symbols"] = discovered
+            config["symbols"] = discovered + config.get("onchain_symbols", [])
         elif discovered is None:
             cached = load_liquid_pairs()
             if isinstance(cached, list):
-                config["symbols"] = cached
+                config["symbols"] = cached + config.get("onchain_symbols", [])
                 logger.warning("Using cached pairs due to symbol scan failure")
             else:
                 logger.error(

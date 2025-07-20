@@ -75,9 +75,12 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
     symbols = cleaned_symbols
     skipped_before = telemetry.snapshot().get("scan.symbols_skipped", 0)
     if asyncio.iscoroutinefunction(filter_symbols):
-        scored = await filter_symbols(exchange, symbols, config)
+        scored, extra_onchain = await filter_symbols(exchange, symbols, config)
     else:
-        scored = await asyncio.to_thread(filter_symbols, exchange, symbols, config)
+        scored, extra_onchain = await asyncio.to_thread(
+            filter_symbols, exchange, symbols, config
+        )
+    onchain_syms.extend([s for s, _ in extra_onchain])
     skipped_main = telemetry.snapshot().get("scan.symbols_skipped", 0) - skipped_before
     if not scored:
         fallback = config.get("symbol")
@@ -92,9 +95,12 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
 
         skipped_before = telemetry.snapshot().get("scan.symbols_skipped", 0)
         if asyncio.iscoroutinefunction(filter_symbols):
-            check = await filter_symbols(exchange, [fallback], config)
+            check, extra_onchain = await filter_symbols(exchange, [fallback], config)
         else:
-            check = await asyncio.to_thread(filter_symbols, exchange, [fallback], config)
+            check, extra_onchain = await asyncio.to_thread(
+                filter_symbols, exchange, [fallback], config
+            )
+        onchain_syms.extend([s for s, _ in extra_onchain])
         skipped_fb = telemetry.snapshot().get("scan.symbols_skipped", 0) - skipped_before
 
         if not check:
