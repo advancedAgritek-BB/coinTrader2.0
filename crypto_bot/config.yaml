@@ -313,8 +313,10 @@ solana_scanner:
   min_volume_usd: 1000
 solana_slippage_bps: 10
 solana_symbols:
-- SOL/USDC
-- BONK/USDC
+  # tickers convert to mints via the Solana token list
+  # if a ticker isn't found specify the base as a mint address
+  - SOL/USDC
+  - BONK/USDC
 strategy_allocation:
   grid_bot: 0.2
   sniper_bot: 0.4

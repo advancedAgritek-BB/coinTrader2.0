@@ -7,6 +7,9 @@ logger = logging.getLogger(__name__)
 
 # Mapping of symbol to Solana token mint used by Jupiter
 TOKEN_MINTS: Dict[str, str] = {
+"""Mapping of token symbols to Solana mint addresses."""
+
+TOKEN_MINTS: dict[str, str] = {
     "BTC": "So11111111111111111111111111111111111111112",
     "ETH": "2NdXGW7dpwye9Heq7qL3gFYYUUDewfxCUUDq36zzfrqD",
     "USDC": "EPjFWdd5AufqSSqeM2q6ksjLpaEweidnGj9n92gtQgNf",
@@ -48,3 +51,9 @@ async def load_token_mints(url: str | None = None) -> Dict[str, str]:
             result[symbol.upper()] = mint
     _LOADED = True
     return result
+
+def set_token_mints(mapping: dict[str, str]) -> None:
+    """Replace ``TOKEN_MINTS`` with ``mapping`` after normalizing keys."""
+    TOKEN_MINTS.clear()
+    TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
+
