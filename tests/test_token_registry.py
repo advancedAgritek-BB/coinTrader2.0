@@ -156,3 +156,87 @@ def test_load_token_mints_error(monkeypatch, tmp_path):
     assert mapping == {"OLD": "M"}
     assert tr.TOKEN_MINTS == {}
 
+
+def test_get_mint_from_gecko(monkeypatch):
+    data = {"data": [{"attributes": {"address": "M"}}]}
+
+    class DummyResp:
+        def __init__(self, d):
+            self._d = d
+
+        async def json(self):
+            return self._d
+
+        def raise_for_status(self):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+    class DummySession:
+        def __init__(self, d):
+            self.d = d
+            self.url = None
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=10):
+            self.url = url
+            return DummyResp(self.d)
+
+    session = DummySession(data)
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
+
+    import importlib.util, pathlib
+    spec = importlib.util.spec_from_file_location(
+        "crypto_bot.utils.token_registry",
+        pathlib.Path(__file__).resolve().parents[1]
+        / "crypto_bot" / "utils" / "token_registry.py",
+    )
+    tr = importlib.util.module_from_spec(spec)
+    sys.modules["crypto_bot.utils.token_registry"] = tr
+    spec.loader.exec_module(tr)
+    monkeypatch.setattr(tr, "aiohttp", aiohttp_mod)
+
+    mint = asyncio.run(tr.get_mint_from_gecko("BONK"))
+    assert mint == "M"
+    assert "query=BONK" in session.url
+
+
+def test_get_mint_from_gecko_error(monkeypatch):
+    class DummyErr(Exception):
+        pass
+
+    class FailingSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=10):
+            raise DummyErr("boom")
+
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: FailingSession(), "ClientError": DummyErr})
+
+    import importlib.util, pathlib
+    spec = importlib.util.spec_from_file_location(
+        "crypto_bot.utils.token_registry",
+        pathlib.Path(__file__).resolve().parents[1]
+        / "crypto_bot" / "utils" / "token_registry.py",
+    )
+    tr = importlib.util.module_from_spec(spec)
+    sys.modules["crypto_bot.utils.token_registry"] = tr
+    spec.loader.exec_module(tr)
+    monkeypatch.setattr(tr, "aiohttp", aiohttp_mod)
+
+    mint = asyncio.run(tr.get_mint_from_gecko("AAA"))
+    assert mint is None
+
