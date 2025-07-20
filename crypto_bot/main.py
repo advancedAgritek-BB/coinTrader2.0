@@ -758,58 +758,64 @@ async def update_caches(ctx: BotContext) -> None:
             max_concurrent = max(1, max_concurrent // 2)
 
     async with OHLCV_LOCK:
-    try:
-        ctx.df_cache = await update_multi_tf_ohlcv_cache(
-            ctx.exchange,
-            ctx.df_cache,
-            batch,
-            ctx.config,
-            limit=limit,
-            use_websocket=ctx.config.get("use_websocket", False),
-            force_websocket_history=ctx.config.get("force_websocket_history", False),
-            max_concurrent=max_concurrent,
-            notifier=(
-                ctx.notifier
-                if ctx.config.get("telegram", {}).get("status_updates", True)
-                else None
-            ),
-            priority_queue=symbol_priority_queue,
-        )
-    except Exception as exc:
-        logger.warning("WS OHLCV failed: %s - falling back to REST", exc)
-        ctx.df_cache = await update_multi_tf_ohlcv_cache(
-            ctx.exchange,
-            ctx.df_cache,
-            batch,
-            ctx.config,
-            limit=limit,
-            use_websocket=False,
-            force_websocket_history=ctx.config.get("force_websocket_history", False),
-            max_concurrent=max_concurrent,
-            notifier=(
-                ctx.notifier
-                if ctx.config.get("telegram", {}).get("status_updates", True)
-                else None
-            ),
-            priority_queue=symbol_priority_queue,
-        )
+        try:
+            ctx.df_cache = await update_multi_tf_ohlcv_cache(
+                ctx.exchange,
+                ctx.df_cache,
+                batch,
+                ctx.config,
+                limit=limit,
+                use_websocket=ctx.config.get("use_websocket", False),
+                force_websocket_history=ctx.config.get(
+                    "force_websocket_history", False
+                ),
+                max_concurrent=max_concurrent,
+                notifier=(
+                    ctx.notifier
+                    if ctx.config.get("telegram", {}).get("status_updates", True)
+                    else None
+                ),
+                priority_queue=symbol_priority_queue,
+            )
+        except Exception as exc:
+            logger.warning("WS OHLCV failed: %s - falling back to REST", exc)
+            ctx.df_cache = await update_multi_tf_ohlcv_cache(
+                ctx.exchange,
+                ctx.df_cache,
+                batch,
+                ctx.config,
+                limit=limit,
+                use_websocket=False,
+                force_websocket_history=ctx.config.get(
+                    "force_websocket_history", False
+                ),
+                max_concurrent=max_concurrent,
+                notifier=(
+                    ctx.notifier
+                    if ctx.config.get("telegram", {}).get("status_updates", True)
+                    else None
+                ),
+                priority_queue=symbol_priority_queue,
+            )
 
-        ctx.regime_cache = await update_regime_tf_cache(
-            ctx.exchange,
-            ctx.regime_cache,
-            batch,
-            ctx.config,
-            limit=limit,
-            use_websocket=ctx.config.get("use_websocket", False),
-            force_websocket_history=ctx.config.get("force_websocket_history", False),
-            max_concurrent=max_concurrent,
-            notifier=(
-                ctx.notifier
-                if ctx.config.get("telegram", {}).get("status_updates", True)
-                else None
-            ),
-            df_map=ctx.df_cache,
-        )
+            ctx.regime_cache = await update_regime_tf_cache(
+                ctx.exchange,
+                ctx.regime_cache,
+                batch,
+                ctx.config,
+                limit=limit,
+                use_websocket=ctx.config.get("use_websocket", False),
+                force_websocket_history=ctx.config.get(
+                    "force_websocket_history", False
+                ),
+                max_concurrent=max_concurrent,
+                notifier=(
+                    ctx.notifier
+                    if ctx.config.get("telegram", {}).get("status_updates", True)
+                    else None
+                ),
+                df_map=ctx.df_cache,
+            )
 
     tf = ctx.config.get("timeframe", "1h")
     for sym in batch:
