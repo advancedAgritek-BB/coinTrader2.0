@@ -21,6 +21,7 @@ except Exception:  # pragma: no cover - optional dependency
 import pandas as pd
 import numpy as np
 import yaml
+import requests
 from dotenv import dotenv_values
 from pydantic import ValidationError
 
@@ -60,6 +61,7 @@ from crypto_bot.utils.market_loader import (
     timeframe_seconds,
     configure as market_loader_configure,
     fetch_order_book_async,
+    fetch_ohlcv_async,
 )
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.utils.eval_queue import build_priority_queue
@@ -70,6 +72,7 @@ from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import write_cycle_metrics
+from crypto_bot.utils.token_registry import TOKEN_MINTS
 
 from crypto_bot.monitoring import record_sol_scanner_metrics
 from crypto_bot.fund_manager import (
@@ -146,6 +149,56 @@ def update_df_cache(
     tf_cache.move_to_end(symbol)
     if len(tf_cache) > max_size:
         tf_cache.popitem(last=False)
+
+
+def fetch_solana_historical(mint: str, timeframe: str, limit: int = 200) -> pd.DataFrame | None:
+    """Return historical OHLCV data for ``mint`` using Birdeye."""
+    api_key = os.getenv("BIRDEYE_API_KEY")
+    if not api_key:
+        logger.error("BIRDEYE_API_KEY not set")
+        return None
+
+    seconds = timeframe_seconds(None, timeframe)
+    if not seconds:
+        logger.error("Invalid timeframe %s", timeframe)
+        return None
+
+    now = int(time.time())
+    start = now - seconds * (limit + 1)
+    url = "https://public-api.birdeye.so/defi/ohlcv"
+    params = {
+        "address": mint,
+        "timeframe": timeframe,
+        "from": start,
+        "to": now,
+    }
+
+    try:
+        resp = requests.get(url, params=params, headers={"X-API-KEY": api_key}, timeout=10)
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+    except Exception as exc:  # pragma: no cover - network failures
+        logger.error("Birdeye OHLCV error for %s: %s", mint, exc)
+        return None
+
+    rows = []
+    for item in data[-limit:]:
+        try:
+            ts = int(item.get("t") or item.get("timestamp") or item.get("time", 0)) * 1000
+            rows.append([
+                ts,
+                float(item.get("o") or item.get("open")),
+                float(item.get("h") or item.get("high")),
+                float(item.get("l") or item.get("low")),
+                float(item.get("c") or item.get("close")),
+                float(item.get("v") or item.get("volume", 0)),
+            ])
+        except Exception:
+            continue
+
+    if not rows:
+        return None
+    return pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
 
 
 def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> float:
@@ -506,9 +559,12 @@ async def initial_scan(
     if not symbols:
         return
 
+    onchain_symbols = [s for s in config.get("onchain_symbols", []) if s]
+
     batch_size = int(config.get("symbol_batch_size", 10))
     total = len(symbols)
     processed = 0
+    scan_limit = min(config.get("scan_lookback_limit", 50), 700)
 
     for i in range(0, total, batch_size):
         batch = symbols[i:i + batch_size]
@@ -517,6 +573,10 @@ async def initial_scan(
         tfs = config.get("timeframes", ["1h"])
         tf_sec = timeframe_seconds(None, min(tfs, key=lambda t: timeframe_seconds(None, t)))
         start_since = int(time.time() * 1000 - limit * tf_sec * 1000)
+        limit = scan_limit
+        history_since = int((time.time() - 365 * 86400) * 1000)
+        limit = int(config.get("scan_deep_limit", config.get("scan_lookback_limit", 50) * 10))
+        logger.info("Loading deep OHLCV history starting %s", datetime.utcfromtimestamp(history_since / 1000).isoformat())
 
         async with OHLCV_LOCK:
             state.df_cache = await update_multi_tf_ohlcv_cache(
@@ -526,11 +586,13 @@ async def initial_scan(
                 config,
                 limit=limit,
                 start_since=start_since,
+                limit=scan_limit,
                 use_websocket=False,
                 force_websocket_history=config.get("force_websocket_history", False),
                 max_concurrent=config.get("max_concurrent_ohlcv"),
                 notifier=notifier,
                 priority_queue=symbol_priority_queue,
+                start_since=history_since,
             )
 
             state.regime_cache = await update_regime_tf_cache(
@@ -540,18 +602,51 @@ async def initial_scan(
                 config,
                 limit=limit,
                 start_since=start_since,
+                limit=scan_limit,
                 use_websocket=False,
                 force_websocket_history=config.get("force_websocket_history", False),
                 max_concurrent=config.get("max_concurrent_ohlcv"),
                 notifier=notifier,
                 df_map=state.df_cache,
             )
+        logger.info("Deep historical OHLCV loaded for %d symbols", len(batch))
+
+            for sym in batch:
+                if sym not in onchain_symbols:
+                    continue
+                base = sym.split("/")[0]
+                mint = TOKEN_MINTS.get(base.upper(), base)
+                for tf in config.get("timeframes", ["1h"]):
+                    df = await asyncio.to_thread(
+                        fetch_solana_historical, mint, tf, limit=limit
+                    )
+                    if isinstance(df, pd.DataFrame) and not df.empty:
+                        update_df_cache(state.df_cache, tf, sym, df)
 
         processed += len(batch)
         pct = processed / total * 100
         logger.info("Initial scan %.1f%% complete", pct)
         if notifier and config.get("telegram", {}).get("status_updates", True):
             notifier.notify(f"Initial scan {pct:.1f}% complete")
+
+    onchain_syms = config.get("onchain_symbols", [])
+    if onchain_syms:
+        try:
+            from crypto_bot.solana import fetch_solana_historical
+        except Exception:
+            fetch_solana_historical = None
+        if fetch_solana_historical:
+            timeframes = config.get("timeframes", ["1h"])
+            for sym in onchain_syms:
+                for tf in timeframes:
+                    try:
+                        df = await fetch_solana_historical(
+                            sym, timeframe=tf, limit=scan_limit
+                        )
+                    except Exception:
+                        continue
+                    if isinstance(df, pd.DataFrame):
+                        update_df_cache(state.df_cache, tf, sym, df)
 
     return
 
@@ -833,6 +928,14 @@ async def update_caches(ctx: BotContext) -> None:
                 logger.info(msg)
                 if status_updates and ctx.notifier:
                     ctx.notifier.notify(msg)
+
+    if ctx.config.get("use_websocket", True):
+        timeframe = ctx.config.get("timeframe", "1h")
+        try:
+            # Subscribe to WS for live candles
+            await ctx.exchange.watch_ohlcv(batch, timeframe)
+        except Exception as exc:  # pragma: no cover - network
+            logger.warning("WS subscribe failed: %s", exc)
 
     ctx.timing["ohlcv_fetch_latency"] = time.perf_counter() - start
 
