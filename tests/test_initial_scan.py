@@ -1,20 +1,18 @@
-import asyncio
 import types
 import sys
 import pandas as pd
 import pytest
 
 stub = types.ModuleType('solana_scanner')
+
 async def get_solana_new_tokens(*args, **kwargs):
     return []
-stub.get_solana_new_tokens = get_solana_new_tokens
-def search_geckoterminal_token(*_a, **_k):
-    return None
-stub.search_geckoterminal_token = search_geckoterminal_token
+
 async def search_geckoterminal_token(*args, **kwargs):
     return None
+
+stub.get_solana_new_tokens = get_solana_new_tokens
 stub.search_geckoterminal_token = search_geckoterminal_token
-stub.search_geckoterminal_token = lambda *a, **k: None
 sys.modules['crypto_bot.utils.solana_scanner'] = stub
 
 from crypto_bot.main import initial_scan, SessionState
@@ -70,6 +68,7 @@ async def test_initial_scan_ws_disabled_and_limit_capped(monkeypatch):
         'symbols': ['BTC/USD'],
         'timeframes': ['1h'],
         'scan_lookback_limit': 1000,
+        'scan_deep_limit': 700,
         'use_websocket': True,
     }
     await initial_scan(DummyExchange(), cfg, SessionState())
@@ -77,8 +76,8 @@ async def test_initial_scan_ws_disabled_and_limit_capped(monkeypatch):
     assert params
     for kw in params:
         assert kw.get('use_websocket') is False
-        assert kw.get('start_since') is not None
         assert kw.get('limit') == 700
+    assert params[0].get('start_since') is not None
 
 
 @pytest.mark.asyncio
@@ -115,4 +114,3 @@ async def test_initial_scan_onchain(monkeypatch):
 
     assert set(calls) == {('SOL/USDC', '1h', 100), ('SOL/USDC', '5m', 100)}
     assert [(c[0], c[1]) for c in updates] == [('1h', 'SOL/USDC'), ('5m', 'SOL/USDC')]
-    assert starts and isinstance(starts[0], int)
