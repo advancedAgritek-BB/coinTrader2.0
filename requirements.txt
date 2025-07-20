@@ -39,3 +39,4 @@ pythclient
 redis
 base58
 statsmodels
+pytest-asyncio
