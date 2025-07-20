@@ -394,6 +394,7 @@ async def fetch_ohlcv_async(
     if timeframe in ("4h", "1d"):
         use_websocket = False
 
+
     try:
         if hasattr(exchange, "symbols"):
             if not exchange.symbols and hasattr(exchange, "load_markets"):
@@ -419,6 +420,33 @@ async def fetch_ohlcv_async(
                     "disabled": True,
                 }
                 return UNSUPPORTED_SYMBOL
+
+        if not use_websocket and limit > 0:
+            data_all: list = []
+            while limit > 0:
+                req_limit = min(limit, 720)
+                params = {"symbol": symbol, "timeframe": timeframe, "limit": req_limit}
+                if since is not None:
+                    params["since"] = since
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
+                    batch = await _call_with_retry(
+                        exchange.fetch_ohlcv,
+                        timeout=REST_OHLCV_TIMEOUT,
+                        **params,
+                    )
+                else:
+                    batch = await _call_with_retry(
+                        asyncio.to_thread,
+                        exchange.fetch_ohlcv,
+                        **params,
+                        timeout=REST_OHLCV_TIMEOUT,
+                    )
+                data_all.extend(batch)
+                limit -= len(batch)
+                if len(batch) < req_limit:
+                    break
+                since = batch[-1][0] + timeframe_seconds(exchange, timeframe) * 1000
+            return data_all
         if (
             use_websocket
             and since is None
