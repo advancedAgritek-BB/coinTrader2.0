@@ -3,6 +3,11 @@ import json
 import sys
 
 
+class DummyErr(Exception):
+    """Minimal exception class for simulating aiohttp errors in tests."""
+    pass
+
+
 def _load_module(monkeypatch, tmp_path):
     import importlib.util, pathlib
     spec = importlib.util.spec_from_file_location(
