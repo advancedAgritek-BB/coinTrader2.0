@@ -1,15 +1,17 @@
-import os
+"""Token registry utilities for Solana assets used by Jupiter."""
+
+from __future__ import annotations
+
 import logging
+import os
 from typing import Dict
+
 import aiohttp
 
 logger = logging.getLogger(__name__)
 
 # Mapping of symbol to Solana token mint used by Jupiter
 TOKEN_MINTS: Dict[str, str] = {
-"""Mapping of token symbols to Solana mint addresses."""
-
-TOKEN_MINTS: dict[str, str] = {
     "BTC": "So11111111111111111111111111111111111111112",
     "ETH": "2NdXGW7dpwye9Heq7qL3gFYYUUDewfxCUUDq36zzfrqD",
     "USDC": "EPjFWdd5AufqSSqeM2q6ksjLpaEweidnGj9n92gtQgNf",
