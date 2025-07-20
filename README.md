@@ -911,6 +911,9 @@ Run it manually whenever needed:
 ```bash
 python tasks/refresh_pairs.py --once
 ```
+Run the script from the project root so that `cache/liquid_pairs.json` is
+written where the bot expects it. Executing the command from another
+directory may create a separate `cache` folder and lead to missing symbols.
 Removing the `--once` flag keeps it running on the configured interval.
 To automate updates you can run the script periodically via cron:
 
