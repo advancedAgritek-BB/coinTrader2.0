@@ -29,6 +29,9 @@ TOKEN_MINTS: Dict[str, str] = {}
 _LOADED = False
 
 
+async def load_token_mints(
+    url: str | None = None,
+    *,
 async def fetch_from_jupiter() -> Dict[str, str]:
     """Return mapping of symbols to mints using Jupiter token list."""
     async with aiohttp.ClientSession() as session:
@@ -77,6 +80,9 @@ async def load_token_mints(
 ) -> Dict[str, str]:
     """Return mapping of token symbols to mint addresses.
 
+    The list is fetched from ``url`` or ``TOKEN_MINTS_URL`` environment variable.
+    Results are cached on disk and subsequent calls return an empty dict unless
+    ``force_refresh`` is ``True``.
     The Solana list is fetched from Jupiter first then GitHub as a fallback.
     Cached results are reused unless ``force_refresh`` is ``True``.
     Unknown ``symbols`` can be resolved via the Helius API.
