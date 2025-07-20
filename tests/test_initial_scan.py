@@ -49,12 +49,10 @@ async def test_initial_scan_fetches_200_candles(monkeypatch):
 @pytest.mark.asyncio
 async def test_initial_scan_ws_disabled_and_limit_capped(monkeypatch):
     params = []
-    starts = []
 
     async def fake_update_multi(exchange, cache, batch, cfg, start_since=None, **kwargs):
         params.append({**kwargs, 'start_since': start_since})
         params.append(kwargs)
-        starts.append(start_since)
         return {}
 
     async def fake_update_regime(exchange, cache, batch, cfg, **kwargs):
