@@ -209,6 +209,24 @@ class DummyBookExchange:
         return {"bids": [[1, 1], [0.9, 2]], "asks": [[1.1, 1], [1.2, 3]]}
 
 
+class PagingExchange:
+    has = {"fetchOHLCV": True}
+
+    def __init__(self):
+        self.limits: list[int] = []
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
+        self.limits.append(limit)
+        return [[0] * 6 for _ in range(limit)]
+
+
+def test_fetch_ohlcv_async_paged_requests():
+    ex = PagingExchange()
+    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=1000))
+    assert len(data) == 1000
+    assert ex.limits == [720, 280]
+
+
 def test_fetch_order_book_async():
     ex = DummyBookExchange()
     data = asyncio.run(fetch_order_book_async(ex, "BTC/USD", depth=2))
