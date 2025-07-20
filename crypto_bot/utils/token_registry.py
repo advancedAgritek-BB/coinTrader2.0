@@ -81,6 +81,21 @@ def _write_cache() -> None:
         logger.error("Failed to write %s: %s", CACHE_FILE, exc)
 
 
+# Additional mints discovered via manual searches
+TOKEN_MINTS.update({
+    "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
+    "BERA": "A7y2wgyytufsxjg2ub616zqnte3x62f7fcp8fujdmoon",
+    "EUROP": "pD6L7wWeei1LJqb7tmnpfEnvkcBvqMgkfqvg23Bpump",
+    "FARTCOIN": "Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw",
+    "RLUSD": "BkbjmJVa84eiGyp27FTofuQVFLqmKFev4ZPZ3U33pump",
+    "USDG": "2gc4f72GkEtggrkUDJRSbLcBpEUPPPFsnDGJJeNKpump",  # Assuming Unlimited Solana Dump
+    "VIRTUAL": "2FupRnaRfnyPHg798WsCBMGAauEkrhMs4YN7nBmujPtM",
+    "XMR": "Fi9GeixxfhMEGfnAe75nJVrwPqfVefyS6fgmyiTxkS6q",  # Wrapped, verify
+    # Add more as needed; skip USDQ/USTC/XTZ as non-Solana
+})
+_write_cache()  # Save immediately
+
+
 def set_token_mints(mapping: dict[str, str]) -> None:
     """Replace ``TOKEN_MINTS`` with ``mapping`` after normalizing keys."""
     TOKEN_MINTS.clear()
@@ -102,6 +117,7 @@ async def get_mint_from_gecko(base: str) -> str | None:
         f"?query={quote_plus(str(base))}&network=solana"
     )
 
+    mint = None
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=10) as resp:
@@ -109,13 +125,33 @@ async def get_mint_from_gecko(base: str) -> str | None:
                 data = await resp.json()
     except Exception as exc:  # pragma: no cover - network failures
         logger.error("Gecko lookup failed for %s: %s", base, exc)
-        return None
+        data = None
 
-    items = data.get("data") if isinstance(data, dict) else []
-    if not isinstance(items, list) or not items:
-        return None
+    if isinstance(data, dict):
+        items = data.get("data")
+        if isinstance(items, list) and items:
+            item = items[0]
+            attrs = item.get("attributes", {}) if isinstance(item, dict) else {}
+            mint = attrs.get("address") or item.get("id")
+            if isinstance(mint, str):
+                return mint
 
-    item = items[0]
-    attrs = item.get("attributes", {}) if isinstance(item, dict) else {}
-    mint = attrs.get("address") or item.get("id")
-    return str(mint) if isinstance(mint, str) else None
+    # Fallback: attempt to search DexScreener if Gecko fails
+    fallback_url = f"https://dexscreener.com/solana?query={quote_plus(str(base))}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(fallback_url, timeout=10) as resp:
+                data = await resp.json()
+                if (
+                    isinstance(data, dict)
+                    and data.get("pairs")
+                    and isinstance(data["pairs"], list)
+                ):
+                    return (
+                        data["pairs"][0]
+                        .get("baseToken", {})
+                        .get("address")
+                    )
+    except Exception:
+        pass
+    return None
