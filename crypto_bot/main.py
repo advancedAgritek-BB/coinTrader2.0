@@ -569,14 +569,19 @@ async def initial_scan(
     for i in range(0, total, batch_size):
         batch = symbols[i:i + batch_size]
 
-        limit = min(config.get("scan_lookback_limit", 50), 700)
+        lookback_limit = scan_limit
         tfs = config.get("timeframes", ["1h"])
         tf_sec = timeframe_seconds(None, min(tfs, key=lambda t: timeframe_seconds(None, t)))
-        start_since = int(time.time() * 1000 - limit * tf_sec * 1000)
-        limit = scan_limit
+        lookback_since = int(time.time() * 1000 - lookback_limit * tf_sec * 1000)
+
         history_since = int((time.time() - 365 * 86400) * 1000)
-        limit = int(config.get("scan_deep_limit", config.get("scan_lookback_limit", 50) * 10))
-        logger.info("Loading deep OHLCV history starting %s", datetime.utcfromtimestamp(history_since / 1000).isoformat())
+        deep_limit = int(
+            config.get("scan_deep_limit", config.get("scan_lookback_limit", 50) * 10)
+        )
+        logger.info(
+            "Loading deep OHLCV history starting %s",
+            datetime.utcfromtimestamp(history_since / 1000).isoformat(),
+        )
 
         async with OHLCV_LOCK:
             state.df_cache = await update_multi_tf_ohlcv_cache(
@@ -584,8 +589,7 @@ async def initial_scan(
                 state.df_cache,
                 batch,
                 config,
-                limit=limit,
-                limit=scan_limit,
+                limit=deep_limit,
                 start_since=history_since,
                 use_websocket=False,
                 force_websocket_history=config.get("force_websocket_history", False),
@@ -599,10 +603,8 @@ async def initial_scan(
                 state.regime_cache,
                 batch,
                 config,
-                limit=limit,
-                start_since=start_since,
                 limit=scan_limit,
-                start_since=history_since,
+                start_since=lookback_since,
                 use_websocket=False,
                 force_websocket_history=config.get("force_websocket_history", False),
                 max_concurrent=config.get("max_concurrent_ohlcv"),
@@ -618,7 +620,7 @@ async def initial_scan(
             mint = TOKEN_MINTS.get(base.upper(), base)
             for tf in config.get("timeframes", ["1h"]):
                 df = await asyncio.to_thread(
-                    fetch_solana_historical, mint, tf, limit=limit
+                    fetch_solana_historical, mint, tf, limit=scan_limit
                 )
                 if isinstance(df, pd.DataFrame) and not df.empty:
                     update_df_cache(state.df_cache, tf, sym, df)
