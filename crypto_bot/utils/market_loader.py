@@ -941,21 +941,6 @@ async def fetch_ohlcv_async(
         return exc
 
 
-async def fetch_dexscreener_ohlcv(
-    symbol: str,
-    timeframe: str = "1h",
-    limit: int = 100,
-) -> list | None:
-    """Deprecated: use :func:`fetch_geckoterminal_ohlcv` instead."""
-
-    warnings.warn(
-        "fetch_dexscreener_ohlcv is deprecated; use fetch_geckoterminal_ohlcv",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return await fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
-
-
 async def fetch_geckoterminal_ohlcv(
     symbol: str,
     timeframe: str = "1h",
