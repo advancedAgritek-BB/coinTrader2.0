@@ -61,7 +61,6 @@ from crypto_bot.utils.market_loader import (
     timeframe_seconds,
     configure as market_loader_configure,
     fetch_order_book_async,
-    fetch_ohlcv_async,
 )
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.utils.eval_queue import build_priority_queue
