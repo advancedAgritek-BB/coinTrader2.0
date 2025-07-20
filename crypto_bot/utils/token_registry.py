@@ -4,8 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Iterable
-from typing import Dict, List
+from typing import Dict, Iterable, List
 
 import aiohttp
 
@@ -29,11 +28,6 @@ TOKEN_MINTS: Dict[str, str] = {}
 
 _LOADED = False
 
-
-async def load_token_mints(
-    url: str | None = None, *, force_refresh: bool = False
-    url: str | None = None,
-    *,
 async def fetch_from_jupiter() -> Dict[str, str]:
     """Return mapping of symbols to mints using Jupiter token list."""
     async with aiohttp.ClientSession() as session:
@@ -48,29 +42,6 @@ async def fetch_from_jupiter() -> Dict[str, str]:
         mint = item.get("address") or item.get("mint") or item.get("tokenMint")
         if isinstance(symbol, str) and isinstance(mint, str):
             result[symbol.upper()] = mint
-    return result
-
-
-async def fetch_from_helius(symbols: List[str]) -> Dict[str, str]:
-    """Lookup ``symbols`` via the Helius metadata API."""
-    api_key = os.getenv("HELIUS_API_KEY")
-    if not api_key:
-        return {}
-    url = f"{HELIUS_TOKEN_API}?api-key={api_key}"
-    payload = {"symbols": [s.upper() for s in symbols]}
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=payload, timeout=10) as resp:
-            resp.raise_for_status()
-            data = await resp.json(content_type=None)
-
-    result: Dict[str, str] = {}
-    items = data.get("result") if isinstance(data, dict) else data
-    if isinstance(items, list):
-        for item in items:
-            symbol = item.get("symbol") or item.get("ticker")
-            mint = item.get("address") or item.get("mint") or item.get("tokenMint")
-            if isinstance(symbol, str) and isinstance(mint, str):
-                result[symbol.upper()] = mint
     return result
 
 
