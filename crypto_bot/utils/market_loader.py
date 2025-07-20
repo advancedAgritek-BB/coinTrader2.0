@@ -1663,6 +1663,8 @@ async def update_multi_tf_ohlcv_cache(
     start_since : int | None, optional
         Timestamp in milliseconds to start fetching history from when no
         cached data is available.
+    start_since : int | None
+        When provided, fetch historical data from this timestamp forward.
     """
     from crypto_bot.regime.regime_classifier import clear_regime_cache
 
@@ -1703,7 +1705,7 @@ async def update_multi_tf_ohlcv_cache(
             else:
                 cex_symbols.append(s)
 
-        if cex_symbols:
+        if cex_symbols and start_since is None:
             tf_cache = await update_ohlcv_cache(
                 exchange,
                 tf_cache,
@@ -1716,6 +1718,65 @@ async def update_multi_tf_ohlcv_cache(
                 notifier=notifier,
                 start_since=start_since,
             )
+        elif cex_symbols:
+            from crypto_bot.main import update_df_cache
+
+            for sym in cex_symbols:
+                batches: list = []
+                current_since = start_since
+                while True:
+                    data = await fetch_ohlcv_async(
+                        exchange,
+                        sym,
+                        timeframe=tf,
+                        limit=1000,
+                        since=current_since,
+                        use_websocket=use_websocket,
+                        force_websocket_history=force_websocket_history,
+                    )
+                    if not data or isinstance(data, Exception):
+                        break
+                    batches.extend(data)
+                    if len(data) < 1000:
+                        break
+                    current_since = data[-1][0] + 1
+
+                if not batches:
+                    continue
+
+                df_new = pd.DataFrame(
+                    batches,
+                    columns=["timestamp", "open", "high", "low", "close", "volume"],
+                )
+                tf_sec = timeframe_seconds(None, tf)
+                unit = "ms" if df_new["timestamp"].iloc[0] > 1e10 else "s"
+                df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit)
+                df_new = (
+                    df_new.set_index("timestamp")
+                    .resample(f"{tf_sec}s")
+                    .agg({
+                        "open": "first",
+                        "high": "max",
+                        "low": "min",
+                        "close": "last",
+                        "volume": "sum",
+                    })
+                    .ffill()
+                    .reset_index()
+                )
+                df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
+
+                if sym in tf_cache and not tf_cache[sym].empty:
+                    last_ts = tf_cache[sym]["timestamp"].iloc[-1]
+                    df_new = df_new[df_new["timestamp"] > last_ts]
+                    if df_new.empty:
+                        continue
+                    df_new = pd.concat([tf_cache[sym], df_new], ignore_index=True)
+
+                update_df_cache(cache, tf, sym, df_new)
+                tf_cache = cache.get(tf, {})
+                tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
+                clear_regime_cache(sym, tf)
 
         for sym in dex_symbols:
             data = None
