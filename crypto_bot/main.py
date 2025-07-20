@@ -71,6 +71,7 @@ from crypto_bot.utils.market_loader import (
     configure as market_loader_configure,
     fetch_order_book_async,
 )
+from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.utils.eval_queue import build_priority_queue
 from crypto_bot.solana import get_solana_new_tokens
 from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
@@ -1446,6 +1447,21 @@ async def _main_impl() -> TelegramNotifier:
 
         if discovered:
             config["symbols"] = discovered
+        elif discovered is None:
+            cached = load_liquid_pairs()
+            if isinstance(cached, list):
+                config["symbols"] = cached
+                logger.warning("Using cached pairs due to symbol scan failure")
+            else:
+                logger.error(
+                    "No symbols discovered after %d attempts; aborting startup",
+                    MAX_SYMBOL_SCAN_ATTEMPTS,
+                )
+                if status_updates:
+                    notifier.notify(
+                        f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
+                    )
+                return notifier
         else:
             logger.error(
                 "No symbols discovered after %d attempts; aborting startup",
