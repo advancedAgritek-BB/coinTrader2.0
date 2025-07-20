@@ -15,20 +15,13 @@ except Exception:  # pragma: no cover - dependency optional
 from crypto_bot.execution.solana_executor import execute_swap
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
+from crypto_bot.utils.token_registry import TOKEN_MINTS
 
 
 logger = setup_logger(__name__, LOG_DIR / "fund_manager.log")
 
 SUPPORTED_FUNDING = ["BTC", "ETH", "XRP"]
 REQUIRED_TOKENS = ["USDC", "SOL"]
-
-# Map common symbols to Solana token mints used by Jupiter
-TOKEN_MINTS = {
-    "BTC": "So11111111111111111111111111111111111111112",
-    "ETH": "2NdXGW7dpwye9Heq7qL3gFYYUUDewfxCUUDq36zzfrqD",
-    "USDC": "EPjFWdd5AufqSSqeM2q6ksjLpaEweidnGj9n92gtQgNf",
-    "SOL": "So11111111111111111111111111111111111111112",
-}
 
 MIN_BALANCE_THRESHOLD = float(os.getenv("MIN_BALANCE_THRESHOLD", "0.001"))
 
