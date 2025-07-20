@@ -116,5 +116,5 @@ async def test_initial_scan_onchain(monkeypatch):
 
     assert set(calls) == {('SOL/USDC', '1h', 100), ('SOL/USDC', '5m', 100)}
     assert [(c[0], c[1]) for c in updates] == [('1h', 'SOL/USDC'), ('5m', 'SOL/USDC')]
-        assert kw.get('limit') == 10000
+    assert kw.get('limit') == 10000
     assert starts and isinstance(starts[0], int)

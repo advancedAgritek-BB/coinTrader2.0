@@ -585,14 +585,12 @@ async def initial_scan(
                 batch,
                 config,
                 limit=limit,
-                start_since=start_since,
-                limit=scan_limit,
+                start_since=history_since,
                 use_websocket=False,
                 force_websocket_history=config.get("force_websocket_history", False),
                 max_concurrent=config.get("max_concurrent_ohlcv"),
                 notifier=notifier,
                 priority_queue=symbol_priority_queue,
-                start_since=history_since,
             )
 
             state.regime_cache = await update_regime_tf_cache(
@@ -602,7 +600,6 @@ async def initial_scan(
                 config,
                 limit=limit,
                 start_since=start_since,
-                limit=scan_limit,
                 use_websocket=False,
                 force_websocket_history=config.get("force_websocket_history", False),
                 max_concurrent=config.get("max_concurrent_ohlcv"),
@@ -611,17 +608,17 @@ async def initial_scan(
             )
         logger.info("Deep historical OHLCV loaded for %d symbols", len(batch))
 
-            for sym in batch:
-                if sym not in onchain_symbols:
-                    continue
-                base = sym.split("/")[0]
-                mint = TOKEN_MINTS.get(base.upper(), base)
-                for tf in config.get("timeframes", ["1h"]):
-                    df = await asyncio.to_thread(
-                        fetch_solana_historical, mint, tf, limit=limit
-                    )
-                    if isinstance(df, pd.DataFrame) and not df.empty:
-                        update_df_cache(state.df_cache, tf, sym, df)
+        for sym in batch:
+            if sym not in onchain_symbols:
+                continue
+            base = sym.split("/")[0]
+            mint = TOKEN_MINTS.get(base.upper(), base)
+            for tf in config.get("timeframes", ["1h"]):
+                df = await asyncio.to_thread(
+                    fetch_solana_historical, mint, tf, limit=limit
+                )
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    update_df_cache(state.df_cache, tf, sym, df)
 
         processed += len(batch)
         pct = processed / total * 100
