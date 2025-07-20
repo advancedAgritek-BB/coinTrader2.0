@@ -267,9 +267,10 @@ def timeframe_seconds(exchange, timeframe: str) -> int:
 
 
 async def _call_with_retry(func, *args, timeout=None, **kwargs):
-    """Call ``func`` with exponential back-off on 520/522 errors."""
+    """Call ``func`` with fixed back-off on 520/522 errors."""
 
     attempts = 3
+    delays = [5, 10, 20]
     for attempt in range(attempts):
         try:
             if timeout is not None:
@@ -284,7 +285,7 @@ async def _call_with_retry(func, *args, timeout=None, **kwargs):
                 getattr(exc, "http_status", None) in (520, 522)
                 and attempt < attempts - 1
             ):
-                await asyncio.sleep(2**attempt)
+                await asyncio.sleep(delays[min(attempt, len(delays) - 1)])
                 continue
             raise
 
