@@ -1305,6 +1305,8 @@ async def _main_impl() -> TelegramNotifier:
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config = load_config()
+    from crypto_bot.utils.token_registry import TOKEN_MINTS, load_token_mints
+    TOKEN_MINTS.update(await load_token_mints())
     sol_syms = [fix_symbol(s) for s in config.get("solana_symbols", [])]
     sol_syms = [f"{s}/USDC" if "/" not in s else s for s in sol_syms]
     if sol_syms:
