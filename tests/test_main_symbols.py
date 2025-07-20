@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from crypto_bot.utils import symbol_utils
+from crypto_bot.utils import symbol_utils, market_loader
 
 class DummyExchange:
     pass
@@ -173,3 +173,30 @@ def test_get_filtered_symbols_skip(monkeypatch):
 
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     assert result == [("BTC/USD", 0.0), ("ETH/USD", 0.0)]
+
+
+def test_get_filtered_symbols_valid_sol(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+
+    monkeypatch.setattr(
+        market_loader,
+        "TOKEN_MINTS",
+        {"SOL": "So11111111111111111111111111111111111111112"},
+        raising=False,
+    )
+    monkeypatch.setattr(market_loader, "_is_valid_base_token", lambda t: True)
+    monkeypatch.setattr(symbol_utils, "_is_valid_base_token", lambda t: True)
+
+    async def fake_filter_symbols(_ex, syms, _cfg):
+        return [("SOL/USDC", 1.0)]
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    config = {"symbols": ["SOL/USDC"]}
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+
+    result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
+
+    assert result == [("SOL/USDC", 1.0)]
+    assert not any("Dropping invalid USDC pair" in r.getMessage() for r in caplog.records)
