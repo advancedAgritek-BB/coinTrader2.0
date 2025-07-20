@@ -251,10 +251,11 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **scan_markets** – load all exchange pairs when `symbols` is empty (enabled by default).
 * **scan_in_background** – start the initial scan in the background so trading can begin immediately.
 * **excluded_symbols** – markets to skip during scanning.
-* **solana_symbols** – base tokens traded on Solana. Tickers are
-  automatically converted to mint addresses using the Solana token list and each
-  pair is appended with `/USDC`. If a ticker isn't found in the registry, the
-  base value must be a valid mint address.
+* **onchain_symbols** – base tokens traded on-chain. Tickers are automatically
+  converted to mint addresses using the Solana token list and each pair is
+  appended with `/USDC`. If a ticker isn't found in the registry, the base value
+  must be a valid mint address. If your configuration still contains
+  `solana_symbols`, rename that section to `onchain_symbols`.
 * **allow_short** – enable short selling. Set to `true` only when your exchange account supports short selling.
 
 ### Market Scanning
@@ -787,7 +788,7 @@ wait for scanning to complete before trading begins.
 scan_markets: true    # default
 scan_in_background: true
 symbols: []            # automatically populated
-solana_symbols: ["SOL/USDC", "BONK/USDC"]     # tickers auto-convert via token list
+onchain_symbols: ["SOL/USDC", "BONK/USDC"]    # tickers auto-convert via token list
                                                 # base must be mint if unknown
 excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures

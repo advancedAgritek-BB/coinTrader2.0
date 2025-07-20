@@ -312,9 +312,10 @@ solana_scanner:
   max_tokens_per_scan: 100
   min_volume_usd: 1000
 solana_slippage_bps: 10
-solana_symbols:
-  # tickers convert to mints via the Solana token list
-  # if a ticker isn't found specify the base as a mint address
+onchain_symbols:
+  # base tokens traded on-chain. Tickers convert to mint addresses via the
+  # Solana token list. If a ticker isn't found in the registry, specify the
+  # base value as a mint address.
   - SOL/USDC
   - BONK/USDC
 strategy_allocation:
