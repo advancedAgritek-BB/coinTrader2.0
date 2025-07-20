@@ -569,6 +569,10 @@ async def initial_scan(
     for i in range(0, total, batch_size):
         batch = symbols[i:i + batch_size]
 
+        limit = min(config.get("scan_lookback_limit", 50), 700)
+        tfs = config.get("timeframes", ["1h"])
+        tf_sec = timeframe_seconds(None, min(tfs, key=lambda t: timeframe_seconds(None, t)))
+        start_since = int(time.time() * 1000 - limit * tf_sec * 1000)
         limit = scan_limit
         history_since = int((time.time() - 365 * 86400) * 1000)
         limit = int(config.get("scan_deep_limit", config.get("scan_lookback_limit", 50) * 10))
@@ -580,6 +584,8 @@ async def initial_scan(
                 state.df_cache,
                 batch,
                 config,
+                limit=limit,
+                start_since=start_since,
                 limit=scan_limit,
                 use_websocket=False,
                 force_websocket_history=config.get("force_websocket_history", False),
@@ -594,6 +600,8 @@ async def initial_scan(
                 state.regime_cache,
                 batch,
                 config,
+                limit=limit,
+                start_since=start_since,
                 limit=scan_limit,
                 use_websocket=False,
                 force_websocket_history=config.get("force_websocket_history", False),
@@ -824,6 +832,7 @@ async def update_caches(ctx: BotContext) -> None:
     )
     limit = max(150, tf_minutes * 2)
     limit = int(ctx.config.get("cycle_lookback_limit") or limit)
+    start_since = int(time.time() * 1000 - limit * tf_minutes * 60 * 1000)
 
     max_concurrent = ctx.config.get("max_concurrent_ohlcv")
     if isinstance(max_concurrent, (int, float)):
@@ -859,6 +868,7 @@ async def update_caches(ctx: BotContext) -> None:
                 batch,
                 ctx.config,
                 limit=limit,
+                start_since=start_since,
                 use_websocket=False,
                 force_websocket_history=ctx.config.get(
                     "force_websocket_history", False
