@@ -8,6 +8,8 @@ from typing import List
 import aiohttp
 import ccxt.async_support as ccxt
 
+from .token_registry import TOKEN_MINTS, get_mint_from_gecko
+
 from . import symbol_scoring
 
 logger = logging.getLogger(__name__)
@@ -79,8 +81,12 @@ async def _close_exchange(exchange) -> None:
             pass
 
 
-def _extract_tokens(data: list | dict) -> List[str]:
-    """Return token mints from ``data`` respecting ``_MIN_VOLUME_USD``."""
+async def _extract_tokens(data: list | dict) -> List[str]:
+    """Return token mints from ``data`` respecting ``_MIN_VOLUME_USD``.
+
+    Tokens not present in :data:`TOKEN_MINTS` are verified via
+    :func:`get_mint_from_gecko`. Unresolvable entries are skipped.
+    """
     items = data.get("data") if isinstance(data, dict) else data
     if isinstance(items, dict):
         items = list(items.values())
@@ -111,6 +117,9 @@ def _extract_tokens(data: list | dict) -> List[str]:
         except Exception:
             volume = 0.0
         if volume >= _MIN_VOLUME_USD:
+            base = str(mint).split("/")[0]
+            if base not in TOKEN_MINTS and not await get_mint_from_gecko(base):
+                continue
             results.append(str(mint))
     return results
 
@@ -121,7 +130,7 @@ async def fetch_new_raydium_pools(api_key: str, limit: int) -> List[str]:
     data = await _fetch_json(url)
     if not data:
         return []
-    tokens = _extract_tokens(data)
+    tokens = await _extract_tokens(data)
     return tokens[:limit]
 
 
@@ -131,7 +140,7 @@ async def fetch_pump_fun_launches(api_key: str, limit: int) -> List[str]:
     data = await _fetch_json(url)
     if not data:
         return []
-    tokens = _extract_tokens(data)
+    tokens = await _extract_tokens(data)
     return tokens[:limit]
 
 
