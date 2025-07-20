@@ -23,14 +23,19 @@ TOKEN_MINTS: Dict[str, str] = {}
 _LOADED = False
 
 
-async def load_token_mints(url: str | None = None) -> Dict[str, str]:
+async def load_token_mints(
+    url: str | None = None,
+    *,
+    force_refresh: bool = False,
+) -> Dict[str, str]:
     """Return mapping of token symbols to mint addresses.
 
     The list is fetched from ``url`` or ``TOKEN_MINTS_URL`` environment variable.
-    Results are cached on disk and subsequent calls return an empty dict.
+    Results are cached on disk and subsequent calls return an empty dict unless
+    ``force_refresh`` is ``True``.
     """
     global _LOADED
-    if _LOADED:
+    if _LOADED and not force_refresh:
         return {}
 
     fetch_url = url or os.getenv("TOKEN_MINTS_URL", TOKEN_REGISTRY_URL)

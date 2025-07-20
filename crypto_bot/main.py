@@ -541,6 +541,22 @@ async def _ws_ping_loop(exchange: object, interval: float) -> None:
         pass
 
 
+async def registry_update_loop(interval_minutes: float) -> None:
+    """Periodically refresh the Solana token registry."""
+    from crypto_bot.utils import token_registry as registry
+
+    while True:
+        try:
+            mapping = await registry.load_token_mints(force_refresh=True)
+            if mapping:
+                registry.set_token_mints({**registry.TOKEN_MINTS, **mapping})
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.error("Token registry update error: %s", exc)
+        await asyncio.sleep(interval_minutes * 60)
+
+
 async def initial_scan(
     exchange: object,
     config: dict,
@@ -1771,6 +1787,13 @@ async def _main_impl() -> TelegramNotifier:
     solana_scan_task: asyncio.Task | None = None
     if config.get("solana_scanner", {}).get("enabled"):
         solana_scan_task = asyncio.create_task(solana_scan_loop())
+    registry_task = asyncio.create_task(
+        registry_update_loop(
+            config.get("token_registry", {}).get(
+                "refresh_interval_minutes", 15
+            )
+        )
+    )
     print("Bot running. Type 'stop' to pause, 'start' to resume, 'quit' to exit.")
 
     from crypto_bot.telegram_bot_ui import TelegramBotUI
@@ -2015,6 +2038,12 @@ async def _main_impl() -> TelegramNotifier:
             solana_scan_task.cancel()
             try:
                 await solana_scan_task
+            except asyncio.CancelledError:
+                pass
+        if registry_task:
+            registry_task.cancel()
+            try:
+                await registry_task
             except asyncio.CancelledError:
                 pass
         if session_state.scan_task:
