@@ -846,6 +846,7 @@ async def filter_symbols(
     from crypto_bot.utils.token_registry import TOKEN_MINTS, get_mint_from_gecko
 
     resolved_onchain: List[tuple[str, float]] = []
+    onchain_min_volume = cfg.get("onchain_min_volume_usd", 1_000_000)
     for sym in onchain_syms:
         base = sym.split("/")[0].upper()
         if base in NON_SOLANA_BASES:
@@ -863,7 +864,15 @@ async def filter_symbols(
         logger.info("Resolved %s to mint %s for onchain", sym, mint)
         try:
             _, vol, _ = await fetch_geckoterminal_ohlcv(sym, limit=1)
-            score = vol / 1000.0
+            if vol < onchain_min_volume:
+                logger.info(
+                    "Skipping %s due to low volume %.2f USD (min %.2f)",
+                    sym,
+                    vol,
+                    onchain_min_volume,
+                )
+                continue
+            score = vol / float(onchain_min_volume)
             resolved_onchain.append((sym, score))
         except Exception:  # pragma: no cover - network
             logger.warning("Gecko fetch failed for %s; skipping", sym)
