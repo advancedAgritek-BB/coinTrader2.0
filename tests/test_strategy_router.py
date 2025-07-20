@@ -190,6 +190,16 @@ def test_auto_solana_breakout_route():
     assert fn.__name__ == sniper_solana.generate_signal.__name__
 
 
+def test_auto_usdc_pair_route(monkeypatch):
+    monkeypatch.setitem(strategy_router.TOKEN_MINTS, "XYZ", "mint")
+    cfg = {
+        "symbol": "XYZ/USDC",
+        "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
+    }
+    fn = route("breakout", "auto", cfg)
+    assert fn.__name__ == sniper_solana.generate_signal.__name__
+
+
 def test_dynamic_grid_uses_micro_scalp():
     cfg = {
         "symbol": "AAA/USDT",
