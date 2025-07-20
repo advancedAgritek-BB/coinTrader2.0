@@ -71,7 +71,18 @@ async def load_token_mints(url: str | None = None) -> Dict[str, str]:
     return result
 
 
+def _write_cache() -> None:
+    """Write ``TOKEN_MINTS`` to :data:`CACHE_FILE`."""
+    try:
+        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(CACHE_FILE, "w") as f:
+            json.dump(TOKEN_MINTS, f, indent=2)
+    except Exception as exc:  # pragma: no cover - optional cache
+        logger.error("Failed to write %s: %s", CACHE_FILE, exc)
+
+
 def set_token_mints(mapping: dict[str, str]) -> None:
     """Replace ``TOKEN_MINTS`` with ``mapping`` after normalizing keys."""
     TOKEN_MINTS.clear()
     TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
+    _write_cache()
