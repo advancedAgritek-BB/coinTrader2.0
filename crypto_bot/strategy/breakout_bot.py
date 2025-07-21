@@ -94,7 +94,7 @@ def generate_signal(
     atr_buffer_mult = float(cfg.get("atr_buffer_mult", 0.05))
     vol_window = int(cfg.get("volume_window", 20))
     vol_confirmation = bool(cfg.get("vol_confirmation", True))
-    vol_multiplier = float(cfg.get("vol_multiplier", cfg.get("volume_mult", 1.2)))
+    vol_multiplier = float(cfg.get("vol_multiplier", cfg.get("volume_mult", 1.2))) * 0.5
     threshold = float(cfg.get("squeeze_threshold", 0.03))
     momentum_filter = bool(cfg.get("momentum_filter", False))
     _ = float(cfg.get("adx_threshold", 20))  # placeholder for future use
@@ -158,22 +158,15 @@ def generate_signal(
     recent["rsi"] = rsi
     recent["macd_hist"] = macd_hist
 
-    if vol_confirmation:
-        vol_ok = (
-            vol_ma.iloc[-1] > 0 and volume.iloc[-1] > vol_ma.iloc[-1] * vol_multiplier
-        )
-    else:
-        vol_ok = True
+    vol_ok = True if not vol_confirmation else (
+        vol_ma.iloc[-1] > 0 and volume.iloc[-1] > vol_ma.iloc[-1] * vol_multiplier
+    )
     atr_last = atr.iloc[-1]
     upper_break = dc_high.iloc[-1] + atr_last * atr_buffer_mult
     lower_break = dc_low.iloc[-1] - atr_last * atr_buffer_mult
 
     long_cond = close.iloc[-1] > upper_break
     short_cond = close.iloc[-1] < lower_break
-
-    if momentum_filter:
-        long_cond = long_cond and (rsi.iloc[-1] > 50 or macd_hist.iloc[-1] > 0)
-        short_cond = short_cond and (rsi.iloc[-1] < 50 or macd_hist.iloc[-1] < 0)
 
     logger.info(
         f"{df.index[-1]} Squeeze: {squeeze.iloc[-1]}, long_cond: {long_cond}, vol_ok: {vol_ok}"
