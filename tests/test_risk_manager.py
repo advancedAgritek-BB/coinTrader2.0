@@ -1,7 +1,7 @@
 import json
 import pandas as pd
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
-from crypto_bot.volatility_filter import calc_atr, too_flat
+from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.utils import trade_memory
 from crypto_bot.utils import ev_tracker
 import logging
@@ -79,9 +79,9 @@ def test_allow_trade_rejects_when_volume_far_below_mean():
         take_profit_pct=0.01,
         min_volume=10,
     )
-from crypto_bot.volatility_filter import calc_atr
-from crypto_bot.utils import ev_tracker, trade_memory
-import logging
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
+    assert not allowed
+    assert "mean" in reason.lower()
 
 def test_allow_trade_not_enough_data():
     df = pd.DataFrame({"open": [1] * 10, "high": [1] * 10, "low": [1] * 10, "close": [1] * 10, "volume": [1] * 10})
@@ -407,6 +407,22 @@ def test_allow_trade_allows_on_positive_sentiment(monkeypatch):
 
 
 def test_allow_trade_rejects_on_negative_ev(tmp_path, monkeypatch):
+    stats = {"trend_bot": {"win_rate": 0.4, "avg_win": 0.01, "avg_loss": -0.02}}
+    file = tmp_path / "stats.json"
+    file.write_text(json.dumps(stats))
+    monkeypatch.setattr(ev_tracker, "STATS_FILE", file)
+
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_expected_value=0.001,
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(_df(), "trend_bot", symbol="XBT/USDT")
+    assert not allowed
+    assert "expected" in reason.lower()
+
+
 def test_allow_trade_ignores_negative_ev(tmp_path, monkeypatch):
     stats = {"trend_bot": {"win_rate": 0.4, "avg_win": 0.01, "avg_loss": -0.02}}
     file = tmp_path / "stats.json"
