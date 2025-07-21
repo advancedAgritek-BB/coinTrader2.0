@@ -343,7 +343,9 @@ symbol_score_weights:
 * **cooldown_enabled** – disable to ignore the cooldown and win-rate check.
 * **breakout** – Bollinger/Keltner squeeze with `donchian_window`,
   `vol_confirmation`/`vol_multiplier`, `setup_window`, `trigger_window` and a
-  `risk` section for stop sizing.
+  `risk` section for stop sizing. Lowering `vol_multiplier` (e.g., `0.5`)
+  captures more frequent breakouts on tokens like Solana. The optional
+  `momentum_filter` is disabled by default for higher trade frequency.
 * **grid_bot.volume_filter** – require a volume spike before entering a grid
   trade. Turning this off increases trade frequency.
 * **grid_bot.dynamic_grid** – realign grid steps when the 1h ATR% changes by
