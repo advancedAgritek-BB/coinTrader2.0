@@ -8,6 +8,7 @@ from datetime import datetime
 from collections import deque, OrderedDict
 from dataclasses import dataclass, field
 import inspect
+import threading
 
 import aiohttp
 
@@ -150,6 +151,22 @@ def update_df_cache(
         tf_cache.popitem(last=False)
 
 
+BIRDEYE_MIN_INTERVAL = 1.0
+_birdeye_lock = threading.Lock()
+_last_birdeye_time = 0.0
+
+
+def _throttle_birdeye() -> None:
+    """Enforce a minimum delay between Birdeye API requests."""
+    global _last_birdeye_time
+    with _birdeye_lock:
+        now = time.monotonic()
+        wait = BIRDEYE_MIN_INTERVAL - (now - _last_birdeye_time)
+        if wait > 0:
+            time.sleep(wait)
+        _last_birdeye_time = time.monotonic()
+
+
 def fetch_solana_historical(mint: str, timeframe: str, limit: int = 200) -> pd.DataFrame | None:
     """Return historical OHLCV data for ``mint`` using Birdeye."""
     api_key = os.getenv("BIRDEYE_API_KEY")
@@ -173,6 +190,7 @@ def fetch_solana_historical(mint: str, timeframe: str, limit: int = 200) -> pd.D
     }
 
     try:
+        _throttle_birdeye()
         resp = requests.get(url, params=params, headers={"X-API-KEY": api_key}, timeout=10)
         resp.raise_for_status()
         data = resp.json().get("data", [])
