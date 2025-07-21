@@ -97,11 +97,10 @@ def generate_signal(
     # a prior volume spike. Users can enable the old behaviour by explicitly
     # setting ``vol_confirmation: true`` in the strategy config.
     vol_confirmation = bool(cfg.get("vol_confirmation", False))
-    vol_multiplier = float(cfg.get("vol_multiplier", cfg.get("volume_mult", 1.2)))
-    vol_confirmation = bool(cfg.get("vol_confirmation", True))
-    vol_multiplier = float(cfg.get("vol_multiplier", cfg.get("volume_mult", 1.2))) * 0.5
+    vol_multiplier = float(
+        cfg.get("vol_multiplier", cfg.get("volume_mult", 1.2))
+    )
     threshold = float(cfg.get("squeeze_threshold", 0.03))
-    momentum_filter = bool(cfg.get("momentum_filter", False))
     _ = float(cfg.get("adx_threshold", 20))  # placeholder for future use
     lookback_cfg = int(cfg_all.get("indicator_lookback", 250))
     squeeze_pct = float(cfg_all.get("bb_squeeze_pct", 20))
