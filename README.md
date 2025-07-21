@@ -304,13 +304,13 @@ symbol_score_weights:
 * Solana tokens are filtered using symbol scoring; adjust `min_symbol_score` to control the threshold.
 
 ### Risk Parameters
-* **risk** – default stop loss, take profit and drawdown limits. `min_volume` is set to `0.1` to filter thin markets. The stop is 1.5× ATR and the take profit is 3× ATR by default.
+* **risk** – default stop loss, take profit and drawdown limits. `min_volume` is set to `0.01` to filter thin markets. The stop is 1.5× ATR and the take profit is 3× ATR by default.
 * **trade_size_pct** – percent of capital used per trade.
 * **max_open_trades** – maximum simultaneous open trades.
 * **max_slippage_pct** – slippage tolerance for orders.
 * **liquidity_check**/**liquidity_depth** – verify order book depth.
 * **weight_liquidity** – scoring weight for available pool liquidity on Solana pairs.
-* **volatility_filter** - skips trading when ATR is too low or funding exceeds `max_funding_rate`. The minimum ATR percent is `0.0001`.
+* **volatility_filter** - skips trading when ATR is too low or funding exceeds `max_funding_rate`. The minimum ATR percent is `0.00005`.
 * **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment to avoid bearish markets.
 * **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
 * **mempool_monitor** – pause or reprice when Solana fees spike.
@@ -318,7 +318,7 @@ symbol_score_weights:
 * **min_cooldown** – minimum minutes between trades.
 * **cycle_bias** – optional on-chain metrics to bias trades.
 * **min_expected_value** – minimum expected value for a strategy based on
-  historical stats.
+  historical stats. Defaults to `-1.0`, effectively disabling the expected value check.
 * **default_expected_value** – fallback EV when no stats exist. When unset,
   the expected value check is skipped.
 * **drawdown_penalty_coef** – weight applied to historical drawdown when
