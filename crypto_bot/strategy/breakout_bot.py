@@ -93,7 +93,10 @@ def generate_signal(
     donchian_window = int(cfg.get("donchian_window", cfg.get("dc_length", 30)))
     atr_buffer_mult = float(cfg.get("atr_buffer_mult", 0.05))
     vol_window = int(cfg.get("volume_window", 20))
-    vol_confirmation = bool(cfg.get("vol_confirmation", True))
+    # Volume confirmation is now optional by default to allow breakouts without
+    # a prior volume spike. Users can enable the old behaviour by explicitly
+    # setting ``vol_confirmation: true`` in the strategy config.
+    vol_confirmation = bool(cfg.get("vol_confirmation", False))
     vol_multiplier = float(cfg.get("vol_multiplier", cfg.get("volume_mult", 1.2)))
     threshold = float(cfg.get("squeeze_threshold", 0.03))
     momentum_filter = bool(cfg.get("momentum_filter", False))
