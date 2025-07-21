@@ -309,6 +309,11 @@ def _classify_all(
         return "unknown", {"unknown": 0.0}, {}
 
     if len(df) < ml_min_bars:
+        pattern_min = float(cfg.get("pattern_min_conf", 0.0))
+        patterns = detect_patterns(df, min_conf=pattern_min)
+        label = "breakout" if patterns.get("breakout", 0.0) > 0 else "trending"
+        log_patterns(label, patterns)
+        return label, _probabilities(label), patterns
         label = _classify_core(df, cfg, higher_df)
         return label, _probabilities(label), {}
 
@@ -422,7 +427,7 @@ def classify_regime(
 
     ml_min_bars = cfg.get("ml_min_bars", 20)
 
-    if df_map is None and (df is None or len(df) < ml_min_bars):
+    if df_map is None and df is None:
         return "unknown", set()
 
     result = _classify_all(df, higher_df, cfg, df_map=df_map)
