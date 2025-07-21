@@ -46,9 +46,9 @@ breakout:
   dc_length: 15
   kc_length: 10
   kc_mult: 1.0
-  momentum_filter: false
+  momentum_filter: false  # momentum filter disabled
   squeeze_threshold: 0.01
-  vol_multiplier: 0.8
+  vol_multiplier: 0.5
   volume_window: 15
 cycle_bias:
   enabled: true
