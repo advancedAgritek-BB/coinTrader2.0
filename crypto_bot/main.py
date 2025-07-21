@@ -1084,6 +1084,8 @@ async def execute_signals(ctx: BotContext) -> None:
             logger.info("Max open trades reached; skipping remaining signals")
             break
         sym = candidate["symbol"]
+        logger.info("[EVAL] evaluating %s", sym)
+        outcome_reason = ""
         if ctx.balance <= 0:
             old_balance = ctx.balance
             latest = await refresh_balance(ctx)
@@ -1094,7 +1096,8 @@ async def execute_signals(ctx: BotContext) -> None:
                 sym,
             )
         if sym in ctx.positions:
-            logger.info("Existing position for %s - skipping", sym)
+            outcome_reason = "existing position"
+            logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             continue
 
         df = candidate["df"]
@@ -1103,7 +1106,8 @@ async def execute_signals(ctx: BotContext) -> None:
         strategy = candidate.get("name", "")
         allowed, reason = ctx.risk_manager.allow_trade(df, strategy, sym)
         if not allowed:
-            logger.info("Trade blocked for %s: %s", sym, reason)
+            outcome_reason = f"blocked: {reason}"
+            logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             continue
 
         probs = candidate.get("probabilities", {})
@@ -1116,7 +1120,8 @@ async def execute_signals(ctx: BotContext) -> None:
             price=price,
         )
         if size <= 0:
-            logger.info("Calculated size %.4f for %s - skipping", size, sym)
+            outcome_reason = f"size {size:.4f}" 
+            logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             continue
 
         if not ctx.risk_manager.can_allocate(strategy, size, ctx.balance):
@@ -1126,12 +1131,15 @@ async def execute_signals(ctx: BotContext) -> None:
                 sym,
                 strategy,
             )
+            outcome_reason = "insufficient capital"
+            logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             continue
 
         amount = size / price if price > 0 else 0.0
         side = direction_to_side(candidate["direction"])
         if side == "sell" and not ctx.config.get("allow_short", False):
-            logger.info("Short selling disabled; skipping signal for %s", sym)
+            outcome_reason = "short selling disabled"
+            logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             continue
         start_exec = time.perf_counter()
         executed_via_sniper = False
@@ -1168,6 +1176,7 @@ async def execute_signals(ctx: BotContext) -> None:
             )
             if order:
                 executed += 1
+                logger.info("[EVAL] %s -> executed %s %.4f", sym, side, amount)
                 take_profit = None
                 if strategy == "bounce_scalper":
                     depth = int(ctx.config.get("liquidity_depth", 10))
@@ -1186,6 +1195,7 @@ async def execute_signals(ctx: BotContext) -> None:
                 )
         else:
             executed += 1
+            logger.info("[EVAL] %s -> executed %s %.4f", sym, side, amount)
         ctx.timing["execution_latency"] = max(
             ctx.timing.get("execution_latency", 0.0),
             time.perf_counter() - start_exec,
