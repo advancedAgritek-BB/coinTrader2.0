@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Optional, Tuple
 
 import logging
@@ -125,7 +127,7 @@ def generate_signal(
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
     if higher_df is not None and not higher_df.empty:
-        h_sq, _ = _squeeze(
+        _squeeze(
             higher_df.iloc[-(lookback + 1):],
             bb_len,
             bb_std,
