@@ -966,7 +966,8 @@ All runtime information is written under `crypto_bot/logs`. Important files
 include:
 
 - `bot.log` – main log file containing startup events, strategy choices and all
-  decision messages.
+  decision messages. `[EVAL]` lines record each symbol's evaluation outcome in
+  this file.
 - `trades.csv` – CSV export of every executed order used by the dashboard and
   backtester. Entries may represent long or short positions: a `buy` side opens
   or closes a short while a `sell` side opens or closes a long. Stop orders are

@@ -47,6 +47,7 @@ def load_execute_signals():
         "log_position": lambda *a, **k: None,
         "_monitor_micro_scalp_exit": lambda *a, **k: None,
         "BotContext": BotContext,
+        "refresh_balance": lambda ctx: asyncio.sleep(0),
     }
     exec(funcs["direction_to_side"], ns)
     exec(funcs["execute_signals"], ns)
@@ -87,4 +88,42 @@ async def test_execute_signals_respects_allow_short(monkeypatch, caplog):
 
     assert ctx.positions == {}
     assert not called["called"]
-    assert "Short selling disabled" in caplog.text
+    assert "[EVAL] evaluating XBT/USDT" in caplog.text
+    assert "[EVAL] XBT/USDT -> short selling disabled" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_execute_signals_logs_execution(monkeypatch, caplog):
+    df = pd.DataFrame({"close": [100.0]})
+    candidate = {
+        "symbol": "XBT/USDT",
+        "direction": "long",
+        "df": df,
+        "name": "test",
+        "probabilities": {},
+        "regime": "bull",
+        "score": 1.0,
+    }
+    ctx = BotContext(
+        positions={},
+        df_cache={"1h": {"XBT/USDT": df}},
+        regime_cache={},
+        config={"execution_mode": "dry_run", "top_n_symbols": 1},
+        exchange=object(),
+        ws_client=None,
+        risk_manager=DummyRM(),
+        notifier=None,
+        paper_wallet=PaperWallet(1000.0),
+        position_guard=DummyPG(),
+    )
+    ctx.balance = 1000.0
+    ctx.analysis_results = [candidate]
+    ctx.timing = {}
+
+    execute_signals, called = load_execute_signals()
+    caplog.set_level(logging.INFO)
+    await execute_signals(ctx)
+
+    assert called["called"]
+    assert "[EVAL] evaluating XBT/USDT" in caplog.text
+    assert "[EVAL] XBT/USDT -> executed buy 1.0000" in caplog.text
