@@ -1037,8 +1037,15 @@ async def analyse_batch(ctx: BotContext) -> None:
     """Run signal analysis on the current batch."""
     batch = ctx.current_batch
     if not batch:
+        logger.info("analyse_batch called with empty batch")
         ctx.analysis_results = []
         return
+
+    logger.info(
+        "analyse_batch starting with %d symbols: %s",
+        len(batch),
+        batch,
+    )
 
     tasks = []
     mode = ctx.config.get("mode", "cex")
@@ -1048,18 +1055,34 @@ async def analyse_batch(ctx: BotContext) -> None:
             df_map[tf] = cache.get(sym)
         tasks.append(analyze_symbol(sym, df_map, mode, ctx.config, ctx.notifier))
 
-    ctx.analysis_results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    ctx.analysis_results = []
+    for sym, res in zip(batch, results):
+        if isinstance(res, Exception):
+            logger.error("Analysis failed for %s: %s", sym, res)
+        else:
+            ctx.analysis_results.append(res)
 
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     for res in ctx.analysis_results:
         if res.get("skip"):
             continue
         logger.info(
-            f"Analysis for {res['symbol']}: regime={res['regime']}, score={res['score']}"
+            "Analysis for %s: regime=%s, score=%s",
+            res["symbol"],
+            res["regime"],
+            res["score"],
         )
         TOTAL_ANALYSES += 1
         if res.get("regime") == "unknown":
             UNKNOWN_COUNT += 1
+
+    logger.info(
+        "analyse_batch produced %d results (%d skipped)",
+        len(ctx.analysis_results),
+        sum(1 for r in ctx.analysis_results if r.get("skip")),
+    )
 
 
 async def execute_signals(ctx: BotContext) -> None:
