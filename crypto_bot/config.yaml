@@ -46,9 +46,9 @@ breakout:
   dc_length: 15
   kc_length: 10
   kc_mult: 1.0
-  momentum_filter: false
+  momentum_filter: false  # momentum filter disabled
   squeeze_threshold: 0.01
-  vol_multiplier: 0.8
+  vol_multiplier: 0.5
   volume_window: 15
 cycle_bias:
   enabled: true
@@ -237,13 +237,14 @@ risk:
   atr_short_window: 10
   max_drawdown: 0.5
   max_volatility_factor: 3
-  min_expected_value: -0.2
-  min_volume: 0.1
+  min_atr_pct: 0.00005
+  min_expected_value: -1.0
+  min_volume: 0.01
   stop_loss_atr_mult: 1.5
   stop_loss_pct: 0.01
   take_profit_atr_mult: 3.0
   take_profit_pct: 0.1
-  volume_threshold_ratio: 0.00005
+  volume_threshold_ratio: 5.0e-05
 rl_selector:
   enabled: false
 rsi_overbought_pct: 80

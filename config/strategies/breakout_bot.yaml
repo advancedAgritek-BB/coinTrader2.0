@@ -1,6 +1,6 @@
 donchian_window: 30
 vol_confirmation: true
-vol_multiplier: 1.5
+vol_multiplier: 0.5  # momentum filter remains disabled
 setup_window: 10
 trigger_window: 3
 risk:

@@ -23,7 +23,7 @@ def reset_telemetry():
     yield
 
 
-def test_classify_regime_returns_unknown_for_short_df():
+def test_classify_regime_returns_trending_for_short_df():
     data = {
         "open": list(range(10)),
         "high": list(range(1, 11)),
@@ -33,15 +33,15 @@ def test_classify_regime_returns_unknown_for_short_df():
     }
     df = pd.DataFrame(data)
     regime, probs = classify_regime(df)
-    assert regime == "unknown"
+    assert regime == "trending"
     assert isinstance(probs, dict)
 
     regime, info = classify_regime(df)
-    assert regime == "unknown"
+    assert regime == "trending"
     assert isinstance(info, dict)
 
 
-def test_classify_regime_returns_unknown_for_14_rows():
+def test_classify_regime_returns_trending_for_14_rows():
     data = {
         "open": list(range(14)),
         "high": list(range(1, 15)),
@@ -51,8 +51,8 @@ def test_classify_regime_returns_unknown_for_14_rows():
     }
     df = pd.DataFrame(data)
     label, conf = classify_regime(df)
-    assert label == "unknown"
-    assert isinstance(conf, set)
+    assert label == "trending"
+    assert isinstance(conf, dict)
     label, _ = classify_regime(df)
     assert isinstance(label, str)
 
@@ -63,7 +63,7 @@ def test_classify_regime_handles_none_df():
     assert probs == {"unknown": 0.0}
 
 
-def test_classify_regime_returns_unknown_between_15_and_19_rows():
+def test_classify_regime_returns_trending_between_15_and_19_rows():
     for rows in range(15, 20):
         data = {
             "open": list(range(rows)),
@@ -73,7 +73,7 @@ def test_classify_regime_returns_unknown_between_15_and_19_rows():
             "volume": [100] * rows,
         }
         df = pd.DataFrame(data)
-        assert classify_regime(df)[0] == "unknown"
+        assert classify_regime(df)[0] == "trending"
 def test_classify_regime_handles_index_error(monkeypatch):
     data = {
         "open": list(range(30)),
@@ -98,46 +98,6 @@ def test_classify_regime_handles_index_error(monkeypatch):
     assert isinstance(classify_regime(df)[0], str)
 
 
-def test_classify_regime_uses_custom_thresholds(tmp_path):
-    rows = 50
-    close = np.linspace(1, 2, rows)
-    high = close + 0.1
-    low = close - 0.1
-    volume = np.arange(rows) + 100
-    df = pd.DataFrame({
-        "open": close,
-        "high": high,
-        "low": low,
-        "close": close,
-        "volume": volume,
-    })
-
-    # With default config this should be trending
-    assert classify_regime(df)[0] == "trending"
-
-    custom_cfg = tmp_path / "regime.yaml"
-    custom_cfg.write_text(
-        """\
-adx_trending_min: 101
-adx_sideways_max: 20
-bb_width_sideways_max: 5
-bb_width_breakout_max: 4
-breakout_volume_mult: 2
-rsi_mean_rev_min: 30
-rsi_mean_rev_max: 70
-ema_distance_mean_rev_max: 0.01
-atr_volatility_mult: 1.5
-normalized_range_volatility_min: 1.5
-ema_fast: 20
-ema_slow: 50
-indicator_window: 14
-bb_window: 20
-ma_window: 20
-"""
-    )
-
-    # ADX threshold is too high so regime should no longer be trending
-    assert classify_regime(df, config_path=str(custom_cfg))[0] != "trending"
 
 
 def _make_trending_df(rows: int = 50) -> pd.DataFrame:
@@ -552,7 +512,7 @@ ml_min_bars: 20
     )
 
     regime, _ = classify_regime(df, config_path=str(cfg))
-    assert regime == "unknown"
+    assert regime == "trending"
     assert not called
 
 

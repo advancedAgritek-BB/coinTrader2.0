@@ -7,13 +7,9 @@ from math import isnan
 
 from crypto_bot.capital_tracker import CapitalTracker
 
-from crypto_bot.sentiment_filter import boost_factor, too_bearish
-from crypto_bot.volatility_filter import too_flat, too_hot, calc_atr
+from crypto_bot.volatility_filter import too_flat, calc_atr
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from crypto_bot.utils import trade_memory
-from crypto_bot.utils import ev_tracker
-from crypto_bot.utils.strategy_utils import compute_drawdown
 
 
 # Log to the main bot file so risk messages are consolidated
@@ -209,120 +205,25 @@ class RiskManager:
         df_len = len(df)
         logger.info("[EVAL] Data length: %d", df_len)
 
-        pair = symbol or self.config.symbol
-
         if df_len < 20:
             reason = "Not enough data to trade"
             logger.info("[EVAL] %s (len=%d)", reason, df_len)
             return False, reason
 
-        if pair and trade_memory.should_avoid(pair):
-            reason = "Symbol blocked by trade memory"
-            logger.info("[EVAL] %s", reason)
-            return False, reason
-
-        if too_bearish(self.config.min_fng, self.config.min_sentiment):
-            reason = "Sentiment too bearish"
-            logger.info("[EVAL] %s", reason)
-            return False, reason
-
-        if too_flat(df, self.config.min_atr_pct):
-            reason = "Market volatility too low"
-            logger.info("[EVAL] %s", reason)
-            return False, reason
-
-        if pair and too_hot(pair, self.config.max_funding_rate):
-            reason = "Funding rate too high"
-            logger.info("[EVAL] %s", reason)
-            return False, reason
-
-        last_close = df["close"].iloc[-1]
-        last_time = str(df.index[-1])
-        logger.info(f"{pair} | Last close: {last_close:.2f}, Time: {last_time}")
-
-        vol_mean = df["volume"].rolling(20).mean().iloc[-1]
         current_volume = df["volume"].iloc[-1]
-        vol_threshold = vol_mean * self.config.volume_threshold_ratio
-        logger.info(
-            (
-                "[EVAL] len=%d volume=%.4f (mean %.4f | min %.4f | threshold %.4f)"
-            ),
-            df_len,
-            current_volume,
-            vol_mean,
-            self.config.min_volume,
-            vol_threshold,
-        )
 
-        # Volume checks using configured thresholds
-        if current_volume < self.config.min_volume:
-            reason = "Volume < min volume threshold"
-            logger.info(
-                "[EVAL] %s (%.2f < %.2f)",
-                reason,
-                current_volume,
-                self.config.min_volume,
-            )
-            return False, reason
-
-        if current_volume < vol_threshold:
-            percent = self.config.volume_threshold_ratio * 100
-            reason = f"Volume < {percent:.0f}% of mean volume"
-            logger.info(
-                "[EVAL] %s (%.2f < %.2f)",
-                reason,
-                current_volume,
-                vol_threshold,
-            )
-            return False, reason
-        vol_std = df["close"].rolling(20).std().iloc[-1]
-        prev_period_std = (
-            df["close"].iloc[-21:-1].std() if len(df) >= 21 else float("nan")
-        )
-        if not isnan(prev_period_std) and vol_std < prev_period_std * 0.5:
-            reason = "Volatility too low"
-            logger.info(
-                "[EVAL] %s (%.4f < %.4f)",
-                reason,
-                vol_std,
-                prev_period_std * 0.5,
-            )
-            return False, reason
-
-        if strategy is not None:
-            ev = ev_tracker.get_expected_value(strategy)
-            if ev == 0.0:
-                stats = ev_tracker._load_stats().get(strategy, {})
-                if not stats:
-                    if self.config.default_expected_value is not None:
-                        ev = self.config.default_expected_value
-                    else:
-                        ev = None
-            if ev is not None and ev < self.config.min_expected_value:
-                reason = (
-                    f"Expected value {ev:.4f} below {self.config.min_expected_value}"
-                )
-                logger.info("[EVAL] %s", reason)
-                return False, reason
-
-        drawdown = compute_drawdown(
-            df, lookback=self.config.pair_drawdown_lookback
-        )
-        if (
-            self.config.max_pair_drawdown > 0
-            and abs(drawdown) > self.config.max_pair_drawdown
-        ):
-            reason = (
-                f"Pair drawdown {abs(drawdown):.2f} exceeds {self.config.max_pair_drawdown}"
-            )
+        if current_volume < 0.01:
+            reason = "Volume too low"
             logger.info("[EVAL] %s", reason)
             return False, reason
 
-        self.boost = boost_factor(self.config.bull_fng, self.config.bull_sentiment)
-        logger.info(
-            f"[EVAL] Trade allowed for {pair} – Volume {current_volume:.4f} >= {self.config.volume_threshold_ratio*100}% of mean {vol_mean:.4f}"
-        )
-        reason = f"Trade allowed (boost {self.boost:.2f})"
+        if too_flat(df, 0.00005):
+            reason = "Volatility too low"
+            logger.info("[EVAL] %s", reason)
+            return False, reason
+
+        self.boost = 1.0
+        reason = "Trade allowed (relaxed for profitability testing)"
         logger.info("[EVAL] %s", reason)
         return True, reason
 

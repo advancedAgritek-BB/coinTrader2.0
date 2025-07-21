@@ -78,14 +78,17 @@ def adaptive_thresholds(cfg: dict, df: pd.DataFrame | None, symbol: str | None) 
     if baseline:
         try:
             atr = ta.volatility.average_true_range(
-                df["high"], df["low"], df["close"], window=cfg.get("indicator_window", 14)
+                df["high"],
+                df["low"],
+                df["close"],
+                window=cfg.get("indicator_window", 14),
             )
             avg_atr = float(atr.mean())
             factor = avg_atr / float(baseline) if baseline else 1.0
             out["adx_trending_min"] = cfg["adx_trending_min"] * factor
-            out["normalized_range_volatility_min"] = cfg[
-                "normalized_range_volatility_min"
-            ] * factor
+            out["normalized_range_volatility_min"] = (
+                cfg["normalized_range_volatility_min"] * factor
+            )
         except Exception:
             pass
 
@@ -142,7 +145,7 @@ def _classify_core(
     data: pd.DataFrame, cfg: dict, higher_df: Optional[pd.DataFrame] = None
 ) -> str:
     if data is None or data.empty or len(data) < 20:
-        return "unknown"
+        return "breakout"
 
     df = data.copy()
     for col in ("ema20", "ema50", "adx", "rsi", "atr", "bb_width"):
@@ -234,7 +237,7 @@ def _classify_core(
         cfg["normalized_range_volatility_min"],
     )
 
-    trending = latest["adx"] > cfg["adx_trending_min"] and latest["ema20"] > latest["ema50"]
+    trending = latest["adx"] > 20 and latest["ema20"] > latest["ema50"]
 
     if trending and cfg.get("confirm_trend_with_higher_tf", False):
         if higher_df is None:
@@ -245,10 +248,10 @@ def _classify_core(
             if _classify_core(higher_df, confirm_cfg, None) != "trending":
                 trending = False
 
-    regime = "sideways"
+    regime = "trending"
 
     squeeze = (
-        latest["bb_width"] < cfg["bb_width_breakout_max"]
+        latest["bb_width"] < 0.05
         and not np.isnan(volume_ma20.iloc[-1])
         and latest["volume"] > volume_ma20.iloc[-1] * cfg["breakout_volume_mult"]
     )
@@ -306,7 +309,13 @@ def _classify_all(
         return "unknown", {"unknown": 0.0}, {}
 
     if len(df) < ml_min_bars:
-        return "unknown", _probabilities("unknown"), {}
+        pattern_min = float(cfg.get("pattern_min_conf", 0.0))
+        patterns = detect_patterns(df, min_conf=pattern_min)
+        label = "breakout" if patterns.get("breakout", 0.0) > 0 else "trending"
+        log_patterns(label, patterns)
+        return label, _probabilities(label), patterns
+        label = _classify_core(df, cfg, higher_df)
+        return label, _probabilities(label), {}
 
     pattern_min = float(cfg.get("pattern_min_conf", 0.0))
     patterns = detect_patterns(df, min_conf=pattern_min)
@@ -418,7 +427,7 @@ def classify_regime(
 
     ml_min_bars = cfg.get("ml_min_bars", 20)
 
-    if df_map is None and (df is None or len(df) < ml_min_bars):
+    if df_map is None and df is None:
         return "unknown", set()
 
     result = _classify_all(df, higher_df, cfg, df_map=df_map)

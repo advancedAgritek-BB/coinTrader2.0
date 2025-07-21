@@ -30,8 +30,10 @@ The bot selects a strategy by first classifying the current market regime. The
 `classify_regime` function computes EMA, ADX, RSI and Bollinger Band width to
 label conditions as `trending`, `sideways`, `breakout`, `mean-reverting` or
 `volatile`. At least **200** candles are required for these indicators to
-be calculated reliably. When fewer rows are available the function returns
-`"unknown"` so the router can avoid making a poor decision. Strategies may
+be calculated reliably. When fewer than **20** candles are available the
+system assumes a `breakout` regime to avoid missing early momentum.
+With 20 to 199 candles the classifier still runs but accuracy may be
+reduced. Strategies may
 operate on different candle intervals, so the loader keeps a multi‑timeframe
 cache populated for each pair. The `timeframes` list in
 `crypto_bot/config.yaml` defines which intervals are stored and reused across
@@ -343,7 +345,9 @@ symbol_score_weights:
 * **cooldown_enabled** – disable to ignore the cooldown and win-rate check.
 * **breakout** – Bollinger/Keltner squeeze with `donchian_window`,
   `vol_confirmation`/`vol_multiplier`, `setup_window`, `trigger_window` and a
-  `risk` section for stop sizing.
+  `risk` section for stop sizing. Lowering `vol_multiplier` (e.g., `0.5`)
+  captures more frequent breakouts on tokens like Solana. The optional
+  `momentum_filter` is disabled by default for higher trade frequency.
 * **grid_bot.volume_filter** – require a volume spike before entering a grid
   trade. Turning this off increases trade frequency.
 * **grid_bot.dynamic_grid** – realign grid steps when the 1h ATR% changes by
