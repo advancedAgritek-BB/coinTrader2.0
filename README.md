@@ -480,6 +480,8 @@ tolerance.
 * **telegram** – bot token, chat ID and trade notifications. Optional
   **status_updates** and **balance_updates** flags control startup and
   balance alerts.
+* **telegram.message_interval** – minimum seconds between notifications.
+* **telegram.max_messages_per_minute** – maximum Telegram sends per minute.
 * **balance_change_threshold** – delta for Telegram balance alerts.
 * **balance_poll_mod** – how often to poll balance between trades.
 * **tax_tracking** – CSV export of executed trades.
@@ -520,6 +522,8 @@ The built-in Telegram interface is provided by the `TelegramBotUI` class in
      chat_id: your_chat_id
      chat_admins: your_chat_id
      trade_updates: true
+     message_interval: 1.0
+     max_messages_per_minute: 20
    ```
 
    The bot reads the chat ID and token from `config.yaml` (not

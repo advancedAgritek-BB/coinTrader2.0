@@ -155,3 +155,37 @@ def test_notifier_stops_after_failure(monkeypatch, caplog):
     assert err2 is None
     assert calls["count"] == 1
     assert any("disabling telegram notifications" in r.getMessage().lower() for r in caplog.records)
+
+
+def test_notifier_rate_limits(monkeypatch):
+    import types
+    import crypto_bot.utils.telegram as telegram
+
+    current = {"t": 0.0}
+
+    def fake_time():
+        return current["t"]
+
+    def fake_sleep(seconds):
+        current["t"] += seconds
+
+    send_times = []
+
+    def fake_send(token, chat_id, text):
+        send_times.append(current["t"])
+        return None
+
+    monkeypatch.setattr(telegram, "send_message", fake_send)
+    monkeypatch.setattr(telegram, "time", types.SimpleNamespace(time=fake_time, sleep=fake_sleep))
+
+    notifier = telegram.TelegramNotifier(True, "t", "c")
+
+    for _ in range(25):
+        notifier.notify("msg")
+
+    # ensure at least one second between sends
+    assert all(b - a >= 1.0 for a, b in zip(send_times, send_times[1:]))
+
+    # ensure no more than 20 messages in any 60 second window
+    for i in range(len(send_times) - 20):
+        assert send_times[i + 20] - send_times[i] >= 60
