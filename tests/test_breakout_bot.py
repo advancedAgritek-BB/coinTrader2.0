@@ -86,6 +86,7 @@ def test_signal_requires_all_conditions(direction, breakout_df, higher_squeeze_d
     df_no_vol = breakout_df(direction, volume_spike=False)
     score_no_vol, got_no_vol = breakout_bot.generate_signal(df_no_vol, higher_df=higher_squeeze_df)
     assert got_no_vol == direction and score_no_vol > 0
+    assert breakout_bot.generate_signal(df_no_vol, higher_df=higher_squeeze_df)[1] == direction
 
     df_no_break = breakout_df(direction, breakout=False)
     assert breakout_bot.generate_signal(df_no_break, higher_df=higher_squeeze_df)[1] == "none"
