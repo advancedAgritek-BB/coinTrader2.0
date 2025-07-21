@@ -1,6 +1,84 @@
 import json
 import pandas as pd
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
+from crypto_bot.volatility_filter import calc_atr, too_flat
+from crypto_bot.utils import trade_memory
+from crypto_bot.utils import ev_tracker
+import logging
+
+
+def volume_df(volumes: list[float]) -> pd.DataFrame:
+    data = {
+        "open": [1] * len(volumes),
+        "high": [1] * len(volumes),
+        "low": [1] * len(volumes),
+        "close": [1] * len(volumes),
+        "volume": volumes,
+    }
+    return pd.DataFrame(data)
+
+def test_allow_trade_rejects_below_min_volume():
+    df = volume_df([1] * 19 + [0.5])
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_volume=1,
+        volume_threshold_ratio=0.5,
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
+    assert not allowed
+    assert "min volume" in reason.lower()
+
+
+def test_allow_trade_rejects_below_volume_ratio():
+    df = volume_df([1] * 19 + [0.4])
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_volume=0.1,
+        volume_threshold_ratio=0.5,
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
+    assert not allowed
+    assert "50% of mean" in reason
+
+
+def test_allow_trade_allows_when_volume_sufficient():
+    df = volume_df([1] * 19 + [2])
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_volume=1,
+        volume_threshold_ratio=0.5,
+    )
+    allowed, _ = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
+    assert allowed
+
+
+def test_allow_trade_rejects_volume_below_point_zero_one():
+    df = volume_df([1] * 19 + [0.005])
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_volume=0.01,
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
+    assert not allowed
+    assert "min volume" in reason.lower()
+
+
+def test_allow_trade_rejects_when_volume_far_below_mean():
+    df = volume_df([100] * 19 + [0.2])
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_volume=10,
+    )
 from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.utils import ev_tracker, trade_memory
 import logging
@@ -38,6 +116,40 @@ def test_allow_trade_allows_with_valid_data():
     allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert allowed
     assert "trade allowed" in reason.lower()
+
+
+def test_allow_trade_rejects_when_atr_below_threshold():
+    df = volume_df([1] * 20)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_atr_pct=0.00005,
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
+    assert not allowed
+    assert "volatility" in reason.lower()
+
+
+def test_allow_trade_allows_above_atr_and_volume_thresholds():
+    prices = list(range(1, 21))
+    data = {
+        "open": prices,
+        "high": [p + 0.01 for p in prices],
+        "low": prices,
+        "close": prices,
+        "volume": [0.02] * 20,
+    }
+    df = pd.DataFrame(data)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_volume=0.01,
+        min_atr_pct=0.00005,
+    )
+    allowed, _ = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
+    assert allowed
 
 
 def test_stop_order_management():
@@ -265,6 +377,36 @@ def _df() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
+def test_allow_trade_rejects_on_bearish_sentiment(monkeypatch):
+    monkeypatch.setenv("MOCK_FNG_VALUE", "10")
+    monkeypatch.setenv("MOCK_TWITTER_SENTIMENT", "20")
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_fng=30,
+        min_sentiment=30,
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(_df(), symbol="XBT/USDT")
+    assert not allowed
+    assert "bearish" in reason.lower()
+
+
+def test_allow_trade_allows_on_positive_sentiment(monkeypatch):
+    monkeypatch.setenv("MOCK_FNG_VALUE", "80")
+    monkeypatch.setenv("MOCK_TWITTER_SENTIMENT", "80")
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_fng=30,
+        min_sentiment=40,
+    )
+    allowed, _ = RiskManager(cfg).allow_trade(_df(), symbol="XBT/USDT")
+    assert allowed
+
+
+def test_allow_trade_rejects_on_negative_ev(tmp_path, monkeypatch):
 def test_allow_trade_ignores_negative_ev(tmp_path, monkeypatch):
     stats = {"trend_bot": {"win_rate": 0.4, "avg_win": 0.01, "avg_loss": -0.02}}
     file = tmp_path / "stats.json"
