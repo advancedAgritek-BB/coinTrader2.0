@@ -314,8 +314,6 @@ def _classify_all(
         label = "breakout" if patterns.get("breakout", 0.0) > 0 else "trending"
         log_patterns(label, patterns)
         return label, _probabilities(label), patterns
-        label = _classify_core(df, cfg, higher_df)
-        return label, _probabilities(label), {}
 
     pattern_min = float(cfg.get("pattern_min_conf", 0.0))
     patterns = detect_patterns(df, min_conf=pattern_min)
@@ -332,7 +330,6 @@ def _classify_all(
             continue
         scores[target] = scores.get(target, 0.0) + weight * float(strength)
 
-    regime = _classify_core(df, cfg, higher_df)
     if regime != "unknown":
         scores[regime] = scores.get(regime, 0.0) + 1.0
 
