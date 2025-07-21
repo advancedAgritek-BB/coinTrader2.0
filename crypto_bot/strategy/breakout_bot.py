@@ -38,7 +38,7 @@ def _squeeze(
 ) -> Tuple[pd.Series, pd.Series]:
     """Return squeeze boolean series and ATR values."""
     hist = max(bb_len, kc_len)
-    recent = df.iloc[-(hist + 1) :]
+    recent = df.iloc[-(hist + 1):]
 
     close = recent["close"]
     high = recent["high"]
@@ -109,7 +109,7 @@ def generate_signal(
     if len(df) < lookback:
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
-    recent = df.iloc[-(lookback + 1) :]
+    recent = df.iloc[-(lookback + 1):]
 
     squeeze, atr = _squeeze(
         recent,
@@ -124,6 +124,18 @@ def generate_signal(
     if pd.isna(squeeze.iloc[-1]) or not squeeze.iloc[-1]:
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
+    if higher_df is not None and not higher_df.empty:
+        h_sq, _ = _squeeze(
+            higher_df.iloc[-(lookback + 1):],
+            bb_len,
+            bb_std,
+            kc_len,
+            kc_mult,
+            threshold,
+            lookback_cfg,
+            squeeze_pct,
+        )
+        # Higher timeframe squeeze is informative but no longer mandatory
 
     close = recent["close"]
     high = recent["high"]
