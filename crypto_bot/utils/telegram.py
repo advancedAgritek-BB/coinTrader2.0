@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import threading
 import os
+import time
 
 from telegram import Bot
 
@@ -92,6 +93,8 @@ class TelegramNotifier:
         token: str = "",
         chat_id: str = "",
         admins: Iterable[str] | str | None = None,
+        message_interval: float = 1.0,
+        max_per_minute: int = 20,
     ) -> None:
         self.enabled = enabled
         self.token = token
@@ -102,6 +105,11 @@ class TelegramNotifier:
         self._disabled = False
         # lock to serialize send attempts
         self._lock = threading.Lock()
+        # rate limiting
+        self.message_interval = message_interval
+        self.max_per_minute = max_per_minute
+        self._last_sent = 0.0
+        self._recent_sends: list[float] = []
 
     def notify(self, text: str) -> Optional[str]:
         """Send ``text`` if notifications are enabled and credentials exist."""
@@ -111,6 +119,19 @@ class TelegramNotifier:
         with self._lock:
             if self._disabled:
                 return None
+
+            now = time.time()
+            self._recent_sends = [t for t in self._recent_sends if now - t < 60]
+
+            delay = max(0.0, self.message_interval - (now - self._last_sent))
+            if self._recent_sends and len(self._recent_sends) >= self.max_per_minute:
+                oldest = self._recent_sends[0]
+                delay = max(delay, 60 - (now - oldest))
+
+            if delay > 0:
+                time.sleep(delay)
+                now = time.time()
+
             err = send_message(self.token, self.chat_id, text)
             if err is not None:
                 self._disabled = True
@@ -118,6 +139,9 @@ class TelegramNotifier:
                     "Disabling Telegram notifications due to send failure: %s",
                     err,
                 )
+            else:
+                self._last_sent = now
+                self._recent_sends.append(now)
             return err
 
     @classmethod
@@ -129,6 +153,8 @@ class TelegramNotifier:
             chat_id=config.get("chat_id", ""),
             enabled=config.get("enabled", True),
             admins=admins,
+            message_interval=config.get("message_interval", 1.0),
+            max_per_minute=config.get("max_messages_per_minute", 20),
         )
         return notifier
 
