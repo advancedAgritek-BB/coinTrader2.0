@@ -599,16 +599,16 @@ async def initial_scan(
 ) -> None:
     """Populate OHLCV and regime caches before trading begins."""
 
-    symbols = (
-        (config.get("symbols") or [config.get("symbol")])
-        + config.get("onchain_symbols", [])
-    )
-    symbols = [s for s in symbols if s]
+    ranked, onchain_symbols = await get_filtered_symbols(exchange, config)
+    symbols = [s for s, _ in ranked]
+    top_n = int(config.get("scan_deep_top", 50))
+    symbols = symbols[:top_n]
+    for sym in onchain_symbols:
+        if sym not in symbols:
+            symbols.append(sym)
     symbols = list(dict.fromkeys(symbols))
     if not symbols:
         return
-
-    onchain_symbols = [s for s in config.get("onchain_symbols", []) if s]
 
     # Save the local sync fetch function so it isn't shadowed later
     fetch_solana_historical_sync = fetch_solana_historical
@@ -620,9 +620,12 @@ async def initial_scan(
     sf = config.get("symbol_filter", {})
     scan_limit = int(sf.get("initial_history_candles", config.get("scan_lookback_limit", 50)))
     scan_limit = min(scan_limit, 700)
+    scan_limit = min(config.get("scan_lookback_limit", 50), 700)
 
-    for i in range(0, total, batch_size):
-        batch = symbols[i:i + batch_size]
+    lookback_limit = scan_limit
+    tfs = config.get("timeframes", ["1h"])
+    tf_sec = timeframe_seconds(None, min(tfs, key=lambda t: timeframe_seconds(None, t)))
+    lookback_since = int(time.time() * 1000 - lookback_limit * tf_sec * 1000)
 
         lookback_limit = scan_limit
         tfs = sf.get("initial_timeframes", config.get("timeframes", ["1h"]))
@@ -691,6 +694,56 @@ async def initial_scan(
         logger.info("Initial scan %.1f%% complete", pct)
         if notifier and config.get("telegram", {}).get("status_updates", True):
             notifier.notify(f"Initial scan {pct:.1f}% complete")
+    history_since = int((time.time() - 365 * 86400) * 1000)
+    deep_limit = int(
+        config.get("scan_deep_limit", config.get("scan_lookback_limit", 50) * 10)
+    )
+    logger.info(
+        "Loading deep OHLCV history starting %s",
+        datetime.utcfromtimestamp(history_since / 1000).isoformat(),
+    )
+
+    async with OHLCV_LOCK:
+        state.df_cache = await update_multi_tf_ohlcv_cache(
+            exchange,
+            state.df_cache,
+            symbols,
+            config,
+            limit=deep_limit,
+            start_since=history_since,
+            use_websocket=False,
+            force_websocket_history=config.get("force_websocket_history", False),
+            max_concurrent=config.get("max_concurrent_ohlcv"),
+            notifier=notifier,
+            priority_queue=symbol_priority_queue,
+        )
+
+        state.regime_cache = await update_regime_tf_cache(
+            exchange,
+            state.regime_cache,
+            symbols,
+            config,
+            limit=scan_limit,
+            start_since=lookback_since,
+            use_websocket=False,
+            force_websocket_history=config.get("force_websocket_history", False),
+            max_concurrent=config.get("max_concurrent_ohlcv"),
+            notifier=notifier,
+            df_map=state.df_cache,
+        )
+    logger.info("Deep historical OHLCV loaded for %d symbols", len(symbols))
+
+    for sym in symbols:
+        if sym not in onchain_symbols:
+            continue
+        base = sym.split("/")[0]
+        mint = TOKEN_MINTS.get(base.upper(), base)
+        for tf in config.get("timeframes", ["1h"]):
+            df = await asyncio.to_thread(
+                fetch_solana_historical_sync, mint, tf, limit=scan_limit
+            )
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                update_df_cache(state.df_cache, tf, sym, df)
 
     onchain_syms = config.get("onchain_symbols", [])
     if onchain_syms:

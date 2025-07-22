@@ -368,6 +368,12 @@ symbol_filter:
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
   volume_percentile: 20
+  max_concurrent_ohlcv: 10
+  initial_timeframes:
+  - 1h
+  - 4h
+  - 1d
+  initial_history_candles: 300
 symbol_refresh_minutes: 1
 symbol_score_weights:
   age: 0.1
