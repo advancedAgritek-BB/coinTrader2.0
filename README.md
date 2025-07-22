@@ -104,7 +104,8 @@ needed.
    Before trading begins the bot performs a full market scan to populate
    its caches. Progress is logged and, when `telegram.status_updates` is
    enabled, sent to your Telegram chat.
-   Type `start`, `stop`, `reload` or `quit` in the terminal to control the bot.
+   Type `start`, `stop`, `panic sell`, `reload` or `quit` in the terminal to
+   control the bot.
    Or launch the web dashboard with:
    ```bash
    python -m frontend.app
