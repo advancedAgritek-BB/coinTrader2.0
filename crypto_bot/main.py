@@ -151,7 +151,7 @@ def update_df_cache(
         tf_cache.popitem(last=False)
 
 
-BIRDEYE_MIN_INTERVAL = 1.0
+BIRDEYE_MIN_INTERVAL = 2.0
 _birdeye_lock = threading.Lock()
 _last_birdeye_time = 0.0
 
