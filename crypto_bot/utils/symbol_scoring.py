@@ -210,8 +210,8 @@ def score_vectorised(
 
     max_vals = np.array(
         [
-            float(config.get("max_vol", 1_000_000)),
-            float(config.get("max_change_pct", 10)),
+            float(config.get("max_vol", 10_000_000)),
+            float(config.get("max_change_pct", 20)),
             float(config.get("max_spread_pct", 2)),
             float(config.get("max_age_days", 180)),
             float(config.get("max_latency_ms", 1000)),
@@ -263,8 +263,8 @@ async def score_symbol(
     if total <= 0:
         raise ValueError("symbol_score_weights must sum to a positive value")
 
-    max_vol = float(config.get("max_vol", 1_000_000))
-    max_change = float(config.get("max_change_pct", 10))
+    max_vol = float(config.get("max_vol", 10_000_000))
+    max_change = float(config.get("max_change_pct", 20))
     max_spread = float(config.get("max_spread_pct", 2))
     max_age = float(config.get("max_age_days", 180))
     max_latency = float(config.get("max_latency_ms", 1000))
@@ -306,8 +306,8 @@ def score_vectorised(df: pd.DataFrame, config: Mapping[str, object]) -> pd.Serie
     if total <= 0:
         raise ValueError("symbol_score_weights must sum to a positive value")
 
-    max_vol = float(config.get("max_vol", 1_000_000))
-    max_change = float(config.get("max_change_pct", 10))
+    max_vol = float(config.get("max_vol", 10_000_000))
+    max_change = float(config.get("max_change_pct", 20))
     max_spread = float(config.get("max_spread_pct", 2))
 
     volume_norm = np.minimum(df["vol"] / max_vol, 1.0)

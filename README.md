@@ -250,7 +250,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **preferred_chain** – chain used for on-chain swaps (e.g. `solana`).
 * **wallet_address** – destination wallet for DEX trades.
 * **solana_slippage_bps** – slippage tolerance for on-chain conversions.
-* **onchain_min_volume_usd** – minimum 24h volume for on-chain pairs (default `1_000_000`).
+* **onchain_min_volume_usd** – minimum 24h volume for on-chain pairs (default `10_000_000`). This value can be overridden in `config.yaml`.
 * **symbol**/**symbols** – pairs to trade when not scanning automatically.
 * **scan_markets** – load all exchange pairs when `symbols` is empty (enabled by default).
 * **scan_in_background** – start the initial scan in the background so trading can begin immediately.
@@ -282,16 +282,16 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **symbol_refresh_minutes** – minutes before the symbol queue is refreshed.
 * **symbol_filter** - filters by minimum volume, 24h change percentile, spread and correlation.
 * **skip_symbol_filters** – bypass the volume and spread checks and use the provided symbol list as-is.
-* **symbol_score_weights** – weights for volume, spread, change, age and liquidity. The weights must sum to a positive value.
+* **symbol_score_weights** – weights for volume, change, spread, age, latency and liquidity. These defaults can be overridden in `config.yaml` and must sum to a positive value.
 
 ```yaml
 symbol_score_weights:
-  volume: 0.25
-  spread: 0.1
-  change: 0.45
-  liquidity: 0.15
-  latency: 0.03
-  age: 0.02
+  volume: 0.4
+  change: 0.2
+  spread: 0.2
+  age: 0.1
+  latency: 0.1
+  liquidity: 0.0
 ```
 * **uncached_volume_multiplier** – extra volume factor applied when a pair is missing from `cache/liquid_pairs.json`.
 * **min_symbol_age_days** – skip newly listed pairs.
@@ -918,13 +918,14 @@ Leaving `allowed_quote_currencies` empty allows any trading pair:
 
 ```yaml
 refresh_pairs:
-  min_quote_volume_usd: 1000000
+  min_quote_volume_usd: 10000000
   refresh_interval: 6h
   top_k: 40
   secondary_exchange: coinbase
   allowed_quote_currencies: []
   blacklist_assets: []
 ```
+These thresholds can be changed in `config.yaml`.
 Run it manually whenever needed:
 
 ```bash

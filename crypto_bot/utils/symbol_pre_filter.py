@@ -863,7 +863,7 @@ async def filter_symbols(
     )
 
     resolved_onchain: List[tuple[str, float]] = []
-    onchain_min_volume = cfg.get("onchain_min_volume_usd", 1_000_000)
+    onchain_min_volume = cfg.get("onchain_min_volume_usd", 10_000_000)
     for sym in onchain_syms:
         base = sym.split("/")[0].upper()
         if base in NON_SOLANA_BASES:
