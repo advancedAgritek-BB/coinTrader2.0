@@ -22,6 +22,27 @@ def reset_semaphore():
     yield
 
 
+@pytest.fixture(autouse=True)
+def patch_multi_tf(monkeypatch):
+    async def fake_update(*_a, **_k):
+        return {}
+
+    monkeypatch.setattr(sp, "update_multi_tf_ohlcv_cache", fake_update)
+    yield
+
+
+@pytest.fixture
+def track_multi_tf(monkeypatch):
+    calls: list[list[str]] = []
+
+    async def fake_update(_ex, cache, symbols, *_args, **_):
+        calls.append(list(symbols))
+        return cache or {}
+
+    monkeypatch.setattr(sp, "update_multi_tf_ohlcv_cache", fake_update)
+    return calls
+
+
 from crypto_bot.utils.symbol_pre_filter import filter_symbols, has_enough_history
 
 CONFIG = {
@@ -73,14 +94,15 @@ async def fake_fetch(*_args, **_kw):
     }
 
 
-def test_filter_symbols(monkeypatch):
+def test_filter_symbols(monkeypatch, track_multi_tf):
     monkeypatch.setattr(
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
     )
-    symbols = asyncio.run(
+    result = asyncio.run(
         filter_symbols(DummyExchange(), ["ETH/USD", "BTC/USD"], CONFIG)
     )
-    assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
+    assert [s for s, _ in result[0]] == ["ETH/USD", "BTC/USD"]
+    assert track_multi_tf == [["ETH/USD", "BTC/USD"]]
 
 
 def test_filter_symbols_sets_semaphore(monkeypatch):
@@ -347,6 +369,20 @@ def test_blacklisted_base_omitted(monkeypatch, caplog):
 
     assert result == ([], [("SOL/USDC", 1.0)])
     assert not any("No mint" in r.getMessage() for r in caplog.records)
+
+
+def test_gecko_skipped_for_blacklisted_base(monkeypatch):
+    async def raise_if_called(*_a, **_k):
+        raise AssertionError("gecko should not be called")
+
+    monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", raise_if_called)
+
+    class DummyEx:
+        has = {}
+        markets_by_id = {}
+
+    result = asyncio.run(sp.filter_symbols(DummyEx(), ["BNB/USDC"], CONFIG))
+    assert result == ([], [])
 
 
 class WatchTickersExchange(DummyExchange):
