@@ -613,6 +613,13 @@ async def initial_scan(
     # Save the local sync fetch function so it isn't shadowed later
     fetch_solana_historical_sync = fetch_solana_historical
 
+    batch_size = int(config.get("symbol_batch_size", 10))
+    total = len(symbols)
+    processed = 0
+
+    sf = config.get("symbol_filter", {})
+    scan_limit = int(sf.get("initial_history_candles", config.get("scan_lookback_limit", 50)))
+    scan_limit = min(scan_limit, 700)
     scan_limit = min(config.get("scan_lookback_limit", 50), 700)
 
     lookback_limit = scan_limit
@@ -620,6 +627,73 @@ async def initial_scan(
     tf_sec = timeframe_seconds(None, min(tfs, key=lambda t: timeframe_seconds(None, t)))
     lookback_since = int(time.time() * 1000 - lookback_limit * tf_sec * 1000)
 
+        lookback_limit = scan_limit
+        tfs = sf.get("initial_timeframes", config.get("timeframes", ["1h"]))
+        tf_sec = timeframe_seconds(None, min(tfs, key=lambda t: timeframe_seconds(None, t)))
+        lookback_since = int(time.time() * 1000 - lookback_limit * tf_sec * 1000)
+
+        history_since = int((time.time() - 365 * 86400) * 1000)
+        deep_limit = int(
+            sf.get(
+                "initial_history_candles",
+                config.get(
+                    "scan_deep_limit",
+                    config.get("scan_lookback_limit", 50) * 10,
+                ),
+            )
+        )
+        logger.info(
+            "Loading deep OHLCV history starting %s",
+            datetime.utcfromtimestamp(history_since / 1000).isoformat(),
+        )
+
+        async with OHLCV_LOCK:
+            state.df_cache = await update_multi_tf_ohlcv_cache(
+                exchange,
+                state.df_cache,
+                batch,
+                {**config, "timeframes": tfs},
+                limit=deep_limit,
+                start_since=history_since,
+                use_websocket=False,
+                force_websocket_history=config.get("force_websocket_history", False),
+                max_concurrent=config.get("max_concurrent_ohlcv"),
+                notifier=notifier,
+                priority_queue=symbol_priority_queue,
+            )
+
+            state.regime_cache = await update_regime_tf_cache(
+                exchange,
+                state.regime_cache,
+                batch,
+                {**config, "timeframes": tfs},
+                limit=scan_limit,
+                start_since=lookback_since,
+                use_websocket=False,
+                force_websocket_history=config.get("force_websocket_history", False),
+                max_concurrent=config.get("max_concurrent_ohlcv"),
+                notifier=notifier,
+                df_map=state.df_cache,
+            )
+        logger.info("Deep historical OHLCV loaded for %d symbols", len(batch))
+
+        for sym in batch:
+            if sym not in onchain_symbols:
+                continue
+            base = sym.split("/")[0]
+            mint = TOKEN_MINTS.get(base.upper(), base)
+            for tf in tfs:
+                df = await asyncio.to_thread(
+                    fetch_solana_historical_sync, mint, tf, limit=scan_limit
+                )
+                if isinstance(df, pd.DataFrame) and not df.empty:
+                    update_df_cache(state.df_cache, tf, sym, df)
+
+        processed += len(batch)
+        pct = processed / total * 100
+        logger.info("Initial scan %.1f%% complete", pct)
+        if notifier and config.get("telegram", {}).get("status_updates", True):
+            notifier.notify(f"Initial scan {pct:.1f}% complete")
     history_since = int((time.time() - 365 * 86400) * 1000)
     deep_limit = int(
         config.get("scan_deep_limit", config.get("scan_lookback_limit", 50) * 10)
@@ -678,7 +752,7 @@ async def initial_scan(
         except Exception:
             fetch_solana_historical_async = None
         if fetch_solana_historical_async:
-            timeframes = config.get("timeframes", ["1h"])
+            timeframes = sf.get("initial_timeframes", config.get("timeframes", ["1h"]))
             for sym in onchain_syms:
                 for tf in timeframes:
                     try:
