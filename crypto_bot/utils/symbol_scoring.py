@@ -118,7 +118,7 @@ def _score_vectorised_py(
     max_vals: np.ndarray,
     total: float,
 ) -> np.ndarray:
-    volume_norm = np.minimum(volume_usd / max_vals[0], 1.0)
+    volume_norm = np.minimum(np.log1p(volume_usd) / np.log1p(max_vals[0]), 1.0)
     change_norm = np.minimum(np.abs(change_pct) / max_vals[1], 1.0)
     spread_norm = 1.0 - np.minimum(spread_pct / max_vals[2], 1.0)
     age_norm = np.minimum(age_days / max_vals[3], 1.0)
@@ -150,7 +150,7 @@ def _score_vectorised_numba(
     n = len(volume_usd)
     out = np.empty(n)
     for i in range(n):
-        v_norm = volume_usd[i] / max_vals[0]
+        v_norm = np.log1p(volume_usd[i]) / np.log1p(max_vals[0])
         if v_norm > 1.0:
             v_norm = 1.0
         c_norm = abs(change_pct[i]) / max_vals[1]
@@ -269,7 +269,7 @@ async def score_symbol(
     max_age = float(config.get("max_age_days", 180))
     max_latency = float(config.get("max_latency_ms", 1000))
 
-    volume_norm = min(volume_usd / max_vol, 1.0)
+    volume_norm = min(np.log1p(volume_usd) / np.log1p(max_vol), 1.0)
     change_norm = min(abs(change_pct) / max_change, 1.0)
     spread_norm = 1.0 - min(spread_pct / max_spread, 1.0)
     age_norm = min(get_symbol_age(exchange, symbol) / max_age, 1.0)
@@ -310,7 +310,7 @@ def score_vectorised(df: pd.DataFrame, config: Mapping[str, object]) -> pd.Serie
     max_change = float(config.get("max_change_pct", 10))
     max_spread = float(config.get("max_spread_pct", 2))
 
-    volume_norm = np.minimum(df["vol"] / max_vol, 1.0)
+    volume_norm = np.minimum(np.log1p(df["vol"]) / np.log1p(max_vol), 1.0)
     change_norm = np.minimum(df["chg"].abs() / max_change, 1.0)
     spread_norm = 1.0 - np.minimum(df["spr"] / max_spread, 1.0)
     liq_norm = np.minimum(df.get("liq", 1.0), 1.0)
