@@ -112,3 +112,36 @@ async def test_initial_scan_onchain(monkeypatch):
 
     assert set(calls) == {('SOL/USDC', '1h', 100), ('SOL/USDC', '5m', 100)}
     assert [(c[0], c[1]) for c in updates] == [('1h', 'SOL/USDC'), ('5m', 'SOL/USDC')]
+
+
+@pytest.mark.asyncio
+async def test_initial_scan_symbol_filter_overrides(monkeypatch):
+    cfg_params = []
+
+    async def fake_update_multi(exchange, cache, batch, cfg, limit=0, **kwargs):
+        cfg_params.append((cfg, limit))
+        return {}
+
+    async def fake_update_regime(exchange, cache, batch, cfg, limit=0, **kwargs):
+        cfg_params.append((cfg, limit))
+        return {}
+
+    monkeypatch.setattr('crypto_bot.main.update_multi_tf_ohlcv_cache', fake_update_multi)
+    monkeypatch.setattr('crypto_bot.main.update_regime_tf_cache', fake_update_regime)
+
+    cfg = {
+        'symbols': ['BTC/USD'],
+        'timeframes': ['1h'],
+        'scan_lookback_limit': 100,
+        'symbol_filter': {
+            'initial_timeframes': ['5m'],
+            'initial_history_candles': 25,
+        },
+    }
+
+    await initial_scan(DummyExchange(), cfg, SessionState())
+
+    assert cfg_params
+    for c, limit in cfg_params:
+        assert c['timeframes'] == ['5m']
+        assert limit == 25
