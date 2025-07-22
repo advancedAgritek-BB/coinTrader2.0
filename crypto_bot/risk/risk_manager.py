@@ -33,7 +33,7 @@ class RiskConfig:
     trade_size_pct: float = 0.1
     risk_pct: float = 0.01
     min_volume: float = 0.0
-    volume_threshold_ratio: float = 0.1
+    volume_threshold_ratio: float = 0.05
     strategy_allocation: dict | None = None
     volume_ratio: float = 1.0
     atr_short_window: int = 14
