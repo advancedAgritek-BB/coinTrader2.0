@@ -11,7 +11,6 @@ from telegram.ext import ContextTypes
 
 from . import console_monitor, log_reader
 from .utils.logger import LOG_DIR, setup_logger
-from .utils.open_trades import get_open_trades
 from .utils.telegram import TelegramNotifier
 
 
@@ -74,7 +73,6 @@ except Exception:  # pragma: no cover - telegram not installed
     ContextTypes = object  # type: ignore
 
 from . import console_monitor, log_reader
-from .utils.open_trades import get_open_trades
 
 STRATEGY_FILE = LOG_DIR / "strategy_stats.json"
 TRADES_FILE = LOG_DIR / "trades.csv"

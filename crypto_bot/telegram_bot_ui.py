@@ -30,7 +30,6 @@ from crypto_bot.utils.telegram import TelegramNotifier, is_admin
 
 from crypto_bot import log_reader, console_monitor
 from .telegram_ctl import BotController
-from crypto_bot.utils.open_trades import get_open_trades
 
 START = "START"
 STOP = "STOP"
