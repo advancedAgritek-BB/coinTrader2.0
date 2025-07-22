@@ -763,3 +763,51 @@ ma_window: 20
     adapted = rc.adaptive_thresholds(cfg, df, "AAA")
     assert adapted["adx_trending_min"] > cfg["adx_trending_min"]
     assert adapted["rsi_mean_rev_max"] >= cfg["rsi_mean_rev_max"]
+
+
+def test_strategy_regime_strength_bonus(monkeypatch):
+    df = _make_trending_df()
+
+    class Filt:
+        @staticmethod
+        def matches(r):
+            return r == "trending"
+
+    def strat(df_, cfg=None):
+        return 0.5, "long"
+
+    strat.regime_filter = Filt()
+
+    import crypto_bot.utils.market_analyzer as ma
+
+    async def fake_async(*_a, **_k):
+        return "trending", {"trending": 1.0}
+
+    async def fake_cached(*_a, **_k):
+        return "trending", 1.0
+
+    monkeypatch.setattr(ma, "classify_regime_async", fake_async)
+    monkeypatch.setattr(ma, "classify_regime_cached", fake_cached)
+    async def fake_patterns(*_a, **_k):
+        return "trending", {}
+
+    monkeypatch.setattr(ma, "classify_regime_with_patterns_async", fake_patterns)
+    monkeypatch.setattr(ma, "route", lambda *a, **k: strat)
+
+    async def fake_eval(*_a, **_k):
+        return [(0.5, "long", None)]
+
+    monkeypatch.setattr(ma, "evaluate_async", fake_eval)
+    monkeypatch.setattr(ma, "detect_patterns", lambda _df: {})
+    monkeypatch.setattr(ma, "calc_atr", lambda *_a, **_k: 0.0)
+
+    async def run():
+        cfg = {
+            "timeframe": "1h",
+            "scoring_weights": {"strategy_score": 0.0, "strategy_regime_strength": 1.0},
+        }
+        df_map = {"1h": df}
+        return await ma.analyze_symbol("AAA", df_map, "cex", cfg, None)
+
+    res = asyncio.run(run())
+    assert res["score"] == pytest.approx(1.1)

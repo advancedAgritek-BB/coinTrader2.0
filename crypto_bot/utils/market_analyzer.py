@@ -313,6 +313,8 @@ async def analyze_symbol(
                 return functools.partial(fn, higher_df=higher_df_1h)
             return fn
 
+        selected_fn = None
+
         if eval_mode == "best":
             strategies = [
                 wrap(s) for s in get_strategies_for_regime(regime, router_cfg)
@@ -321,6 +323,10 @@ async def analyze_symbol(
             name = res.get("name", strategy_name(regime, env))
             score = float(res.get("score", 0.0))
             direction = res.get("direction", "none")
+            for fn in strategies:
+                if _fn_name(fn) == name:
+                    selected_fn = fn
+                    break
             if len(strategies) > 1:
                 remaining = [s for s in strategies if _fn_name(s) != name]
                 if remaining:
@@ -344,6 +350,7 @@ async def analyze_symbol(
             ranked = await run_candidates(df, candidates, symbol, cfg, regime)
             if ranked:
                 best_fn, raw_score, raw_dir = ranked[0]
+                selected_fn = best_fn
                 name = _fn_name(best_fn)
                 score = raw_score
                 direction = raw_dir if raw_score >= min_conf else "none"
@@ -362,14 +369,30 @@ async def analyze_symbol(
                 direction = "none"
         else:
             strategy_fn = wrap(route(regime, env, router_cfg, notifier, df_map=df_map))
+            selected_fn = strategy_fn
             name = strategy_name(regime, env)
-            score, direction, atr = (await evaluate_async([strategy_fn], df_map, cfg))[
-                0
-            ]
+            score, direction, atr = (
+                await evaluate_async([strategy_fn], df_map, cfg)
+            )[0]
 
         atr_period = int(config.get("risk", {}).get("atr_period", 14))
         if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
             atr = calc_atr(df, window=atr_period)
+
+        reg_strength = 1.0
+        if selected_fn is not None:
+            reg_filter = getattr(selected_fn, "regime_filter", None)
+            if reg_filter is None:
+                try:
+                    module = importlib.import_module(selected_fn.__module__)
+                    reg_filter = getattr(module, "regime_filter", None)
+                except Exception:  # pragma: no cover - safety
+                    reg_filter = None
+            try:
+                if reg_filter and hasattr(reg_filter, "matches") and reg_filter.matches(regime):
+                    reg_strength = 1.1
+            except Exception:  # pragma: no cover - safety
+                pass
 
         weights = config.get("scoring_weights", {})
         final = (
@@ -378,7 +401,7 @@ async def analyze_symbol(
             + weights.get("volume_score", 0.0) * 1.0
             + weights.get("symbol_score", 0.0) * 1.0
             + weights.get("spread_penalty", 0.0) * 0.0
-            + weights.get("strategy_regime_strength", 0.0) * 1.0
+            + weights.get("strategy_regime_strength", 0.0) * reg_strength
         )
 
         result.update(
