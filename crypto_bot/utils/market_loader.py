@@ -1113,7 +1113,6 @@ async def fetch_geckoterminal_ohlcv(
             )
         except Exception:
             continue
-                continue
 
         if return_price:
             return result, volume, price

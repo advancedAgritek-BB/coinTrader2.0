@@ -35,7 +35,25 @@ try:
         cfg = yaml.safe_load(f) or {}
 except Exception:
     cfg = {}
-SEMA = asyncio.Semaphore(cfg.get("max_concurrent_ohlcv", 4))
+
+# Semaphore guarding concurrent OHLCV requests
+SEMA: asyncio.Semaphore | None = None
+
+
+def init_semaphore(limit: int | None = None) -> asyncio.Semaphore:
+    """Initialize the global semaphore with ``limit`` permits."""
+
+    global SEMA
+    if limit is None:
+        limit = 4
+    try:
+        val = int(limit)
+        if val < 1:
+            raise ValueError
+    except (TypeError, ValueError):
+        val = 4
+    SEMA = asyncio.Semaphore(val)
+    return SEMA
 
 
 logger = setup_logger(__name__, LOG_DIR / "symbol_filter.log")
@@ -584,6 +602,7 @@ async def filter_symbols(
 
     cfg = config or {}
     sf = cfg.get("symbol_filter", {})
+    init_semaphore(sf.get("max_concurrent_ohlcv", cfg.get("max_concurrent_ohlcv", 4)))
     min_volume = sf.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
     vol_pct = sf.get("volume_percentile", DEFAULT_VOLUME_PERCENTILE)
     max_spread = sf.get("max_spread_pct", 1.0)
