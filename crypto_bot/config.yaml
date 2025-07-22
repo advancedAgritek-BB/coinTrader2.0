@@ -369,12 +369,12 @@ symbol_filter:
   volume_percentile: 20
 symbol_refresh_minutes: 1
 symbol_score_weights:
-  age: 0.02
-  change: 0.45
-  latency: 0.03
-  liquidity: 0.15
-  spread: 0.1
-  volume: 0.25
+  volume: 0.3
+  change: 0.3
+  spread: 0.15
+  age: 0.1
+  latency: 0.05
+  liquidity: 0.1
 symbols: []
 tax_tracking:
   enabled: true
