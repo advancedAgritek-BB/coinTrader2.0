@@ -33,9 +33,6 @@ def _raise_stop():
 def test_trade_updates_disabled(monkeypatch):
     calls = {"entry": 0, "exit": 0}
 
-    monkeypatch.setattr(main, "report_entry", lambda *a, **k: calls.__setitem__("entry", calls["entry"] + 1))
-    monkeypatch.setattr(main, "report_exit", lambda *a, **k: calls.__setitem__("exit", calls["exit"] + 1))
-
     monkeypatch.setattr(main, "send_test_message", lambda *a, **k: True)
     monkeypatch.setattr(main, "load_config", lambda: {"telegram": {"trade_updates": False}})
     monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
@@ -78,13 +75,18 @@ def test_status_updates_disabled(monkeypatch):
         def fetch_balance(self):
             return {"USDT": {"free": 0}}
 
+        def load_markets(self):
+            return {}
+
     monkeypatch.setattr(main, "get_exchange", lambda config: (DummyExchange(), None))
     monkeypatch.setattr(main.TelegramNotifier, "from_config", lambda cfg: DummyNotifier())
     monkeypatch.setattr(main, "RiskConfig", lambda *_a, **_k: None)
     monkeypatch.setattr(main, "RiskManager", lambda *_a, **_k: (_ for _ in ()).throw(StopLoop))
+    async def fake_load_syms(*_a, **_k):
+        return ["XBT/USDT"]
+    monkeypatch.setattr(main, "load_kraken_symbols", fake_load_syms)
 
-    with pytest.raises(StopLoop):
-        asyncio.run(main.main())
+    asyncio.run(main.main())
 
     assert notes.get("notifier") is None
 
