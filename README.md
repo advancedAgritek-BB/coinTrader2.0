@@ -476,6 +476,7 @@ tolerance.
 * **loop_interval_minutes** – delay between trading cycles.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
 * **max_parallel** – number of markets processed concurrently.
+* **gecko_limit** – concurrent GeckoTerminal requests.
 * **log_to_google** – export trades to Google Sheets.
 * **telegram** – bot token, chat ID and trade notifications. Optional
   **status_updates** and **balance_updates** flags control startup and
@@ -637,10 +638,12 @@ scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
 loop_interval_minutes: 0.5   # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
 max_ws_limit: 50             # skip WebSocket when request exceeds this
+gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
 force_websocket_history: true  # set false to enable REST fallback
 max_ws_limit: 200            # skip WebSocket when request exceeds this
+gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
 metrics:
