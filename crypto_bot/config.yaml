@@ -127,6 +127,7 @@ max_slippage_pct: 0.2
 max_spread_pct: 3
 max_vol: 50000000
 max_ws_limit: 200
+gecko_limit: 10
 meme_wave_sniper:
   enabled: true
   execution:

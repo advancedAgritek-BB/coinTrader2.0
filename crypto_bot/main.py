@@ -516,6 +516,7 @@ def reload_config(
         config.get("max_ws_limit", 50),
         config.get("telegram", {}).get("status_updates", True),
         max_concurrent=config.get("max_concurrent_ohlcv"),
+        gecko_limit=config.get("gecko_limit"),
     )
 
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
@@ -1637,6 +1638,7 @@ async def _main_impl() -> TelegramNotifier:
         config.get("max_ws_limit", 50),
         status_updates,
         max_concurrent=config.get("max_concurrent_ohlcv"),
+        gecko_limit=config.get("gecko_limit"),
     )
     secrets = dotenv_values(ENV_PATH)
     flat_cfg = _flatten_config(config)

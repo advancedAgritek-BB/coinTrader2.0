@@ -59,7 +59,6 @@ def test_fetch_from_jupiter(monkeypatch, tmp_path):
             return DummyResp(self.d)
 
     session = DummySession(data)
-    aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
 
     mod = _load_module(monkeypatch, tmp_path)
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
@@ -117,8 +116,8 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
             self.url = url
             return DummyResp(self.d)
 
+    urls: list[str] = []
     session = DummySession(data)
-    aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
 
     mod = _load_module(monkeypatch, tmp_path)
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
@@ -306,25 +305,18 @@ def test_get_mint_from_gecko(monkeypatch):
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr
     spec.loader.exec_module(tr)
-    monkeypatch.setattr(tr, "aiohttp", aiohttp_mod)
+    def fake_req(url, params=None, retries=3):
+        urls.append(url)
+        return data
+
+    monkeypatch.setattr(tr, "gecko_request", fake_req)
 
     mint = asyncio.run(tr.get_mint_from_gecko("BONK"))
     assert mint == "M"
-    assert "query=BONK" in session.url
+    assert "query=BONK" in urls[0]
 
 
 def test_get_mint_from_gecko_error(monkeypatch):
-    class FailingSession:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def get(self, url, timeout=10):
-            raise DummyErr("boom")
-
-    aiohttp_mod = type("M", (), {"ClientSession": lambda: FailingSession(), "ClientError": DummyErr})
 
     import importlib.util, pathlib
     spec = importlib.util.spec_from_file_location(
@@ -335,7 +327,10 @@ def test_get_mint_from_gecko_error(monkeypatch):
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr
     spec.loader.exec_module(tr)
-    monkeypatch.setattr(tr, "aiohttp", aiohttp_mod)
+    async def fail_req(url, params=None, retries=3):
+        raise DummyErr("boom")
+
+    monkeypatch.setattr(tr, "gecko_request", fail_req)
 
     mint = asyncio.run(tr.get_mint_from_gecko("AAA"))
     assert mint is None

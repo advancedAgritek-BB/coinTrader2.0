@@ -7,6 +7,7 @@ import logging
 from typing import List
 import aiohttp
 import ccxt.async_support as ccxt
+from .gecko import gecko_request
 
 from .token_registry import TOKEN_MINTS, get_mint_from_gecko, fetch_from_helius
 
@@ -37,7 +38,7 @@ async def search_geckoterminal_token(query: str) -> tuple[str, float] | None:
         f"?query={quote_plus(query)}&network=solana"
     )
 
-    data = await _fetch_json(url)
+    data = await gecko_request(url)
     if not data:
         return None
 
