@@ -24,6 +24,17 @@ DEFAULT_REFRESH_INTERVAL = 6 * 3600  # 6 hours
 logger = logging.getLogger(__name__)
 
 
+def is_cache_fresh() -> bool:
+    """Return ``True`` if ``PAIR_FILE`` exists and is newer than one hour."""
+    if not PAIR_FILE.exists():
+        return False
+    try:
+        mtime = PAIR_FILE.stat().st_mtime
+    except OSError:
+        return False
+    return time.time() - mtime < 3600
+
+
 def _parse_interval(value: str | int | float) -> float:
     """Return ``value`` in seconds, accepting shorthand like "6h"."""
     if isinstance(value, (int, float)):
@@ -139,8 +150,21 @@ async def get_solana_liquid_pairs(min_volume: float) -> list[str]:
     return results
 
 
-async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
+async def refresh_pairs_async(
+    min_volume_usd: float, top_k: int, config: dict, *, force_refresh: bool = False
+) -> list[str]:
     """Fetch tickers and update the cached liquid pairs list."""
+    if not force_refresh and is_cache_fresh():
+        try:
+            with open(PAIR_FILE) as f:
+                loaded = json.load(f)
+            if isinstance(loaded, list):
+                return loaded
+            if isinstance(loaded, dict):
+                return list(loaded)
+        except Exception as exc:  # pragma: no cover - corrupted cache
+            logger.error("Failed to read %s: %s", PAIR_FILE, exc)
+
     old_pairs: list[str] = []
     old_map: dict[str, float] = {}
     mtime = 0.0
@@ -239,9 +263,13 @@ async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -
     return top_list
 
 
-def refresh_pairs(min_volume_usd: float, top_k: int, config: dict) -> list[str]:
+def refresh_pairs(
+    min_volume_usd: float, top_k: int, config: dict, *, force_refresh: bool = False
+) -> list[str]:
     """Synchronous wrapper for :func:`refresh_pairs_async`."""
-    return asyncio.run(refresh_pairs_async(min_volume_usd, top_k, config))
+    return asyncio.run(
+        refresh_pairs_async(min_volume_usd, top_k, config, force_refresh=force_refresh)
+    )
 
 
 def main() -> None:
