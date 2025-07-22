@@ -379,7 +379,8 @@ async def analyze_symbol(
         if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
             atr = calc_atr(df, window=atr_period)
 
-        reg_strength = 1.0
+        # Determine how well the selected strategy matches the detected regime
+        reg_strength = 0.0
         if selected_fn is not None:
             reg_filter = getattr(selected_fn, "regime_filter", None)
             if reg_filter is None:
@@ -390,7 +391,7 @@ async def analyze_symbol(
                     reg_filter = None
             try:
                 if reg_filter and hasattr(reg_filter, "matches") and reg_filter.matches(regime):
-                    reg_strength = 1.1
+                    reg_strength = 1.0
             except Exception:  # pragma: no cover - safety
                 pass
 
