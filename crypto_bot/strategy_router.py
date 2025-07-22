@@ -355,7 +355,10 @@ def strategy_for(
     """Return strategy callable for a given regime."""
     cfg = config or DEFAULT_ROUTER_CFG
     strategies = get_strategies_for_regime(regime, cfg)
-    base = strategies[0] if strategies else grid_bot.generate_signal
+    if strategies:
+        base = strategies[0]
+    else:
+        base = breakout_bot.generate_signal if regime == "unknown" else grid_bot.generate_signal
     tf_key = f"{regime.replace('-', '_')}_timeframe"
     tf = cfg_get(cfg, tf_key, cfg_get(cfg, "timeframe", "1h"))
     return wrap_with_tf(base, tf)
