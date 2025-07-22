@@ -224,6 +224,12 @@ class RiskManager:
 
         self.boost = 1.0
         reason = "Trade allowed (relaxed for profitability testing)"
+        logger.info(
+            "Allow %s: vol=%.6f, flat=%s",
+            symbol,
+            current_volume,
+            too_flat(df, 0.00005),
+        )
         logger.info("[EVAL] %s", reason)
         return True, reason
 

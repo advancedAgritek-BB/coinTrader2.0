@@ -404,7 +404,7 @@ token_registry:
 top_n_symbols: 50
 tp_mult: 2.0
 tp_pct: 0.2
-trade_size_pct: 0.05
+trade_size_pct: 0.1
 trend:
   atr_period: 10
   k: 0.8
