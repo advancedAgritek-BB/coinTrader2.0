@@ -878,7 +878,20 @@ symbol_filter:
   http_timeout: 10               # seconds for fallback /Ticker requests
   ticker_retry_attempts: 3       # number of fetch_tickers retries
   log_ticker_exceptions: false   # include stack traces when true
+max_concurrent_ohlcv: 2          # simultaneous OHLCV requests during startup
+initial_timeframes: [1m, 5m, 15m, 1h, 4h]  # preloaded intervals
+initial_history_candles: 700     # candles fetched per timeframe initially
 ```
+
+`max_concurrent_ohlcv` controls how many OHLCV requests are made in parallel
+during the startup scan. It defaults to `2`, keeping API usage modest.
+`initial_timeframes` lists the intervals preloaded before trading begins. When
+omitted it falls back to the `timeframes` list (1m, 5m, 15m, 1h and 4h by
+default). `initial_history_candles` sets how many bars to download for each of
+these intervals during the initial scan and defaults to the
+`scan_lookback_limit` of `700`. Together these options ensure enough historical
+data is fetched for regime detection and correlation checks before live trading
+starts.
 
 Kraken labels Bitcoin as `XBT` in its market identifiers. The bot
 automatically converts canonical symbols using `exchange.market_id`,
