@@ -2106,3 +2106,63 @@ def test_update_multi_tf_ohlcv_cache_start_since(monkeypatch):
     df = cache["1s"]["BTC/USD"]
     assert len(df) == 1500
     assert calls == [(0, 1000), (1000, 1000)]
+
+
+def test_coinbase_usdc_pair_mapping(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    called: dict[str, str] = {}
+
+    async def fake_fetch(_ex, sym, timeframe="1h", limit=100, **_k):
+        called["sym"] = sym
+        return [[i, 1, 1, 1, 1, 1] for i in range(limit)]
+
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+
+    class DummyCB:
+        id = "coinbase"
+        has = {"fetchOHLCV": True}
+        symbols = ["FOO/USD"]
+
+    ex = DummyCB()
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["FOO/USDC"],
+            {"timeframes": ["1h"]},
+            limit=1,
+        )
+    )
+
+    assert "FOO/USD" in cache["1h"]
+    assert called["sym"] == "FOO/USD"
+
+
+def test_coinbase_usdc_pair_skip(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    async def fail_fetch(*_a, **_k):
+        raise AssertionError("fetch should not be called")
+
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fail_fetch)
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_fetch)
+    monkeypatch.setattr(market_loader, "fetch_dex_ohlcv", fail_fetch)
+
+    class DummyCB:
+        id = "coinbase"
+        has = {"fetchOHLCV": True}
+        symbols: list[str] = []
+
+    ex = DummyCB()
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["FOO/USDC"],
+            {"timeframes": ["1h"]},
+            limit=1,
+        )
+    )
+
+    assert cache["1h"] == {}

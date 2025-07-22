@@ -1691,11 +1691,17 @@ async def update_multi_tf_ohlcv_cache(
         cex_symbols: list[str] = []
         dex_symbols: list[str] = []
         for s in symbols:
+            sym = s
             base, _, quote = s.partition("/")
             if quote.upper() == "USDC" and _is_valid_base_token(base):
-                dex_symbols.append(s)
+                dex_symbols.append(sym)
             else:
-                cex_symbols.append(s)
+                if "coinbase" in getattr(exchange, "id", "") and "/USDC" in sym:
+                    mapped = sym.replace("/USDC", "/USD")
+                    if mapped not in getattr(exchange, "symbols", []):
+                        continue  # skip unsupported pair
+                    sym = mapped
+                cex_symbols.append(sym)
 
         tf_sec = timeframe_seconds(exchange, tf)
         tf_limit = limit
