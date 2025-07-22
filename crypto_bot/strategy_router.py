@@ -101,7 +101,7 @@ class RouterConfig:
         return cls(
             regimes=router.get("regimes", {}),
             min_score=float(
-                data.get("min_confidence_score", data.get("signal_threshold", 0.0))
+                data.get("min_confidence_score", data.get("signal_threshold", 0.005))
             ),
             fusion_method=fusion.get("fusion_method", "weight"),
             perf_window=int(fusion.get("perf_window", 20)),

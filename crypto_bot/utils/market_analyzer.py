@@ -164,7 +164,7 @@ async def analyze_symbol(
             "direction": "none",
         }
     baseline = float(
-        config.get("min_confidence_score", config.get("signal_threshold", 0.0))
+        config.get("min_confidence_score", config.get("signal_threshold", 0.005))
     )
     bb_z = 0.0
     if df is not None and len(df) >= 14:
@@ -177,6 +177,7 @@ async def analyze_symbol(
         except Exception:
             bb_z = 0.0
     min_conf_adaptive = baseline * (1 + bb_z / 3)
+    min_conf_adaptive = min(min_conf_adaptive, 0.3)
     higher_df = df_map.get("1d")
     regime, probs = await classify_regime_async(df, higher_df)
     sub_regime = regime
