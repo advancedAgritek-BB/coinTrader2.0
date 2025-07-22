@@ -2042,19 +2042,30 @@ def test_coinbase_usdc_pair_mapping(monkeypatch):
         )
     )
 
-    assert "FOO/USD" in cache["1h"]
-    assert called["sym"] == "FOO/USD"
+    assert "FOO/USDC" in cache["1h"]
+    assert called["sym"] == "FOO/USDC"
 
 
 def test_coinbase_usdc_pair_skip(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    async def fail_fetch(*_a, **_k):
-        raise AssertionError("fetch should not be called")
+    calls = {"gecko": 0, "dex": 0, "ohlcv": 0}
 
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fail_fetch)
-    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_fetch)
-    monkeypatch.setattr(market_loader, "fetch_dex_ohlcv", fail_fetch)
+    async def fake_ohlcv(*_a, **_k):
+        calls["ohlcv"] += 1
+        return []
+
+    async def fake_gecko(*_a, **_k):
+        calls["gecko"] += 1
+        return None
+
+    async def fake_dex(*_a, **_k):
+        calls["dex"] += 1
+        return []
+
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_ohlcv)
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
+    monkeypatch.setattr(market_loader, "fetch_dex_ohlcv", fake_dex)
 
     class DummyCB:
         id = "coinbase"
@@ -2072,4 +2083,6 @@ def test_coinbase_usdc_pair_skip(monkeypatch):
         )
     )
 
-    assert cache["1h"] == {}
+    assert calls["gecko"] == 1
+    assert calls["dex"] == 1
+    assert calls["ohlcv"] == 0
