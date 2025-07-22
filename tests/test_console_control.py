@@ -88,3 +88,25 @@ def test_reload_command(monkeypatch, tmp_path):
 
     assert state.get("reload") is None
     assert load_calls
+
+
+def test_panic_sell_command(monkeypatch):
+    inputs = iter(["panic sell", "quit"])
+
+    def fake_input(prompt=""):
+        return next(inputs)
+
+    async def fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    printed = []
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    monkeypatch.setattr(console_control.asyncio, "to_thread", fake_to_thread)
+    monkeypatch.setattr("builtins.print", lambda msg: printed.append(msg))
+
+    state = {"running": True}
+    asyncio.run(console_control.control_loop(state))
+
+    assert state.get("liquidate_all") is True
+    assert any("Liquidation" in p for p in printed)
