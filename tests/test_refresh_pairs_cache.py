@@ -21,7 +21,7 @@ def test_refresh_pairs_error_keeps_old_cache(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(rp, "get_exchange", lambda cfg: DummyExchange())
 
     with caplog.at_level(logging.ERROR):
-        result = rp.refresh_pairs(1_000_000, 40, {})
+        result = rp.refresh_pairs(10_000_000, 40, {})
 
     assert result == ["ETH/USD"]
     assert set(json.loads(file.read_text())) == {"ETH/USD"}

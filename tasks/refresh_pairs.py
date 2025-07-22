@@ -17,7 +17,7 @@ CONFIG_PATH = Path(__file__).resolve().parents[1] / "crypto_bot" / "config.yaml"
 CACHE_DIR = Path(__file__).resolve().parents[1] / "cache"
 PAIR_FILE = CACHE_DIR / "liquid_pairs.json"
 
-DEFAULT_MIN_VOLUME_USD = 1_000_000
+DEFAULT_MIN_VOLUME_USD = 10_000_000
 DEFAULT_TOP_K = 40
 DEFAULT_REFRESH_INTERVAL = 6 * 3600  # 6 hours
 
