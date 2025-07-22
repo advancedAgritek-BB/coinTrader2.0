@@ -233,7 +233,7 @@ def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> f
 def is_market_pumping(
     symbols: list[str], df_cache: dict, timeframe: str = "1h", lookback_hours: int = 24
 ) -> bool:
-    """Return ``True`` when the average % change over ``lookback_hours`` exceeds ~10%."""
+    """Return ``True`` when the average % change over ``lookback_hours`` exceeds ~5%."""
 
     tf_cache = df_cache.get(timeframe, {})
     if not tf_cache:
@@ -260,7 +260,7 @@ def is_market_pumping(
         changes.append((end - start) / start)
 
     avg_change = sum(changes) / len(changes) if changes else 0.0
-    return avg_change >= 0.10
+    return avg_change >= 0.05
 
 
 async def get_market_regime(ctx: BotContext) -> str:
