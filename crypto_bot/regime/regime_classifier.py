@@ -133,12 +133,12 @@ def _probabilities(label: str, confidence: float | None = None) -> Dict[str, flo
     return probs
 
 
-def _normalize(probs: Dict[str, float]) -> Dict[str, float]:
+def _normalize(probs: Dict[str, float], eps: float = 1e-8) -> Dict[str, float]:
     """Return normalized probability mapping."""
     total = sum(probs.values())
-    if total > 0:
-        probs = {k: v / total for k, v in probs.items()}
-    return probs
+    if total <= 0:
+        total = eps
+    return {k: v / total for k, v in probs.items()}
 
 
 def _classify_core(
