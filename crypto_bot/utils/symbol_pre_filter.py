@@ -21,6 +21,7 @@ from .logger import LOG_DIR, setup_logger
 from .market_loader import (
     fetch_ohlcv_async,
     update_ohlcv_cache,
+    update_multi_tf_ohlcv_cache,
     fetch_geckoterminal_ohlcv,
     timeframe_seconds,
 )
@@ -732,6 +733,21 @@ async def filter_symbols(
             metrics.append((sym, vol_usd, change_pct, spread_pct))
         else:
             skipped += 1
+
+    candidates = [m[0] for m in metrics if m[1] >= vol_cut]
+    if candidates:
+        if df_cache is None:
+            df_cache = {}
+        df_cache = await update_multi_tf_ohlcv_cache(
+            exchange,
+            {"1h": df_cache} if isinstance(df_cache, dict) and "1h" not in df_cache else df_cache,
+            candidates,
+            {"timeframes": ["1h", "4h", "1d"]},
+            limit=300,
+            max_concurrent=min(10, len(candidates)),
+        )
+        if "1h" in df_cache:
+            df_cache = df_cache.get("1h", {})
 
     if metrics and pct:
         threshold = np.percentile([abs(m[2]) for m in metrics], pct)
