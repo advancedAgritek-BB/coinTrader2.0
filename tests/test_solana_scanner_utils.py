@@ -139,13 +139,16 @@ def test_search_geckoterminal_token(monkeypatch):
             {"attributes": {"address": "M", "volume_usd_h24": "123"}},
         ]
     }
-    session = DummySession(data)
-    aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
-    monkeypatch.setattr(solana_scanner, "aiohttp", aiohttp_mod)
+    urls: list[str] = []
+    monkeypatch.setattr(
+        solana_scanner,
+        "gecko_request",
+        lambda url, params=None, retries=3: (urls.append(url) or data),
+    )
 
     res = asyncio.run(solana_scanner.search_geckoterminal_token("foo"))
     assert res == ("M", 123.0)
-    assert "query=foo" in session.url
+    assert "query=foo" in urls[0]
 
 
 def test_get_solana_new_tokens_gecko_filter(monkeypatch):
