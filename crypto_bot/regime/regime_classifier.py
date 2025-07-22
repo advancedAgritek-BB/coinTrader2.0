@@ -237,7 +237,10 @@ def _classify_core(
         cfg["normalized_range_volatility_min"],
     )
 
-    trending = latest["adx"] > 20 and latest["ema20"] > latest["ema50"]
+    trending = (
+        latest["adx"] > cfg.get("adx_trending_min", 20)
+        and latest["ema20"] > latest["ema50"]
+    )
 
     if trending and cfg.get("confirm_trend_with_higher_tf", False):
         if higher_df is None:
