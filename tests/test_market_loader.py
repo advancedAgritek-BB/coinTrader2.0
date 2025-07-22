@@ -1684,8 +1684,6 @@ def test_fetch_geckoterminal_ohlcv_retry(monkeypatch):
 
     assert sleeps == [1, 2, 3, 1]
     assert calls == 2
-    assert sleeps == [1, 2]
-    assert calls >= 3
     assert data == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
     assert vol == 123.0
 
