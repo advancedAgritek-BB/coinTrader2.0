@@ -2,8 +2,6 @@ import json
 import pandas as pd
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.volatility_filter import calc_atr
-from crypto_bot.utils import ev_tracker
-from crypto_bot.utils import trade_memory
 import logging
 
 
