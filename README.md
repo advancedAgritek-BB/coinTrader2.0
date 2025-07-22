@@ -374,7 +374,7 @@ score, direction, atr = breakout_bot.generate_signal(lower_df, cfg, higher_df)
 size = risk_manager.position_size(score, balance, lower_df, atr=atr)
 ```
 * **ml_signal_model**/**signal_weight_optimizer** – blend strategy scores with machine-learning predictions.
-* **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade. `min_confidence_score` and `signal_fusion.min_confidence` default to `0.05`.
+* **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade. `min_confidence_score` and `signal_fusion.min_confidence` default to `0.005`.
 * **regime_timeframes**/**regime_return_period** – windows used for regime detection.
 * **regime_overrides** – optional settings that replace values in the `risk` or strategy sections when a specific regime is active.
 ```yaml
