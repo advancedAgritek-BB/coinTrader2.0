@@ -511,7 +511,7 @@ def reload_config(
     risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
     risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
     risk_params["volume_threshold_ratio"] = config.get("risk", {}).get(
-        "volume_threshold_ratio", 0.1
+        "volume_threshold_ratio", 0.05
     )
     risk_params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
     risk_params["stop_loss_atr_mult"] = config.get("risk", {}).get(
@@ -1098,7 +1098,7 @@ async def execute_signals(ctx: BotContext) -> None:
         logger.info("All signals filtered out - nothing actionable")
         return
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
-    top_n = ctx.config.get("top_n_symbols", 3)
+    top_n = ctx.config.get("top_n_symbols", 10)
     executed = 0
 
     for candidate in results[:top_n]:
@@ -1143,9 +1143,18 @@ async def execute_signals(ctx: BotContext) -> None:
             price=price,
         )
         if size <= 0:
-            outcome_reason = f"size {size:.4f}" 
-            logger.info("[EVAL] %s -> %s", sym, outcome_reason)
-            continue
+            await refresh_balance(ctx)
+            size = ctx.risk_manager.position_size(
+                reg_prob,
+                ctx.balance,
+                df,
+                atr=candidate.get("atr"),
+                price=price,
+            )
+            if size <= 0:
+                outcome_reason = f"size {size:.4f}"
+                logger.info("[EVAL] %s -> %s", sym, outcome_reason)
+                continue
 
         if not ctx.risk_manager.can_allocate(strategy, size, ctx.balance):
             logger.info(
@@ -1775,7 +1784,7 @@ async def _main_impl() -> TelegramNotifier:
     risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
     risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
     risk_params["volume_threshold_ratio"] = config.get("risk", {}).get(
-        "volume_threshold_ratio", 0.1
+        "volume_threshold_ratio", 0.05
     )
     risk_params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
     risk_params["stop_loss_atr_mult"] = config.get("risk", {}).get(

@@ -121,7 +121,7 @@ max_change_pct: 20
 max_concurrent_ohlcv: 2
 max_latency_ms: 500
 max_ohlcv_failures: 3
-max_open_trades: 20
+max_open_trades: 5
 max_parallel: 50
 max_slippage_pct: 0.2
 max_spread_pct: 3
@@ -244,7 +244,7 @@ risk:
   stop_loss_pct: 0.01
   take_profit_atr_mult: 3.0
   take_profit_pct: 0.1
-  volume_threshold_ratio: 5.0e-05
+  volume_threshold_ratio: 0.05
 rl_selector:
   enabled: false
 rsi_overbought_pct: 80
