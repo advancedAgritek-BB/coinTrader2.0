@@ -1082,18 +1082,17 @@ async def fetch_geckoterminal_ohlcv(
                 )
             except Exception:
                 reserve = 0.0
-            GECKO_POOL_CACHE[symbol] = (pool_addr, volume, reserve, price, limit)
-        else:
-            pool_addr, volume, reserve, price, _ = cached
+        GECKO_POOL_CACHE[symbol] = (pool_addr, volume, reserve, price, limit)
 
-        ohlcv_url = (
-            "https://api.geckoterminal.com/api/v2/networks/solana/pools/"
-            f"{pool_addr}/ohlcv/{timeframe}"
-        )
-        params = {"aggregate": 1, "limit": limit}
-        data = await gecko_request(ohlcv_url, params)
-        if not data:
-            return None
+
+    ohlcv_url = (
+        "https://api.geckoterminal.com/api/v2/networks/solana/pools/"
+        f"{pool_addr}/ohlcv/{timeframe}"
+    )
+    params = {"aggregate": 1, "limit": limit}
+    data = await gecko_request(ohlcv_url, params)
+    if not data:
+        return None
 
     candles = (data.get("data") or {}).get("attributes", {}).get("ohlcv_list") or []
 
@@ -1114,9 +1113,9 @@ async def fetch_geckoterminal_ohlcv(
         except Exception:
             continue
 
-        if return_price:
-            return result, volume, price
-        return result, volume, reserve
+    if return_price:
+        return result, volume, price
+    return result, volume, reserve
 
 
 async def fetch_coingecko_ohlc(
