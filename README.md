@@ -878,7 +878,14 @@ symbol_filter:
   http_timeout: 10               # seconds for fallback /Ticker requests
   ticker_retry_attempts: 3       # number of fetch_tickers retries
   log_ticker_exceptions: false   # include stack traces when true
+  max_concurrent_ohlcv: 10       # limit OHLCV requests when loading history
+  initial_timeframes: [1h, 4h, 1d]  # timeframes fetched for new symbols
+  initial_history_candles: 300   # candles per timeframe on first load
 ```
+
+* **max_concurrent_ohlcv** – cap simultaneous OHLCV requests while scoring new symbols (default `10`).
+* **initial_timeframes** – candle intervals pulled when caching a new market (default `[1h, 4h, 1d]`).
+* **initial_history_candles** – number of candles per timeframe loaded on first use (default `300`).
 
 Kraken labels Bitcoin as `XBT` in its market identifiers. The bot
 automatically converts canonical symbols using `exchange.market_id`,
