@@ -4,7 +4,8 @@ import asyncio
 import contextlib
 import json
 from pathlib import Path
-from typing import Any, Dict, Sequence
+from typing import Any, Dict, Sequence, Tuple
+import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
@@ -16,6 +17,74 @@ from .utils.telegram import TelegramNotifier
 
 
 logger = setup_logger(__name__, LOG_DIR / "telegram_ctl.log")
+
+# ----------------------------------------------------------------------------
+# Pagination helpers originally defined in the project root ``telegram_ctl``
+# module.  They are used by :mod:`crypto_bot.telegram_bot_ui` and the tests.
+
+callback_timeout = 300
+callback_state: Dict[str, Dict[str, Tuple[int, float]]] = {}
+ITEMS_PER_PAGE = 20
+
+
+def _cleanup(chat_id: str) -> None:
+    now = time.time()
+    store = callback_state.get(chat_id)
+    if not store:
+        return
+    for key in list(store.keys()):
+        _, ts = store[key]
+        if now - ts > callback_timeout:
+            del store[key]
+    if not store:
+        callback_state.pop(chat_id, None)
+
+
+def set_page(chat_id: str | int, key: str, value: int) -> None:
+    cid = str(chat_id)
+    _cleanup(cid)
+    store = callback_state.setdefault(cid, {})
+    store[key] = (value, time.time())
+
+
+def get_page(chat_id: str | int, key: str) -> int:
+    cid = str(chat_id)
+    _cleanup(cid)
+    store = callback_state.get(cid)
+    if not store:
+        return 0
+    val = store.get(key)
+    if val is None:
+        return 0
+    page, ts = val
+    if time.time() - ts > callback_timeout:
+        del store[key]
+        if not store:
+            callback_state.pop(cid, None)
+        return 0
+    return page
+
+
+def _paginate(text: str | Sequence[str], page: int) -> tuple[str, InlineKeyboardMarkup | None]:
+    if isinstance(text, str):
+        lines = text.splitlines()
+    else:
+        lines = list(text)
+    total_pages = max(1, (len(lines) + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * ITEMS_PER_PAGE
+    end = start + ITEMS_PER_PAGE
+    page_lines = lines[start:end]
+    keyboard = []
+    if total_pages > 1:
+        buttons = []
+        if page > 0:
+            buttons.append(InlineKeyboardButton("Prev", callback_data="prev"))
+        if page < total_pages - 1:
+            buttons.append(InlineKeyboardButton("Next", callback_data="next"))
+        keyboard.append(buttons)
+    markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+    return "\n".join(page_lines) or "(empty)", markup
 
 
 async def _maybe_call(func: Any) -> Any:
@@ -240,7 +309,7 @@ async def settings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 ITEMS_PER_PAGE = 20
 
 
-def _paginate(text: str, lines_per_page: int = ITEMS_PER_PAGE) -> list[str]:
+def split_pages(text: str, lines_per_page: int = ITEMS_PER_PAGE) -> list[str]:
     """Return ``text`` split into pages of ``lines_per_page`` lines."""
     lines = text.splitlines()
     return [
