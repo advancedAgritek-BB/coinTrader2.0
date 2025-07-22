@@ -270,6 +270,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **scan_lookback_limit** – candles of history loaded during the initial scan (default `700`).
   The caches store at least this many bars per timeframe before strategies run.
   Initial history is retrieved via REST with up to 700 candles per timeframe.
+* **scan_deep_top** – number of top-ranked pairs loaded with a full year of history during startup (default `50`).
 * **start_since** – optional timestamp used to backfill older data during the initial scan.
   When set, the bot loads candles starting from this time (e.g. `365d` for one year)
   before switching to realtime updates.
@@ -816,6 +817,7 @@ exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 2           # skip pairs with less history
 symbol_batch_size: 50            # symbols processed per cycle
 scan_lookback_limit: 700         # candles loaded during startup
+scan_deep_top: 50                # deep load this many ranked symbols
 start_since: 365d                # backfill candles this far in the past
 min_history_fraction: 0.5        # minimum portion of history required
 cycle_lookback_limit: 150        # candles fetched each cycle
