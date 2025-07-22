@@ -301,6 +301,7 @@ symbol_score_weights:
 * **use_numba_scoring** – enable numba acceleration for symbol scoring when available.
 * **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle.
 * **solana_scanner.gecko_search** – query GeckoTerminal to verify volume for new Solana tokens.
+* **gecko_limit** – maximum simultaneous requests to GeckoTerminal. Reduce this if you encounter HTTP 429 errors.
 * Solana tokens are filtered using symbol scoring; adjust `min_symbol_score` to control the threshold.
 
 ### Risk Parameters
@@ -1254,6 +1255,7 @@ High `max_concurrent_ohlcv` values combined with short `ohlcv_timeout`
 settings can overload the exchange and lead to failed candle fetches.
 Increase `ohlcv_timeout` to give each request more time and lower
 `max_concurrent_ohlcv` if errors continue.
+`gecko_request` retries failures using exponential backoff (1s, 2s, 4s) before giving up.
 
 This project is provided for educational purposes only. Use it at your own risk, and remember that nothing here constitutes financial advice.
 
