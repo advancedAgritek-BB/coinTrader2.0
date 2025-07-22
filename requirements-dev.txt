@@ -1,0 +1,5 @@
+# Additional packages required for running the full test suite
+flask
+base58
+python-dotenv
+websocket-client

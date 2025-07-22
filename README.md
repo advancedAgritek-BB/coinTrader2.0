@@ -1221,9 +1221,11 @@ pytest -q
 ## Testing
 
 The repository includes an automated test suite. Some tests rely on optional
-packages such as `numpy`, `pandas`, and `ccxt`.  Lightweight stubs allow the suite to run
+packages such as `numpy`, `pandas`, `ccxt`, `flask`, `base58`,
+`python-dotenv` and `websocket-client`.  Lightweight stubs allow the suite to run
 in very small environments, but the **full** set of tests requires the
-dependencies listed in `requirements.txt`.
+dependencies listed in `requirements.txt` together with the additional
+packages enumerated in `requirements-dev.txt`.
 
 Set up the environment by running the provided script:
 
@@ -1234,11 +1236,12 @@ bash codex/setup.sh  # installs system and Python dependencies
 Alternatively you can install the Python packages manually:
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt       # core dependencies
+pip install -r requirements-dev.txt   # optional packages for tests
 ```
 
-If `pytest` fails with a `ModuleNotFoundError`, ensure the packages from the
-requirements file are installed.  After the dependencies are available, execute
+If `pytest` fails with a `ModuleNotFoundError`, ensure the packages from both
+requirements files are installed.  After the dependencies are available, execute
 
 ```bash
 pytest -q
