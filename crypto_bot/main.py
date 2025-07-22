@@ -233,7 +233,7 @@ def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> f
 def is_market_pumping(
     symbols: list[str], df_cache: dict, timeframe: str = "1h", lookback_hours: int = 24
 ) -> bool:
-    """Return ``True`` when the average % change over ``lookback_hours`` exceeds ~10%."""
+    """Return ``True`` when the average % change over ``lookback_hours`` exceeds ~5%."""
 
     tf_cache = df_cache.get(timeframe, {})
     if not tf_cache:
@@ -260,7 +260,7 @@ def is_market_pumping(
         changes.append((end - start) / start)
 
     avg_change = sum(changes) / len(changes) if changes else 0.0
-    return avg_change >= 0.10
+    return avg_change >= 0.05
 
 
 async def get_market_regime(ctx: BotContext) -> str:
@@ -274,8 +274,23 @@ async def get_market_regime(ctx: BotContext) -> str:
     sym, df = next(iter(tf_cache.items()))
     higher_tf = ctx.config.get("higher_timeframe", "1d")
     higher_df = ctx.df_cache.get(higher_tf, {}).get(sym)
-    label, _ = await classify_regime_cached(sym, base_tf, df, higher_df)
-    return label.split("_")[-1]
+    label, info = await classify_regime_cached(sym, base_tf, df, higher_df)
+    regime = label.split("_")[-1]
+    logger.info(
+        "Regime for %s [%s/%s]: %s",
+        sym,
+        base_tf,
+        higher_tf,
+        regime,
+    )
+    if regime == "unknown":
+        logger.info(
+            "Unknown regime details: bars=%s/%s info=%s",
+            len(df) if df is not None else 0,
+            len(higher_df) if isinstance(higher_df, pd.DataFrame) else 0,
+            info,
+        )
+    return regime
 
 
 def direction_to_side(direction: str) -> str:
@@ -511,7 +526,7 @@ def reload_config(
     risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
     risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
     risk_params["volume_threshold_ratio"] = config.get("risk", {}).get(
-        "volume_threshold_ratio", 0.1
+        "volume_threshold_ratio", 0.05
     )
     risk_params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
     risk_params["stop_loss_atr_mult"] = config.get("risk", {}).get(
@@ -1098,7 +1113,7 @@ async def execute_signals(ctx: BotContext) -> None:
         logger.info("All signals filtered out - nothing actionable")
         return
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
-    top_n = ctx.config.get("top_n_symbols", 3)
+    top_n = ctx.config.get("top_n_symbols", 10)
     executed = 0
 
     for candidate in results[:top_n]:
@@ -1143,9 +1158,18 @@ async def execute_signals(ctx: BotContext) -> None:
             price=price,
         )
         if size <= 0:
-            outcome_reason = f"size {size:.4f}" 
-            logger.info("[EVAL] %s -> %s", sym, outcome_reason)
-            continue
+            await refresh_balance(ctx)
+            size = ctx.risk_manager.position_size(
+                reg_prob,
+                ctx.balance,
+                df,
+                atr=candidate.get("atr"),
+                price=price,
+            )
+            if size <= 0:
+                outcome_reason = f"size {size:.4f}"
+                logger.info("[EVAL] %s -> %s", sym, outcome_reason)
+                continue
 
         if not ctx.risk_manager.can_allocate(strategy, size, ctx.balance):
             logger.info(
@@ -1775,7 +1799,7 @@ async def _main_impl() -> TelegramNotifier:
     risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
     risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
     risk_params["volume_threshold_ratio"] = config.get("risk", {}).get(
-        "volume_threshold_ratio", 0.1
+        "volume_threshold_ratio", 0.05
     )
     risk_params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
     risk_params["stop_loss_atr_mult"] = config.get("risk", {}).get(
