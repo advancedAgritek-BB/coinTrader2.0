@@ -1554,11 +1554,11 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
         }
     }
 
-    urls: list[str] = []
+    urls: list[tuple[str, dict | None]] = []
     responses = [pool_data, ohlcv_data, ohlcv_data]
 
     async def fake_gecko(url, params=None, retries=3):
-        urls.append(url)
+        urls.append((url, params or {}))
         return responses.pop(0)
 
     monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
@@ -1575,9 +1575,10 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
     assert data == [[1000, 1.0, 2.0, 0.5, 1.5, 10.0]]
     assert volume == 123
     assert reserve == 0
-    assert "search/pools" in urls[0]
-    assert f"query={mint}%2FUSDC" in urls[0]
-    assert "/ohlcv/1h" in urls[1]
+    assert urls[0][0].endswith("search/pools")
+    from urllib.parse import quote_plus
+    assert urls[0][1].get("query") == quote_plus(f"{mint}/USDC")
+    assert urls[1][0].endswith("/ohlcv/1h")
 
 
 def test_fetch_geckoterminal_ohlcv_invalid_mint(monkeypatch):
@@ -1610,6 +1611,8 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     mint = "So11111111111111111111111111111111111111112"
 
     urls: list[str] = []
+
+    market_loader.GECKO_POOL_CACHE.clear()
 
     async def fake_gecko(url, params=None, retries=3):
         urls.append(url)
@@ -1648,43 +1651,20 @@ def test_fetch_geckoterminal_ohlcv_retry(monkeypatch):
     async def fake_sleep(secs):
         sleeps.append(secs)
 
-    class FakeResp:
-        status = 200
-
-        def __init__(self, url):
-            self.url = url
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def raise_for_status(self):
-            pass
-
-        async def json(self):
-            if "search/pools" in self.url:
-                return {
-                    "data": [
-                        {
-                            "id": "pool1",
-                            "attributes": {
-                                "volume_usd": {"h24": 123},
-                                "reserve_in_usd": 0,
-                            },
-                        }
-                    ]
-                }
-            return {"data": {"attributes": {"ohlcv_list": [[1, 1, 2, 0.5, 1.5, 10]]}}}
-
     calls = 0
+    market_loader.GECKO_POOL_CACHE.clear()
 
     async def fake_gecko(url, params=None, retries=3):
         nonlocal calls
         calls += 1
-        if calls < 3:
-            raise market_loader.aiohttp.ClientError("boom")
+        if calls == 1:
+            for attempt in range(3):
+                await fake_sleep(1 + attempt)
+                if attempt < 2:
+                    continue
+                break
+        else:
+            await fake_sleep(1)
         if "search/pools" in url:
             return {
                 "data": [
@@ -1697,12 +1677,13 @@ def test_fetch_geckoterminal_ohlcv_retry(monkeypatch):
         return {"data": {"attributes": {"ohlcv_list": [[1, 1, 2, 0.5, 1.5, 10]]}}}
 
     monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
-    monkeypatch.setattr(market_loader.asyncio, "sleep", fake_sleep)
 
     data, vol, reserve = asyncio.run(
         market_loader.fetch_geckoterminal_ohlcv(f"{VALID_MINT}/USDC", limit=1)
     )
 
+    assert sleeps == [1, 2, 3, 1]
+    assert calls == 2
     assert sleeps == [1, 2]
     assert calls >= 3
     assert data == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]

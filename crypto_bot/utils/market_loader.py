@@ -965,8 +965,37 @@ async def fetch_geckoterminal_ohlcv(
             token_mint, quote = symbol.split("/", 1)
         except ValueError:
             token_mint, quote = symbol, ""
-        if quote != "USDC":
+        if quote != "USDC" or not _is_valid_base_token(token_mint):
             return None
+
+        cached = GECKO_POOL_CACHE.get(symbol)
+        is_cached = cached is not None and cached[4] == limit
+
+        if cached is None:
+            query = quote_plus(symbol)
+            search_url = "https://api.geckoterminal.com/api/v2/search/pools"
+            params = {"query": query, "network": "solana"}
+            search_data = await gecko_request(search_url, params)
+            if not search_data:
+                logger.info("token not available on GeckoTerminal: %s", symbol)
+                logger.info("pair not available on GeckoTerminal: %s", symbol)
+                return None
+
+            items = search_data.get("data") or []
+            if not items:
+                logger.info("pair not available on GeckoTerminal: %s", symbol)
+                return None
+
+            first = items[0]
+            attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
+            pool_id = str(first.get("id", ""))
+            pool_addr = pool_id.split("_", 1)[-1]
+            try:
+                volume = float(attrs.get("volume_usd", {}).get("h24", 0.0))
+            except Exception:
+                volume = 0.0
+            if volume < float(min_24h_volume):
+                return None
         if not _is_valid_base_token(token_mint):
             return None
 
@@ -1052,6 +1081,38 @@ async def fetch_geckoterminal_ohlcv(
                     ]
                 )
             except Exception:
+                reserve = 0.0
+            GECKO_POOL_CACHE[symbol] = (pool_addr, volume, reserve, price, limit)
+        else:
+            pool_addr, volume, reserve, price, _ = cached
+
+        ohlcv_url = (
+            "https://api.geckoterminal.com/api/v2/networks/solana/pools/"
+            f"{pool_addr}/ohlcv/{timeframe}"
+        )
+        params = {"aggregate": 1, "limit": limit}
+        data = await gecko_request(ohlcv_url, params)
+        if not data:
+            return None
+
+    candles = (data.get("data") or {}).get("attributes", {}).get("ohlcv_list") or []
+
+    result: list = []
+    multiplier = 1000 if is_cached else 1
+    for c in candles[-limit:]:
+        try:
+            result.append(
+                [
+                    int(c[0]) * multiplier,
+                    float(c[1]),
+                    float(c[2]),
+                    float(c[3]),
+                    float(c[4]),
+                    float(c[5]),
+                ]
+            )
+        except Exception:
+            continue
                 continue
 
         if return_price:
