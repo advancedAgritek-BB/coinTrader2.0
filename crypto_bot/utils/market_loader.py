@@ -51,7 +51,7 @@ COINGECKO_IDS = {
 # Cache GeckoTerminal pool addresses and metadata per symbol
 # Mapping: symbol -> (pool_addr, volume, reserve, price, limit)
 GECKO_POOL_CACHE: dict[str, tuple[str, float, float, float, int]] = {}
-GECKO_SEMAPHORE = asyncio.Semaphore(25)
+GECKO_SEMAPHORE = asyncio.Semaphore(10)
 
 # Valid characters for Solana addresses
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
