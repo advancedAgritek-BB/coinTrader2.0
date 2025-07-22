@@ -100,6 +100,8 @@ logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 
 # Track WebSocket ping tasks
 WS_PING_TASKS: set[asyncio.Task] = set()
+# Track async sniper trade tasks
+SNIPER_TASKS: set[asyncio.Task] = set()
 
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
@@ -627,67 +629,67 @@ async def initial_scan(
     tf_sec = timeframe_seconds(None, min(tfs, key=lambda t: timeframe_seconds(None, t)))
     lookback_since = int(time.time() * 1000 - lookback_limit * tf_sec * 1000)
 
-        lookback_limit = scan_limit
-        tfs = sf.get("initial_timeframes", config.get("timeframes", ["1h"]))
-        tf_sec = timeframe_seconds(None, min(tfs, key=lambda t: timeframe_seconds(None, t)))
-        lookback_since = int(time.time() * 1000 - lookback_limit * tf_sec * 1000)
+    lookback_limit = scan_limit
+    tfs = sf.get("initial_timeframes", config.get("timeframes", ["1h"]))
+    tf_sec = timeframe_seconds(None, min(tfs, key=lambda t: timeframe_seconds(None, t)))
+    lookback_since = int(time.time() * 1000 - lookback_limit * tf_sec * 1000)
 
-        history_since = int((time.time() - 365 * 86400) * 1000)
-        deep_limit = int(
-            sf.get(
-                "initial_history_candles",
-                config.get(
-                    "scan_deep_limit",
-                    config.get("scan_lookback_limit", 50) * 10,
-                ),
-            )
+    history_since = int((time.time() - 365 * 86400) * 1000)
+    deep_limit = int(
+        sf.get(
+            "initial_history_candles",
+            config.get(
+                "scan_deep_limit",
+                config.get("scan_lookback_limit", 50) * 10,
+            ),
         )
-        logger.info(
-            "Loading deep OHLCV history starting %s",
-            datetime.utcfromtimestamp(history_since / 1000).isoformat(),
+    )
+    logger.info(
+        "Loading deep OHLCV history starting %s",
+        datetime.utcfromtimestamp(history_since / 1000).isoformat(),
+    )
+
+    async with OHLCV_LOCK:
+        state.df_cache = await update_multi_tf_ohlcv_cache(
+            exchange,
+            state.df_cache,
+            batch,
+            {**config, "timeframes": tfs},
+            limit=deep_limit,
+            start_since=history_since,
+            use_websocket=False,
+            force_websocket_history=config.get("force_websocket_history", False),
+            max_concurrent=config.get("max_concurrent_ohlcv"),
+            notifier=notifier,
+            priority_queue=symbol_priority_queue,
         )
 
-        async with OHLCV_LOCK:
-            state.df_cache = await update_multi_tf_ohlcv_cache(
-                exchange,
-                state.df_cache,
-                batch,
-                {**config, "timeframes": tfs},
-                limit=deep_limit,
-                start_since=history_since,
-                use_websocket=False,
-                force_websocket_history=config.get("force_websocket_history", False),
-                max_concurrent=config.get("max_concurrent_ohlcv"),
-                notifier=notifier,
-                priority_queue=symbol_priority_queue,
-            )
+        state.regime_cache = await update_regime_tf_cache(
+            exchange,
+            state.regime_cache,
+            batch,
+            {**config, "timeframes": tfs},
+            limit=scan_limit,
+            start_since=lookback_since,
+            use_websocket=False,
+            force_websocket_history=config.get("force_websocket_history", False),
+            max_concurrent=config.get("max_concurrent_ohlcv"),
+            notifier=notifier,
+            df_map=state.df_cache,
+        )
+    logger.info("Deep historical OHLCV loaded for %d symbols", len(batch))
 
-            state.regime_cache = await update_regime_tf_cache(
-                exchange,
-                state.regime_cache,
-                batch,
-                {**config, "timeframes": tfs},
-                limit=scan_limit,
-                start_since=lookback_since,
-                use_websocket=False,
-                force_websocket_history=config.get("force_websocket_history", False),
-                max_concurrent=config.get("max_concurrent_ohlcv"),
-                notifier=notifier,
-                df_map=state.df_cache,
+    for sym in batch:
+        if sym not in onchain_symbols:
+            continue
+        base = sym.split("/")[0]
+        mint = TOKEN_MINTS.get(base.upper(), base)
+        for tf in tfs:
+            df = await asyncio.to_thread(
+                fetch_solana_historical_sync, mint, tf, limit=scan_limit
             )
-        logger.info("Deep historical OHLCV loaded for %d symbols", len(batch))
-
-        for sym in batch:
-            if sym not in onchain_symbols:
-                continue
-            base = sym.split("/")[0]
-            mint = TOKEN_MINTS.get(base.upper(), base)
-            for tf in tfs:
-                df = await asyncio.to_thread(
-                    fetch_solana_historical_sync, mint, tf, limit=scan_limit
-                )
-                if isinstance(df, pd.DataFrame) and not df.empty:
-                    update_df_cache(state.df_cache, tf, sym, df)
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                update_df_cache(state.df_cache, tf, sym, df)
 
         processed += len(batch)
         pct = processed / total * 100
@@ -1261,15 +1263,19 @@ async def execute_signals(ctx: BotContext) -> None:
                 from crypto_bot.solana_trading import sniper_trade
 
                 base, quote = sym.split("/")
-                await sniper_trade(
-                    ctx.config.get("wallet_address", ""),
-                    quote,
-                    base,
-                    size,
-                    dry_run=ctx.config.get("execution_mode") == "dry_run",
-                    slippage_bps=ctx.config.get("solana_slippage_bps", 50),
-                    notifier=ctx.notifier,
+                task = asyncio.create_task(
+                    sniper_trade(
+                        ctx.config.get("wallet_address", ""),
+                        quote,
+                        base,
+                        size,
+                        dry_run=ctx.config.get("execution_mode") == "dry_run",
+                        slippage_bps=ctx.config.get("solana_slippage_bps", 50),
+                        notifier=ctx.notifier,
+                    )
                 )
+                SNIPER_TASKS.add(task)
+                task.add_done_callback(SNIPER_TASKS.discard)
                 executed_via_sniper = True
 
         if not executed_via_sniper:
@@ -2239,6 +2245,14 @@ async def _main_impl() -> TelegramNotifier:
             except asyncio.CancelledError:
                 pass
         WS_PING_TASKS.clear()
+        for task in list(SNIPER_TASKS):
+            task.cancel()
+        for task in list(SNIPER_TASKS):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        SNIPER_TASKS.clear()
 
     return notifier
 
