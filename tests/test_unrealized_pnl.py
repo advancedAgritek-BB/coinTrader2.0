@@ -3,8 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from crypto_bot.utils.open_trades import get_open_trades
-from crypto_bot.console_monitor import trade_stats_lines
+from crypto_bot.console_monitor import get_open_trades, trade_stats_lines
 
 
 class PriceExchange:

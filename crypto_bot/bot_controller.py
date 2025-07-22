@@ -14,7 +14,7 @@ import yaml
 from crypto_bot.utils.symbol_utils import fix_symbol
 
 from .portfolio_rotator import PortfolioRotator
-from .utils.open_trades import get_open_trades
+from .console_monitor import get_open_trades
 from .execution.cex_executor import get_exchange, execute_trade_async
 
 

@@ -1,5 +1,5 @@
 import time
-import telegram_ctl as ctl
+import crypto_bot.telegram_ctl as ctl
 
 
 def test_set_get_page():
@@ -22,11 +22,7 @@ def test_expiration(monkeypatch):
 import asyncio
 import types
 import pytest
-
-try:
-    import crypto_bot.telegram_ctl as telegram_ctl
-except Exception as e:  # pragma: no cover - module may not exist
-    telegram_ctl = None
+import crypto_bot.telegram_ctl as telegram_ctl
 
 
 class DummyUpdate:
@@ -87,7 +83,6 @@ class DummyBotController:
         return "Liquidation scheduled"
 
 
-@pytest.mark.skipif(telegram_ctl is None, reason="telegram_ctl module missing")
 class TestTelegramCtl:
     def setup_method(self):
         self.controller = DummyBotController()
@@ -130,7 +125,7 @@ class TestTelegramCtl:
     async def test_pagination(self):
         update = DummyUpdate()
         long_text = "line\n" * 50
-        pages = telegram_ctl._paginate(long_text)
+        pages = telegram_ctl.split_pages(long_text)
         assert len(pages) > 1
         await self.tg._send_pages(update, pages)
         assert update.message.text is not None
