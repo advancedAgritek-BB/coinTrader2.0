@@ -779,6 +779,10 @@ async def filter_symbols(
             denom = 1.0
 
         async def _fetch_liq(sym: str) -> tuple[str, float]:
+            base, _, quote = sym.partition("/")
+            is_solana = quote.upper() == "USDC" and base.upper() not in NON_SOLANA_BASES
+            if not is_solana:
+                return sym, 0.0
             try:
                 _, _, reserve = await fetch_geckoterminal_ohlcv(sym, limit=1)
                 return sym, reserve / denom
@@ -786,7 +790,7 @@ async def filter_symbols(
                 return sym, 0.0
 
         liq_results = await asyncio.gather(
-            *[_fetch_liq(sym) for sym, *_ in metrics if sym.endswith("/USDC")]
+            *[_fetch_liq(sym) for sym, *_ in metrics if sym.upper().endswith("/USDC")]
         )
         liq_scores = {s: sc for s, sc in liq_results}
 
@@ -900,9 +904,11 @@ async def filter_symbols(
     resolved_onchain: List[tuple[str, float]] = []
     onchain_min_volume = cfg.get("onchain_min_volume_usd", 10_000_000)
     for sym in onchain_syms:
-        base = sym.split("/")[0].upper()
-        if base in NON_SOLANA_BASES:
+        base, _, quote = sym.partition("/")
+        is_solana = quote.upper() == "USDC" and base.upper() not in NON_SOLANA_BASES
+        if not is_solana:
             continue
+        base = base.upper()
         mint = TOKEN_MINTS.get(base)
         if not mint:
             logger.debug("No mint for %s; attempting lookup", sym)

@@ -1739,7 +1739,8 @@ async def update_multi_tf_ohlcv_cache(
         for s in symbols:
             sym = s
             base, _, quote = s.partition("/")
-            if quote.upper() == "USDC" and _is_valid_base_token(base):
+            is_solana = quote.upper() == "USDC" and base.upper() not in NON_SOLANA_BASES
+            if is_solana:
                 dex_symbols.append(sym)
             else:
                 if "coinbase" in getattr(exchange, "id", "") and "/USDC" in sym:
@@ -1833,17 +1834,22 @@ async def update_multi_tf_ohlcv_cache(
             vol = 0.0
             res = None
             gecko_failed = False
-            try:
-                res = await fetch_geckoterminal_ohlcv(
-                    sym,
-                    timeframe=tf,
-                    limit=tf_limit,
-                    min_24h_volume=min_volume_usd,
-                )
-            except Exception as e:  # pragma: no cover - network
-                logger.warning(
-                    f"Gecko failed for {sym}: {e} - using exchange data"
-                )
+            base, _, quote = sym.partition("/")
+            is_solana = quote.upper() == "USDC" and base.upper() not in NON_SOLANA_BASES
+            if is_solana:
+                try:
+                    res = await fetch_geckoterminal_ohlcv(
+                        sym,
+                        timeframe=tf,
+                        limit=tf_limit,
+                        min_24h_volume=min_volume_usd,
+                    )
+                except Exception as e:  # pragma: no cover - network
+                    logger.warning(
+                        f"Gecko failed for {sym}: {e} - using exchange data"
+                    )
+                    gecko_failed = True
+            else:
                 gecko_failed = True
 
             if res and not gecko_failed:
@@ -1862,7 +1868,7 @@ async def update_multi_tf_ohlcv_cache(
                     limit=tf_limit,
                     min_volume_usd=min_volume_usd,
                     gecko_res=res,
-                    use_gecko=False,
+                    use_gecko=is_solana,
                 )
                 if isinstance(data, Exception) or not data:
                     continue
