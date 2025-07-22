@@ -143,6 +143,7 @@ async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -
     """Fetch tickers and update the cached liquid pairs list."""
     old_pairs: list[str] = []
     old_map: dict[str, float] = {}
+    mtime = 0.0
     if PAIR_FILE.exists():
         try:
             with open(PAIR_FILE) as f:
@@ -152,16 +153,23 @@ async def refresh_pairs_async(min_volume_usd: float, top_k: int, config: dict) -
                 elif isinstance(loaded, dict):
                     old_pairs = list(loaded)
                     old_map = {k: float(v) for k, v in loaded.items()}
+            mtime = PAIR_FILE.stat().st_mtime
         except Exception as exc:  # pragma: no cover - corrupted cache
             logger.error("Failed to read %s: %s", PAIR_FILE, exc)
 
     rp_cfg = config.get("refresh_pairs", {}) if isinstance(config, dict) else {}
+    refresh_interval = _parse_interval(
+        rp_cfg.get("refresh_interval", DEFAULT_REFRESH_INTERVAL)
+    )
     allowed_quotes = {
         q.upper() for q in rp_cfg.get("allowed_quote_currencies", []) if isinstance(q, str)
     }
     blacklist = {
         a.upper() for a in rp_cfg.get("blacklist_assets", []) if isinstance(a, str)
     }
+
+    if old_pairs and mtime and time.time() - mtime < refresh_interval:
+        return old_pairs
 
     exchange = get_exchange(config)
     sec_name = config.get("refresh_pairs", {}).get("secondary_exchange")
