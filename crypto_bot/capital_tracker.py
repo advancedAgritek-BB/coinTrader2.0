@@ -10,7 +10,7 @@ class CapitalTracker:
         cap = self.allocation.get(strategy)
         if cap is None:
             return True
-        allowed = balance * cap
+        allowed = balance * cap * 1.1
         return self._usage.get(strategy, 0.0) + amount <= allowed
 
     def allocate(self, strategy: str, amount: float) -> None:
