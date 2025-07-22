@@ -1,8 +1,7 @@
 import asyncio
 from pathlib import Path
 
-from crypto_bot.console_monitor import trade_stats_lines
-from crypto_bot.utils.open_trades import get_open_trades
+from crypto_bot.console_monitor import trade_stats_lines, get_open_trades
 
 
 class PriceExchange:
