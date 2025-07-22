@@ -616,19 +616,28 @@ async def initial_scan(
     batch_size = int(config.get("symbol_batch_size", 10))
     total = len(symbols)
     processed = 0
-    scan_limit = min(config.get("scan_lookback_limit", 50), 700)
+
+    sf = config.get("symbol_filter", {})
+    scan_limit = int(sf.get("initial_history_candles", config.get("scan_lookback_limit", 50)))
+    scan_limit = min(scan_limit, 700)
 
     for i in range(0, total, batch_size):
         batch = symbols[i:i + batch_size]
 
         lookback_limit = scan_limit
-        tfs = config.get("timeframes", ["1h"])
+        tfs = sf.get("initial_timeframes", config.get("timeframes", ["1h"]))
         tf_sec = timeframe_seconds(None, min(tfs, key=lambda t: timeframe_seconds(None, t)))
         lookback_since = int(time.time() * 1000 - lookback_limit * tf_sec * 1000)
 
         history_since = int((time.time() - 365 * 86400) * 1000)
         deep_limit = int(
-            config.get("scan_deep_limit", config.get("scan_lookback_limit", 50) * 10)
+            sf.get(
+                "initial_history_candles",
+                config.get(
+                    "scan_deep_limit",
+                    config.get("scan_lookback_limit", 50) * 10,
+                ),
+            )
         )
         logger.info(
             "Loading deep OHLCV history starting %s",
@@ -640,7 +649,7 @@ async def initial_scan(
                 exchange,
                 state.df_cache,
                 batch,
-                config,
+                {**config, "timeframes": tfs},
                 limit=deep_limit,
                 start_since=history_since,
                 use_websocket=False,
@@ -654,7 +663,7 @@ async def initial_scan(
                 exchange,
                 state.regime_cache,
                 batch,
-                config,
+                {**config, "timeframes": tfs},
                 limit=scan_limit,
                 start_since=lookback_since,
                 use_websocket=False,
@@ -670,7 +679,7 @@ async def initial_scan(
                 continue
             base = sym.split("/")[0]
             mint = TOKEN_MINTS.get(base.upper(), base)
-            for tf in config.get("timeframes", ["1h"]):
+            for tf in tfs:
                 df = await asyncio.to_thread(
                     fetch_solana_historical_sync, mint, tf, limit=scan_limit
                 )
@@ -690,7 +699,7 @@ async def initial_scan(
         except Exception:
             fetch_solana_historical_async = None
         if fetch_solana_historical_async:
-            timeframes = config.get("timeframes", ["1h"])
+            timeframes = sf.get("initial_timeframes", config.get("timeframes", ["1h"]))
             for sym in onchain_syms:
                 for tf in timeframes:
                     try:
