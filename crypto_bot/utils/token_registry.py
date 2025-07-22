@@ -8,6 +8,7 @@ from typing import Dict, Iterable, List
 
 import aiohttp
 
+from .gecko import gecko_request
 logger = logging.getLogger(__name__)
 
 TOKEN_REGISTRY_URL = (
@@ -166,14 +167,7 @@ async def get_mint_from_gecko(base: str) -> str | None:
     )
 
     mint = None
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=10) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
-    except Exception as exc:  # pragma: no cover - network failures
-        logger.error("Gecko lookup failed for %s: %s", base, exc)
-        data = None
+    data = await gecko_request(url)
 
     if isinstance(data, dict):
         items = data.get("data")
@@ -186,22 +180,13 @@ async def get_mint_from_gecko(base: str) -> str | None:
 
     # Fallback: attempt to search DexScreener if Gecko fails
     fallback_url = f"https://dexscreener.com/solana?query={quote_plus(str(base))}"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(fallback_url, timeout=10) as resp:
-                data = await resp.json()
-                if (
-                    isinstance(data, dict)
-                    and data.get("pairs")
-                    and isinstance(data["pairs"], list)
-                ):
-                    return (
-                        data["pairs"][0]
-                        .get("baseToken", {})
-                        .get("address")
-                    )
-    except Exception:
-        pass
+    data = await gecko_request(fallback_url)
+    if (
+        isinstance(data, dict)
+        and data.get("pairs")
+        and isinstance(data["pairs"], list)
+    ):
+        return data["pairs"][0].get("baseToken", {}).get("address")
     return None
 
 

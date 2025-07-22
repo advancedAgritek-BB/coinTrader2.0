@@ -1554,44 +1554,14 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
         }
     }
 
-    class PoolResp:
-        status = 200
+    urls: list[str] = []
+    responses = [pool_data, ohlcv_data, ohlcv_data]
 
-        async def __aenter__(self):
-            return self
+    async def fake_gecko(url, params=None, retries=3):
+        urls.append(url)
+        return responses.pop(0)
 
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def raise_for_status(self):
-            pass
-
-        async def json(self):
-            return pool_data
-
-    class OhlcvResp(PoolResp):
-        async def json(self):
-            return ohlcv_data
-
-    class FakeSession:
-        calls = 0
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def get(self, url, timeout=None):
-            FakeSession.calls += 1
-            if FakeSession.calls == 1:
-                assert "search/pools" in url
-                assert f"query={mint}%2FUSDC" in url
-                return PoolResp()
-            assert "/pools/pool1/ohlcv/1h" in url
-            return OhlcvResp()
-
-    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
+    monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
 
     data, vol, reserve = asyncio.run(
         market_loader.fetch_geckoterminal_ohlcv(f"{mint}/USDC", timeframe="1h", limit=1)
@@ -1605,15 +1575,18 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
     assert data == [[1000, 1.0, 2.0, 0.5, 1.5, 10.0]]
     assert volume == 123
     assert reserve == 0
+    assert "search/pools" in urls[0]
+    assert f"query={mint}%2FUSDC" in urls[0]
+    assert "/ohlcv/1h" in urls[1]
 
 
 def test_fetch_geckoterminal_ohlcv_invalid_mint(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    def fail_session(*_a, **_k):
+    def fail(*_a, **_k):
         raise AssertionError("should not be called")
 
-    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", fail_session)
+    monkeypatch.setattr(market_loader, "gecko_request", fail)
 
     res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
     assert res is None
@@ -1622,10 +1595,10 @@ def test_fetch_geckoterminal_ohlcv_invalid_mint(monkeypatch):
 def test_fetch_geckoterminal_ohlcv_invalid_length(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    def fail_session(*_a, **_k):
+    def fail(*_a, **_k):
         raise AssertionError("should not be called")
 
-    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", fail_session)
+    monkeypatch.setattr(market_loader, "gecko_request", fail)
 
     res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("abcd/USDC"))
     assert res is None
@@ -1636,34 +1609,13 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
 
     mint = "So11111111111111111111111111111111111111112"
 
-    class FakeResp:
-        status = 404
+    urls: list[str] = []
 
-        async def __aenter__(self):
-            return self
+    async def fake_gecko(url, params=None, retries=3):
+        urls.append(url)
+        return None
 
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def raise_for_status(self):
-            raise AssertionError("should not be called")
-
-        async def json(self):
-            return {}
-
-    class FakeSession:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def get(self, url, timeout=None):
-            assert "search/pools" in url
-            assert f"query={mint}%2FUSDC" in url
-            return FakeResp()
-
-    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
+    monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
 
     caplog.set_level(logging.INFO)
     res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv(f"{mint}/USDC"))
@@ -1679,17 +1631,10 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
 def test_fetch_geckoterminal_ohlcv_network_error(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    class FakeSession:
-        async def __aenter__(self):
-            return self
+    async def fail(*_a, **_k):
+        raise market_loader.aiohttp.ClientError("boom")
 
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def get(self, *a, **k):
-            raise market_loader.aiohttp.ClientError("boom")
-
-    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
+    monkeypatch.setattr(market_loader, "gecko_request", fail)
 
     res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
     assert res is None
@@ -1733,29 +1678,32 @@ def test_fetch_geckoterminal_ohlcv_retry(monkeypatch):
                 }
             return {"data": {"attributes": {"ohlcv_list": [[1, 1, 2, 0.5, 1.5, 10]]}}}
 
-    class RetrySession:
-        calls = 0
+    calls = 0
 
-        async def __aenter__(self):
-            return self
+    async def fake_gecko(url, params=None, retries=3):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise market_loader.aiohttp.ClientError("boom")
+        if "search/pools" in url:
+            return {
+                "data": [
+                    {
+                        "id": "pool1",
+                        "attributes": {"volume_usd": {"h24": 123}, "reserve_in_usd": 0},
+                    }
+                ]
+            }
+        return {"data": {"attributes": {"ohlcv_list": [[1, 1, 2, 0.5, 1.5, 10]]}}}
 
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def get(self, url, timeout=None):
-            RetrySession.calls += 1
-            if RetrySession.calls < 3:
-                raise market_loader.aiohttp.ClientError("boom")
-            return FakeResp(url)
-
-    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: RetrySession())
+    monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
     monkeypatch.setattr(market_loader.asyncio, "sleep", fake_sleep)
 
     data, vol, reserve = asyncio.run(
         market_loader.fetch_geckoterminal_ohlcv(f"{VALID_MINT}/USDC", limit=1)
     )
 
-    assert RetrySession.calls >= 3
+    assert calls >= 3
     assert sleeps == [1, 2]
     assert data == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
     assert vol == 123.0
@@ -1769,41 +1717,19 @@ def test_geckoterminal_semaphore_limits(monkeypatch):
 
     calls = {"active": 0, "max": 0}
 
-    class FakeResp:
-        status = 200
-
-        def __init__(self, url):
-            self.url = url
-
-        async def __aenter__(self):
-            calls["max"] = max(calls["max"], calls["active"])
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            calls["active"] -= 1
-
-        def raise_for_status(self):
-            pass
-
-        async def json(self):
-            if "search/pools" in self.url:
+    async def fake_gecko(url, params=None, retries=3):
+        calls["active"] += 1
+        calls["max"] = max(calls["max"], calls["active"])
+        try:
+            if "search/pools" in url:
                 return {
                     "data": [{"id": "pool1", "attributes": {"volume_usd": {"h24": 0}}}]
                 }
             return {"data": {"attributes": {"ohlcv_list": [[1, 1, 1, 1, 1, 1]]}}}
+        finally:
+            calls["active"] -= 1
 
-    class FakeSession:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def get(self, url, timeout=None):
-            calls["active"] += 1
-            return FakeResp(url)
-
-    monkeypatch.setattr(market_loader.aiohttp, "ClientSession", lambda: FakeSession())
+    monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
 
     async def worker():
         await market_loader.fetch_geckoterminal_ohlcv(f"{VALID_MINT}/USDC", limit=1)
