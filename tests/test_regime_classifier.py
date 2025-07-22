@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import asyncio
 import pytest
+import yaml
 
 from crypto_bot.regime.regime_classifier import (
     classify_regime,
@@ -74,6 +75,24 @@ def test_classify_regime_returns_trending_between_15_and_19_rows():
         }
         df = pd.DataFrame(data)
         assert classify_regime(df)[0] == "trending"
+
+
+def test_adx_trending_min_threshold(tmp_path):
+    df = _make_trending_df()
+
+    low_cfg = rc.CONFIG.copy()
+    low_cfg["adx_trending_min"] = 10
+    low_path = tmp_path / "low.yaml"
+    low_path.write_text(yaml.safe_dump(low_cfg))
+    assert classify_regime(df, config_path=str(low_path))[0] == "trending"
+
+    high_cfg = rc.CONFIG.copy()
+    high_cfg["adx_trending_min"] = 110
+    high_cfg["adx_sideways_max"] = 200
+    high_cfg["bb_width_sideways_max"] = 50
+    high_path = tmp_path / "high.yaml"
+    high_path.write_text(yaml.safe_dump(high_cfg))
+    assert classify_regime(df, config_path=str(high_path))[0] == "sideways"
 def test_classify_regime_handles_index_error(monkeypatch):
     data = {
         "open": list(range(30)),
