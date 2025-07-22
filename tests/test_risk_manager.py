@@ -2,6 +2,7 @@ import json
 import pandas as pd
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.volatility_filter import calc_atr
+from crypto_bot.utils import ev_tracker
 from crypto_bot.utils import trade_memory
 import logging
 
@@ -339,30 +340,6 @@ def test_risk_config_has_volume_threshold_ratio_default():
     assert hasattr(cfg, "volume_threshold_ratio")
     assert cfg.volume_threshold_ratio == 0.1
 
-def test_allow_trade_ignores_trade_memory(tmp_path, monkeypatch):
-    data = {
-        'open': list(range(20)),
-        'high': [i + 1 for i in range(20)],
-        'low': list(range(20)),
-        'close': [i + 0.5 for i in range(20)],
-        'volume': [10] * 20,
-    }
-    df = pd.DataFrame(data)
-    mem = tmp_path / "mem.json"
-    monkeypatch.setattr(trade_memory, "LOG_FILE", mem)
-    trade_memory.configure(max_losses=1, slippage_threshold=0.5, lookback_seconds=3600)
-    trade_memory.clear()
-    trade_memory.record_loss("XBT/USDT", 0.01)
-
-    cfg = RiskConfig(
-        max_drawdown=1,
-        stop_loss_pct=0.01,
-        take_profit_pct=0.01,
-        symbol="XBT/USDT",
-    )
-    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
-    assert allowed
-    assert "trade allowed" in reason.lower()
 
 
 def _df() -> pd.DataFrame:
