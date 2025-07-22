@@ -274,8 +274,23 @@ async def get_market_regime(ctx: BotContext) -> str:
     sym, df = next(iter(tf_cache.items()))
     higher_tf = ctx.config.get("higher_timeframe", "1d")
     higher_df = ctx.df_cache.get(higher_tf, {}).get(sym)
-    label, _ = await classify_regime_cached(sym, base_tf, df, higher_df)
-    return label.split("_")[-1]
+    label, info = await classify_regime_cached(sym, base_tf, df, higher_df)
+    regime = label.split("_")[-1]
+    logger.info(
+        "Regime for %s [%s/%s]: %s",
+        sym,
+        base_tf,
+        higher_tf,
+        regime,
+    )
+    if regime == "unknown":
+        logger.info(
+            "Unknown regime details: bars=%s/%s info=%s",
+            len(df) if df is not None else 0,
+            len(higher_df) if isinstance(higher_df, pd.DataFrame) else 0,
+            info,
+        )
+    return regime
 
 
 def direction_to_side(direction: str) -> str:
