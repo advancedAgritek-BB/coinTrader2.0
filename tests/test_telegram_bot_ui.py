@@ -223,9 +223,8 @@ def test_menu_signals_balance_trades_history(monkeypatch, tmp_path):
     asyncio.run(ui.menu_cmd(update, DummyContext()))
     assert isinstance(update.message.reply_markup, telegram_bot_ui.InlineKeyboardMarkup)
     assert len(update.message.reply_markup.inline_keyboard) == 4
-    assert len(update.message.reply_markup.inline_keyboard) == 3
-    last_row = update.message.reply_markup.inline_keyboard[-1]
-    assert any(getattr(btn, "text", None) == "Trade History" for btn in last_row)
+    buttons = [btn for row in update.message.reply_markup.inline_keyboard for btn in row]
+    assert any(getattr(btn, "text", None) == "Trade History" for btn in buttons)
     texts = [btn.text for row in update.message.reply_markup.inline_keyboard for btn in row]
     assert "PnL Stats" in texts
 

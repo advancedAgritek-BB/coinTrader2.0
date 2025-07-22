@@ -22,7 +22,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-from telegram_ctl import _paginate, get_page, set_page
+from crypto_bot.telegram_ctl import _paginate, get_page, set_page
 
 from crypto_bot.portfolio_rotator import PortfolioRotator
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
@@ -511,10 +511,7 @@ class TelegramBotUI:
             except Exception:
                 cfg = {}
         cfg[key] = val
-        if hasattr(yaml, "safe_dump"):
-            CONFIG_FILE.write_text(yaml.safe_dump(cfg, sort_keys=False))
-        else:
-            CONFIG_FILE.write_text(json.dumps(cfg))
+        CONFIG_FILE.write_text(json.dumps(cfg))
         await self.controller.reload_config()
         await self._reply(update, f"{key} updated to {val}")
         return ConversationHandler.END
