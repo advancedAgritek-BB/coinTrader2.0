@@ -1744,7 +1744,7 @@ def test_fetch_geckoterminal_ohlcv_retry(monkeypatch):
 
         def get(self, url, timeout=None):
             RetrySession.calls += 1
-            if RetrySession.calls < 3:
+            if RetrySession.calls in {1, 2, 3, 5}:
                 raise market_loader.aiohttp.ClientError("boom")
             return FakeResp(url)
 
@@ -1755,8 +1755,8 @@ def test_fetch_geckoterminal_ohlcv_retry(monkeypatch):
         market_loader.fetch_geckoterminal_ohlcv(f"{VALID_MINT}/USDC", limit=1)
     )
 
-    assert RetrySession.calls >= 3
-    assert sleeps == [1, 2]
+    assert RetrySession.calls >= 6
+    assert sleeps == [1, 2, 3, 1]
     assert data == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
     assert vol == 123.0
 
