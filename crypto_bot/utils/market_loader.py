@@ -1779,6 +1779,8 @@ async def update_multi_tf_ohlcv_cache(
         for sym in dex_symbols:
             data = None
             vol = 0.0
+            res = None
+            gecko_failed = False
             try:
                 res = await fetch_geckoterminal_ohlcv(
                     sym,
@@ -1786,11 +1788,13 @@ async def update_multi_tf_ohlcv_cache(
                     limit=tf_limit,
                     min_24h_volume=min_volume_usd,
                 )
-            except Exception as exc:  # pragma: no cover - network
-                logger.error("GeckoTerminal OHLCV error for %s: %s", sym, exc)
-                res = None
+            except Exception as e:  # pragma: no cover - network
+                logger.warning(
+                    f"Gecko failed for {sym}: {e} - using exchange data"
+                )
+                gecko_failed = True
 
-            if res:
+            if res and not gecko_failed:
                 if isinstance(res, tuple):
                     data, vol, *_ = res
                 else:
@@ -1798,7 +1802,7 @@ async def update_multi_tf_ohlcv_cache(
                     vol = min_volume_usd
                 add_priority(data, sym)
 
-            if not data or vol < min_volume_usd:
+            if gecko_failed or not data or vol < min_volume_usd:
                 data = await fetch_dex_ohlcv(
                     exchange,
                     sym,
