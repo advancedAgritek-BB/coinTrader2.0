@@ -364,8 +364,16 @@ def _build_mappings_cached(config_id: int) -> tuple[
     cfg = _CONFIG_REGISTRY.get(config_id, DEFAULT_ROUTER_CFG)
     return _build_mappings(cfg)
 
+
 _register_config(DEFAULT_ROUTER_CFG)
 STRATEGY_MAP, REGIME_STRATEGIES = _build_mappings_cached(id(DEFAULT_ROUTER_CFG))
+
+
+def _has_regime(cfg: Mapping[str, Any] | RouterConfig, regime: str) -> bool:
+    """Return ``True`` if ``cfg`` explicitly defines ``regime``."""
+    if isinstance(cfg, RouterConfig):
+        return regime in cfg.regimes
+    return regime in cfg.get("strategy_router", {}).get("regimes", {})
 
 
 def strategy_for(
@@ -374,7 +382,7 @@ def strategy_for(
     """Return strategy callable for a given regime."""
     cfg = config or DEFAULT_ROUTER_CFG
     strategies = get_strategies_for_regime(regime, cfg)
-    if strategies:
+    if strategies and _has_regime(cfg, regime):
         base = strategies[0]
     else:
         base = sniper_bot.generate_signal if regime == "unknown" else grid_bot.generate_signal

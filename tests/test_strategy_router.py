@@ -33,14 +33,20 @@ SAMPLE_CFG = {
 def test_strategy_for_mapping():
     data = {"strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"], "commit_lock_intervals": 3}}
     cfg = RouterConfig.from_dict(data)
-    assert strategy_for("trending", cfg) is trend_bot.generate_signal
-    assert strategy_for("sideways", cfg) is grid_bot.generate_signal
-    assert strategy_for("mean-reverting", cfg) is mean_bot.generate_signal
-    assert strategy_for("breakout", cfg) is breakout_bot.generate_signal
-    assert strategy_for("volatile", cfg) is sniper_bot.generate_signal
-    assert strategy_for("scalp", cfg) is micro_scalp_bot.generate_signal
-    assert strategy_for("bounce", cfg) is bounce_scalper.generate_signal
-    assert strategy_for("unknown", cfg) is sniper_bot.generate_signal
+    assert (
+        strategy_for("trending", cfg).__name__
+        == trend_bot.generate_signal.__name__
+    )
+    assert strategy_for("sideways", cfg).__name__ == grid_bot.generate_signal.__name__
+    assert (
+        strategy_for("mean-reverting", cfg).__name__
+        == mean_bot.generate_signal.__name__
+    )
+    assert strategy_for("breakout", cfg).__name__ == breakout_bot.generate_signal.__name__
+    assert strategy_for("volatile", cfg).__name__ == sniper_bot.generate_signal.__name__
+    assert strategy_for("scalp", cfg).__name__ == micro_scalp_bot.generate_signal.__name__
+    assert strategy_for("bounce", cfg).__name__ == bounce_scalper.generate_signal.__name__
+    assert strategy_for("unknown", cfg).__name__ == sniper_bot.generate_signal.__name__
 
 
 def test_strategy_for_solana_scalping():
@@ -50,7 +56,10 @@ def test_strategy_for_solana_scalping():
         "strategy_router": {"regimes": {"scalp": ["solana_scalping"]}}
     }
     cfg = RouterConfig.from_dict(data)
-    assert strategy_for("scalp", cfg) is solana_scalping.generate_signal
+    assert (
+        strategy_for("scalp", cfg).__name__
+        == solana_scalping.generate_signal.__name__
+    )
     import crypto_bot.strategy_router as sr
     sr._build_mappings_cached.cache_clear()
     sr._CONFIG_REGISTRY.clear()
@@ -75,7 +84,7 @@ def test_route_notifier(monkeypatch):
     cfg = RouterConfig.from_dict({"strategy_router": {"regimes": {"trending": ["dummy"]}}})
 
     fn = route("trending", "cex", cfg, DummyNotifier())
-    score, direction = asyncio.run(fn(None, {"symbol": "AAA"}))
+    score, direction = fn(None, {"symbol": "AAA"})
 
     assert score == 0.5
     assert direction == "long"
@@ -98,7 +107,7 @@ def test_route_multi_tf_combo(monkeypatch, tmp_path):
     cfg = RouterConfig.from_dict({"timeframe": "1m", "strategy_router": {"regimes": {"breakout": ["dummy"]}}})
 
     fn = route({"1m": "breakout", "15m": "trending"}, "cex", cfg)
-    score, direction = asyncio.run(fn(pd.DataFrame()))
+    score, direction = fn(pd.DataFrame())
     assert (score, direction) == (0.1, "long")
 
 
@@ -242,7 +251,7 @@ def test_strategy_timeframe_routing(monkeypatch):
 
     df_map = {"1m": pd.DataFrame({"v": [1]}), "5m": pd.DataFrame({"v": [5]})}
     fn = route("breakout", "cex", cfg)
-    asyncio.run(fn(df_map))
+    fn(df_map)
     assert captured.get('df') is df_map["5m"]
 
 

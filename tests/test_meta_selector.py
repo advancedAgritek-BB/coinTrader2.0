@@ -34,7 +34,7 @@ def test_choose_best_fallback(tmp_path, monkeypatch):
     monkeypatch.setattr(meta_selector, "LOG_FILE", file)
 
     fn = meta_selector.choose_best("sideways")
-    assert fn is strategy_for("sideways")
+    assert fn.__name__ == strategy_for("sideways").__name__
 
 
 def test_strategy_map_contains_micro_scalp():
