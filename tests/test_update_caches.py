@@ -24,7 +24,7 @@ def test_update_caches_default_limit(monkeypatch):
     monkeypatch.setattr(main, "update_multi_tf_ohlcv_cache", dummy_update)
     monkeypatch.setattr(main, "update_regime_tf_cache", dummy_update)
     asyncio.run(main.update_caches(ctx))
-    assert dummy_update.kwargs["limit"] == 200
+    assert dummy_update.kwargs["limit"] == 150
 
 
 def test_update_caches_override(monkeypatch):

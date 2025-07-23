@@ -88,7 +88,9 @@ async def test_initial_scan_ws_disabled_and_limit_capped(monkeypatch):
     assert params
     for kw in params:
         assert kw.get('use_websocket') is False
-        assert kw.get('limit') == 700
+    assert params[0].get('limit') == 700
+    assert params[1].get('limit') == 700
+    assert params[-1].get('limit') == 1000
     assert params[0].get('start_since') is not None
 
 
