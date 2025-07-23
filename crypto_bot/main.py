@@ -1096,6 +1096,7 @@ async def execute_signals(ctx: BotContext) -> None:
             df,
             atr=candidate.get("atr"),
             price=price,
+            name=strategy,
         )
         if size <= 0:
             await refresh_balance(ctx)
@@ -1105,6 +1106,7 @@ async def execute_signals(ctx: BotContext) -> None:
                 df,
                 atr=candidate.get("atr"),
                 price=price,
+                name=strategy,
             )
             if size <= 0:
                 outcome_reason = f"size {size:.4f}"

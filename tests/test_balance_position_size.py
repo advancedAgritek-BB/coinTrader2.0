@@ -7,6 +7,7 @@ from pathlib import Path
 
 from crypto_bot.phase_runner import BotContext
 from crypto_bot.paper_wallet import PaperWallet
+from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 
 
 class DummyRM:
@@ -96,3 +97,25 @@ async def test_positive_balance_generates_position():
 
     assert called["called"]
     assert ctx.positions["XBT/USDT"]["size"] > 0
+
+
+def _simple_cfg():
+    return RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
+
+
+def test_high_win_rate_boosts_position_size(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.risk.risk_manager.get_recent_win_rate", lambda *a, **k: 0.8
+    )
+    rm = RiskManager(_simple_cfg())
+    size = rm.position_size(1.0, 1000, name="trend_bot")
+    assert size == pytest.approx(150.0)
+
+
+def test_low_win_rate_no_boost(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.risk.risk_manager.get_recent_win_rate", lambda *a, **k: 0.6
+    )
+    rm = RiskManager(_simple_cfg())
+    size = rm.position_size(1.0, 1000, name="trend_bot")
+    assert size == pytest.approx(100.0)

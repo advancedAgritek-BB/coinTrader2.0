@@ -10,6 +10,7 @@ from crypto_bot.capital_tracker import CapitalTracker
 from crypto_bot.volatility_filter import too_flat, calc_atr
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 
 
 # Log to the main bot file so risk messages are consolidated
@@ -129,12 +130,15 @@ class RiskManager:
         stop_distance: float | None = None,
         atr: float | None = None,
         price: float | None = None,
+        name: str | None = None,
     ) -> float:
         """Return the trade value for a signal.
 
         When ``stop_distance`` or ``atr`` is provided the size is calculated
         using ``risk_pct`` relative to that distance.  Otherwise the fixed
         ``trade_size_pct`` is scaled by volatility and current drawdown.
+        When ``name`` is supplied the recent win rate for that strategy is
+        fetched and a 50%% boost is applied when the rate exceeds ``0.7``.
         """
 
         volatility_factor = 1.0
@@ -176,6 +180,14 @@ class RiskManager:
                 * volatility_factor
                 * capital_risk_factor
             )
+
+        if name:
+            try:
+                win_rate = get_recent_win_rate(strategy=name)
+            except Exception:
+                win_rate = 0.0
+            if win_rate > 0.7:
+                size *= 1.5
 
         logger.info(
             "Calculated position size: %.4f (vol %.2f risk %.2f)",
