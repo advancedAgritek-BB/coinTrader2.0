@@ -175,6 +175,7 @@ def test_onchain_solana_route():
 def test_usdc_pair_breakout():
     cfg = {
         "symbol": "XYZ/USDC",
+        "onchain_default_quote": "USDC",
         "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
     }
     fn = route("breakout", "cex", cfg)
@@ -195,6 +196,7 @@ def test_auto_usdc_pair_route(monkeypatch):
     monkeypatch.setitem(strategy_router.TOKEN_MINTS, "XYZ", "mint")
     cfg = {
         "symbol": "XYZ/USDC",
+        "onchain_default_quote": "USDC",
         "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
     }
     fn = route("breakout", "auto", cfg)
@@ -205,6 +207,7 @@ def test_auto_usdc_pair_cex_fallback(monkeypatch):
     monkeypatch.setattr(strategy_router, "TOKEN_MINTS", {})
     cfg = {
         "symbol": "XYZ/USDC",
+        "onchain_default_quote": "USDC",
         "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
     }
     fn = route("breakout", "auto", cfg)
