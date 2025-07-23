@@ -763,7 +763,12 @@ async def scan_arbitrage(exchange: object, config: dict) -> list[str]:
         if fetch_solana_prices:
             dex_prices.update(await fetch_solana_prices(remaining))
     results: list[str] = []
-    threshold = float(config.get("arbitrage_threshold", 0.0))
+    threshold = float(
+        config.get(
+            "arbitrage_threshold",
+            config.get("grid_bot", {}).get("arbitrage_threshold", 0.0),
+        )
+    )
 
     for sym in pairs:
         dex_price = dex_prices.get(sym)

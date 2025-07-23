@@ -29,6 +29,7 @@ def test_load_config_returns_dict():
     assert "rsi_oversold_pct" in config
     assert "bb_squeeze_pct" in config
     assert "adx_threshold" in config
+    assert "arbitrage_threshold" in config
     assert "sl_mult" in config
     assert "tp_mult" in config
     assert "allow_short" in config
