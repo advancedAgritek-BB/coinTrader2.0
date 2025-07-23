@@ -1,3 +1,8 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 class CapitalTracker:
     """Track capital usage per strategy."""
 
@@ -11,7 +16,17 @@ class CapitalTracker:
         if cap is None:
             return True
         allowed = balance * cap * 1.1
-        return self._usage.get(strategy, 0.0) + amount <= allowed
+        usage = self._usage.get(strategy, 0.0)
+        can = usage + amount <= allowed
+        if not can:
+            logger.info(
+                "Capital limit reached for %s: request %.2f usage %.2f allowed %.2f",
+                strategy,
+                amount,
+                usage,
+                allowed,
+            )
+        return can
 
     def allocate(self, strategy: str, amount: float) -> None:
         """Record capital allocation for ``strategy``."""
