@@ -4,6 +4,7 @@ from pathlib import Path
 
 if not hasattr(yaml, "__file__"):
     import sys
+
     sys.modules.pop("yaml", None)
     spec = importlib.util.find_spec("yaml")
     if spec and spec.loader:
@@ -95,6 +96,8 @@ def test_load_config_returns_dict():
         "program_id",
     ]:
         assert key in pyth_cfg
+    assert "pyth_quotes" in config
+    assert config["pyth_quotes"]
 
 
 def test_load_config_normalizes_symbol(tmp_path, monkeypatch):

@@ -1023,7 +1023,9 @@ async def enrich_with_pyth(ctx: BotContext) -> None:
 
     async with aiohttp.ClientSession() as session:
         for sym in batch:
-            if not sym.endswith("/USDC"):
+            quote = sym.split("/")[-1]
+            allowed = ctx.config.get("pyth_quotes", ["USDC"])
+            if quote not in allowed:
                 continue
             base = sym.split("/")[0]
             try:

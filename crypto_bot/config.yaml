@@ -219,6 +219,8 @@ pyth:
   program_id: FsJ3A3u2vn5cTVofAjvy6qM3HrjTXg5Gs1Y8D6fCt3m
   solana_endpoint: https://api.mainnet-beta.solana.com
   solana_ws_endpoint: wss://api.mainnet-beta.solana.com
+pyth_quotes:
+- USDC
 refresh_pairs:
   allowed_quote_currencies: []
   blacklist_assets: []
