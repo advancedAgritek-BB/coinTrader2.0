@@ -23,6 +23,12 @@ from crypto_bot.utils import stats
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
+try:  # pragma: no cover - optional dependency
+    from coinTrader_Trainer.ml_trainer import load_model
+    MODEL = load_model("trend_bot")
+except Exception:  # pragma: no cover - fallback
+    MODEL = None
+
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 
@@ -167,8 +173,15 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         score = min((latest["rsi"] - dynamic_overbought) / (100 - dynamic_overbought), 1.0)
         direction = "short"
 
-    if score > 0 and (config is None or config.get("atr_normalization", True)):
-        score = normalize_score_by_volatility(df, score)
+    if score > 0:
+        if MODEL is not None:
+            try:  # pragma: no cover - best effort
+                ml_score = MODEL.predict(df)
+                score = (score + ml_score) / 2
+            except Exception:
+                pass
+        if config is None or config.get("atr_normalization", True):
+            score = normalize_score_by_volatility(df, score)
 
     if config:
         torch_cfg = config.get("torch_signal_model", {})

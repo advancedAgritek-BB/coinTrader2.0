@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 import types
 import sys
 sys.modules.setdefault(
@@ -387,6 +388,32 @@ def test_trigger_once(monkeypatch):
     assert second[1] == "none"
     assert third[1] != "none"
     assert fourth[1] == "none"
+
+
+def test_trainer_model_influence(monkeypatch):
+    df = _df([5.0, 5.0, 4.8, 4.5], [100, 100, 100, 500])
+    monkeypatch.setattr(
+        bounce_scalper.ta.trend, "ema_indicator", lambda s, window=50: pd.Series([4] * len(s))
+    )
+    cfg = {
+        "rsi_window": 3,
+        "oversold": 100,
+        "overbought": 0,
+        "vol_window": 3,
+        "zscore_threshold": 1.0,
+        "rsi_oversold_pct": 100,
+        "down_candles": 1,
+        "up_candles": 2,
+        "body_pct": 0.5,
+        "atr_normalization": False,
+    }
+    monkeypatch.setattr(bounce_scalper, "MODEL", None)
+    base, direction = bounce_scalper.generate_signal(df, cfg)
+    dummy = types.SimpleNamespace(predict=lambda _df: 0.6)
+    monkeypatch.setattr(bounce_scalper, "MODEL", dummy)
+    score, direction2 = bounce_scalper.generate_signal(df, cfg)
+    assert direction2 == direction
+    assert score == pytest.approx((base + 0.6) / 2)
 
 
 def test_lower_df_pattern_detection(monkeypatch):

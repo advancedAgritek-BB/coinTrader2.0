@@ -1,4 +1,6 @@
 import pandas as pd
+import pytest
+import types
 
 from crypto_bot.strategy import sniper_bot
 
@@ -144,3 +146,18 @@ def test_price_fallback_long_signal():
     assert score > 0
     assert atr > 0
     assert event
+
+
+def test_trainer_model_influence(monkeypatch):
+    df = _df_with_volume_and_price(
+        [1.0, 1.05, 1.1, 1.2],
+        [10, 12, 11, 200]
+    )
+    cfg = {"atr_normalization": False}
+    monkeypatch.setattr(sniper_bot, "MODEL", None)
+    base, direction, _, _ = sniper_bot.generate_signal(df, cfg)
+    dummy = types.SimpleNamespace(predict=lambda _df: 0.5)
+    monkeypatch.setattr(sniper_bot, "MODEL", dummy)
+    score, direction2, _, _ = sniper_bot.generate_signal(df, cfg)
+    assert direction2 == direction
+    assert score == pytest.approx((base + 0.5) / 2)

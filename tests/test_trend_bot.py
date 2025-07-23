@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import sys
 import numpy as np
+import types
 import pytest
 import ta
 
@@ -134,3 +135,15 @@ def test_torch_signal_default_weight(monkeypatch):
     score, _ = trend_bot.generate_signal(df, cfg)
     expected = base_score * 0.3 + 0.2 * 0.7
     assert score == pytest.approx(expected)
+
+
+def test_trainer_model_influence(monkeypatch):
+    df = _df_trend(150.0, high_equals_close=True)
+    cfg = {"donchian_confirmation": False, "atr_normalization": False}
+    monkeypatch.setattr(trend_bot, "MODEL", None)
+    base, direction = trend_bot.generate_signal(df, cfg)
+    dummy = types.SimpleNamespace(predict=lambda _df: 0.7)
+    monkeypatch.setattr(trend_bot, "MODEL", dummy)
+    score, direction2 = trend_bot.generate_signal(df, cfg)
+    assert direction2 == direction
+    assert score == pytest.approx((base + 0.7) / 2)

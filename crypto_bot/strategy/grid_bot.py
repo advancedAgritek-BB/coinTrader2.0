@@ -18,6 +18,11 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.volatility_filter import calc_atr
 
 DYNAMIC_THRESHOLD = 1.5
+try:  # pragma: no cover - optional dependency
+    from coinTrader_Trainer.ml_trainer import load_model
+    MODEL = load_model("grid_bot")
+except Exception:  # pragma: no cover - fallback
+    MODEL = None
 from . import breakout_bot, micro_scalp_bot
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
@@ -319,6 +324,12 @@ def generate_signal(
             return 0.0, "none"
         distance = centre - price
         score = min(distance / half_range, 1.0)
+        if MODEL is not None:
+            try:  # pragma: no cover - best effort
+                ml_score = MODEL.predict(df)
+                score = (score + ml_score) / 2
+            except Exception:
+                pass
         if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
         logger.info("Signal for %s: %s, %s", symbol, score, "long")
@@ -329,6 +340,12 @@ def generate_signal(
             return 0.0, "none"
         distance = price - centre
         score = min(distance / half_range, 1.0)
+        if MODEL is not None:
+            try:  # pragma: no cover - best effort
+                ml_score = MODEL.predict(df)
+                score = (score + ml_score) / 2
+            except Exception:
+                pass
         if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
         logger.info("Signal for %s: %s, %s", symbol, score, "short")

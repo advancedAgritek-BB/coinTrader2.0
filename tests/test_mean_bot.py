@@ -126,3 +126,15 @@ def test_ml_enabled_by_default(monkeypatch):
     assert score == pytest.approx((base_score + 0.2) / 2)
 
 
+def test_trainer_model_influence(monkeypatch):
+    df = _df_low_bw_drop()
+    cfg = {"atr_normalization": False}
+    monkeypatch.setattr(mean_bot, "MODEL", None)
+    base, direction = mean_bot.generate_signal(df, cfg)
+    dummy = types.SimpleNamespace(predict=lambda _df: 0.25)
+    monkeypatch.setattr(mean_bot, "MODEL", dummy)
+    score, direction2 = mean_bot.generate_signal(df, cfg)
+    assert direction2 == direction
+    assert score == pytest.approx((base + 0.25) / 2)
+
+

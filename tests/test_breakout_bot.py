@@ -1,6 +1,7 @@
 import pandas as pd
 
 import pytest
+import types
 
 from crypto_bot.strategy import breakout_bot
 
@@ -134,3 +135,22 @@ def test_no_volume_confirmation_still_signals(breakout_df):
     cfg = {"breakout": {"vol_confirmation": False}}
     score, direction, _ = breakout_bot.generate_signal(df, cfg)
     assert direction == "long" and score > 0
+
+
+def test_trainer_model_influence(monkeypatch):
+    prices = [100] * 35 + [102]
+    volumes = [100] * 35 + [300]
+    df = pd.DataFrame({
+        "open": prices,
+        "high": [p + 1 for p in prices],
+        "low": [p - 1 for p in prices],
+        "close": prices,
+        "volume": volumes,
+    })
+    monkeypatch.setattr(breakout_bot, "MODEL", None)
+    base, direction, _ = breakout_bot.generate_signal(df)
+    dummy = types.SimpleNamespace(predict=lambda _df: 0.5)
+    monkeypatch.setattr(breakout_bot, "MODEL", dummy)
+    score, direction2, _ = breakout_bot.generate_signal(df)
+    assert direction2 == direction
+    assert score == pytest.approx((base + 0.5) / 2)

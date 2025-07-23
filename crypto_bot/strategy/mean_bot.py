@@ -27,6 +27,12 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
+try:  # pragma: no cover - optional dependency
+    from coinTrader_Trainer.ml_trainer import load_model
+    MODEL = load_model("mean_bot")
+except Exception:  # pragma: no cover - fallback
+    MODEL = None
+
 
 def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
     """Score mean reversion opportunities using multiple indicators."""
@@ -174,10 +180,9 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     else:
         return 0.0, "none"
 
-    if ml_enabled:
-        try:
-            from crypto_bot.ml_signal_model import predict_signal
-            ml_score = predict_signal(df)
+    if ml_enabled and MODEL is not None:
+        try:  # pragma: no cover - best effort
+            ml_score = MODEL.predict(df)
             score = (score + ml_score) / 2
         except Exception:
             pass

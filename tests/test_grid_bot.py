@@ -233,3 +233,17 @@ def test_range_window_config(cfg, monkeypatch):
     score, direction = grid_bot.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0.0
+
+
+def test_trainer_model_influence(monkeypatch):
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: 1.0)
+    df = _df_with_price(111.0)
+    cfg = GridConfig(atr_normalization=False)
+    monkeypatch.setattr(grid_bot, "MODEL", None)
+    base, direction = grid_bot.generate_signal(df, config=cfg)
+    dummy = types.SimpleNamespace(predict=lambda _df: 0.4)
+    monkeypatch.setattr(grid_bot, "MODEL", dummy)
+    score, direction2 = grid_bot.generate_signal(df, config=cfg)
+    assert direction2 == direction
+    assert score == pytest.approx((base + 0.4) / 2)

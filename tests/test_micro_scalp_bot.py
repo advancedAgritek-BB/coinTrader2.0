@@ -290,3 +290,17 @@ def test_spread_ratio_blocks_signal(make_df):
     cfg = {"micro_scalp": {"fresh_cross_only": False}}
     score, direction = micro_scalp_bot.generate_signal(df, cfg, book=book)
     assert (score, direction) == (0.0, "none")
+
+
+def test_trainer_model_influence(make_df, monkeypatch):
+    prices = list(range(1, 21))
+    volumes = [100] * 19 + [150]
+    df = make_df(prices, volumes)
+    cfg = {"micro_scalp": {"fresh_cross_only": False, "min_vol_z": 0}, "atr_normalization": False}
+    monkeypatch.setattr(micro_scalp_bot, "MODEL", None)
+    base, direction = micro_scalp_bot.generate_signal(df, cfg)
+    dummy = types.SimpleNamespace(predict=lambda _df: 0.3)
+    monkeypatch.setattr(micro_scalp_bot, "MODEL", dummy)
+    score, direction2 = micro_scalp_bot.generate_signal(df, cfg)
+    assert direction2 == direction
+    assert score == pytest.approx((base + 0.3) / 2)
