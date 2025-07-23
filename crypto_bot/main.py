@@ -766,6 +766,9 @@ async def fetch_candidates(ctx: BotContext) -> None:
             sf["min_volume_usd"] = orig_min_volume
             sf["volume_percentile"] = orig_volume_pct
 
+    # Always include major benchmark pairs
+    symbols.extend([("BTC/USDT", 10.0), ("SOL/USDC", 10.0)])
+
     ctx.timing["symbol_time"] = time.perf_counter() - t0
 
     solana_tokens: list[str] = list(onchain_syms)

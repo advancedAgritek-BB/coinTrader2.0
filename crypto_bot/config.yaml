@@ -194,7 +194,7 @@ ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
 ohlcv_timeout: 120
 onchain_default_quote: USDC
-onchain_min_volume_usd: 10000
+onchain_min_volume_usd: 5000
 onchain_symbols:
 - SOL/USDC
 - BONK/USDC
@@ -360,7 +360,7 @@ strategy_router:
 symbol: BTC/USDT
 symbol_batch_size: 50
 symbol_filter:
-  change_pct_percentile: 2
+  change_pct_percentile: 10
   correlation_max_pairs: 200
   http_timeout: 5
   initial_history_candles: 300
@@ -373,10 +373,10 @@ symbol_filter:
   max_concurrent_ohlcv: 10
   max_correlation: 0.9
   max_spread_pct: 4
-  min_volume_usd: 500
+  min_volume_usd: 100
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
-  volume_percentile: 20
+  volume_percentile: 10
 symbol_refresh_minutes: 1
 symbol_score_weights:
   age: 0.1
