@@ -1494,11 +1494,16 @@ async def force_exit_all(ctx: BotContext) -> None:
     """Liquidate all open positions immediately."""
     tf = ctx.config.get("timeframe", "1h")
     tf_cache = ctx.df_cache.get(tf, {})
+    if not ctx.positions:
+        logger.info("No positions to liquidate")
+        return
     for sym, pos in list(ctx.positions.items()):
         df = tf_cache.get(sym)
         exit_price = pos["entry_price"]
         if df is not None and not df.empty:
             exit_price = float(df["close"].iloc[-1])
+
+        logger.info("Liquidating %s %.4f @ %.2f", sym, pos["size"], exit_price)
 
         await cex_trade_async(
             ctx.exchange,
@@ -1536,6 +1541,8 @@ async def force_exit_all(ctx: BotContext) -> None:
             )
         except Exception:
             pass
+
+        logger.info("Liquidated %s %.4f @ %.2f", sym, pos["size"], exit_price)
 
 
 async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
