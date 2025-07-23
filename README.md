@@ -384,8 +384,17 @@ grid_bot:
 * **atr_normalization** – adjust signal scores using ATR.
 ```python
 score, direction, atr = breakout_bot.generate_signal(lower_df, cfg, higher_df)
-size = risk_manager.position_size(score, balance, lower_df, atr=atr)
+size = risk_manager.position_size(
+    score,
+    balance,
+    lower_df,
+    atr=atr,
+    name="trend_bot",
+)
 ```
+* Passing a ``name`` parameter causes ``position_size`` to check
+  ``get_recent_win_rate``. When the win rate exceeds ``0.7`` the
+  calculated size is boosted by **50%**.
 * **ml_signal_model**/**signal_weight_optimizer** – blend strategy scores with machine-learning predictions.
 * **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade. `min_confidence_score` and `signal_fusion.min_confidence` default to `0.005`.
 * **regime_timeframes**/**regime_return_period** – windows used for regime detection.
