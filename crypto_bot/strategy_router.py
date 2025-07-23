@@ -377,7 +377,7 @@ def strategy_for(
     if strategies:
         base = strategies[0]
     else:
-        base = breakout_bot.generate_signal if regime == "unknown" else grid_bot.generate_signal
+        base = sniper_bot.generate_signal if regime == "unknown" else grid_bot.generate_signal
     tf_key = f"{regime.replace('-', '_')}_timeframe"
     tf = cfg_get(cfg, tf_key, cfg_get(cfg, "timeframe", "1h"))
     return wrap_with_tf(base, tf)
