@@ -7,6 +7,7 @@ sys.modules.setdefault("ccxtpro", types.ModuleType("ccxtpro"))
 from frontend import api
 from fastapi.testclient import TestClient
 import json
+import pytest
 
 def test_live_signals_endpoint(tmp_path, monkeypatch):
     scores = {"BTC": 0.5, "ETH": 0.1}
@@ -92,3 +93,33 @@ def test_close_all_endpoint(monkeypatch):
     assert resp.json()["status"] == "liquidation_scheduled"
     assert dummy.called is True
     assert dummy.state.get("liquidate_all") is True
+
+
+@pytest.mark.asyncio
+async def test_close_all_positions_writes_to_proc(monkeypatch):
+    class DummyStdin:
+        def __init__(self):
+            self.writes = []
+
+        def write(self, data):
+            self.writes.append(data)
+
+        async def drain(self):
+            pass
+
+    class DummyProc:
+        def __init__(self, stdin):
+            self.stdin = stdin
+            self.returncode = None
+
+    stdin = DummyStdin()
+    proc = DummyProc(stdin)
+    from crypto_bot.bot_controller import TradingBotController
+
+    controller = TradingBotController.__new__(TradingBotController)
+    controller.proc = proc
+    controller.state = {}
+
+    result = await controller.close_all_positions()
+    assert stdin.writes == [b"panic sell\n"]
+    assert result["status"] == "command_sent"
