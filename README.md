@@ -30,9 +30,9 @@ The bot selects a strategy by first classifying the current market regime. The
 `classify_regime` function computes EMA, ADX, RSI and Bollinger Band width to
 label conditions as `trending`, `sideways`, `breakout`, `mean-reverting` or
 `volatile`. At least **200** candles are required for these indicators to
-be calculated reliably. When fewer than **10** candles are available the
+be calculated reliably. When fewer than **5** candles are available the
 system assumes a `breakout` regime to avoid missing early momentum.
-With 10 to 199 candles the classifier still runs but accuracy may be
+With 5 to 199 candles the classifier still runs but accuracy may be
 reduced. Strategies may
 operate on different candle intervals, so the loader keeps a multi‑timeframe
 cache populated for each pair. The `timeframes` list in
@@ -52,7 +52,7 @@ machine learning model whenever the indicator rules return `"unknown"`.
 The EMA windows have been shortened to **8** and **21** and the ADX threshold
 lowered to switch regimes more quickly. The fallback model is bundled in
 `crypto_bot.regime.model_data` as a base64 string and loaded automatically.
-By default the ML model runs once at least **10** candles are available (`ml_min_bars` in `crypto_bot/regime/regime_config.yaml`).
+By default the ML model runs once at least **5** candles are available (`ml_min_bars` in `crypto_bot/regime/regime_config.yaml`).
 You can replace that module with your own encoded model if desired.
 When enough history is present the ML probabilities are blended with the
 rule-based result using `ml_blend_weight` from `regime_config.yaml`.
