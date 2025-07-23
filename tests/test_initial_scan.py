@@ -1,6 +1,5 @@
 import types
 import sys
-import pandas as pd
 import pytest
 
 stub = types.ModuleType('solana_scanner')
@@ -36,7 +35,15 @@ async def test_initial_scan_fetches_200_candles(monkeypatch):
         return {}
 
     monkeypatch.setattr('crypto_bot.main.update_multi_tf_ohlcv_cache', fake_update_multi)
+
     monkeypatch.setattr('crypto_bot.main.update_regime_tf_cache', fake_update_regime)
+    async def fake_get_filtered_symbols(ex, cfg):
+        return ([(cfg['symbols'][0], 0.0)], cfg.get('onchain_symbols', []))
+
+    monkeypatch.setattr(
+        'crypto_bot.main.get_filtered_symbols',
+        fake_get_filtered_symbols,
+    )
 
     cfg = {'symbols': ['BTC/USD'], 'timeframes': ['1h'], 'scan_lookback_limit': 200}
     await initial_scan(DummyExchange(), cfg, SessionState())
@@ -61,6 +68,13 @@ async def test_initial_scan_ws_disabled_and_limit_capped(monkeypatch):
 
     monkeypatch.setattr('crypto_bot.main.update_multi_tf_ohlcv_cache', fake_update_multi)
     monkeypatch.setattr('crypto_bot.main.update_regime_tf_cache', fake_update_regime)
+    async def fake_get_filtered_symbols(ex, cfg):
+        return ([(cfg['symbols'][0], 0.0)], cfg.get('onchain_symbols', []))
+
+    monkeypatch.setattr(
+        'crypto_bot.main.get_filtered_symbols',
+        fake_get_filtered_symbols,
+    )
 
     cfg = {
         'symbols': ['BTC/USD'],
@@ -80,12 +94,6 @@ async def test_initial_scan_ws_disabled_and_limit_capped(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_initial_scan_onchain(monkeypatch):
-    calls = []
-
-    async def fake_fetch(symbol, timeframe="1h", limit=0):
-        calls.append((symbol, timeframe, limit))
-        return pd.DataFrame({"timestamp": [1], "open": [0], "high": [0], "low": [0], "close": [0], "volume": [0]})
-
     updates = []
 
     def fake_update(cache, tf, sym, df, *args, **kwargs):
@@ -99,8 +107,14 @@ async def test_initial_scan_onchain(monkeypatch):
 
     monkeypatch.setattr('crypto_bot.main.update_multi_tf_ohlcv_cache', fake_update_multi)
     monkeypatch.setattr('crypto_bot.main.update_regime_tf_cache', fake_update_regime)
-    monkeypatch.setattr('crypto_bot.solana.fetch_solana_historical', fake_fetch, raising=False)
     monkeypatch.setattr('crypto_bot.main.update_df_cache', fake_update)
+    async def fake_get_filtered_symbols(ex, cfg):
+        return ([(cfg['symbols'][0], 0.0)], cfg.get('onchain_symbols', []))
+
+    monkeypatch.setattr(
+        'crypto_bot.main.get_filtered_symbols',
+        fake_get_filtered_symbols,
+    )
 
     cfg = {
         'symbols': ['BTC/USD'],
@@ -110,8 +124,7 @@ async def test_initial_scan_onchain(monkeypatch):
     }
     await initial_scan(DummyExchange(), cfg, SessionState())
 
-    assert set(calls) == {('SOL/USDC', '1h', 100), ('SOL/USDC', '5m', 100)}
-    assert [(c[0], c[1]) for c in updates] == [('1h', 'SOL/USDC'), ('5m', 'SOL/USDC')]
+    assert updates == []
 
 
 @pytest.mark.asyncio
@@ -128,6 +141,13 @@ async def test_initial_scan_symbol_filter_overrides(monkeypatch):
 
     monkeypatch.setattr('crypto_bot.main.update_multi_tf_ohlcv_cache', fake_update_multi)
     monkeypatch.setattr('crypto_bot.main.update_regime_tf_cache', fake_update_regime)
+    async def fake_get_filtered_symbols(ex, cfg):
+        return ([(cfg['symbols'][0], 0.0)], cfg.get('onchain_symbols', []))
+
+    monkeypatch.setattr(
+        'crypto_bot.main.get_filtered_symbols',
+        fake_get_filtered_symbols,
+    )
 
     cfg = {
         'symbols': ['BTC/USD'],

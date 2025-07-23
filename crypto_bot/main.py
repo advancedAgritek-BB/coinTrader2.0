@@ -8,7 +8,6 @@ from datetime import datetime
 from collections import deque, OrderedDict
 from dataclasses import dataclass, field
 import inspect
-import threading
 
 import aiohttp
 
@@ -22,7 +21,6 @@ except Exception:  # pragma: no cover - optional dependency
 import pandas as pd
 import numpy as np
 import yaml
-import requests
 from dotenv import dotenv_values
 from pydantic import ValidationError
 
@@ -152,73 +150,6 @@ def update_df_cache(
     tf_cache.move_to_end(symbol)
     if len(tf_cache) > max_size:
         tf_cache.popitem(last=False)
-
-
-BIRDEYE_MIN_INTERVAL = 2.0
-_birdeye_lock = threading.Lock()
-_last_birdeye_time = 0.0
-
-
-def _throttle_birdeye() -> None:
-    """Enforce a minimum delay between Birdeye API requests."""
-    global _last_birdeye_time
-    with _birdeye_lock:
-        now = time.monotonic()
-        wait = BIRDEYE_MIN_INTERVAL - (now - _last_birdeye_time)
-        if wait > 0:
-            time.sleep(wait)
-        _last_birdeye_time = time.monotonic()
-
-
-def fetch_solana_historical(mint: str, timeframe: str, limit: int = 200) -> pd.DataFrame | None:
-    """Return historical OHLCV data for ``mint`` using Birdeye."""
-    api_key = os.getenv("BIRDEYE_API_KEY")
-    if not api_key:
-        logger.error("BIRDEYE_API_KEY not set")
-        return None
-
-    seconds = timeframe_seconds(None, timeframe)
-    if not seconds:
-        logger.error("Invalid timeframe %s", timeframe)
-        return None
-
-    now = int(time.time())
-    start = now - seconds * (limit + 1)
-    url = "https://public-api.birdeye.so/defi/ohlcv"
-    params = {
-        "address": mint,
-        "timeframe": timeframe,
-        "from": start,
-        "to": now,
-    }
-
-    try:
-        _throttle_birdeye()
-        resp = requests.get(url, params=params, headers={"X-API-KEY": api_key}, timeout=10)
-        resp.raise_for_status()
-        data = resp.json().get("data", [])
-    except Exception as exc:  # pragma: no cover - network failures
-        logger.error("Birdeye OHLCV error for %s: %s", mint, exc)
-        return None
-
-    rows = []
-    for item in data[-limit:]:
-        try:
-            ts = int(item.get("t") or item.get("timestamp") or item.get("time", 0)) * 1000
-            rows.append([
-                ts,
-                float(item.get("o") or item.get("open")),
-                float(item.get("h") or item.get("high")),
-                float(item.get("l") or item.get("low")),
-                float(item.get("c") or item.get("close")),
-                float(item.get("v") or item.get("volume", 0)),
-            ])
-        except Exception:
-            continue
-
-    if not rows:
-        return None
-    return pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
 
 
 def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> float:
@@ -617,9 +548,6 @@ async def initial_scan(
     if not symbols:
         return
 
-    # Save the local sync fetch function so it isn't shadowed later
-    fetch_solana_historical_sync = fetch_solana_historical
-
     batch_size = int(config.get("symbol_batch_size", 10))
     total = len(symbols)
     processed = 0
@@ -682,42 +610,11 @@ async def initial_scan(
             )
         logger.info("Deep historical OHLCV loaded for %d symbols", len(batch))
 
-        for sym in batch:
-            if sym not in onchain_symbols:
-                continue
-            base = sym.split("/")[0]
-            mint = TOKEN_MINTS.get(base.upper(), base)
-            for tf in tfs:
-                df = await asyncio.to_thread(
-                    fetch_solana_historical_sync, mint, tf, limit=scan_limit
-                )
-                if isinstance(df, pd.DataFrame) and not df.empty:
-                    update_df_cache(state.df_cache, tf, sym, df)
-
         processed += len(batch)
         pct = processed / total * 100
         logger.info("Initial scan %.1f%% complete", pct)
         if notifier and config.get("telegram", {}).get("status_updates", True):
             notifier.notify(f"Initial scan {pct:.1f}% complete")
-
-    onchain_syms = config.get("onchain_symbols", [])
-    if onchain_syms:
-        try:
-            from crypto_bot.solana import fetch_solana_historical as fetch_solana_historical_async
-        except Exception:
-            fetch_solana_historical_async = None
-        if fetch_solana_historical_async:
-            timeframes = sf.get("initial_timeframes", config.get("timeframes", ["1h"]))
-            for sym in onchain_syms:
-                for tf in timeframes:
-                    try:
-                        df = await fetch_solana_historical_async(
-                            sym, timeframe=tf, limit=scan_limit
-                        )
-                    except Exception:
-                        continue
-                    if isinstance(df, pd.DataFrame):
-                        update_df_cache(state.df_cache, tf, sym, df)
 
     return
 
