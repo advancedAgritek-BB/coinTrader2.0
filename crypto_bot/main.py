@@ -510,6 +510,10 @@ def reload_config(
     position_guard.max_open_trades = config.get(
         "max_open_trades", position_guard.max_open_trades
     )
+    logger.info(
+        "OpenPositionGuard limit set to %d trades",
+        position_guard.max_open_trades,
+    )
 
     cooldown_configure(config.get("min_cooldown", 0))
     market_loader_configure(
@@ -1183,8 +1187,18 @@ async def execute_signals(ctx: BotContext) -> None:
 
     for candidate in results[:top_n]:
         logger.info("Analysis result: %s", candidate)
+        max_trades = (
+            ctx.position_guard.max_open_trades if ctx.position_guard else 0
+        )
+        logger.debug(
+            "Open trades: %d / %d", len(ctx.positions), max_trades
+        )
         if not ctx.position_guard or not ctx.position_guard.can_open(ctx.positions):
-            logger.info("Max open trades reached; skipping remaining signals")
+            logger.info(
+                "Max open trades reached (%d/%d); skipping remaining signals",
+                len(ctx.positions),
+                max_trades,
+            )
             break
         sym = candidate["symbol"]
         logger.info("[EVAL] evaluating %s", sym)
