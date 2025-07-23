@@ -169,7 +169,7 @@ micro_scalp:
   imbalance_ratio: 0
   min_atr_pct: 0.0005
   min_momentum_pct: 0.0
-  min_vol_z: -1.0
+  min_vol_z: -2.0
   trend_fast: 15
   trend_filter: false
   trend_slow: 40
@@ -304,7 +304,7 @@ sniper_bot:
   fallback_volume_mult: 1.0
   max_history: 20
   price_fallback: true
-  volume_multiple: 1.2
+  volume_multiple: 1.0
   volume_window: 3
 solana_scalping:
   macd_fast: 10
