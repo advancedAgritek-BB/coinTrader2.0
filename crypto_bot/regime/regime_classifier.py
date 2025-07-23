@@ -294,7 +294,7 @@ def _classify_all(
 ) -> Tuple[str, Dict[str, float], Dict[str, float]] | Dict[str, str] | Tuple[str, str]:
     """Return regime label, probability mapping and patterns or labels for ``df_map``."""
 
-    ml_min_bars = cfg.get("ml_min_bars", 20)
+    ml_min_bars = cfg.get("ml_min_bars", 10)
 
     if df_map is not None:
         labels: Dict[str, str] = {}
@@ -425,7 +425,7 @@ def classify_regime(
     _configure_logger(cfg)
     cfg = adaptive_thresholds(cfg, df, symbol)
 
-    ml_min_bars = cfg.get("ml_min_bars", 20)
+    ml_min_bars = cfg.get("ml_min_bars", 10)
 
     if df_map is None and df is None:
         return "unknown", set()

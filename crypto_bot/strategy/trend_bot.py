@@ -21,11 +21,16 @@ from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
+
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 
 def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
     """Trend following signal with ADX, volume and optional Donchian filters."""
+    symbol = config.get("symbol") if config else ""
     if df.empty or len(df) < 50:
+        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none"
 
     df = df.copy()
@@ -176,7 +181,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
                 score = max(0.0, min(score, 1.0))
             except Exception:
                 pass
-
+    logger.info("Signal for %s: %s, %s", symbol, score, direction)
     return score, direction
 
 

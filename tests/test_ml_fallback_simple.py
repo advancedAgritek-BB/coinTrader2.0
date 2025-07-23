@@ -26,7 +26,7 @@ def test_no_ml_fallback_when_disabled(monkeypatch, tmp_path):
     monkeypatch.setattr(rc, "_ml_fallback", fake_ml)
 
     cfg = tmp_path / "regime.yaml"
-    cfg.write_text("use_ml_regime_classifier: false\nml_min_bars: 20\n")
+    cfg.write_text("use_ml_regime_classifier: false\nml_min_bars: 10\n")
 
     label, _ = rc.classify_regime(df, config_path=str(cfg))
     assert label == "unknown"
@@ -47,7 +47,7 @@ def test_ml_fallback_triggers(monkeypatch, tmp_path):
 
     cfg = tmp_path / "regime.yaml"
     cfg.write_text(
-        "use_ml_regime_classifier: true\nml_min_bars: 20\nml_blend_weight: 1.0\n"
+        "use_ml_regime_classifier: true\nml_min_bars: 10\nml_blend_weight: 1.0\n"
     )
 
     label, probs = rc.classify_regime(df, config_path=str(cfg))

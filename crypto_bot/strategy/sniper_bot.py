@@ -6,9 +6,12 @@ import ta
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.volatility_filter import calc_atr
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 DEFAULT_PAIRS = ["BTC/USD", "ETH/USD"]
 ALLOWED_PAIRS = load_liquid_pairs() or DEFAULT_PAIRS
+
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 
 def generate_signal(
@@ -74,6 +77,7 @@ def generate_signal(
     """
     symbol = config.get("symbol") if config else ""
     if symbol and ALLOWED_PAIRS and symbol not in ALLOWED_PAIRS:
+        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none", 0.0, False
 
     if config:
@@ -94,6 +98,7 @@ def generate_signal(
         initial_window = max(1, initial_window // 2)
 
     if len(df) < initial_window:
+        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none", 0.0, False
 
     price_change = df["close"].iloc[-1] / df["close"].iloc[0] - 1
@@ -102,6 +107,7 @@ def generate_signal(
         score = 1.0
         if config is None or config.get("atr_normalization", True):
             score = normalize_score_by_volatility(df, score)
+        logger.info("Signal for %s: %s, %s", symbol, score, "short")
         return score, "short", atr, False
 
     base_volume = df["volume"].iloc[:initial_window].mean()
@@ -125,6 +131,7 @@ def generate_signal(
             event = True
 
     if df["volume"].iloc[-1] < min_volume:
+        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none", atr, event
 
     if (
@@ -142,6 +149,7 @@ def generate_signal(
         trade_direction = direction
         if direction == "auto":
             trade_direction = "short" if price_change < 0 else "long"
+        logger.info("Signal for %s: %s, %s", symbol, score, trade_direction)
         return score, trade_direction, atr, event
 
     trade_direction = direction
@@ -169,8 +177,10 @@ def generate_signal(
                     if df["close"].iloc[-1] < df["open"].iloc[-1]
                     else "long"
                 )
+            logger.info("Signal for %s: %s, %s", symbol, score, trade_direction)
             return score, trade_direction, atr, event
 
+    logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
     return 0.0, "none", atr, event
 
 

@@ -30,9 +30,9 @@ The bot selects a strategy by first classifying the current market regime. The
 `classify_regime` function computes EMA, ADX, RSI and Bollinger Band width to
 label conditions as `trending`, `sideways`, `breakout`, `mean-reverting` or
 `volatile`. At least **200** candles are required for these indicators to
-be calculated reliably. When fewer than **20** candles are available the
+be calculated reliably. When fewer than **10** candles are available the
 system assumes a `breakout` regime to avoid missing early momentum.
-With 20 to 199 candles the classifier still runs but accuracy may be
+With 10 to 199 candles the classifier still runs but accuracy may be
 reduced. Strategies may
 operate on different candle intervals, so the loader keeps a multi‑timeframe
 cache populated for each pair. The `timeframes` list in
