@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Mapping, Sequence
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class OpenPositionGuard:
     """Simple utility enforcing ``max_open_trades``."""
@@ -13,4 +17,11 @@ class OpenPositionGuard:
 
     def can_open(self, positions: Mapping | Sequence) -> bool:
         """Return ``True`` if another trade may be opened."""
-        return len(positions) < self.max_open_trades
+        allowed = len(positions) < self.max_open_trades
+        if not allowed:
+            logger.info(
+                "OpenPositionGuard deny: %d/%d trades open",
+                len(positions),
+                self.max_open_trades,
+            )
+        return allowed
