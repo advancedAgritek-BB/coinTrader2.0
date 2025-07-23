@@ -16,6 +16,7 @@ from functools import lru_cache
 from datetime import datetime
 
 from crypto_bot.utils import timeframe_seconds, commit_lock
+from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telemetry import telemetry
@@ -217,14 +218,14 @@ def _symbol_has_onchain_quote(symbol: str, cfg: Mapping[str, Any] | RouterConfig
 def wrap_with_tf(fn: Callable[[pd.DataFrame], Tuple[float, str]], tf: str):
     """Return ``fn`` wrapped to extract ``tf`` from a dataframe map."""
 
-    def wrapped(df_or_map: Any, cfg=None):
+    def wrapped(df_or_map: Any, cfg=None, **kwargs):
         df = None
         if isinstance(df_or_map, Mapping):
             df = df_or_map.get(tf)
         if df is None:
             df = df_or_map if not isinstance(df_or_map, Mapping) else pd.DataFrame()
         try:
-            return fn(df, cfg)
+            return fn(df, cfg, **kwargs)
         except TypeError:
             return fn(df)
 
@@ -534,6 +535,9 @@ def route(
     config: RouterConfig | Mapping[str, Any] | None = None,
     notifier: TelegramNotifier | None = None,
     df_map: Mapping[str, pd.DataFrame] | pd.DataFrame | None = None,
+    *,
+    mempool_monitor: SolanaMempoolMonitor | None = None,
+    mempool_cfg: Mapping[str, Any] | None = None,
 ) -> Callable[[pd.DataFrame | Mapping[str, pd.DataFrame]], Tuple[float, str]]:
     """Select a strategy based on market regime and operating mode.
 
@@ -563,9 +567,17 @@ def route(
     def _wrap(fn: Callable[[pd.DataFrame], Tuple[float, str]]):
         async def inner(df: pd.DataFrame, cfg=None):
             try:
-                res = fn(df, cfg)
+                res = fn(
+                    df,
+                    cfg,
+                    mempool_monitor=mempool_monitor,
+                    mempool_cfg=mempool_cfg,
+                )
             except TypeError:
-                res = fn(df)
+                try:
+                    res = fn(df, cfg)
+                except TypeError:
+                    res = fn(df)
             if isinstance(res, tuple):
                 score, direction = res[0], res[1]
             else:

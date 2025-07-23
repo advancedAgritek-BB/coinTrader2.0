@@ -13,6 +13,7 @@ from solders.signature import Signature
 from solders.keypair import Keypair
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
 
 logger = setup_logger(__name__, LOG_DIR / "raydium_client.log")
@@ -121,6 +122,9 @@ async def sniper_trade(
     amount: int,
     notifier: Any | None = None,
     config: Mapping[str, Any] | None = None,
+    *,
+    mempool_monitor: SolanaMempoolMonitor | None = None,
+    mempool_cfg: dict | None = None,
 ) -> Mapping[str, Any]:
     """Execute a simple snipe trade and convert profits to BTC."""
     from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
@@ -145,6 +149,8 @@ async def sniper_trade(
         quote.get("data", quote),
         tx_version=cfg.get("tx_version", "V0"),
         risk_manager=rm,
+        mempool_monitor=mempool_monitor,
+        mempool_cfg=mempool_cfg,
     )
 
     await auto_convert_funds(
@@ -154,5 +160,7 @@ async def sniper_trade(
         size,
         dry_run=True,
         notifier=notifier,
+        mempool_monitor=mempool_monitor,
+        mempool_cfg=mempool_cfg,
     )
     return swap_res

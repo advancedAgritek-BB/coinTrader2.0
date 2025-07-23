@@ -86,6 +86,7 @@ from crypto_bot.regime.regime_classifier import (
 )
 from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.solana.exit import monitor_price
+from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
 # Backwards compatibility for tests
 _fix_symbol = fix_symbol
@@ -1095,7 +1096,17 @@ async def analyse_batch(ctx: BotContext) -> None:
         df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
         for tf, cache in ctx.regime_cache.items():
             df_map[tf] = cache.get(sym)
-        tasks.append(analyze_symbol(sym, df_map, mode, ctx.config, ctx.notifier))
+        tasks.append(
+            analyze_symbol(
+                sym,
+                df_map,
+                mode,
+                ctx.config,
+                ctx.notifier,
+                mempool_monitor=ctx.mempool_monitor,
+                mempool_cfg=ctx.mempool_cfg,
+            )
+        )
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -1715,6 +1726,11 @@ async def _main_impl() -> TelegramNotifier:
     if status_updates:
         notifier.notify("🤖 CoinTrader2.0 started")
 
+    mempool_cfg = config.get("mempool_monitor", {})
+    mempool_monitor = None
+    if mempool_cfg.get("enabled"):
+        mempool_monitor = SolanaMempoolMonitor()
+
     if notifier.token and notifier.chat_id:
         if not send_test_message(notifier.token, notifier.chat_id, "Bot started"):
             logger.warning("Telegram test message failed; check your token and chat ID")
@@ -1966,6 +1982,8 @@ async def _main_impl() -> TelegramNotifier:
         df_cache=session_state.df_cache,
         regime_cache=session_state.regime_cache,
         config=config,
+        mempool_monitor=mempool_monitor,
+        mempool_cfg=mempool_cfg,
     )
     ctx.exchange = exchange
     ctx.ws_client = ws_client
@@ -2056,6 +2074,8 @@ async def _main_impl() -> TelegramNotifier:
                     dry_run=config["execution_mode"] == "dry_run",
                     slippage_bps=config.get("solana_slippage_bps", 50),
                     notifier=notifier,
+                    mempool_monitor=ctx.mempool_monitor,
+                    mempool_cfg=ctx.mempool_cfg,
                 )
                 if asyncio.iscoroutinefunction(
                     getattr(exchange, "fetch_balance", None)

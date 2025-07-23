@@ -25,6 +25,8 @@ class BotContext:
     analysis_results: list | None = field(default_factory=list)
     timing: dict | None = field(default_factory=dict)
     volatility_factor: float = 1.0
+    mempool_monitor: object | None = None
+    mempool_cfg: dict | None = None
 
 
 class PhaseRunner:

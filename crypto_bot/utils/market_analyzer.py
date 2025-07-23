@@ -28,6 +28,7 @@ from crypto_bot import meta_selector
 from crypto_bot.signals.signal_scoring import evaluate_async, evaluate_strategies
 from crypto_bot.utils.rank_logger import log_second_place
 from crypto_bot.strategy import grid_bot
+from crypto_bot.strategy import micro_scalp_bot
 from crypto_bot.volatility_filter import calc_atr
 from ta.volatility import BollingerBands
 from crypto_bot.utils import zscore
@@ -116,6 +117,9 @@ async def analyze_symbol(
     mode: str,
     config: Dict,
     notifier: TelegramNotifier | None = None,
+    *,
+    mempool_monitor: object | None = None,
+    mempool_cfg: dict | None = None,
 ) -> Dict:
     """Classify the market regime and evaluate the trading signal for ``symbol``.
 
@@ -131,6 +135,10 @@ async def analyze_symbol(
         Bot configuration.
     notifier : TelegramNotifier | None
         Optional notifier used to send a message when the strategy is invoked.
+    mempool_monitor : object, optional
+        Monitor used to check Solana priority fees.
+    mempool_cfg : dict, optional
+        Configuration for the mempool monitor.
     """
     router_cfg = RouterConfig.from_dict(config)
     lookback = config.get("indicator_lookback", 14) * 2
@@ -310,7 +318,18 @@ async def analyze_symbol(
 
         def wrap(fn):
             if fn is grid_bot.generate_signal:
-                return functools.partial(fn, higher_df=higher_df_1h)
+                return functools.partial(
+                    fn,
+                    higher_df=higher_df_1h,
+                    mempool_monitor=mempool_monitor,
+                    mempool_cfg=mempool_cfg,
+                )
+            if fn is micro_scalp_bot.generate_signal:
+                return functools.partial(
+                    fn,
+                    mempool_monitor=mempool_monitor,
+                    mempool_cfg=mempool_cfg,
+                )
             return fn
 
         selected_fn = None
@@ -368,7 +387,17 @@ async def analyze_symbol(
                 score = 0.0
                 direction = "none"
         else:
-            strategy_fn = wrap(route(regime, env, router_cfg, notifier, df_map=df_map))
+            strategy_fn = wrap(
+                route(
+                    regime,
+                    env,
+                    router_cfg,
+                    notifier,
+                    df_map=df_map,
+                    mempool_monitor=mempool_monitor,
+                    mempool_cfg=mempool_cfg,
+                )
+            )
             selected_fn = strategy_fn
             name = strategy_name(regime, env)
             score, direction, atr = (
