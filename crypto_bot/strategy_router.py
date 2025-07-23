@@ -90,6 +90,8 @@ class RouterConfig:
     scalp_timeframe: str | None = None
     breakout_timeframe: str | None = None
     commit_lock_intervals: int = 0
+    onchain_default_quote: str = "USDC"
+    onchain_quotes: list[str] = field(default_factory=list)
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
     @classmethod
@@ -119,6 +121,8 @@ class RouterConfig:
             scalp_timeframe=str(router.get("scalp_timeframe", data.get("scalp_timeframe", tf))) or None,
             breakout_timeframe=str(router.get("breakout_timeframe", data.get("breakout_timeframe", tf))) or None,
             commit_lock_intervals=int(router.get("commit_lock_intervals", 0)),
+            onchain_default_quote=str(data.get("onchain_default_quote", "USDC")),
+            onchain_quotes=[str(q) for q in data.get("onchain_quotes", [])],
             raw=data,
         )
 
@@ -194,6 +198,20 @@ def cfg_get(cfg: Mapping[str, Any] | RouterConfig, key: str, default: Any | None
             return cfg.get(key, default)
         return cfg.get("strategy_router", {}).get(key, default)
     return default
+
+
+def _onchain_quotes(cfg: Mapping[str, Any] | RouterConfig) -> list[str]:
+    quotes = cfg_get(cfg, "onchain_quotes", None)
+    if quotes:
+        return [str(q).upper() for q in quotes]
+    return [str(cfg_get(cfg, "onchain_default_quote", "USDC")).upper()]
+
+
+def _symbol_has_onchain_quote(symbol: str, cfg: Mapping[str, Any] | RouterConfig) -> bool:
+    if "/" not in symbol:
+        return False
+    quote = symbol.split("/")[-1].upper()
+    return quote in _onchain_quotes(cfg)
 
 
 def wrap_with_tf(fn: Callable[[pd.DataFrame], Tuple[float, str]], tf: str):
@@ -725,7 +743,7 @@ def route(
         grid_cfg = cfg.get("grid_bot", {})
     else:
         grid_cfg = {}
-    if symbol.endswith("/USDC") and mode == "auto":
+    if symbol and _symbol_has_onchain_quote(symbol, cfg) and mode == "auto":
         base = symbol.split("/")[0]
         if base.upper() in TOKEN_MINTS:
             logger.info("Routing %s pair to Solana sniper bot (auto)", symbol)
@@ -734,7 +752,7 @@ def route(
         select_df = df if df is not None else pd.DataFrame()
         strategy_fn = Selector(cfg).select(select_df, regime, "cex", notifier)
         return _wrap(strategy_fn)
-    if symbol.endswith("/USDC") and regime == "breakout":
+    if symbol and _symbol_has_onchain_quote(symbol, cfg) and regime == "breakout":
         base = symbol.split("/")[0]
         if base.upper() in TOKEN_MINTS:
             logger.info("Routing USDC breakout to Solana sniper bot")
