@@ -14,11 +14,11 @@ def test_compute_strategy_weights_normalizes(tmp_path):
         {"strategy": "grid", "pnl": 2},
     ]
     pd.DataFrame(data).to_csv(file, index=False)
-    weights = compute_strategy_weights(file)
+    weights = compute_strategy_weights(file, scoring_method="sharpe")
     assert set(weights.keys()) == {"trend", "grid"}
     total = sum(weights.values())
     assert abs(total - 1.0) < 1e-6
-    assert weights["grid"] > weights["trend"]
+    assert weights["trend"] > weights["grid"]
 
 
 def test_risk_manager_updates_tracker():
