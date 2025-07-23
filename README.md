@@ -52,9 +52,8 @@ machine learning model whenever the indicator rules return `"unknown"`.
 The EMA windows have been shortened to **8** and **21** and the ADX threshold
 lowered to switch regimes more quickly. The fallback model is bundled in
 `crypto_bot.regime.model_data` as a base64 string and loaded automatically.
-By default the ML model only runs when at least **200** candles are available
-(tunable via `ml_min_bars`). You can replace that module with your own encoded
-model if desired.
+By default the ML model runs once at least **10** candles are available (`ml_min_bars` in `crypto_bot/regime/regime_config.yaml`).
+You can replace that module with your own encoded model if desired.
 When enough history is present the ML probabilities are blended with the
 rule-based result using `ml_blend_weight` from `regime_config.yaml`.
 
