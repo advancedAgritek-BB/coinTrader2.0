@@ -1566,9 +1566,9 @@ async def force_exit_all(ctx: BotContext) -> None:
                 )
             except Exception:
                 pass
+            logger.info("Liquidated %s %.4f @ %.2f", sym, size, exit_price)
 
         ctx.paper_wallet.positions.clear()
-        logger.info("Liquidated %s %.4f @ %.2f", sym, pos["size"], exit_price)
 
 
 async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
