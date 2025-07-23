@@ -18,7 +18,7 @@ def generate_signal(
     df: pd.DataFrame,
     config: Optional[Dict[str, float | int | str]] = None,
     *,
-    breakout_pct: float = 0.05,
+    breakout_pct: float = 0.02,
     volume_multiple: float = 1.5,
     max_history: int = 30,
     initial_window: int = 3,
