@@ -116,7 +116,7 @@ indicator_lookback: 14
 liquidity_check: true
 liquidity_depth: 5
 log_to_google: true
-loop_interval_minutes: 0.5
+loop_interval_minutes: 0.1
 max_age_days: 90
 max_change_pct: 20
 max_concurrent_ohlcv: 2
@@ -318,7 +318,7 @@ solana_scanner:
     moralis: YOUR_KEY
   enabled: true
   gecko_search: true
-  interval_minutes: 0.5
+  interval_minutes: 0.1
   max_tokens_per_scan: 200
   min_volume_usd: 500
 solana_slippage_bps: 10
