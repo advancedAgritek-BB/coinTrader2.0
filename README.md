@@ -258,10 +258,12 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **excluded_symbols** – markets to skip during scanning.
 * **onchain_symbols** – base tokens traded on-chain. Tickers are automatically
   resolved to mint addresses using a hybrid Jupiter/Helius registry cached at
-  `cache/token_mints.json`. Each entry is appended with `/USDC`. If a ticker
-  isn't found in the registry, the base value must be a valid mint address. If
-  your configuration still contains
-  `solana_symbols`, rename that section to `onchain_symbols`.
+  `cache/token_mints.json`. Each entry is appended with the quote defined by
+  `onchain_default_quote` (defaults to `USDC`). If a ticker isn't found in the
+  registry, the base value must be a valid mint address. If your configuration
+  still contains `solana_symbols`, rename that section to `onchain_symbols`.
+* **onchain_default_quote** – quote currency used when appending to entries in
+  `onchain_symbols`. Defaults to `USDC`.
 * **allow_short** – enable short selling. Set to `true` only when your exchange account supports short selling.
 
 ### Market Scanning
@@ -810,7 +812,8 @@ wait for scanning to complete before trading begins.
 scan_markets: true    # default
 scan_in_background: true
 symbols: []            # automatically populated
-onchain_symbols: ["SOL/USDC", "BONK/USDC", "AI16Z/USDC"]    # tickers auto-resolve
+onchain_default_quote: USDT
+onchain_symbols: ["SOL", "BONK", "AI16Z"]             # quote appended automatically
                                                 # to mints via Jupiter/Helius
                                                 # base must be mint if unknown
 excluded_symbols: [ETH/USD]
