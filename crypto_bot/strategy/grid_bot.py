@@ -14,11 +14,14 @@ import ta
 from crypto_bot import grid_state
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility, atr_percent
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.volatility_filter import calc_atr
 
 DYNAMIC_THRESHOLD = 1.5
 from . import breakout_bot, micro_scalp_bot
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
+
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 
 @dataclass
@@ -173,8 +176,10 @@ def generate_signal(
         win_rate = get_recent_win_rate(4, strategy="grid_bot")
         skip_cd = win_rate > 0.7
         if not skip_cd and grid_state.in_cooldown(symbol, cfg.cooldown_bars):
+            logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
             return 0.0, "none"
         if grid_state.active_leg_count(symbol) >= cfg.max_active_legs:
+            logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
             return 0.0, "none"
 
     min_len = max(20, cfg.volume_ma_window)
@@ -310,6 +315,7 @@ def generate_signal(
         score = min(distance / half_range, 1.0)
         if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
+        logger.info("Signal for %s: %s, %s", symbol, score, "long")
         return score, "long"
 
     if price >= upper_bound:
@@ -319,8 +325,10 @@ def generate_signal(
         score = min(distance / half_range, 1.0)
         if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
+        logger.info("Signal for %s: %s, %s", symbol, score, "short")
         return score, "short"
 
+    logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
     return 0.0, "none"
 
 

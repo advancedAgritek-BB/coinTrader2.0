@@ -526,7 +526,7 @@ ma_window: 20
 higher_timeframe: '4h'
 confirm_trend_with_higher_tf: false
 use_ml_regime_classifier: true
-ml_min_bars: 20
+ml_min_bars: 10
 """
     )
 
@@ -570,7 +570,7 @@ ma_window: 20
 higher_timeframe: '4h'
 confirm_trend_with_higher_tf: false
 use_ml_regime_classifier: true
-ml_min_bars: 20
+ml_min_bars: 10
 """
     )
 
@@ -664,7 +664,7 @@ ma_window: 20
 higher_timeframe: '4h'
 confirm_trend_with_higher_tf: false
 use_ml_regime_classifier: true
-ml_min_bars: 20
+ml_min_bars: 10
 """
     )
 
@@ -729,7 +729,7 @@ def test_ml_blending(monkeypatch, tmp_path):
         lambda _df: ("trending", 0.7),
     )
     cfg = tmp_path / "regime.yaml"
-    cfg.write_text("use_ml_regime_classifier: true\nml_min_bars: 20\n")
+    cfg.write_text("use_ml_regime_classifier: true\nml_min_bars: 10\n")
     regime, probs = classify_regime(df, config_path=str(cfg))
     assert regime == "trending"
     assert probs["trending"] == pytest.approx(0.7)

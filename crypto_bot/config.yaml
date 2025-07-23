@@ -10,7 +10,7 @@ balance_poll_mod: 1
 bandit:
   alpha0: 1
   beta0: 1
-  enabled: false
+  enabled: true
   explore_pct: 0.1
 bb_squeeze_pct: 15
 bounce_scalper:
@@ -298,7 +298,7 @@ sl_mult: 1.0
 sl_pct: 0.03
 sniper_bot:
   atr_window: 10
-  breakout_pct: 0.03
+  breakout_pct: 0.02
   fallback_atr_mult: 1.2
   fallback_volume_mult: 1.0
   max_history: 20
@@ -328,7 +328,7 @@ strategy_allocation:
   trend_bot: 0.3
 strategy_evaluation_mode: ensemble
 strategy_router:
-  bandit_enabled: false
+  bandit_enabled: true
   bounce_timeframe: 5m
   breakout_timeframe: 15m
   fast_path:

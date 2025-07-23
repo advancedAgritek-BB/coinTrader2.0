@@ -23,12 +23,17 @@ from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
+
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 
 def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
     """Score mean reversion opportunities using multiple indicators."""
 
+    symbol = config.get("symbol") if config else ""
     if len(df) < 50:
+        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none"
 
     params = config or {}
@@ -180,7 +185,9 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     if config is None or config.get("atr_normalization", True):
         score = normalize_score_by_volatility(df, score)
 
-    return float(max(0.0, min(score, 1.0))), direction
+    score = float(max(0.0, min(score, 1.0)))
+    logger.info("Signal for %s: %s, %s", symbol, score, direction)
+    return score, direction
 
 
 class regime_filter:
