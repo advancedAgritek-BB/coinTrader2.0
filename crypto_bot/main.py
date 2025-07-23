@@ -1926,7 +1926,6 @@ async def _main_impl() -> TelegramNotifier:
         console_monitor.monitor_loop(exchange, paper_wallet, LOG_DIR / "bot.log")
     )
 
-    position_tasks: dict[str, asyncio.Task] = {}
     max_open_trades = config.get("max_open_trades", 1)
     position_guard = OpenPositionGuard(max_open_trades)
     rotator = PortfolioRotator()
@@ -2229,14 +2228,6 @@ async def _main_impl() -> TelegramNotifier:
         rotation_task.cancel()
         if sniper_task:
             sniper_task.cancel()
-        for task in list(position_tasks.values()):
-            task.cancel()
-        for task in list(position_tasks.values()):
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-        position_tasks.clear()
         if meme_wave_task:
             meme_wave_task.cancel()
             try:
