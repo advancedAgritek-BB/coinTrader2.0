@@ -14,6 +14,7 @@ ml_mod.fetch_ohlcv_async = lambda *_a, **_k: None
 ml_mod.fetch_order_book_async = lambda *_a, **_k: None
 ml_mod.load_ohlcv_parallel = lambda *_a, **_k: None
 ml_mod.update_ohlcv_cache = lambda *_a, **_k: None
+ml_mod.update_multi_tf_ohlcv_cache = lambda *_a, **_k: None
 ml_mod.fetch_geckoterminal_ohlcv = lambda *_a, **_k: None
 sys.modules.setdefault("crypto_bot.utils.market_loader", ml_mod)
 import tasks.refresh_pairs as rp
@@ -79,7 +80,7 @@ def test_refresh_pairs_force_refresh(monkeypatch, tmp_path):
             return {"NEW/USD": {"quoteVolume": 2_000_000}}
 
     monkeypatch.setattr(rp, "get_exchange", lambda cfg: DummyExchange())
-    async def no_sol(_):
+    async def no_sol(*_a):
         return []
     monkeypatch.setattr(rp, "get_solana_liquid_pairs", no_sol)
 

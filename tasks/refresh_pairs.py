@@ -102,8 +102,8 @@ async def _close_exchange(exchange: ccxt.Exchange) -> None:
             pass
 
 
-async def get_solana_liquid_pairs(min_volume: float) -> list[str]:
-    """Return Raydium symbols with liquidity above ``min_volume``."""
+async def get_solana_liquid_pairs(min_volume: float, quote: str = "USDC") -> list[str]:
+    """Return Raydium symbols with liquidity above ``min_volume`` using ``quote`` as quote currency."""
     url = "https://api.raydium.io/v2/main/pairs"
     try:
         async with aiohttp.ClientSession() as session:
@@ -120,6 +120,7 @@ async def get_solana_liquid_pairs(min_volume: float) -> list[str]:
     if not isinstance(items, list):
         return []
 
+    quote = quote.upper()
     results: list[str] = []
     for item in items:
         if not isinstance(item, dict):
@@ -127,8 +128,8 @@ async def get_solana_liquid_pairs(min_volume: float) -> list[str]:
         name = item.get("name")
         if not isinstance(name, str):
             continue
-        base, _, quote = name.partition("/")
-        if quote.upper() != "USDC" or not base:
+        base, _, q = name.partition("/")
+        if q.upper() != quote or not base:
             continue
         vol = (
             item.get("liquidity")
@@ -145,7 +146,7 @@ async def get_solana_liquid_pairs(min_volume: float) -> list[str]:
         except Exception:
             amount = 0.0
         if amount >= min_volume:
-            results.append(f"{base.upper()}/USDC")
+            results.append(f"{base.upper()}/{quote}")
 
     return results
 
@@ -185,6 +186,7 @@ async def refresh_pairs_async(
     refresh_interval = _parse_interval(
         rp_cfg.get("refresh_interval", DEFAULT_REFRESH_INTERVAL)
     )
+    onchain_quote = str(config.get("onchain_default_quote", "USDC")).upper()
     allowed_quotes = {
         q.upper() for q in rp_cfg.get("allowed_quote_currencies", []) if isinstance(q, str)
     }
@@ -192,7 +194,7 @@ async def refresh_pairs_async(
         a.upper() for a in rp_cfg.get("blacklist_assets", []) if isinstance(a, str)
     }
 
-    if old_pairs and mtime and time.time() - mtime < refresh_interval:
+    if old_pairs and mtime and time.time() - mtime < refresh_interval and not force_refresh:
         return old_pairs
 
     exchange = get_exchange(config)
@@ -220,7 +222,7 @@ async def refresh_pairs_async(
                             tickers[sym] = data
                     else:
                         tickers[sym] = data
-        sol_pairs = await get_solana_liquid_pairs(min_volume_usd)
+        sol_pairs = await get_solana_liquid_pairs(min_volume_usd, onchain_quote)
         for sym in sol_pairs:
             tickers.setdefault(sym, {"quoteVolume": min_volume_usd})
     except Exception as exc:  # pragma: no cover - network failures
