@@ -2072,13 +2072,14 @@ async def _main_impl() -> TelegramNotifier:
             balances = await asyncio.to_thread(
                 check_wallet_balances, user.get("wallet_address", "")
             )
+            quote_token = config.get("auto_convert_quote", "USDC")
             for token in detect_non_trade_tokens(balances):
                 amount = balances[token]
-                logger.info("Converting %s %s to USDC", amount, token)
+                logger.info("Converting %s %s to %s", amount, token, quote_token)
                 await auto_convert_funds(
                     user.get("wallet_address", ""),
                     token,
-                    "USDC",
+                    quote_token,
                     amount,
                     dry_run=config["execution_mode"] == "dry_run",
                     slippage_bps=config.get("solana_slippage_bps", 50),

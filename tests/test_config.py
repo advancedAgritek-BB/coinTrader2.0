@@ -96,6 +96,8 @@ def test_load_config_returns_dict():
     ]:
         assert key in pyth_cfg
 
+    assert "auto_convert_quote" in config
+
 
 def test_load_config_normalizes_symbol(tmp_path, monkeypatch):
     path = tmp_path / "config.yaml"
