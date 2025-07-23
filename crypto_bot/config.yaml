@@ -6,6 +6,7 @@ adx_threshold: 15
 allow_short: false
 arbitrage_enabled: true
 atr_normalization: true
+auto_convert_quote: USDC
 balance_poll_mod: 1
 bandit:
   alpha0: 1
@@ -324,8 +325,8 @@ solana_scanner:
 solana_slippage_bps: 10
 strategy_allocation:
   grid_bot: 0.1
-  sniper_bot: 0.6
-  trend_bot: 0.3
+  sniper_bot: 0.4
+  trend_bot: 0.5
 strategy_evaluation_mode: ensemble
 strategy_router:
   bandit_enabled: false
@@ -433,6 +434,5 @@ voting_strategies:
 - mean_reversion
 - sniper_bot
 wallet_address: your_wallet
-auto_convert_quote: USDC
 ws_failures_before_disable: 1
 ws_ping_interval: 10

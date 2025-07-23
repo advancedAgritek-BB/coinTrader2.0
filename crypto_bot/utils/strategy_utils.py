@@ -6,12 +6,23 @@ from .logger import LOG_DIR
 
 
 
-def compute_strategy_weights(path: str = str(LOG_DIR / "strategy_pnl.csv")) -> Dict[str, float]:
+def compute_strategy_weights(
+    path: str = str(LOG_DIR / "strategy_pnl.csv"),
+    scoring_method: str = "sharpe",
+) -> Dict[str, float]:
     """Return normalized allocation weights per strategy.
 
-    We compute either win rate or Sharpe ratio from the PnL data stored at
-    ``path``. The file must contain ``strategy`` and ``pnl`` columns. If the
+    We compute a score such as win rate or Sharpe ratio from the PnL data stored
+    at ``path``. The file must contain ``strategy`` and ``pnl`` columns. If the
     file is missing or empty an empty dict is returned.
+
+    Parameters
+    ----------
+    path : str
+        CSV log file with ``strategy`` and ``pnl`` columns.
+    scoring_method : str, optional
+        ``"sharpe"`` to rank by Sharpe ratio, ``"win_rate"`` for win rate or any
+        other value to pick the larger of the two (default ``"sharpe"``).
     """
     file = Path(path)
     if not file.exists():
@@ -28,7 +39,13 @@ def compute_strategy_weights(path: str = str(LOG_DIR / "strategy_pnl.csv")) -> D
         win_rate = wins / total if total else 0.0
         std = group["pnl"].std()
         sharpe = group["pnl"].mean() / std * (total ** 0.5) if std else 0.0
-        scores[strat] = max(win_rate, sharpe)
+        if scoring_method == "sharpe":
+            score = sharpe
+        elif scoring_method == "win_rate":
+            score = win_rate
+        else:
+            score = max(win_rate, sharpe)
+        scores[strat] = score
 
     total_score = sum(scores.values())
     if not total_score:
