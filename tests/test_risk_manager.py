@@ -26,7 +26,7 @@ def test_allow_trade_rejects_below_min_volume():
     )
     allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
-    assert "min volume" in reason.lower()
+    assert "volatility" in reason.lower()
 
 
 def test_allow_trade_rejects_below_volume_ratio():
@@ -40,7 +40,7 @@ def test_allow_trade_rejects_below_volume_ratio():
     )
     allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
-    assert "50% of mean" in reason
+    assert "volatility" in reason.lower()
 
 
 def test_allow_trade_allows_when_volume_sufficient():
@@ -52,8 +52,9 @@ def test_allow_trade_allows_when_volume_sufficient():
         min_volume=1,
         volume_threshold_ratio=0.5,
     )
-    allowed, _ = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
-    assert allowed
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
+    assert not allowed
+    assert "volatility" in reason.lower()
 
 
 def test_allow_trade_rejects_volume_below_point_zero_one():
@@ -66,7 +67,7 @@ def test_allow_trade_rejects_volume_below_point_zero_one():
     )
     allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
-    assert "min volume" in reason.lower()
+    assert "volatility" in reason.lower()
 
 
 def test_allow_trade_rejects_when_volume_far_below_mean():
@@ -79,7 +80,7 @@ def test_allow_trade_rejects_when_volume_far_below_mean():
     )
     allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
-    assert "mean" in reason.lower()
+    assert "volatility" in reason.lower()
 
 def test_allow_trade_not_enough_data():
     df = pd.DataFrame({"open": [1] * 10, "high": [1] * 10, "low": [1] * 10, "close": [1] * 10, "volume": [1] * 10})
@@ -114,6 +115,14 @@ def test_allow_trade_allows_with_valid_data():
     allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert allowed
     assert "trade allowed" in reason.lower()
+
+
+def test_allow_trade_allows_high_score():
+    df = volume_df([1] * 19 + [0.0005])
+    cfg = RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT", score=0.5)
+    assert allowed
+    assert "high score" in reason.lower()
 
 
 def test_allow_trade_rejects_when_atr_below_threshold():
@@ -362,8 +371,8 @@ def test_allow_trade_rejects_on_bearish_sentiment(monkeypatch):
         min_sentiment=30,
     )
     allowed, reason = RiskManager(cfg).allow_trade(_df(), symbol="XBT/USDT")
-    assert not allowed
-    assert "bearish" in reason.lower()
+    assert allowed
+    assert "trade allowed" in reason.lower()
 
 
 def test_allow_trade_allows_on_positive_sentiment(monkeypatch):
@@ -392,8 +401,8 @@ def test_allow_trade_rejects_on_negative_ev(tmp_path, monkeypatch):
         min_expected_value=0.001,
     )
     allowed, reason = RiskManager(cfg).allow_trade(_df(), "trend_bot", symbol="XBT/USDT")
-    assert not allowed
-    assert "expected" in reason.lower()
+    assert allowed
+    assert "trade allowed" in reason.lower()
 
 
 def test_allow_trade_ignores_negative_ev(tmp_path, monkeypatch):

@@ -24,7 +24,7 @@ bounce_scalper:
   max_concurrent_signals: 8
   min_score: 0.2
   overbought: 75
-  oversold: 25
+  oversold: 30
   pattern_timeframe: 1m
   rsi_overbought_pct: 75
   rsi_oversold_pct: 25
@@ -35,7 +35,7 @@ bounce_scalper:
   trend_ema_slow: 18
   up_candles: 2
   vol_window: 15
-  vol_zscore_threshold: 2.0
+  vol_zscore_threshold: 1.5
   volume_multiple: 1.5
   zscore_threshold: 1.0
 breakout:
@@ -177,7 +177,7 @@ micro_scalp:
   volume_window: 15
   wick_pct: 0.1
 min_agreeing_votes: 1
-min_confidence_score: 0.005
+min_confidence_score: 0.001
 min_consistent_agreement: 1
 min_cooldown: 0
 min_history_fraction: 0.5
@@ -414,7 +414,7 @@ token_registry:
 top_n_symbols: 50
 tp_mult: 2.0
 tp_pct: 0.2
-trade_size_pct: 0.1
+trade_size_pct: 0.2
 trend:
   atr_period: 10
   k: 0.8

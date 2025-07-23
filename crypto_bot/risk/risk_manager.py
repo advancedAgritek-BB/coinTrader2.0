@@ -186,8 +186,12 @@ class RiskManager:
         return size
 
     def allow_trade(
-        self, df: Any, strategy: str | None = None, symbol: str | None = None
-        ) -> tuple[bool, str]:
+        self,
+        df: Any,
+        strategy: str | None = None,
+        symbol: str | None = None,
+        score: float | None = None,
+    ) -> tuple[bool, str]:
         """Assess whether market conditions merit taking a trade.
 
         Parameters
@@ -212,7 +216,12 @@ class RiskManager:
 
         current_volume = df["volume"].iloc[-1]
 
-        if current_volume < 0.01:
+        if score is not None and score > 0.4:
+            reason = "High score boost"
+            logger.info("[EVAL] %s", reason)
+            return True, reason
+
+        if current_volume < 0.001:
             reason = "Volume too low"
             logger.info("[EVAL] %s", reason)
             return False, reason
