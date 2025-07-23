@@ -553,9 +553,8 @@ async def initial_scan(
     processed = 0
 
     sf = config.get("symbol_filter", {})
-    scan_limit = min(
-        int(sf.get("initial_history_candles", config.get("scan_lookback_limit", 50))),
-        700,
+    scan_limit = int(
+        sf.get("initial_history_candles", config.get("scan_lookback_limit", 50))
     )
 
     tfs = sf.get("initial_timeframes", config.get("timeframes", ["1h"]))

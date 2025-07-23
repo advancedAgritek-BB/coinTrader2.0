@@ -762,7 +762,7 @@ async def filter_symbols(
             {"1h": df_cache} if isinstance(df_cache, dict) and "1h" not in df_cache else df_cache,
             candidates,
             {"timeframes": ["1h", "4h", "1d"]},
-            limit=300,
+            limit=int(sf.get("initial_history_candles", 300)),
             max_concurrent=min(10, len(candidates)),
         )
         if "1h" in df_cache:
