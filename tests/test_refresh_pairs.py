@@ -18,6 +18,7 @@ ml_mod.fetch_ohlcv_async = lambda *_a, **_k: None
 ml_mod.fetch_order_book_async = lambda *_a, **_k: None
 ml_mod.load_ohlcv_parallel = lambda *_a, **_k: None
 ml_mod.update_ohlcv_cache = lambda *_a, **_k: None
+ml_mod.update_multi_tf_ohlcv_cache = lambda *_a, **_k: None
 ml_mod.fetch_geckoterminal_ohlcv = lambda *_a, **_k: None
 sys.modules.setdefault("crypto_bot.utils.market_loader", ml_mod)
 
@@ -50,7 +51,7 @@ def test_refresh_pairs_creates_file(monkeypatch, tmp_path):
         "XRP/USD": {"quoteVolume": 100_000},
     }
     monkeypatch.setattr(rp, "get_exchange", lambda _cfg: DummyExchange(tickers))
-    async def no_sol(_v):
+    async def no_sol(*_a):
         return []
     monkeypatch.setattr(rp, "get_solana_liquid_pairs", no_sol)
     pairs = rp.refresh_pairs(1_000_000, 2, {})
@@ -68,7 +69,7 @@ def test_refresh_pairs_fallback(monkeypatch, tmp_path):
     monkeypatch.setattr(rp, "CACHE_DIR", cache_dir)
     monkeypatch.setattr(rp, "PAIR_FILE", pair_file)
     monkeypatch.setattr(rp, "get_exchange", lambda _cfg: FailingExchange())
-    async def no_sol(_v):
+    async def no_sol(*_a):
         return []
     monkeypatch.setattr(rp, "get_solana_liquid_pairs", no_sol)
     pairs = rp.refresh_pairs(1_000_000, 2, {})
@@ -86,7 +87,7 @@ def test_refresh_pairs_filters_quote(monkeypatch, tmp_path):
         "ETH/USD": {"quoteVolume": 2_000_000},
     }
     monkeypatch.setattr(rp, "get_exchange", lambda _cfg: DummyExchange(tickers))
-    async def no_sol(_v):
+    async def no_sol(*_a):
         return []
     monkeypatch.setattr(rp, "get_solana_liquid_pairs", no_sol)
     cfg = {"refresh_pairs": {"allowed_quote_currencies": ["USD"]}}
@@ -105,7 +106,7 @@ def test_refresh_pairs_blacklist(monkeypatch, tmp_path):
         "BTC/USD": {"quoteVolume": 3_000_000},
     }
     monkeypatch.setattr(rp, "get_exchange", lambda _cfg: DummyExchange(tickers))
-    async def no_sol(_v):
+    async def no_sol(*_a):
         return []
     monkeypatch.setattr(rp, "get_solana_liquid_pairs", no_sol)
     cfg = {"refresh_pairs": {"blacklist_assets": ["SCAM"]}}
@@ -169,8 +170,8 @@ def test_refresh_pairs_includes_solana(monkeypatch, tmp_path):
     tickers = {"BTC/USD": {"quoteVolume": 2_000_000}}
     monkeypatch.setattr(rp, "get_exchange", lambda _cfg: DummyExchange(tickers))
 
-    async def fake_sol(min_vol):
-        return ["SOL/USDC"]
+    async def fake_sol(min_vol, quote):
+        return [f"SOL/{quote}"]
 
     monkeypatch.setattr(rp, "get_solana_liquid_pairs", fake_sol)
     pairs = rp.refresh_pairs(1_000_000, 5, {})
@@ -196,8 +197,29 @@ def test_refresh_pairs_uses_fresh_cache(monkeypatch, tmp_path):
 
     ex = DummyExchange()
     monkeypatch.setattr(rp, "get_exchange", lambda _cfg: ex)
-    monkeypatch.setattr(rp, "get_solana_liquid_pairs", lambda _v: [])
+    monkeypatch.setattr(rp, "get_solana_liquid_pairs", lambda *_a: [])
 
     pairs = rp.refresh_pairs(1_000_000, 40, {})
     assert pairs == ["BTC/USD", "ETH/USD"]
     assert not ex.called
+
+
+def test_refresh_pairs_respects_onchain_default_quote(monkeypatch, tmp_path):
+    cache_dir = tmp_path / "cache"
+    pair_file = cache_dir / "liquid_pairs.json"
+    monkeypatch.setattr(rp, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(rp, "PAIR_FILE", pair_file)
+    tickers = {"BTC/USD": {"quoteVolume": 2_000_000}}
+    monkeypatch.setattr(rp, "get_exchange", lambda _cfg: DummyExchange(tickers))
+
+    called: dict[str, str] = {}
+
+    async def fake_sol(min_vol, quote):
+        called["quote"] = quote
+        return [f"SOL/{quote}"]
+
+    monkeypatch.setattr(rp, "get_solana_liquid_pairs", fake_sol)
+    cfg = {"onchain_default_quote": "USDT"}
+    pairs = rp.refresh_pairs(1_000_000, 5, cfg)
+    assert called["quote"] == "USDT"
+    assert "SOL/USDT" in pairs
