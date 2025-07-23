@@ -29,6 +29,12 @@ from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.cooldown_manager import in_cooldown, mark_cooldown
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 
+try:  # pragma: no cover - optional dependency
+    from coinTrader_Trainer.ml_trainer import load_model
+    MODEL = load_model("bounce_scalper")
+except Exception:  # pragma: no cover - fallback
+    MODEL = None
+
 # Flag to bypass cooldown and win-rate filtering once
 FORCE_SIGNAL = False
 
@@ -357,6 +363,12 @@ def generate_signal(
         direction = "short"
 
     if score > 0:
+        if MODEL is not None:
+            try:  # pragma: no cover - best effort
+                ml_score = MODEL.predict(df)
+                score = (score + ml_score) / 2
+            except Exception:
+                pass
         if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
         if symbol:

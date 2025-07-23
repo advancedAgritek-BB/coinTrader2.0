@@ -13,6 +13,12 @@ ALLOWED_PAIRS = load_liquid_pairs() or DEFAULT_PAIRS
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
+try:  # pragma: no cover - optional dependency
+    from coinTrader_Trainer.ml_trainer import load_model
+    MODEL = load_model("sniper_bot")
+except Exception:  # pragma: no cover - fallback
+    MODEL = None
+
 
 def generate_signal(
     df: pd.DataFrame,
@@ -105,6 +111,12 @@ def generate_signal(
     if direction == "auto" and price_change < 0:
         atr = calc_atr(df)
         score = 1.0
+        if MODEL is not None:
+            try:  # pragma: no cover - best effort
+                ml_score = MODEL.predict(df)
+                score = (score + ml_score) / 2
+            except Exception:
+                pass
         if config is None or config.get("atr_normalization", True):
             score = normalize_score_by_volatility(df, score)
         logger.info("Signal for %s: %s, %s", symbol, score, "short")
@@ -142,6 +154,12 @@ def generate_signal(
         price_score = min(abs(price_change) / breakout_pct, 1.0)
         vol_score = min(vol_ratio / volume_multiple, 1.0)
         score = (price_score + vol_score) / 2
+        if MODEL is not None:
+            try:  # pragma: no cover - best effort
+                ml_score = MODEL.predict(df)
+                score = (score + ml_score) / 2
+            except Exception:
+                pass
         if config is None or config.get("atr_normalization", True):
             score = normalize_score_by_volatility(df, score)
         if direction not in {"auto", "long", "short"}:
@@ -166,6 +184,12 @@ def generate_signal(
             and df["volume"].iloc[-1] > avg_vol * fallback_volume_mult
         ):
             score = 1.0
+            if MODEL is not None:
+                try:  # pragma: no cover - best effort
+                    ml_score = MODEL.predict(df)
+                    score = (score + ml_score) / 2
+                except Exception:
+                    pass
             if config is None or config.get("atr_normalization", True):
                 score = normalize_score_by_volatility(df, score)
             if direction not in {"auto", "long", "short"}:

@@ -8,6 +8,12 @@ from crypto_bot.utils.indicator_cache import cache_series
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
+try:  # pragma: no cover - optional dependency
+    from coinTrader_Trainer.ml_trainer import load_model
+    MODEL = load_model("micro_scalp_bot")
+except Exception:  # pragma: no cover - fallback
+    MODEL = None
+
 
 def _wick_ratios(row: pd.Series) -> Tuple[float, float]:
     """Return lower and upper wick ratios for a candle.
@@ -204,6 +210,12 @@ def generate_signal(
             return 0.0, "none"
 
     score = min(abs(momentum) / latest["close"], 1.0)
+    if score > 0 and MODEL is not None:
+        try:  # pragma: no cover - best effort
+            ml_score = MODEL.predict(df)
+            score = (score + ml_score) / 2
+        except Exception:
+            pass
     if config is None or config.get("atr_normalization", True):
         score = normalize_score_by_volatility(df, score)
 

@@ -25,6 +25,12 @@ from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
 
+try:  # pragma: no cover - optional dependency
+    from coinTrader_Trainer.ml_trainer import load_model
+    MODEL = load_model("breakout_bot")
+except Exception:  # pragma: no cover - fallback
+    MODEL = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -187,8 +193,15 @@ def generate_signal(
         direction = "short"
         score = 1.0
 
-    if score > 0 and (config is None or config.get("atr_normalization", True)):
-        score = normalize_score_by_volatility(recent, score)
+    if score > 0:
+        if MODEL is not None:
+            try:  # pragma: no cover - best effort
+                ml_score = MODEL.predict(df)
+                score = (score + ml_score) / 2
+            except Exception:
+                pass
+        if config is None or config.get("atr_normalization", True):
+            score = normalize_score_by_volatility(recent, score)
 
     if higher_df is not None:
         return score, direction
