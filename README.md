@@ -217,6 +217,7 @@ Edit `crypto_bot/config.yaml` to adjust trading behaviour. Key settings include:
 ```yaml
 exchange: coinbase       # coinbase or kraken
 execution_mode: dry_run  # or live
+mode: auto               # router chooses CEX or on-chain based on token mints
 use_websocket: true
 telegram:
   token: your_telegram_token
@@ -409,7 +410,9 @@ regime_overrides:
   resulting LightGBM model to `crypto_bot/models/meta_selector_lgbm.pkl`.
 * **bandit_router** – Thompson sampling router that favors historically profitable strategies.
 * **bandit** – Thompson sampling selector; tune `explore_pct` for exploration.
-* **mode** – `auto` or `manual` evaluation of strategies.
+* **mode** – set to `auto` so the router switches between CEX and on-chain
+  strategies whenever a token's mint is known, or `manual` to lock in the
+  configured exchange.
 * **parallel_strategy_workers** – strategies evaluated concurrently when
   ranking candidates.
 * **second_place_csv** – file that records the runner‑up from each
