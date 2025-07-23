@@ -245,3 +245,28 @@ def test_strategy_timeframe_routing(monkeypatch):
     asyncio.run(fn(df_map))
     assert captured.get('df') is df_map["5m"]
 
+
+def test_route_mempool_blocks_signal(monkeypatch):
+    prices = list(range(1, 11))
+    volumes = [100] * 10
+    df = pd.DataFrame({"open": prices, "high": prices, "low": prices, "close": prices, "volume": volumes})
+
+    class DummyMonitor:
+        def is_suspicious(self, threshold):
+            return True
+
+    cfg = {
+        "strategy_router": {"regimes": {"scalp": ["micro_scalp"]}},
+        "micro_scalp": {"fresh_cross_only": False, "min_vol_z": 0},
+        "mempool_monitor": {"enabled": True, "suspicious_fee_threshold": 1},
+    }
+    fn = route(
+        "scalp",
+        "cex",
+        cfg,
+        mempool_monitor=DummyMonitor(),
+        mempool_cfg=cfg["mempool_monitor"],
+    )
+    score, direction = fn(df, cfg)
+    assert (score, direction) == (0.0, "none")
+

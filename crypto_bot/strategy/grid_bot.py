@@ -19,6 +19,7 @@ from crypto_bot.volatility_filter import calc_atr
 
 DYNAMIC_THRESHOLD = 1.5
 from . import breakout_bot, micro_scalp_bot
+from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
@@ -163,6 +164,9 @@ def generate_signal(
     num_levels: int | None = None,
     config: ConfigType = None,
     higher_df: pd.DataFrame | None = None,
+    *,
+    mempool_monitor: micro_scalp_bot.SolanaMempoolMonitor | None = None,
+    mempool_cfg: dict | None = None,
 ) -> Tuple[float, str]:
     """Generate a grid based trading signal."""
     cfg = GridConfig.from_dict(_as_dict(config))
@@ -304,6 +308,8 @@ def generate_signal(
                 df,
                 _as_dict(config),
                 higher_df=higher_df,
+                mempool_monitor=mempool_monitor,
+                mempool_cfg=mempool_cfg,
             )
             if scalp_dir != "none":
                 return scalp_score, scalp_dir

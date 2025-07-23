@@ -8,6 +8,7 @@ import pandas as pd
 import ta
 
 from crypto_bot.utils.pyth_utils import get_pyth_price
+from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
 from crypto_bot.fund_manager import auto_convert_funds
 
@@ -28,6 +29,8 @@ async def on_trade_filled(
     *,
     dry_run: bool = True,
     slippage_bps: int = 50,
+    mempool_monitor: SolanaMempoolMonitor | None = None,
+    mempool_cfg: dict | None = None,
 ) -> dict:
     """Convert trade profits back to BTC using the fund manager helper."""
 
@@ -38,6 +41,8 @@ async def on_trade_filled(
         amount,
         dry_run=dry_run,
         slippage_bps=slippage_bps,
+        mempool_monitor=mempool_monitor,
+        mempool_cfg=mempool_cfg,
     )
 
 

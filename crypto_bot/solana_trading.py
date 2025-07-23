@@ -12,6 +12,7 @@ from crypto_bot.execution.solana_executor import (
     execute_swap,
     JUPITER_QUOTE_URL,
 )
+from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.fund_manager import auto_convert_funds
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
@@ -111,6 +112,8 @@ async def sniper_trade(
     slippage_bps: int = 50,
     notifier: Optional[object] = None,
     profit_threshold: float = 0.2,
+    mempool_monitor: SolanaMempoolMonitor | None = None,
+    mempool_cfg: dict | None = None,
 ) -> Dict:
     """Buy ``target_token`` then convert profits when threshold reached."""
 
@@ -121,6 +124,8 @@ async def sniper_trade(
         notifier=notifier,
         slippage_bps=slippage_bps,
         dry_run=dry_run,
+        mempool_monitor=mempool_monitor,
+        mempool_cfg=mempool_cfg,
     )
     tx_sig = trade.get("tx_hash")
     if not tx_sig or tx_sig == "DRYRUN":
@@ -136,5 +141,7 @@ async def sniper_trade(
             dry_run=dry_run,
             slippage_bps=slippage_bps,
             notifier=notifier,
+            mempool_monitor=mempool_monitor,
+            mempool_cfg=mempool_cfg,
         )
     return trade

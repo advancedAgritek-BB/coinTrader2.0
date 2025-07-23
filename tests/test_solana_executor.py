@@ -423,3 +423,28 @@ def test_execute_swap_jito(monkeypatch):
         "route": {"inAmount": 100, "outAmount": 110},
     }
     assert hasattr(session, "jito_payload")
+
+
+def test_swap_paused_on_suspicious(monkeypatch):
+    class DummyMonitor:
+        def fetch_priority_fee(self):
+            return 0.0
+
+        def is_suspicious(self, threshold):
+            return True
+
+    monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monitor = DummyMonitor()
+
+    res = asyncio.run(
+        solana_executor.execute_swap(
+            "SOL",
+            "USDC",
+            1,
+            notifier=DummyNotifier(),
+            dry_run=False,
+            mempool_monitor=monitor,
+            mempool_cfg={"enabled": True, "action": "pause", "suspicious_fee_threshold": 0},
+        )
+    )
+    assert res.get("paused") is True
