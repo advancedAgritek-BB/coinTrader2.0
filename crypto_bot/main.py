@@ -625,19 +625,14 @@ async def initial_scan(
     processed = 0
 
     sf = config.get("symbol_filter", {})
-    scan_limit = int(sf.get("initial_history_candles", config.get("scan_lookback_limit", 50)))
-    scan_limit = min(scan_limit, 700)
-    scan_limit = min(config.get("scan_lookback_limit", 50), 700)
+    scan_limit = min(
+        int(sf.get("initial_history_candles", config.get("scan_lookback_limit", 50))),
+        700,
+    )
 
-    lookback_limit = scan_limit
-    tfs = config.get("timeframes", ["1h"])
-    tf_sec = timeframe_seconds(None, min(tfs, key=lambda t: timeframe_seconds(None, t)))
-    lookback_since = int(time.time() * 1000 - lookback_limit * tf_sec * 1000)
-
-    lookback_limit = scan_limit
     tfs = sf.get("initial_timeframes", config.get("timeframes", ["1h"]))
     tf_sec = timeframe_seconds(None, min(tfs, key=lambda t: timeframe_seconds(None, t)))
-    lookback_since = int(time.time() * 1000 - lookback_limit * tf_sec * 1000)
+    lookback_since = int(time.time() * 1000 - scan_limit * tf_sec * 1000)
 
     history_since = int((time.time() - 365 * 86400) * 1000)
     deep_limit = int(
