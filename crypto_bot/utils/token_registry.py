@@ -167,7 +167,11 @@ async def get_mint_from_gecko(base: str) -> str | None:
     )
 
     mint = None
-    data = await gecko_request(url)
+    try:
+        data = await gecko_request(url)
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("Gecko lookup failed: %s", exc)
+        data = None
 
     if isinstance(data, dict):
         items = data.get("data")
@@ -180,14 +184,24 @@ async def get_mint_from_gecko(base: str) -> str | None:
 
     # Fallback: attempt to search DexScreener if Gecko fails
     fallback_url = f"https://dexscreener.com/solana?query={quote_plus(str(base))}"
-    data = await gecko_request(fallback_url)
+    try:
+        data = await gecko_request(fallback_url)
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("Dexscreener lookup failed: %s", exc)
+        data = None
     if (
         isinstance(data, dict)
         and data.get("pairs")
         and isinstance(data["pairs"], list)
     ):
         return data["pairs"][0].get("baseToken", {}).get("address")
-    return None
+
+    # New fallback: query Helius if GeckoTerminal and Dexscreener fail
+    try:
+        helius = await fetch_from_helius([base])
+    except Exception:  # pragma: no cover - network failures
+        helius = {}
+    return helius.get(base.upper())
 
 
 async def fetch_from_helius(symbols: Iterable[str]) -> Dict[str, str]:

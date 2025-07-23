@@ -61,6 +61,7 @@ def test_fetch_from_jupiter(monkeypatch, tmp_path):
     session = DummySession(data)
 
     mod = _load_module(monkeypatch, tmp_path)
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
 
     import importlib.util, pathlib
@@ -120,6 +121,7 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
     session = DummySession(data)
 
     mod = _load_module(monkeypatch, tmp_path)
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: session, "ClientError": Exception})
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
     monkeypatch.setenv("HELIUS_KEY", "KEY")
 
@@ -295,6 +297,7 @@ def test_get_mint_from_gecko(monkeypatch):
 
     session = DummySession(data)
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
+    urls: list[str] = []
 
     import importlib.util, pathlib
     spec = importlib.util.spec_from_file_location(
@@ -305,7 +308,7 @@ def test_get_mint_from_gecko(monkeypatch):
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr
     spec.loader.exec_module(tr)
-    def fake_req(url, params=None, retries=3):
+    async def fake_req(url, params=None, retries=3):
         urls.append(url)
         return data
 
@@ -331,6 +334,36 @@ def test_get_mint_from_gecko_error(monkeypatch):
         raise DummyErr("boom")
 
     monkeypatch.setattr(tr, "gecko_request", fail_req)
+    async def fake_hel(symbols):
+        return {}
+    monkeypatch.setattr(tr, "fetch_from_helius", fake_hel)
 
     mint = asyncio.run(tr.get_mint_from_gecko("AAA"))
     assert mint is None
+
+
+def test_get_mint_from_gecko_helius_fallback(monkeypatch):
+    """Helius fallback is used when Gecko lookups fail."""
+
+    import importlib.util, pathlib
+    spec = importlib.util.spec_from_file_location(
+        "crypto_bot.utils.token_registry",
+        pathlib.Path(__file__).resolve().parents[1]
+        / "crypto_bot" / "utils" / "token_registry.py",
+    )
+    tr = importlib.util.module_from_spec(spec)
+    sys.modules["crypto_bot.utils.token_registry"] = tr
+    spec.loader.exec_module(tr)
+
+    async def fail_req(url, params=None, retries=3):
+        raise DummyErr("boom")
+
+    async def fake_hel(symbols):
+        assert symbols == ["AAA"]
+        return {"AAA": "mint"}
+
+    monkeypatch.setattr(tr, "gecko_request", fail_req)
+    monkeypatch.setattr(tr, "fetch_from_helius", fake_hel)
+
+    mint = asyncio.run(tr.get_mint_from_gecko("AAA"))
+    assert mint == "mint"

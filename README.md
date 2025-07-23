@@ -172,6 +172,13 @@ token_registry.refresh_interval_minutes=720  # optional cache update interval
 admin chats. Omit it to restrict control to the single `chat_id` in the
 configuration file.
 
+### Solana token registry
+
+Solana tickers are resolved to mint addresses using a hybrid
+Jupiter/Helius registry cached in `cache/token_mints.json`. When GeckoTerminal
+and Dexscreener searches return no results, the lookup now falls back to
+Helius to fetch metadata for the missing symbol.
+
 ### Solana Setup
 
 Example RPC URLs:
