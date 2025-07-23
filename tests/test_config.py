@@ -99,6 +99,8 @@ def test_load_config_returns_dict():
     assert "pyth_quotes" in config
     assert config["pyth_quotes"]
 
+    assert "auto_convert_quote" in config
+
 
 def test_load_config_normalizes_symbol(tmp_path, monkeypatch):
     path = tmp_path / "config.yaml"

@@ -251,6 +251,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **preferred_chain** – chain used for on-chain swaps (e.g. `solana`).
 * **wallet_address** – destination wallet for DEX trades.
 * **solana_slippage_bps** – slippage tolerance for on-chain conversions.
+* **auto_convert_quote** – token used when converting idle balances (default `USDC`).
 * **onchain_min_volume_usd** – minimum 24h volume for on-chain pairs (default `10_000_000`). This value can be overridden in `config.yaml`.
 * **symbol**/**symbols** – pairs to trade when not scanning automatically.
 * **scan_markets** – load all exchange pairs when `symbols` is empty (enabled by default).
