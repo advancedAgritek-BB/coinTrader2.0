@@ -1542,6 +1542,37 @@ async def force_exit_all(ctx: BotContext) -> None:
         except Exception:
             pass
 
+    if not ctx.positions and ctx.paper_wallet and ctx.paper_wallet.positions:
+        for pid, wpos in list(ctx.paper_wallet.positions.items()):
+            sym = wpos.get("symbol") or pid
+            df = tf_cache.get(sym)
+            exit_price = wpos.get("entry_price", 0.0)
+            if df is not None and not df.empty:
+                exit_price = float(df["close"].iloc[-1])
+
+            size = wpos.get("size", wpos.get("amount", 0.0))
+            try:
+                ctx.paper_wallet.close(size, exit_price, pid)
+                ctx.balance = ctx.paper_wallet.balance
+            except Exception:
+                pass
+
+            ctx.risk_manager.deallocate_capital(
+                wpos.get("strategy", ""), size * wpos.get("entry_price", 0.0)
+            )
+            try:
+                log_position(
+                    sym,
+                    wpos.get("side", ""),
+                    size,
+                    wpos.get("entry_price", 0.0),
+                    exit_price,
+                    ctx.balance,
+                )
+            except Exception:
+                pass
+
+        ctx.paper_wallet.positions.clear()
         logger.info("Liquidated %s %.4f @ %.2f", sym, pos["size"], exit_price)
 
 
