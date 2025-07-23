@@ -85,9 +85,16 @@ class TradingBotController:
             sys.executable,
             "-m",
             "crypto_bot.main",
+            stdin=asyncio.subprocess.PIPE,
         )
         self.state["running"] = True
         return {"running": True, "status": "started"}
+
+    async def send_command(self, cmd: str) -> None:
+        """Send ``cmd`` followed by a newline to the subprocess stdin."""
+        if self.proc and self.proc.stdin:
+            self.proc.stdin.write(cmd.encode() + b"\n")
+            await self.proc.stdin.drain()
 
     async def stop_trading(self) -> Dict[str, object]:
         """Terminate the subprocess if running."""
@@ -138,6 +145,9 @@ class TradingBotController:
 
     async def close_all_positions(self) -> Dict[str, str]:
         """Signal the trading bot to liquidate all open positions."""
+        if self.proc and self.proc.returncode is None:
+            await self.send_command("panic sell")
+            return {"status": "command_sent"}
         self.state["liquidate_all"] = True
         return {"status": "liquidation_scheduled"}
 
