@@ -1827,6 +1827,12 @@ async def update_ohlcv_cache(
 
     config = config or {}
     delay = 0.5
+    size = (
+        batch_size
+        if batch_size is not None
+        else config.get("ohlcv_batch_size", 3)
+    )
+    if size is None:
     cfg_size = config.get("ohlcv_batch_size")
     if isinstance(batch_size, int) and batch_size >= 1:
         size = batch_size
