@@ -1,0 +1,31 @@
+name: Train Regime Model
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Checkout trainer repository
+        uses: actions/checkout@v3
+        with:
+          repository: 0xdapp/coinTrader_Trainer
+          path: coinTrader_Trainer
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Train regime model
+        run: python tasks/train_regime.py
