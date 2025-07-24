@@ -38,3 +38,13 @@ def test_scan_arbitrage_not_profitable(monkeypatch):
     cfg = {"arbitrage_pairs": ["SOL/USDC"], "arbitrage_threshold": 0.005}
     res = asyncio.run(main.scan_arbitrage(exchange, cfg))
     assert res == []
+
+
+def test_scan_cex_arbitrage(monkeypatch):
+    ex1_prices = {"SOL/USDC": 10.0}
+    ex2_prices = {"SOL/USDC": 11.0}
+    ex1 = types.SimpleNamespace(fetch_ticker=lambda sym: dummy_fetch_ticker(ex1_prices, sym))
+    ex2 = types.SimpleNamespace(fetch_ticker=lambda sym: dummy_fetch_ticker(ex2_prices, sym))
+    cfg = {"arbitrage_pairs": ["SOL/USDC"], "arbitrage_threshold": 0.05}
+    res = asyncio.run(main.scan_cex_arbitrage(ex1, ex2, cfg))
+    assert res == ["SOL/USDC"]

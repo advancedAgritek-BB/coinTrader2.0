@@ -64,6 +64,11 @@ dca:
   size_multiplier: 1.0
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.05
+# configure one or two centralized exchanges
+# exchanges: [coinbase, kraken]
+primary_exchange: kraken
+secondary_exchange: coinbase
+# legacy single exchange field still supported
 exchange: kraken
 exchange_market_types:
 - spot
@@ -272,7 +277,6 @@ scoring_weights:
   strategy_score: 0.5
   symbol_score: 0.05
   volume_score: 0.05
-secondary_exchange: coinbase
 sentiment_filter:
   bull_fng: 50
   bull_sentiment: 45

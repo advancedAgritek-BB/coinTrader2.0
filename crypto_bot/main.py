@@ -48,6 +48,7 @@ from crypto_bot.risk.exit_manager import (
 from crypto_bot.execution.cex_executor import (
     execute_trade_async as cex_trade_async,
     get_exchange,
+    get_exchanges,
 )
 from crypto_bot.open_position_guard import OpenPositionGuard
 from crypto_bot import console_monitor, console_control
@@ -674,7 +675,10 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     if regime == "trending" and ctx.config.get("arbitrage_enabled", True):
         try:
-            arb_syms = await scan_arbitrage(ctx.exchange, ctx.config)
+            if ctx.secondary_exchange:
+                arb_syms = await scan_cex_arbitrage(ctx.exchange, ctx.secondary_exchange, ctx.config)
+            else:
+                arb_syms = await scan_arbitrage(ctx.exchange, ctx.config)
             symbols.extend((s, 2.0) for s in arb_syms)
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("Arbitrage scan error: %s", exc)
@@ -790,6 +794,44 @@ async def scan_arbitrage(exchange: object, config: dict) -> list[str]:
         if cex_val <= 0:
             continue
         diff = abs(dex_price - cex_val) / cex_val
+        if diff >= threshold:
+            results.append(sym)
+    return results
+
+
+async def scan_cex_arbitrage(primary: object, secondary: object, config: dict) -> list[str]:
+    """Return symbols with profitable arbitrage between two centralized exchanges."""
+    pairs: list[str] = config.get("arbitrage_pairs", [])
+    if not pairs:
+        return []
+
+    results: list[str] = []
+    threshold = float(config.get("arbitrage_threshold", 0.0))
+    for sym in pairs:
+        try:
+            if asyncio.iscoroutinefunction(getattr(primary, "fetch_ticker", None)):
+                t1 = await primary.fetch_ticker(sym)
+            else:
+                t1 = await asyncio.to_thread(primary.fetch_ticker, sym)
+            if asyncio.iscoroutinefunction(getattr(secondary, "fetch_ticker", None)):
+                t2 = await secondary.fetch_ticker(sym)
+            else:
+                t2 = await asyncio.to_thread(secondary.fetch_ticker, sym)
+        except Exception:
+            continue
+
+        p1 = t1.get("last") or t1.get("close")
+        p2 = t2.get("last") or t2.get("close")
+        if p1 is None or p2 is None:
+            continue
+        try:
+            f1 = float(p1)
+            f2 = float(p2)
+        except Exception:
+            continue
+        if f1 <= 0:
+            continue
+        diff = abs(f1 - f2) / f1
         if diff >= threshold:
             results.append(sym)
     return results
@@ -1673,9 +1715,16 @@ async def _main_impl() -> TelegramNotifier:
 
     # allow user-configured exchange to override YAML setting
     if user.get("exchange"):
-        config["exchange"] = user["exchange"]
+        config["primary_exchange"] = user["exchange"]
 
-    exchange, ws_client = get_exchange(config)
+    exchanges = get_exchanges(config)
+    primary = config.get("primary_exchange") or config.get("exchange") or next(iter(exchanges))
+    exchange, ws_client = exchanges[primary]
+    secondary_exchange = None
+    for name, pair in exchanges.items():
+        if name != primary:
+            secondary_exchange = pair[0]
+            break
     if hasattr(exchange, "options"):
         opts = getattr(exchange, "options", {})
         opts["ws"] = {"ping_interval": 10, "ping_timeout": 45}
@@ -1921,6 +1970,7 @@ async def _main_impl() -> TelegramNotifier:
         mempool_cfg=mempool_cfg,
     )
     ctx.exchange = exchange
+    ctx.secondary_exchange = secondary_exchange
     ctx.ws_client = ws_client
     ctx.risk_manager = risk_manager
     ctx.notifier = notifier
@@ -1962,7 +2012,10 @@ async def _main_impl() -> TelegramNotifier:
 
             if config.get("arbitrage_enabled", True):
                 try:
-                    arb_syms = await scan_arbitrage(exchange, config)
+                    if ctx.secondary_exchange:
+                        arb_syms = await scan_cex_arbitrage(exchange, ctx.secondary_exchange, config)
+                    else:
+                        arb_syms = await scan_arbitrage(exchange, config)
                     if arb_syms:
                         async with QUEUE_LOCK:
                             for sym in reversed(arb_syms):
