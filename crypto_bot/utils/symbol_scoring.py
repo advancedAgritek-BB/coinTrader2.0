@@ -32,8 +32,8 @@ _AGE_REFRESH = 24 * 3600  # 24 hours in seconds
 _LATENCY_REFRESH = 10 * 60  # 10 minutes in seconds
 
 DEFAULT_WEIGHTS = {
-    "volume": 0.3,
-    "change": 0.3,
+    "volume": 0.25,
+    "change": 0.4,
     "spread": 0.15,
     "age": 0.1,
     "latency": 0.05,
