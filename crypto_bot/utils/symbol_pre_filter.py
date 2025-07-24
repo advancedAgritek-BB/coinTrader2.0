@@ -578,9 +578,11 @@ async def _bounded_score(
     cfg: dict,
     df: pd.DataFrame | None = None,
 ) -> tuple[str, float]:
-    """Return ``(symbol, score)`` using the global semaphore.
+    """Return ``(symbol, score)`` for ``symbol`` using the global semaphore.
 
-    ``df`` is currently unused but reserved for future scoring helpers.
+    ``df`` provides recent OHLCV data for ``symbol``.  When supplied it is
+    forwarded to :func:`score_symbol` so the raw score can be normalized by the
+    symbol's volatility.  Passing ``None`` disables this normalization.
     """
 
     async with SEMA:
