@@ -166,6 +166,8 @@ SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
 HELIUS_KEY=your_helius_api_key          # required for Jupiter/Helius registry
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
+SUPABASE_URL=https://xyzcompany.supabase.co
+SUPABASE_KEY=your_service_key
 token_registry.refresh_interval_minutes=720  # optional cache update interval
 ```
 
@@ -175,6 +177,8 @@ token_registry.refresh_interval_minutes=720  # optional cache update interval
 `TELE_CHAT_ADMINS` lets the Telegram bot accept commands from multiple
 admin chats. Omit it to restrict control to the single `chat_id` in the
 configuration file.
+
+`SUPABASE_URL` and `SUPABASE_KEY` are required for downloading models used by `regime_classifier`.
 
 ### Solana token registry
 
