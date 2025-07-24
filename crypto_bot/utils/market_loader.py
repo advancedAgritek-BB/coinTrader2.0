@@ -89,6 +89,12 @@ async def _ohlcv_batch_worker(
     delay: float,
 ) -> None:
     """Process queued OHLCV requests."""
+    if not isinstance(batch_size, int) or batch_size < 1:
+        logger.warning(
+            "Invalid batch_size %r passed to _ohlcv_batch_worker; using 1",
+            batch_size,
+        )
+        batch_size = 1
     try:
         while True:
             try:
@@ -1821,7 +1827,20 @@ async def update_ohlcv_cache(
 
     config = config or {}
     delay = 0.5
-    size = batch_size or config.get("ohlcv_batch_size", 3)
+    cfg_size = config.get("ohlcv_batch_size")
+    if isinstance(batch_size, int) and batch_size >= 1:
+        size = batch_size
+    elif isinstance(cfg_size, int) and cfg_size >= 1:
+        size = cfg_size
+    else:
+        if batch_size is not None or cfg_size is not None:
+            logger.warning(
+                "Invalid ohlcv_batch_size %r; defaulting to 3",
+                batch_size if batch_size is not None else cfg_size,
+            )
+        else:
+            logger.warning("ohlcv_batch_size not set; defaulting to 3")
+        size = 3
     key = (
         timeframe,
         limit,
