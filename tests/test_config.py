@@ -103,6 +103,26 @@ def test_load_config_returns_dict():
     assert "auto_convert_quote" in config
 
 
+def test_exit_config_unified():
+    with open(CONFIG_PATH) as f:
+        config = yaml.safe_load(f)
+    assert "exit_strategy" in config
+    exit_cfg = config["exit_strategy"]
+    assert isinstance(exit_cfg, dict)
+    for key in [
+        "fib_tp_enabled",
+        "min_gain_to_trail",
+        "partial_levels",
+        "scale_out",
+        "trailing_stop_factor",
+        "trailing_stop_pct",
+        "default_sl_pct",
+        "default_tp_pct",
+    ]:
+        assert key in exit_cfg
+    assert "exits" not in config
+
+
 def test_load_config_normalizes_symbol(tmp_path, monkeypatch):
     path = tmp_path / "config.yaml"
     path.write_text("scan_markets: true\nsymbol: XBT/USDT\n")
