@@ -583,12 +583,20 @@ async def _bounded_score(
     spread_pct: float,
     liquidity_score: float,
     cfg: dict,
+    df: pd.DataFrame | None = None,
 ) -> tuple[str, float]:
     """Return ``(symbol, score)`` using the global semaphore."""
 
     async with SEMA:
         score = await score_symbol(
-            exchange, symbol, volume_usd, change_pct, spread_pct, liquidity_score, cfg
+            exchange,
+            symbol,
+            volume_usd,
+            change_pct,
+            spread_pct,
+            liquidity_score,
+            cfg,
+            df,
         )
     return symbol, score
 
@@ -806,6 +814,7 @@ async def filter_symbols(
                     spr,
                     liq_scores.get(sym, 1.0),
                     cfg,
+                    df_cache.get(sym) if df_cache else None,
                 )
                 for sym, vol, chg, spr in metrics
             ]

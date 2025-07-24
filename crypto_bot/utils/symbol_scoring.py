@@ -20,6 +20,7 @@ except Exception:  # pragma: no cover - numba missing
 
         return wrap
 import pandas as pd
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 # Cache of computed symbol ages
 _age_cache: Dict[Tuple[str, str], Tuple[float, float]] = {}
@@ -254,6 +255,7 @@ async def score_symbol(
     spread_pct: float,
     liquidity: float,
     config: Mapping[str, object],
+    df: pd.DataFrame | None = None,
 ) -> float:
     """Return a normalized score for ``symbol``."""
 
@@ -285,7 +287,10 @@ async def score_symbol(
         + liq_norm * weights.get("liquidity", 0)
     )
 
-    return score / total
+    score /= total
+    if df is not None:
+        score = normalize_score_by_volatility(df, score)
+    return score
 
 
 def score_vectorised(df: pd.DataFrame, config: Mapping[str, object]) -> pd.Series:
