@@ -235,6 +235,7 @@ regime_timeframes:
 - 1m
 - 5m
 - 15m
+use_ml_regime_classifier: true
 risk:
   atr_long_window: 40
   atr_period: 10
