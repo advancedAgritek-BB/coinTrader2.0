@@ -127,7 +127,7 @@ max_ohlcv_failures: 3
 max_open_trades: 5
 max_parallel: 50
 max_slippage_pct: 0.2
-max_spread_pct: 3
+max_spread_pct: 10
 max_vol: 50000000
 max_ws_limit: 200
 meme_wave_sniper:
