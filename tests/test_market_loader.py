@@ -601,7 +601,6 @@ def test_update_ohlcv_cache_retry_incomplete_ws():
             max_concurrent=1,
         )
     )
-    assert len(res["BTC/USD"]) == 20
     assert len(res["BTC/USD"]) == 10
     assert ex.fetch_calls == 2
 
