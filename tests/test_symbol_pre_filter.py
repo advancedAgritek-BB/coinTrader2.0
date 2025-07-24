@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 import ccxt
 import logging
+import time
 import crypto_bot.utils.symbol_scoring as sc
 import crypto_bot.utils.symbol_pre_filter as sp
 from crypto_bot.utils.telemetry import telemetry
@@ -19,6 +20,12 @@ def reset_telemetry():
 @pytest.fixture(autouse=True)
 def reset_semaphore():
     sp.init_semaphore(1)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def reset_ticker_semaphore():
+    sp.init_ticker_semaphore(1, 0)
     yield
 
 
@@ -1464,3 +1471,46 @@ def test_filter_symbols_missing_mint_logs_debug(monkeypatch, caplog):
 
     assert result == ([], [])
     assert any(r.levelno == logging.WARNING for r in caplog.records)
+
+
+def test_refresh_tickers_semaphore(monkeypatch):
+    class DummyExchange:
+        has = {"fetchTickers": True}
+        markets = {"A/USD": {}, "B/USD": {}}
+        options = {"ws_scan": False}
+        rateLimit = 50
+
+        def __init__(self):
+            self.times: list[float] = []
+
+        async def fetch_tickers(self, symbols):
+            self.times.append(time.time())
+            return {s: {
+                "a": ["1", "1", "1"],
+                "b": ["1", "1", "1"],
+                "c": ["1", "1"],
+                "v": ["1", "1"],
+                "p": ["1", "1"],
+                "o": "1",
+            } for s in symbols}
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(secs):
+        sleeps.append(secs)
+
+    monkeypatch.setattr(sp.asyncio, "sleep", fake_sleep)
+
+    ex = DummyExchange()
+
+    async def run():
+        await asyncio.gather(
+            sp._refresh_tickers(ex, ["A/USD"], {}),
+            sp._refresh_tickers(ex, ["B/USD"], {}),
+        )
+
+    asyncio.run(run())
+
+    assert len(ex.times) == 2
+    assert ex.times[1] >= ex.times[0]
+    assert sleeps == [ex.rateLimit / 1000, ex.rateLimit / 1000]
