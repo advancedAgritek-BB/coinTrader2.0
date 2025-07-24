@@ -152,21 +152,7 @@ _write_cache()  # Save immediately
 
 async def refresh_mints() -> None:
     """Force refresh cached token mints and add known symbols."""
-    await load_token_mints(
-        force_refresh=True,
-        unknown=[
-            "AI16Z",
-            "FARTCOIN",
-            "MELANIA",
-            "PENGU",
-            "RLUSD",
-            "VIRTUAL",
-            "USDG",
-            "USDR",
-            "USTC",
-            "TRUMP",
-        ],
-    )
+    await load_token_mints(force_refresh=True)
     TOKEN_MINTS.update(
         {
             "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
