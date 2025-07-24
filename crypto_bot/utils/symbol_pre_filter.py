@@ -109,6 +109,12 @@ def _norm_symbol(sym: str) -> str:
 # cache for ticker data when using watchTickers
 ticker_cache: dict[str, dict] = {}
 ticker_ts: dict[str, float] = {}
+# track ticker fetch failures per symbol
+ticker_failures: dict[str, dict] = {}
+
+# default backoff settings for ticker retries
+TICKER_BACKOFF_INITIAL = 2
+TICKER_BACKOFF_MAX = 60
 
 # Cache of recent liquidity metrics per symbol
 liq_cache = TTLCache(maxsize=2000, ttl=900)
@@ -278,10 +284,20 @@ async def _refresh_tickers(
         attempts = 1
     log_exc = sf.get("log_ticker_exceptions", False)
 
+    backoff_initial = float(cfg.get("ticker_backoff_initial", TICKER_BACKOFF_INITIAL))
+    backoff_max = float(cfg.get("ticker_backoff_max", TICKER_BACKOFF_MAX))
+
     now = time.time()
     batch = cfg.get("symbol_filter", {}).get("kraken_batch_size", 100)
     timeout = cfg.get("symbol_filter", {}).get("http_timeout", 10)
     symbols = list(symbols)
+    filtered: list[str] = []
+    for s in symbols:
+        info = ticker_failures.get(s)
+        if info and now - info["time"] < info["delay"]:
+            continue
+        filtered.append(s)
+    symbols = filtered
     if not hasattr(exchange, "options"):
         exchange.options = {}
     markets = getattr(exchange, "markets", None)
@@ -303,6 +319,21 @@ async def _refresh_tickers(
             )
         symbols = [s for s in symbols if s in markets]
 
+    attempted_syms: set[str] = set()
+
+    def record_results(res: dict):
+        for sym in attempted_syms:
+            if sym in res and res[sym]:
+                ticker_failures.pop(sym, None)
+            else:
+                info = ticker_failures.get(sym)
+                delay = backoff_initial
+                count = 1
+                if info is not None:
+                    delay = min(info["delay"] * 2, backoff_max)
+                    count = info.get("count", 0) + 1
+                ticker_failures[sym] = {"time": now, "delay": delay, "count": count}
+
     try_ws = (
         getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
         and getattr(exchange, "options", {}).get("ws_scan", True)
@@ -317,6 +348,7 @@ async def _refresh_tickers(
             s for s in symbols if now - ticker_ts.get(s, 0) > 5 or s not in ticker_cache
         ]
         if to_fetch:
+            attempted_syms.update(to_fetch)
             if ws_failures:
                 await asyncio.sleep(min(2 ** (ws_failures - 1), 30))
             try:
@@ -341,6 +373,7 @@ async def _refresh_tickers(
                     if failures >= ws_limit:
                         opts["ws_scan"] = False
                 telemetry.inc("scan.ws_errors")
+                attempted_syms.clear()
                 try_ws = False
                 try_http = True
         for sym, ticker in data.items():
@@ -350,6 +383,7 @@ async def _refresh_tickers(
             ticker_ts[sym] = now
         result = {s: ticker_cache[s] for s in symbols if s in ticker_cache}
         if result:
+            record_results(result)
             return {s: t.get("info", t) for s, t in result.items()}
 
     if try_http:
@@ -357,6 +391,7 @@ async def _refresh_tickers(
             "fetchTickers"
         ):
             data = {}
+            attempted_syms.update(symbols)
             symbols_list = list(symbols)
             for i in range(0, len(symbols_list), batch):
                 chunk = symbols_list[i : i + batch]
@@ -593,6 +628,7 @@ async def _refresh_tickers(
                     continue
                 ticker_cache[sym] = ticker.get("info", ticker)
                 ticker_ts[sym] = now
+            record_results({s: t for s, t in data.items() if s in symbols})
             return {
                 s: t.get("info", t)
                 for s, t in data.items()
@@ -601,6 +637,7 @@ async def _refresh_tickers(
 
     result: dict[str, dict] = {}
     if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTicker"):
+        attempted_syms.update(symbols)
         for sym in symbols:
             try:
                 fetcher = getattr(exchange, "fetch_ticker", None)
@@ -636,6 +673,7 @@ async def _refresh_tickers(
                 continue
             ticker_cache[sym] = ticker
             ticker_ts[sym] = now
+    record_results(result)
     return result
 
 
