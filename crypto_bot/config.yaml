@@ -127,7 +127,7 @@ max_ohlcv_failures: 3
 max_open_trades: 5
 max_parallel: 50
 max_slippage_pct: 0.2
-max_spread_pct: 3
+max_spread_pct: 10
 max_vol: 50000000
 max_ws_limit: 200
 meme_wave_sniper:
@@ -179,7 +179,7 @@ micro_scalp:
   volume_window: 15
   wick_pct: 0.1
 min_agreeing_votes: 1
-min_confidence_score: 0.001
+min_confidence_score: 0.0001
 min_consistent_agreement: 1
 min_cooldown: 0
 min_history_fraction: 0.1
@@ -235,8 +235,6 @@ regime_timeframes:
 - 1m
 - 5m
 - 15m
-- 1h
-- 4h
 use_ml_regime_classifier: true
 risk:
   atr_long_window: 40
@@ -323,12 +321,10 @@ solana_scanner:
   gecko_search: true
   interval_minutes: 0.1
   max_tokens_per_scan: 200
-  min_volume_usd: 500
+  min_volume_usd: 10
 solana_slippage_bps: 10
 strategy_allocation:
-  grid_bot: 0.1
-  sniper_bot: 0.7
-  trend_bot: 0.3
+  sniper_solana: 0.9
 strategy_evaluation_mode: ensemble
 strategy_router:
   bandit_enabled: true
