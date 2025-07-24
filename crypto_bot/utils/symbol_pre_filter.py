@@ -585,7 +585,10 @@ async def _bounded_score(
     cfg: dict,
     df: pd.DataFrame | None = None,
 ) -> tuple[str, float]:
-    """Return ``(symbol, score)`` using the global semaphore."""
+    """Return ``(symbol, score)`` using the global semaphore.
+
+    ``df`` is currently unused but reserved for future scoring helpers.
+    """
 
     async with SEMA:
         score = await score_symbol(
