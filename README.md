@@ -127,7 +127,7 @@ needed.
    Save the file and type `reload` in the console or send `/reload` via Telegram
    to apply the changes immediately.
 
-Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values in `user_config.yaml`.
+Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
 
 ## Configuration Files
 
@@ -145,7 +145,9 @@ EXCHANGE=coinbase              # or kraken
 API_KEY=your_key
 API_SECRET=your_secret
 API_PASSPHRASE=your_coinbase_passphrase_if_needed
-FERNET_KEY=optional_key_for_encryption
+# generate with:
+# python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+FERNET_KEY=your_generated_fernet_key
 KRAKEN_WS_TOKEN=your_ws_token          # optional for Kraken
 KRAKEN_API_TOKEN=your_api_token        # optional for Kraken
 TELEGRAM_TOKEN=your_telegram_token
@@ -166,6 +168,9 @@ MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 token_registry.refresh_interval_minutes=720  # optional cache update interval
 ```
+
+`FERNET_KEY` holds the encryption key used by wallet_manager.py when saving credentials. Generate it with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` and set in `crypto_bot/.env`.
+
 
 `TELE_CHAT_ADMINS` lets the Telegram bot accept commands from multiple
 admin chats. Omit it to restrict control to the single `chat_id` in the
@@ -531,7 +536,7 @@ tolerance.
    # API_KEY=your_key
    # API_SECRET=your_secret
    # API_PASSPHRASE=your_coinbase_passphrase_if_needed
-   # FERNET_KEY=optional_key_for_encryption
+   # FERNET_KEY=your_generated_fernet_key
    ```
 
 ### Telegram Setup
