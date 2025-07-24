@@ -860,6 +860,7 @@ async def filter_symbols(
                     timeframe="1h",
                     limit=int((min_age * 86400) / seconds),
                     max_concurrent=len(missing),
+                    config=cfg,
                 )
 
     result: List[tuple[str, float]] = []

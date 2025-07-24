@@ -2100,6 +2100,7 @@ async def _main_impl() -> TelegramNotifier:
                             "force_websocket_history", False
                         ),
                         max_concurrent=config.get("max_concurrent_ohlcv"),
+                        config=config,
                     )
                     ctx.df_cache[tf] = tf_cache
                     session_state.df_cache[tf] = tf_cache

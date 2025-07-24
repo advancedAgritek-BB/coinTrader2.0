@@ -518,6 +518,7 @@ tolerance.
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options. The snapshot limit defaults to `500`.
 * **loop_interval_minutes** – delay between trading cycles.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
+* **ohlcv_batch_size** – number of symbols grouped per OHLCV request.
 * **max_parallel** – number of markets processed concurrently.
 * **gecko_limit** – concurrent GeckoTerminal requests.
 * **log_to_google** – export trades to Google Sheets.
@@ -695,11 +696,13 @@ max_ws_limit: 50             # skip WebSocket when request exceeds this
 gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
+ohlcv_batch_size: 3          # group symbols per OHLCV fetch
 force_websocket_history: true  # set false to enable REST fallback
 max_ws_limit: 200            # skip WebSocket when request exceeds this
 gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
+ohlcv_batch_size: 3          # group symbols per OHLCV fetch
 metrics:
   enabled: true              # write cycle statistics to metrics.csv
   file: crypto_bot/logs/metrics.csv
@@ -710,7 +713,7 @@ evaluation cycle, giving the market time to evolve before scanning again.
 `max_concurrent_ohlcv` caps how many OHLCV requests run in parallel when
 `update_ohlcv_cache` gathers new candles. The new `ohlcv_timeout` option
 controls the timeout for each fetch call. If you still encounter timeouts after
-raising this value, try lowering `max_concurrent_ohlcv` to reduce pressure on
+raising this value, try lowering `max_concurrent_ohlcv` or `ohlcv_batch_size` to reduce pressure on
 the exchange API.
 The updater automatically determines how many candles are missing from the
 cache, so even when `limit` is large it only requests the data required to fill
@@ -957,6 +960,7 @@ starts.
 ```
 
 * **max_concurrent_ohlcv** – cap simultaneous OHLCV requests while scoring new symbols (default `10`).
+* **ohlcv_batch_size** – batch size for grouped OHLCV requests.
 * **initial_timeframes** – candle intervals pulled when caching a new market (default `[1h, 4h, 1d]`).
 * **initial_history_candles** – number of candles per timeframe loaded on first
   use (default `300`). The loader observes Kraken listing dates so it never

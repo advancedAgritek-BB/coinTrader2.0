@@ -190,6 +190,7 @@ ml_signal_model:
 mode: auto
 mode_degrade_window: 15
 mode_threshold: 0.3
+ohlcv_batch_size: 3
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
 ohlcv_timeout: 120
@@ -373,6 +374,7 @@ symbol_filter:
   max_correlation: 0.9
   max_spread_pct: 4
   min_volume_usd: 100
+  ohlcv_batch_size: 3
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
   volume_percentile: 10

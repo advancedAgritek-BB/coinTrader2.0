@@ -1,6 +1,7 @@
 """Utilities for loading trading symbols and fetching OHLCV data."""
 
 from typing import Iterable, List, Dict, Any, Deque
+from dataclasses import dataclass
 import asyncio
 import inspect
 import time
@@ -59,6 +60,87 @@ COINGECKO_IDS = {
 # Mapping: symbol -> (pool_addr, volume, reserve, price, limit)
 GECKO_POOL_CACHE: dict[str, tuple[str, float, float, float, int]] = {}
 GECKO_SEMAPHORE = asyncio.Semaphore(10)
+
+# Batch queues for OHLCV updates keyed by request parameters
+_OHLCV_BATCH_QUEUES: Dict[tuple, asyncio.Queue] = {}
+_OHLCV_BATCH_TASKS: Dict[tuple, asyncio.Task] = {}
+
+
+@dataclass
+class _OhlcvBatchRequest:
+    exchange: Any
+    cache: Dict[str, pd.DataFrame]
+    symbols: List[str]
+    timeframe: str
+    limit: int
+    start_since: int | None
+    use_websocket: bool
+    force_websocket_history: bool
+    config: Dict
+    max_concurrent: int | None
+    notifier: TelegramNotifier | None
+    future: asyncio.Future
+
+
+async def _ohlcv_batch_worker(
+    key: tuple,
+    queue: asyncio.Queue,
+    batch_size: int,
+    delay: float,
+) -> None:
+    """Process queued OHLCV requests."""
+    try:
+        while True:
+            try:
+                first: _OhlcvBatchRequest = await asyncio.wait_for(queue.get(), timeout=5)
+            except asyncio.TimeoutError:
+                if queue.empty():
+                    break
+                continue
+
+            reqs = [first]
+            start = time.monotonic()
+            while len(reqs) < batch_size:
+                timeout = delay - (time.monotonic() - start)
+                if timeout <= 0:
+                    break
+                try:
+                    reqs.append(await asyncio.wait_for(queue.get(), timeout=timeout))
+                except asyncio.TimeoutError:
+                    break
+
+            union_symbols: List[str] = []
+            for r in reqs:
+                union_symbols.extend(r.symbols)
+            # Deduplicate while preserving order
+            seen = set()
+            union_symbols = [s for s in union_symbols if not (s in seen or seen.add(s))]
+
+            base = reqs[0]
+            cache = await _update_ohlcv_cache_inner(
+                base.exchange,
+                base.cache,
+                union_symbols,
+                timeframe=base.timeframe,
+                limit=base.limit,
+                start_since=base.start_since,
+                use_websocket=base.use_websocket,
+                force_websocket_history=base.force_websocket_history,
+                config=base.config,
+                max_concurrent=base.max_concurrent,
+                notifier=base.notifier,
+            )
+
+            for r in reqs:
+                if r.cache is not cache:
+                    for s in r.symbols:
+                        if s in cache:
+                            r.cache[s] = cache[s]
+                if not r.future.done():
+                    r.future.set_result(r.cache)
+                queue.task_done()
+    finally:
+        _OHLCV_BATCH_TASKS.pop(key, None)
 
 # Valid characters for Solana addresses
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -1512,7 +1594,7 @@ async def load_ohlcv_parallel(
     return data
 
 
-async def update_ohlcv_cache(
+async def _update_ohlcv_cache_inner(
     exchange,
     cache: Dict[str, pd.DataFrame],
     symbols: Iterable[str],
@@ -1721,6 +1803,60 @@ async def update_ohlcv_cache(
     return cache
 
 
+async def update_ohlcv_cache(
+    exchange,
+    cache: Dict[str, pd.DataFrame],
+    symbols: Iterable[str],
+    timeframe: str = "1h",
+    limit: int = 100,
+    start_since: int | None = None,
+    use_websocket: bool = False,
+    force_websocket_history: bool = False,
+    config: Dict | None = None,
+    max_concurrent: int | None = None,
+    notifier: TelegramNotifier | None = None,
+    batch_size: int | None = None,
+) -> Dict[str, pd.DataFrame]:
+    """Batch OHLCV updates for multiple calls."""
+
+    config = config or {}
+    delay = 0.5
+    size = batch_size or config.get("ohlcv_batch_size", 3)
+    key = (
+        timeframe,
+        limit,
+        start_since,
+        use_websocket,
+        force_websocket_history,
+        max_concurrent,
+    )
+
+    req = _OhlcvBatchRequest(
+        exchange,
+        cache,
+        list(symbols),
+        timeframe,
+        limit,
+        start_since,
+        use_websocket,
+        force_websocket_history,
+        config,
+        max_concurrent,
+        notifier,
+        asyncio.get_running_loop().create_future(),
+    )
+
+    queue = _OHLCV_BATCH_QUEUES.setdefault(key, asyncio.Queue())
+    await queue.put(req)
+
+    if key not in _OHLCV_BATCH_TASKS or _OHLCV_BATCH_TASKS[key].done():
+        _OHLCV_BATCH_TASKS[key] = asyncio.create_task(
+            _ohlcv_batch_worker(key, queue, size, delay)
+        )
+
+    return await req.future
+
+
 async def update_multi_tf_ohlcv_cache(
     exchange,
     cache: Dict[str, Dict[str, pd.DataFrame]],
@@ -1816,18 +1952,21 @@ async def update_multi_tf_ohlcv_cache(
                         logger.info(
                             "Adjusting limit for %s on %s to %d", s, tf, lim
                         )
-                tf_cache = await update_ohlcv_cache(
-                    exchange,
-                    tf_cache,
-                    syms,
-                    timeframe=tf,
-                    limit=lim,
-                    config={"min_history_fraction": 0},
-                    start_since=start_since,
-                    use_websocket=use_websocket,
-                    force_websocket_history=force_websocket_history,
-                    max_concurrent=max_concurrent,
-                    notifier=notifier,
+                    tf_cache = await update_ohlcv_cache(
+                        exchange,
+                        tf_cache,
+                        syms,
+                        timeframe=tf,
+                        limit=lim,
+                        config={
+                            "min_history_fraction": 0,
+                            "ohlcv_batch_size": config.get("ohlcv_batch_size"),
+                        },
+                        start_since=start_since,
+                        use_websocket=use_websocket,
+                        force_websocket_history=force_websocket_history,
+                        max_concurrent=max_concurrent,
+                        notifier=notifier,
                 )
         elif cex_symbols:
             from crypto_bot.main import update_df_cache
