@@ -1505,6 +1505,7 @@ async def update_ohlcv_cache(
 
     # Use the provided limit without enforcing a fixed minimum
     limit = int(limit)
+    # Request the number of candles specified by the caller
 
     if max_concurrent is not None:
         if not isinstance(max_concurrent, int) or max_concurrent < 1:
@@ -1679,6 +1680,7 @@ async def update_ohlcv_cache(
             cache[sym] = df_new
             changed = True
         if changed:
+            cache[sym] = cache[sym].tail(limit).reset_index(drop=True)
             cache[sym]["return"] = cache[sym]["close"].pct_change()
             clear_regime_cache(sym, timeframe)
     logger.info("Completed OHLCV update for timeframe %s", timeframe)
@@ -1711,6 +1713,7 @@ async def update_multi_tf_ohlcv_cache(
     from crypto_bot.regime.regime_classifier import clear_regime_cache
 
     limit = int(limit)
+    # Use the limit provided by the caller
 
     def add_priority(data: list, symbol: str) -> None:
         """Push ``symbol`` to ``priority_queue`` if volume spike detected."""
@@ -1929,6 +1932,7 @@ async def update_regime_tf_cache(
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for regime detection timeframes."""
     limit = int(limit)
+    # Respect the caller-specified limit
     regime_cfg = {**config, "timeframes": config.get("regime_timeframes", [])}
     tfs = regime_cfg["timeframes"]
     logger.info("Updating regime cache for timeframes: %s", tfs)

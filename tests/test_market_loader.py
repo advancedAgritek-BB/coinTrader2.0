@@ -484,11 +484,13 @@ class DummyLargeExchange:
         self.data = [[i * 3600] + [i] * 5 for i in range(200)]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
+        if since is not None and since > self.data[-1][0] and since // 1000 <= self.data[-1][0]:
+            since //= 1000
         rows = [r for r in self.data if since is None or r[0] > since]
         return rows[:limit]
 
 
-def test_update_ohlcv_cache_enforces_min_limit():
+def test_update_ohlcv_cache_respects_requested_limit():
     from crypto_bot.utils import market_loader
     market_loader._last_snapshot_time = 0
     ex = DummyLargeExchange()
@@ -600,6 +602,7 @@ def test_update_ohlcv_cache_retry_incomplete_ws():
         )
     )
     assert len(res["BTC/USD"]) == 20
+    assert len(res["BTC/USD"]) == 10
     assert ex.fetch_calls == 2
 
 
