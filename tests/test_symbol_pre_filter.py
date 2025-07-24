@@ -1589,3 +1589,47 @@ def test_refresh_tickers_semaphore(monkeypatch):
     assert len(ex.times) == 2
     assert ex.times[1] >= ex.times[0]
     assert sleeps == [ex.rateLimit / 1000, ex.rateLimit / 1000]
+
+
+class BTCQuoteExchange:
+    def __init__(self):
+        self.has = {"fetchTickers": True, "fetchTicker": True}
+        self.markets_by_id = {
+            "XETHXXBT": {"symbol": "ETH/BTC"},
+            "XXBTZUSD": {"symbol": "BTC/USDT"},
+        }
+        self.markets = {"ETH/BTC": {}, "BTC/USDT": {}}
+
+    async def fetch_tickers(self, symbols):
+        assert symbols == ["ETH/BTC"]
+        ticker = {
+            "a": ["0.06", "1", "1"],
+            "b": ["0.059", "1", "1"],
+            "c": ["0.06", "1"],
+            "v": ["100", "100"],
+            "p": ["0.06", "0.06"],
+            "o": "0.05",
+        }
+        return {"ETH/BTC": ticker}
+
+    async def fetch_ticker(self, symbol):
+        assert symbol == "BTC/USDT"
+        return {"last": 50000.0}
+
+
+def test_quote_volume_converted(monkeypatch):
+    async def raise_if_called(*_a, **_k):
+        raise AssertionError("_fetch_ticker_async should not be called")
+
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", raise_if_called
+    )
+
+    cfg = {
+        **CONFIG,
+        "symbol_filter": {**CONFIG["symbol_filter"], "min_volume_usd": 50000},
+    }
+
+    result = asyncio.run(filter_symbols(BTCQuoteExchange(), ["ETH/BTC"], cfg))
+
+    assert [s for s, _ in result[0]] == ["ETH/BTC"]
