@@ -531,6 +531,24 @@ tolerance.
 * **tax_tracking** – CSV export of executed trades.
 * **metrics_enabled**, **metrics_backend**, **metrics_output_file** – cycle metrics output.
 * **testing_mode** – indicates a sandbox environment.
+
+### Kraken Call Rate Limits
+
+Kraken allows roughly **1 request per second** with a short burst capacity of
+about 20 calls every 10 seconds. The bot enforces this using an internal
+`Semaphore` to gate outgoing requests and a small backoff that increases the
+delay when a call fails. Tune these options in `crypto_bot/config.yaml` to stay
+within the limit:
+
+* **max_concurrent_tickers** – maximum ticker requests processed in parallel.
+* **max_concurrent_ohlcv** – maximum concurrent OHLCV fetches.
+* **ohlcv_batch_size** – number of symbols loaded per OHLCV batch.
+
+Start with low values (e.g. 2 tickers and 4 OHLCV requests) and raise them only
+if you remain under the limit. If you notice log messages like
+`Fetching for 1 symbols` repeating, the semaphore is throttling requests. Reduce
+these settings or the batch size so each cycle completes without hitting the
+cap.
 ## Exchange Setup for U.S. Users
 
 
