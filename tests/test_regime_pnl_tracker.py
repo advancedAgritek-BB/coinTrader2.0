@@ -66,3 +66,10 @@ def test_recent_win_rate_filters_strategy(tmp_path, monkeypatch):
 
     rate = rpt.get_recent_win_rate(5, log, strategy="strat_a")
     assert rate == 1.0
+
+
+def test_win_rate_default(tmp_path, monkeypatch):
+    """Empty logs should yield a bootstrap win rate of 0.6."""
+    log = tmp_path / "pnl.csv"
+    monkeypatch.setattr(rpt, "LOG_FILE", log)
+    assert rpt.get_recent_win_rate(5, log) == 0.6

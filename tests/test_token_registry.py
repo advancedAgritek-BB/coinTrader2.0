@@ -399,3 +399,23 @@ def test_get_mint_from_gecko_empty_attrs(monkeypatch):
     mint = asyncio.run(tr.get_mint_from_gecko("AAA"))
     assert mint == "mint"
     assert called["symbols"] == ["AAA"]
+def test_refresh_mints(monkeypatch, tmp_path):
+    mod = _load_module(monkeypatch, tmp_path)
+
+    calls = {"load": 0, "cache": 0}
+
+    async def fake_load(*, force_refresh=False, unknown=None):
+        calls["load"] += 1
+        assert force_refresh is True
+        assert unknown
+        return {}
+
+    monkeypatch.setattr(mod, "load_token_mints", fake_load)
+    monkeypatch.setattr(mod, "_write_cache", lambda: calls.__setitem__("cache", calls["cache"] + 1))
+    monkeypatch.setattr(mod, "logger", type("L", (), {"info": lambda *a, **k: None}))
+
+    asyncio.run(mod.refresh_mints())
+
+    assert calls["load"] == 1
+    assert calls["cache"] == 1
+    assert "AI16Z" in mod.TOKEN_MINTS
