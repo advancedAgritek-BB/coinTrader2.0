@@ -226,7 +226,12 @@ def _id_for_symbol(exchange, symbol: str) -> str:
     return symbol.replace("/", "")
 
 
-def _parse_metrics(symbol: str, ticker: dict) -> tuple[float, float, float]:
+USD_STABLES = {"USD", "USDT", "USDC"}
+
+
+async def _parse_metrics(
+    exchange, symbol: str, ticker: dict
+) -> tuple[float, float, float]:
     """Return volume USD, percent change and spread percentage using cache."""
 
     if "c" in ticker and isinstance(ticker["c"], (list, tuple)):
@@ -250,6 +255,40 @@ def _parse_metrics(symbol: str, ticker: dict) -> tuple[float, float, float]:
         else:
             base_vol = float(ticker.get("baseVolume", 0.0))
             volume_usd = base_vol * vwap
+
+    base, _, quote = symbol.partition("/")
+    quote = quote.upper()
+    if quote and quote not in USD_STABLES:
+        price = None
+        pair = ""
+        for cur in USD_STABLES:
+            pair = f"{quote}/{cur}"
+            cached = ticker_cache.get(pair)
+            if cached:
+                if "c" in cached and isinstance(cached["c"], (list, tuple)):
+                    price = float(cached["c"][0])
+                else:
+                    price = float(cached.get("last") or cached.get("close") or 0.0)
+                break
+        if price is None and hasattr(exchange, "fetch_ticker"):
+            fetch = exchange.fetch_ticker
+            for cur in USD_STABLES:
+                pair = f"{quote}/{cur}"
+                try:
+                    if asyncio.iscoroutinefunction(fetch):
+                        t = await fetch(pair)
+                    else:
+                        t = await asyncio.to_thread(fetch, pair)
+                    if "c" in t and isinstance(t["c"], (list, tuple)):
+                        price = float(t["c"][0])
+                    else:
+                        price = float(t.get("last") or t.get("close") or 0.0)
+                    ticker_cache[pair] = t
+                    break
+                except Exception:
+                    continue
+        if price:
+            volume_usd *= price
 
     change_pct = ((last - open_price) / open_price) * 100 if open_price else 0.0
 
@@ -828,7 +867,7 @@ async def filter_symbols(
             logger.warning("Unable to map ticker id %s to requested symbol", pair_id)
             continue
 
-        vol_usd, change_pct, spread_pct = _parse_metrics(symbol, ticker)
+        vol_usd, change_pct, spread_pct = await _parse_metrics(exchange, symbol, ticker)
         logger.debug(
             "Ticker %s volume %.2f USD change %.2f%% spread %.2f%%",
             symbol,
