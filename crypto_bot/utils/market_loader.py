@@ -14,7 +14,6 @@ import base58
 from .gecko import gecko_request
 import contextlib
 
-from .token_registry import TOKEN_MINTS, get_mint_from_gecko
 from .token_registry import (
     TOKEN_MINTS,
     get_mint_from_gecko,
