@@ -1312,10 +1312,12 @@ pytest -q
 
 The repository includes an automated test suite. Some tests rely on optional
 packages such as `numpy`, `pandas`, `ccxt`, `flask`, `base58`,
-`python-dotenv` and `websocket-client`.  Lightweight stubs allow the suite to run
-in very small environments, but the **full** set of tests requires the
-dependencies listed in `requirements.txt` together with the additional
-packages enumerated in `requirements-dev.txt`.
+`prometheus_client`, `python-dotenv` and `websocket-client`.  Lightweight stubs
+allow the suite to run in very small environments, but the **full** set of tests
+requires the dependencies listed in `requirements.txt` together with the
+additional packages enumerated in `requirements-dev.txt`. When running only a
+subset of tests you may need to install these optional packages manually so that
+`pytest` can import the modules they depend on.
 
 Set up the environment by running the provided script:
 
