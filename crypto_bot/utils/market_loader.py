@@ -399,7 +399,7 @@ async def load_kraken_symbols(
     return symbols
 
 
-async def fetch_ohlcv_async(
+async def _fetch_ohlcv_async_inner(
     exchange,
     symbol: str,
     timeframe: str = "1h",
@@ -408,7 +408,7 @@ async def fetch_ohlcv_async(
     use_websocket: bool = False,
     force_websocket_history: bool = False,
 ) -> list | Exception:
-    """Return OHLCV data for ``symbol`` using async I/O."""
+    """Internal helper for :func:`fetch_ohlcv_async`."""
 
     if hasattr(exchange, "has") and not exchange.has.get("fetchOHLCV"):
         ex_id = getattr(exchange, "id", "unknown")
@@ -534,7 +534,7 @@ async def fetch_ohlcv_async(
                         logger.warning(
                             "WS OHLCV failed: %s - falling back to REST", exc
                         )
-                        return await fetch_ohlcv_async(
+                        return await _fetch_ohlcv_async_inner(
                             exchange,
                             symbol,
                             timeframe=timeframe,
@@ -942,6 +942,41 @@ async def fetch_ohlcv_async(
             except Exception:
                 pass
         return exc
+
+
+async def fetch_ohlcv_async(
+    exchange,
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+    since: int | None = None,
+    use_websocket: bool = False,
+    force_websocket_history: bool = False,
+) -> list | Exception:
+    """Return OHLCV data for ``symbol`` with simple retries."""
+
+    for attempt in range(3):
+        try:
+            return await _fetch_ohlcv_async_inner(
+                exchange,
+                symbol,
+                timeframe=timeframe,
+                limit=limit,
+                since=since,
+                use_websocket=use_websocket,
+                force_websocket_history=force_websocket_history,
+            )
+        except Exception as exc:
+            if attempt == 2:
+                raise
+            logger.warning(
+                "OHLCV fetch retry %d for %s: %s",
+                attempt + 1,
+                symbol,
+                exc,
+            )
+            await asyncio.sleep(2 ** attempt)
+    return []
 
 
 async def fetch_geckoterminal_ohlcv(
