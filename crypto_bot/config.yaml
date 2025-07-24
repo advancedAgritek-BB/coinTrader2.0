@@ -325,9 +325,7 @@ solana_scanner:
   min_volume_usd: 500
 solana_slippage_bps: 10
 strategy_allocation:
-  grid_bot: 0.1
-  sniper_bot: 0.7
-  trend_bot: 0.3
+  sniper_solana: 0.9
 strategy_evaluation_mode: ensemble
 strategy_router:
   bandit_enabled: true
