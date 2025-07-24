@@ -3,6 +3,7 @@ from typing import Dict, Optional, Tuple
 import asyncio
 import time
 import logging
+import os
 
 import pandas as pd
 import numpy as np
@@ -35,6 +36,8 @@ def _configure_logger(cfg: dict) -> None:
 
 
 _configure_logger(CONFIG)
+
+_supabase_model = None
 
 _ALL_REGIMES = [
     "trending",
@@ -124,6 +127,63 @@ def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
         return "unknown", 0.0
 
 
+def _download_supabase_model():
+    """Download LightGBM model from Supabase and return a Booster."""
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_KEY")
+    if not url or not key:
+        logger.error("Missing Supabase credentials")
+        return None
+    try:  # pragma: no cover - optional dependency
+        from supabase import create_client
+    except Exception as exc:  # pragma: no cover - log import failure
+        logger.error("Supabase client unavailable: %s", exc)
+        return None
+
+    try:
+        client = create_client(url, key)
+        data = client.storage.from_("models").download("trainer_model.pkl")
+        path = Path(__file__).with_name("trainer_model.pkl")
+        path.write_bytes(data)
+        import lightgbm as lgb  # pragma: no cover - optional dependency
+        model = lgb.Booster(model_file=str(path))
+        logger.info("Downloaded trainer_model.pkl from Supabase")
+        return model
+    except Exception as exc:
+        logger.error("Failed to download Supabase model: %s", exc)
+        return None
+
+
+def _classify_ml(df: pd.DataFrame) -> Tuple[str, float]:
+    """Predict regime using the Supabase model with fallback."""
+    global _supabase_model
+    try:  # pragma: no cover - optional dependency
+        import lightgbm as lgb
+    except Exception:
+        return _ml_fallback(df)
+
+    if _supabase_model is None:
+        _supabase_model = _download_supabase_model()
+
+    model = _supabase_model
+    if model is None:
+        return _ml_fallback(df)
+
+    try:
+        change = df["close"].iloc[-1] - df["close"].iloc[0]
+        X = np.array([[change]], dtype=float)
+        prob = float(model.predict(X)[0])
+        if prob > 0.55:
+            label = "trending"
+        elif prob < 0.45:
+            label = "mean-reverting"
+        else:
+            label = "sideways"
+        return label, abs(prob - 0.5) * 2
+    except Exception:
+        return _ml_fallback(df)
+
+
 def _probabilities(label: str, confidence: float | None = None) -> Dict[str, float]:
     """Return a probability mapping for all regimes."""
     probs = {r: 0.0 for r in _ALL_REGIMES}
@@ -145,7 +205,7 @@ def _classify_core(
     data: pd.DataFrame, cfg: dict, higher_df: Optional[pd.DataFrame] = None
 ) -> str:
     if data is None or data.empty or len(data) < 20:
-        return "breakout"
+        return "trending"
 
     df = data.copy()
     for col in ("ema20", "ema50", "adx", "rsi", "atr", "bb_width"):
@@ -349,7 +409,7 @@ def _classify_all(
     ml_probs = {r: 0.0 for r in _ALL_REGIMES}
     use_ml = cfg.get("use_ml_regime_classifier", False)
     if use_ml and len(df) >= ml_min_bars:
-        ml_label, conf = _ml_fallback(df)
+        ml_label, conf = _classify_ml(df)
         ml_probs = _probabilities(ml_label, conf)
         if regime == "unknown" and ml_label != "unknown":
             log_patterns(ml_label, patterns)
@@ -357,7 +417,7 @@ def _classify_all(
 
     if regime == "unknown":
         if cfg.get("use_ml_regime_classifier", False) and len(df) >= ml_min_bars:
-            label, conf = _ml_fallback(df)
+            label, conf = _classify_ml(df)
             log_patterns(label, patterns)
             return label, _normalize(_probabilities(label, conf)), patterns
         if len(df) >= ml_min_bars:
