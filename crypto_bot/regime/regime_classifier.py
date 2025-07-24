@@ -15,6 +15,7 @@ from crypto_bot.utils.pattern_logger import log_patterns
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 
+# Thresholds and ML blend settings are defined in ``regime_config.yaml``
 CONFIG_PATH = Path(__file__).with_name("regime_config.yaml")
 
 
