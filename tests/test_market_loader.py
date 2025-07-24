@@ -546,6 +546,40 @@ def test_update_ohlcv_cache_respects_max_concurrent():
     assert ex.max_active <= 2
 
 
+def test_update_ohlcv_cache_batches_requests(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    calls = 0
+
+    async def fake_inner(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        cache = args[1]
+        symbols = args[2]
+        for s in symbols:
+            cache[s] = pd.DataFrame({"close": [0]})
+        return cache
+
+    monkeypatch.setattr(market_loader, "_update_ohlcv_cache_inner", fake_inner)
+
+    ex = DummySyncExchange()
+    cache: dict[str, pd.DataFrame] = {}
+
+    async def call(sym):
+        await market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            [sym],
+            limit=1,
+            config={"ohlcv_batch_size": 3},
+        )
+
+    asyncio.run(asyncio.gather(call("A"), call("B"), call("C")))
+
+    assert calls == 1
+    assert set(cache) == {"A", "B", "C"}
+
+
 def test_load_ohlcv_parallel_invalid_max_concurrent():
     ex = DummySyncExchange()
     with pytest.raises(ValueError):
