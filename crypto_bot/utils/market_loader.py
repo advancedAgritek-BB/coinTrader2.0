@@ -1503,6 +1503,8 @@ async def update_ohlcv_cache(
 
     from crypto_bot.regime.regime_classifier import clear_regime_cache
 
+    # Use the provided limit without enforcing a fixed minimum
+    limit = int(limit)
     # Request the number of candles specified by the caller
 
     if max_concurrent is not None:
@@ -1710,6 +1712,7 @@ async def update_multi_tf_ohlcv_cache(
     """
     from crypto_bot.regime.regime_classifier import clear_regime_cache
 
+    limit = int(limit)
     # Use the limit provided by the caller
 
     def add_priority(data: list, symbol: str) -> None:
@@ -1928,6 +1931,7 @@ async def update_regime_tf_cache(
     df_map: Dict[str, Dict[str, pd.DataFrame]] | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for regime detection timeframes."""
+    limit = int(limit)
     # Respect the caller-specified limit
     regime_cfg = {**config, "timeframes": config.get("regime_timeframes", [])}
     tfs = regime_cfg["timeframes"]
