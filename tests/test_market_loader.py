@@ -2298,3 +2298,39 @@ def test_dynamic_limits_cap(monkeypatch):
     )
 
     assert limits == [720]
+
+
+def test_listing_date_concurrency(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    active = 0
+    max_active = 0
+
+    async def listing_date(_sym):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return 1
+
+    async def fake_update(*_a, **_k):
+        return {}
+
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", listing_date)
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
+    monkeypatch.setattr(market_loader, "fetch_dex_ohlcv", lambda *a, **k: [])
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", lambda *a, **k: [])
+
+    ex = DummyMultiTFExchange()
+    asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["A/USD", "B/USD", "C/USD"],
+            {"timeframes": ["1h"], "listing_date_concurrency": 2},
+            limit=1,
+        )
+    )
+
+    assert 1 < max_active <= 2

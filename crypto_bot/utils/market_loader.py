@@ -89,6 +89,12 @@ async def _ohlcv_batch_worker(
     delay: float,
 ) -> None:
     """Process queued OHLCV requests."""
+    if not isinstance(batch_size, int) or batch_size < 1:
+        logger.warning(
+            "Invalid batch_size %r passed to _ohlcv_batch_worker; using 1",
+            batch_size,
+        )
+        batch_size = 1
     try:
         while True:
             try:
@@ -1827,6 +1833,19 @@ async def update_ohlcv_cache(
         else config.get("ohlcv_batch_size", 3)
     )
     if size is None:
+    cfg_size = config.get("ohlcv_batch_size")
+    if isinstance(batch_size, int) and batch_size >= 1:
+        size = batch_size
+    elif isinstance(cfg_size, int) and cfg_size >= 1:
+        size = cfg_size
+    else:
+        if batch_size is not None or cfg_size is not None:
+            logger.warning(
+                "Invalid ohlcv_batch_size %r; defaulting to 3",
+                batch_size if batch_size is not None else cfg_size,
+            )
+        else:
+            logger.warning("ohlcv_batch_size not set; defaulting to 3")
         size = 3
     key = (
         timeframe,
@@ -1921,8 +1940,20 @@ async def update_multi_tf_ohlcv_cache(
         dynamic_limits: dict[str, int] = {}
         snapshot_cap = int(config.get("ohlcv_snapshot_limit", limit))
         max_cap = min(snapshot_cap, 720)
-        for sym in symbols:
-            listing_ts = await get_kraken_listing_date(sym)
+
+        concurrency = int(config.get("listing_date_concurrency", 5) or 0)
+        semaphore = asyncio.Semaphore(concurrency) if concurrency > 0 else None
+
+        async def _fetch_listing(sym: str) -> tuple[str, int | None]:
+            if semaphore is not None:
+                async with semaphore:
+                    ts = await get_kraken_listing_date(sym)
+            else:
+                ts = await get_kraken_listing_date(sym)
+            return sym, ts
+
+        tasks = [asyncio.create_task(_fetch_listing(sym)) for sym in symbols]
+        for sym, listing_ts in await asyncio.gather(*tasks):
             if listing_ts and 0 < listing_ts <= now_ms:
                 age_ms = now_ms - listing_ts
                 tf_sec = timeframe_seconds(exchange, tf)
