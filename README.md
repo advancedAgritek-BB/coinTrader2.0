@@ -942,6 +942,19 @@ initial_timeframes: [1m, 5m, 15m, 1h, 4h]  # preloaded intervals
 initial_history_candles: 700     # candles fetched per timeframe initially
 ```
 
+For thin markets you may want to relax the filters and trading
+thresholds.  Lowering `min_volume_usd`, widening `max_spread_pct` and
+reducing the minimum signal requirements lets the bot operate on less
+liquid pairs:
+
+```yaml
+min_confidence_score: 0.00005
+signal_threshold: 0.002
+symbol_filter:
+  max_spread_pct: 8
+  min_volume_usd: 20
+```
+
 `max_concurrent_ohlcv` controls how many OHLCV requests are made in parallel
 during the startup scan. It defaults to `2`, keeping API usage modest.
 `initial_timeframes` lists the intervals preloaded before trading begins. When
