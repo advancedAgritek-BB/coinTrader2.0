@@ -983,8 +983,6 @@ async def fetch_geckoterminal_ohlcv(
         price = 0.0
         data: dict | None = None
 
-        cached = GECKO_POOL_CACHE.get(symbol)
-        is_cached = cached is not None and cached[4] == limit
         pool_addr = ""
         attrs: dict = {}
         if is_cached:
