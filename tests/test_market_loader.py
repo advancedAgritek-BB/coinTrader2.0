@@ -453,12 +453,12 @@ def test_update_ohlcv_cache_appends():
     cache = asyncio.run(
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=2, max_concurrent=2)
     )
-    assert len(cache["BTC/USD"]) == 200
+    assert len(cache["BTC/USD"]) == 2
     ex.data.extend([[i * 3600] + [i] * 5 for i in range(200, 301)])
     cache = asyncio.run(
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2)
     )
-    assert len(cache["BTC/USD"]) == 200
+    assert len(cache["BTC/USD"]) == 4
 
 
 def test_update_ohlcv_cache_fallback_full_history():
@@ -469,12 +469,12 @@ def test_update_ohlcv_cache_fallback_full_history():
     cache = asyncio.run(
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=3, max_concurrent=2)
     )
-    assert len(cache["BTC/USD"]) == 200
+    assert len(cache["BTC/USD"]) == 3
     ex.data.extend([[i * 3600] + [i] * 5 for i in range(200, 301)])
     cache = asyncio.run(
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=4, max_concurrent=2)
     )
-    assert len(cache["BTC/USD"]) == 200
+    assert len(cache["BTC/USD"]) == 4
 
 
 class DummyLargeExchange:
@@ -484,11 +484,13 @@ class DummyLargeExchange:
         self.data = [[i * 3600] + [i] * 5 for i in range(200)]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
+        if since is not None and since > self.data[-1][0] and since // 1000 <= self.data[-1][0]:
+            since //= 1000
         rows = [r for r in self.data if since is None or r[0] > since]
         return rows[:limit]
 
 
-def test_update_ohlcv_cache_enforces_min_limit():
+def test_update_ohlcv_cache_respects_requested_limit():
     from crypto_bot.utils import market_loader
     market_loader._last_snapshot_time = 0
     ex = DummyLargeExchange()
@@ -496,7 +498,7 @@ def test_update_ohlcv_cache_enforces_min_limit():
     cache = asyncio.run(
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=50, max_concurrent=2)
     )
-    assert len(cache["BTC/USD"]) == 200
+    assert len(cache["BTC/USD"]) == 50
 
 
 class CountingExchange:
@@ -599,7 +601,7 @@ def test_update_ohlcv_cache_retry_incomplete_ws():
             max_concurrent=1,
         )
     )
-    assert len(res["BTC/USD"]) == 200
+    assert len(res["BTC/USD"]) == 10
     assert ex.fetch_calls == 2
 
 
@@ -619,7 +621,7 @@ def test_update_ohlcv_cache_skip_after_retry(caplog):
     )
     assert "BTC/USD" not in res
     assert any(
-        "Skipping BTC/USD: only 4/200 candles" in r.getMessage() for r in caplog.records
+        "Skipping BTC/USD: only 4/10 candles" in r.getMessage() for r in caplog.records
     )
 
 
