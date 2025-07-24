@@ -332,6 +332,8 @@ symbol_score_weights:
 * **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle.
 * **solana_scanner.gecko_search** – query GeckoTerminal to verify volume for new Solana tokens.
 * **gecko_limit** – maximum simultaneous requests to GeckoTerminal. Reduce this if you encounter HTTP 429 errors.
+* **max_concurrent_tickers** – maximum simultaneous ticker requests.
+* **ticker_rate_limit** – delay in milliseconds after each ticker API call.
 * Solana tokens are filtered using symbol scoring; adjust `min_symbol_score` to control the threshold.
 
 ### Risk Parameters
@@ -520,6 +522,8 @@ tolerance.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
 * **max_parallel** – number of markets processed concurrently.
 * **gecko_limit** – concurrent GeckoTerminal requests.
+* **max_concurrent_tickers** – maximum simultaneous ticker requests.
+* **ticker_rate_limit** – delay in milliseconds after each ticker API call.
 * **log_to_google** – export trades to Google Sheets.
 * **telegram** – bot token, chat ID and trade notifications. Optional
   **status_updates** and **balance_updates** flags control startup and
@@ -695,6 +699,8 @@ max_ws_limit: 50             # skip WebSocket when request exceeds this
 gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
+max_concurrent_tickers: 10   # limit simultaneous ticker fetches
+ticker_rate_limit: 0         # override exchange rate limit (ms)
 force_websocket_history: true  # set false to enable REST fallback
 max_ws_limit: 200            # skip WebSocket when request exceeds this
 gecko_limit: 10              # concurrent GeckoTerminal requests
@@ -938,6 +944,8 @@ symbol_filter:
   ticker_retry_attempts: 3       # number of fetch_tickers retries
   log_ticker_exceptions: false   # include stack traces when true
 max_concurrent_ohlcv: 2          # simultaneous OHLCV requests during startup
+max_concurrent_tickers: 10       # simultaneous ticker requests
+ticker_rate_limit: 0             # ms delay after each ticker request
 initial_timeframes: [1m, 5m, 15m, 1h, 4h]  # preloaded intervals
 initial_history_candles: 700     # candles fetched per timeframe initially
 ```
@@ -957,6 +965,8 @@ starts.
 ```
 
 * **max_concurrent_ohlcv** – cap simultaneous OHLCV requests while scoring new symbols (default `10`).
+* **max_concurrent_tickers** – cap simultaneous ticker requests (default `10`).
+* **ticker_rate_limit** – delay applied after ticker requests in milliseconds.
 * **initial_timeframes** – candle intervals pulled when caching a new market (default `[1h, 4h, 1d]`).
 * **initial_history_candles** – number of candles per timeframe loaded on first
   use (default `300`). The loader observes Kraken listing dates so it never
