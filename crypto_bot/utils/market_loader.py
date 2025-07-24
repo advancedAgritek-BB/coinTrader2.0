@@ -1915,8 +1915,20 @@ async def update_multi_tf_ohlcv_cache(
         dynamic_limits: dict[str, int] = {}
         snapshot_cap = int(config.get("ohlcv_snapshot_limit", limit))
         max_cap = min(snapshot_cap, 720)
-        for sym in symbols:
-            listing_ts = await get_kraken_listing_date(sym)
+
+        concurrency = int(config.get("listing_date_concurrency", 5) or 0)
+        semaphore = asyncio.Semaphore(concurrency) if concurrency > 0 else None
+
+        async def _fetch_listing(sym: str) -> tuple[str, int | None]:
+            if semaphore is not None:
+                async with semaphore:
+                    ts = await get_kraken_listing_date(sym)
+            else:
+                ts = await get_kraken_listing_date(sym)
+            return sym, ts
+
+        tasks = [asyncio.create_task(_fetch_listing(sym)) for sym in symbols]
+        for sym, listing_ts in await asyncio.gather(*tasks):
             if listing_ts and 0 < listing_ts <= now_ms:
                 age_ms = now_ms - listing_ts
                 tf_sec = timeframe_seconds(exchange, tf)
