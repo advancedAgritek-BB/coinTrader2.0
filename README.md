@@ -29,7 +29,7 @@ On-chain DEX execution submits real transactions when not running in dry-run mod
 The bot selects a strategy by first classifying the current market regime. The
 `classify_regime` function computes EMA, ADX, RSI and Bollinger Band width to
 label conditions as `trending`, `sideways`, `breakout`, `mean-reverting` or
-`volatile`. At least **200** candles are required for these indicators to
+`volatile`. At least **200** candles are recommended for these indicators to
 be calculated reliably. When fewer than **5** candles are available the
 system assumes a `breakout` regime to avoid missing early momentum.
 With 5 to 199 candles the classifier still runs but accuracy may be

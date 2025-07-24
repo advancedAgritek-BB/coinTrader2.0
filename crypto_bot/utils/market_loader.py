@@ -1503,8 +1503,8 @@ async def update_ohlcv_cache(
 
     from crypto_bot.regime.regime_classifier import clear_regime_cache
 
-    # Ensure we always request a reasonable number of candles
-    limit = max(limit, 200)
+    # Use the provided limit without enforcing a fixed minimum
+    limit = int(limit)
 
     if max_concurrent is not None:
         if not isinstance(max_concurrent, int) or max_concurrent < 1:
@@ -1522,12 +1522,12 @@ async def update_ohlcv_cache(
     if start_since is not None:
         tf_sec = timeframe_seconds(exchange, timeframe)
         needed = int((time.time() * 1000 - start_since) // (tf_sec * 1000)) + 1
-        limit = max(limit, needed, 200)
+        limit = max(limit, needed)
         since_map = {sym: start_since for sym in symbols}
         snapshot_due = False
     elif snapshot_due:
         _last_snapshot_time = now
-        limit = max(config.get("ohlcv_snapshot_limit", limit), 200)
+        limit = max(config.get("ohlcv_snapshot_limit", limit), limit)
         since_map = {sym: None for sym in symbols}
     else:
         for sym in symbols:
@@ -1710,7 +1710,7 @@ async def update_multi_tf_ohlcv_cache(
     """
     from crypto_bot.regime.regime_classifier import clear_regime_cache
 
-    limit = max(limit, 200)
+    limit = int(limit)
 
     def add_priority(data: list, symbol: str) -> None:
         """Push ``symbol`` to ``priority_queue`` if volume spike detected."""
@@ -1928,7 +1928,7 @@ async def update_regime_tf_cache(
     df_map: Dict[str, Dict[str, pd.DataFrame]] | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for regime detection timeframes."""
-    limit = max(limit, 200)
+    limit = int(limit)
     regime_cfg = {**config, "timeframes": config.get("regime_timeframes", [])}
     tfs = regime_cfg["timeframes"]
     logger.info("Updating regime cache for timeframes: %s", tfs)
