@@ -311,3 +311,15 @@ def _clear_strategy_router_cache():
     yield
     sr._build_mappings_cached.cache_clear()
     sr._CONFIG_REGISTRY.clear()
+
+
+@pytest.fixture(autouse=True)
+def _mock_listing_date(monkeypatch):
+    """Avoid network calls for Kraken listing timestamps."""
+    from crypto_bot.utils import market_loader
+
+    async def _no_listing(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", _no_listing)
+    yield
