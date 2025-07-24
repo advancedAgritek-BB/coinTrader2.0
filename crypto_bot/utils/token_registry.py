@@ -101,11 +101,6 @@ async def load_token_mints(
         except Exception as err:  # pragma: no cover - best effort
             logger.error("Failed to read cache: %s", err)
 
-    if unknown:
-        try:
-            mapping.update(await fetch_from_helius(unknown))
-        except Exception as exc:  # pragma: no cover - network failures
-            logger.error("Failed to fetch Helius metadata: %s", exc)
 
     if mapping:
         TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
@@ -152,21 +147,7 @@ _write_cache()  # Save immediately
 
 async def refresh_mints() -> None:
     """Force refresh cached token mints and add known symbols."""
-    await load_token_mints(
-        force_refresh=True,
-        unknown=[
-            "AI16Z",
-            "FARTCOIN",
-            "MELANIA",
-            "PENGU",
-            "RLUSD",
-            "VIRTUAL",
-            "USDG",
-            "USDR",
-            "USTC",
-            "TRUMP",
-        ],
-    )
+    await load_token_mints(force_refresh=True)
     TOKEN_MINTS.update(
         {
             "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
@@ -179,6 +160,7 @@ async def refresh_mints() -> None:
             "USDR": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
             "USTC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
             "TRUMP": "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
+            "SOL": "So11111111111111111111111111111111111111112",
         }
     )
     _write_cache()
