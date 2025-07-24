@@ -3,6 +3,8 @@ import numpy as np
 import asyncio
 import pytest
 import yaml
+import sys
+import types
 
 from crypto_bot.regime.regime_classifier import (
     classify_regime,
@@ -763,5 +765,50 @@ ma_window: 20
     adapted = rc.adaptive_thresholds(cfg, df, "AAA")
     assert adapted["adx_trending_min"] > cfg["adx_trending_min"]
     assert adapted["rsi_mean_rev_max"] >= cfg["rsi_mean_rev_max"]
+
+
+def test_supabase_missing_env_uses_fallback(monkeypatch):
+    df = _make_trending_df()
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_KEY", raising=False)
+    called = False
+
+    def fallback(_df):
+        nonlocal called
+        called = True
+        return "trending", 0.9
+
+    monkeypatch.setattr(rc, "_ml_fallback", fallback)
+    rc._supabase_model = None
+    label, conf = rc._classify_ml(df)
+    assert called
+    assert label == "trending"
+    assert conf == 0.9
+
+
+def test_supabase_download_failure(monkeypatch):
+    df = _make_trending_df()
+    monkeypatch.setenv("SUPABASE_URL", "http://example.com")
+    monkeypatch.setenv("SUPABASE_KEY", "key")
+
+    class FakeBucket:
+        def download(self, path):
+            raise Exception("fail")
+
+    class FakeStorage:
+        def from_(self, name):
+            return FakeBucket()
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            self.storage = FakeStorage()
+
+    monkeypatch.setattr(rc, "_supabase_model", None)
+    monkeypatch.setattr(rc, "_ml_fallback", lambda _df: ("sideways", 0.5))
+    monkeypatch.setitem(sys.modules, "supabase", types.SimpleNamespace(create_client=lambda u, k: FakeClient()))
+
+    label, conf = rc._classify_ml(df)
+    assert label == "sideways"
+    assert conf == 0.5
 
 
