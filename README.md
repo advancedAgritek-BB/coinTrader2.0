@@ -1310,3 +1310,7 @@ Increase `ohlcv_timeout` to give each request more time and lower
 
 This project is provided for educational purposes only. Use it at your own risk, and remember that nothing here constitutes financial advice.
 
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
