@@ -11,17 +11,35 @@ def test_cli_get():
 def test_cli_post_runs_command(monkeypatch):
     client = app.app.test_client()
 
-    def fake_run(cmd, shell, capture_output, text, check):
+    def fake_run(cmd, capture_output, text, check):
         class Result:
             stdout = 'out'
             stderr = 'err'
-        Result.returned_cmd = cmd
+
+        fake_run.called_with = cmd
         return Result()
 
     monkeypatch.setattr(subprocess, 'run', fake_run)
-    resp = client.post('/cli', data={'base': 'custom', 'command': 'echo hi'})
+    resp = client.post('/cli', data={'base': 'bot', 'command': '--help'})
     assert b'out' in resp.data
     assert b'err' in resp.data
+    assert fake_run.called_with == [
+        'python',
+        '-m',
+        'crypto_bot.main',
+        '--help',
+    ]
+
+
+def test_cli_rejects_injection(monkeypatch):
+    client = app.app.test_client()
+
+    def fake_run(*a, **kw):
+        raise AssertionError('subprocess should not run')
+
+    monkeypatch.setattr(subprocess, 'run', fake_run)
+    resp = client.post('/cli', data={'base': 'bot', 'command': '; ls'})
+    assert b'Unsafe argument' in resp.data
 
 
 class FakeProc:
