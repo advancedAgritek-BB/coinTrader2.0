@@ -1,7 +1,23 @@
+import sys
+import types
 import yaml
 import pytest
 
 from crypto_bot import wallet_manager
+
+
+@pytest.fixture(autouse=True)
+def stub_solana_keypair(monkeypatch):
+    """Ensure ``solana.keypair`` is available even if Solana isn't installed."""
+    module = sys.modules.setdefault("solana.keypair", types.ModuleType("solana.keypair"))
+    if not hasattr(module, "Keypair"):
+        class Dummy:
+            @staticmethod
+            def from_secret_key(secret):
+                return None
+
+        monkeypatch.setattr(module, "Keypair", Dummy, raising=False)
+    yield
 
 
 def test_environment_overrides_config(tmp_path, monkeypatch):
