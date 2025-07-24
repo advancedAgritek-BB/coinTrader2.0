@@ -177,7 +177,7 @@ micro_scalp:
   volume_window: 15
   wick_pct: 0.1
 min_agreeing_votes: 1
-min_confidence_score: 5.0e-05
+min_confidence_score: 0.0001  # minimum; consider raising in production
 min_consistent_agreement: 1
 min_cooldown: 0
 min_history_fraction: 0.1
@@ -287,7 +287,7 @@ signal_fusion:
     - 0.3
   - - sniper_bot
     - 0.2
-signal_threshold: 0.002
+signal_threshold: 0.001  # minimum; consider raising in production
 signal_weight_optimizer:
   enabled: true
   learning_rate: 0.05
@@ -371,8 +371,8 @@ symbol_filter:
   log_ticker_exceptions: true
   max_concurrent_ohlcv: 10
   max_correlation: 0.9
-  max_spread_pct: 8
   min_volume_usd: 20
+  max_spread_pct: 8  # minimum; consider raising in production
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
   volume_percentile: 10
@@ -426,7 +426,7 @@ use_ml_regime_classifier: true
 use_websocket: false
 volatility_filter:
   max_funding_rate: 0.1
-  min_atr_pct: 0.0001
+  min_atr_pct: 0  # minimum; consider raising in production
 voting_strategies:
 - trend
 - momentum
