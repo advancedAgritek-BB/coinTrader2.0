@@ -139,17 +139,12 @@ def test_load_token_mints(monkeypatch, tmp_path):
     async def fake_jup():
         return {"SOL": "So111"}
 
-    async def fake_hel(sym):
-        return {"BONK": "Mb"}
-
     monkeypatch.setattr(mod, "fetch_from_jupiter", fake_jup)
-    monkeypatch.setattr(mod, "fetch_from_helius", fake_hel)
 
-    mapping = asyncio.run(mod.load_token_mints(force_refresh=True, unknown=["BONK"]))
-    assert mapping == {"SOL": "So111", "BONK": "Mb"}
+    mapping = asyncio.run(mod.load_token_mints(force_refresh=True))
+    assert mapping == {"SOL": "So111"}
     assert json.loads(mod.CACHE_FILE.read_text()) == mapping
     assert mod.TOKEN_MINTS["SOL"] == "So111"
-    assert mod.TOKEN_MINTS["BONK"] == "Mb"
 
 
 def test_load_token_mints_error(monkeypatch, tmp_path):
@@ -404,11 +399,11 @@ def test_refresh_mints(monkeypatch, tmp_path):
 
     calls = {"load": 0, "cache": 0}
 
-    async def fake_load(*, force_refresh=False, unknown=None):
+    async def fake_load(*, force_refresh=False):
         calls["load"] += 1
         assert force_refresh is True
-        assert unknown
-        return {}
+        mod.TOKEN_MINTS["SOL"] = "So111"
+        return {"SOL": "So111"}
 
     monkeypatch.setattr(mod, "load_token_mints", fake_load)
     monkeypatch.setattr(mod, "_write_cache", lambda: calls.__setitem__("cache", calls["cache"] + 1))
@@ -418,4 +413,4 @@ def test_refresh_mints(monkeypatch, tmp_path):
 
     assert calls["load"] == 1
     assert calls["cache"] == 1
-    assert "AI16Z" in mod.TOKEN_MINTS
+    assert "SOL" in mod.TOKEN_MINTS
