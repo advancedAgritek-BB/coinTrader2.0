@@ -61,8 +61,8 @@ def init_semaphore(limit: int | None = None) -> asyncio.Semaphore:
 logger = setup_logger(__name__, LOG_DIR / "symbol_filter.log")
 
 API_URL = "https://api.kraken.com/0/public"
-DEFAULT_MIN_VOLUME_USD = 50000
-DEFAULT_VOLUME_PERCENTILE = 30
+DEFAULT_MIN_VOLUME_USD = 1000  # Lower from 50000 for testing/Solana volatility
+DEFAULT_VOLUME_PERCENTILE = 10  # Lower from 30 to include more pairs
 DEFAULT_CHANGE_PCT_PERCENTILE = 50
 
 # Mapping of exchange specific symbols to standardized forms
@@ -89,9 +89,14 @@ liq_cache = TTLCache(maxsize=2000, ttl=900)
 
 
 async def has_enough_history(
-    exchange, symbol: str, days: int = 30, timeframe: str = "1d"
+    exchange, symbol: str, days: int = 30, timeframe: str = "1d", min_fraction: float = 0.5
 ) -> bool:
-    """Return ``True`` when ``symbol`` has at least ``days`` days of history."""
+    """Return ``True`` when ``symbol`` has at least ``days`` days of history.
+
+    ``min_fraction`` specifies how much of ``days`` worth of candles are required
+    for a symbol to pass.  This helps include recently listed tokens that have
+    partial history available.
+    """
     seconds = timeframe_seconds(exchange, timeframe)
     candles_needed = int((days * 86400) / seconds)
     try:
@@ -118,7 +123,7 @@ async def has_enough_history(
             data,
         )
         return False
-    if not isinstance(data, list) or len(data) < candles_needed:
+    if not isinstance(data, list) or len(data) < candles_needed * min_fraction:
         return False
     return True
 
