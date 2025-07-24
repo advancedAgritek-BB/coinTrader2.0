@@ -1833,20 +1833,20 @@ async def update_ohlcv_cache(
         else config.get("ohlcv_batch_size", 3)
     )
     if size is None:
-    cfg_size = config.get("ohlcv_batch_size")
-    if isinstance(batch_size, int) and batch_size >= 1:
-        size = batch_size
-    elif isinstance(cfg_size, int) and cfg_size >= 1:
-        size = cfg_size
-    else:
-        if batch_size is not None or cfg_size is not None:
-            logger.warning(
-                "Invalid ohlcv_batch_size %r; defaulting to 3",
-                batch_size if batch_size is not None else cfg_size,
-            )
+        cfg_size = config.get("ohlcv_batch_size")
+        if isinstance(batch_size, int) and batch_size >= 1:
+            size = batch_size
+        elif isinstance(cfg_size, int) and cfg_size >= 1:
+            size = cfg_size
         else:
-            logger.warning("ohlcv_batch_size not set; defaulting to 3")
-        size = 3
+            if batch_size is not None or cfg_size is not None:
+                logger.warning(
+                    "Invalid ohlcv_batch_size %r; defaulting to 3",
+                    batch_size if batch_size is not None else cfg_size,
+                )
+            else:
+                logger.warning("ohlcv_batch_size not set; defaulting to 3")
+            size = 3
     key = (
         timeframe,
         limit,
