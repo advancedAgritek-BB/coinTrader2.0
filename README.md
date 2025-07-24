@@ -289,9 +289,11 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **symbol_batch_size** – number of symbols processed each cycle.
   The same batch size controls the initial market scan at startup where
   progress is logged after each batch.
-* **scan_lookback_limit** – candles of history loaded during the initial scan (default `700`).
-  The caches store at least this many bars per timeframe before strategies run.
-  Initial history is retrieved via REST with up to 700 candles per timeframe.
+* **scan_lookback_limit** – default maximum candles per timeframe fetched during
+  the initial scan (`700`). `update_multi_tf_ohlcv_cache` trims this value for
+  newly listed pairs using `get_kraken_listing_date` so requests never exceed the
+  available history. The caches store at least this many bars when history
+  permits.
 * **scan_deep_top** – number of top-ranked pairs loaded with a full year of history during startup (default `50`).
 * **start_since** – optional timestamp used to backfill older data during the initial scan.
   When set, the bot loads candles starting from this time (e.g. `365d` for one year)
@@ -729,10 +731,13 @@ requests should still use WebSocket. For example set
 `max_ws_limit: 200` if you regularly request 200 candles.
 
 During the startup scan the bot always loads historical candles over REST
-regardless of the WebSocket setting. It calls `fetch_ohlcv` starting from the
-`start_since` timestamp when provided, otherwise up to
-`scan_lookback_limit` candles per pair (700 by default on Kraken) to build the
-cache before realtime updates begin over WebSocket.
+regardless of the WebSocket setting. It relies on
+`update_multi_tf_ohlcv_cache` to pull each timeframe. When `start_since` is
+omitted the helper `get_kraken_listing_date` checks when every pair was
+listed on Kraken and caps the request so no more candles are fetched than the
+exchange actually offers. When sufficient history is available the loader
+retrieves up to `scan_lookback_limit` candles per pair (700 by default on
+Kraken) before switching to WebSocket updates.
 
 The client now records heartbeat events and exposes `is_alive(conn_type)` to
 check if a connection has received a heartbeat within the last 10 seconds. Call
@@ -862,7 +867,8 @@ excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 2           # skip pairs with less history
 symbol_batch_size: 50            # symbols processed per cycle
-scan_lookback_limit: 700         # candles loaded during startup
+scan_lookback_limit: 700         # max candles per pair during startup
+                                 # trimmed using Kraken listing data
 scan_deep_top: 50                # deep load this many ranked symbols
 start_since: 365d                # backfill candles this far in the past
 min_history_fraction: 0.5        # minimum portion of history required
@@ -947,7 +953,9 @@ starts.
 
 * **max_concurrent_ohlcv** – cap simultaneous OHLCV requests while scoring new symbols (default `10`).
 * **initial_timeframes** – candle intervals pulled when caching a new market (default `[1h, 4h, 1d]`).
-* **initial_history_candles** – number of candles per timeframe loaded on first use (default `300`).
+* **initial_history_candles** – number of candles per timeframe loaded on first
+  use (default `300`). The loader observes Kraken listing dates so it never
+  requests data preceding a pair's debut.
 
 Kraken labels Bitcoin as `XBT` in its market identifiers. The bot
 automatically converts canonical symbols using `exchange.market_id`,
