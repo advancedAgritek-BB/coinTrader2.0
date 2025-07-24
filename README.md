@@ -1273,8 +1273,24 @@ ml_signal_model:
   weight: 0.5           # blend ratio between strategy and ML scores
 ```
 
+
 When enabled, `evaluate` computes `(score * (1 - weight)) + (ml_score * weight)`
 and caps the result between 0 and 1.
+
+## ML Regime Trainer
+
+The optional `coinTrader_Trainer` package can bootstrap machine learning models
+used by the regime classifier. After generating trade logs, run the trainer to
+upload a LightGBM model to Supabase:
+
+```bash
+python ml_trainer.py train regime --use-gpu --federated
+```
+
+Ensure `SUPABASE_URL` and `SUPABASE_KEY` are set in `crypto_bot/.env` so the
+upload succeeds. Set `use_ml_regime_classifier: true` in
+`crypto_bot/regime/regime_config.yaml` to enable downloads of the trained model
+when the bot starts.
 
 ## Development Setup
 
