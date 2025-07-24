@@ -705,6 +705,15 @@ async def filter_symbols(
         )
         seen.add(symbol)
         local_min_volume = min_volume * 0.5 if symbol.endswith("/USDC") else min_volume
+        if vol_usd < local_min_volume:
+            logger.warning(
+                "Skipping %s due to low ticker volume %.2f < %.2f",
+                symbol,
+                vol_usd,
+                local_min_volume,
+            )
+            skipped += 1
+            continue
         if cache_map and vol_usd < local_min_volume * vol_mult:
             skipped += 1
             continue
@@ -723,6 +732,10 @@ async def filter_symbols(
             continue
         cached = cached_data.get(sym) or cached_data.get(norm_sym)
         if cached is None:
+            logger.warning(
+                "No ticker data returned for %s; skipping",
+                sym,
+            )
             skipped += 1
             continue
         vol_usd, spread_pct, _ = cached
