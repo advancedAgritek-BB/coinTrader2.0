@@ -9,6 +9,8 @@ from pathlib import Path
 
 from crypto_bot.utils.logger import LOG_DIR
 import subprocess
+import shlex
+import re
 import json
 import threading
 import time
@@ -183,19 +185,33 @@ def cli():
     if request.method == 'POST':
         base = request.form.get('base', 'bot')
         cmd_args = request.form.get('command', '')
-        if base == 'backtest':
-            cmd = f"python -m crypto_bot.backtest.backtest_runner {cmd_args}"
-        elif base == 'custom':
-            cmd = cmd_args
+
+        allowed = {
+            'bot': ['python', '-m', 'crypto_bot.main'],
+            'backtest': ['python', '-m', 'crypto_bot.backtest.backtest_runner'],
+        }
+
+        def build_command(b: str, args: str):
+            base_cmd = allowed.get(b)
+            if not base_cmd:
+                return None, f'Invalid command base: {b}'
+            tokens = shlex.split(args)
+            for t in tokens:
+                if not re.fullmatch(r"[\w\-./:=]+", t):
+                    return None, f'Unsafe argument: {t}'
+            return base_cmd + tokens, None
+
+        cmd_list, err = build_command(base, cmd_args)
+        if cmd_list is None:
+            output = err
         else:
-            cmd = f"python -m crypto_bot.main {cmd_args}"
-        try:
-            proc = subprocess.run(
-                cmd, shell=True, capture_output=True, text=True, check=False
-            )
-            output = proc.stdout + proc.stderr
-        except Exception as exc:  # pragma: no cover - subprocess
-            output = str(exc)
+            try:
+                proc = subprocess.run(
+                    cmd_list, capture_output=True, text=True, check=False
+                )
+                output = proc.stdout + proc.stderr
+            except Exception as exc:  # pragma: no cover - subprocess
+                output = str(exc)
     return render_template('cli.html', output=output)
 @app.route('/dashboard')
 def dashboard():
