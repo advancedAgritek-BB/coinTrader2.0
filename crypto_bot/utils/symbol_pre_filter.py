@@ -123,13 +123,6 @@ async def has_enough_history(
             exc,
             exc_info=True,
         )
-        logger.warning(
-            "fetch_ohlcv returned exception for %s on %s for %d days: %s",
-            symbol,
-            timeframe,
-            days,
-            exc,
-        )
         return False
     if isinstance(data, Exception):  # pragma: no cover - network
         logger.warning(
