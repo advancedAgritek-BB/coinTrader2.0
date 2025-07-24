@@ -14,7 +14,11 @@ import base58
 from .gecko import gecko_request
 import contextlib
 
-from .token_registry import TOKEN_MINTS
+from .token_registry import (
+    TOKEN_MINTS,
+    get_mint_from_gecko,
+    fetch_from_helius,
+)
 
 from .telegram import TelegramNotifier
 from .logger import LOG_DIR, setup_logger
@@ -1000,11 +1004,33 @@ async def fetch_geckoterminal_ohlcv(
 
                     items = search_data.get("data") or []
                     if not items:
-                        logger.info("pair not available on GeckoTerminal: %s", symbol)
-                        return None
+                        mint = await get_mint_from_gecko(token_mint)
+                        if mint:
+                            params = {"query": mint, "network": "solana"}
+                            search_data = await gecko_request(search_url, params=params)
+                            items = search_data.get("data") or [] if search_data else []
+                            token_mint = mint
+                        if not items:
+                            logger.info("pair not available on GeckoTerminal: %s", symbol)
+                            return None
 
                     first = items[0]
                     attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
+                    if not attrs:
+                        helius_map = await fetch_from_helius([token_mint])
+                        helius_mint = helius_map.get(token_mint.upper()) if isinstance(helius_map, dict) else None
+                        if helius_mint:
+                            logger.info("Helius mint resolved for %s: %s", symbol, helius_mint)
+                            params = {"query": helius_mint, "network": "solana"}
+                            search_data = await gecko_request(search_url, params=params)
+                            items = search_data.get("data") or [] if search_data else []
+                            if items:
+                                first = items[0]
+                                attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
+                                token_mint = helius_mint
+                        if not attrs:
+                            return None
+                    
                     pool_id = str(first.get("id", ""))
                     pool_addr = pool_id.split("_", 1)[-1]
                     try:
