@@ -22,6 +22,7 @@ from .token_registry import (
 
 from .telegram import TelegramNotifier
 from .logger import LOG_DIR, setup_logger
+from .constants import NON_SOLANA_BASES
 
 
 _last_snapshot_time = 0
@@ -63,10 +64,6 @@ BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 # Quote currencies eligible for Coinbase fallback
 SUPPORTED_USD_QUOTES = {"USD", "USDC", "USDT"}
-
-# Known non-Solana base tickers that may be misclassified as mint addresses
-NON_SOLANA_BASES = {"ADA", "BNB", "AVAX", "APE"}
-
 
 def _is_valid_base_token(token: str) -> bool:
     """Return ``True`` if ``token`` is known or looks like a Solana mint."""
