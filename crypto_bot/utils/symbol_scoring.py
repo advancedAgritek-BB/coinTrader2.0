@@ -210,11 +210,11 @@ def score_vectorised(
 
     max_vals = np.array(
         [
-            float(config.get("max_vol", 10_000_000)),
-            float(config.get("max_change_pct", 20)),
-            float(config.get("max_spread_pct", 2)),
-            float(config.get("max_age_days", 180)),
-            float(config.get("max_latency_ms", 1000)),
+            1_000_000,
+            50,
+            5,
+            90,
+            500,
             1.0,
         ],
         dtype=np.float64,
@@ -322,7 +322,8 @@ def score_vectorised(df: pd.DataFrame, config: Mapping[str, object]) -> pd.Serie
         + liq_norm * weights.get("liquidity", 0)
     )
 
-    # Age and latency are ignored by the vectorised implementation. Set the
-    # weights to zero or fall back to :func:`score_symbol` for full scoring.
+    # Age and latency are ignored by the vectorised implementation. This
+    # variant exists for Solana/"meme" optimisation. Set the weights to zero or
+    # fall back to :func:`score_symbol` for full scoring.
     return score / total
 
