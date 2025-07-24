@@ -40,6 +40,9 @@ except Exception:
 
 # Semaphore guarding concurrent OHLCV requests
 SEMA: asyncio.Semaphore | None = None
+# Semaphore guarding concurrent ticker requests
+TICKER_SEMA: asyncio.Semaphore | None = None
+TICKER_DELAY = 0.0
 
 
 def init_semaphore(limit: int | None = None) -> asyncio.Semaphore:
@@ -56,6 +59,29 @@ def init_semaphore(limit: int | None = None) -> asyncio.Semaphore:
         val = 4
     SEMA = asyncio.Semaphore(val)
     return SEMA
+
+
+def init_ticker_semaphore(
+    limit: int | None = None, delay_ms: int | float | None = None
+) -> asyncio.Semaphore:
+    """Initialize the ticker semaphore and delay."""
+
+    global TICKER_SEMA, TICKER_DELAY
+    if limit is None:
+        limit = 10
+    try:
+        val = int(limit)
+        if val < 1:
+            raise ValueError
+    except (TypeError, ValueError):
+        val = 10
+    TICKER_SEMA = asyncio.Semaphore(val)
+    try:
+        delay_val = float(delay_ms) if delay_ms is not None else 0.0
+    except (TypeError, ValueError):
+        delay_val = 0.0
+    TICKER_DELAY = delay_val / 1000 if delay_val else 0.0
+    return TICKER_SEMA
 
 
 logger = setup_logger(__name__, LOG_DIR / "symbol_filter.log")
@@ -153,13 +179,25 @@ async def _fetch_ticker_async(
         else:
             market_id = sym
         pairs_list.append(market_id.replace("/", ""))
+    cfg_local = globals().get("cfg", {})
+    rate_ms = cfg_local.get("ticker_rate_limit")
+    if rate_ms is None:
+        rate_ms = getattr(exchange, "rateLimit", 0) if exchange is not None else 0
+    delay = rate_ms / 1000 if rate_ms else 0
     combined: dict = {"result": {}, "error": []}
     async with aiohttp.ClientSession() as session:
+        async def fetch(url: str):
+            async with TICKER_SEMA:
+                resp = await session.get(url, timeout=timeout)
+                if delay:
+                    await asyncio.sleep(delay)
+                return resp
+
         tasks = []
         for i in range(0, len(pairs_list), 20):
             chunk = pairs_list[i : i + 20]
             url = f"{API_URL}/Ticker?pair={','.join(chunk)}"
-            tasks.append(session.get(url, timeout=timeout))
+            tasks.append(asyncio.create_task(fetch(url)))
 
         responses = await asyncio.gather(*tasks)
         for resp in responses:
@@ -227,6 +265,14 @@ async def _refresh_tickers(
     symbols = list(symbols)
     cfg = config if config is not None else globals().get("cfg", {})
     sf = cfg.get("symbol_filter", {})
+    init_ticker_semaphore(
+        sf.get("max_concurrent_tickers", cfg.get("max_concurrent_tickers")),
+        cfg.get("ticker_rate_limit"),
+    )
+    delay_ms = cfg.get("ticker_rate_limit")
+    if delay_ms is None:
+        delay_ms = getattr(exchange, "rateLimit", 0)
+    delay = delay_ms / 1000 if delay_ms else 0
     attempts = int(sf.get("ticker_retry_attempts", 3))
     if attempts < 1:
         attempts = 1
@@ -274,7 +320,10 @@ async def _refresh_tickers(
             if ws_failures:
                 await asyncio.sleep(min(2 ** (ws_failures - 1), 30))
             try:
-                data = await exchange.watch_tickers(to_fetch)
+                async with TICKER_SEMA:
+                    data = await exchange.watch_tickers(to_fetch)
+                    if delay:
+                        await asyncio.sleep(delay)
                 opts = getattr(exchange, "options", None)
                 if opts is not None:
                     opts["ws_failures"] = 0
@@ -316,9 +365,15 @@ async def _refresh_tickers(
                     try:
                         fetcher = getattr(exchange, "fetch_tickers", None)
                         if asyncio.iscoroutinefunction(fetcher):
-                            fetched = await fetcher(chunk)
+                            async with TICKER_SEMA:
+                                fetched = await fetcher(chunk)
+                                if delay:
+                                    await asyncio.sleep(delay)
                         else:
-                            fetched = await asyncio.to_thread(fetcher, chunk)
+                            async with TICKER_SEMA:
+                                fetched = await asyncio.to_thread(fetcher, chunk)
+                                if delay:
+                                    await asyncio.sleep(delay)
                         chunk_data = {s: t.get("info", t) for s, t in fetched.items()}
                         break
                     except ccxt.BadSymbol as exc:  # pragma: no cover - network
@@ -355,9 +410,15 @@ async def _refresh_tickers(
                         try:
                             fetcher = getattr(exchange, "fetch_tickers", None)
                             if asyncio.iscoroutinefunction(fetcher):
-                                fetched = await fetcher(list(symbols))
+                                async with TICKER_SEMA:
+                                    fetched = await fetcher(list(symbols))
+                                    if delay:
+                                        await asyncio.sleep(delay)
                             else:
-                                fetched = await asyncio.to_thread(fetcher, list(symbols))
+                                async with TICKER_SEMA:
+                                    fetched = await asyncio.to_thread(fetcher, list(symbols))
+                                    if delay:
+                                        await asyncio.sleep(delay)
                             data = {s: t.get("info", t) for s, t in fetched.items()}
                             break
                         except ccxt.BadSymbol as exc:  # pragma: no cover - network
@@ -405,9 +466,15 @@ async def _refresh_tickers(
                     pairs = [_id_for_symbol(exchange, s) for s in symbols]
 
                     try:
-                        resp = await _fetch_ticker_async(pairs, timeout=timeout)
+                        async with TICKER_SEMA:
+                            resp = await _fetch_ticker_async(pairs, timeout=timeout)
+                            if delay:
+                                await asyncio.sleep(delay)
                     except TypeError:
-                        resp = await _fetch_ticker_async(pairs)
+                        async with TICKER_SEMA:
+                            resp = await _fetch_ticker_async(pairs)
+                            if delay:
+                                await asyncio.sleep(delay)
                     raw = resp.get("result", {})
                     if resp.get("error"):
                         logger.warning(
@@ -416,13 +483,19 @@ async def _refresh_tickers(
                             "; ".join(resp["error"]),
                         )
                         try:
-                            raw = (
-                                await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
-                            ).get("result", {})
+                            async with TICKER_SEMA:
+                                raw = (
+                                    await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
+                                ).get("result", {})
+                                if delay:
+                                    await asyncio.sleep(delay)
                         except TypeError:
-                            raw = (
-                                await _fetch_ticker_async(symbols, exchange=exchange)
-                            ).get("result", {})
+                            async with TICKER_SEMA:
+                                raw = (
+                                    await _fetch_ticker_async(symbols, exchange=exchange)
+                                ).get("result", {})
+                                if delay:
+                                    await asyncio.sleep(delay)
                     data = {}
                     if len(raw) == len(symbols):
                         for sym, (_, ticker) in zip(symbols, raw.items()):
@@ -454,9 +527,15 @@ async def _refresh_tickers(
                 pairs = [_id_for_symbol(exchange, s) for s in symbols]
 
                 try:
-                    resp = await _fetch_ticker_async(pairs, timeout=timeout)
+                    async with TICKER_SEMA:
+                        resp = await _fetch_ticker_async(pairs, timeout=timeout)
+                        if delay:
+                            await asyncio.sleep(delay)
                 except TypeError:
-                    resp = await _fetch_ticker_async(pairs)
+                    async with TICKER_SEMA:
+                        resp = await _fetch_ticker_async(pairs)
+                        if delay:
+                            await asyncio.sleep(delay)
                 raw = resp.get("result", {})
                 if resp.get("error"):
                     logger.warning(
@@ -465,13 +544,19 @@ async def _refresh_tickers(
                         "; ".join(resp["error"]),
                     )
                     try:
-                        raw = (
-                            await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
-                        ).get("result", {})
+                        async with TICKER_SEMA:
+                            raw = (
+                                await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
+                            ).get("result", {})
+                            if delay:
+                                await asyncio.sleep(delay)
                     except TypeError:
-                        raw = (
-                            await _fetch_ticker_async(symbols, exchange=exchange)
-                        ).get("result", {})
+                        async with TICKER_SEMA:
+                            raw = (
+                                await _fetch_ticker_async(symbols, exchange=exchange)
+                            ).get("result", {})
+                            if delay:
+                                await asyncio.sleep(delay)
                 data = {}
                 if len(raw) == len(symbols):
                     for sym, (_, ticker) in zip(symbols, raw.items()):
@@ -520,9 +605,15 @@ async def _refresh_tickers(
             try:
                 fetcher = getattr(exchange, "fetch_ticker", None)
                 if asyncio.iscoroutinefunction(fetcher):
-                    ticker = await fetcher(sym)
+                    async with TICKER_SEMA:
+                        ticker = await fetcher(sym)
+                        if delay:
+                            await asyncio.sleep(delay)
                 else:
-                    ticker = await asyncio.to_thread(fetcher, sym)
+                    async with TICKER_SEMA:
+                        ticker = await asyncio.to_thread(fetcher, sym)
+                        if delay:
+                            await asyncio.sleep(delay)
                 if ticker:
                     result[sym] = ticker.get("info", ticker)
                 else:
@@ -600,6 +691,10 @@ async def filter_symbols(
     cfg = config or {}
     sf = cfg.get("symbol_filter", {})
     init_semaphore(sf.get("max_concurrent_ohlcv", cfg.get("max_concurrent_ohlcv", 4)))
+    init_ticker_semaphore(
+        sf.get("max_concurrent_tickers", cfg.get("max_concurrent_tickers")),
+        cfg.get("ticker_rate_limit"),
+    )
     min_volume = sf.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
     vol_pct = sf.get("volume_percentile", DEFAULT_VOLUME_PERCENTILE)
     max_spread = sf.get("max_spread_pct", 1.0)
@@ -705,6 +800,15 @@ async def filter_symbols(
         )
         seen.add(symbol)
         local_min_volume = min_volume * 0.5 if symbol.endswith("/USDC") else min_volume
+        if vol_usd < local_min_volume:
+            logger.warning(
+                "Skipping %s due to low ticker volume %.2f < %.2f",
+                symbol,
+                vol_usd,
+                local_min_volume,
+            )
+            skipped += 1
+            continue
         if cache_map and vol_usd < local_min_volume * vol_mult:
             skipped += 1
             continue
@@ -723,6 +827,10 @@ async def filter_symbols(
             continue
         cached = cached_data.get(sym) or cached_data.get(norm_sym)
         if cached is None:
+            logger.warning(
+                "No ticker data returned for %s; skipping",
+                sym,
+            )
             skipped += 1
             continue
         vol_usd, spread_pct, _ = cached
