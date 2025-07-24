@@ -14,6 +14,7 @@ import base58
 from .gecko import gecko_request
 import contextlib
 
+from .token_registry import TOKEN_MINTS, get_mint_from_gecko
 from .token_registry import (
     TOKEN_MINTS,
     get_mint_from_gecko,
@@ -1005,6 +1006,10 @@ async def fetch_geckoterminal_ohlcv(
                     items = search_data.get("data") or []
                     if not items:
                         mint = await get_mint_from_gecko(token_mint)
+                        if mint and mint != token_mint:
+                            params["query"] = quote_plus(f"{mint}/USDC")
+                            search_data = await gecko_request(search_url, params=params)
+                            items = search_data.get("data") or [] if search_data else []
                         if mint:
                             params = {"query": mint, "network": "solana"}
                             search_data = await gecko_request(search_url, params=params)
