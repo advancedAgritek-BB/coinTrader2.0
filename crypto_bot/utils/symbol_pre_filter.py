@@ -25,6 +25,7 @@ from .market_loader import (
     fetch_geckoterminal_ohlcv,
     timeframe_seconds,
 )
+from .constants import NON_SOLANA_BASES
 from .correlation import incremental_correlation
 from .symbol_scoring import score_symbol
 from .telemetry import telemetry
@@ -63,22 +64,6 @@ API_URL = "https://api.kraken.com/0/public"
 DEFAULT_MIN_VOLUME_USD = 50000
 DEFAULT_VOLUME_PERCENTILE = 30
 DEFAULT_CHANGE_PCT_PERCENTILE = 50
-
-# Known non-Solana base tickers that may be misclassified as mints
-NON_SOLANA_BASES = {
-    "ADA",
-    "BNB",
-    "AVAX",
-    "APE",
-    "BCH",
-    "XMR",
-    "XTZ",
-    "EURR",
-    "RLUSD",
-    "USDG",
-    "USDQ",
-    "USTC",
-}
 
 # Mapping of exchange specific symbols to standardized forms
 _ALIASES = {"XBT": "BTC", "XBTUSDT": "BTC/USDT"}

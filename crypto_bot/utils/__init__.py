@@ -25,3 +25,4 @@ except Exception:  # pragma: no cover - optional dependency
 from .pyth import get_pyth_price
 from .pyth_utils import get_pyth_price
 from .token_registry import load_token_mints, TOKEN_MINTS
+from .constants import NON_SOLANA_BASES
