@@ -235,8 +235,6 @@ regime_timeframes:
 - 1m
 - 5m
 - 15m
-- 1h
-- 4h
 risk:
   atr_long_window: 40
   atr_period: 10

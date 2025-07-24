@@ -2181,6 +2181,8 @@ async def main() -> None:
     """Entry point for running the trading bot with error handling."""
     notifier: TelegramNotifier | None = None
     try:
+        from crypto_bot.utils.token_registry import refresh_mints
+        await refresh_mints()
         notifier = await _main_impl()
     except Exception as exc:  # pragma: no cover - error path
         logger.exception("Unhandled error in main: %s", exc)

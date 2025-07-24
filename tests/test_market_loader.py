@@ -1619,6 +1619,7 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
         return None
 
     monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
+    monkeypatch.setattr(market_loader, "get_mint_from_gecko", lambda *_a, **_k: asyncio.sleep(0, result=None))
 
     caplog.set_level(logging.INFO)
     res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv(f"{mint}/USDC"))
