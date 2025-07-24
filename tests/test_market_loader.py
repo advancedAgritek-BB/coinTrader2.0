@@ -580,6 +580,58 @@ def test_update_ohlcv_cache_batches_requests(monkeypatch):
     assert set(cache) == {"A", "B", "C"}
 
 
+def test_update_ohlcv_cache_none_batch_size(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    captured: list[int] = []
+
+    async def fake_worker(key, queue, batch_size, delay):
+        captured.append(batch_size)
+        req = await queue.get()
+        for s in req.symbols:
+            req.cache[s] = pd.DataFrame({"close": [0]})
+        req.future.set_result(req.cache)
+        queue.task_done()
+        market_loader._OHLCV_BATCH_TASKS.pop(key, None)
+
+    monkeypatch.setattr(market_loader, "_ohlcv_batch_worker", fake_worker)
+
+    market_loader._OHLCV_BATCH_QUEUES.clear()
+    market_loader._OHLCV_BATCH_TASKS.clear()
+
+    ex = DummySyncExchange()
+    cache: dict[str, pd.DataFrame] = {}
+
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            config={"ohlcv_batch_size": None},
+        )
+    )
+
+    assert captured and captured[0] == 3
+    assert "BTC/USD" in cache
+
+    captured.clear()
+    cache = {}
+
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["ETH/USD"],
+            limit=1,
+            batch_size=None,
+        )
+    )
+
+    assert captured and captured[-1] == 3
+    assert "ETH/USD" in cache
+
+
 def test_load_ohlcv_parallel_invalid_max_concurrent():
     ex = DummySyncExchange()
     with pytest.raises(ValueError):
