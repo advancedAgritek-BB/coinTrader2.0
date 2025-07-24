@@ -238,10 +238,10 @@ risk:
   atr_long_window: 40
   atr_period: 10
   atr_short_window: 10
-  max_drawdown: 0.5
+  max_drawdown: 0.3
   max_volatility_factor: 3
   min_atr_pct: 0.0005
-  min_expected_value: -1.0
+  min_expected_value: 0.0
   min_volume: 0.0001
   stop_loss_atr_mult: 1.5
   stop_loss_pct: 0.01
@@ -322,7 +322,9 @@ solana_scanner:
   min_volume_usd: 10
 solana_slippage_bps: 10
 strategy_allocation:
-  sniper_solana: 0.9
+  grid: 0.2
+  sniper_solana: 0.6
+  trend: 0.2
 strategy_evaluation_mode: ensemble
 strategy_router:
   bandit_enabled: true
