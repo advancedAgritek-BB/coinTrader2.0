@@ -64,11 +64,6 @@ dca:
   size_multiplier: 1.0
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.05
-# configure one or two centralized exchanges
-# exchanges: [coinbase, kraken]
-primary_exchange: kraken
-secondary_exchange: coinbase
-# legacy single exchange field still supported
 exchange: kraken
 exchange_market_types:
 - spot
@@ -79,6 +74,8 @@ exec:
   order_retry_interval: 3
 execution_mode: dry_run
 exit_strategy:
+  default_sl_pct: 0.015
+  default_tp_pct: 0.07
   fib_tp_enabled: true
   min_gain_to_trail: 0.01
   partial_levels:
@@ -88,10 +85,6 @@ exit_strategy:
   - 100
   scale_out: true
   trailing_stop_factor: 1.2
-  trailing_stop_pct: 0.01
-exits:
-  default_sl_pct: 0.015
-  default_tp_pct: 0.07
   trailing_stop_pct: 0.01
 force_websocket_history: false
 gas_threshold_gwei: 50
@@ -222,6 +215,7 @@ portfolio_rotation:
   scoring_method: sharpe
   top_assets: 20
 preferred_chain: solana
+primary_exchange: kraken
 pyth:
   enabled: true
   program_id: FsJ3A3u2vn5cTVofAjvy6qM3HrjTXg5Gs1Y8D6fCt3m
@@ -240,7 +234,6 @@ regime_timeframes:
 - 1m
 - 5m
 - 15m
-use_ml_regime_classifier: true
 risk:
   atr_long_window: 40
   atr_period: 10
@@ -277,6 +270,7 @@ scoring_weights:
   strategy_score: 0.5
   symbol_score: 0.05
   volume_score: 0.05
+secondary_exchange: coinbase
 sentiment_filter:
   bull_fng: 50
   bull_sentiment: 45
@@ -426,6 +420,7 @@ trend:
 twap_enabled: true
 twap_interval_seconds: 5
 twap_slices: 6
+use_ml_regime_classifier: true
 use_websocket: false
 volatility_filter:
   max_funding_rate: 0.1

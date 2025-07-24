@@ -350,7 +350,9 @@ symbol_score_weights:
 * **safety** – kill switch thresholds and API error limits.
 * **scoring** – windows and weights used to rank strategies.
 * **exec** – advanced order execution settings.
-* **exits** – default take profit and stop loss options.
+* **exit_strategy** – default stop loss/take profit settings plus partial profit
+  taking and trailing stops. The trailing stop follows price by 2% after at
+  least 1% gain.
 
 ### Strategy and Signals
 * **strategy_allocation** – capital split across strategies.
@@ -358,7 +360,6 @@ symbol_score_weights:
 * **ensemble_min_conf** – minimum confidence required for a strategy to
   participate in ensemble evaluation.
 * **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
-* **exit_strategy** – partial profit taking and trailing stop logic. The trailing stop follows price by 2% after at least 1% gain.
 * **micro_scalp** – EMA settings plus volume z-score and ATR filters for the scalp bot.
   Supports tick-level aggregation, optional mempool fee checks and order-book
   imbalance filtering with an optional penalty. Set `trend_filter` or
