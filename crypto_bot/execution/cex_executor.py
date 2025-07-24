@@ -83,6 +83,20 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
     return exchange, ws_client
 
 
+def get_exchanges(config) -> Dict[str, Tuple[ccxt.Exchange, Optional[KrakenWSClient]]]:
+    """Return exchange instances for all configured CEXes."""
+    names = config.get("exchanges")
+    if not names:
+        primary = config.get("primary_exchange") or config.get("exchange")
+        names = [name for name in [primary, config.get("secondary_exchange")] if name]
+    result: Dict[str, Tuple[ccxt.Exchange, Optional[KrakenWSClient]]] = {}
+    for name in names:
+        cfg = dict(config)
+        cfg["exchange"] = name
+        result[name] = get_exchange(cfg)
+    return result
+
+
 def execute_trade(
     exchange: ccxt.Exchange,
     ws_client: Optional[KrakenWSClient],

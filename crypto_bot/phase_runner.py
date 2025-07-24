@@ -15,6 +15,7 @@ class BotContext:
     regime_cache: dict
     config: dict
     exchange: object | None = None
+    secondary_exchange: object | None = None
     ws_client: object | None = None
     risk_manager: object | None = None
     notifier: object | None = None

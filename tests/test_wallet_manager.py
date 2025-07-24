@@ -34,6 +34,22 @@ def test_environment_overrides_config(tmp_path, monkeypatch):
     assert creds["coinbase_api_key"] == "env_key"
 
 
+def test_load_returns_both_exchange_creds(tmp_path, monkeypatch):
+    cfg = tmp_path / "user_config.yaml"
+    data = {
+        "coinbase_api_key": "cb_key",
+        "coinbase_api_secret": "cb_secret",
+        "coinbase_passphrase": "pass",
+        "kraken_api_key": "kr_key",
+        "kraken_api_secret": "kr_secret",
+    }
+    cfg.write_text(yaml.safe_dump(data))
+    monkeypatch.setattr(wallet_manager, "CONFIG_FILE", cfg)
+    creds = wallet_manager.load_or_create()
+    assert creds["coinbase_api_key"] == "cb_key"
+    assert creds["kraken_api_key"] == "kr_key"
+
+
 def test_sanitize_secret_adds_padding():
     secret = "YWJjZA"
     padded = wallet_manager._sanitize_secret(secret)

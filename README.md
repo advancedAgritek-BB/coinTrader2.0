@@ -230,7 +230,9 @@ environment.
 Edit `crypto_bot/config.yaml` to adjust trading behaviour. Key settings include:
 
 ```yaml
-exchange: coinbase       # coinbase or kraken
+# configure up to two exchanges
+primary_exchange: coinbase  # coinbase or kraken
+secondary_exchange: kraken
 execution_mode: dry_run  # or live
 mode: auto               # router chooses CEX or on-chain based on token mints
 use_websocket: true
@@ -540,6 +542,11 @@ tolerance.
    # API_KEY=your_key
    # API_SECRET=your_secret
    # API_PASSPHRASE=your_coinbase_passphrase_if_needed
+   # COINBASE_API_KEY=your_coinbase_key
+   # COINBASE_API_SECRET=your_coinbase_secret
+   # COINBASE_API_PASSPHRASE=your_coinbase_passphrase
+   # KRAKEN_API_KEY=your_kraken_key
+   # KRAKEN_API_SECRET=your_kraken_secret
    # FERNET_KEY=your_generated_fernet_key
    ```
 
@@ -632,7 +639,9 @@ when requesting funding information.
 4. In `crypto_bot/config.yaml` set:
 
    ```yaml
-   exchange: coinbase  # Options: coinbase, kraken
+   exchanges: [coinbase, kraken]
+   primary_exchange: coinbase
+   secondary_exchange: kraken
    execution_mode: dry_run  # or live
    use_websocket: true      # enable when trading on Kraken via WebSocket
    ```
@@ -654,7 +663,9 @@ token = get_ws_token(API_KEY, API_SECRET, "123456")
 5. In `crypto_bot/config.yaml` set:
 
     ```yaml
-    exchange: coinbase  # Options: coinbase, kraken
+    exchanges: [coinbase, kraken]
+    primary_exchange: coinbase
+    secondary_exchange: kraken
     execution_mode: dry_run  # or live
     use_websocket: true      # enable when trading on Kraken via WebSocket
     ```

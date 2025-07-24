@@ -152,6 +152,11 @@ def load_or_create() -> dict:
             creds.update(load_external_secrets(provider, path))
 
     env_mapping = {key: [key.upper()] for key in creds.keys()}
+    env_mapping.setdefault("coinbase_api_key", []).append("COINBASE_API_KEY")
+    env_mapping.setdefault("coinbase_api_secret", []).append("COINBASE_API_SECRET")
+    env_mapping.setdefault("coinbase_passphrase", []).append("COINBASE_API_PASSPHRASE")
+    env_mapping.setdefault("kraken_api_key", []).append("KRAKEN_API_KEY")
+    env_mapping.setdefault("kraken_api_secret", []).append("KRAKEN_API_SECRET")
     env_mapping.setdefault("coinbase_api_key", []).append("API_KEY")
     env_mapping.setdefault("coinbase_api_secret", []).append("API_SECRET")
     env_mapping.setdefault("coinbase_passphrase", []).append("API_PASSPHRASE")
@@ -169,15 +174,22 @@ def load_or_create() -> dict:
         if sec in creds and creds[sec]:
             creds[sec] = _sanitize_secret(str(creds[sec]))
 
+    # expose credentials via dedicated env vars
+    os.environ["COINBASE_API_KEY"] = creds.get("coinbase_api_key", "")
+    os.environ["COINBASE_API_SECRET"] = creds.get("coinbase_api_secret", "")
+    os.environ["COINBASE_API_PASSPHRASE"] = creds.get("coinbase_passphrase", "")
+    os.environ["KRAKEN_API_KEY"] = creds.get("kraken_api_key", "")
+    os.environ["KRAKEN_API_SECRET"] = creds.get("kraken_api_secret", "")
+
     # expose selected exchange credentials via generic env vars for ccxt
-    exch = creds.get("exchange")
+    exch = creds.get("primary_exchange") or creds.get("exchange")
     if exch == "coinbase":
-        os.environ["API_KEY"] = creds.get("coinbase_api_key", "")
-        os.environ["API_SECRET"] = creds.get("coinbase_api_secret", "")
-        os.environ["API_PASSPHRASE"] = creds.get("coinbase_passphrase", "")
+        os.environ["API_KEY"] = os.environ.get("COINBASE_API_KEY", "")
+        os.environ["API_SECRET"] = os.environ.get("COINBASE_API_SECRET", "")
+        os.environ["API_PASSPHRASE"] = os.environ.get("COINBASE_API_PASSPHRASE", "")
     elif exch == "kraken":
-        os.environ["API_KEY"] = creds.get("kraken_api_key", "")
-        os.environ["API_SECRET"] = creds.get("kraken_api_secret", "")
+        os.environ["API_KEY"] = os.environ.get("KRAKEN_API_KEY", "")
+        os.environ["API_SECRET"] = os.environ.get("KRAKEN_API_SECRET", "")
         os.environ.pop("API_PASSPHRASE", None)
 
     return creds
