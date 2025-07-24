@@ -28,6 +28,15 @@ def _seed_fake_trades(path: str | Path = LOG_FILE) -> None:
                 "pnl": 0.02,
             }
         )
+    for _ in range(50):
+        rows.append(
+            {
+                "timestamp": datetime.utcnow().isoformat(),
+                "regime": "volatile",
+                "strategy": "sniper_solana",
+                "pnl": 0.05,
+            }
+        )
     file.parent.mkdir(parents=True, exist_ok=True)
     header = not file.exists() or file.stat().st_size == 0
     pd.DataFrame(rows).to_csv(file, mode="a", header=header, index=False)
