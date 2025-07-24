@@ -20,6 +20,7 @@ except Exception:  # pragma: no cover - numba missing
 
         return wrap
 import pandas as pd
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 # Cache of computed symbol ages
 _age_cache: Dict[Tuple[str, str], Tuple[float, float]] = {}
@@ -32,8 +33,8 @@ _AGE_REFRESH = 24 * 3600  # 24 hours in seconds
 _LATENCY_REFRESH = 10 * 60  # 10 minutes in seconds
 
 DEFAULT_WEIGHTS = {
-    "volume": 0.3,
-    "change": 0.3,
+    "volume": 0.25,
+    "change": 0.4,
     "spread": 0.15,
     "age": 0.1,
     "latency": 0.05,
@@ -210,11 +211,11 @@ def score_vectorised(
 
     max_vals = np.array(
         [
-            float(config.get("max_vol", 10_000_000)),
-            float(config.get("max_change_pct", 20)),
-            float(config.get("max_spread_pct", 2)),
-            float(config.get("max_age_days", 180)),
-            float(config.get("max_latency_ms", 1000)),
+            1_000_000,
+            50,
+            5,
+            90,
+            500,
             1.0,
         ],
         dtype=np.float64,
@@ -254,6 +255,7 @@ async def score_symbol(
     spread_pct: float,
     liquidity: float,
     config: Mapping[str, object],
+    df: pd.DataFrame | None = None,
 ) -> float:
     """Return a normalized score for ``symbol``."""
 
@@ -285,7 +287,10 @@ async def score_symbol(
         + liq_norm * weights.get("liquidity", 0)
     )
 
-    return score / total
+    score /= total
+    if df is not None:
+        score = normalize_score_by_volatility(df, score)
+    return score
 
 
 def score_vectorised(df: pd.DataFrame, config: Mapping[str, object]) -> pd.Series:
@@ -322,7 +327,8 @@ def score_vectorised(df: pd.DataFrame, config: Mapping[str, object]) -> pd.Serie
         + liq_norm * weights.get("liquidity", 0)
     )
 
-    # Age and latency are ignored by the vectorised implementation. Set the
-    # weights to zero or fall back to :func:`score_symbol` for full scoring.
+    # Age and latency are ignored by the vectorised implementation. This
+    # variant exists for Solana/"meme" optimisation. Set the weights to zero or
+    # fall back to :func:`score_symbol` for full scoring.
     return score / total
 

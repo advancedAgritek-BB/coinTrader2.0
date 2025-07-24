@@ -367,3 +367,55 @@ def test_get_mint_from_gecko_helius_fallback(monkeypatch):
 
     mint = asyncio.run(tr.get_mint_from_gecko("AAA"))
     assert mint == "mint"
+
+
+def test_get_mint_from_gecko_empty_attrs(monkeypatch):
+    """fetch_from_helius is used when Gecko returns item without attributes."""
+
+    import importlib.util, pathlib
+    spec = importlib.util.spec_from_file_location(
+        "crypto_bot.utils.token_registry",
+        pathlib.Path(__file__).resolve().parents[1]
+        / "crypto_bot"
+        / "utils"
+        / "token_registry.py",
+    )
+    tr = importlib.util.module_from_spec(spec)
+    sys.modules["crypto_bot.utils.token_registry"] = tr
+    spec.loader.exec_module(tr)
+
+    async def fake_req(url, params=None, retries=3):
+        return {"data": [{}]}
+
+    called = {}
+
+    async def fake_hel(symbols):
+        called["symbols"] = symbols
+        return {"AAA": "mint"}
+
+    monkeypatch.setattr(tr, "gecko_request", fake_req)
+    monkeypatch.setattr(tr, "fetch_from_helius", fake_hel)
+
+    mint = asyncio.run(tr.get_mint_from_gecko("AAA"))
+    assert mint == "mint"
+    assert called["symbols"] == ["AAA"]
+def test_refresh_mints(monkeypatch, tmp_path):
+    mod = _load_module(monkeypatch, tmp_path)
+
+    calls = {"load": 0, "cache": 0}
+
+    async def fake_load(*, force_refresh=False, unknown=None):
+        calls["load"] += 1
+        assert force_refresh is True
+        assert unknown
+        return {}
+
+    monkeypatch.setattr(mod, "load_token_mints", fake_load)
+    monkeypatch.setattr(mod, "_write_cache", lambda: calls.__setitem__("cache", calls["cache"] + 1))
+    monkeypatch.setattr(mod, "logger", type("L", (), {"info": lambda *a, **k: None}))
+
+    asyncio.run(mod.refresh_mints())
+
+    assert calls["load"] == 1
+    assert calls["cache"] == 1
+    assert "AI16Z" in mod.TOKEN_MINTS
