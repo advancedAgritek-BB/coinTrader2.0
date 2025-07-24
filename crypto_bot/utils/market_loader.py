@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 import ccxt
 import aiohttp
+import datetime
 import base58
 from .gecko import gecko_request
 import contextlib
@@ -1154,6 +1155,39 @@ async def fetch_coingecko_ohlc(
     return result
 
 
+async def get_kraken_listing_date(symbol: str) -> int | None:
+    """Return approximate Kraken listing date in milliseconds for ``symbol``."""
+
+    url = "https://api.kraken.com/0/public/Trades"
+    ex = ccxt.kraken()
+    try:
+        pair = ex.market_id(symbol)
+    except Exception:
+        pair = symbol.replace("/", "")
+    params = {"pair": pair, "since": 0}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, timeout=10) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+    except Exception:
+        return None
+    trades = None
+    if isinstance(data, dict):
+        for val in data.get("result", {}).values():
+            if isinstance(val, list) and val:
+                trades = val
+                break
+    if not trades:
+        return None
+    try:
+        ts = float(trades[0][2])
+        dt = datetime.datetime.utcfromtimestamp(ts)
+        return int(dt.timestamp() * 1000)
+    except Exception:
+        return None
+
+
 async def fetch_dex_ohlcv(
     exchange,
     symbol: str,
@@ -1738,6 +1772,14 @@ async def update_multi_tf_ohlcv_cache(
         logger.info("Starting update for timeframe %s", tf)
         tf_cache = cache.get(tf, {})
 
+        now_ms = int(time.time() * 1000)
+        dynamic_limits: dict[str, int] = {}
+        for sym in symbols:
+            listing_ts = await get_kraken_listing_date(sym)
+            if listing_ts:
+                age_ms = now_ms - listing_ts
+                dynamic_limits[sym] = int(age_ms // timeframe_seconds(exchange, tf))
+
         cex_symbols: list[str] = []
         dex_symbols: list[str] = []
         for s in symbols:
@@ -1761,30 +1803,48 @@ async def update_multi_tf_ohlcv_cache(
             tf_limit = max(limit, needed)
 
         if cex_symbols and start_since is None:
-            tf_cache = await update_ohlcv_cache(
-                exchange,
-                tf_cache,
-                cex_symbols,
-                timeframe=tf,
-                limit=tf_limit,
-                start_since=start_since,
-                use_websocket=use_websocket,
-                force_websocket_history=force_websocket_history,
-                max_concurrent=max_concurrent,
-                notifier=notifier,
-            )
+            groups: Dict[int, list[str]] = {}
+            for sym in cex_symbols:
+                sym_limit = dynamic_limits.get(sym, tf_limit)
+                groups.setdefault(int(sym_limit), []).append(sym)
+            for lim, syms in groups.items():
+                if lim < tf_limit:
+                    for s in syms:
+                        logger.info(
+                            "Adjusting limit for %s on %s to %d", s, tf, lim
+                        )
+                tf_cache = await update_ohlcv_cache(
+                    exchange,
+                    tf_cache,
+                    syms,
+                    timeframe=tf,
+                    limit=lim,
+                    config={"min_history_fraction": 0},
+                    start_since=start_since,
+                    use_websocket=use_websocket,
+                    force_websocket_history=force_websocket_history,
+                    max_concurrent=max_concurrent,
+                    notifier=notifier,
+                )
         elif cex_symbols:
             from crypto_bot.main import update_df_cache
 
             for sym in cex_symbols:
                 batches: list = []
                 current_since = start_since
-                while True:
+                sym_total = min(tf_limit, dynamic_limits.get(sym, tf_limit))
+                if sym_total < tf_limit:
+                    logger.info(
+                        "Adjusting limit for %s on %s to %d", sym, tf, sym_total
+                    )
+                remaining = sym_total
+                while remaining > 0:
+                    req = min(remaining, 1000)
                     data = await fetch_ohlcv_async(
                         exchange,
                         sym,
                         timeframe=tf,
-                        limit=1000,
+                        limit=req,
                         since=current_since,
                         use_websocket=use_websocket,
                         force_websocket_history=force_websocket_history,
@@ -1792,7 +1852,8 @@ async def update_multi_tf_ohlcv_cache(
                     if not data or isinstance(data, Exception):
                         break
                     batches.extend(data)
-                    if len(data) < 1000:
+                    remaining -= len(data)
+                    if len(data) < req:
                         break
                     current_since = data[-1][0] + 1
 
@@ -1840,12 +1901,15 @@ async def update_multi_tf_ohlcv_cache(
             gecko_failed = False
             base, _, quote = sym.partition("/")
             is_solana = quote.upper() == "USDC" and base.upper() not in NON_SOLANA_BASES
+            sym_l = min(dynamic_limits.get(sym, tf_limit), tf_limit)
+            if sym_l < tf_limit:
+                logger.info("Adjusting limit for %s on %s to %d", sym, tf, sym_l)
             if is_solana:
                 try:
                     res = await fetch_geckoterminal_ohlcv(
                         sym,
                         timeframe=tf,
-                        limit=tf_limit,
+                        limit=sym_l,
                         min_24h_volume=min_volume_usd,
                     )
                 except Exception as e:  # pragma: no cover - network
@@ -1869,7 +1933,7 @@ async def update_multi_tf_ohlcv_cache(
                     exchange,
                     sym,
                     timeframe=tf,
-                    limit=tf_limit,
+                    limit=sym_l,
                     min_volume_usd=min_volume_usd,
                     gecko_res=res,
                     use_gecko=is_solana,
