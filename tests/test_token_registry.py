@@ -117,7 +117,6 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
             self.url = url
             return DummyResp(self.d)
 
-    urls: list[str] = []
     session = DummySession(data)
 
     mod = _load_module(monkeypatch, tmp_path)
