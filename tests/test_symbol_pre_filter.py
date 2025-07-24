@@ -1281,6 +1281,81 @@ def test_ticker_retry_attempts(monkeypatch):
     assert result == {}
 
 
+def test_ticker_failure_backoff(monkeypatch):
+    class FailExchange(DummyExchange):
+        def __init__(self):
+            self.has = {"fetchTickers": True}
+            self.calls = 0
+            self.markets = {"ETH/USD": {}}
+
+        async def fetch_tickers(self, symbols):
+            self.calls += 1
+            raise RuntimeError("boom")
+
+    sp.ticker_cache.clear()
+    sp.ticker_ts.clear()
+    sp.ticker_failures.clear()
+    ex = FailExchange()
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", lambda *_a, **_k: {"result": {}})
+
+    t = {"now": 0}
+    monkeypatch.setattr(sp.time, "time", lambda: t["now"])
+
+    cfg = {"ticker_backoff_initial": 2, "ticker_backoff_max": 8, "symbol_filter": {"ticker_retry_attempts": 1}}
+
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    assert sp.ticker_failures["ETH/USD"]["delay"] == 2
+
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+
+    t["now"] += 3
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    assert sp.ticker_failures["ETH/USD"]["delay"] == 4
+
+    t["now"] += 5
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    assert sp.ticker_failures["ETH/USD"]["delay"] == 8
+
+    t["now"] += 9
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    assert sp.ticker_failures["ETH/USD"]["delay"] == 8
+
+
+def test_ticker_backoff_resets_on_success(monkeypatch):
+    class FailOnceExchange(DummyExchange):
+        def __init__(self):
+            self.has = {"fetchTickers": True}
+            self.calls = 0
+            self.markets = {"ETH/USD": {}}
+
+        async def fetch_tickers(self, symbols):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("boom")
+            data = (await fake_fetch(None))["result"]
+            return {"ETH/USD": data["XETHZUSD"]}
+
+    sp.ticker_cache.clear()
+    sp.ticker_ts.clear()
+    sp.ticker_failures.clear()
+    ex = FailOnceExchange()
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", lambda *_a, **_k: {"result": {}})
+
+    t = {"now": 0}
+    monkeypatch.setattr(sp.time, "time", lambda: t["now"])
+
+    cfg = {"ticker_backoff_initial": 2, "ticker_backoff_max": 8, "symbol_filter": {"ticker_retry_attempts": 1}}
+
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    assert sp.ticker_failures["ETH/USD"]["delay"] == 2
+
+    t["now"] += 3
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    assert "ETH/USD" not in sp.ticker_failures
+
+
 def test_log_ticker_exceptions(monkeypatch, caplog):
     caplog.set_level("WARNING")
 

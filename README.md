@@ -548,6 +548,8 @@ within the limit:
 * **max_concurrent_tickers** – maximum ticker requests processed in parallel.
 * **max_concurrent_ohlcv** – maximum concurrent OHLCV fetches.
 * **ohlcv_batch_size** – number of symbols loaded per OHLCV batch.
+* **ticker_backoff_initial** – seconds to wait after a ticker failure.
+* **ticker_backoff_max** – maximum delay between ticker retries.
 
 Start with low values (e.g. 2 tickers and 4 OHLCV requests) and raise them only
 if you remain under the limit. If you notice log messages like
@@ -965,9 +967,11 @@ symbol_filter:
   ticker_retry_attempts: 3       # number of fetch_tickers retries
   log_ticker_exceptions: false   # include stack traces when true
 max_concurrent_ohlcv: 2          # simultaneous OHLCV requests during startup
-max_concurrent_tickers: 10       # simultaneous ticker requests
-ticker_rate_limit: 0             # ms delay after each ticker request
-initial_timeframes: [1m, 5m, 15m, 1h, 4h]  # preloaded intervals
+  max_concurrent_tickers: 10       # simultaneous ticker requests
+  ticker_rate_limit: 0             # ms delay after each ticker request
+  ticker_backoff_initial: 2        # seconds after first failure
+  ticker_backoff_max: 60           # cap for exponential backoff
+  initial_timeframes: [1m, 5m, 15m, 1h, 4h]  # preloaded intervals
 initial_history_candles: 700     # candles fetched per timeframe initially
 ```
 
