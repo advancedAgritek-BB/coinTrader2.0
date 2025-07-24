@@ -1660,6 +1660,15 @@ async def update_ohlcv_cache(
                     columns=["timestamp", "open", "high", "low", "close", "volume"],
                 )
             if len(df_new) < min_candles_required:
+                last_ts = df_new.iloc[-1, 0] if not df_new.empty else None
+                logger.debug(
+                    "Fetched %d/%d candles for %s since=%s last_ts=%s",
+                    len(df_new),
+                    limit,
+                    sym,
+                    since_val,
+                    last_ts,
+                )
                 logger.warning(
                     "Skipping %s: only %d/%d candles",
                     sym,
