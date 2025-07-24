@@ -30,11 +30,10 @@ def normalize_score_by_volatility(
 ) -> float:
     """Scale ``raw_score`` based on market volatility.
 
-    The function compares the current ATR to a long‑term average
-    (default 20‑period). The score is multiplied by
-    ``min(current_atr / long_term_avg_atr, 2.0)``. When ATR values are
-    ``min(current_atr / long_term_atr, 2.0)``. When ATR values are
-    unavailable the raw score is returned unchanged.
+    The function compares the current ATR to a long‑term average (default
+    20‑period). The score is multiplied by
+    ``min(current_atr / long_term_avg_atr, 2.0)``. If ATR values are
+    unavailable, the raw score is returned unchanged.
     """
     if raw_score == 0 or df.empty:
         return raw_score
