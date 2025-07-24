@@ -1581,6 +1581,47 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
     assert urls[1][0].endswith("/ohlcv/1h")
 
 
+def test_fetch_gecko_lookup_fallback(monkeypatch):
+    """Second search uses mint from get_mint_from_gecko when first search is empty."""
+    from crypto_bot.utils import market_loader
+
+    symbol = "FOO/USDC"
+    mint = "So11111111111111111111111111111111111111112"
+    monkeypatch.setitem(market_loader.TOKEN_MINTS, "FOO", "dummy")
+
+    # First search returns no pools
+    pool_empty = {"data": []}
+    pool_data = {"data": [{"id": "pool1", "attributes": {"volume_usd": {"h24": 5}}}]}
+    ohlcv_data = {"data": {"attributes": {"ohlcv_list": [[1, 1, 2, 0.5, 1.5, 10]]}}}
+
+    calls: list[tuple[str, dict | None]] = []
+    responses = [pool_empty, pool_data, ohlcv_data]
+
+    async def fake_gecko(url, params=None, retries=3):
+        calls.append((url, dict(params or {})))
+        return responses.pop(0)
+
+    async def fake_get_mint(base):
+        assert base == "FOO"
+        return mint
+
+    monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
+    monkeypatch.setattr(market_loader, "get_mint_from_gecko", fake_get_mint)
+
+    data, vol, reserve = asyncio.run(
+        market_loader.fetch_geckoterminal_ohlcv(symbol, timeframe="1h", limit=1)
+    )
+
+    from urllib.parse import quote_plus
+
+    assert calls[0][0].endswith("search/pools")
+    assert calls[0][1]["query"] == quote_plus(symbol)
+    assert calls[1][1]["query"] == quote_plus(f"{mint}/USDC")
+    assert data == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
+    assert vol == 5.0
+
+
+
 def test_fetch_geckoterminal_ohlcv_invalid_mint(monkeypatch):
     from crypto_bot.utils import market_loader
 
@@ -1618,7 +1659,15 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
         urls.append(url)
         return None
 
+    async def fake_get_mint(_base):
+        return None
+
+    async def fake_helius(_symbols):
+        return {}
+
     monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
+    monkeypatch.setattr(market_loader, "get_mint_from_gecko", fake_get_mint)
+    monkeypatch.setattr(market_loader, "fetch_from_helius", fake_helius, raising=False)
 
     caplog.set_level(logging.INFO)
     res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv(f"{mint}/USDC"))

@@ -14,7 +14,7 @@ import base58
 from .gecko import gecko_request
 import contextlib
 
-from .token_registry import TOKEN_MINTS
+from .token_registry import TOKEN_MINTS, get_mint_from_gecko
 
 from .telegram import TelegramNotifier
 from .logger import LOG_DIR, setup_logger
@@ -1000,8 +1000,14 @@ async def fetch_geckoterminal_ohlcv(
 
                     items = search_data.get("data") or []
                     if not items:
-                        logger.info("pair not available on GeckoTerminal: %s", symbol)
-                        return None
+                        mint = await get_mint_from_gecko(token_mint)
+                        if mint and mint != token_mint:
+                            params["query"] = quote_plus(f"{mint}/USDC")
+                            search_data = await gecko_request(search_url, params=params)
+                            items = search_data.get("data") or [] if search_data else []
+                        if not items:
+                            logger.info("pair not available on GeckoTerminal: %s", symbol)
+                            return None
 
                     first = items[0]
                     attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
