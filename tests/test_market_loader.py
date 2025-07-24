@@ -2170,3 +2170,79 @@ def test_coinbase_usdc_pair_skip(monkeypatch):
     assert calls["gecko"] == 1
     assert calls["dex"] == 1
     assert calls["ohlcv"] == 0
+
+
+def test_dynamic_limits_unit_conversion(monkeypatch):
+    from crypto_bot.utils import market_loader
+    import pandas as pd
+
+    limits: list[int] = []
+
+    async def fake_update(_ex, cache, syms, timeframe="1h", limit=100, **_k):
+        limits.append(limit)
+        for s in syms:
+            cache[s] = pd.DataFrame(
+                [[0, 1, 1, 1, 1, 1]],
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
+        return cache
+
+    now = 20 * 3600  # 20h in seconds
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
+    monkeypatch.setattr(market_loader.time, "time", lambda: float(now))
+
+    async def listing_date(_sym):
+        return int(now * 1000 - 10 * 3600 * 1000)
+
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", listing_date)
+
+    ex = DummyMultiTFExchange()
+    asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["BTC/USD"],
+            {"timeframes": ["1h"]},
+            limit=100,
+        )
+    )
+
+    assert limits == [10]
+
+
+def test_dynamic_limits_cap(monkeypatch):
+    from crypto_bot.utils import market_loader
+    import pandas as pd
+
+    limits: list[int] = []
+
+    async def fake_update(_ex, cache, syms, timeframe="1h", limit=100, **_k):
+        limits.append(limit)
+        for s in syms:
+            cache[s] = pd.DataFrame(
+                [[0, 1, 1, 1, 1, 1]],
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
+        return cache
+
+    now = 9_000_000  # arbitrary seconds (>90 days)
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
+    monkeypatch.setattr(market_loader.time, "time", lambda: float(now))
+
+    async def listing_date(_sym):
+        return int(now * 1000 - 90 * 24 * 3600 * 1000)
+
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", listing_date)
+
+    ex = DummyMultiTFExchange()
+    asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["BTC/USD"],
+            {"timeframes": ["1h"], "ohlcv_snapshot_limit": 1000},
+            limit=1500,
+        )
+    )
+
+    assert limits == [720]

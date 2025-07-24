@@ -1913,11 +1913,16 @@ async def update_multi_tf_ohlcv_cache(
 
         now_ms = int(time.time() * 1000)
         dynamic_limits: dict[str, int] = {}
+        snapshot_cap = int(config.get("ohlcv_snapshot_limit", limit))
+        max_cap = min(snapshot_cap, 720)
         for sym in symbols:
             listing_ts = await get_kraken_listing_date(sym)
-            if listing_ts:
+            if listing_ts and 0 < listing_ts <= now_ms:
                 age_ms = now_ms - listing_ts
-                dynamic_limits[sym] = int(age_ms // timeframe_seconds(exchange, tf))
+                tf_sec = timeframe_seconds(exchange, tf)
+                hist_candles = age_ms // (tf_sec * 1000)
+                if hist_candles > 0:
+                    dynamic_limits[sym] = int(min(hist_candles, max_cap))
 
         cex_symbols: list[str] = []
         dex_symbols: list[str] = []
