@@ -112,7 +112,22 @@ def adaptive_thresholds(cfg: dict, df: pd.DataFrame | None, symbol: str | None) 
 
 
 def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
-    """Return regime label and confidence using the bundled ML fallback model."""
+    """Return regime label and confidence using a Supabase model with fallback."""
+    try:  # pragma: no cover - Supabase model is optional
+        from .ml_regime_model import predict_regime as sb_predict
+
+        result = sb_predict(df)
+        if isinstance(result, tuple):
+            label, conf = result
+        else:
+            label, conf = result, 1.0
+
+        logger.info("Using Supabase regime model")
+        return label, float(conf)
+    except Exception as exc:  # pragma: no cover - log and fallback
+        logger.error("%s", exc)
+        logger.info("Falling back to embedded model")
+
     try:  # pragma: no cover - optional dependency
         from .ml_fallback import predict_regime
     except Exception:
