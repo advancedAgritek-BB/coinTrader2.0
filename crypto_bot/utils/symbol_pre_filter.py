@@ -599,6 +599,7 @@ async def _bounded_score(
             spread_pct,
             liquidity_score,
             cfg,
+            df,
         )
     return symbol, score
 

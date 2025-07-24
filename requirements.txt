@@ -40,3 +40,6 @@ redis
 base58
 statsmodels
 pytest-asyncio
+supabase-py
+supabase
+
