@@ -111,7 +111,7 @@ async def status_loop(
                     lines.extend(str(p) for p in positions)
             message = "\n".join(lines)
             for admin in admins:
-                admin.notify(message)
+                await admin.notify_async(message)
         except Exception as exc:  # pragma: no cover - logging only
             logger.error("Status update failed: %s", exc)
         await asyncio.sleep(update_interval)
@@ -126,7 +126,8 @@ def start(
     """Return background task sending periodic updates when ``enabled``."""
     if not enabled:
         return None
-    return asyncio.create_task(status_loop(controller, admins, update_interval))
+    task = asyncio.create_task(status_loop(controller, admins, update_interval))
+    return task
 """Telegram command handlers used by TelegramBotUI and other clients."""
 
 import asyncio

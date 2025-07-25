@@ -197,6 +197,9 @@ class DummyNotifier(TelegramNotifier):
     def notify(self, text):
         self.sent.append(text)
 
+    async def notify_async(self, text):
+        self.sent.append(text)
+
 
 class StopLoop(Exception):
     pass
