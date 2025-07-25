@@ -126,7 +126,8 @@ def start(
     """Return background task sending periodic updates when ``enabled``."""
     if not enabled:
         return None
-    return asyncio.create_task(status_loop(controller, admins, update_interval))
+    task = asyncio.create_task(status_loop(controller, admins, update_interval))
+    return task
 """Telegram command handlers used by TelegramBotUI and other clients."""
 
 import asyncio
