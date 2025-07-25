@@ -1356,12 +1356,14 @@ when the bot starts.
 
 ## Development Setup
 
-Create and activate a virtual environment, then install the Python dependencies:
+Create and activate a virtual environment, then install the Python dependencies.
+Running the test suite requires packages from **both** `requirements.txt` and
+`requirements-dev.txt`:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt -r requirements-dev.txt
 ```
 
 Run the test suite to verify your environment:
