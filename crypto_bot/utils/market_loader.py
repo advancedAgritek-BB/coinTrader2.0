@@ -1987,6 +1987,7 @@ async def update_multi_tf_ohlcv_cache(
                 ts = await get_kraken_listing_date(sym)
             return sym, ts
 
+        start_list = time.perf_counter()
         tasks = [asyncio.create_task(_fetch_listing(sym)) for sym in symbols]
         for sym, listing_ts in await asyncio.gather(*tasks):
             if listing_ts and 0 < listing_ts <= now_ms:
@@ -1995,6 +1996,11 @@ async def update_multi_tf_ohlcv_cache(
                 hist_candles = age_ms // (tf_sec * 1000)
                 if hist_candles > 0:
                     dynamic_limits[sym] = int(min(hist_candles, max_cap))
+        logger.debug(
+            "listing date fetch for %d symbols took %.2fs",
+            len(symbols),
+            time.perf_counter() - start_list,
+        )
 
         cex_symbols: list[str] = []
         dex_symbols: list[str] = []

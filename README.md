@@ -733,7 +733,7 @@ gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
 ohlcv_batch_size: 10         # group symbols per OHLCV fetch
-max_concurrent_tickers: 10   # limit simultaneous ticker fetches
+max_concurrent_tickers: 20   # limit simultaneous ticker fetches
 ticker_rate_limit: 0         # override exchange rate limit (ms)
 force_websocket_history: true  # set false to enable REST fallback
 max_ws_limit: 200            # skip WebSocket when request exceeds this
@@ -979,7 +979,7 @@ symbol_filter:
   ticker_retry_attempts: 3       # number of fetch_tickers retries
   log_ticker_exceptions: false   # include stack traces when true
 max_concurrent_ohlcv: 2          # simultaneous OHLCV requests during startup
-  max_concurrent_tickers: 10       # simultaneous ticker requests
+  max_concurrent_tickers: 20       # simultaneous ticker requests
   ticker_rate_limit: 0             # ms delay after each ticker request
   ticker_backoff_initial: 2        # seconds after first failure
   ticker_backoff_max: 60           # cap for exponential backoff
@@ -1016,7 +1016,7 @@ starts.
 
 * **max_concurrent_ohlcv** – cap simultaneous OHLCV requests while scoring new symbols (default `10`).
 * **ohlcv_batch_size** – batch size for grouped OHLCV requests.
-* **max_concurrent_tickers** – cap simultaneous ticker requests (default `10`).
+* **max_concurrent_tickers** – cap simultaneous ticker requests (default `20`).
 * **ticker_rate_limit** – delay applied after ticker requests in milliseconds.
 * **initial_timeframes** – candle intervals pulled when caching a new market (default `[1h, 1d]`; Coinbase does not provide 4h candles).
 * **initial_history_candles** – number of candles per timeframe loaded on first
