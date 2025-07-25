@@ -81,8 +81,13 @@ def generate_signal(
     Tuple[float, str, float, bool]
         Score between 0 and 1, trade direction, ATR value and event flag.
     """
-    symbol = config.get("symbol") if config else ""
-    if symbol and ALLOWED_PAIRS and symbol not in ALLOWED_PAIRS:
+    symbol = config.get("symbol", "unknown") if config else "unknown"
+    if (
+        symbol
+        and symbol != "unknown"
+        and ALLOWED_PAIRS
+        and symbol not in ALLOWED_PAIRS
+    ):
         logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none", 0.0, False
 
