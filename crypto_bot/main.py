@@ -554,6 +554,9 @@ async def initial_scan(
     processed = 0
 
     sf = config.get("symbol_filter", {})
+    ohlcv_batch_size = config.get("ohlcv_batch_size")
+    if ohlcv_batch_size is None:
+        ohlcv_batch_size = sf.get("ohlcv_batch_size")
     scan_limit = int(
         sf.get("initial_history_candles", config.get("scan_lookback_limit", 50))
     )
@@ -593,6 +596,7 @@ async def initial_scan(
                 max_concurrent=config.get("max_concurrent_ohlcv"),
                 notifier=notifier,
                 priority_queue=symbol_priority_queue,
+                batch_size=ohlcv_batch_size,
             )
 
             state.regime_cache = await update_regime_tf_cache(
@@ -607,6 +611,7 @@ async def initial_scan(
                 max_concurrent=config.get("max_concurrent_ohlcv"),
                 notifier=notifier,
                 df_map=state.df_cache,
+                batch_size=ohlcv_batch_size,
             )
         logger.info("Deep historical OHLCV loaded for %d symbols", len(batch))
 
@@ -851,6 +856,10 @@ async def update_caches(ctx: BotContext) -> None:
     limit = int(ctx.config.get("cycle_lookback_limit") or limit)
     start_since = int(time.time() * 1000 - limit * tf_minutes * 60 * 1000)
 
+    ohlcv_batch_size = ctx.config.get("ohlcv_batch_size")
+    if ohlcv_batch_size is None:
+        ohlcv_batch_size = ctx.config.get("symbol_filter", {}).get("ohlcv_batch_size")
+
     max_concurrent = ctx.config.get("max_concurrent_ohlcv")
     if isinstance(max_concurrent, (int, float)):
         max_concurrent = int(max_concurrent)
@@ -876,6 +885,7 @@ async def update_caches(ctx: BotContext) -> None:
                     else None
                 ),
                 priority_queue=symbol_priority_queue,
+                batch_size=ohlcv_batch_size,
             )
         except Exception as exc:
             logger.warning("WS OHLCV failed: %s - falling back to REST", exc)
@@ -897,6 +907,7 @@ async def update_caches(ctx: BotContext) -> None:
                     else None
                 ),
                 priority_queue=symbol_priority_queue,
+                batch_size=ohlcv_batch_size,
             )
 
             ctx.regime_cache = await update_regime_tf_cache(
@@ -916,6 +927,7 @@ async def update_caches(ctx: BotContext) -> None:
                     else None
                 ),
                 df_map=ctx.df_cache,
+                batch_size=ohlcv_batch_size,
             )
 
     tf = ctx.config.get("timeframe", "1h")
@@ -2087,6 +2099,9 @@ async def _main_impl() -> TelegramNotifier:
                 if time.time() - last_ts >= tf_sec:
                     open_syms.append(sym)
             if open_syms:
+                ohlcv_batch_size = config.get("ohlcv_batch_size")
+                if ohlcv_batch_size is None:
+                    ohlcv_batch_size = config.get("symbol_filter", {}).get("ohlcv_batch_size")
                 async with OHLCV_LOCK:
                     tf_cache = ctx.df_cache.get(tf, {})
                     tf_cache = await update_ohlcv_cache(
@@ -2101,6 +2116,7 @@ async def _main_impl() -> TelegramNotifier:
                         ),
                         max_concurrent=config.get("max_concurrent_ohlcv"),
                         config=config,
+                        batch_size=ohlcv_batch_size,
                     )
                     ctx.df_cache[tf] = tf_cache
                     session_state.df_cache[tf] = tf_cache
