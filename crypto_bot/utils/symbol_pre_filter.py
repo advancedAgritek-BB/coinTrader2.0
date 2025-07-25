@@ -68,13 +68,13 @@ def init_ticker_semaphore(
 
     global TICKER_SEMA, TICKER_DELAY
     if limit is None:
-        limit = 10
+        limit = 20
     try:
         val = int(limit)
         if val < 1:
             raise ValueError
     except (TypeError, ValueError):
-        val = 10
+        val = 20
     TICKER_SEMA = asyncio.Semaphore(val)
     try:
         delay_val = float(delay_ms) if delay_ms is not None else 0.0
@@ -306,6 +306,8 @@ async def _refresh_tickers(
     config: dict | None = None,
 ) -> dict:
     """Return ticker data using WS/HTTP and fall back to per-symbol fetch."""
+
+    start_time = time.perf_counter()
 
     symbols = list(symbols)
     cfg = config if config is not None else globals().get("cfg", {})
@@ -713,6 +715,12 @@ async def _refresh_tickers(
             ticker_cache[sym] = ticker
             ticker_ts[sym] = now
     record_results(result)
+    elapsed = time.perf_counter() - start_time
+    logger.debug(
+        "_refresh_tickers fetched %d tickers in %.2fs",
+        len(symbols),
+        elapsed,
+    )
     return result
 
 
@@ -764,6 +772,8 @@ async def filter_symbols(
     df_cache: Dict[str, pd.DataFrame] | None = None,
 ) -> tuple[List[tuple[str, float]], List[tuple[str, float]]]:
     """Return CEX symbols and onchain symbols with basic scoring."""
+
+    start_time = time.perf_counter()
 
     cfg = config or {}
     sf = cfg.get("symbol_filter", {})
@@ -1123,6 +1133,12 @@ async def filter_symbols(
         except Exception:  # pragma: no cover - network
             logger.warning("Gecko fetch failed for %s; skipping", sym)
 
+    elapsed = time.perf_counter() - start_time
+    logger.debug(
+        "filter_symbols processed %d symbols in %.2fs",
+        len(symbols),
+        elapsed,
+    )
     return (
         sorted(result, key=lambda x: x[1], reverse=True),
         sorted(resolved_onchain, key=lambda x: x[1], reverse=True),
