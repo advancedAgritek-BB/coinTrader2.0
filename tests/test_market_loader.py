@@ -632,6 +632,24 @@ def test_update_ohlcv_cache_none_batch_size(monkeypatch):
     assert "ETH/USD" in cache
 
 
+def test_update_ohlcv_cache_batch_size_no_warning(caplog):
+    ex = DummySyncExchange()
+    cache: dict[str, pd.DataFrame] = {}
+    caplog.set_level(logging.WARNING)
+    asyncio.run(
+        update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            config={"ohlcv_batch_size": 2},
+        )
+    )
+    assert not any(
+        "ohlcv_batch_size not set" in r.getMessage() for r in caplog.records
+    )
+
+
 def test_load_ohlcv_parallel_invalid_max_concurrent():
     ex = DummySyncExchange()
     with pytest.raises(ValueError):
@@ -859,6 +877,7 @@ def test_update_regime_tf_cache():
             limit=1,
             max_concurrent=2,
             df_map=df_map,
+            batch_size=3,
         )
     )
     assert set(cache.keys()) == {"5m", "15m", "1h"}

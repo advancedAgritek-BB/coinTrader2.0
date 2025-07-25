@@ -1901,6 +1901,7 @@ async def update_multi_tf_ohlcv_cache(
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
     priority_queue: Deque[str] | None = None,
+    batch_size: int | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for multiple timeframes.
 
@@ -2011,6 +2012,7 @@ async def update_multi_tf_ohlcv_cache(
                             "min_history_fraction": 0,
                             "ohlcv_batch_size": config.get("ohlcv_batch_size"),
                         },
+                        batch_size=batch_size,
                         start_since=start_since,
                         use_websocket=use_websocket,
                         force_websocket_history=force_websocket_history,
@@ -2181,6 +2183,7 @@ async def update_regime_tf_cache(
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
     df_map: Dict[str, Dict[str, pd.DataFrame]] | None = None,
+    batch_size: int | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for regime detection timeframes."""
     limit = int(limit)
@@ -2219,6 +2222,7 @@ async def update_regime_tf_cache(
             max_concurrent=max_concurrent,
             notifier=notifier,
             priority_queue=None,
+            batch_size=batch_size,
         )
 
     return cache
