@@ -377,7 +377,6 @@ symbol_filter:
   log_ticker_exceptions: true
   max_concurrent_ohlcv: 10
   max_correlation: 0.9
-  min_volume_usd: 100
   ohlcv_batch_size: 3
   min_volume_usd: 20
   max_spread_pct: 8  # minimum; consider raising in production
