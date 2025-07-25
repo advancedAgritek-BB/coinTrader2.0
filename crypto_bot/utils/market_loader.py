@@ -1097,6 +1097,7 @@ async def fetch_geckoterminal_ohlcv(
     reserve liquidity value.
     """
 
+    limit = min(int(limit), 720)
     from urllib.parse import quote_plus
 
     async with GECKO_SEMAPHORE:
