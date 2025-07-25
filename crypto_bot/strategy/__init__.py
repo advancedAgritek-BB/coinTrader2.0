@@ -23,6 +23,7 @@ mean_bot = _optional_import("mean_bot")
 micro_scalp_bot = _optional_import("micro_scalp_bot")
 sniper_bot = _optional_import("sniper_bot")
 trend_bot = _optional_import("trend_bot")
+dip_hunter = _optional_import("dip_hunter")
 
 # Export Solana sniper strategy module under a unified name
 sniper_solana = importlib.import_module("crypto_bot.strategies.sniper_solana")
@@ -37,6 +38,7 @@ __all__ = [
         "dca_bot",
         "grid_bot",
         "mean_bot",
+        "dip_hunter",
         "micro_scalp_bot",
         "sniper_bot",
         "trend_bot",

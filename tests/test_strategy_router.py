@@ -7,6 +7,7 @@ from crypto_bot.strategy import (
     trend_bot,
     grid_bot,
     mean_bot,
+    dip_hunter,
     breakout_bot,
     sniper_bot,
     sniper_solana,
@@ -20,7 +21,7 @@ SAMPLE_CFG = {
         "regimes": {
             "trending": ["trend"],
             "sideways": ["grid"],
-            "mean-reverting": ["mean_bot"],
+            "mean-reverting": ["dip_hunter"],
             "breakout": ["breakout_bot"],
             "volatile": ["sniper_bot"],
             "scalp": ["micro_scalp"],
@@ -40,7 +41,7 @@ def test_strategy_for_mapping():
     assert strategy_for("sideways", cfg).__name__ == grid_bot.generate_signal.__name__
     assert (
         strategy_for("mean-reverting", cfg).__name__
-        == mean_bot.generate_signal.__name__
+        == dip_hunter.generate_signal.__name__
     )
     assert strategy_for("breakout", cfg).__name__ == breakout_bot.generate_signal.__name__
     assert strategy_for("volatile", cfg).__name__ == sniper_bot.generate_signal.__name__

@@ -40,6 +40,20 @@ bounce_scalper:
   vol_zscore_threshold: 1.0
   volume_multiple: 1.5
   zscore_threshold: 1.0
+dip_hunter:
+  rsi_window: 14
+  rsi_oversold: 30
+  dip_pct: 0.03
+  dip_bars: 3
+  vol_window: 20
+  vol_mult: 1.5
+  adx_window: 14
+  adx_threshold: 25
+  bb_window: 20
+  ema_trend: 200
+  ml_weight: 0.5
+  atr_normalization: true
+  cooldown_enabled: false
 breakout:
   adx_threshold: 15
   atr_buffer_mult: 0.03
@@ -359,6 +373,7 @@ strategy_router:
     breakout:
     - breakout_bot
     mean-reverting:
+    - dip_hunter
     - mean_bot
     scalp:
     - micro_scalp
