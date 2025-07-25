@@ -949,9 +949,17 @@ async def update_caches(ctx: BotContext) -> None:
             batch_size=ohlcv_batch_size,
         )
 
+    filtered_batch: list[str] = []
     for sym in batch:
         df = ctx.df_cache.get(timeframe, {}).get(sym)
-        logger.info("%s OHLCV: %d candles", sym, len(df) if df is not None else 0)
+        count = len(df) if isinstance(df, pd.DataFrame) else 0
+        logger.info("%s OHLCV: %d candles", sym, count)
+        if count == 0:
+            logger.warning("No OHLCV data for %s; skipping analysis", sym)
+            continue
+        filtered_batch.append(sym)
+
+    ctx.current_batch = filtered_batch
 
     vol_thresh = ctx.config.get("bounce_scalper", {}).get("vol_zscore_threshold")
     if vol_thresh is not None:
