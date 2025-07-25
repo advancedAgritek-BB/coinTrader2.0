@@ -47,6 +47,7 @@ class RiskConfig:
     take_profit_atr_mult: float = 4.0
     max_pair_drawdown: float = 0.0
     pair_drawdown_lookback: int = 20
+    min_history_bars: int = 20
 
 
 class RiskManager:
@@ -221,7 +222,7 @@ class RiskManager:
         df_len = len(df)
         logger.info("[EVAL] Data length: %d", df_len)
 
-        if df_len < 20:
+        if df_len < self.config.min_history_bars:
             reason = "Not enough data to trade"
             logger.info("[EVAL] %s (len=%d)", reason, df_len)
             return False, reason
