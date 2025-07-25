@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 import types
+import logging
 
 from crypto_bot.strategy import sniper_bot
 
@@ -161,3 +162,18 @@ def test_trainer_model_influence(monkeypatch):
     score, direction2, _, _ = sniper_bot.generate_signal(df, cfg)
     assert direction2 == direction
     assert score == pytest.approx((base + 0.5) / 2)
+
+
+def test_logs_unknown_symbol(caplog):
+    df = pd.DataFrame({
+        "open": [1],
+        "high": [1],
+        "low": [1],
+        "close": [1],
+        "volume": [0],
+    })
+    with caplog.at_level(logging.INFO):
+        sniper_bot.generate_signal(df)
+    assert any(
+        "Signal for unknown: 0.0, none" in r.getMessage() for r in caplog.records
+    )
