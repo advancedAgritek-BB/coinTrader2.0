@@ -256,7 +256,15 @@ def test_set_token_mints_updates_cache(monkeypatch, tmp_path):
 
 
 def test_get_mint_from_gecko(monkeypatch):
-    data = {"data": [{"attributes": {"address": "M"}}]}
+    data = {
+        "data": [
+            {
+                "relationships": {
+                    "base_token": {"data": {"id": "solana_M"}}
+                }
+            }
+        ]
+    }
 
     class DummyResp:
         def __init__(self, d):

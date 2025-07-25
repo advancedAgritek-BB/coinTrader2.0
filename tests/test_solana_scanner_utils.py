@@ -136,14 +136,23 @@ def test_get_solana_new_tokens(monkeypatch):
 def test_search_geckoterminal_token(monkeypatch):
     data = {
         "data": [
-            {"attributes": {"address": "M", "volume_usd_h24": "123"}},
+            {
+                "relationships": {
+                    "base_token": {"data": {"id": "solana_M"}}
+                },
+                "attributes": {"volume_usd_h24": "123"},
+            },
         ]
     }
     urls: list[str] = []
+    async def fake_req(url, params=None, retries=3):
+        urls.append(url)
+        return data
+
     monkeypatch.setattr(
         solana_scanner,
         "gecko_request",
-        lambda url, params=None, retries=3: (urls.append(url) or data),
+        fake_req,
     )
 
     res = asyncio.run(solana_scanner.search_geckoterminal_token("foo"))
