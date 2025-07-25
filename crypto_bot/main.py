@@ -957,8 +957,25 @@ async def update_caches(ctx: BotContext) -> None:
                 df_map=ctx.df_cache,
                 batch_size=ohlcv_batch_size,
             )
+        ctx.regime_cache = await update_regime_tf_cache(
+            ctx.exchange,
+            ctx.regime_cache,
+            batch,
+            ctx.config,
+            limit=limit,
+            use_websocket=ctx.config.get("use_websocket", False),
+            force_websocket_history=ctx.config.get("force_websocket_history", False),
+            max_concurrent=max_concurrent,
+            notifier=(
+                ctx.notifier
+                if ctx.config.get("telegram", {}).get("status_updates", True)
+                else None
+            ),
+            df_map=ctx.df_cache,
+            batch_size=ohlcv_batch_size,
+        )
 
-    base_tf = ctx.config.get("timeframe", "1h")
+    tf = ctx.config.get("timeframe", "1h")
     for sym in batch:
         df = ctx.df_cache.get(base_tf, {}).get(sym)
         logger.info("%s OHLCV: %d candles", sym, len(df) if df is not None else 0)
@@ -1075,9 +1092,7 @@ async def analyse_batch(ctx: BotContext) -> None:
         df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
         for tf, cache in ctx.regime_cache.items():
             df_map[tf] = cache.get(sym)
-        logger.info(
-            f"DF len for {sym}: {len(df_map.get(base_tf, pd.DataFrame()))}"
-        )
+        logger.info(f"DF len for {sym}: {len(df_map.get(base_tf, pd.DataFrame()))}")
         tasks.append(
             analyze_symbol(
                 sym,
@@ -2170,7 +2185,9 @@ async def _main_impl() -> TelegramNotifier:
             if open_syms:
                 ohlcv_batch_size = config.get("ohlcv_batch_size")
                 if ohlcv_batch_size is None:
-                    ohlcv_batch_size = config.get("symbol_filter", {}).get("ohlcv_batch_size")
+                    ohlcv_batch_size = config.get("symbol_filter", {}).get(
+                        "ohlcv_batch_size"
+                    )
                 async with OHLCV_LOCK:
                     tf_cache = ctx.df_cache.get(tf, {})
                     tf_cache = await update_ohlcv_cache(

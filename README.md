@@ -516,7 +516,7 @@ tolerance.
 * **timeframes** – list of additional intervals cached for reuse by strategies.
 * **scalp_timeframe** – short interval used by the scalping bots.
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options. A separate cache is maintained for each timeframe listed in `timeframes`.
-* **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis. Default `timeframe` is `15m` and `timeframes` include `1m`, `5m`, `15m`, `1h`, and `4h`.
+* **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis. Default `timeframe` is `15m` and `timeframes` include `1m`, `5m`, `15m`, and `1h` (Coinbase lacks a `4h` interval).
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options. The snapshot limit defaults to `500`.
 * **loop_interval_minutes** – delay between trading cycles.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
@@ -971,7 +971,7 @@ max_concurrent_ohlcv: 2          # simultaneous OHLCV requests during startup
   ticker_rate_limit: 0             # ms delay after each ticker request
   ticker_backoff_initial: 2        # seconds after first failure
   ticker_backoff_max: 60           # cap for exponential backoff
-  initial_timeframes: [1m, 5m, 15m, 1h, 4h]  # preloaded intervals
+  initial_timeframes: [1m, 5m, 15m, 1h]  # preloaded intervals (4h unsupported on Coinbase)
 initial_history_candles: 700     # candles fetched per timeframe initially
 ```
 
@@ -991,14 +991,14 @@ symbol_filter:
 `max_concurrent_ohlcv` controls how many OHLCV requests are made in parallel
 during the startup scan. It defaults to `2`, keeping API usage modest.
 `initial_timeframes` lists the intervals preloaded before trading begins. When
-omitted it falls back to the `timeframes` list (1m, 5m, 15m, 1h and 4h by
-default). `initial_history_candles` sets how many bars to download for each of
+omitted it falls back to the `timeframes` list (1m, 5m, 15m and 1h by
+default; Coinbase does not offer 4h candles). `initial_history_candles` sets how many bars to download for each of
 these intervals during the initial scan and defaults to the
 `scan_lookback_limit` of `700`. Together these options ensure enough historical
 data is fetched for regime detection and correlation checks before live trading
 starts.
   max_concurrent_ohlcv: 10       # limit OHLCV requests when loading history
-  initial_timeframes: [1h, 4h, 1d]  # timeframes fetched for new symbols
+  initial_timeframes: [1h, 1d]  # timeframes fetched for new symbols
   initial_history_candles: 300   # candles per timeframe on first load
 ```
 
@@ -1006,7 +1006,7 @@ starts.
 * **ohlcv_batch_size** – batch size for grouped OHLCV requests.
 * **max_concurrent_tickers** – cap simultaneous ticker requests (default `10`).
 * **ticker_rate_limit** – delay applied after ticker requests in milliseconds.
-* **initial_timeframes** – candle intervals pulled when caching a new market (default `[1h, 4h, 1d]`).
+* **initial_timeframes** – candle intervals pulled when caching a new market (default `[1h, 1d]`; Coinbase does not provide 4h candles).
 * **initial_history_candles** – number of candles per timeframe loaded on first
   use (default `300`). The loader observes Kraken listing dates so it never
   requests data preceding a pair's debut.
@@ -1373,7 +1373,7 @@ pytest -q
 ## Testing
 
 The repository includes an automated test suite. Some tests rely on optional
-packages such as `numpy`, `pandas`, `ccxt`, `flask`, `base58`,
+packages such as `numpy`, `pandas`, `pytest-asyncio`, `ccxt`, `flask`, `base58`,
 `prometheus_client`, `python-dotenv` and `websocket-client`.  Lightweight stubs
 allow the suite to run in very small environments, but the **full** set of tests
 requires the dependencies listed in `requirements.txt` together with the
@@ -1393,6 +1393,9 @@ Alternatively you can install the Python packages manually:
 pip install -r requirements.txt       # core dependencies
 pip install -r requirements-dev.txt   # optional packages for tests
 ```
+
+Run `pip install -r requirements-dev.txt` to ensure packages like `numpy`,
+`pandas` and `pytest-asyncio` are installed before executing `pytest`.
 
 If `pytest` fails with a `ModuleNotFoundError`, ensure the packages from both
 requirements files are installed.  After the dependencies are available, execute

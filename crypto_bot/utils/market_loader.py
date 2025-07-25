@@ -1935,7 +1935,19 @@ async def update_multi_tf_ohlcv_cache(
             return
 
     tfs = config.get("timeframes", ["1h"])
+    supported = getattr(exchange, "timeframes", None)
+    if supported:
+        unsupported = [tf for tf in tfs if tf not in supported]
+        if unsupported:
+            logger.info(
+                "Skipping unsupported timeframes on %s: %s",
+                getattr(exchange, "id", "unknown"),
+                unsupported,
+            )
+        tfs = [tf for tf in tfs if tf in supported]
     logger.info("Updating OHLCV cache for timeframes: %s", tfs)
+    if not tfs:
+        return cache
 
     min_volume_usd = float(config.get("min_volume_usd", 0) or 0)
     vol_thresh = config.get("bounce_scalper", {}).get("vol_zscore_threshold")
