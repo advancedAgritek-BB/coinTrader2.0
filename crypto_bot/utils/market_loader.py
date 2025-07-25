@@ -369,6 +369,19 @@ def timeframe_seconds(exchange, timeframe: str) -> int:
     raise ValueError(f"Unknown timeframe {timeframe}")
 
 
+def gecko_timeframe_parts(timeframe: str) -> tuple[str, int]:
+    """Return (path, aggregate) for GeckoTerminal OHLCV requests."""
+    unit = timeframe[-1]
+    value = int(timeframe[:-1]) if timeframe[:-1].isdigit() else 1
+    if unit == "m":
+        return "minute", value
+    if unit == "h":
+        return "hour", value
+    if unit == "d":
+        return "day", value
+    return timeframe, 1
+
+
 async def _call_with_retry(func, *args, timeout=None, **kwargs):
     """Call ``func`` with fixed back-off on 520/522 errors."""
 
@@ -1178,10 +1191,11 @@ async def fetch_geckoterminal_ohlcv(
                     except Exception:
                         reserve = 0.0
 
+                gecko_tf, aggregate = gecko_timeframe_parts(timeframe)
                 ohlcv_url = (
-                    f"https://api.geckoterminal.com/api/v2/networks/solana/pools/{pool_addr}/ohlcv/{timeframe}"
+                    f"https://api.geckoterminal.com/api/v2/networks/solana/pools/{pool_addr}/ohlcv/{gecko_tf}"
                 )
-                params = {"aggregate": 1, "limit": limit}
+                params = {"aggregate": aggregate, "limit": limit}
                 data = await gecko_request(ohlcv_url, params=params)
                 if data is None:
                     raise RuntimeError("request failed")
