@@ -9,11 +9,10 @@ from typing import Dict, Iterable, List
 import aiohttp
 
 from .gecko import gecko_request
+
 logger = logging.getLogger(__name__)
 
-TOKEN_REGISTRY_URL = (
-    "https://raw.githubusercontent.com/solana-labs/token-list/main/src/tokens/solana.tokenlist.json"
-)
+TOKEN_REGISTRY_URL = "https://raw.githubusercontent.com/solana-labs/token-list/main/src/tokens/solana.tokenlist.json"
 
 # Primary token list from Jupiter API
 # ``station.jup.ag`` now redirects to ``dev.jup.ag`` which returns ``404``.
@@ -21,7 +20,7 @@ TOKEN_REGISTRY_URL = (
 JUPITER_TOKEN_URL = "https://token.jup.ag/all"
 
 # Batch metadata endpoint for resolving unknown symbols
-HELIUS_TOKEN_API = "https://api.helius.xyz/v0/tokens/metadata"
+HELIUS_TOKEN_API = "https://api.helius.xyz/v0/token-metadata"
 
 CACHE_FILE = Path(__file__).resolve().parents[2] / "cache" / "token_mints.json"
 
@@ -30,6 +29,7 @@ CACHE_FILE = Path(__file__).resolve().parents[2] / "cache" / "token_mints.json"
 TOKEN_MINTS: Dict[str, str] = {}
 
 _LOADED = False
+
 
 async def fetch_from_jupiter() -> Dict[str, str]:
     """Return mapping of symbols to mints using Jupiter token list."""
@@ -84,9 +84,7 @@ async def load_token_mints(
             tokens = data.get("tokens") or data.get("data", {}).get("tokens") or []
             for item in tokens:
                 symbol = item.get("symbol") or item.get("ticker")
-                mint = (
-                    item.get("address") or item.get("mint") or item.get("tokenMint")
-                )
+                mint = item.get("address") or item.get("mint") or item.get("tokenMint")
                 if isinstance(symbol, str) and isinstance(mint, str):
                     mapping[symbol.upper()] = mint
         except Exception as exc:  # pragma: no cover - network failures
@@ -100,7 +98,6 @@ async def load_token_mints(
                 mapping.update({str(k).upper(): str(v) for k, v in cached.items()})
         except Exception as err:  # pragma: no cover - best effort
             logger.error("Failed to read cache: %s", err)
-
 
     if mapping:
         TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
@@ -126,22 +123,24 @@ def _write_cache() -> None:
 
 
 # Additional mints discovered via manual searches
-TOKEN_MINTS.update({
-    "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
-    "BERA": "A7y2wgyytufsxjg2ub616zqnte3x62f7fcp8fujdmoon",
-    "EUROP": "pD6L7wWeei1LJqb7tmnpfEnvkcBvqMgkfqvg23Bpump",
-    "FARTCOIN": "Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw",
-    "RLUSD": "BkbjmJVa84eiGyp27FTofuQVFLqmKFev4ZPZ3U33pump",
-    "USDG": "2gc4f72GkEtggrkUDJRSbLcBpEUPPPFsnDGJJeNKpump",  # Assuming Unlimited Solana Dump
-    "VIRTUAL": "2FupRnaRfnyPHg798WsCBMGAauEkrhMs4YN7nBmujPtM",
-    "XMR": "Fi9GeixxfhMEGfnAe75nJVrwPqfVefyS6fgmyiTxkS6q",  # Wrapped, verify
-    "MELANIA": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
-    "PENGU": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
-    "USDR": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  # USDT as proxy
-    "USTC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC proxy (adjust if needed)
-    "TRUMP": "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
-    # Add more as needed; skip USDQ/USTC/XTZ as non-Solana
-})
+TOKEN_MINTS.update(
+    {
+        "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
+        "BERA": "A7y2wgyytufsxjg2ub616zqnte3x62f7fcp8fujdmoon",
+        "EUROP": "pD6L7wWeei1LJqb7tmnpfEnvkcBvqMgkfqvg23Bpump",
+        "FARTCOIN": "Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw",
+        "RLUSD": "BkbjmJVa84eiGyp27FTofuQVFLqmKFev4ZPZ3U33pump",
+        "USDG": "2gc4f72GkEtggrkUDJRSbLcBpEUPPPFsnDGJJeNKpump",  # Assuming Unlimited Solana Dump
+        "VIRTUAL": "2FupRnaRfnyPHg798WsCBMGAauEkrhMs4YN7nBmujPtM",
+        "XMR": "Fi9GeixxfhMEGfnAe75nJVrwPqfVefyS6fgmyiTxkS6q",  # Wrapped, verify
+        "MELANIA": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
+        "PENGU": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
+        "USDR": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  # USDT as proxy
+        "USTC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC proxy (adjust if needed)
+        "TRUMP": "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
+        # Add more as needed; skip USDQ/USTC/XTZ as non-Solana
+    }
+)
 _write_cache()  # Save immediately
 
 
@@ -226,17 +225,24 @@ async def fetch_from_helius(symbols: Iterable[str]) -> Dict[str, str]:
     """
 
     api_key = os.getenv("HELIUS_KEY", "")
-    if not symbols:
+    tokens = [str(s) for s in symbols if s]
+    if not tokens:
         return {}
-    url = (
-        "https://api.helius.xyz/v0/tokens/metadata"
-        f"?symbols={','.join(symbols)}"
-        + (f"&api-key={api_key}" if api_key else "")
-    )
+
+    params = {"symbol": ",".join(tokens)}
+    if api_key:
+        params["api-key"] = api_key
+    from urllib.parse import urlencode
+
+    url = f"{HELIUS_TOKEN_API}?{urlencode(params)}"
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=10) as resp:
+                if 400 <= resp.status < 500:
+                    text = await resp.text()
+                    logger.error("Helius lookup failed [%s]: %s", resp.status, text)
+                    return {}
                 resp.raise_for_status()
                 data = await resp.json()
     except aiohttp.ClientError as exc:  # pragma: no cover - network
