@@ -190,6 +190,13 @@ class RiskManager:
             if win_rate > 0.7:
                 size *= 1.5
 
+        if size <= 0:
+            logger.info(
+                "Position size zero - balance=%.2f trade_size_pct=%.2f",
+                balance,
+                self.config.trade_size_pct,
+            )
+
         logger.info(
             "Calculated position size: %.4f (vol %.2f risk %.2f)",
             size,

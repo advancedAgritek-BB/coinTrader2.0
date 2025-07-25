@@ -325,6 +325,20 @@ def test_position_size_low_price_risk_based():
     assert abs(size - 50.0) < 1e-6
 
 
+def test_position_size_logs_when_zero(caplog):
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        trade_size_pct=0.1,
+    )
+    manager = RiskManager(cfg)
+    caplog.set_level(logging.INFO)
+    size = manager.position_size(0.0, 1000)
+    assert size == 0.0
+    assert "Position size zero" in caplog.text
+
+
 def test_can_allocate_uses_tracker():
     cfg = RiskConfig(
         max_drawdown=1,
