@@ -581,6 +581,58 @@ def test_update_ohlcv_cache_batches_requests(monkeypatch):
     assert set(cache) == {"A", "B", "C"}
 
 
+def test_update_ohlcv_cache_none_batch_size(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    captured: list[int] = []
+
+    async def fake_worker(key, queue, batch_size, delay):
+        captured.append(batch_size)
+        req = await queue.get()
+        for s in req.symbols:
+            req.cache[s] = pd.DataFrame({"close": [0]})
+        req.future.set_result(req.cache)
+        queue.task_done()
+        market_loader._OHLCV_BATCH_TASKS.pop(key, None)
+
+    monkeypatch.setattr(market_loader, "_ohlcv_batch_worker", fake_worker)
+
+    market_loader._OHLCV_BATCH_QUEUES.clear()
+    market_loader._OHLCV_BATCH_TASKS.clear()
+
+    ex = DummySyncExchange()
+    cache: dict[str, pd.DataFrame] = {}
+
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=1,
+            config={"ohlcv_batch_size": None},
+        )
+    )
+
+    assert captured and captured[0] == 3
+    assert "BTC/USD" in cache
+
+    captured.clear()
+    cache = {}
+
+    asyncio.run(
+        market_loader.update_ohlcv_cache(
+            ex,
+            cache,
+            ["ETH/USD"],
+            limit=1,
+            batch_size=None,
+        )
+    )
+
+    assert captured and captured[-1] == 3
+    assert "ETH/USD" in cache
+
+
 def test_load_ohlcv_parallel_invalid_max_concurrent():
     ex = DummySyncExchange()
     with pytest.raises(ValueError):
@@ -2298,3 +2350,37 @@ def test_get_kraken_listing_date_cached(monkeypatch):
     assert ts2 == ts1
     assert len(calls) == 1
 
+def test_listing_date_concurrency(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    active = 0
+    max_active = 0
+
+    async def listing_date(_sym):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return 1
+
+    async def fake_update(*_a, **_k):
+        return {}
+
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", listing_date)
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
+    monkeypatch.setattr(market_loader, "fetch_dex_ohlcv", lambda *a, **k: [])
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", lambda *a, **k: [])
+
+    ex = DummyMultiTFExchange()
+    asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["A/USD", "B/USD", "C/USD"],
+            {"timeframes": ["1h"], "listing_date_concurrency": 2},
+            limit=1,
+        )
+    )
+
+    assert 1 < max_active <= 2

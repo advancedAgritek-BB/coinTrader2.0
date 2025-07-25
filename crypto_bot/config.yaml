@@ -121,6 +121,7 @@ max_age_days: 90
 max_change_pct: 20
 max_concurrent_ohlcv: 2
 max_concurrent_tickers: 10
+listing_date_concurrency: 5
 ticker_rate_limit: null
 ticker_backoff_initial: 2
 ticker_backoff_max: 60
