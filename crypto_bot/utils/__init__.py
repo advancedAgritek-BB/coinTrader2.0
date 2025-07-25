@@ -14,7 +14,11 @@ from .pair_cache import load_liquid_pairs
 # Symbol filtering utilities import is optional because the module has
 # heavy async dependencies and some environments may not need it during
 # initialization. Import it lazily where required.
-from .symbol_utils import get_filtered_symbols, fix_symbol
+try:  # optional heavy dependency
+    from .symbol_utils import get_filtered_symbols, fix_symbol
+except Exception:  # pragma: no cover - allow import without symbol_utils
+    get_filtered_symbols = None
+    fix_symbol = None
 from .stats import zscore
 from .commit_lock import check_and_update
 from .telemetry import telemetry
