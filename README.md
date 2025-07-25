@@ -720,7 +720,7 @@ max_ws_limit: 50             # skip WebSocket when request exceeds this
 gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
-ohlcv_batch_size: 3          # group symbols per OHLCV fetch
+ohlcv_batch_size: 10         # group symbols per OHLCV fetch
 max_concurrent_tickers: 10   # limit simultaneous ticker fetches
 ticker_rate_limit: 0         # override exchange rate limit (ms)
 force_websocket_history: true  # set false to enable REST fallback
@@ -728,7 +728,7 @@ max_ws_limit: 200            # skip WebSocket when request exceeds this
 gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
-ohlcv_batch_size: 3          # group symbols per OHLCV fetch
+ohlcv_batch_size: 10         # group symbols per OHLCV fetch
 metrics:
   enabled: true              # write cycle statistics to metrics.csv
   file: crypto_bot/logs/metrics.csv
