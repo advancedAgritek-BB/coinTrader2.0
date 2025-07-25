@@ -44,6 +44,7 @@ _ALL_REGIMES = [
     "trending",
     "sideways",
     "mean-reverting",
+    "dip_hunter",
     "breakout",
     "volatile",
     "bullish_trending",
@@ -341,6 +342,8 @@ def _classify_core(
         regime = "breakout"
     elif trending:
         regime = "trending"
+    elif not trending and latest["adx"] < cfg.get("dip_hunter_adx_max", 25):
+        regime = "dip_hunter"
     elif (
         latest["adx"] < cfg["adx_sideways_max"]
         and latest["bb_width"] < cfg["bb_width_sideways_max"]

@@ -43,6 +43,10 @@ def test_strategy_for_mapping():
         strategy_for("mean-reverting", cfg).__name__
         == dip_hunter.generate_signal.__name__
     )
+    assert (
+        strategy_for("dip_hunter", cfg).__name__
+        == dip_hunter.generate_signal.__name__
+    )
     assert strategy_for("breakout", cfg).__name__ == breakout_bot.generate_signal.__name__
     assert strategy_for("volatile", cfg).__name__ == sniper_bot.generate_signal.__name__
     assert strategy_for("scalp", cfg).__name__ == micro_scalp_bot.generate_signal.__name__

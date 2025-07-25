@@ -372,6 +372,8 @@ strategy_router:
     - bounce_scalper
     breakout:
     - breakout_bot
+    dip_hunter:
+    - dip_hunter
     mean-reverting:
     - dip_hunter
     - mean_bot

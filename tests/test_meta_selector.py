@@ -62,6 +62,15 @@ def test_strategy_map_contains_bounce_scalper():
     )
 
 
+def test_strategy_map_contains_dip_hunter():
+    from crypto_bot.strategy import dip_hunter
+
+    assert (
+        meta_selector._STRATEGY_FN_MAP.get("dip_hunter")
+        is dip_hunter.generate_signal
+    )
+
+
 def test_strategy_map_contains_solana_scalping():
     from crypto_bot.strategy import solana_scalping
 

@@ -31,6 +31,7 @@ from crypto_bot.strategy import grid_bot
 from crypto_bot.strategy import micro_scalp_bot
 from crypto_bot.volatility_filter import calc_atr
 from ta.volatility import BollingerBands
+from ta.trend import ADXIndicator
 from crypto_bot.utils import zscore
 from crypto_bot.utils.telemetry import telemetry
 
@@ -184,6 +185,16 @@ async def analyze_symbol(
                 bb_z = float(z.iloc[-1])
         except Exception:
             bb_z = 0.0
+        try:
+            adx_val = (
+                ADXIndicator(df["high"], df["low"], df["close"], window=14)
+                .adx()
+                .iloc[-1]
+            )
+        except Exception:
+            adx_val = 0.0
+    else:
+        adx_val = 0.0
     min_conf_adaptive = baseline * (1 + bb_z / 3)
     min_conf_adaptive = min(min_conf_adaptive, 0.3)
     higher_df = df_map.get("1d")
@@ -272,6 +283,9 @@ async def analyze_symbol(
         regime, votes = max(regime_counts.items(), key=lambda kv: kv[1])
     else:
         regime, votes = "unknown", 0
+
+    if adx_val < 25 and patterns.get("breakout", 0) <= 0 and regime in {"sideways", "mean-reverting"}:
+        regime = "dip_hunter"
 
     denom = len(regime_tfs)
     if vote_map:
