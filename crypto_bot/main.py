@@ -302,6 +302,19 @@ async def refresh_balance(ctx: BotContext) -> float:
     return ctx.balance
 
 
+def _ensure_ml(cfg: dict) -> None:
+    """Attempt to load the mean_bot ML model or disable ML."""
+    if not cfg.get("ml_enabled", True):
+        return
+    try:  # pragma: no cover - best effort
+        from coinTrader_Trainer.ml_trainer import load_model
+
+        load_model("mean_bot")
+    except Exception as exc:  # pragma: no cover - missing trainer or model
+        cfg["ml_enabled"] = False
+        logger.warning("Machine learning unavailable, disabling ml_enabled: %s", exc)
+
+
 def _emit_timing(
     symbol_t: float,
     ohlcv_t: float,
@@ -336,6 +349,8 @@ def load_config() -> dict:
     with open(CONFIG_PATH) as f:
         logger.info("Loading config from %s", CONFIG_PATH)
         data = yaml.safe_load(f) or {}
+
+    _ensure_ml(data)
 
     strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
     trend_file = strat_dir / "trend_bot.yaml"
