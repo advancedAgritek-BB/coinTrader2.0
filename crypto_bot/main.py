@@ -918,7 +918,7 @@ async def update_caches(ctx: BotContext) -> None:
                 df_map=ctx.df_cache,
             )
 
-    tf = ctx.config.get("timeframe", "1h")
+    base_tf = ctx.config.get("timeframe", "1h")
     for sym in batch:
         df = ctx.df_cache.get(tf, {}).get(sym)
         logger.info("%s OHLCV: %d candles", sym, len(df) if df is not None else 0)
@@ -1028,12 +1028,17 @@ async def analyse_batch(ctx: BotContext) -> None:
         batch,
     )
 
+    base_tf = ctx.config.get("timeframe", "1h")
+
     tasks = []
     mode = ctx.config.get("mode", "cex")
     for sym in batch:
         df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
         for tf, cache in ctx.regime_cache.items():
             df_map[tf] = cache.get(sym)
+        logger.info(
+            f"DF len for {sym}: {len(df_map.get(base_tf, pd.DataFrame()))}"
+        )
         tasks.append(
             analyze_symbol(
                 sym,
