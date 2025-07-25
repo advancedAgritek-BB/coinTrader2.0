@@ -629,6 +629,18 @@ The built-in Telegram interface is provided by the `TelegramBotUI` class in
    Double-check the values in `config.yaml` and ensure you've started a
   conversation with your bot.
 
+For asynchronous workflows the notifier exposes `notify_async` so you can
+send messages without blocking the event loop:
+
+```python
+notifier = TelegramNotifier.from_config(cfg["telegram"])
+
+async def heartbeat():
+    while True:
+        await notifier.notify_async("Bot running")
+        await asyncio.sleep(60)
+```
+
 #### Troubleshooting
 
 Before running the bot, run `python tools/test_telegram.py` to send a
