@@ -25,16 +25,16 @@ PUMP_FUN_URL = "https://client-api.prod.pump.fun/v1/launches"
 async def search_geckoterminal_token(query: str) -> tuple[str, float] | None:
     """Return ``(mint, volume)`` from GeckoTerminal token search.
 
-    The function queries ``/api/v2/search/tokens`` with ``query`` and
-    ``network=solana`` and returns the first result's address and 24h
-    volume in USD. ``None`` is returned when the request fails or no
-    results are available.
+    The function queries ``/api/v2/search/pools`` with ``query`` and
+    ``network=solana`` and returns the first result's base token mint
+    and 24h volume in USD. ``None`` is returned when the request fails
+    or no results are available.
     """
 
     from urllib.parse import quote_plus
 
     url = (
-        "https://api.geckoterminal.com/api/v2/search/tokens"
+        "https://api.geckoterminal.com/api/v2/search/pools"
         f"?query={quote_plus(query)}&network=solana"
     )
 
@@ -46,9 +46,22 @@ async def search_geckoterminal_token(query: str) -> tuple[str, float] | None:
     if not isinstance(items, list) or not items:
         return None
 
-    item = items[0]
-    attrs = item.get("attributes", {}) if isinstance(item, dict) else {}
-    mint = str(attrs.get("address") or item.get("id") or query)
+    item = items[0] if isinstance(items[0], dict) else None
+    if not item:
+        return None
+
+    mint = (
+        item.get("relationships", {})
+        .get("base_token", {})
+        .get("data", {})
+        .get("id")
+    )
+    if not isinstance(mint, str):
+        return None
+    if mint.startswith("solana_"):
+        mint = mint[len("solana_") :]
+
+    attrs = item.get("attributes", {})
     try:
         volume = float(attrs.get("volume_usd_h24") or 0.0)
     except Exception:

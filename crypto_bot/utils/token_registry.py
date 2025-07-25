@@ -184,7 +184,7 @@ async def get_mint_from_gecko(base: str) -> str | None:
     from urllib.parse import quote_plus
 
     url = (
-        "https://api.geckoterminal.com/api/v2/search/tokens"
+        "https://api.geckoterminal.com/api/v2/search/pools"
         f"?query={quote_plus(str(base))}&network=solana"
     )
 
@@ -197,11 +197,18 @@ async def get_mint_from_gecko(base: str) -> str | None:
     if isinstance(data, dict):
         items = data.get("data")
         if isinstance(items, list) and items:
-            item = items[0]
-            attrs = item.get("attributes", {}) if isinstance(item, dict) else {}
-            mint = attrs.get("address") or item.get("id")
-            if isinstance(mint, str):
-                return mint
+            item = items[0] if isinstance(items[0], dict) else None
+            if item:
+                mint = (
+                    item.get("relationships", {})
+                    .get("base_token", {})
+                    .get("data", {})
+                    .get("id")
+                )
+                if isinstance(mint, str):
+                    if mint.startswith("solana_"):
+                        mint = mint[len("solana_") :]
+                    return mint
 
     # Fallback: Helius if Gecko fails
     logger.info("Gecko failed; falling back to Helius for %s", base)
