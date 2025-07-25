@@ -1,19 +1,24 @@
 import asyncio
 import json
 import sys
+import logging
 
 
 class DummyErr(Exception):
     """Minimal exception class for simulating aiohttp errors in tests."""
+
     pass
 
 
 def _load_module(monkeypatch, tmp_path):
     import importlib.util, pathlib
+
     spec = importlib.util.spec_from_file_location(
         "crypto_bot.utils.token_registry",
         pathlib.Path(__file__).resolve().parents[1]
-        / "crypto_bot" / "utils" / "token_registry.py",
+        / "crypto_bot"
+        / "utils"
+        / "token_registry.py",
     )
     mod = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = mod
@@ -30,6 +35,8 @@ def test_fetch_from_jupiter(monkeypatch, tmp_path):
     class DummyResp:
         def __init__(self, d):
             self._d = d
+            self.status = 200
+            self.status = 200
 
         async def json(self, content_type=None):
             return self._d
@@ -65,10 +72,13 @@ def test_fetch_from_jupiter(monkeypatch, tmp_path):
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
 
     import importlib.util, pathlib
+
     spec = importlib.util.spec_from_file_location(
         "crypto_bot.utils.token_registry",
         pathlib.Path(__file__).resolve().parents[1]
-        / "crypto_bot" / "utils" / "token_registry.py",
+        / "crypto_bot"
+        / "utils"
+        / "token_registry.py",
     )
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr
@@ -89,6 +99,7 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
     class DummyResp:
         def __init__(self, d):
             self._d = d
+            self.status = 200
 
         async def json(self, content_type=None):
             return self._d
@@ -120,16 +131,64 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
     session = DummySession(data)
 
     mod = _load_module(monkeypatch, tmp_path)
-    aiohttp_mod = type("M", (), {"ClientSession": lambda: session, "ClientError": Exception})
+    aiohttp_mod = type(
+        "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
+    )
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
     monkeypatch.setenv("HELIUS_KEY", "KEY")
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
     assert mapping == {"AAA": "mmm"}
     assert (
-        session.url
-        == "https://api.helius.xyz/v0/tokens/metadata?symbols=AAA&api-key=KEY"
+        session.url == "https://api.helius.xyz/v0/token-metadata?symbol=AAA&api-key=KEY"
     )
+
+
+def test_fetch_from_helius_4xx(monkeypatch, tmp_path, caplog):
+    class DummyResp:
+        def __init__(self, status=401):
+            self.status = status
+
+        async def text(self):
+            return "nope"
+
+        async def json(self, content_type=None):
+            return {}
+
+        def raise_for_status(self):
+            raise AssertionError("should not be called")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+    class DummySession:
+        def __init__(self):
+            self.url = None
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=10):
+            self.url = url
+            return DummyResp()
+
+    session = DummySession()
+    mod = _load_module(monkeypatch, tmp_path)
+    aiohttp_mod = type(
+        "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
+    )
+    monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+    caplog.set_level(logging.ERROR)
+
+    mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
+    assert mapping == {}
+    assert "Helius lookup failed" in caplog.text
 
 
 def test_load_token_mints(monkeypatch, tmp_path):
@@ -167,13 +226,18 @@ def test_load_token_mints_error(monkeypatch, tmp_path):
     aiohttp_mod = type("M", (), {"ClientSession": lambda: FailingSession()})
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
 
-    aiohttp_mod = type("M", (), {"ClientSession": lambda: FailingSession(), "ClientError": DummyErr})
+    aiohttp_mod = type(
+        "M", (), {"ClientSession": lambda: FailingSession(), "ClientError": DummyErr}
+    )
 
     import importlib.util, pathlib
+
     spec = importlib.util.spec_from_file_location(
         "crypto_bot.utils.token_registry",
         pathlib.Path(__file__).resolve().parents[1]
-        / "crypto_bot" / "utils" / "token_registry.py",
+        / "crypto_bot"
+        / "utils"
+        / "token_registry.py",
     )
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr
@@ -221,13 +285,18 @@ def test_load_token_mints_force_refresh_creates_dir(monkeypatch, tmp_path):
         def get(self, url, timeout=10):
             return DummyResp(self.d)
 
-    aiohttp_mod = type("M", (), {"ClientSession": lambda: DummySession(data), "ClientError": Exception})
+    aiohttp_mod = type(
+        "M", (), {"ClientSession": lambda: DummySession(data), "ClientError": Exception}
+    )
 
     import importlib.util, pathlib, shutil
+
     spec = importlib.util.spec_from_file_location(
         "crypto_bot.utils.token_registry",
         pathlib.Path(__file__).resolve().parents[1]
-        / "crypto_bot" / "utils" / "token_registry.py",
+        / "crypto_bot"
+        / "utils"
+        / "token_registry.py",
     )
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr
@@ -294,14 +363,18 @@ def test_get_mint_from_gecko(monkeypatch):
     urls: list[str] = []
 
     import importlib.util, pathlib
+
     spec = importlib.util.spec_from_file_location(
         "crypto_bot.utils.token_registry",
         pathlib.Path(__file__).resolve().parents[1]
-        / "crypto_bot" / "utils" / "token_registry.py",
+        / "crypto_bot"
+        / "utils"
+        / "token_registry.py",
     )
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr
     spec.loader.exec_module(tr)
+
     async def fake_req(url, params=None, retries=3):
         urls.append(url)
         return data
@@ -316,20 +389,26 @@ def test_get_mint_from_gecko(monkeypatch):
 def test_get_mint_from_gecko_error(monkeypatch):
 
     import importlib.util, pathlib
+
     spec = importlib.util.spec_from_file_location(
         "crypto_bot.utils.token_registry",
         pathlib.Path(__file__).resolve().parents[1]
-        / "crypto_bot" / "utils" / "token_registry.py",
+        / "crypto_bot"
+        / "utils"
+        / "token_registry.py",
     )
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr
     spec.loader.exec_module(tr)
+
     async def fail_req(url, params=None, retries=3):
         raise DummyErr("boom")
 
     monkeypatch.setattr(tr, "gecko_request", fail_req)
+
     async def fake_hel(symbols):
         return {}
+
     monkeypatch.setattr(tr, "fetch_from_helius", fake_hel)
 
     mint = asyncio.run(tr.get_mint_from_gecko("AAA"))
@@ -340,10 +419,13 @@ def test_get_mint_from_gecko_helius_fallback(monkeypatch):
     """Helius fallback is used when Gecko lookups fail."""
 
     import importlib.util, pathlib
+
     spec = importlib.util.spec_from_file_location(
         "crypto_bot.utils.token_registry",
         pathlib.Path(__file__).resolve().parents[1]
-        / "crypto_bot" / "utils" / "token_registry.py",
+        / "crypto_bot"
+        / "utils"
+        / "token_registry.py",
     )
     tr = importlib.util.module_from_spec(spec)
     sys.modules["crypto_bot.utils.token_registry"] = tr
@@ -367,6 +449,7 @@ def test_get_mint_from_gecko_empty_attrs(monkeypatch):
     """fetch_from_helius is used when Gecko returns item without attributes."""
 
     import importlib.util, pathlib
+
     spec = importlib.util.spec_from_file_location(
         "crypto_bot.utils.token_registry",
         pathlib.Path(__file__).resolve().parents[1]
@@ -393,6 +476,8 @@ def test_get_mint_from_gecko_empty_attrs(monkeypatch):
     mint = asyncio.run(tr.get_mint_from_gecko("AAA"))
     assert mint == "mint"
     assert called["symbols"] == ["AAA"]
+
+
 def test_refresh_mints(monkeypatch, tmp_path):
     mod = _load_module(monkeypatch, tmp_path)
 
@@ -405,7 +490,9 @@ def test_refresh_mints(monkeypatch, tmp_path):
         return {"SOL": "So111"}
 
     monkeypatch.setattr(mod, "load_token_mints", fake_load)
-    monkeypatch.setattr(mod, "_write_cache", lambda: calls.__setitem__("cache", calls["cache"] + 1))
+    monkeypatch.setattr(
+        mod, "_write_cache", lambda: calls.__setitem__("cache", calls["cache"] + 1)
+    )
     monkeypatch.setattr(mod, "logger", type("L", (), {"info": lambda *a, **k: None}))
 
     asyncio.run(mod.refresh_mints())
