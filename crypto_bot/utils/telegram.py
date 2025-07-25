@@ -195,6 +195,42 @@ class TelegramNotifier:
         """Asynchronously send ``text`` using :meth:`notify`."""
         return await asyncio.to_thread(self.notify, text)
 
+    async def notify_async(self, text: str) -> Optional[str]:
+        """Asynchronous variant of :meth:`notify` using ``asyncio.sleep``."""
+        if self._disabled or not self.enabled or not self.token or not self.chat_id:
+            return None
+
+        if not hasattr(self, "_async_lock"):
+            self._async_lock = asyncio.Lock()
+
+        async with self._async_lock:
+            if self._disabled:
+                return None
+
+            now = time.time()
+            self._recent_sends = [t for t in self._recent_sends if now - t < 60]
+
+            delay = max(0.0, self.message_interval - (now - self._last_sent))
+            if self._recent_sends and len(self._recent_sends) >= self.max_per_minute:
+                oldest = self._recent_sends[0]
+                delay = max(delay, 60 - (now - oldest))
+
+            if delay > 0:
+                await asyncio.sleep(delay)
+                now = time.time()
+
+            err = send_message(self.token, self.chat_id, text)
+            if err is not None:
+                self._disabled = True
+                logger.error(
+                    "Disabling Telegram notifications due to send failure: %s",
+                    err,
+                )
+            else:
+                self._last_sent = now
+                self._recent_sends.append(now)
+            return err
+
     @classmethod
     def from_config(cls, config: dict) -> "TelegramNotifier":
         """Create a notifier from a configuration dictionary."""

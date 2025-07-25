@@ -1,3 +1,7 @@
+from crypto_bot.utils.telegram import TelegramNotifier
+import pytest
+import types
+import time
 import asyncio
 import importlib.util
 import types
@@ -73,6 +77,70 @@ def test_set_admin_ids_accepts_int(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_notify_async_respects_message_interval(monkeypatch):
+    import crypto_bot.utils.telegram as tg
+
+    send_times = []
+
+    def fake_send(token, chat_id, text):
+        send_times.append(current["t"])
+        return None
+
+    monkeypatch.setattr(tg, "send_message", fake_send)
+
+    current = {"t": 100.0}
+
+    def fake_time():
+        return current["t"]
+
+    async def fake_sleep(sec):
+        current["t"] += sec
+
+    monkeypatch.setattr(time, "time", fake_time)
+    monkeypatch.setattr(tg.asyncio, "sleep", fake_sleep)
+
+    notifier = tg.TelegramNotifier(True, "t", "c", message_interval=1.0)
+
+    await notifier.notify_async("a")
+    current["t"] = 100.2
+    await notifier.notify_async("b")
+
+    assert len(send_times) == 2
+    assert send_times[1] - send_times[0] >= 1.0
+
+
+@pytest.mark.asyncio
+async def test_notify_async_respects_max_messages_per_minute(monkeypatch):
+    import crypto_bot.utils.telegram as tg
+    send_times = []
+
+    def fake_send(token, chat_id, text):
+        send_times.append(current["t"])
+        return None
+
+    monkeypatch.setattr(tg, "send_message", fake_send)
+
+    current = {"t": 200.0}
+
+    def fake_time():
+        return current["t"]
+
+    async def fake_sleep(sec):
+        current["t"] += sec
+
+    monkeypatch.setattr(time, "time", fake_time)
+    monkeypatch.setattr(tg.asyncio, "sleep", fake_sleep)
+
+    notifier = tg.TelegramNotifier(True, "t", "c", message_interval=0.0, max_per_minute=2)
+
+    await notifier.notify_async("1")
+    current["t"] = 200.1
+    await notifier.notify_async("2")
+    current["t"] = 200.2
+    await notifier.notify_async("3")
+
+    assert len(send_times) == 3
+    assert send_times[2] - send_times[0] >= 60
 async def test_notify_async_uses_send_message(monkeypatch):
     calls = {}
 
