@@ -1742,6 +1742,7 @@ def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
     urls: list[str] = []
 
     market_loader.GECKO_POOL_CACHE.clear()
+    market_loader.GECKO_UNAVAILABLE.clear()
 
     async def fake_gecko(url, params=None, retries=3):
         urls.append(url)
@@ -1791,6 +1792,7 @@ def test_fetch_geckoterminal_ohlcv_retry(monkeypatch):
 
     calls = 0
     market_loader.GECKO_POOL_CACHE.clear()
+    market_loader.GECKO_UNAVAILABLE.clear()
 
     async def fake_gecko(url, params=None, retries=3):
         nonlocal calls
@@ -1826,11 +1828,38 @@ def test_fetch_geckoterminal_ohlcv_retry(monkeypatch):
     assert vol == 123.0
 
 
+def test_fetch_geckoterminal_skip_unavailable(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    calls = 0
+
+    async def fake_gecko(url, params=None, retries=3):
+        nonlocal calls
+        calls += 1
+        return None
+
+    market_loader.GECKO_POOL_CACHE.clear()
+    market_loader.GECKO_UNAVAILABLE.clear()
+
+    monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
+    monkeypatch.setattr(market_loader, "get_mint_from_gecko", lambda *_a, **_k: None)
+    monkeypatch.setattr(market_loader, "fetch_from_helius", lambda *_a, **_k: {})
+
+    sym = f"{VALID_MINT}/USDC"
+    res1 = asyncio.run(market_loader.fetch_geckoterminal_ohlcv(sym))
+    res2 = asyncio.run(market_loader.fetch_geckoterminal_ohlcv(sym))
+
+    assert res1 is None and res2 is None
+    assert calls == 1
+    assert sym in market_loader.GECKO_UNAVAILABLE
+
+
 def test_geckoterminal_semaphore_limits(monkeypatch):
     from crypto_bot.utils import market_loader
 
     market_loader.configure(gecko_limit=1)
     market_loader.GECKO_POOL_CACHE.clear()
+    market_loader.GECKO_UNAVAILABLE.clear()
 
     calls = {"active": 0, "max": 0}
 

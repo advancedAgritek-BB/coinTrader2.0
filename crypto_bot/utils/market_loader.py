@@ -60,6 +60,8 @@ COINGECKO_IDS = {
 # Mapping: symbol -> (pool_addr, volume, reserve, price, limit)
 GECKO_POOL_CACHE: dict[str, tuple[str, float, float, float, int]] = {}
 GECKO_SEMAPHORE = asyncio.Semaphore(10)
+# Track symbols that don't exist on GeckoTerminal to avoid repeated lookups
+GECKO_UNAVAILABLE: set[str] = set()
 
 # Batch queues for OHLCV updates keyed by request parameters
 _OHLCV_BATCH_QUEUES: Dict[tuple, asyncio.Queue] = {}
@@ -1093,6 +1095,9 @@ async def fetch_geckoterminal_ohlcv(
         if quote != "USDC" or not _is_valid_base_token(token_mint):
             return None
 
+        if symbol in GECKO_UNAVAILABLE:
+            return None
+
         cached = GECKO_POOL_CACHE.get(symbol)
         is_cached = cached is not None and cached[4] == limit
         if not _is_valid_base_token(token_mint):
@@ -1119,6 +1124,7 @@ async def fetch_geckoterminal_ohlcv(
                     if not search_data:
                         logger.info("token not available on GeckoTerminal: %s", symbol)
                         logger.info("pair not available on GeckoTerminal: %s", symbol)
+                        GECKO_UNAVAILABLE.add(symbol)
                         return None
 
                     items = search_data.get("data") or []
@@ -1135,6 +1141,7 @@ async def fetch_geckoterminal_ohlcv(
                             token_mint = mint
                         if not items:
                             logger.info("pair not available on GeckoTerminal: %s", symbol)
+                            GECKO_UNAVAILABLE.add(symbol)
                             return None
 
                     first = items[0]
