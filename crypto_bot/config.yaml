@@ -60,7 +60,7 @@ cycle_bias:
 cycle_lookback_limit: 150
 dca:
   enabled: false
-  max_entries: 2
+  max_entries: 3
   size_multiplier: 1.0
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.05
@@ -179,7 +179,7 @@ micro_scalp:
   volume_window: 15
   wick_pct: 0.1
 min_agreeing_votes: 1
-min_confidence_score: 0.0001
+min_confidence_score: 0.001
 min_consistent_agreement: 1
 min_cooldown: 0
 min_history_fraction: 0.1
@@ -246,11 +246,11 @@ risk:
   min_atr_pct: 0.0005
   min_expected_value: 0.0
   min_volume: 0.0001
-  stop_loss_atr_mult: 1.5
+  stop_loss_atr_mult: 1.0
   stop_loss_pct: 0.01
   take_profit_atr_mult: 3.0
   take_profit_pct: 0.1
-  volume_threshold_ratio: 0.05
+  volume_threshold_ratio: 0.01
 rl_selector:
   enabled: false
 rsi_overbought_pct: 80
@@ -339,6 +339,7 @@ strategy_router:
     breakout_volume_multiplier: 3
     trend_adx_threshold: 20
   mean_reverting_timeframe: 1h
+  min_confidence: 0.001
   regimes:
     bounce:
     - bounce_scalper
