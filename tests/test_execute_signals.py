@@ -7,17 +7,23 @@ from pathlib import Path
 from crypto_bot.phase_runner import BotContext
 from crypto_bot.paper_wallet import PaperWallet
 
+
 class DummyRM:
     def allow_trade(self, *a, **k):
         return True, ""
+
     def position_size(self, *a, **k):
         return 100.0
+
     def can_allocate(self, *a, **k):
         return True
+
     def allocate_capital(self, *a, **k):
         pass
+
     def register_stop_order(self, *a, **k):
         pass
+
 
 class DummyPG:
     def __init__(self, max_open_trades: int = 2) -> None:
@@ -33,8 +39,12 @@ def load_execute_signals():
     module = ast.parse(src)
     funcs = {}
     for node in module.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in {"direction_to_side", "execute_signals"}:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in {
+            "direction_to_side",
+            "execute_signals",
+        }:
             funcs[node.name] = ast.get_source_segment(src, node)
+
     async def _trade(*a, **k):
         called["called"] = True
         return {"id": "1"}
@@ -130,3 +140,53 @@ async def test_execute_signals_logs_execution(monkeypatch, caplog):
     assert called["called"]
     assert "[EVAL] evaluating XBT/USDT" in caplog.text
     assert "[EVAL] XBT/USDT -> executed buy 1.0000" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_execute_signals_no_symbols_qualify(monkeypatch, caplog):
+    df = pd.DataFrame({"close": [100.0]})
+    candidate = {
+        "symbol": "XBT/USDT",
+        "direction": "long",
+        "df": df,
+        "name": "test",
+        "probabilities": {},
+        "regime": "bull",
+        "score": 0.05,
+        "min_confidence": 0.1,
+    }
+
+    class DummyNotifier:
+        def __init__(self):
+            self.sent = []
+
+        def notify(self, text):
+            self.sent.append(text)
+
+    ctx = BotContext(
+        positions={},
+        df_cache={"1h": {"XBT/USDT": df}},
+        regime_cache={},
+        config={
+            "execution_mode": "dry_run",
+            "top_n_symbols": 1,
+            "telegram": {"trade_updates": True},
+        },
+        exchange=object(),
+        ws_client=None,
+        risk_manager=DummyRM(),
+        notifier=DummyNotifier(),
+        paper_wallet=PaperWallet(1000.0),
+        position_guard=DummyPG(),
+    )
+    ctx.balance = 1000.0
+    ctx.analysis_results = [candidate]
+    ctx.timing = {}
+
+    execute_signals, _ = load_execute_signals()
+    caplog.set_level(logging.DEBUG)
+    await execute_signals(ctx)
+
+    assert ctx.notifier.sent == ["No symbols qualified for trading"]
+    assert any("Candidate scoring" in r.getMessage() for r in caplog.records)
+    assert "nothing actionable" in caplog.text
