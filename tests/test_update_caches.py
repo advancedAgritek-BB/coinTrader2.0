@@ -105,6 +105,37 @@ def test_update_caches_volatility_adjusts_concurrency(monkeypatch):
     assert dummy_update_regime.kwargs["max_concurrent"] == 4
 
 
+def test_update_caches_logs_counts(monkeypatch, caplog):
+    df = pd.DataFrame(
+        {
+            "timestamp": [1],
+            "open": [1],
+            "high": [1],
+            "low": [1],
+            "close": [1],
+            "volume": [1],
+        }
+    )
+
+    async def fake_update(*args, **kwargs):
+        return {"1h": {"BTC/USDT": df}}
+
+    ctx = BotContext(
+        positions={},
+        df_cache={},
+        regime_cache={},
+        config={"timeframe": "1h"},
+    )
+    ctx.exchange = object()
+    ctx.current_batch = ["BTC/USDT"]
+    monkeypatch.setattr(main, "update_multi_tf_ohlcv_cache", fake_update)
+    monkeypatch.setattr(main, "update_regime_tf_cache", dummy_update)
+    caplog.set_level("INFO")
+
+    asyncio.run(main.update_caches(ctx))
+
+    assert "BTC/USDT OHLCV: 1 candles" in caplog.text
+
 async def success_update(*args, **kwargs):
     success_update.called = True
     return {}
