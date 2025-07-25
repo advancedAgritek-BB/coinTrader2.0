@@ -142,7 +142,11 @@ class TelegramNotifier:
             else:
                 self._last_sent = now
                 self._recent_sends.append(now)
-            return err
+        return err
+
+    async def notify_async(self, text: str) -> Optional[str]:
+        """Asynchronously send ``text`` using :meth:`notify`."""
+        return await asyncio.to_thread(self.notify, text)
 
     @classmethod
     def from_config(cls, config: dict) -> "TelegramNotifier":
