@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+"""Telegram notification helpers.
+
+This module defines :class:`TelegramNotifier` which can send messages to a
+Telegram chat while respecting rate limits.  Both synchronous (:meth:`notify`)
+and asynchronous (:meth:`notify_async`) interfaces are provided.
+"""
+
 from dataclasses import dataclass
 from typing import Optional, Iterable, Any
 import asyncio
@@ -105,14 +112,54 @@ class TelegramNotifier:
         self._disabled = False
         # lock to serialize send attempts
         self._lock = threading.Lock()
+        # async lock for notify_async
+        self._async_lock = asyncio.Lock()
         # rate limiting
         self.message_interval = message_interval
         self.max_per_minute = max_per_minute
         self._last_sent = 0.0
         self._recent_sends: list[float] = []
 
+    async def notify_async(self, text: str) -> Optional[str]:
+        """Asynchronously send ``text`` if notifications are enabled."""
+        if self._disabled or not self.enabled or not self.token or not self.chat_id:
+            return None
+
+        async with self._async_lock:
+            if self._disabled:
+                return None
+
+            now = time.time()
+            self._recent_sends = [t for t in self._recent_sends if now - t < 60]
+
+            delay = max(0.0, self.message_interval - (now - self._last_sent))
+            if self._recent_sends and len(self._recent_sends) >= self.max_per_minute:
+                oldest = self._recent_sends[0]
+                delay = max(delay, 60 - (now - oldest))
+
+            if delay > 0:
+                await asyncio.sleep(delay)
+                now = time.time()
+
+            err = await asyncio.to_thread(send_message, self.token, self.chat_id, text)
+            if err is not None:
+                self._disabled = True
+                logger.error(
+                    "Disabling Telegram notifications due to send failure: %s",
+                    err,
+                )
+            else:
+                self._last_sent = now
+                self._recent_sends.append(now)
+            return err
+
     def notify(self, text: str) -> Optional[str]:
         """Send ``text`` if notifications are enabled and credentials exist."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.notify_async(text))
+
         if self._disabled or not self.enabled or not self.token or not self.chat_id:
             return None
 
