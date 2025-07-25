@@ -1708,7 +1708,8 @@ def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
     assert urls[0][0].endswith("search/pools")
     from urllib.parse import quote_plus
     assert urls[0][1].get("query") == quote_plus(f"{mint}/USDC")
-    assert urls[1][0].endswith("/ohlcv/1h")
+    assert urls[1][0].endswith("/ohlcv/hour")
+    assert urls[1][1]["aggregate"] == 1
 
 
 def test_fetch_gecko_lookup_fallback(monkeypatch):
