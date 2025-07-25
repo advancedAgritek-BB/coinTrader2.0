@@ -1,13 +1,9 @@
-from crypto_bot.utils.telegram import TelegramNotifier
 import pytest
 import types
 import time
-import asyncio
 import importlib.util
-import types
 from pathlib import Path
 import sys
-import pytest
 
 path = Path(__file__).resolve().parents[1] / "crypto_bot" / "utils" / "telegram.py"
 spec = importlib.util.spec_from_file_location(
@@ -141,6 +137,9 @@ async def test_notify_async_respects_max_messages_per_minute(monkeypatch):
 
     assert len(send_times) == 3
     assert send_times[2] - send_times[0] >= 60
+
+
+@pytest.mark.asyncio
 async def test_notify_async_uses_send_message(monkeypatch):
     calls = {}
 
