@@ -1050,7 +1050,12 @@ async def analyse_batch(ctx: BotContext) -> None:
         df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
         for tf, cache in ctx.regime_cache.items():
             df_map[tf] = cache.get(sym)
-        logger.info(f"DF len for {sym}: {len(df_map.get(base_tf, pd.DataFrame()))}")
+        df = df_map.get(base_tf)
+        logger.info(
+            "DF len for %s: %d",
+            sym,
+            len(df) if isinstance(df, pd.DataFrame) else 0,
+        )
         tasks.append(
             analyze_symbol(
                 sym,
