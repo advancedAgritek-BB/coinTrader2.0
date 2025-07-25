@@ -115,16 +115,13 @@ hidden_limit: true
 indicator_lookback: 14
 liquidity_check: true
 liquidity_depth: 5
+listing_date_concurrency: 5
 log_to_google: true
 loop_interval_minutes: 0.1
 max_age_days: 90
 max_change_pct: 20
 max_concurrent_ohlcv: 2
 max_concurrent_tickers: 10
-listing_date_concurrency: 5
-ticker_rate_limit: null
-ticker_backoff_initial: 2
-ticker_backoff_max: 60
 max_latency_ms: 500
 max_ohlcv_failures: 3
 max_open_trades: 5
@@ -182,7 +179,7 @@ micro_scalp:
   volume_window: 15
   wick_pct: 0.1
 min_agreeing_votes: 1
-min_confidence_score: 0.0001  # minimum; consider raising in production
+min_confidence_score: 0.0001
 min_consistent_agreement: 1
 min_cooldown: 0
 min_history_fraction: 0.1
@@ -293,7 +290,7 @@ signal_fusion:
     - 0.3
   - - sniper_bot
     - 0.2
-signal_threshold: 0.001  # minimum; consider raising in production
+signal_threshold: 0.001
 signal_weight_optimizer:
   enabled: true
   learning_rate: 0.05
@@ -371,15 +368,14 @@ symbol_filter:
   initial_history_candles: 50
   initial_timeframes:
   - 1h
-  - 4h
   - 1d
   kraken_batch_size: 200
   log_ticker_exceptions: true
   max_concurrent_ohlcv: 10
   max_correlation: 0.9
-  ohlcv_batch_size: 3
+  max_spread_pct: 8
   min_volume_usd: 20
-  max_spread_pct: 8  # minimum; consider raising in production
+  ohlcv_batch_size: 3
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
   volume_percentile: 10
@@ -408,13 +404,15 @@ telegram_ctl:
   enabled: true
   update_interval: 30
 testing_mode: true
+ticker_backoff_initial: 2
+ticker_backoff_max: 60
+ticker_rate_limit: null
 timeframe: 15m
 timeframes:
 - 1m
 - 5m
 - 15m
 - 1h
-- 4h
 token_registry:
   refresh_interval_minutes: 15
 top_n_symbols: 50
@@ -433,7 +431,7 @@ use_ml_regime_classifier: true
 use_websocket: false
 volatility_filter:
   max_funding_rate: 0.1
-  min_atr_pct: 0  # minimum; consider raising in production
+  min_atr_pct: 0
 voting_strategies:
 - trend
 - momentum

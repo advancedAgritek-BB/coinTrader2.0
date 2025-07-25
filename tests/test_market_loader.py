@@ -804,6 +804,10 @@ class DummyMultiTFExchange:
         return [[0, 1, 2, 3, 4, 5]]
 
 
+class LimitedTFExchange(DummyMultiTFExchange):
+    timeframes = {"1h": "1h"}
+
+
 def test_update_multi_tf_ohlcv_cache():
     ex = DummyMultiTFExchange()
     cache: dict[str, dict[str, pd.DataFrame]] = {}
@@ -822,6 +826,25 @@ def test_update_multi_tf_ohlcv_cache():
     for tf in config["timeframes"]:
         assert "BTC/USD" in cache[tf]
     assert set(ex.calls) == {"1h", "4h", "1d"}
+
+
+def test_update_multi_tf_ohlcv_cache_skips_unsupported_tf(caplog):
+    ex = LimitedTFExchange()
+    caplog.set_level(logging.INFO)
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["BTC/USD"],
+            {"timeframes": ["1h", "4h"]},
+            limit=1,
+        )
+    )
+    assert set(cache.keys()) == {"1h"}
+    assert set(ex.calls) == {"1h"}
+    assert any(
+        "Skipping unsupported timeframes" in r.getMessage() for r in caplog.records
+    )
 
 
 class PagingMultiExchange:
