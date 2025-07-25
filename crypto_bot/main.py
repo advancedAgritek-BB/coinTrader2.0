@@ -1962,9 +1962,7 @@ async def _main_impl() -> TelegramNotifier:
     session_state = SessionState(last_balance=last_balance)
     last_candle_ts: dict[str, int] = {}
 
-    control_task = None
-    if sys.stdin.isatty():
-        control_task = asyncio.create_task(console_control.control_loop(state))
+    control_task = asyncio.create_task(console_control.control_loop(state))
     rotation_task = asyncio.create_task(
         _rotation_loop(
             rotator,
