@@ -1373,7 +1373,7 @@ pytest -q
 ## Testing
 
 The repository includes an automated test suite. Some tests rely on optional
-packages such as `numpy`, `pandas`, `ccxt`, `flask`, `base58`,
+packages such as `numpy`, `pandas`, `pytest-asyncio`, `ccxt`, `flask`, `base58`,
 `prometheus_client`, `python-dotenv` and `websocket-client`.  Lightweight stubs
 allow the suite to run in very small environments, but the **full** set of tests
 requires the dependencies listed in `requirements.txt` together with the
@@ -1393,6 +1393,9 @@ Alternatively you can install the Python packages manually:
 pip install -r requirements.txt       # core dependencies
 pip install -r requirements-dev.txt   # optional packages for tests
 ```
+
+Run `pip install -r requirements-dev.txt` to ensure packages like `numpy`,
+`pandas` and `pytest-asyncio` are installed before executing `pytest`.
 
 If `pytest` fails with a `ModuleNotFoundError`, ensure the packages from both
 requirements files are installed.  After the dependencies are available, execute
