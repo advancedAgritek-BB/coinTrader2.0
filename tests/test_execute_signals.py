@@ -160,6 +160,9 @@ async def test_execute_signals_no_symbols_qualify(monkeypatch, caplog):
         def __init__(self):
             self.sent = []
 
+        async def notify_async(self, text):
+            self.sent.append(text)
+
         def notify(self, text):
             self.sent.append(text)
 

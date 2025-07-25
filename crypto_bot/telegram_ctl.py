@@ -111,7 +111,7 @@ async def status_loop(
                     lines.extend(str(p) for p in positions)
             message = "\n".join(lines)
             for admin in admins:
-                admin.notify(message)
+                await admin.notify_async(message)
         except Exception as exc:  # pragma: no cover - logging only
             logger.error("Status update failed: %s", exc)
         await asyncio.sleep(update_interval)

@@ -194,7 +194,7 @@ class DummyNotifier(TelegramNotifier):
         super().__init__(True, "t", "c")
         self.sent = []
 
-    def notify(self, text):
+    async def notify_async(self, text):
         self.sent.append(text)
 
 
