@@ -354,9 +354,13 @@ def load_config() -> dict:
     if "symbols" in data:
         data["symbols"] = [fix_symbol(s) for s in data.get("symbols", [])]
     if "onchain_symbols" in data:
-        data["onchain_symbols"] = [fix_symbol(s) for s in data.get("onchain_symbols", [])]
+        data["onchain_symbols"] = [
+            fix_symbol(s) for s in data.get("onchain_symbols", [])
+        ]
     elif "solana_symbols" in data:
-        data["onchain_symbols"] = [fix_symbol(s) for s in data.get("solana_symbols", [])]
+        data["onchain_symbols"] = [
+            fix_symbol(s) for s in data.get("solana_symbols", [])
+        ]
     try:
         if hasattr(ScannerConfig, "model_validate"):
             ScannerConfig.model_validate(data)
@@ -676,7 +680,9 @@ async def fetch_candidates(ctx: BotContext) -> None:
     if regime == "trending" and ctx.config.get("arbitrage_enabled", True):
         try:
             if ctx.secondary_exchange:
-                arb_syms = await scan_cex_arbitrage(ctx.exchange, ctx.secondary_exchange, ctx.config)
+                arb_syms = await scan_cex_arbitrage(
+                    ctx.exchange, ctx.secondary_exchange, ctx.config
+                )
             else:
                 arb_syms = await scan_arbitrage(ctx.exchange, ctx.config)
             symbols.extend((s, 2.0) for s in arb_syms)
@@ -799,7 +805,9 @@ async def scan_arbitrage(exchange: object, config: dict) -> list[str]:
     return results
 
 
-async def scan_cex_arbitrage(primary: object, secondary: object, config: dict) -> list[str]:
+async def scan_cex_arbitrage(
+    primary: object, secondary: object, config: dict
+) -> list[str]:
     """Return symbols with profitable arbitrage between two centralized exchanges."""
     pairs: list[str] = config.get("arbitrage_pairs", [])
     if not pairs:
@@ -1083,23 +1091,49 @@ async def execute_signals(ctx: BotContext) -> None:
         logger.info("No analysis results to act on")
         return
 
-    # Prioritize by score
-    results = [r for r in results if not r.get("skip") and r.get("direction") != "none"]
+    # Filter and prioritize by score
+    orig_results = results
+    results = []
+    skipped_syms: list[str] = []
+    no_dir_syms: list[str] = []
+    low_score: list[str] = []
+    for r in orig_results:
+        if r.get("skip"):
+            skipped_syms.append(r.get("symbol"))
+            continue
+        if r.get("direction") == "none":
+            no_dir_syms.append(r.get("symbol"))
+            continue
+        min_req = r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0))
+        score = r.get("score", 0.0)
+        if score < min_req:
+            low_score.append(f"{r.get('symbol')}({score:.2f}<{min_req:.2f})")
+            continue
+        results.append(r)
+
+    logger.debug(
+        "Candidate scoring: %d/%d met the minimum score; low_score=%s skip=%s no_direction=%s",
+        len(results),
+        len(orig_results),
+        low_score,
+        skipped_syms,
+        no_dir_syms,
+    )
+
     if not results:
         logger.info("All signals filtered out - nothing actionable")
+        if ctx.notifier and ctx.config.get("telegram", {}).get("trade_updates", True):
+            ctx.notifier.notify("No symbols qualified for trading")
         return
+
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
     top_n = ctx.config.get("top_n_symbols", 10)
     executed = 0
 
     for candidate in results[:top_n]:
         logger.info("Analysis result: %s", candidate)
-        max_trades = (
-            ctx.position_guard.max_open_trades if ctx.position_guard else 0
-        )
-        logger.debug(
-            "Open trades: %d / %d", len(ctx.positions), max_trades
-        )
+        max_trades = ctx.position_guard.max_open_trades if ctx.position_guard else 0
+        logger.debug("Open trades: %d / %d", len(ctx.positions), max_trades)
         if not ctx.position_guard or not ctx.position_guard.can_open(ctx.positions):
             logger.info(
                 "Max open trades reached (%d/%d); skipping remaining signals",
@@ -1310,7 +1344,9 @@ async def handle_exits(ctx: BotContext) -> None:
         ):
             add_amount = pos["size"] * dca_cfg.get("size_multiplier", 1.0)
             add_value = add_amount * current_price
-            if ctx.risk_manager.can_allocate(pos.get("strategy", ""), add_value, ctx.balance):
+            if ctx.risk_manager.can_allocate(
+                pos.get("strategy", ""), add_value, ctx.balance
+            ):
                 await cex_trade_async(
                     ctx.exchange,
                     ctx.ws_client,
@@ -1324,7 +1360,9 @@ async def handle_exits(ctx: BotContext) -> None:
                 )
                 if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
                     try:
-                        ctx.paper_wallet.open(sym, pos["side"], add_amount, current_price)
+                        ctx.paper_wallet.open(
+                            sym, pos["side"], add_amount, current_price
+                        )
                         ctx.balance = ctx.paper_wallet.balance
                     except Exception:
                         pass
@@ -1388,7 +1426,9 @@ async def handle_exits(ctx: BotContext) -> None:
                 direction == "long"
                 and pos.get("dca_count", 0) < max_entries
                 and ctx.risk_manager.capital_tracker.can_allocate(
-                    pos.get("strategy", ""), pos["size"] * size_pct * current_price, ctx.balance
+                    pos.get("strategy", ""),
+                    pos["size"] * size_pct * current_price,
+                    ctx.balance,
                 )
             ):
                 new_size = pos["size"] * size_pct
@@ -1621,6 +1661,7 @@ async def _main_impl() -> TelegramNotifier:
         load_token_mints,
         set_token_mints,
     )
+
     mapping = await load_token_mints()
     if mapping:
         set_token_mints({**TOKEN_MINTS, **mapping})
@@ -1718,7 +1759,11 @@ async def _main_impl() -> TelegramNotifier:
         config["primary_exchange"] = user["exchange"]
 
     exchanges = get_exchanges(config)
-    primary = config.get("primary_exchange") or config.get("exchange") or next(iter(exchanges))
+    primary = (
+        config.get("primary_exchange")
+        or config.get("exchange")
+        or next(iter(exchanges))
+    )
     exchange, ws_client = exchanges[primary]
     secondary_exchange = None
     for name, pair in exchanges.items():
@@ -1906,9 +1951,7 @@ async def _main_impl() -> TelegramNotifier:
         solana_scan_task = asyncio.create_task(solana_scan_loop())
     registry_task = asyncio.create_task(
         registry_update_loop(
-            config.get("token_registry", {}).get(
-                "refresh_interval_minutes", 15
-            )
+            config.get("token_registry", {}).get("refresh_interval_minutes", 15)
         )
     )
     print("Bot running. Type 'stop' to pause, 'start' to resume, 'quit' to exit.")
@@ -2013,7 +2056,9 @@ async def _main_impl() -> TelegramNotifier:
             if config.get("arbitrage_enabled", True):
                 try:
                     if ctx.secondary_exchange:
-                        arb_syms = await scan_cex_arbitrage(exchange, ctx.secondary_exchange, config)
+                        arb_syms = await scan_cex_arbitrage(
+                            exchange, ctx.secondary_exchange, config
+                        )
                     else:
                         arb_syms = await scan_arbitrage(exchange, config)
                     if arb_syms:
@@ -2236,6 +2281,7 @@ async def main() -> None:
     notifier: TelegramNotifier | None = None
     try:
         from crypto_bot.utils.token_registry import refresh_mints
+
         await refresh_mints()
         notifier = await _main_impl()
     except Exception as exc:  # pragma: no cover - error path
