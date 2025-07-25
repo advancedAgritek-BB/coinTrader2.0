@@ -4,6 +4,7 @@ import pytest
 import logging
 import time
 import ccxt
+import importlib
 
 VALID_MINT = "So11111111111111111111111111111111111111112"
 
@@ -2370,6 +2371,55 @@ def test_dynamic_limits_cap(monkeypatch):
 
     assert limits == [720]
 
+
+def test_get_kraken_listing_date_cached(monkeypatch):
+    import importlib
+    from crypto_bot.utils import market_loader as ml
+
+    ml = importlib.reload(ml)
+
+    calls = []
+
+    class DummyResp:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def raise_for_status(self):
+            pass
+
+        async def json(self):
+            return {"result": {"TEST": [["0", "0", "1000"]]}}
+
+    class DummySession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, params=None, timeout=10):
+            calls.append((url, params))
+            return DummyResp()
+
+    monkeypatch.setattr(ml.aiohttp, "ClientSession", lambda: DummySession())
+
+    class DummyKraken:
+        def market_id(self, sym):
+            return sym.replace("/", "")
+
+    monkeypatch.setattr(ml.ccxt, "kraken", lambda: DummyKraken())
+
+    ml.KRAKEN_LISTING_CACHE.clear()
+
+    ts1 = asyncio.run(ml.get_kraken_listing_date("BTC/USD"))
+    ts2 = asyncio.run(ml.get_kraken_listing_date("BTC/USD"))
+
+    assert ts1 == 1000 * 1000
+    assert ts2 == ts1
+    assert len(calls) == 1
 
 def test_listing_date_concurrency(monkeypatch):
     from crypto_bot.utils import market_loader

@@ -59,6 +59,8 @@ COINGECKO_IDS = {
 # Cache GeckoTerminal pool addresses and metadata per symbol
 # Mapping: symbol -> (pool_addr, volume, reserve, price, limit)
 GECKO_POOL_CACHE: dict[str, tuple[str, float, float, float, int]] = {}
+# Cache Kraken listing timestamps per symbol
+KRAKEN_LISTING_CACHE: dict[str, int | None] = {}
 GECKO_SEMAPHORE = asyncio.Semaphore(10)
 # Track symbols that don't exist on GeckoTerminal to avoid repeated lookups
 GECKO_UNAVAILABLE: set[str] = set()
@@ -1252,6 +1254,8 @@ async def fetch_coingecko_ohlc(
 
 async def get_kraken_listing_date(symbol: str) -> int | None:
     """Return approximate Kraken listing date in milliseconds for ``symbol``."""
+    if symbol in KRAKEN_LISTING_CACHE:
+        return KRAKEN_LISTING_CACHE[symbol]
 
     url = "https://api.kraken.com/0/public/Trades"
     ex = ccxt.kraken()
@@ -1266,6 +1270,7 @@ async def get_kraken_listing_date(symbol: str) -> int | None:
                 resp.raise_for_status()
                 data = await resp.json()
     except Exception:
+        KRAKEN_LISTING_CACHE[symbol] = None
         return None
     trades = None
     if isinstance(data, dict):
@@ -1274,12 +1279,16 @@ async def get_kraken_listing_date(symbol: str) -> int | None:
                 trades = val
                 break
     if not trades:
+        KRAKEN_LISTING_CACHE[symbol] = None
         return None
     try:
         ts = float(trades[0][2])
         dt = datetime.datetime.utcfromtimestamp(ts)
-        return int(dt.timestamp() * 1000)
+        ts_ms = int(dt.timestamp() * 1000)
+        KRAKEN_LISTING_CACHE[symbol] = ts_ms
+        return ts_ms
     except Exception:
+        KRAKEN_LISTING_CACHE[symbol] = None
         return None
 
 

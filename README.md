@@ -294,11 +294,11 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **symbol_batch_size** – number of symbols processed each cycle.
   The same batch size controls the initial market scan at startup where
   progress is logged after each batch.
-* **scan_lookback_limit** – default maximum candles per timeframe fetched during
-  the initial scan (`700`). `update_multi_tf_ohlcv_cache` trims this value for
+  * **scan_lookback_limit** – default maximum candles per timeframe fetched during
+    the initial scan (`700`). `update_multi_tf_ohlcv_cache` trims this value for
   newly listed pairs using `get_kraken_listing_date` so requests never exceed the
-  available history. The caches store at least this many bars when history
-  permits.
+  available history. Listing timestamps are cached per symbol to avoid repeated
+  HTTP requests. The caches store at least this many bars when history permits.
 * **scan_deep_top** – number of top-ranked pairs loaded with a full year of history during startup (default `50`).
 * **start_since** – optional timestamp used to backfill older data during the initial scan.
   When set, the bot loads candles starting from this time (e.g. `365d` for one year)
@@ -772,6 +772,8 @@ listed on Kraken and caps the request so no more candles are fetched than the
 exchange actually offers. When sufficient history is available the loader
 retrieves up to `scan_lookback_limit` candles per pair (700 by default on
 Kraken) before switching to WebSocket updates.
+The resolved listing timestamps are cached so repeated scans skip the
+network request.
 
 The client now records heartbeat events and exposes `is_alive(conn_type)` to
 check if a connection has received a heartbeat within the last 10 seconds. Call
