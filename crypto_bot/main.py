@@ -857,9 +857,8 @@ async def update_caches(ctx: BotContext) -> None:
         return
 
     start = time.perf_counter()
-    tf_minutes = int(
-        pd.Timedelta(ctx.config.get("timeframe", "1h")).total_seconds() // 60
-    )
+    timeframe = ctx.config.get("timeframe", "1h")
+    tf_minutes = int(pd.Timedelta(timeframe).total_seconds() // 60)
     limit = max(150, tf_minutes * 2)
     limit = int(ctx.config.get("cycle_lookback_limit") or limit)
     start_since = int(time.time() * 1000 - limit * tf_minutes * 60 * 1000)
@@ -917,46 +916,6 @@ async def update_caches(ctx: BotContext) -> None:
                 priority_queue=symbol_priority_queue,
                 batch_size=ohlcv_batch_size,
             )
-
-            ctx.regime_cache = await update_regime_tf_cache(
-                ctx.exchange,
-                ctx.regime_cache,
-                batch,
-                ctx.config,
-                limit=limit,
-                use_websocket=ctx.config.get("use_websocket", False),
-                force_websocket_history=ctx.config.get(
-                    "force_websocket_history", False
-                ),
-                max_concurrent=max_concurrent,
-                notifier=(
-                    ctx.notifier
-                    if ctx.config.get("telegram", {}).get("status_updates", True)
-                    else None
-                ),
-                df_map=ctx.df_cache,
-                batch_size=ohlcv_batch_size,
-            )
-        else:
-            ctx.regime_cache = await update_regime_tf_cache(
-                ctx.exchange,
-                ctx.regime_cache,
-                batch,
-                ctx.config,
-                limit=limit,
-                use_websocket=ctx.config.get("use_websocket", False),
-                force_websocket_history=ctx.config.get(
-                    "force_websocket_history", False
-                ),
-                max_concurrent=max_concurrent,
-                notifier=(
-                    ctx.notifier
-                    if ctx.config.get("telegram", {}).get("status_updates", True)
-                    else None
-                ),
-                df_map=ctx.df_cache,
-                batch_size=ohlcv_batch_size,
-            )
         ctx.regime_cache = await update_regime_tf_cache(
             ctx.exchange,
             ctx.regime_cache,
@@ -975,16 +934,15 @@ async def update_caches(ctx: BotContext) -> None:
             batch_size=ohlcv_batch_size,
         )
 
-    tf = ctx.config.get("timeframe", "1h")
     for sym in batch:
-        df = ctx.df_cache.get(base_tf, {}).get(sym)
+        df = ctx.df_cache.get(timeframe, {}).get(sym)
         logger.info("%s OHLCV: %d candles", sym, len(df) if df is not None else 0)
 
     vol_thresh = ctx.config.get("bounce_scalper", {}).get("vol_zscore_threshold")
     if vol_thresh is not None:
         status_updates = ctx.config.get("telegram", {}).get("status_updates", True)
         for sym in batch:
-            df = ctx.df_cache.get(base_tf, {}).get(sym)
+            df = ctx.df_cache.get(timeframe, {}).get(sym)
             if df is None or df.empty or "volume" not in df:
                 continue
             vols = df["volume"].to_numpy(dtype=float)
