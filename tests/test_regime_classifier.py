@@ -711,6 +711,14 @@ def test_classify_regime_probabilities_sum_to_one():
     assert pytest.approx(sum(probs.values())) == 1.0
 
 
+def test_dip_hunter_regime_low_adx(tmp_path):
+    df = _make_sideways_df()
+    cfg = tmp_path / "regime.yaml"
+    cfg.write_text("dip_hunter_adx_max: 25\n")
+    label, _ = classify_regime(df, config_path=str(cfg))
+    assert label == "dip_hunter"
+
+
 def test_patterns_override_unknown(monkeypatch):
     df = _make_breakout_df()
     monkeypatch.setattr(
@@ -719,6 +727,18 @@ def test_patterns_override_unknown(monkeypatch):
     regime, probs = classify_regime(df)
     assert regime == "breakout"
     assert probs["breakout"] == 1.0
+
+
+def test_analyze_symbol_routes_to_dip_hunter():
+    df = _make_sideways_df()
+
+    async def run():
+        cfg = {"timeframe": "1h"}
+        df_map = {"1h": df}
+        return await analyze_symbol("AAA", df_map, "cex", cfg, None)
+
+    res = asyncio.run(run())
+    assert res["regime"] == "dip_hunter"
 
 
 def test_ml_blending(monkeypatch, tmp_path):
