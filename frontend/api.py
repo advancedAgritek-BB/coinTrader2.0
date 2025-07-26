@@ -6,6 +6,9 @@ import re
 from typing import TYPE_CHECKING
 
 from crypto_bot.utils.logger import LOG_DIR
+import yaml
+from pathlib import Path
+from crypto_bot.paper_wallet import PaperWallet
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from crypto_bot.bot_controller import TradingBotController
@@ -18,7 +21,19 @@ def get_controller() -> "TradingBotController":
     global CONTROLLER
     if CONTROLLER is None:
         from crypto_bot.bot_controller import TradingBotController
-        CONTROLLER = TradingBotController()
+        cfg_path = Path("crypto_bot/config.yaml")
+        cfg = {}
+        if cfg_path.exists():
+            with open(cfg_path) as f:
+                cfg = yaml.safe_load(f) or {}
+        wallet = None
+        if cfg.get("execution_mode") == "dry_run":
+            wallet = PaperWallet(
+                cfg.get("start_balance", 1000.0),
+                cfg.get("max_open_trades", 1),
+                cfg.get("allow_short", False),
+            )
+        CONTROLLER = TradingBotController(paper_wallet=wallet)
     return CONTROLLER
 SIGNALS_FILE = LOG_DIR / "asset_scores.json"
 POSITIONS_FILE = LOG_DIR / "positions.log"

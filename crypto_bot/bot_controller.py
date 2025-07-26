@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
+from .paper_wallet import PaperWallet
+
 from crypto_bot.utils.logger import LOG_DIR
 
 
@@ -26,12 +28,14 @@ class TradingBotController:
         config_path: str | Path = "crypto_bot/config.yaml",
         trades_file: str | Path = LOG_DIR / "trades.csv",
         log_file: str | Path = LOG_DIR / "bot.log",
+        paper_wallet: "PaperWallet | None" = None,
     ) -> None:
         self.config_path = Path(config_path)
         self.trades_file = Path(trades_file)
         self.log_file = Path(log_file)
         self.config = self._load_config()
         self.rotator = PortfolioRotator()
+        self.paper_wallet = paper_wallet
         self.exchange, self.ws_client = get_exchange(self.config)
         self.proc: asyncio.subprocess.Process | None = None
         self.enabled: Dict[str, bool] = {
@@ -132,7 +136,7 @@ class TradingBotController:
 
     async def close_position(self, symbol: str, amount: float) -> Dict:
         """Submit a market order closing ``amount`` of ``symbol``."""
-        return await execute_trade_async(
+        order = await execute_trade_async(
             self.exchange,
             self.ws_client,
             symbol,
@@ -142,6 +146,24 @@ class TradingBotController:
             use_websocket=self.config.get("use_websocket", False),
             config=self.config,
         )
+        if self.config.get("execution_mode") == "dry_run" and self.paper_wallet:
+            price = order.get("price") or 0.0
+            if not price:
+                try:
+                    if asyncio.iscoroutinefunction(
+                        getattr(self.exchange, "fetch_ticker", None)
+                    ):
+                        t = await self.exchange.fetch_ticker(symbol)
+                    else:
+                        t = await asyncio.to_thread(self.exchange.fetch_ticker, symbol)
+                    price = t.get("last") or t.get("bid") or t.get("ask") or 0.0
+                except Exception:
+                    price = 0.0
+            try:
+                self.paper_wallet.close(symbol, amount, price)
+            except Exception:
+                pass
+        return order
 
     async def close_all_positions(self) -> Dict[str, str]:
         """Signal the trading bot to liquidate all open positions."""
