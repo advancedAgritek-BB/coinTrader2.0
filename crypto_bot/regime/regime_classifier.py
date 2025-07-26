@@ -159,12 +159,13 @@ def _download_supabase_model():
 
     try:
         client = create_client(url, key)
-        data = client.storage.from_("models").download("trainer_model.pkl")
-        path = Path(__file__).with_name("trainer_model.pkl")
+        file_name = os.getenv("SUPABASE_MODEL_FILE", "regime_lgbm.pkl")
+        data = client.storage.from_("models").download(file_name)
+        path = Path(__file__).with_name(file_name)
         path.write_bytes(data)
         import lightgbm as lgb  # pragma: no cover - optional dependency
         model = lgb.Booster(model_file=str(path))
-        logger.info("Downloaded trainer_model.pkl from Supabase")
+        logger.info("Downloaded %s from Supabase", file_name)
         return model
     except Exception as exc:
         logger.error("Failed to download Supabase model: %s", exc)
