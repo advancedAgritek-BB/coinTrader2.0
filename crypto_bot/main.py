@@ -369,15 +369,16 @@ def load_config() -> dict:
     if "symbol" in data:
         data["symbol"] = fix_symbol(data["symbol"])
     if "symbols" in data:
-        data["symbols"] = [fix_symbol(s) for s in data.get("symbols", [])]
+        data["symbols"] = [fix_symbol(s) for s in data.get("symbols") or []]
+
+    onchain_syms = None
     if "onchain_symbols" in data:
-        data["onchain_symbols"] = [
-            fix_symbol(s) for s in data.get("onchain_symbols", [])
-        ]
+        onchain_syms = data.get("onchain_symbols")
     elif "solana_symbols" in data:
-        data["onchain_symbols"] = [
-            fix_symbol(s) for s in data.get("solana_symbols", [])
-        ]
+        onchain_syms = data.get("solana_symbols")
+
+    if onchain_syms is not None:
+        data["onchain_symbols"] = [fix_symbol(s) for s in onchain_syms or []]
     try:
         if hasattr(ScannerConfig, "model_validate"):
             ScannerConfig.model_validate(data)
