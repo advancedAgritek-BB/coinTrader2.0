@@ -78,8 +78,10 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df["rsi_z"] = stats.zscore(rsi, lookback_cfg)
     df["volume_ma"] = vol_ma
 
-    adx_ind = ta.trend.ADXIndicator(df["high"], df["low"], df["close"], window=7)
-    df["adx"] = adx_ind.adx()
+    df["adx"] = ta.trend.ADXIndicator(
+        df["high"], df["low"], df["close"], window=7
+    ).adx()
+    df["adx"] = cache_series("adx_trend", df, df["adx"], lookback)
 
     latest = df.iloc[-1]
     score = 0.0
