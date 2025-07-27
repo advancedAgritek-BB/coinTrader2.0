@@ -87,3 +87,31 @@ def test_priority_fee_below_threshold(monkeypatch):
     score, direction = dex_scalper.generate_signal(df, cfg)
     assert direction == "long"
     assert score > 0
+
+
+class DummyMonitor:
+    def __init__(self, fee):
+        self._fee = fee
+
+    def fetch_priority_fee(self):
+        return self._fee
+
+
+def test_monitor_fee_blocks_signal():
+    df = pd.DataFrame({"close": pd.Series(range(1, 21))})
+    cfg = {"dex_scalper": {"gas_threshold_gwei": 10}}
+    score, direction = dex_scalper.generate_signal(
+        df, cfg, mempool_monitor=DummyMonitor(15)
+    )
+    assert score == 0.0
+    assert direction == "none"
+
+
+def test_monitor_fee_allows_signal():
+    df = pd.DataFrame({"close": pd.Series(range(1, 21))})
+    cfg = {"dex_scalper": {"gas_threshold_gwei": 10}}
+    score, direction = dex_scalper.generate_signal(
+        df, cfg, mempool_monitor=DummyMonitor(5)
+    )
+    assert direction == "long"
+    assert score > 0
