@@ -44,3 +44,6 @@ supabase
 gymnasium
 stable-baselines3
 
+stable-baselines3
+gymnasium
+
