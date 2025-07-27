@@ -156,7 +156,7 @@ def test_menu_sent_on_run(monkeypatch, tmp_path):
 
 def test_start_stop_toggle(monkeypatch, tmp_path):
     monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
-    state = {"running": False, "mode": "cex"}
+    state = {"running": False, "mode": "auto"}
     ui, _ = make_ui(tmp_path, state)
     ui.command_cooldown = 0
     ui.command_cooldown = 0
@@ -174,12 +174,12 @@ def test_start_stop_toggle(monkeypatch, tmp_path):
     assert update.message.text == "Trading stopped"
 
     asyncio.run(ui.toggle_mode_cmd(update, DummyContext()))
-    assert state["mode"] == "onchain"
-    assert update.message.text == "Mode set to onchain"
+    assert state["mode"] == "cex"
+    assert update.message.text == "Mode set to cex"
 
     update_status = DummyUpdate()
     asyncio.run(ui.status_cmd(update_status, DummyContext()))
-    assert "mode: onchain" in update_status.message.text
+    assert "mode: cex" in update_status.message.text
 
 
 def test_log_and_rotate(monkeypatch, tmp_path):
