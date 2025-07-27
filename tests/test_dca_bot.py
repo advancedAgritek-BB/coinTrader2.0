@@ -21,6 +21,13 @@ def test_no_signal_above_ma():
     assert score == 0.0
 
 
+def test_short_signal_when_above_ma():
+    df = _df(120.0)
+    score, direction = dca_bot.generate_signal(df)
+    assert direction == "short"
+    assert score == 0.8
+
+
 def test_empty_dataframe():
     score, direction = dca_bot.generate_signal(pd.DataFrame())
     assert direction == "none"

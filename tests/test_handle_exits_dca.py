@@ -21,9 +21,13 @@ class DummyRM:
             def can_allocate(self, *a, **k):
                 return True
         self.capital_tracker = CT()
+    def can_allocate(self, *a, **k):
+        return True
     def deallocate_capital(self, *a, **k):
         pass
     def allocate_capital(self, *a, **k):
+        pass
+    def update_stop_order(self, *a, **k):
         pass
 
 def load_handle_exits():
@@ -36,6 +40,8 @@ def load_handle_exits():
     calls = {"count": 0}
     async def _trade(*a, **k):
         calls["count"] += 1
+    async def _refresh(*a, **k):
+        return None
     ns = {
         "asyncio": asyncio,
         "cex_trade_async": _trade,
@@ -45,6 +51,7 @@ def load_handle_exits():
         "pd": pd,
         "BotContext": BotContext,
         "log_position": lambda *a, **k: None,
+        "refresh_balance": _refresh,
     }
     exec(funcs["opposite_side"], ns)
     exec(funcs["handle_exits"], ns)
@@ -80,8 +87,8 @@ async def test_handle_exits_triggers_dca_buy():
     ctx.balance = 1000.0
     handle_exits, calls = load_handle_exits()
     await handle_exits(ctx)
-    assert calls["count"] == 1
-    assert ctx.positions["XBT/USDT"]["dca_count"] == 1
+    assert calls["count"] == 2
+    assert ctx.positions["XBT/USDT"]["dca_count"] == 2
 
 @pytest.mark.asyncio
 async def test_handle_exits_stops_at_max_entries():
@@ -115,3 +122,70 @@ async def test_handle_exits_stops_at_max_entries():
     await handle_exits(ctx)
     assert calls["count"] == 0
     assert ctx.positions["XBT/USDT"]["dca_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_handle_exits_triggers_dca_short():
+    df = pd.DataFrame({"close": [100.0]*19 + [120.0]})
+    ctx = BotContext(
+        positions={"XBT/USDT": {
+            "side": "sell",
+            "entry_price": 100.0,
+            "entry_time": "t",
+            "regime": "",
+            "strategy": "dca_bot",
+            "confidence": 1.0,
+            "pnl": 0.0,
+            "size": 1.0,
+            "trailing_stop": 0.0,
+            "highest_price": 100.0,
+            "dca_count": 0,
+        }},
+        df_cache={"1h": {"XBT/USDT": df}},
+        regime_cache={},
+        config={"execution_mode": "dry_run", "timeframe": "1h", "dca": {"max_entries": 2, "size_pct": 1.0}},
+        exchange=object(),
+        ws_client=None,
+        risk_manager=DummyRM(),
+        notifier=None,
+        paper_wallet=PaperWallet(1000.0),
+        position_guard=None,
+    )
+    ctx.balance = 1000.0
+    handle_exits, calls = load_handle_exits()
+    await handle_exits(ctx)
+    assert calls["count"] == 2
+    assert ctx.positions["XBT/USDT"]["dca_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_handle_exits_handles_missing_df():
+    ctx = BotContext(
+        positions={"XBT/USDT": {
+            "side": "buy",
+            "entry_price": 100.0,
+            "entry_time": "t",
+            "regime": "",
+            "strategy": "dca_bot",
+            "confidence": 1.0,
+            "pnl": 0.0,
+            "size": 1.0,
+            "trailing_stop": 0.0,
+            "highest_price": 100.0,
+            "dca_count": 0,
+        }},
+        df_cache={"1h": {}},
+        regime_cache={},
+        config={"execution_mode": "dry_run", "timeframe": "1h", "dca": {"max_entries": 2, "size_pct": 1.0}},
+        exchange=object(),
+        ws_client=None,
+        risk_manager=DummyRM(),
+        notifier=None,
+        paper_wallet=PaperWallet(1000.0),
+        position_guard=None,
+    )
+    ctx.balance = 1000.0
+    handle_exits, calls = load_handle_exits()
+    await handle_exits(ctx)
+    assert calls["count"] == 0
+    assert ctx.positions["XBT/USDT"]["dca_count"] == 0
