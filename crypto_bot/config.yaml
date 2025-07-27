@@ -40,20 +40,6 @@ bounce_scalper:
   vol_zscore_threshold: 1.0
   volume_multiple: 1.5
   zscore_threshold: 1.0
-dip_hunter:
-  rsi_window: 14
-  rsi_oversold: 30
-  dip_pct: 0.03
-  dip_bars: 3
-  vol_window: 20
-  vol_mult: 1.5
-  adx_window: 14
-  adx_threshold: 25
-  bb_window: 20
-  ema_trend: 200
-  ml_weight: 0.5
-  atr_normalization: true
-  cooldown_enabled: false
 breakout:
   adx_threshold: 15
   atr_buffer_mult: 0.03
@@ -76,6 +62,20 @@ dca:
   enabled: false
   max_entries: 3
   size_multiplier: 1.0
+dip_hunter:
+  adx_threshold: 25
+  adx_window: 14
+  atr_normalization: true
+  bb_window: 20
+  cooldown_enabled: false
+  dip_bars: 3
+  dip_pct: 0.03
+  ema_trend: 200
+  ml_weight: 0.5
+  rsi_oversold: 30
+  rsi_window: 14
+  vol_mult: 1.5
+  vol_window: 20
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.05
 exchange: kraken
@@ -203,7 +203,7 @@ ml_enabled: false
 ml_signal_model:
   enabled: true
   weight: 0.7
-mode: onchain
+mode: auto
 mode_degrade_window: 15
 mode_threshold: 0.3
 ohlcv_batch_size: 10
@@ -285,9 +285,9 @@ safety:
   max_error_count: 10
   restart_on_error: true
 scalp_timeframe: 1m
+scan_deep_top: 100
 scan_in_background: true
 scan_lookback_limit: 700
-scan_deep_top: 100
 scan_markets: true
 scoring:
   lookback_bars: 30
