@@ -202,6 +202,9 @@ def generate_signal(
     cfg = BounceScalperConfig.from_dict(cfg_dict)
 
     symbol = cfg.symbol
+    if len(df) < 50:
+        return 0.0, "none"
+
     strategy = cfg.strategy
     global FORCE_SIGNAL
     force = FORCE_SIGNAL
