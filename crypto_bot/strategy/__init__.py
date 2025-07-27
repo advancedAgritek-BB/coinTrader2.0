@@ -46,6 +46,7 @@ __all__ = [
         "momentum_bot",
         "sniper_solana",
         "solana_scalping",
+        "momentum_bot",
     ]
     if globals().get(name) is not None
 ]
