@@ -35,10 +35,11 @@ STRATEGIES = [
     "dip_hunter",      # 4: RSI/vol dips for mean-reversion (quick 2-3x)
     "mean_bot",        # 5: Keltner/BB mean-reversion (stable in ranges)
     "breakout_bot",    # 6: BB/KC squeeze breakouts (high-momentum 3-5x)
-    "bounce_scalper",  # 7: Patterns + RSI/vol for bounces (80% win scalps)
-    "micro_scalp_bot", # 8: EMA cross + wicks for micro-scalps (high-freq)
-    "dca_bot",         # 9: Averaging for longs (safety net)
-    "solana_scalping"  # 10: MACD/RSI for Solana scalps (mempool-integrated)
+    "momentum_bot",    # 7: Donchian/volume momentum strategy
+    "bounce_scalper",  # 8: Patterns + RSI/vol for bounces (80% win scalps)
+    "micro_scalp_bot", # 9: EMA cross + wicks for micro-scalps (high-freq)
+    "dca_bot",         # 10: Averaging for longs (safety net)
+    "solana_scalping"  # 11: MACD/RSI for Solana scalps (mempool-integrated)
 ]
 NUM_STRATEGIES = len(STRATEGIES)
 

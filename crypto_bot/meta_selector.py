@@ -18,6 +18,7 @@ from crypto_bot.strategy import (
     dip_hunter,
     breakout_bot,
     micro_scalp_bot,
+    momentum_bot,
     bounce_scalper,
     solana_scalping,
 )
@@ -80,6 +81,8 @@ _STRATEGY_FN_MAP = {
     "breakout_bot": breakout_bot.generate_signal,
     "micro_scalp": micro_scalp_bot.generate_signal,
     "micro_scalp_bot": micro_scalp_bot.generate_signal,
+    "momentum": momentum_bot.generate_signal,
+    "momentum_bot": momentum_bot.generate_signal,
     "bounce_scalper": bounce_scalper.generate_signal,
     "bounce_scalper_bot": bounce_scalper.generate_signal,
     "dip_hunter": dip_hunter.generate_signal,
