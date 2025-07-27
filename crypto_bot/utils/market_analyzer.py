@@ -199,10 +199,9 @@ async def analyze_symbol(
     min_conf_adaptive = min(min_conf_adaptive, 0.3)
     higher_df = df_map.get("1d")
     regime, probs = await classify_regime_async(df, higher_df)
-    sub_regime = regime
-    regime = regime.split("_")[-1]
+    sub_regime = regime.split("_")[-1]
     patterns = detect_patterns(df)
-    base_conf = float(probs.get(sub_regime, 0.0))
+    base_conf = float(probs.get(regime, 0.0))
     bias_cfg = config.get("sentiment_filter", {})
     try:
         from crypto_bot.sentiment_filter import boost_factor
@@ -225,21 +224,21 @@ async def analyze_symbol(
         higher_df,
         profile,
     )
-    regime = regime.split("_")[-1]
+    sub_regime = regime.split("_")[-1]
     higher_df = df_map.get(higher_tf)
 
     if df is not None:
         regime_tmp, patterns = await classify_regime_with_patterns_async(df, higher_df)
-        sub_regime = regime_tmp
-        regime = regime_tmp.split("_")[-1]
+        regime = regime_tmp
+        sub_regime = regime_tmp.split("_")[-1]
         # Refresh probabilities based on the final regime determination
         _label, info = await classify_regime_async(df, higher_df)
         if isinstance(info, dict):
             probs = info
-            base_conf = float(info.get(sub_regime, 0.0))
+            base_conf = float(info.get(regime, 0.0))
         elif isinstance(info, set):
             probs = {p: 1.0 for p in info}
-            base_conf = float(probs.get(sub_regime, 0.0))
+            base_conf = float(probs.get(regime, 0.0))
         else:
             base_conf = float(info)
 
@@ -280,12 +279,12 @@ async def analyze_symbol(
                 regime_counts[r] = regime_counts.get(r, 0) + 1
 
     if regime_counts:
-        regime, votes = max(regime_counts.items(), key=lambda kv: kv[1])
+        sub_regime, votes = max(regime_counts.items(), key=lambda kv: kv[1])
     else:
-        regime, votes = "unknown", 0
+        sub_regime, votes = "unknown", 0
 
-    if adx_val < 25 and patterns.get("breakout", 0) <= 0 and regime in {"sideways", "mean-reverting"}:
-        regime = "dip_hunter"
+    if adx_val < 25 and patterns.get("breakout", 0) <= 0 and sub_regime in {"sideways", "mean-reverting"}:
+        regime = sub_regime = "dip_hunter"
 
     denom = len(regime_tfs)
     if vote_map:
@@ -293,12 +292,12 @@ async def analyze_symbol(
     confidence = votes / max(denom, 1)
     confidence *= base_conf
     if votes < min_agree:
-        regime = "unknown"
+        regime = sub_regime = "unknown"
 
     analysis_logger.info(
         "%s regime=%s conf=%.2f votes=%d",
         symbol,
-        regime,
+        sub_regime,
         confidence,
         votes,
     )
@@ -350,10 +349,10 @@ async def analyze_symbol(
 
         if eval_mode == "best":
             strategies = [
-                wrap(s) for s in get_strategies_for_regime(regime, router_cfg)
+                wrap(s) for s in get_strategies_for_regime(sub_regime, router_cfg)
             ]
             res = evaluate_strategies(strategies, df, cfg)
-            name = res.get("name", strategy_name(regime, env))
+            name = res.get("name", strategy_name(sub_regime, env))
             score = float(res.get("score", 0.0))
             direction = res.get("direction", "none")
             for fn in strategies:
@@ -367,12 +366,12 @@ async def analyze_symbol(
                     second_score = float(second.get("score", 0.0))
                     edge = score - second_score
                     log_second_place(
-                        symbol, regime, second.get("name", ""), second_score, edge
+                        symbol, sub_regime, second.get("name", ""), second_score, edge
                     )
         elif eval_mode == "ensemble":
             min_conf = float(config.get("ensemble_min_conf", 0.15))
-            candidates = [wrap(strategy_for(regime, router_cfg))]
-            extra = meta_selector._scores_for(regime)
+            candidates = [wrap(strategy_for(sub_regime, router_cfg))]
+            extra = meta_selector._scores_for(sub_regime)
             for strat_name, val in extra.items():
                 if val >= min_conf:
                     fn = get_strategy_by_name(strat_name)
@@ -380,7 +379,7 @@ async def analyze_symbol(
                         fn = wrap(fn)
                         if fn not in candidates:
                             candidates.append(fn)
-            ranked = await run_candidates(df, candidates, symbol, cfg, regime)
+            ranked = await run_candidates(df, candidates, symbol, cfg, sub_regime)
             if ranked:
                 best_fn, raw_score, raw_dir = ranked[0]
                 selected_fn = best_fn
@@ -397,13 +396,13 @@ async def analyze_symbol(
                         second[2],
                     )
             else:
-                name = strategy_name(regime, env)
+                name = strategy_name(sub_regime, env)
                 score = 0.0
                 direction = "none"
         else:
             strategy_fn = wrap(
                 route(
-                    regime,
+                    sub_regime,
                     env,
                     router_cfg,
                     notifier,
@@ -413,7 +412,7 @@ async def analyze_symbol(
                 )
             )
             selected_fn = strategy_fn
-            name = strategy_name(regime, env)
+            name = strategy_name(sub_regime, env)
             score, direction, atr = (
                 await evaluate_async([strategy_fn], df_map, cfg)
             )[0]
@@ -433,7 +432,7 @@ async def analyze_symbol(
                 except Exception:  # pragma: no cover - safety
                     reg_filter = None
             try:
-                if reg_filter and hasattr(reg_filter, "matches") and reg_filter.matches(regime):
+                if reg_filter and hasattr(reg_filter, "matches") and reg_filter.matches(sub_regime):
                     reg_strength = 1.0
             except Exception:  # pragma: no cover - safety
                 pass
