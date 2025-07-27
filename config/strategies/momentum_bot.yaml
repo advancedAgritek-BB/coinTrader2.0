@@ -1,3 +1,11 @@
+donchian_period: 20
+vol_multiplier: 1.0
+atr_period: 14
+setup_window: 10
+trigger_window: 3
+risk:
+  stop_loss_pct: 0.01
+  take_profit_pct: 0.03
 fast_length: 20
 slow_length: 50
 adx_threshold: 25
