@@ -24,7 +24,7 @@ bounce_scalper:
   ema_window: 40
   lookback: 200
   max_concurrent_signals: 8
-  min_score: 0.2
+  min_score: 0.1
   overbought: 75
   oversold: 30
   pattern_timeframe: 1m
@@ -37,7 +37,7 @@ bounce_scalper:
   trend_ema_slow: 18
   up_candles: 2
   vol_window: 15
-  vol_zscore_threshold: 1.0
+  vol_zscore_threshold: 1.2
   volume_multiple: 1.5
   zscore_threshold: 1.0
 breakout:
@@ -169,7 +169,7 @@ mempool_monitor:
   reprice_multiplier: 1.1
   suspicious_fee_threshold: 30
 meta_selector:
-  enabled: false
+  enabled: true
 metrics_backend: csv
 metrics_enabled: true
 metrics_output_file: crypto_bot/logs/metrics.csv
@@ -193,7 +193,7 @@ micro_scalp:
   volume_window: 15
   wick_pct: 0.1
 min_agreeing_votes: 1
-min_confidence_score: 0.001
+min_confidence_score: 0.0001
 min_consistent_agreement: 1
 min_cooldown: 0
 min_history_fraction: 0.1
@@ -278,7 +278,7 @@ risk:
   take_profit_pct: 0.1
   volume_threshold_ratio: 0.01
 rl_selector:
-  enabled: false
+  enabled: true
 rsi_overbought_pct: 80
 rsi_oversold_pct: 25
 safety:
@@ -307,7 +307,7 @@ sentiment_filter:
   min_fng: -100
   min_sentiment: -100
 signal_fusion:
-  enabled: false
+  enabled: true
   fusion_method: weight
   min_confidence: 0.05
   strategies:
@@ -327,12 +327,12 @@ sl_mult: 1.0
 sl_pct: 0.03
 sniper_bot:
   atr_window: 10
-  breakout_pct: 0.02
+  breakout_pct: 0.01
   fallback_atr_mult: 1.2
   fallback_volume_mult: 1.0
   max_history: 20
   price_fallback: true
-  volume_multiple: 1.0
+  volume_multiple: 1.2
   volume_window: 3
 solana_scalping:
   macd_fast: 10
