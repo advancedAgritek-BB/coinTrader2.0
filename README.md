@@ -108,6 +108,9 @@ needed.
    Before trading begins the bot performs a full market scan to populate
    its caches. Progress is logged and, when `telegram.status_updates` is
    enabled, sent to your Telegram chat.
+   In dry-run mode order prices are pulled from the latest ticker. If the
+   exchange fails to return a price the entry value from the trade log is
+   used so profit calculations remain accurate.
    Type `start`, `stop`, `panic sell`, `reload` or `quit` in the terminal to
    control the bot.
    Or launch the web dashboard with:
@@ -621,10 +624,12 @@ The built-in Telegram interface is provided by the `TelegramBotUI` class in
    - `/balance` – display your current exchange holdings
    - `/trades` – summarize executed trades
    - `/panic_sell` – exit all open positions immediately (paper or live).
-     Liquidations are recorded in `crypto_bot/logs/positions.log` while
-     overall activity continues in `bot.log`.
+      Liquidations are recorded in `crypto_bot/logs/positions.log` while
+      overall activity continues in `bot.log`. After closing a position you can
+      confirm the updated wallet total by reading the last "Wallet balance"
+      entry in this file.
    - HTTP `POST /close-all` – trigger the same exit via the web server,
-     also works in paper trading mode.
+      also works in paper trading mode.
 4. If you see `Failed to send message: Not Found` in the logs, the chat ID or
    token is likely incorrect or the bot lacks permission to message the chat.
    Double-check the values in `config.yaml` and ensure you've started a

@@ -159,6 +159,13 @@ class TradingBotController:
                     price = t.get("last") or t.get("bid") or t.get("ask") or 0.0
                 except Exception:
                     price = 0.0
+            if not price:
+                entries = [p for p in get_open_trades(self.trades_file) if p.get("symbol") == symbol]
+                if entries:
+                    total = sum(float(p.get("amount", 0)) * float(p.get("price", 0)) for p in entries)
+                    qty = sum(float(p.get("amount", 0)) for p in entries)
+                    if qty > 0:
+                        price = total / qty
             try:
                 self.paper_wallet.close(symbol, amount, price)
             except Exception:
