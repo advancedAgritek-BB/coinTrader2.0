@@ -10,6 +10,7 @@ from typing import Dict, List
 from .paper_wallet import PaperWallet
 
 from crypto_bot.utils.logger import LOG_DIR
+from crypto_bot import main
 
 
 import yaml
@@ -168,8 +169,15 @@ class TradingBotController:
                         price = total / qty
             try:
                 self.paper_wallet.close(symbol, amount, price)
+                main.log_balance(self.paper_wallet.balance)
             except Exception:
                 pass
+
+        balance = await main.fetch_and_log_balance(
+            self.exchange, self.paper_wallet, self.config
+        )
+        if isinstance(order, dict):
+            order["balance"] = balance
         return order
 
     async def close_all_positions(self) -> Dict[str, str]:
