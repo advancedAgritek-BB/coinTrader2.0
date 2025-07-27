@@ -41,4 +41,6 @@ base58
 statsmodels
 pytest-asyncio
 supabase
+gymnasium
+stable-baselines3
 
