@@ -6,5 +6,10 @@ trigger_window: 3
 risk:
   stop_loss_pct: 0.01
   take_profit_pct: 0.03
+fast_length: 20
+slow_length: 50
+adx_threshold: 25
+risk:
+  trailing_stop_factor: 1.5  # ATR multiple for trailing stop
   risk_pct: 0.01
   max_drawdown: 0.4
