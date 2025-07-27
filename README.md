@@ -496,7 +496,8 @@ the win rate.
 
 #### DCA Bot
 Dollar-cost averaging gradually accumulates a position by buying when the price
-closes 10% below the 20-period moving average. Adjust the behaviour in
+closes 10% below the 20-period moving average or selling when it trades 10%
+above. Adjust the behaviour in
 `crypto_bot/config.yaml`:
 
 ```yaml

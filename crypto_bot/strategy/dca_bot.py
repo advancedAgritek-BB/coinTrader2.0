@@ -4,13 +4,16 @@ import pandas as pd
 
 
 def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
-    """Simple dollar-cost averaging signal."""
-    if df is None or df.empty:
+    """Simple dollar-cost averaging signal supporting long and short."""
+    if df is None or df.empty or "close" not in df:
         return 0.0, "none"
 
     ma = df["close"].rolling(20).mean().iloc[-1]
-    if df["close"].iloc[-1] < ma * 0.9:
+    price = df["close"].iloc[-1]
+    if price < ma * 0.9:
         return 0.8, "long"
+    if price > ma * 1.1:
+        return 0.8, "short"
     return 0.0, "none"
 
 

@@ -159,7 +159,7 @@ def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> f
     tf_cache = df_cache.get(timeframe, {})
     for sym in symbols:
         df = tf_cache.get(sym)
-        if df is None or df.empty:
+        if df is None or df.empty or "close" not in df:
             continue
         atr_values.append(calc_atr(df))
     return sum(atr_values) / len(atr_values) if atr_values else 0.0
@@ -1357,7 +1357,7 @@ async def handle_exits(ctx: BotContext) -> None:
     tf_cache = ctx.df_cache.get(tf, {})
     for sym, pos in list(ctx.positions.items()):
         df = tf_cache.get(sym)
-        if df is None or df.empty:
+        if df is None or df.empty or "close" not in df:
             continue
         current_price = float(df["close"].iloc[-1])
         pnl_pct = ((current_price - pos["entry_price"]) / pos["entry_price"]) * (
@@ -1375,9 +1375,12 @@ async def handle_exits(ctx: BotContext) -> None:
         dca_cfg = ctx.config.get("dca", {})
         dca_score, dca_dir = dca_bot.generate_signal(df)
         if (
-            dca_dir == "long"
-            and dca_score > 0
+            dca_score > 0
             and pos.get("dca_count", 0) < dca_cfg.get("max_entries", 0)
+            and (
+                (pos["side"] == "buy" and dca_dir == "long")
+                or (pos["side"] == "sell" and dca_dir == "short")
+            )
         ):
             add_amount = pos["size"] * dca_cfg.get("size_multiplier", 1.0)
             add_value = add_amount * current_price
@@ -1460,8 +1463,11 @@ async def handle_exits(ctx: BotContext) -> None:
             max_entries = dca_cfg.get("max_entries", 0)
             size_pct = dca_cfg.get("size_pct", 1.0)
             if (
-                direction == "long"
-                and pos.get("dca_count", 0) < max_entries
+                pos.get("dca_count", 0) < max_entries
+                and (
+                    (pos["side"] == "buy" and direction == "long")
+                    or (pos["side"] == "sell" and direction == "short")
+                )
                 and ctx.risk_manager.capital_tracker.can_allocate(
                     pos.get("strategy", ""),
                     pos["size"] * size_pct * current_price,
