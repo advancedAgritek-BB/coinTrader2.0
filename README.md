@@ -364,7 +364,8 @@ symbol_score_weights:
 * **exec** – advanced order execution settings.
 * **exit_strategy** – default stop loss/take profit settings plus partial profit
   taking and trailing stops. The trailing stop follows price by 2% after at
-  least 1% gain.
+  least 1% gain. `momentum_bot` uses the `trailing_stop_factor` setting for an
+  ATR-based stop.
 
 ### Strategy and Signals
 * **strategy_allocation** – capital split across strategies.
@@ -514,6 +515,20 @@ dca_bot:
 Repeatedly adding exposure can amplify losses during prolonged downtrends, so
 keep the order size small and stop averaging if drawdown exceeds your risk
 tolerance.
+
+#### Momentum Bot
+The momentum bot rides strong trends using an ATR-based trailing stop. Set
+`exit_strategy.trailing_stop_factor` in `momentum_bot.yaml` to control the stop
+distance.
+
+```yaml
+# config/strategies/momentum_bot.yaml
+fast_length: 20
+slow_length: 50
+risk:
+  trailing_stop_factor: 1.5  # ATR multiple
+  risk_pct: 0.01
+```
 
 ### Data and Logging
 * **timeframe** – base interval for most indicators (default `15m`).

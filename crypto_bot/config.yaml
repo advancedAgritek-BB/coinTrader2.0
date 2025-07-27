@@ -334,6 +334,12 @@ sniper_bot:
   price_fallback: true
   volume_multiple: 1.2
   volume_window: 3
+momentum_bot:
+  donchian_period: 20
+  vol_multiplier: 1.0
+  atr_period: 14
+  setup_window: 10
+  trigger_window: 3
 solana_scalping:
   macd_fast: 10
   macd_signal: 8
@@ -383,9 +389,11 @@ strategy_router:
     - grid
     trending:
     - trend
+    - momentum_bot
     volatile:
     - sniper_bot
     - sniper_solana
+    - momentum_bot
   scalp_timeframe: 1m
   sideways_timeframe: 1h
   trending_timeframe: 1h
