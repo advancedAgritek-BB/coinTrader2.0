@@ -383,9 +383,11 @@ strategy_router:
     - grid
     trending:
     - trend
+    - momentum_bot
     volatile:
     - sniper_bot
     - sniper_solana
+    - momentum_bot
   scalp_timeframe: 1m
   sideways_timeframe: 1h
   trending_timeframe: 1h
