@@ -72,6 +72,7 @@ from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import write_cycle_metrics
 from crypto_bot.utils.token_registry import TOKEN_MINTS
+from crypto_bot.utils import regime_pnl_tracker
 from crypto_bot.utils import pnl_logger, regime_pnl_tracker
 
 from crypto_bot.monitoring import record_sol_scanner_metrics
@@ -1477,6 +1478,15 @@ async def handle_exits(ctx: BotContext) -> None:
                 )
             except Exception:
                 pass
+            try:
+                pnl = (current_price - pos["entry_price"]) / pos["entry_price"]
+                if pos["side"] == "sell":
+                    pnl = -pnl
+                regime_pnl_tracker.log_trade(
+                    pos.get("regime", ""), pos.get("strategy", ""), pnl
+                )
+            except Exception:
+                pass
         else:
             score, direction = dca_bot.generate_signal(df)
             dca_cfg = ctx.config.get("dca", {})
@@ -1709,6 +1719,15 @@ async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
     try:
         log_position(
             sym, pos["side"], pos["size"], pos["entry_price"], exit_price, ctx.balance
+        )
+    except Exception:
+        pass
+    try:
+        pnl = (exit_price - pos["entry_price"]) / pos["entry_price"]
+        if pos["side"] == "sell":
+            pnl = -pnl
+        regime_pnl_tracker.log_trade(
+            pos.get("regime", ""), pos.get("strategy", ""), pnl
         )
     except Exception:
         pass
