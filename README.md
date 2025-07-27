@@ -417,7 +417,7 @@ size = risk_manager.position_size(
   ``get_recent_win_rate``. When the win rate exceeds ``0.7`` the
   calculated size is boosted by **50%**.
 * **ml_signal_model**/**signal_weight_optimizer** – blend strategy scores with machine-learning predictions.
-* **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade. `min_confidence_score` and `signal_fusion.min_confidence` default to `0.005`.
+* **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade. `min_confidence_score` and `signal_fusion.min_confidence` default to `0.0001`.
 * **regime_timeframes**/**regime_return_period** – windows used for regime detection.
 * **regime_overrides** – optional settings that replace values in the `risk` or strategy sections when a specific regime is active.
 ```yaml
@@ -432,10 +432,10 @@ regime_overrides:
 * **portfolio_rotation** – rotate holdings based on scoring metrics.
 * **arbitrage_enabled** – enable cross-exchange arbitrage features.
 * **scoring_weights** - weighting factors for regime confidence, symbol score and volume metrics.
-* **signal_fusion** - combine scores from multiple strategies via a `fusion_method`.
+* **signal_fusion** – enable to combine scores from multiple strategies via a `fusion_method` for improved selection.
 * **strategy_router** - maps market regimes to lists of strategy names. Each regime also accepts a `<regime>_timeframe` key (e.g. `trending_timeframe: 1h`, `volatile_timeframe: 1m`).
 * **mode_threshold**/**mode_degrade_window** - degrade to manual mode when auto selection underperforms.
-* **meta_selector**/**rl_selector** – experimental strategy routers.
+* **meta_selector**/**rl_selector** – experimental strategy routers. Enable these along with `signal_fusion` for improved strategy selection.
   Train the meta selector on your historical trade results with:
 
   ```bash
