@@ -1305,6 +1305,7 @@ async def execute_signals(ctx: BotContext) -> None:
                     confidence=score,
                     direction=side,
                     take_profit=take_profit,
+                    regime=candidate.get("regime"),
                 )
         else:
             executed += 1
