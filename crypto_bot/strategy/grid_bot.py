@@ -278,18 +278,15 @@ def generate_signal(
         else:
             grid_step = prev_step
         grid_state.set_last_atr(symbol, atr_pct_1h)
-    centre = float("nan")
-    if cfg.use_ml_center:
-        try:  # pragma: no cover - best effort
-            from crypto_bot import grid_center_model
-            centre = grid_center_model.predict_centre(recent)
-        except Exception:
-            centre = float("nan")
-    if pd.isna(centre):
-        if "vwap" in recent.columns and not pd.isna(recent["vwap"].iloc[-1]):
-            centre = recent["vwap"].iloc[-1]
-        else:
-            centre = (high + low) / 2
+    # Determine the centre price of the grid. Previous versions optionally used
+    # a machine learning model via ``grid_center_model.predict_centre``. Since
+    # no model is shipped with the repository, fall back to a simple heuristic
+    # based on the latest VWAP when available, otherwise the midpoint of the
+    # recent high/low range.
+    if "vwap" in recent.columns and not pd.isna(recent["vwap"].iloc[-1]):
+        centre = recent["vwap"].iloc[-1]
+    else:
+        centre = (high + low) / 2
 
     if not grid_step:
         return 0.0, "none"
