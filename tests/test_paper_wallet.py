@@ -154,3 +154,23 @@ def test_short_sell_rejected():
     wallet = PaperWallet(1000.0, allow_short=False)
     with pytest.raises(RuntimeError):
         wallet.open("XBT/USDT", "sell", 1.0, 100.0)
+
+
+def test_close_falls_back_to_entry_price_long():
+    wallet = PaperWallet(1000.0)
+    wallet.open("XBT/USDT", "buy", 1.0, 100.0)
+
+    pnl = wallet.close("XBT/USDT", 1.0, 0.0)
+    assert pnl == 0.0
+    assert wallet.balance == 1000.0
+    assert wallet.realized_pnl == 0.0
+
+
+def test_close_falls_back_to_entry_price_short():
+    wallet = PaperWallet(1000.0)
+    wallet.open("XBT/USDT", "sell", 1.0, 100.0)
+
+    pnl = wallet.close("XBT/USDT", 1.0, 0.0)
+    assert pnl == 0.0
+    assert wallet.balance == 1000.0
+    assert wallet.realized_pnl == 0.0

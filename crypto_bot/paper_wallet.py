@@ -160,6 +160,9 @@ class PaperWallet:
         if not pos:
             return 0.0
 
+        if price == 0.0:
+            price = pos["entry_price"]
+
         key = "size" if "size" in pos else "amount"
         amount = min(amount, pos[key])
 
