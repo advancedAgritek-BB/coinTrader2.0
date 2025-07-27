@@ -5,6 +5,7 @@ import ta
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.volatility_filter import calc_atr
+from crypto_bot.utils import regime_pnl_tracker
 from pathlib import Path
 
 
@@ -158,6 +159,11 @@ def should_exit(
                         pnl,
                         confidence,
                         direction,
+                    )
+                    regime_pnl_tracker.log_trade(
+                        order.get("regime", "unknown"),
+                        strategy,
+                        pnl,
                     )
     else:
         if trailing_stop > 0:
