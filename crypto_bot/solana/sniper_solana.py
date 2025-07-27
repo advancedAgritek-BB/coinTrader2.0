@@ -113,3 +113,225 @@ class regime_filter:
     @staticmethod
     def matches(regime: str) -> bool:
         return regime == "volatile"
+
+
+import asyncio
+import json
+from typing import Dict, Any, Optional
+import aiohttp
+from solana.rpc.async_api import AsyncClient
+from solders.pubkey import Pubkey
+from solders.rpc.responses import (
+    GetTokenAccountBalanceResp,
+    GetAccountInfoResp,
+)
+from crypto_bot.utils.logger import setup_logger
+
+logger = setup_logger(__name__, "crypto_bot/logs/solana_rug_check.log")
+
+# Constants
+SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
+RUGCHECK_API_URL = "https://api.rugcheck.xyz/v1/tokens/{token}/report"
+DEXSCREENER_API_URL = "https://api.dexscreener.com/latest/dex/tokens/{token}"
+RAYDIUM_PROGRAM_ID = Pubkey.from_string(
+    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Nyh"
+)
+
+# Risk thresholds
+MIN_LIQUIDITY_USD = 10000
+MAX_TOP_HOLDER_PCT = 20.0
+MAX_TOP_10_HOLDERS_PCT = 50.0
+MIN_TOKEN_AGE_MINUTES = 5
+RUGCHECK_RISK_THRESHOLD = 50
+
+
+async def fetch_token_metadata(
+    client: AsyncClient, token_mint: str
+) -> Optional[Dict[str, Any]]:
+    """Fetch token metadata like mint authority and supply."""
+    try:
+        mint_pubkey = Pubkey.from_string(token_mint)
+        resp: GetAccountInfoResp = await client.get_account_info(mint_pubkey)
+        if resp.value is None:
+            return None
+
+        account_data = resp.value.data
+        mint_authority = (
+            account_data[0:32] if account_data[32:36] == b"\x01" else None
+        )
+        freeze_authority = (
+            account_data[36:68] if account_data[68:72] == b"\x01" else None
+        )
+        supply = int.from_bytes(account_data[4:12], "little")
+
+        return {
+            "mint_authority": bool(mint_authority),
+            "freeze_authority": bool(freeze_authority),
+            "total_supply": supply,
+        }
+    except Exception as e:  # pragma: no cover - network errors
+        logger.error(f"Error fetching token metadata for {token_mint}: {e}")
+        return None
+
+
+async def fetch_dexscreener_data(
+    session: aiohttp.ClientSession, token_mint: str
+) -> Optional[Dict[str, Any]]:
+    """Fetch liquidity and holder info from DexScreener."""
+    url = DEXSCREENER_API_URL.format(token=token_mint)
+    try:
+        async with session.get(url, timeout=10) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json()
+            pairs = data.get("pairs", [])
+            if not pairs:
+                return None
+
+            main_pair = pairs[0]
+            liquidity_usd = main_pair.get("liquidity", {}).get("usd", 0)
+            top_10_holders_pct = main_pair.get("top10HoldersPercent", 0)
+            fdv = main_pair.get("fdv", 0)
+
+            return {
+                "liquidity_usd": liquidity_usd,
+                "top_10_holders_pct": top_10_holders_pct,
+                "fdv": fdv,
+            }
+    except Exception as e:  # pragma: no cover - network errors
+        logger.error(f"Error fetching DexScreener data for {token_mint}: {e}")
+        return None
+
+
+async def fetch_rugcheck_score(
+    session: aiohttp.ClientSession, token_mint: str
+) -> Optional[int]:
+    """Fetch risk score from RugCheck (0-100, higher risk)."""
+    url = RUGCHECK_API_URL.format(token=token_mint)
+    try:
+        async with session.get(url, timeout=10) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json()
+            return data.get("riskScore")
+    except Exception as e:  # pragma: no cover - network errors
+        logger.error(f"Error fetching RugCheck score for {token_mint}: {e}")
+        return None
+
+
+async def check_liquidity_locked(client: AsyncClient, pool_address: str) -> bool:
+    """Return ``True`` if pool tokens are burned or locked."""
+    try:
+        pool_pubkey = Pubkey.from_string(pool_address)
+        resp: GetTokenAccountBalanceResp = await client.get_token_account_balance(
+            pool_pubkey
+        )
+        if resp.value is None:
+            return False
+        balance = resp.value.ui_amount
+        return balance == 0
+    except Exception as e:  # pragma: no cover - network errors
+        logger.error(f"Error checking liquidity lock for pool {pool_address}: {e}")
+        return False
+
+
+async def simulate_honeypot(client: AsyncClient, token_mint: str) -> bool:
+    """Basic honeypot detection via mint authority."""
+    metadata = await fetch_token_metadata(client, token_mint)
+    if metadata and metadata.get("mint_authority"):
+        return True
+    return False
+
+
+async def rug_check(
+    token_mint: str, pool_address: Optional[str] = None
+) -> Dict[str, Any]:
+    """Comprehensive rug check returning a risk score."""
+
+    async with AsyncClient(SOLANA_RPC_URL) as client:
+        async with aiohttp.ClientSession() as session:
+            tasks = [
+                fetch_token_metadata(client, token_mint),
+                fetch_dexscreener_data(session, token_mint),
+                fetch_rugcheck_score(session, token_mint),
+                simulate_honeypot(client, token_mint),
+            ]
+            if pool_address:
+                tasks.append(check_liquidity_locked(client, pool_address))
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            metadata, dexscreener, rug_score, is_honeypot = results[:4]
+            lp_locked = results[4] if pool_address else False
+
+            details: Dict[str, Any] = {}
+            risk_factors = 0
+            total_checks = 5
+
+            if not isinstance(metadata, dict):
+                details["metadata_error"] = str(metadata)
+                risk_factors += 1
+            else:
+                if metadata["mint_authority"]:
+                    details["mint_authority"] = "Exists (risk: can mint more)"
+                    risk_factors += 1
+                if metadata["freeze_authority"]:
+                    details["freeze_authority"] = "Exists (risk: can freeze accounts)"
+                    risk_factors += 1
+
+            if not isinstance(dexscreener, dict):
+                details["dexscreener_error"] = str(dexscreener)
+                risk_factors += 1
+            else:
+                liquidity = dexscreener.get("liquidity_usd", 0)
+                details["liquidity_usd"] = liquidity
+                if liquidity < MIN_LIQUIDITY_USD:
+                    details["low_liquidity"] = f"{liquidity} < {MIN_LIQUIDITY_USD}"
+                    risk_factors += 1
+
+                top_10_pct = dexscreener.get("top_10_holders_pct", 0)
+                details["top_10_holders_pct"] = top_10_pct
+                if top_10_pct > MAX_TOP_10_HOLDERS_PCT:
+                    details["concentrated_holders"] = (
+                        f"{top_10_pct}% > {MAX_TOP_10_HOLDERS_PCT}%"
+                    )
+                    risk_factors += 1
+
+            if not isinstance(rug_score, int):
+                details["rugcheck_error"] = str(rug_score)
+                risk_factors += 1
+            else:
+                details["rugcheck_score"] = rug_score
+                if rug_score > RUGCHECK_RISK_THRESHOLD:
+                    details["high_rug_score"] = f"{rug_score} > {RUGCHECK_RISK_THRESHOLD}"
+                    risk_factors += 1
+
+            if isinstance(is_honeypot, Exception):
+                details["honeypot_error"] = str(is_honeypot)
+                risk_factors += 1
+            elif is_honeypot:
+                details["potential_honeypot"] = True
+                risk_factors += 1
+
+            if pool_address:
+                details["lp_locked"] = lp_locked
+                if not lp_locked:
+                    details["lp_not_locked"] = "Liquidity not burned/locked"
+                    risk_factors += 1
+                total_checks += 1
+
+            risk_score = risk_factors / total_checks
+            safe = risk_score < 0.3
+
+            return {
+                "safe": safe,
+                "risk_score": risk_score,
+                "details": details,
+            }
+
+# Example usage within ``generate_signal``:
+# async def generate_signal(...):
+#     check = await rug_check(token_mint)
+#     if not check["safe"]:
+#         logger.warning(f"Rug risk for {token_mint}: {check['risk_score']}")
+#         return 0.0, "none"
