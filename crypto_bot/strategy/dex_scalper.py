@@ -7,6 +7,7 @@ from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.utils.gas_estimator import fetch_priority_fee_gwei
+from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
 ALLOWED_PAIRS = load_liquid_pairs() or []
 
@@ -60,8 +61,17 @@ def fetch_priority_fee_gwei(endpoint: str | None = None) -> float:
     return 0.0
 
 
-def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
-    """Short-term momentum strategy using EMA divergence on DEX pairs."""
+def generate_signal(
+    df: pd.DataFrame,
+    config: Optional[dict] = None,
+    *,
+    mempool_monitor: Optional[SolanaMempoolMonitor] = None,
+) -> Tuple[float, str]:
+    """Short-term momentum strategy using EMA divergence on DEX pairs.
+
+    When ``mempool_monitor`` is supplied the current Solana priority fee is
+    used instead of the Ethereum fee estimator.
+    """
     if df.empty:
         return 0.0, "none"
 
@@ -72,8 +82,15 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     gas_threshold_gwei = params.get("gas_threshold_gwei", 10.0)
 
     if gas_threshold_gwei > 0:
-        fee = fetch_priority_fee_gwei()
-        if fee > gas_threshold_gwei:
+        fee = None
+        if mempool_monitor is not None:
+            try:
+                fee = mempool_monitor.fetch_priority_fee()
+            except Exception:
+                fee = None
+        if fee is None:
+            fee = fetch_priority_fee_gwei()
+        if fee is not None and fee > gas_threshold_gwei:
             return 0.0, "none"
 
     if len(df) < slow_window:

@@ -709,6 +709,9 @@ async def fetch_candidates(ctx: BotContext) -> None:
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("Arbitrage scan error: %s", exc)
 
+    if regime == "volatile":
+        symbols.extend((s, 0.0) for s in onchain_syms)
+
     if regime == "volatile" and sol_cfg.get("enabled"):
         try:
             new_tokens = await get_solana_new_tokens(sol_cfg)
