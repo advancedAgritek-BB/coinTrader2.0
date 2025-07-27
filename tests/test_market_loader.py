@@ -2372,6 +2372,40 @@ def test_dynamic_limits_cap(monkeypatch):
     assert limits == [720]
 
 
+def test_dynamic_limits_skip_extreme_age(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    called = False
+
+    async def fake_update(*_a, **_k):
+        nonlocal called
+        called = True
+        return {}
+
+    now = 1_000_000
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
+    monkeypatch.setattr(market_loader.time, "time", lambda: float(now))
+
+    async def listing_date(_sym):
+        # 100 years ago
+        return int(now * 1000 - 100 * 365 * 24 * 3600 * 1000)
+
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", listing_date)
+
+    ex = DummyMultiTFExchange()
+    asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["BTC/USD"],
+            {"timeframes": ["1h"]},
+            limit=100,
+        )
+    )
+
+    assert not called
+
+
 def test_listing_date_concurrency(monkeypatch):
     from crypto_bot.utils import market_loader
 
