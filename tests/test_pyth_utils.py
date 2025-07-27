@@ -118,7 +118,7 @@ def test_get_pyth_price(monkeypatch):
         "program_key": "p",
     }
 
-    price, conf_pct, trading = asyncio.run(pyth_utils.get_pyth_price("BTC/USD", cfg))
+    price, conf_pct, trading = asyncio.run(pyth_utils.async_get_pyth_price("BTC/USD", cfg))
 
     assert price == 10.0
     assert conf_pct == 0.02
