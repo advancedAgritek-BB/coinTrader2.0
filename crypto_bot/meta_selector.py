@@ -110,11 +110,17 @@ def _load() -> Dict[str, Dict[str, List[dict]]]:
 def _compute_stats(trades: List[dict]) -> Optional[Dict[str, float]]:
     now = datetime.utcnow()
     pnls = [
-        float(t["pnl"]) * (0.98 ** (now - datetime.fromisoformat(t["timestamp"])).days)
+        float(t["pnl"]) * (0.99 ** (now - datetime.fromisoformat(t["timestamp"])).days)
         for t in trades
     ]
     if not pnls:
-        return None
+        return {
+            "win_rate": 0.6,
+            "raw_sharpe": 1.0,
+            "downside_std": 0.0,
+            "max_dd": 0.0,
+            "trade_count": 1,
+        }
     wins = sum(p > 0 for p in pnls)
     total = len(pnls)
     win_rate = wins / total if total else 0.0

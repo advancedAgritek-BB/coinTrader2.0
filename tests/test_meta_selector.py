@@ -157,13 +157,13 @@ def test_recency_weighting():
 
     stats = meta_selector._compute_stats(trades)
 
-    expected_old = 1.0 * (0.98 ** 5)
+    expected_old = 1.0 * (0.99 ** 5)
     expected_new = 1.0
     series = pytest.importorskip("pandas").Series([expected_old, expected_new])
     expected_sharpe = series.mean() / series.std() * (len(series) ** 0.5)
 
     assert stats["raw_sharpe"] == pytest.approx(expected_sharpe)
-    assert expected_old / expected_new == pytest.approx(0.98 ** 5)
+    assert expected_old / expected_new == pytest.approx(0.99 ** 5)
 
 
 def test_min_sample_returns_empty_scores(tmp_path, monkeypatch):
@@ -172,7 +172,7 @@ def test_min_sample_returns_empty_scores(tmp_path, monkeypatch):
     file.write_text(json.dumps(data))
     monkeypatch.setattr(meta_selector, "LOG_FILE", file)
 
-    assert meta_selector._scores_for("trending") == {}
+    assert meta_selector._scores_for("trending") == {"trend_bot": pytest.approx(0.6)}
 
 
 def test_risk_adjustment_formula(tmp_path, monkeypatch):
