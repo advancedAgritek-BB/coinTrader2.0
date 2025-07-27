@@ -1522,7 +1522,6 @@ async def force_exit_all(ctx: BotContext) -> None:
     tf_cache = ctx.df_cache.get(tf, {})
     if not ctx.positions:
         logger.info("No positions to liquidate")
-        return
     for sym, pos in list(ctx.positions.items()):
         df = tf_cache.get(sym)
         exit_price = pos["entry_price"]
