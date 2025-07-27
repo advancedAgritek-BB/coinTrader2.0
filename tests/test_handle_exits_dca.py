@@ -52,6 +52,7 @@ def load_handle_exits():
         "BotContext": BotContext,
         "log_position": lambda *a, **k: None,
         "refresh_balance": _refresh,
+        "regime_pnl_tracker": type("R", (), {"log_trade": lambda *a, **k: None}),
     }
     exec(funcs["opposite_side"], ns)
     exec(funcs["handle_exits"], ns)

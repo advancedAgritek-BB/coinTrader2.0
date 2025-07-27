@@ -215,6 +215,15 @@ def test_stop_order_management():
     assert manager.stop_orders == {}
 
 
+def test_register_stop_order_stores_regime():
+    manager = RiskManager(
+        RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
+    )
+    order = {"id": "1", "symbol": "XBT/USDT", "side": "sell", "amount": 1, "dry_run": True}
+    manager.register_stop_order(order, symbol="XBT/USDT", regime="volatile")
+    assert manager.stop_orders["XBT/USDT"].get("regime") == "volatile"
+
+
 def test_position_size_uses_trade_size_pct_when_no_stop():
     manager = RiskManager(
         RiskConfig(

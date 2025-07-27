@@ -7,6 +7,21 @@ import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+# Basic ccxt stub so utils can import without the real dependency
+import types
+sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
+sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
+sys.modules.setdefault("base58", types.ModuleType("base58"))
+class _FakeProm:
+    class Counter:
+        def __init__(self, *a, **k):
+            pass
+
+        def inc(self, *_a, **_k):
+            pass
+
+sys.modules.setdefault("prometheus_client", _FakeProm())
+
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config, items):
@@ -323,3 +338,14 @@ def _mock_listing_date(monkeypatch):
 
     monkeypatch.setattr(market_loader, "get_kraken_listing_date", _no_listing)
     yield
+
+
+@pytest.fixture()
+def regime_pnl_file(tmp_path, monkeypatch):
+    """Provide a temp regime PnL log without seeded trades."""
+    from crypto_bot.utils import regime_pnl_tracker as rpt
+
+    log = tmp_path / "regime_pnl.csv"
+    monkeypatch.setattr(rpt, "LOG_FILE", log)
+    monkeypatch.setattr(rpt, "_seed_fake_trades", lambda *a, **k: None)
+    return log
