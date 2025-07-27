@@ -112,7 +112,12 @@ def generate_signal(
         logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none", 0.0, False
 
-    price_change = df["close"].iloc[-1] / df["close"].iloc[0] - 1
+    first_close = df["close"].iloc[0]
+    if first_close == 0:
+        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        return 0.0, "none", 0.0, False
+
+    price_change = df["close"].iloc[-1] / first_close - 1
     if direction == "auto" and price_change < 0:
         atr = calc_atr(df)
         score = 1.0
