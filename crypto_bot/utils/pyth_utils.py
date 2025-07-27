@@ -7,7 +7,7 @@ from .logger import LOG_DIR, setup_logger
 logger = setup_logger(__name__, LOG_DIR / "pyth_utils.log")
 
 
-async def get_pyth_price(symbol: str, config: Mapping[str, object]) -> tuple[float, float, bool]:
+async def async_get_pyth_price(symbol: str, config: Mapping[str, object]) -> tuple[float, float, bool]:
     """Return the latest Pyth price for ``symbol``.
 
     Parameters
