@@ -140,4 +140,4 @@ def get_recent_win_rate(
 
 
 # Seed the PnL log with fake trades when empty to bootstrap weights
-_seed_fake_trades(LOG_FILE)
+# _seed_fake_trades(LOG_FILE)

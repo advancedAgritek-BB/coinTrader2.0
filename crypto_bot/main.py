@@ -73,6 +73,7 @@ from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import write_cycle_metrics
 from crypto_bot.utils.token_registry import TOKEN_MINTS
 from crypto_bot.utils import regime_pnl_tracker
+from crypto_bot.utils import pnl_logger, regime_pnl_tracker
 
 from crypto_bot.monitoring import record_sol_scanner_metrics
 from crypto_bot.fund_manager import (
@@ -1447,6 +1448,21 @@ async def handle_exits(ctx: BotContext) -> None:
                 except Exception:
                     pass
             await refresh_balance(ctx)
+            realized_pnl = (current_price - pos["entry_price"]) * pos["size"]
+            if pos["side"] == "sell":
+                realized_pnl = -realized_pnl
+            pnl_logger.log_pnl(
+                pos.get("strategy", ""),
+                sym,
+                pos["entry_price"],
+                current_price,
+                realized_pnl,
+                pos.get("confidence", 0.0),
+                pos["side"],
+            )
+            regime_pnl_tracker.log_trade(
+                pos.get("regime", ""), pos.get("strategy", ""), realized_pnl
+            )
             ctx.risk_manager.deallocate_capital(
                 pos.get("strategy", ""), pos["size"] * pos["entry_price"]
             )
@@ -1561,6 +1577,21 @@ async def force_exit_all(ctx: BotContext) -> None:
                 pass
 
         await refresh_balance(ctx)
+        realized_pnl = (exit_price - pos["entry_price"]) * pos["size"]
+        if pos["side"] == "sell":
+            realized_pnl = -realized_pnl
+        pnl_logger.log_pnl(
+            pos.get("strategy", ""),
+            sym,
+            pos["entry_price"],
+            exit_price,
+            realized_pnl,
+            pos.get("confidence", 0.0),
+            pos["side"],
+        )
+        regime_pnl_tracker.log_trade(
+            pos.get("regime", ""), pos.get("strategy", ""), realized_pnl
+        )
 
         ctx.risk_manager.deallocate_capital(
             pos.get("strategy", ""), pos["size"] * pos["entry_price"]
@@ -1592,6 +1623,22 @@ async def force_exit_all(ctx: BotContext) -> None:
                 ctx.balance = ctx.paper_wallet.balance
             except Exception:
                 pass
+
+            realized_pnl = (exit_price - wpos.get("entry_price", 0.0)) * size
+            if wpos.get("side") == "sell":
+                realized_pnl = -realized_pnl
+            pnl_logger.log_pnl(
+                wpos.get("strategy", ""),
+                sym,
+                wpos.get("entry_price", 0.0),
+                exit_price,
+                realized_pnl,
+                wpos.get("confidence", 0.0),
+                wpos.get("side", ""),
+            )
+            regime_pnl_tracker.log_trade(
+                wpos.get("regime", ""), wpos.get("strategy", ""), realized_pnl
+            )
 
             ctx.risk_manager.deallocate_capital(
                 wpos.get("strategy", ""), size * wpos.get("entry_price", 0.0)
@@ -1649,6 +1696,21 @@ async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
             pass
 
     await refresh_balance(ctx)
+    realized_pnl = (exit_price - pos["entry_price"]) * pos["size"]
+    if pos["side"] == "sell":
+        realized_pnl = -realized_pnl
+    pnl_logger.log_pnl(
+        pos.get("strategy", ""),
+        sym,
+        pos["entry_price"],
+        exit_price,
+        realized_pnl,
+        pos.get("confidence", 0.0),
+        pos["side"],
+    )
+    regime_pnl_tracker.log_trade(
+        pos.get("regime", ""), pos.get("strategy", ""), realized_pnl
+    )
 
     ctx.risk_manager.deallocate_capital(
         pos.get("strategy", ""), pos["size"] * pos["entry_price"]

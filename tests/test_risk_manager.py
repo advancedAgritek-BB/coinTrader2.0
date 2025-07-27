@@ -162,8 +162,9 @@ def test_allow_trade_allows_above_atr_and_volume_thresholds():
 def test_stop_order_management():
     manager = RiskManager(RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01))
     order = {"id": "1", "symbol": "XBT/USDT", "side": "sell", "amount": 1, "dry_run": True}
-    manager.register_stop_order(order, symbol="XBT/USDT")
+    manager.register_stop_order(order, symbol="XBT/USDT", regime="bull")
     assert manager.stop_orders["XBT/USDT"]["amount"] == 1
+    assert manager.stop_orders["XBT/USDT"]["regime"] == "bull"
     manager.update_stop_order(0.5, symbol="XBT/USDT")
     assert manager.stop_orders["XBT/USDT"]["amount"] == 0.5
     manager = RiskManager(
