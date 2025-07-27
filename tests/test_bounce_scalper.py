@@ -454,3 +454,18 @@ def test_lower_df_pattern_detection(monkeypatch):
     assert direction == "long"
     assert score > 0
 
+
+def test_short_df_returns_none():
+    df = pd.DataFrame(
+        {
+            "open": [1.0],
+            "high": [1.0],
+            "low": [1.0],
+            "close": [1.0],
+            "volume": [1.0],
+        }
+    )
+    score, direction = bounce_scalper.generate_signal(df, {})
+    assert direction == "none"
+    assert score == 0.0
+

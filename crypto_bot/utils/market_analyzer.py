@@ -142,16 +142,6 @@ async def analyze_symbol(
         Configuration for the mempool monitor.
     """
     router_cfg = RouterConfig.from_dict(config)
-    lookback = config.get("indicator_lookback", 14) * 2
-    for tf, df in df_map.items():
-        if df is None or len(df) < lookback:
-            analysis_logger.info(
-                "Skipping analysis for %s on %s: insufficient data (%d candles)",
-                symbol,
-                tf,
-                0 if df is None else len(df),
-            )
-            return {"symbol": symbol, "skip": True}
     base_tf = router_cfg.timeframe
     higher_tf = config.get("higher_timeframe", "1d")
     df = df_map.get(base_tf)
@@ -172,6 +162,13 @@ async def analyze_symbol(
             "min_confidence": 0.0,
             "direction": "none",
         }
+
+    if len(df) < 50:
+        telemetry.inc("analysis.skipped_short_data")
+        analysis_logger.info(
+            "Skipping %s: insufficient data (%d candles)", symbol, len(df)
+        )
+        return {"symbol": symbol, "skip": "short_data"}
     baseline = float(
         config.get("min_confidence_score", config.get("signal_threshold", 0.005))
     )

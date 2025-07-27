@@ -19,6 +19,10 @@ PROM_COUNTERS: Dict[str, Counter] = {
         "analysis_skipped_no_df",
         "Number of symbols skipped due to missing OHLCV data",
     ),
+    "analysis.skipped_short_data": Counter(
+        "analysis_skipped_short_data",
+        "Number of symbols skipped due to insufficient OHLCV data length",
+    ),
     "scan.ws_errors": Counter(
         "scan_ws_errors",
         "Number of WebSocket errors encountered while scanning",
