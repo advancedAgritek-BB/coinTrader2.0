@@ -271,6 +271,7 @@ class RiskManager:
         confidence: float | None = None,
         direction: str | None = None,
         take_profit: float | None = None,
+        regime: str | None = None,
     ) -> None:
         """Store the protective stop order and related trade info."""
         order = dict(order)
@@ -289,6 +290,8 @@ class RiskManager:
             order["direction"] = direction
         if take_profit is not None:
             order["take_profit"] = take_profit
+        if regime is not None:
+            order["regime"] = regime
         self.stop_order = order
         if symbol is not None:
             self.stop_orders[symbol] = order
