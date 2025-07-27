@@ -247,3 +247,9 @@ def test_trainer_model_influence(monkeypatch):
     score, direction2 = grid_bot.generate_signal(df, config=cfg)
     assert direction2 == direction
     assert score == pytest.approx((base + 0.4) / 2)
+
+
+def test_zero_price_returns_none():
+    df = _df_with_price(0.0)
+    score, direction = grid_bot.generate_signal(df)
+    assert (score, direction) == (0.0, "none")

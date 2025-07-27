@@ -177,3 +177,12 @@ def test_logs_unknown_symbol(caplog):
     assert any(
         "Signal for unknown: 0.0, none" in r.getMessage() for r in caplog.records
     )
+
+
+def test_zero_first_price_returns_none():
+    import importlib, sys
+    sys.modules.pop("crypto_bot.strategy.sniper_bot", None)
+    real_sniper = importlib.import_module("crypto_bot.strategy.sniper_bot")
+    df = _df_with_volume_and_price([0.0, 0.1, 0.2], [10, 20, 30])
+    score, direction, _, _ = real_sniper.generate_signal(df)
+    assert (score, direction) == (0.0, "none")
