@@ -1,3 +1,9 @@
+"""Trend (momentum) trading strategy.
+
+This momentum bot expects ``exit_strategy.trailing_stop_factor`` to set
+an ATR-based trailing stop for risk management.
+"""
+
 from typing import Optional, Tuple
 
 import pandas as pd
