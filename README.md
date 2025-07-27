@@ -523,16 +523,17 @@ tolerance.
 
 #### Momentum Bot
 The momentum bot rides strong trends using an ATR-based trailing stop. Set
-`exit_strategy.trailing_stop_factor` in `momentum_bot.yaml` to control the stop
-distance.
+`momentum_bot.risk.trailing_stop_factor` in `crypto_bot/config.yaml` to control
+the stop distance.
 
 ```yaml
-# config/strategies/momentum_bot.yaml
-fast_length: 20
-slow_length: 50
-risk:
-  trailing_stop_factor: 1.5  # ATR multiple
-  risk_pct: 0.01
+# crypto_bot/config.yaml
+momentum_bot:
+  fast_length: 20
+  slow_length: 50
+  risk:
+    trailing_stop_factor: 1.5  # ATR multiple
+    risk_pct: 0.01
 ```
 
 ### Data and Logging
