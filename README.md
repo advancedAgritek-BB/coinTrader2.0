@@ -188,6 +188,8 @@ MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 SUPABASE_URL=https://xyzcompany.supabase.co
 SUPABASE_KEY=your_service_key
+# optional custom model name stored in Supabase
+SUPABASE_MODEL_FILE=regime_lgbm.pkl
 LUNARCRUSH_API_KEY=your_lunarcrush_api_key  # optional, LunarCrush social metrics
 token_registry.refresh_interval_minutes=720  # optional cache update interval
 ```
@@ -199,7 +201,9 @@ token_registry.refresh_interval_minutes=720  # optional cache update interval
 admin chats. Omit it to restrict control to the single `chat_id` in the
 configuration file.
 
-`SUPABASE_URL` and `SUPABASE_KEY` are required for downloading models used by `regime_classifier`.
+`SUPABASE_URL` and `SUPABASE_KEY` are required for downloading models used by
+`regime_classifier`.  Use `SUPABASE_MODEL_FILE` to override the default model
+file name if needed.
 
 ### Solana token registry
 
@@ -400,6 +404,13 @@ solana_scanner:
   taking and trailing stops. The trailing stop follows price by 2% after at
   least 1% gain. `momentum_bot` uses the `trailing_stop_factor` setting for an
   ATR-based stop.
+* **quick_sell_profit_pct**/**quick_sell_hold_timeout** – automatically close a
+  position when profit exceeds the configured percentage and it has been held for
+  at least this many seconds.
+
+Quick sell uses `quick_sell_profit_pct` as the profit target. Once a trade has
+been open longer than `quick_sell_hold_timeout` seconds and the unrealized gain
+exceeds this percentage, the position is closed immediately.
 
 ### Strategy and Signals
 * **strategy_allocation** – capital split across strategies.
@@ -1558,7 +1569,8 @@ python ml_trainer.py train regime --use-gpu --federated
 ```
 
 Ensure `SUPABASE_URL` and `SUPABASE_KEY` are set in `crypto_bot/.env` so the
-upload succeeds. Set `use_ml_regime_classifier: true` in
+upload succeeds. Optionally set `SUPABASE_MODEL_FILE` if you renamed the
+stored model. Set `use_ml_regime_classifier: true` in
 `crypto_bot/regime/regime_config.yaml` to enable downloads of the trained model
 when the bot starts.
 

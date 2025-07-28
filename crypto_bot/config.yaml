@@ -105,6 +105,10 @@ exit_strategy:
   scale_out: true
   trailing_stop_factor: 1.2
   trailing_stop_pct: 0.005
+  # Close a position quickly when profit exceeds ``profit_pct``
+  # and the trade has been held for at least ``hold_timeout`` seconds.
+  quick_sell_profit_pct: 0.02
+  quick_sell_hold_timeout: 300
 force_websocket_history: false
 gas_threshold_gwei: 50
 gecko_limit: 10
