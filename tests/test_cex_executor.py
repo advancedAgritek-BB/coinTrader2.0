@@ -356,6 +356,44 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
     assert float(row.split(",")[3]) > 0
 
 
+def test_execute_trade_async_retries(monkeypatch):
+    calls = {"count": 0}
+    delays = []
+
+    class DummyEx:
+        async def create_market_order(self, symbol, side, amount):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise cex_executor.ccxt.NetworkError("fail")
+            return {"id": "1"}
+
+    async def fake_sleep(d):
+        delays.append(d)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    NetworkError = type("NetworkError", (Exception,), {})
+    monkeypatch.setattr(cex_executor.ccxt, "NetworkError", NetworkError, raising=False)
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+
+    order = asyncio.run(
+        cex_executor.execute_trade_async(
+            DummyEx(),
+            None,
+            "XBT/USDT",
+            "buy",
+            1.0,
+            notifier=DummyNotifier(),
+            dry_run=False,
+            max_retries=2,
+        )
+    )
+
+    assert order == {"id": "1"}
+    assert delays
+
+
 def test_execute_trade_no_message_when_disabled(monkeypatch):
     calls = {"count": 0}
     monkeypatch.setattr(
