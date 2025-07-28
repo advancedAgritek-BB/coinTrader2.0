@@ -243,9 +243,3 @@ async def trade_stats_lines(exchange: Any, trade_file: Path = TRADE_FILE) -> lis
             pnl = (current - entry) * amount
         lines.append(f"{sym} -- {entry:.2f} -- {pnl:+.2f}")
     return lines
-
-
-async def trade_stats_line(exchange: Any, trade_file: Path = TRADE_FILE) -> str:
-    """Return a single line summarizing PnL for each open trade."""
-    lines = await trade_stats_lines(exchange, trade_file)
-    return " | ".join(lines)
