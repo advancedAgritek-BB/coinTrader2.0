@@ -94,7 +94,6 @@ class regime_filter:
     def matches(regime: str) -> bool:
         return regime in {"trending", "volatile"}
 """Solana meme wave strategy using simple volume surge detection."""
-from __future__ import annotations
 
 import asyncio
 from typing import Optional, Tuple, Mapping
