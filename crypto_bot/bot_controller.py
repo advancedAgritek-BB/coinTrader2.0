@@ -49,6 +49,7 @@ class TradingBotController:
             "breakout_bot": True,
             "micro_scalp_bot": True,
             "bounce_scalper": True,
+            "flash_crash_bot": True,
         }
         self.state = {
             "running": False,
