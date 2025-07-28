@@ -359,6 +359,10 @@ momentum_bot:
     trailing_stop_factor: 1.5  # ATR multiple for trailing stop
     risk_pct: 0.01
     max_drawdown: 0.4
+flash_crash_bot:
+  drop_thr: -0.10   # 10% 1m drop
+  vol_thr: 5.0      # volume spike multiplier
+  tp_thr: 0.05      # take‑profit reversion threshold
 solana_scalping:
   macd_fast: 10
   macd_signal: 8
