@@ -975,13 +975,20 @@ async def filter_symbols(
     if candidates:
         if df_cache is None:
             df_cache = {}
+        ohlcv_bs = cfg.get("ohlcv_batch_size")
+        if ohlcv_bs is None:
+            ohlcv_bs = sf.get("ohlcv_batch_size")
         df_cache = await update_multi_tf_ohlcv_cache(
             exchange,
             {"1h": df_cache} if isinstance(df_cache, dict) and "1h" not in df_cache else df_cache,
             candidates,
-            {"timeframes": ["1h", "4h", "1d"]},
+            {
+                "timeframes": ["1h", "4h", "1d"],
+                "ohlcv_batch_size": ohlcv_bs,
+            },
             limit=int(sf.get("initial_history_candles", 300)),
             max_concurrent=min(10, len(candidates)),
+            batch_size=ohlcv_bs,
         )
         if "1h" in df_cache:
             df_cache = df_cache.get("1h", {})
