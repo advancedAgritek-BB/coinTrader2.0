@@ -102,11 +102,6 @@ def test_watcher_yields_event(monkeypatch):
     assert event.tx_count == 11
     assert session.json["method"] == "dex.getNewPools"
     assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
-    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
-    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
-    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
-    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
-    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
 
 
 def test_min_liquidity_filter(monkeypatch):
