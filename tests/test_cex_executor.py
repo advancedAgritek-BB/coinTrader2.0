@@ -209,6 +209,34 @@ def test_execute_trade_ws_missing(monkeypatch):
         )
 
 
+def test_execute_trade_calls_sync(monkeypatch):
+    called = {}
+
+    def fake_sync(exchange):
+        called["sync"] = True
+        return []
+
+    monkeypatch.setattr(cex_executor, "sync_positions", fake_sync)
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+
+    ex = DummyExchange()
+    cex_executor.execute_trade(
+        ex,
+        None,
+        "XBT/USDT",
+        "buy",
+        1.0,
+        TelegramNotifier("t", "c"),
+        notifier=DummyNotifier(),
+        dry_run=False,
+    )
+
+    assert called.get("sync") is True
+
+
 def test_get_exchange_websocket(monkeypatch):
     config = {"exchange": "kraken", "use_websocket": True}
 
@@ -453,7 +481,7 @@ def test_execute_trade_async_retries(monkeypatch):
         )
     )
 
-    assert order == {"id": "1"}
+    assert order.get("id") == "1"
     assert delays
 
 
@@ -509,6 +537,40 @@ def test_execute_trade_retries_network_error(monkeypatch):
     assert order.get("status") == "closed"
     assert ex.calls == 2
     assert sleeps == [1.0]
+
+
+def test_execute_trade_async_calls_sync(monkeypatch):
+    called = {}
+
+    async def fake_sync(exchange):
+        called["sync"] = True
+        return []
+
+    class DummyEx:
+        async def create_market_order(self, symbol, side, amount):
+            return {"id": "a1"}
+
+        async def fetch_order(self, oid, symbol):
+            return {"id": oid, "status": "closed", "filled": 1.0}
+
+    monkeypatch.setattr(cex_executor, "sync_positions_async", fake_sync)
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+
+    asyncio.run(
+        cex_executor.execute_trade_async(
+            DummyEx(),
+            None,
+            "XBT/USDT",
+            "buy",
+            1.0,
+            notifier=DummyNotifier(),
+            dry_run=False,
+        )
+    )
+
+    assert called.get("sync") is True
 
 
 def test_execute_trade_async_skips_on_slippage(monkeypatch):
