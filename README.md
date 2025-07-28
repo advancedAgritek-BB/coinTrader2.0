@@ -370,7 +370,7 @@ Example configuration:
 ```yaml
 solana_scanner:
   filter_tf: 5m
-  filter_regime: [volatile, breakout]
+  filter_regime: [volatile, breakout, new_pool]
 ```
 
 ### Risk Parameters
