@@ -501,6 +501,62 @@ def test_execute_trade_retries_network_error(monkeypatch):
     assert sleeps == [1.0]
 
 
+def test_execute_trade_async_skips_on_slippage(monkeypatch):
+    class AsyncSlippageEx:
+        async def fetch_order_book(self, symbol, limit=10):
+            return {"asks": [[101, 0.1], [120, 1.0]], "bids": [[100, 1.0]]}
+
+        async def create_market_order(self, symbol, side, amount):
+            raise AssertionError("should not execute")
+
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+
+    order = asyncio.run(
+        cex_executor.execute_trade_async(
+            AsyncSlippageEx(),
+            None,
+            "XBT/USDT",
+            "buy",
+            1.0,
+            notifier=DummyNotifier(),
+            dry_run=False,
+            config={"max_slippage_pct": 0.05},
+        )
+    )
+
+    assert order == {}
+
+
+def test_execute_trade_async_insufficient_liquidity(monkeypatch):
+    class LowLiquidityEx:
+        async def fetch_order_book(self, symbol, limit=10):
+            return {"asks": [[110, 0.4]], "bids": [[100, 0.4]]}
+
+        async def create_market_order(self, symbol, side, amount):
+            raise AssertionError("should not execute")
+
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+
+    order = asyncio.run(
+        cex_executor.execute_trade_async(
+            LowLiquidityEx(),
+            None,
+            "XBT/USDT",
+            "buy",
+            1.0,
+            notifier=DummyNotifier(),
+            dry_run=False,
+            config={"liquidity_check": True, "liquidity_depth": 5},
+        )
+    )
+
+    assert order == {}
+
+
 def test_execute_trade_async_retries(monkeypatch):
     class RetryEx:
         def __init__(self):
@@ -604,3 +660,47 @@ def test_simple_executor_timeout(monkeypatch):
         simple_executor.execute_trade(ex, "XBT/USDT", "buy", 1.0, {}, notifier, dry_run=False, poll_timeout=2)
 
     assert any("timed out" in m for m in notifier.messages)
+
+
+def test_estimate_book_slippage():
+    book = {
+        "asks": [[1.0, 2], [1.1, 1]],
+        "bids": [[0.9, 2], [0.8, 3]],
+    }
+    slip = cex_executor.estimate_book_slippage(book, "buy", 3)
+    assert slip == pytest.approx(0.033333, rel=1e-3)
+
+
+def test_estimate_book_slippage_async_sync_exchange():
+    class DummySync:
+        def __init__(self):
+            self.called = False
+
+        def fetch_order_book(self, symbol, limit=2):
+            self.called = True
+            return {
+                "asks": [[1.0, 1], [1.1, 2]],
+                "bids": [[0.9, 2], [0.8, 3]],
+            }
+
+    ex = DummySync()
+    slip = asyncio.run(
+        cex_executor.estimate_book_slippage_async(ex, "BTC/USD", "sell", 3, depth=2)
+    )
+    assert ex.called is True
+    assert slip == pytest.approx(0.037037, rel=1e-3)
+
+
+def test_estimate_book_slippage_async_async_exchange():
+    class DummyAsync:
+        async def fetch_order_book(self, symbol, limit=2):
+            return {
+                "asks": [[1.0, 2], [1.1, 1]],
+                "bids": [[0.9, 2], [0.8, 3]],
+            }
+
+    ex = DummyAsync()
+    slip = asyncio.run(
+        cex_executor.estimate_book_slippage_async(ex, "BTC/USD", "buy", 3, depth=2)
+    )
+    assert slip == pytest.approx(0.033333, rel=1e-3)

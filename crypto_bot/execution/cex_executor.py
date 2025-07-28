@@ -136,6 +136,33 @@ def estimate_book_slippage(order_book: Dict, side: str, amount: float) -> float:
     else:
         impact = (mid - avg_price) / mid
     return impact
+async def estimate_book_slippage_async(
+    exchange: ccxt.Exchange,
+    symbol: str,
+    side: str,
+    amount: float,
+    depth: int = 10,
+) -> float:
+    """Estimate slippage using the order book snapshot."""
+    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_order_book", None)):
+        book = await exchange.fetch_order_book(symbol, limit=depth)
+    else:
+        book = await asyncio.to_thread(exchange.fetch_order_book, symbol, depth)
+
+    levels = book["asks" if side == "buy" else "bids"]
+    remaining = amount
+    cost = 0.0
+    for price, qty in levels:
+        take = qty if qty < remaining else remaining
+        cost += price * take
+        remaining -= take
+        if remaining <= 0:
+            break
+    if remaining > 0:
+        return float("inf")
+    avg_price = cost / amount
+    best_price = levels[0][0]
+    return abs(avg_price - best_price) / best_price
 
 
 def execute_trade(
@@ -423,7 +450,6 @@ async def execute_trade_async(
     use_websocket: bool = False,
     config: Optional[Dict] = None,
     score: float = 0.0,
-    max_retries: int = 1,
     max_retries: int = 3,
     poll_timeout: int = 60,
 ) -> Dict:
@@ -443,6 +469,48 @@ async def execute_trade_async(
     err = notifier.notify(msg)
     if err:
         logger.error("Failed to send message: %s", err)
+
+    config = config or {}
+
+    try:
+        depth = config.get("liquidity_depth", 10)
+        slippage = await estimate_book_slippage_async(exchange, symbol, side, amount, depth)
+        if slippage > config.get("max_slippage_pct", 1.0):
+            logger.warning("Trade skipped due to slippage.")
+            err_msg = notifier.notify("Trade skipped due to slippage.")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
+            return {}
+    except Exception as err:  # pragma: no cover - network
+        logger.warning("Slippage check failed: %s", err)
+
+    async def has_liquidity(order_size: float) -> bool:
+        try:
+            depth = config.get("liquidity_depth", 10)
+            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_order_book", None)):
+                ob = await exchange.fetch_order_book(symbol, limit=depth)
+            else:
+                ob = await asyncio.to_thread(exchange.fetch_order_book, symbol, depth)
+            book = ob["asks" if side == "buy" else "bids"]
+            vol = 0.0
+            for _, qty in book:
+                vol += qty
+                if vol >= order_size:
+                    return True
+            return False
+        except Exception as err:
+            err_msg = notifier.notify(f"Order book error: {err}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
+            return False
+
+    if (
+        config.get("liquidity_check", True)
+        and hasattr(exchange, "fetch_order_book")
+        and not await has_liquidity(amount)
+    ):
+        notifier.notify("Insufficient liquidity for order size")
+        return {}
 
     async def place(size: float) -> List[Dict]:
         if dry_run:
@@ -544,6 +612,15 @@ async def execute_trade_async(
         delay = config.get("twap_interval_seconds", 1)
         slice_amount = amount / slices
         for i in range(slices):
+            if (
+                config.get("liquidity_check", True)
+                and hasattr(exchange, "fetch_order_book")
+                and not await has_liquidity(slice_amount)
+            ):
+                err_liq = notifier.notify("Insufficient liquidity during TWAP execution")
+                if err_liq:
+                    logger.error("Failed to send message: %s", err_liq)
+                break
             placed = await place(slice_amount)
             for order in placed:
                 if dry_run:
@@ -599,73 +676,6 @@ async def execute_trade_async(
     if len(all_orders) == 1:
         return all_orders[0]
     return {"orders": all_orders}
-        delay = 1.0
-    if dry_run:
-        order = {"symbol": symbol, "side": side, "amount": amount, "dry_run": True}
-    else:
-        attempt = 0
-        while True:
-        for attempt in range(max_retries):
-            try:
-                if asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
-                    order = await exchange.create_market_order(symbol, side, size)
-                else:
-                    order = await asyncio.to_thread(exchange.create_market_order, symbol, side, size)
-                break
-            except (NetworkError, RateLimitExceeded):
-                    if use_websocket and ws_client is not None and not ccxtpro:
-                        order = ws_client.add_order(symbol, side, amount)
-                    elif asyncio.iscoroutinefunction(
-                        getattr(exchange, "create_market_order", None)
-                    ):
-                        order = await exchange.create_market_order(symbol, side, amount)
-                    else:
-                        order = await asyncio.to_thread(
-                            exchange.create_market_order, symbol, side, amount
-                        )
-            except ccxt.NetworkError as e:  # pragma: no cover - network
-                if attempt >= max_retries - 1:
-                    err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
-                    if err_msg:
-                        logger.error("Failed to send message: %s", err_msg)
-                    return {}
-                await asyncio.sleep(1)
-                attempt += 1
-                continue
-            except Exception as e:  # pragma: no cover - network
-                break
-            except Exception as e:  # pragma: no cover - network
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(1)
-                    continue
-                err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
-                if err_msg:
-                    logger.error("Failed to send message: %s", err_msg)
-                return {}
-            break
-            else:
-                if use_websocket and ws_client is not None and not ccxtpro:
-                    return ws_client.add_order(symbol, side, size)
-                if asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
-                    return await exchange.create_market_order(symbol, side, size)
-                return await asyncio.to_thread(exchange.create_market_order, symbol, side, size)
-            except (NetworkError, RateLimitExceeded) as exc:
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(delay)
-                    delay *= 2
-                    continue
-                raise
-            except Exception as exc:
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(1)
-                    continue
-                err_msg = notifier.notify(f"Order failed: {exc}")
-                if err_msg:
-                    logger.error("Failed to send message: %s", err_msg)
-                raise
-        else:
-            raise RuntimeError("Order execution failed after retries")
-        return order
 
     order = await place(amount)
     err = notifier.notify(f"Order executed: {order}")
@@ -778,3 +788,58 @@ def place_stop_order(
         logger.error("Failed to send message: %s", err)
     log_trade(order, is_stop=True)
     return order
+
+
+def estimate_book_slippage(order_book: Dict[str, List[List[float]]], side: str, amount: float) -> float:
+    """Estimate slippage percentage for a market order using an order book."""
+
+    if amount <= 0:
+        return 0.0
+
+    levels = order_book.get("asks" if side == "buy" else "bids") or []
+    if not levels:
+        return 0.0
+
+    best_price = float(levels[0][0])
+    remaining = amount
+    cost = 0.0
+    filled = 0.0
+    for price, qty in levels:
+        take = min(remaining, float(qty))
+        cost += take * float(price)
+        filled += take
+        remaining -= take
+        if remaining <= 0:
+            break
+
+    if filled == 0:
+        return 0.0
+    avg_price = cost / filled
+    if side == "buy":
+        return (avg_price - best_price) / best_price
+    else:
+        return (best_price - avg_price) / best_price
+
+
+async def estimate_book_slippage_async(
+    exchange,
+    symbol: str,
+    side: str,
+    amount: float,
+    depth: int = 10,
+) -> float:
+    """Fetch order book and return slippage estimate asynchronously."""
+
+    fetch_fn = getattr(exchange, "fetch_order_book", None)
+    if fetch_fn is None:
+        return 0.0
+
+    try:
+        if asyncio.iscoroutinefunction(fetch_fn):
+            book = await fetch_fn(symbol, limit=depth)
+        else:
+            book = await asyncio.to_thread(fetch_fn, symbol, depth)
+    except Exception:  # pragma: no cover - network
+        return 0.0
+
+    return estimate_book_slippage(book, side, amount)
