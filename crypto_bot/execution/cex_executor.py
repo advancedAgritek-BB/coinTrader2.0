@@ -99,6 +99,35 @@ def get_exchanges(config) -> Dict[str, Tuple[ccxt.Exchange, Optional[KrakenWSCli
     return result
 
 
+async def estimate_book_slippage_async(
+    exchange: ccxt.Exchange,
+    symbol: str,
+    side: str,
+    amount: float,
+    depth: int = 10,
+) -> float:
+    """Estimate slippage using the order book snapshot."""
+    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_order_book", None)):
+        book = await exchange.fetch_order_book(symbol, limit=depth)
+    else:
+        book = await asyncio.to_thread(exchange.fetch_order_book, symbol, depth)
+
+    levels = book["asks" if side == "buy" else "bids"]
+    remaining = amount
+    cost = 0.0
+    for price, qty in levels:
+        take = qty if qty < remaining else remaining
+        cost += price * take
+        remaining -= take
+        if remaining <= 0:
+            break
+    if remaining > 0:
+        return float("inf")
+    avg_price = cost / amount
+    best_price = levels[0][0]
+    return abs(avg_price - best_price) / best_price
+
+
 def execute_trade(
     exchange: ccxt.Exchange,
     ws_client: Optional[KrakenWSClient],
@@ -399,6 +428,48 @@ async def execute_trade_async(
     if err:
         logger.error("Failed to send message: %s", err)
 
+    config = config or {}
+
+    try:
+        depth = config.get("liquidity_depth", 10)
+        slippage = await estimate_book_slippage_async(exchange, symbol, side, amount, depth)
+        if slippage > config.get("max_slippage_pct", 1.0):
+            logger.warning("Trade skipped due to slippage.")
+            err_msg = notifier.notify("Trade skipped due to slippage.")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
+            return {}
+    except Exception as err:  # pragma: no cover - network
+        logger.warning("Slippage check failed: %s", err)
+
+    async def has_liquidity(order_size: float) -> bool:
+        try:
+            depth = config.get("liquidity_depth", 10)
+            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_order_book", None)):
+                ob = await exchange.fetch_order_book(symbol, limit=depth)
+            else:
+                ob = await asyncio.to_thread(exchange.fetch_order_book, symbol, depth)
+            book = ob["asks" if side == "buy" else "bids"]
+            vol = 0.0
+            for _, qty in book:
+                vol += qty
+                if vol >= order_size:
+                    return True
+            return False
+        except Exception as err:
+            err_msg = notifier.notify(f"Order book error: {err}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
+            return False
+
+    if (
+        config.get("liquidity_check", True)
+        and hasattr(exchange, "fetch_order_book")
+        and not await has_liquidity(amount)
+    ):
+        notifier.notify("Insufficient liquidity for order size")
+        return {}
+
     async def place(size: float) -> List[Dict]:
         if dry_run:
             return [{"symbol": symbol, "side": side, "amount": size, "dry_run": True}]
@@ -499,6 +570,15 @@ async def execute_trade_async(
         delay = config.get("twap_interval_seconds", 1)
         slice_amount = amount / slices
         for i in range(slices):
+            if (
+                config.get("liquidity_check", True)
+                and hasattr(exchange, "fetch_order_book")
+                and not await has_liquidity(slice_amount)
+            ):
+                err_liq = notifier.notify("Insufficient liquidity during TWAP execution")
+                if err_liq:
+                    logger.error("Failed to send message: %s", err_liq)
+                break
             placed = await place(slice_amount)
             for order in placed:
                 if dry_run:
