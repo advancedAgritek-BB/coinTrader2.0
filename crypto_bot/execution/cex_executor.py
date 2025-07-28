@@ -719,7 +719,11 @@ def estimate_book_slippage(order_book: Dict[str, List[List[float]]], side: str, 
     remaining = amount
     cost = 0.0
     filled = 0.0
-    for price, qty in levels:
+    for values in levels:
+        if len(values) < 2:
+            logger.warning("Invalid slippage values: %s", values)
+            return 0.0
+        price, qty = values[:2]
         take = min(remaining, float(qty))
         cost += take * float(price)
         filled += take
