@@ -543,6 +543,19 @@ momentum_bot:
     risk_pct: 0.01
 ```
 
+#### Cross-Chain Arbitrage Bot
+`cross_chain_arb_bot` watches price differences between a centralized
+exchange and Solana DEX quotes. When the gap for a pair in `pairs` exceeds
+`spread_thr` (fractional), the bot buys on the cheaper venue and sells on the
+other, covering bridge costs in the process.
+
+```yaml
+cross_chain_arb_bot:
+  pairs: [SOL/USDC, ETH/USDT]
+  spread_thr: 0.007
+```
+
+
 ### Data and Logging
 * **timeframe** – base interval for most indicators (default `15m`).
 * **timeframes** – list of additional intervals cached for reuse by strategies.
