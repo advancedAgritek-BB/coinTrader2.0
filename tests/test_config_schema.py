@@ -26,6 +26,7 @@ def test_solana_scanner_defaults():
     assert cfg.enabled is False
     assert cfg.interval_minutes == 5
     assert cfg.api_keys.moralis == "YOUR_KEY"
+    assert cfg.api_keys.lunarcrush_api_key == "YOUR_KEY"
     assert cfg.max_tokens_per_scan == 20
     assert cfg.gecko_search is True
 
@@ -37,8 +38,10 @@ def test_solana_scanner_invalid_type():
 
 def test_solana_scanner_env_override(monkeypatch):
     monkeypatch.setenv("MORALIS_KEY", "env_key")
+    monkeypatch.setenv("LUNARCRUSH_API_KEY", "env_lunar")
     cfg = SolanaScannerConfig()
     assert cfg.api_keys.moralis == "env_key"
+    assert cfg.api_keys.lunarcrush_api_key == "env_lunar"
 
 
 def test_pyth_defaults():

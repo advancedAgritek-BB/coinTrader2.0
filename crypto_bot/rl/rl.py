@@ -39,7 +39,9 @@ STRATEGIES = [
     "bounce_scalper",  # 8: Patterns + RSI/vol for bounces (80% win scalps)
     "micro_scalp_bot", # 9: EMA cross + wicks for micro-scalps (high-freq)
     "dca_bot",         # 10: Averaging for longs (safety net)
-    "solana_scalping"  # 11: MACD/RSI for Solana scalps (mempool-integrated)
+    "solana_scalping",  # 11: MACD/RSI for Solana scalps (mempool-integrated)
+    "flash_crash_bot"   # 12: Opportunistic flash crash entries
+    "lstm_bot",        # 12: LSTM-based model predictions
 ]
 NUM_STRATEGIES = len(STRATEGIES)
 
