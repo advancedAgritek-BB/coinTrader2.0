@@ -93,6 +93,7 @@ class regime_filter:
     @staticmethod
     def matches(regime: str) -> bool:
         return regime in {"trending", "volatile"}
+"""Solana meme wave strategy using simple volume surge detection."""
 
 
 import asyncio
@@ -104,6 +105,7 @@ import ta
 from crypto_bot.solana_trading import sniper_trade
 from crypto_bot.solana.exit import monitor_price
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
+from crypto_bot.sentiment_filter import fetch_twitter_sentiment
 
 
 async def trade(symbol: str, amount: float, cfg: Mapping[str, object]) -> dict:
@@ -135,11 +137,15 @@ def generate_signal(
     mempool_monitor: Optional[SolanaMempoolMonitor] = None,
     mempool_cfg: Optional[dict] = None,
 ) -> Tuple[float, str]:
-    """Return score and direction based on volume and ATR expansion."""
-    if df is None or df.empty:
+    """Return a meme wave score and direction using volume and sentiment."""
+
+    if mempool_monitor is None:
         return 0.0, "none"
 
     params = config.get("meme_wave_bot", {}) if config else {}
+    vol_threshold = float(params.get("volume_threshold", 1.0))
+    sentiment_thr = float(params.get("sentiment_threshold", 0.0))
+    query = params.get("twitter_query") or ""
     atr_window = int(params.get("atr_window", 14))
     vol_window = int(params.get("volume_window", 20))
     jump_mult = float(params.get("jump_mult", 3.0))
@@ -148,20 +154,24 @@ def generate_signal(
     sentiment_thr = params.get("sentiment_thr")
     query = params.get("twitter_query")
 
-    lookback = max(atr_window, vol_window)
-    if len(df) < lookback + 1:
-        return 0.0, "none"
+    recent_vol = mempool_monitor.get_recent_volume()
+    avg_vol = mempool_monitor.get_average_volume()
 
-    recent = df.tail(lookback + 1)
-    atr = ta.volatility.average_true_range(
-        recent["high"], recent["low"], recent["close"], window=atr_window
-    )
-    if atr.empty or pd.isna(atr.iloc[-1]):
-        return 0.0, "none"
+    try:
+        import asyncio
+        import inspect
 
-    price_change = recent["close"].iloc[-1] - recent["close"].iloc[-2]
-    vol = recent["volume"].iloc[-1]
-    avg_vol = recent["volume"].iloc[:-1].mean()
+        if inspect.iscoroutine(recent_vol):
+            recent_vol = asyncio.run(recent_vol)
+        if inspect.iscoroutine(avg_vol):
+            avg_vol = asyncio.run(avg_vol)
+    except Exception:
+        pass
+
+    sentiment = fetch_twitter_sentiment(query) / 100.0
+
+    if avg_vol and recent_vol >= avg_vol * vol_threshold and sentiment >= sentiment_thr:
+        return 1.0, "long"
 
     spike = (
         abs(price_change) >= atr.iloc[-1] * jump_mult
