@@ -28,6 +28,7 @@ sniper_bot = _optional_import("sniper_bot")
 trend_bot = _optional_import("trend_bot")
 dip_hunter = _optional_import("dip_hunter")
 meme_wave_bot = _optional_import("meme_wave_bot")
+flash_crash_bot = _optional_import("flash_crash_bot")
 lstm_bot = _optional_import("lstm_bot")
 
 # Export Solana sniper strategy module under a unified name
@@ -49,6 +50,7 @@ __all__ = [
         "momentum_bot",
         "lstm_bot",
         "meme_wave_bot",
+        "flash_crash_bot",
         "lstm_bot",
         "sniper_bot",
         "trend_bot",
