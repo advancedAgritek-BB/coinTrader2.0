@@ -16,6 +16,14 @@ import numpy as np
 import pandas as pd
 import yaml
 from cachetools import TTLCache
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    before_log,
+    before_sleep_log,
+)
+import logging
 
 from .logger import LOG_DIR, setup_logger
 from .market_loader import (
@@ -118,6 +126,20 @@ TICKER_BACKOFF_MAX = 60
 
 # Cache of recent liquidity metrics per symbol
 liq_cache = TTLCache(maxsize=2000, ttl=900)
+
+
+# tenacity wrapped helper for WebSocket ticker requests
+@retry(
+    wait=wait_exponential(multiplier=1, min=1, max=30),
+    stop=stop_after_attempt(3),
+    reraise=True,
+    before=before_log(logger, logging.DEBUG),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+)
+async def _watch_tickers_with_retry(exchange, symbols):
+    """Call ``exchange.watch_tickers`` with retries."""
+
+    return await exchange.watch_tickers(symbols)
 
 
 async def has_enough_history(
@@ -394,7 +416,7 @@ async def _refresh_tickers(
                 await asyncio.sleep(min(2 ** (ws_failures - 1), 30))
             try:
                 async with TICKER_SEMA:
-                    data = await exchange.watch_tickers(to_fetch)
+                    data = await _watch_tickers_with_retry(exchange, to_fetch)
                     if delay:
                         await asyncio.sleep(delay)
                 opts = getattr(exchange, "options", None)

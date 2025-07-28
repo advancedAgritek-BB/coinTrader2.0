@@ -15,6 +15,14 @@ import datetime
 import base58
 from .gecko import gecko_request
 import contextlib
+import logging
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    before_log,
+    before_sleep_log,
+)
 
 from .token_registry import (
     TOKEN_MINTS,
@@ -66,6 +74,20 @@ GECKO_UNAVAILABLE: set[str] = set()
 # Batch queues for OHLCV updates keyed by request parameters
 _OHLCV_BATCH_QUEUES: Dict[tuple, asyncio.Queue] = {}
 _OHLCV_BATCH_TASKS: Dict[tuple, asyncio.Task] = {}
+
+
+# tenacity wrapped helper for WebSocket OHLCV requests
+@retry(
+    wait=wait_exponential(multiplier=1, min=1, max=30),
+    stop=stop_after_attempt(3),
+    reraise=True,
+    before=before_log(logger, logging.DEBUG),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+)
+async def _watch_ohlcv_with_retry(exchange, **kwargs):
+    """Call ``exchange.watch_ohlcv`` with retries."""
+
+    return await exchange.watch_ohlcv(**kwargs)
 
 
 @dataclass
@@ -618,43 +640,34 @@ async def _fetch_ohlcv_async_inner(
                     kwargs["limit"] = ws_limit
                 except Exception:
                     pass
-            for attempt in range(3):
-                try:
-                    data = await _call_with_retry(
-                        exchange.watch_ohlcv, timeout=WS_OHLCV_TIMEOUT, **kwargs
-                    )
-                    WS_FAIL_COUNTS[symbol] = 0
-                    break
-                except asyncio.CancelledError:
-                    if hasattr(exchange, "close"):
-                        if asyncio.iscoroutinefunction(getattr(exchange, "close")):
-                            with contextlib.suppress(Exception):
-                                await exchange.close()
-                        else:
-                            with contextlib.suppress(Exception):
-                                await asyncio.to_thread(exchange.close)
-                    raise
-                except Exception as exc:
-                    WS_FAIL_COUNTS[symbol] = WS_FAIL_COUNTS.get(symbol, 0) + 1
-                    if WS_FAIL_COUNTS[symbol] > 2:
-                        logger.warning(
-                            "WS OHLCV failed: %s - falling back to REST", exc
-                        )
-                        return await _fetch_ohlcv_async_inner(
-                            exchange,
-                            symbol,
-                            timeframe=timeframe,
-                            limit=limit,
-                            since=since,
-                            use_websocket=False,
-                            force_websocket_history=force_websocket_history,
-                        )
-                    if attempt >= 2:
-                        raise
+            try:
+                data = await _watch_ohlcv_with_retry(exchange, **kwargs)
+                WS_FAIL_COUNTS[symbol] = 0
+            except asyncio.CancelledError:
+                if hasattr(exchange, "close"):
+                    if asyncio.iscoroutinefunction(getattr(exchange, "close")):
+                        with contextlib.suppress(Exception):
+                            await exchange.close()
+                    else:
+                        with contextlib.suppress(Exception):
+                            await asyncio.to_thread(exchange.close)
+                raise
+            except Exception as exc:
+                WS_FAIL_COUNTS[symbol] = WS_FAIL_COUNTS.get(symbol, 0) + 1
+                if WS_FAIL_COUNTS[symbol] > 2:
                     logger.warning(
-                        "watch_ohlcv failed on attempt %d: %s", attempt + 1, exc
+                        "WS OHLCV failed: %s - falling back to REST", exc
                     )
-                    await asyncio.sleep(5)
+                    return await _fetch_ohlcv_async_inner(
+                        exchange,
+                        symbol,
+                        timeframe=timeframe,
+                        limit=limit,
+                        since=since,
+                        use_websocket=False,
+                        force_websocket_history=force_websocket_history,
+                    )
+                raise
             if ws_limit and len(data) < ws_limit and force_websocket_history:
                 logger.warning(
                     "WebSocket OHLCV for %s %s returned %d of %d candles; disable force_websocket_history to allow REST fallback",
