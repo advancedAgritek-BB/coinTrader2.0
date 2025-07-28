@@ -4,10 +4,12 @@ import os
 import time
 try:
     import ccxt  # type: ignore
+    from ccxt.base.errors import NetworkError, RateLimitExceeded, ExchangeError
 except Exception:  # pragma: no cover - optional dependency
     import types
 
     ccxt = types.SimpleNamespace()
+    NetworkError = RateLimitExceeded = ExchangeError = Exception
 import asyncio
 from typing import Dict, Optional, Tuple, List
 from pathlib import Path
@@ -151,6 +153,8 @@ def execute_trade(
     def place(size: float) -> Dict:
         if dry_run:
             return {"symbol": symbol, "side": side, "amount": size, "dry_run": True}
+
+        delay = 1.0
         for attempt in range(max_retries):
             try:
                 if score > 0.8 and hasattr(exchange, "create_limit_order"):
@@ -172,6 +176,27 @@ def execute_trade(
                 if ws_client is not None:
                     return ws_client.add_order(symbol, side, size)
                 return exchange.create_market_order(symbol, side, size)
+            except (NetworkError, RateLimitExceeded) as exc:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "Retry %s placing %s %s due to %s",
+                        attempt + 1,
+                        side,
+                        symbol,
+                        exc,
+                    )
+                    time.sleep(delay)
+                    delay *= 2
+                    continue
+                raise
+            except ExchangeError:
+                raise
+            except Exception as exc:
+                logger.exception("Order placement failed: %s", exc)
+                err_msg = notifier.notify(f"Order failed: {exc}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                raise
             except Exception as exc:
                 if attempt < max_retries - 1:
                     time.sleep(1)
@@ -373,9 +398,15 @@ async def execute_trade_async(
 
     msg = f"Placing {side} order for {amount} {symbol}"
     err = notifier.notify(msg)
-    
+
     if err:
         logger.error("Failed to send message: %s", err)
+
+    async def place(size: float) -> Dict:
+        if dry_run:
+            return {"symbol": symbol, "side": side, "amount": size, "dry_run": True}
+
+        delay = 1.0
     if dry_run:
         order = {"symbol": symbol, "side": side, "amount": amount, "dry_run": True}
     else:
@@ -399,6 +430,11 @@ async def execute_trade_async(
                         if config.get("hidden_limit"):
                             params["hidden"] = True
                         if asyncio.iscoroutinefunction(getattr(exchange, "create_limit_order", None)):
+                            return await exchange.create_limit_order(symbol, side, size, price, params)
+                        return await asyncio.to_thread(
+                            exchange.create_limit_order, symbol, side, size, price, params
+                        )
+
                             order = await exchange.create_limit_order(symbol, side, amount, price, params)
                         else:
                             order = await asyncio.to_thread(
@@ -437,15 +473,33 @@ async def execute_trade_async(
                 return {}
             else:
                 if use_websocket and ws_client is not None and not ccxtpro:
-                    order = ws_client.add_order(symbol, side, amount)
-                elif asyncio.iscoroutinefunction(
-                    getattr(exchange, "create_market_order", None)
-                ):
-                    order = await exchange.create_market_order(symbol, side, amount)
-                else:
-                    order = await asyncio.to_thread(
-                        exchange.create_market_order, symbol, side, amount
+                    return ws_client.add_order(symbol, side, size)
+                if asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
+                    return await exchange.create_market_order(symbol, side, size)
+                return await asyncio.to_thread(exchange.create_market_order, symbol, side, size)
+            except (NetworkError, RateLimitExceeded) as exc:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "Retry %s placing %s %s due to %s",
+                        attempt + 1,
+                        side,
+                        symbol,
+                        exc,
                     )
+                    await asyncio.sleep(delay)
+                    delay *= 2
+                    continue
+                raise
+            except ExchangeError:
+                raise
+            except Exception as e:
+                logger.exception("Order placement failed: %s", e)
+                err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                raise
+
+    order = await place(amount)
         except Exception as e:  # pragma: no cover - network
             err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
             if err_msg:
@@ -541,6 +595,7 @@ def place_stop_order(
             "dry_run": True,
         }
     else:
+        delay = 1.0
         for attempt in range(max_retries):
             try:
                 order = exchange.create_order(
@@ -551,6 +606,27 @@ def place_stop_order(
                     params={"stopPrice": stop_price},
                 )
                 break
+            except (NetworkError, RateLimitExceeded) as exc:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "Retry %s placing stop %s %s due to %s",
+                        attempt + 1,
+                        side,
+                        symbol,
+                        exc,
+                    )
+                    time.sleep(delay)
+                    delay *= 2
+                    continue
+                raise
+            except ExchangeError:
+                raise
+            except Exception as e:
+                logger.exception("Stop order failed: %s", e)
+                err_msg = notifier.notify(f"Stop order failed: {e}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                raise
             except Exception as e:
                 if attempt < max_retries - 1:
                     time.sleep(1)
