@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+import math
 try:
     import ccxt  # type: ignore
     from ccxt.base.errors import NetworkError, RateLimitExceeded, ExchangeError
@@ -99,6 +100,44 @@ def get_exchanges(config) -> Dict[str, Tuple[ccxt.Exchange, Optional[KrakenWSCli
     return result
 
 
+def estimate_book_slippage(order_book: Dict, side: str, amount: float) -> float:
+    """Return expected slippage for ``amount`` using ``order_book``.
+
+    Parameters
+    ----------
+    order_book:
+        Mapping with ``bids`` and ``asks`` lists.
+    side:
+        ``"buy"`` or ``"sell"``.
+    amount:
+        Order size to simulate.
+    """
+
+    bids = order_book.get("bids") or []
+    asks = order_book.get("asks") or []
+    if not bids or not asks:
+        return 0.0
+
+    mid = (bids[0][0] + asks[0][0]) / 2
+    levels = asks if side == "buy" else bids
+    qty = 0.0
+    cost = 0.0
+    for price, vol in levels:
+        take = min(amount - qty, vol)
+        cost += take * price
+        qty += take
+        if qty >= amount:
+            break
+    if qty < amount:
+        return float("inf")
+    avg_price = cost / amount
+    if side == "buy":
+        impact = (avg_price - mid) / mid
+    else:
+        impact = (mid - avg_price) / mid
+    return impact
+
+
 def execute_trade(
     exchange: ccxt.Exchange,
     ws_client: Optional[KrakenWSClient],
@@ -137,22 +176,25 @@ def execute_trade(
         raise ValueError("WebSocket trading enabled but ws_client is missing")
     config = config or {}
 
-    def has_liquidity(order_size: float) -> bool:
+    depth = config.get("liquidity_depth", 10)
+    order_book: Dict = {}
+    if hasattr(exchange, "fetch_order_book"):
         try:
-            depth = config.get("liquidity_depth", 10)
-            ob = exchange.fetch_order_book(symbol, limit=depth)
-            book = ob["asks" if side == "buy" else "bids"]
-            vol = 0.0
-            for _, qty in book:
-                vol += qty
-                if vol >= order_size:
-                    return True
-            return False
-        except Exception as err:
-            err_msg = notifier.notify(f"Order book error: {err}")
-            if err_msg:
-                logger.error("Failed to send message: %s", err_msg)
-            return False
+            order_book = exchange.fetch_order_book(symbol, limit=depth)
+        except Exception as err:  # pragma: no cover - network
+            logger.warning("Order book fetch failed: %s", err)
+            err = notifier.notify(f"Order book error: {err}")
+            if err:
+                logger.error("Failed to send message: %s", err)
+
+    def has_liquidity(order_size: float) -> bool:
+        book = order_book.get("asks" if side == "buy" else "bids", [])
+        vol = 0.0
+        for _, qty in book:
+            vol += qty
+            if vol >= order_size:
+                return True
+        return False
 
     def place(size: float) -> List[Dict]:
         """Place ``size`` amount and wait for completion.
@@ -245,40 +287,42 @@ def execute_trade(
     if err:
         logger.error("Failed to send message: %s", err)
 
+    force_twap = False
     try:
-        ticker = exchange.fetch_ticker(symbol)
-        bid = ticker.get("bid")
-        ask = ticker.get("ask")
-        if bid and ask:
-            slippage = (ask - bid) / ((ask + bid) / 2)
+        if order_book:
+            slippage = estimate_book_slippage(order_book, side, amount)
             if slippage > config.get("max_slippage_pct", 1.0):
-                logger.warning("Trade skipped due to slippage.")
-                err_msg = notifier.notify("Trade skipped due to slippage.")
+                if config.get("twap_enabled", False):
+                    force_twap = True
+                else:
+                    logger.warning("Trade skipped due to slippage.")
+                    err_msg = notifier.notify("Trade skipped due to slippage.")
+                    if err_msg:
+                        logger.error("Failed to send message: %s", err_msg)
+                    return {}
+            book = order_book["asks" if side == "buy" else "bids"]
+            total_vol = sum(qty for _, qty in book)
+            max_use = total_vol * config.get("max_liquidity_usage", 0.8)
+            if amount > max_use:
+                logger.warning("Trade skipped due to low liquidity: %s > %s", amount, max_use)
+                err_msg = notifier.notify("Insufficient liquidity for order size")
                 if err_msg:
                     logger.error("Failed to send message: %s", err_msg)
                 return {}
     except Exception as err:  # pragma: no cover - network
         logger.warning("Slippage check failed: %s", err)
 
-    if (
-        config.get("liquidity_check", True)
-        and hasattr(exchange, "fetch_order_book")
-        and not has_liquidity(amount)
-    ):
+    if config.get("liquidity_check", True) and order_book and not has_liquidity(amount):
         notifier.notify("Insufficient liquidity for order size")
         return {}
 
     orders: List[Dict] = []
-    if config.get("twap_enabled", False) and config.get("twap_slices", 1) > 1:
+    if (force_twap or config.get("twap_enabled", False)) and config.get("twap_slices", 1) > 1:
         slices = config.get("twap_slices", 1)
         delay = config.get("twap_interval_seconds", 1)
         slice_amount = amount / slices
         for i in range(slices):
-            if (
-                config.get("liquidity_check", True)
-                and hasattr(exchange, "fetch_order_book")
-                and not has_liquidity(slice_amount)
-            ):
+            if config.get("liquidity_check", True) and order_book and not has_liquidity(slice_amount):
                 err_liq = notifier.notify(
                     "Insufficient liquidity during TWAP execution"
                 )
