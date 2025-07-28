@@ -1358,19 +1358,26 @@ async def execute_signals(ctx: BotContext) -> None:
             ctx.paper_wallet.open(sym, side, amount, price)
             ctx.balance = ctx.paper_wallet.balance
         ctx.risk_manager.allocate_capital(strategy, size)
-        ctx.positions[sym] = {
-            "side": side,
-            "entry_price": price,
-            "entry_time": datetime.utcnow().isoformat(),
-            "regime": candidate.get("regime"),
-            "strategy": strategy,
-            "confidence": score,
-            "pnl": 0.0,
-            "size": amount,
-            "trailing_stop": 0.0,
-            "highest_price": price,
-            "dca_count": 0,
-        }
+        if ctx.config.get("execution_mode") == "dry_run":
+            ctx.positions[sym] = {
+                "side": side,
+                "entry_price": price,
+                "entry_time": datetime.utcnow().isoformat(),
+                "regime": candidate.get("regime"),
+                "strategy": strategy,
+                "confidence": score,
+                "pnl": 0.0,
+                "size": amount,
+                "trailing_stop": 0.0,
+                "highest_price": price,
+                "dca_count": 0,
+            }
+        else:
+            try:
+                pos_list = await cex_trade_async.sync_positions_async(ctx.exchange)
+                ctx.positions = {p.get("symbol"): p for p in pos_list}
+            except Exception as exc:  # pragma: no cover - optional
+                logger.error("Position sync failed: %s", exc)
         try:
             log_position(
                 sym,

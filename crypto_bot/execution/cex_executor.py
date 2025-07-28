@@ -390,6 +390,12 @@ def execute_trade(
                 oid,
             )
 
+    if not dry_run:
+        try:
+            sync_positions(exchange)
+        except Exception as exc:  # pragma: no cover - optional
+            logger.error("Position sync failed: %s", exc)
+
     if len(orders) == 1:
         return orders[0]
     return {"orders": orders}
@@ -631,6 +637,12 @@ async def execute_trade_async(
             if err_exec:
                 logger.error("Failed to send message: %s", err_exec)
 
+    if not dry_run:
+        try:
+            await sync_positions_async(exchange)
+        except Exception as exc:  # pragma: no cover - optional
+            logger.error("Position sync failed: %s", exc)
+
     if len(all_orders) == 1:
         return all_orders[0]
     return {"orders": all_orders}
@@ -801,3 +813,93 @@ async def estimate_book_slippage_async(
         return 0.0
 
     return estimate_book_slippage(book, side, amount)
+
+
+def sync_positions(exchange: ccxt.Exchange) -> List[Dict]:
+    """Return open positions or open orders from ``exchange``."""
+
+    fetch_positions = getattr(exchange, "fetch_positions", None)
+    fetch_orders = getattr(exchange, "fetch_open_orders", None)
+
+    result: List[Dict] = []
+    try:
+        if fetch_positions is not None:
+            data = fetch_positions()
+        elif fetch_orders is not None:
+            data = fetch_orders()
+        else:
+            logger.error("Exchange missing position fetch methods")
+            return []
+
+        for pos in data:
+            result.append(
+                {
+                    "symbol": pos.get("symbol"),
+                    "side": pos.get("side") or pos.get("direction"),
+                    "size": float(
+                        pos.get("contracts")
+                        or pos.get("amount")
+                        or pos.get("size")
+                        or 0.0
+                    ),
+                    "price": float(
+                        pos.get("entryPrice")
+                        or pos.get("average")
+                        or pos.get("price")
+                        or 0.0
+                    ),
+                }
+            )
+    except Exception as exc:  # pragma: no cover - optional
+        logger.error("Failed to sync positions: %s", exc)
+        return []
+
+    return result
+
+
+async def sync_positions_async(exchange: ccxt.Exchange) -> List[Dict]:
+    """Asynchronous variant of :func:`sync_positions`."""
+
+    fetch_positions = getattr(exchange, "fetch_positions", None)
+    fetch_orders = getattr(exchange, "fetch_open_orders", None)
+
+    try:
+        if fetch_positions is not None:
+            if asyncio.iscoroutinefunction(fetch_positions):
+                data = await fetch_positions()
+            else:
+                data = await asyncio.to_thread(fetch_positions)
+        elif fetch_orders is not None:
+            if asyncio.iscoroutinefunction(fetch_orders):
+                data = await fetch_orders()
+            else:
+                data = await asyncio.to_thread(fetch_orders)
+        else:
+            logger.error("Exchange missing position fetch methods")
+            return []
+    except Exception as exc:  # pragma: no cover - optional
+        logger.error("Failed to sync positions: %s", exc)
+        return []
+
+    result: List[Dict] = []
+    for pos in data:
+        result.append(
+            {
+                "symbol": pos.get("symbol"),
+                "side": pos.get("side") or pos.get("direction"),
+                "size": float(
+                    pos.get("contracts")
+                    or pos.get("amount")
+                    or pos.get("size")
+                    or 0.0
+                ),
+                "price": float(
+                    pos.get("entryPrice")
+                    or pos.get("average")
+                    or pos.get("price")
+                    or 0.0
+                ),
+            }
+        )
+
+    return result
