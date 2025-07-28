@@ -6,7 +6,9 @@ from typing import AsyncGenerator, Any, Dict
 import json
 
 
-async def watch_pool(api_key: str, pool_program: str) -> AsyncGenerator[Dict[str, Any], None]:
+async def watch_pool(
+    api_key: str, pool_program: str, min_liquidity: float = 0.0
+) -> AsyncGenerator[Dict[str, Any], None]:
     """Connect to Helius enhanced websocket and yield transaction data."""
     url = f"wss://atlas-mainnet.helius-rpc.com/?api-key={api_key}"
     async with aiohttp.ClientSession() as session:
@@ -41,6 +43,10 @@ async def watch_pool(api_key: str, pool_program: str) -> AsyncGenerator[Dict[str
                             if isinstance(data, dict):
                                 result = data.get("params", {}).get("result")
                             if result is not None:
+                                liquidity = float(result.get("liquidity", 0.0))
+                                tx_count = int(result.get("txCount", result.get("tx_count", 0)))
+                                if liquidity < min_liquidity or tx_count <= 10:
+                                    continue
                                 yield result
                         elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
                             reconnect = True
