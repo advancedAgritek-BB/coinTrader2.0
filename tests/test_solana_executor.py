@@ -79,14 +79,46 @@ class DummySession:
         return DummyResp(data)
 
     def post(self, url, json=None, timeout=10):
-        return DummyResp({"swapTransaction": "tx"})
+        class PR:
+            def __init__(self, data):
+                self._data = data
+
+            async def json(self):
+                return self._data
+
+            def raise_for_status(self):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                pass
+
+        return PR({"swapTransaction": "tx"})
 
 
 class DummyJitoSession(DummySession):
     def post(self, url, json=None, headers=None, timeout=10):
         if "jito" in url:
             self.jito_payload = {"url": url, "json": json, "headers": headers}
-            return DummyResp({"signature": "sig"})
+            class PR:
+                def __init__(self, data):
+                    self._data = data
+
+                async def json(self):
+                    return self._data
+
+                def raise_for_status(self):
+                    pass
+
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, exc_type, exc, tb):
+                    pass
+
+            return PR({"signature": "sig"})
         return super().post(url, json=json, timeout=timeout)
 
 
@@ -497,9 +529,28 @@ def test_execute_swap_jito(monkeypatch):
     sys.modules.setdefault("solana.keypair", types.ModuleType("solana.keypair"))
     sys.modules.setdefault("solana.transaction", types.ModuleType("solana.transaction"))
     sys.modules.setdefault("solana.rpc.api", types.ModuleType("solana.rpc.api"))
+    sys.modules.setdefault("solana.rpc.async_api", types.ModuleType("solana.rpc.async_api"))
     monkeypatch.setattr(sys.modules["solana.keypair"], "Keypair", KP, raising=False)
     monkeypatch.setattr(sys.modules["solana.transaction"], "Transaction", Tx, raising=False)
     monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
+
+    class AC:
+        def __init__(self, url):
+            self.url = url
+            AC.instance = self
+            self.called = False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def confirm_transaction(self, sig, commitment=None, sleep_seconds=0.5, last_valid_block_height=None):
+            self.called = True
+            return {}
+
+    monkeypatch.setattr(sys.modules["solana.rpc.async_api"], "AsyncClient", AC, raising=False)
 
     res = asyncio.run(
         solana_executor.execute_swap(
@@ -510,6 +561,7 @@ def test_execute_swap_jito(monkeypatch):
             notifier=DummyNotifier(),
             dry_run=False,
             jito_key="KEY",
+            config={"max_slippage_pct": 20},
         )
     )
     assert res == {
@@ -520,6 +572,7 @@ def test_execute_swap_jito(monkeypatch):
         "route": {"inAmount": 100, "outAmount": 110},
     }
     assert hasattr(session, "jito_payload")
+    assert AC.instance.called
 
 
 def test_swap_paused_on_suspicious(monkeypatch):
@@ -545,3 +598,75 @@ def test_swap_paused_on_suspicious(monkeypatch):
         )
     )
     assert res.get("paused") is True
+
+
+def test_confirm_transaction_called(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
+    monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: DummySession())
+    monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")
+
+    class KP:
+        public_key = "k"
+
+        @staticmethod
+        def from_secret_key(b):
+            return KP()
+
+        def sign(self, tx):
+            pass
+
+    class Tx:
+        @staticmethod
+        def deserialize(raw):
+            return Tx()
+
+        def sign(self, kp):
+            pass
+
+    class Client:
+        def __init__(self, *a, **k):
+            pass
+
+        def send_transaction(self, tx, kp):
+            return {"result": "h"}
+
+    import sys, types
+
+    sys.modules.setdefault("solana.keypair", types.ModuleType("solana.keypair"))
+    sys.modules.setdefault("solana.transaction", types.ModuleType("solana.transaction"))
+    sys.modules.setdefault("solana.rpc.api", types.ModuleType("solana.rpc.api"))
+    sys.modules.setdefault("solana.rpc.async_api", types.ModuleType("solana.rpc.async_api"))
+    monkeypatch.setattr(sys.modules["solana.keypair"], "Keypair", KP, raising=False)
+    monkeypatch.setattr(sys.modules["solana.transaction"], "Transaction", Tx, raising=False)
+    monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
+
+    class AC:
+        def __init__(self, url):
+            self.url = url
+            AC.instance = self
+            self.called = False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def confirm_transaction(self, sig, commitment=None, sleep_seconds=0.5, last_valid_block_height=None):
+            self.called = True
+            return {}
+
+    monkeypatch.setattr(sys.modules["solana.rpc.async_api"], "AsyncClient", AC, raising=False)
+
+    asyncio.run(
+        solana_executor.execute_swap(
+            "SOL",
+            "USDC",
+            100,
+            notifier=TelegramNotifier(False, "t", "c"),
+            dry_run=False,
+            config={"max_slippage_pct": 20},
+        )
+    )
+
+    assert AC.instance.called
