@@ -159,13 +159,13 @@ meme_wave_sniper:
   execution:
     dry_run: true
   pool:
-    interval: 3
+    interval: 0.5
     raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
     url: https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY
     websocket_url: wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
   risk:
     daily_loss_cap: 2.0
-    max_concurrent: 15
+    max_concurrent: 5
   risk_file: crypto_bot/logs/sniper_risk.json
   safety:
     min_liquidity: 50
@@ -408,6 +408,11 @@ solana_scanner:
   min_liquidity: 50
   use_ws: true
   enabled: true
+  helius_ws_url: "wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}"
+  raydium_program_id: "EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6oKEWSCPPu"
+  pump_fun_program_id: "6EF8rrecthR5Dkzon8NQiDSKX6EYxsCPt6oKEWSCPPu"
+  use_ws: true
+  min_liquidity: 100.0
   gecko_search: true
   interval_minutes: 0.1
   max_tokens_per_scan: 200
@@ -536,7 +541,7 @@ token_registry:
 top_n_symbols: 50
 tp_mult: 2.0
 tp_pct: 0.1
-trade_size_pct: 0.3
+trade_size_pct: 0.001
 trend:
   atr_period: 10
   k: 0.8
