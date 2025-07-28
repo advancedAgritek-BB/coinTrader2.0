@@ -482,6 +482,8 @@ strategy_router:
     - cross_chain_arb_bot
     - flash_crash_bot
     - lstm_bot
+    new_pool:
+    - sniper_solana
   scalp_timeframe: 1m
   sideways_timeframe: 1h
   trending_timeframe: 1h
