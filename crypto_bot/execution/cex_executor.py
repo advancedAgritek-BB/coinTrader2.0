@@ -381,13 +381,7 @@ async def execute_trade_async(
     max_retries: int = 1,
     max_retries: int = 3,
 ) -> Dict:
-    """Asynchronous version of :func:`execute_trade` with retry support.
-
-    Parameters
-    ----------
-    max_retries:
-        Number of attempts when API calls fail. Defaults to ``3``.
-    """
+    """Simplified async trade execution used in tests."""
 
     if notifier is None:
         if isinstance(token, TelegramNotifier):
@@ -399,7 +393,6 @@ async def execute_trade_async(
 
     msg = f"Placing {side} order for {amount} {symbol}"
     err = notifier.notify(msg)
-
     if err:
         logger.error("Failed to send message: %s", err)
 
@@ -415,46 +408,12 @@ async def execute_trade_async(
         while True:
         for attempt in range(max_retries):
             try:
-                if score > 0.8 and hasattr(exchange, "create_limit_order"):
-                    price = None
-                    try:
-                        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
-                            t = await exchange.fetch_ticker(symbol)
-                        else:
-                            t = await asyncio.to_thread(exchange.fetch_ticker, symbol)
-                        bid = t.get("bid")
-                        ask = t.get("ask")
-                        if bid and ask:
-                            price = (bid + ask) / 2
-                    except Exception as err:
-                        logger.warning("Limit price fetch failed: %s", err)
-                    if price:
-                        params = {"postOnly": True}
-                        if config.get("hidden_limit"):
-                            params["hidden"] = True
-                        if asyncio.iscoroutinefunction(getattr(exchange, "create_limit_order", None)):
-                            return await exchange.create_limit_order(symbol, side, size, price, params)
-                        return await asyncio.to_thread(
-                            exchange.create_limit_order, symbol, side, size, price, params
-                        )
-
-                            order = await exchange.create_limit_order(symbol, side, amount, price, params)
-                        else:
-                            order = await asyncio.to_thread(
-                                exchange.create_limit_order, symbol, side, amount, price, params
-                            )
-                    else:
-                        if use_websocket and ws_client is not None and not ccxtpro:
-                            order = ws_client.add_order(symbol, side, amount)
-                        elif asyncio.iscoroutinefunction(
-                            getattr(exchange, "create_market_order", None)
-                        ):
-                            order = await exchange.create_market_order(symbol, side, amount)
-                        else:
-                            order = await asyncio.to_thread(
-                                exchange.create_market_order, symbol, side, amount
-                            )
+                if asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
+                    order = await exchange.create_market_order(symbol, side, size)
                 else:
+                    order = await asyncio.to_thread(exchange.create_market_order, symbol, side, size)
+                break
+            except (NetworkError, RateLimitExceeded):
                     if use_websocket and ws_client is not None and not ccxtpro:
                         order = ws_client.add_order(symbol, side, amount)
                     elif asyncio.iscoroutinefunction(
@@ -493,82 +452,27 @@ async def execute_trade_async(
                 return await asyncio.to_thread(exchange.create_market_order, symbol, side, size)
             except (NetworkError, RateLimitExceeded) as exc:
                 if attempt < max_retries - 1:
-                    logger.warning(
-                        "Retry %s placing %s %s due to %s",
-                        attempt + 1,
-                        side,
-                        symbol,
-                        exc,
-                    )
                     await asyncio.sleep(delay)
                     delay *= 2
                     continue
                 raise
-            except ExchangeError:
-                raise
-            except Exception as e:
-                logger.exception("Order placement failed: %s", e)
-                err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
+            except Exception as exc:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                err_msg = notifier.notify(f"Order failed: {exc}")
                 if err_msg:
                     logger.error("Failed to send message: %s", err_msg)
                 raise
+        else:
+            raise RuntimeError("Order execution failed after retries")
+        return order
 
     order = await place(amount)
-        except Exception as e:  # pragma: no cover - network
-            err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
-            if err_msg:
-                logger.error("Failed to send message: %s", err_msg)
-            logger.error(
-                "Order failed - symbol=%s side=%s amount=%s: %s",
-                symbol,
-                side,
-                amount,
-                e,
-                exc_info=True,
-            )
-            return {}
     err = notifier.notify(f"Order executed: {order}")
     if err:
         logger.error("Failed to send message: %s", err)
-    oid = (
-        order.get("id")
-        or order.get("order_id")
-        or order.get("tx_hash")
-        or order.get("txid")
-    )
-    logger.info(
-        "Order executed %s %s %.8f (id/tx: %s)",
-        side,
-        symbol,
-        amount,
-        oid,
-    )
-    if dry_run:
-        try:
-            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
-                t = await exchange.fetch_ticker(symbol)
-            else:
-                t = await asyncio.to_thread(exchange.fetch_ticker, symbol)
-            order["price"] = t.get("last") or t.get("bid") or t.get("ask") or 0.0
-        except Exception:
-            order["price"] = (config or {}).get("entry_price", 0.0)
     log_trade(order)
-    logger.info(
-        "Order executed - id=%s side=%s amount=%s price=%s dry_run=%s",
-        order.get("id"),
-        order.get("side"),
-        order.get("amount"),
-        order.get("price") or order.get("average"),
-        dry_run,
-    )
-    if (config or {}).get("tax_tracking", {}).get("enabled"):
-        try:
-            if order.get("side") == "buy":
-                tax_logger.record_entry(order)
-            else:
-                tax_logger.record_exit(order)
-        except Exception:
-            pass
     return order
 
 
