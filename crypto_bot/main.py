@@ -2090,7 +2090,12 @@ async def _main_impl() -> TelegramNotifier:
         )
 
     monitor_task = asyncio.create_task(
-        console_monitor.monitor_loop(exchange, paper_wallet, LOG_DIR / "bot.log")
+        console_monitor.monitor_loop(
+            exchange,
+            paper_wallet,
+            LOG_DIR / "bot.log",
+            quiet_mode=config.get("quiet_mode", False),
+        )
     )
 
     max_open_trades = config.get("max_open_trades", 1)

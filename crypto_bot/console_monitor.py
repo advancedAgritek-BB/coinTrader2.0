@@ -121,6 +121,8 @@ async def monitor_loop(
     paper_wallet: Optional[object] = None,
     log_file: str | Path = LOG_DIR / "bot.log",
     trade_file: str | Path = TRADE_FILE,
+    *,
+    quiet_mode: bool = False,
 ) -> None:
     """Periodically output balance, last log line and open trade stats.
 
@@ -128,7 +130,8 @@ async def monitor_loop(
     tests can easily patch it. The monitor fetches the current balance from
     ``exchange`` or ``paper_wallet`` and prints the last line of ``log_file``.
     Open trade PnL lines are generated from ``trade_file`` and printed below the
-    status line when positions exist.
+    status line when positions exist. Set ``quiet_mode`` to ``True`` to print
+    a single update when stdout is not a TTY.
     """
     log_path = Path(log_file)
     last_line = ""
@@ -176,7 +179,11 @@ async def monitor_loop(
                     prev_lines = output.count("\n") + 1
                     prev_output = output
                 else:
-                    if output != prev_output:
+                    if quiet_mode:
+                        if not prev_output:
+                            print(output)
+                            prev_output = output
+                    elif output != prev_output:
                         print(output)
                         prev_output = output
     except asyncio.CancelledError:

@@ -174,6 +174,52 @@ def test_monitor_loop_skips_duplicate_lines(monkeypatch, tmp_path):
     assert outputs[1].splitlines()[0].endswith("other'")
 
 
+def test_monitor_loop_quiet_mode(monkeypatch, tmp_path):
+    log_file = tmp_path / "bot.log"
+    log_file.write_text("first\n")
+
+    async def fake_stats(*_a, **_kw):
+        return []
+
+    outputs = []
+
+    class StopLoop(Exception):
+        pass
+
+    call_count = 0
+
+    async def fake_sleep(_):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            with open(log_file, "a") as fh:
+                fh.write("second\n")
+        if call_count >= 3:
+            raise StopLoop
+
+    def fake_print(*args, **kwargs):
+        text = " ".join(str(a) for a in args)
+        if "[Monitor]" in text:
+            outputs.append(text)
+
+    ex = type("Ex", (), {"fetch_balance": lambda self: {"USDT": {"free": 0}}})()
+
+    monkeypatch.setattr(console_monitor, "trade_stats_lines", fake_stats)
+    monkeypatch.setattr(console_monitor.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr("builtins.print", fake_print)
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False)
+
+    with pytest.raises(StopLoop):
+        asyncio.run(
+            console_monitor.monitor_loop(
+                ex, None, log_file, quiet_mode=True
+            )
+        )
+
+    assert len(outputs) == 1
+    assert outputs[0].splitlines()[0].endswith("first'")
+
+
 def test_monitor_loop_async_balance(monkeypatch, tmp_path):
     log_file = tmp_path / "bot.log"
     log_file.write_text("start\n")
