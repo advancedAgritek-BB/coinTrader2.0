@@ -82,3 +82,50 @@ def recent_pattern_strength(symbol: str, pattern: str) -> float:
         return 0.0
 
     return float(rows[-1].get("strength", 0.0))
+
+
+def average_pattern_strength(name: str, lookback: int = 1000) -> float:
+    """Return the mean strength for ``name`` from the pattern log.
+
+    Parameters
+    ----------
+    name:
+        Pattern name to average, e.g. ``"volume_spike"``.
+    lookback:
+        Number of recent rows to include in the calculation. ``0`` means all
+        rows.
+    """
+
+    if not LOG_FILE.exists():
+        return 0.0
+
+    if hasattr(pd, "read_csv"):
+        try:
+            df = pd.read_csv(LOG_FILE)
+        except Exception:
+            return 0.0
+
+        df = df[df["pattern"] == name]
+        if df.empty:
+            return 0.0
+
+        df = df.sort_values("timestamp")
+        if lookback > 0:
+            df = df.tail(int(lookback))
+        return float(df["strength"].mean())
+
+    import csv
+
+    try:
+        with open(LOG_FILE, newline="") as f:
+            rows = [row for row in csv.DictReader(f) if row.get("pattern") == name]
+    except Exception:
+        return 0.0
+
+    if lookback > 0:
+        rows = rows[-int(lookback) :]
+    if not rows:
+        return 0.0
+
+    vals = [float(r.get("strength", 0.0)) for r in rows]
+    return sum(vals) / len(vals)
