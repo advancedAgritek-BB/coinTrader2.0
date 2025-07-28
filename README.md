@@ -1564,7 +1564,11 @@ and caps the result between 0 and 1.
 
 The optional `coinTrader_Trainer` package can bootstrap machine learning models
 used by the regime classifier. After generating trade logs, run the trainer to
-upload a LightGBM model to Supabase:
+upload a LightGBM model to Supabase.  The trainer now supports ingesting
+**new-pool** events captured by the Solana scanner.  These events should be
+labeled `"new_pool"` when preparing the training dataset so the model learns
+to recognize the volatile conditions surrounding freshly created pools.  After
+adding the new data, execute the trainer:
 
 ```bash
 python ml_trainer.py train regime --use-gpu --federated
