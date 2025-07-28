@@ -207,13 +207,30 @@ def test_regime_commit_lock(tmp_path, monkeypatch):
 
 import pandas as pd
 from crypto_bot.strategy_router import route
-from crypto_bot.strategy import breakout_bot, trend_bot
+from crypto_bot.strategy import breakout_bot, trend_bot, sniper_bot
 
 
 def make_df(close_vals, vol_vals):
     idx = pd.date_range("2025-01-01", periods=len(close_vals), freq="T")
     return pd.DataFrame({"open": close_vals, "high": close_vals, "low": close_vals,
                          "close": close_vals, "volume": vol_vals}, index=idx)
+
+
+def make_breakdown_df() -> pd.DataFrame:
+    rows = 30
+    close = [1 + i / (rows - 1) for i in range(rows)]
+    high = [c + 0.1 for c in close]
+    low = [c - 0.1 for c in close]
+    volume = [100 + i for i in range(rows)]
+    df = pd.DataFrame(
+        {"open": close, "high": high, "low": low, "close": close, "volume": volume},
+        index=pd.date_range("2025-01-01", periods=rows, freq="T"),
+    )
+    df.loc[df.index[-1], "close"] = min(low) - 0.5
+    df.loc[df.index[-1], "high"] = df.loc[df.index[-1], "close"] + 0.1
+    df.loc[df.index[-1], "low"] = df.loc[df.index[-1], "close"] - 0.1
+    df.loc[df.index[-1], "volume"] = sum(volume) / len(volume) * 3
+    return df
 
 
 def test_fastpath_breakout(tmp_path, monkeypatch):
@@ -243,6 +260,13 @@ def test_fastpath_trend(tmp_path):
     df = make_df(vals, [1]*10)
     fn = route("trending", "cex", cfg, None, df)
     assert fn.__name__ == trend_bot.generate_signal.__name__
+
+
+def test_fastpath_breakdown_sniper():
+    cfg = {"strategy_router": {"fast_path": {"breakdown_window": 5, "breakdown_volume_multiplier": 2}}}
+    df = make_breakdown_df()
+    fn = route("sideways", "cex", cfg, None, df)
+    assert fn.__name__ == sniper_bot.generate_signal.__name__
 
 
 def test_onchain_solana_route():
