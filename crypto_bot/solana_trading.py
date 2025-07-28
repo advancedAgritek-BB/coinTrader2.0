@@ -21,26 +21,33 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 logger = setup_logger(__name__, LOG_DIR / "solana_trading.log")
 
 
-async def _fetch_price(token_in: str, token_out: str) -> float:
+async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> float:
     """Return current price for ``token_in``/``token_out`` using Jupiter."""
-    async with aiohttp.ClientSession() as session:
-        async with session.get(
-            JUPITER_QUOTE_URL,
-            params={
-                "inputMint": token_in,
-                "outputMint": token_out,
-                "amount": 1_000_000,
-                "slippageBps": 50,
-            },
-            timeout=10,
-        ) as resp:
-            resp.raise_for_status()
-            data = await resp.json()
-    route = (data.get("data") or [{}])[0]
-    try:
-        return float(route["outAmount"]) / float(route["inAmount"])
-    except Exception:
-        return 0.0
+    params = {
+        "inputMint": token_in,
+        "outputMint": token_out,
+        "amount": 1_000_000,
+        "slippageBps": 50,
+    }
+    for attempt in range(max_retries):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(JUPITER_QUOTE_URL, params=params, timeout=10) as resp:
+                    if resp.status >= 500:
+                        raise aiohttp.ClientError(f"server error: {resp.status}")
+                    resp.raise_for_status()
+                    data = await resp.json()
+            route = (data.get("data") or [{}])[0]
+            return float(route["outAmount"]) / float(route["inAmount"])
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            logger.warning(
+                "Price fetch failed (%s/%s): %s", attempt + 1, max_retries, exc
+            )
+            if attempt + 1 < max_retries:
+                await asyncio.sleep(2 ** attempt)
+        except Exception:
+            return 0.0
+    return 0.0
 
 
 async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
@@ -92,7 +99,7 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
 
         start = time.time()
         while time.time() - start < 300:
-            price = await _fetch_price(out_mint, in_mint)
+            price = await _fetch_price(out_mint, in_mint, max_retries=3)
             if price:
                 change = (price - entry_price) / entry_price
                 if change >= threshold:
@@ -175,7 +182,7 @@ async def cross_chain_trade(
         return {"error": "unknown_mint"}
 
     if side == "buy":
-        price = await _fetch_price(quote_mint, base_mint)
+        price = await _fetch_price(quote_mint, base_mint, max_retries=3)
         in_amount = amount / price if price else amount
         token_in = quote_mint
         token_out = base_mint
