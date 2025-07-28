@@ -159,7 +159,8 @@ class DummyClient:
         self.closed = True
 
 
-async def fake_price(_in, _out):
+async def fake_price(_in, _out, max_retries=3):
+    assert max_retries == 3
     return 0.65
 
 
