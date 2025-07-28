@@ -20,6 +20,7 @@ from crypto_bot.strategy import (
     micro_scalp_bot,
     bounce_scalper,
     solana_scalping,
+    momentum_bot,
 )
 
 LOG_FILE = LOG_DIR / "strategy_performance.json"
@@ -88,6 +89,9 @@ _STRATEGY_FN_MAP = {
     "dca": dca_bot.generate_signal,
     "dca_bot": dca_bot.generate_signal,
 }
+
+if momentum_bot is not None:
+    _STRATEGY_FN_MAP["momentum_bot"] = momentum_bot.generate_signal
 
 
 def get_strategy_by_name(
