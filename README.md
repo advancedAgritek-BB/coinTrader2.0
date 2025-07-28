@@ -337,7 +337,8 @@ symbol_score_weights:
 * **top_n_symbols** – maximum number of active markets.
 * **max_age_days**, **max_change_pct**, **max_spread_pct**, **max_latency_ms**, **max_vol** – additional scanning limits.
 * **use_numba_scoring** – enable numba acceleration for symbol scoring when available.
-* **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle.
+* **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle. See
+  `scan_cex_arbitrage` in `crypto_bot/main.py` for multi-exchange support.
 * **solana_scanner.gecko_search** – query GeckoTerminal to verify volume for new Solana tokens.
 * **gecko_limit** – maximum simultaneous requests to GeckoTerminal. Reduce this if you encounter HTTP 429 errors.
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
@@ -440,6 +441,10 @@ regime_overrides:
 * **optimization** – periodic parameter optimisation.
 * **portfolio_rotation** – rotate holdings based on scoring metrics.
 * **arbitrage_enabled** – enable cross-exchange arbitrage features.
+  The previous `cross_chain_arb_bot.py` module has been
+  consolidated into helper functions. Use `scan_cex_arbitrage` or
+  `scan_arbitrage` in `crypto_bot/main.py` when implementing a
+  multi-exchange arbitrage strategy.
 * **scoring_weights** - weighting factors for regime confidence, symbol score and volume metrics.
 * **signal_fusion** – enable to combine scores from multiple strategies via a `fusion_method` for improved selection.
 * **strategy_router** - maps market regimes to lists of strategy names. Each regime also accepts a `<regime>_timeframe` key (e.g. `trending_timeframe: 1h`, `volatile_timeframe: 1m`).
