@@ -268,7 +268,15 @@ async def execute_swap(
                 bundle_data = await bundle_resp.json()
         tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
     else:
-        send_res = client.send_transaction(tx, keypair)
+        for attempt in range(max_retries):
+            try:
+                send_res = client.send_transaction(tx, keypair)
+                break
+            except Exception as err:
+                if "congestion" in str(err).lower() and attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                raise
         tx_hash = send_res["result"]
 
     poll_timeout = config.get("poll_timeout", 60)
@@ -276,7 +284,7 @@ async def execute_swap(
 
     try:
         async with AsyncClient(rpc_url) as aclient:
-            await asyncio.wait_for(
+            confirm_res = await asyncio.wait_for(
                 aclient.confirm_transaction(tx_hash),
                 timeout=poll_timeout,
             )
@@ -286,12 +294,16 @@ async def execute_swap(
             logger.error("Failed to send message: %s", err_msg)
         raise TimeoutError("Transaction confirmation failed") from err
 
+    status = None
+    if isinstance(confirm_res, dict):
+        status = confirm_res.get("status") or confirm_res.get("value", {}).get("confirmationStatus")
     result = {
         "token_in": token_in,
         "token_out": token_out,
         "amount": amount,
         "tx_hash": tx_hash,
         "route": route,
+        "status": status or "confirmed",
     }
     err = notifier.notify(f"Swap executed: {result}")
     if err:
