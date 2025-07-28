@@ -1102,3 +1102,50 @@ def test_close_shuts_down_connections(monkeypatch):
     assert client.private_ws is None
     assert client._public_subs == []
     assert client._private_subs == []
+
+
+def test_handle_message_enqueues_response():
+    client = KrakenWSClient()
+    ws = DummyWS()
+
+    msg = {"method": "add_order", "result": {"status": "ok"}}
+    client._handle_message(ws, json.dumps(msg))
+
+    err = {"errorMessage": "boom"}
+    client._handle_message(ws, json.dumps(err))
+
+    assert list(client._responses)[0] == msg
+    assert list(client._responses)[1] == err
+
+
+def test_add_order_waits_for_response(monkeypatch):
+    client, ws = _setup_private_client(monkeypatch)
+
+    response = {"method": "add_order", "result": {"txid": "1"}}
+
+    called = {}
+
+    def fake_wait(method, timeout=5.0):
+        called["method"] = method
+        called["timeout"] = timeout
+        return response
+
+    monkeypatch.setattr(client, "_wait_for_response", fake_wait)
+
+    result = client.add_order("BTC/USD", "buy", 1.0)
+
+    expected = json.dumps(
+        {
+            "method": "add_order",
+            "params": {
+                "symbol": "BTC/USD",
+                "side": "buy",
+                "order_type": "market",
+                "order_qty": "1.0",
+                "token": "token",
+            },
+        }
+    )
+    assert ws.sent == [expected]
+    assert result == response
+    assert called["method"] == "add_order"
