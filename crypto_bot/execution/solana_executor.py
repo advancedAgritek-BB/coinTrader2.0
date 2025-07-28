@@ -334,8 +334,6 @@ async def execute_swap(
     try:
         async with AsyncClient(rpc_url) as aclient:
             confirm_res = await asyncio.wait_for(
-                aclient.confirm_transaction(tx_hash),
-            await asyncio.wait_for(
                 aclient.confirm_transaction(tx_hash, commitment="confirmed"),
                 timeout=poll_timeout,
             )
@@ -353,7 +351,6 @@ async def execute_swap(
         "token_out": token_out,
         "amount": amount,
         "tx_hash": tx_hash,
-        "status": "confirmed",
         "route": route,
         "status": status or "confirmed",
     }
