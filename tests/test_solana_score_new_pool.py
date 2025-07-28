@@ -3,6 +3,7 @@ import pytest
 from crypto_bot.solana.sniper_solana import score_new_pool
 from crypto_bot.solana.watcher import NewPoolEvent
 from crypto_bot.solana.risk import RiskTracker
+from crypto_bot.utils import pattern_logger
 
 
 def make_event(**kwargs):
@@ -47,3 +48,22 @@ def test_risk_blocks_pool(tmp_path):
     event = make_event(token_mint="N")
     cfg = {"risk": {"max_concurrent": 1}, "safety": {"min_liquidity": 10}}
     assert score_new_pool(event, cfg, tracker) == (0.0, "none")
+
+
+def test_pattern_boosts_score(tmp_path, monkeypatch):
+    tracker = RiskTracker(tmp_path / "risk.json")
+    log = tmp_path / "patterns.csv"
+    monkeypatch.setattr(pattern_logger, "LOG_FILE", log)
+
+    event = make_event()
+    cfg = {
+        "scoring": {"weight_liquidity": 0.1, "weight_tx": 1.0, "twitter_weight": 0.1},
+        "safety": {"min_liquidity": 10},
+        "risk": {"max_concurrent": 1},
+        "twitter_score": 10,
+    }
+
+    base, _ = score_new_pool(event, cfg, tracker)
+    log.write_text("timestamp,token,pattern,strength\n2024-01-01,M,volatile,1.0\n")
+    boosted, _ = score_new_pool(event, cfg, tracker)
+    assert boosted > base

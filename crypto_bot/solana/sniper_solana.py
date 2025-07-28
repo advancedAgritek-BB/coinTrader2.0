@@ -6,6 +6,7 @@ import pandas as pd
 import ta
 
 from crypto_bot.utils.pyth_utils import get_pyth_price
+from crypto_bot.utils.pattern_logger import recent_pattern_strength
 
 from .risk import RiskTracker
 from .safety import is_safe
@@ -103,6 +104,10 @@ def score_new_pool(
     sentiment = float(config.get("twitter_score", 0))
     weight = float(scoring_cfg.get("twitter_weight", 1.0))
     score += sentiment * weight
+
+    strength = recent_pattern_strength(event.token_mint, "volatile")
+    if strength >= 0.9:
+        score *= 1.2
 
     return score, "long"
 
