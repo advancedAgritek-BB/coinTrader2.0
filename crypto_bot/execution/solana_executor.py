@@ -6,6 +6,7 @@ import json
 import base64
 import asyncio
 import aiohttp
+from solana.rpc.async_api import AsyncClient
 
 try:  # pragma: no cover - optional dependency
     import keyring  # type: ignore
@@ -288,16 +289,54 @@ async def execute_swap(
                 bundle_data = await bundle_resp.json()
         tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
     else:
-        send_res = client.send_transaction(tx, keypair)
+        for attempt in range(max_retries):
+            try:
+                send_res = client.send_transaction(tx, keypair)
+                break
+            except Exception as err:
+                if "congestion" in str(err).lower() and attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                raise
         tx_hash = send_res["result"]
+    retries = 0
+    tx_hash = None
+    while retries < 3:
+        try:
+            if jito_key:
+                signed_tx = base64.b64encode(tx.serialize()).decode()
+                async with aiohttp.ClientSession() as jito_session:
+                    async with jito_session.post(
+                        JITO_BUNDLE_URL,
+                        json={"transactions": [signed_tx]},
+                        headers={"Authorization": f"Bearer {jito_key}"},
+                        timeout=10,
+                    ) as bundle_resp:
+                        bundle_resp.raise_for_status()
+                        bundle_data = await bundle_resp.json()
+                tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
+            else:
+                send_res = client.send_transaction(tx, keypair)
+                tx_hash = send_res["result"]
+            break
+        except Exception as err:
+            if "congestion" in str(err) and retries < 2:
+                retries += 1
+                await asyncio.sleep(2 ** retries)
+                continue
+            raise
+
+    if tx_hash is None:
+        raise RuntimeError("Swap failed after retries")
 
     poll_timeout = config.get("poll_timeout", 60)
-    from solana.rpc.async_api import AsyncClient
 
     try:
         async with AsyncClient(rpc_url) as aclient:
-            await asyncio.wait_for(
+            confirm_res = await asyncio.wait_for(
                 aclient.confirm_transaction(tx_hash),
+            await asyncio.wait_for(
+                aclient.confirm_transaction(tx_hash, commitment="confirmed"),
                 timeout=poll_timeout,
             )
     except Exception as err:
@@ -306,12 +345,17 @@ async def execute_swap(
             logger.error("Failed to send message: %s", err_msg)
         raise TimeoutError("Transaction confirmation failed") from err
 
+    status = None
+    if isinstance(confirm_res, dict):
+        status = confirm_res.get("status") or confirm_res.get("value", {}).get("confirmationStatus")
     result = {
         "token_in": token_in,
         "token_out": token_out,
         "amount": amount,
         "tx_hash": tx_hash,
+        "status": "confirmed",
         "route": route,
+        "status": status or "confirmed",
     }
     err = notifier.notify(f"Swap executed: {result}")
     if err:

@@ -5,6 +5,7 @@ import os
 from collections import deque
 from typing import Optional, Callable, Union, List, Any, Dict, Deque
 from datetime import datetime, timedelta, timezone
+import keyring
 
 try:
     import ccxt  # type: ignore
@@ -419,8 +420,21 @@ class KrakenWSClient:
         ws_token: Optional[str] = None,
         api_token: Optional[str] = None,
     ):
-        self.api_key = api_key or os.getenv("API_KEY")
-        self.api_secret = api_secret or os.getenv("API_SECRET")
+        if api_key is None:
+            api_key = keyring.get_password("kraken", "api_key")
+            if api_key is None:
+                api_key = os.getenv("API_KEY")
+        if api_secret is None:
+            api_secret = keyring.get_password("kraken", "api_secret")
+            if api_secret is None:
+                api_secret = os.getenv("API_SECRET")
+
+        self.api_key = api_key
+        self.api_secret = api_secret
+
+        if not self.api_key or not self.api_secret:
+            raise ValueError("Kraken API credentials not available")
+
         # Tokens can be supplied via environment variables to avoid repeated REST calls
         self.ws_token = ws_token or os.getenv("KRAKEN_WS_TOKEN")
         self.api_token = api_token or os.getenv("KRAKEN_API_TOKEN")
