@@ -100,6 +100,48 @@ def test_watcher_yields_event(monkeypatch):
     assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
 
 
+def test_min_liquidity_filter(monkeypatch):
+    data = {
+        "result": {
+            "pools": [
+                {
+                    "address": "L",
+                    "tokenMint": "M1",
+                    "creator": "C1",
+                    "liquidity": 10.0,
+                    "txCount": 1,
+                },
+                {
+                    "address": "H",
+                    "tokenMint": "M2",
+                    "creator": "C2",
+                    "liquidity": 60.0,
+                    "txCount": 2,
+                },
+            ]
+        }
+    }
+    session = DummySession(data)
+    monkeypatch.setattr(
+        watcher,
+        "aiohttp",
+        type("M", (), {"ClientSession": lambda: session}),
+    )
+
+    w = PoolWatcher("http://test", interval=0, min_liquidity=50)
+
+    async def run_once():
+        gen = w.watch()
+        event = await gen.__anext__()
+        w.stop()
+        await gen.aclose()
+        return event
+
+    event = asyncio.run(run_once())
+    assert event.pool_address == "H"
+    assert event.liquidity == 60.0
+
+
 def test_env_substitution(monkeypatch):
     monkeypatch.setenv("HELIUS_KEY", "ABC")
     w = PoolWatcher("https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY", interval=0)
