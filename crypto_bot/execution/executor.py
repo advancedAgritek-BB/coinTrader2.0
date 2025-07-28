@@ -9,6 +9,7 @@ except Exception:  # pragma: no cover - optional dependency
 from typing import Dict
 import time
 from pathlib import Path
+import time
 
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.trade_logger import log_trade
@@ -37,11 +38,33 @@ def execute_trade(
     dry_run: bool = True,
     max_retries: int = 3,
 ) -> None:
+    """Execute a market trade with optional retry logic.
+
+    Parameters
+    ----------
+    max_retries:
+        Number of attempts when order placement fails due to a transient
+        error. Defaults to ``3``.
+    """
+
     pre_msg = f"Placing {side} order for {amount} {symbol}"
     err = notifier.notify(pre_msg)
     if err:
         logger.error("Failed to send message: %s", err)
 
+    if not dry_run:
+        for attempt in range(max_retries):
+            try:
+                order = exchange.create_market_order(symbol, side, amount)
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                err_msg = notifier.notify(f"Order failed: {e}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                return
     if dry_run:
         order = {"symbol": symbol, "side": side, "amount": amount, "dry_run": True}
         err = notifier.notify(f"Order executed: {order}")
