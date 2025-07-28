@@ -80,6 +80,16 @@ def test_strategy_for_solana_scalping():
     sr._CONFIG_REGISTRY.clear()
 
 
+def test_route_returns_meme_wave_bot():
+    from crypto_bot.strategy import meme_wave_bot
+
+    cfg = {
+        "strategy_router": {"regimes": {"volatile": ["meme_wave_bot"]}}
+    }
+    fn = route("volatile", "cex", cfg)
+    assert fn.__name__ == meme_wave_bot.generate_signal.__name__
+
+
 def test_route_notifier(monkeypatch):
     msgs = []
 

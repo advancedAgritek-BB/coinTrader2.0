@@ -80,6 +80,15 @@ def test_strategy_map_contains_solana_scalping():
     )
 
 
+def test_strategy_map_contains_meme_wave_bot():
+    from crypto_bot.strategy import meme_wave_bot
+
+    assert (
+        meta_selector._STRATEGY_FN_MAP.get("meme_wave_bot")
+        is meme_wave_bot.generate_signal
+    )
+
+
 def test_get_strategy_by_name_returns_callable():
     for name, fn in meta_selector._STRATEGY_FN_MAP.items():
         returned = meta_selector.get_strategy_by_name(name)

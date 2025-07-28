@@ -15,6 +15,7 @@ from crypto_bot.strategy import (
     mean_bot,
     breakout_bot,
     solana_scalping,
+    meme_wave_bot,
 )
 
 # Default log file location
@@ -30,6 +31,7 @@ _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {
     "mean_bot": mean_bot.generate_signal,
     "breakout_bot": breakout_bot.generate_signal,
     "solana_scalping": solana_scalping.generate_signal,
+    "meme_wave_bot": meme_wave_bot.generate_signal,
 }
 
 

@@ -21,6 +21,7 @@ from crypto_bot.strategy import (
     momentum_bot,
     bounce_scalper,
     solana_scalping,
+    meme_wave_bot,
 )
 
 LOG_FILE = LOG_DIR / "strategy_performance.json"
@@ -88,6 +89,7 @@ _STRATEGY_FN_MAP = {
     "dip_hunter": dip_hunter.generate_signal,
     "solana_scalping": solana_scalping.generate_signal,
     "solana_scalping_bot": solana_scalping.generate_signal,
+    "meme_wave_bot": meme_wave_bot.generate_signal,
     "dca": dca_bot.generate_signal,
     "dca_bot": dca_bot.generate_signal,
 }
