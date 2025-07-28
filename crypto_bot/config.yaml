@@ -403,6 +403,10 @@ solana_scanner:
     bitquery: YOUR_KEY
     moralis: YOUR_KEY
     lunarcrush_api_key: YOUR_KEY
+  helius_ws_url: wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
+  raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
+  min_liquidity: 50
+  use_ws: true
   enabled: true
   gecko_search: true
   interval_minutes: 0.1
