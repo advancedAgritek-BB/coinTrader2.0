@@ -1399,6 +1399,44 @@ async def fetch_dex_ohlcv(
     return data
 
 
+async def fetch_ohlcv_for_token(
+    symbol: str, timeframe: str = "1m", limit: int = 60
+) -> pd.DataFrame | None:
+    """Return short-term OHLCV DataFrame for ``symbol``.
+
+    Data is retrieved from :func:`fetch_geckoterminal_ohlcv`. ``None`` is
+    returned on failure.
+    """
+
+    try:
+        res = await fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("Token OHLCV fetch error for %s: %s", symbol, exc)
+        return None
+
+    if not res:
+        return None
+    data = res[0] if isinstance(res, tuple) else res
+    if not data:
+        return None
+
+    df = pd.DataFrame(
+        data, columns=["timestamp", "open", "high", "low", "close", "volume"]
+    )
+    tf_sec = timeframe_seconds(None, timeframe)
+    unit = "ms" if df["timestamp"].iloc[0] > 1e10 else "s"
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit=unit)
+    df = (
+        df.set_index("timestamp")
+        .resample(f"{tf_sec}s")
+        .agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
+        .ffill()
+        .reset_index()
+    )
+    df["timestamp"] = df["timestamp"].astype(int) // 10 ** 9
+    return df
+
+
 async def fetch_ohlcv_from_trades(
     exchange,
     symbol: str,
