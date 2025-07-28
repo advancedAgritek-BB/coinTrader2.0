@@ -354,6 +354,29 @@ sniper_bot:
   price_fallback: true
   volume_multiple: 1.2
   volume_window: 3
+momentum_bot:
+  donchian_period: 20
+  vol_multiplier: 1.0
+  atr_period: 14
+  setup_window: 10
+  trigger_window: 3
+  fast_length: 20
+  slow_length: 50
+  adx_threshold: 25
+  risk:
+    stop_loss_pct: 0.01
+    take_profit_pct: 0.03
+    trailing_stop_factor: 1.5  # ATR multiple for trailing stop
+    risk_pct: 0.01
+    max_drawdown: 0.4
+cross_chain_arb_bot:
+  pair: SOL/USDC
+  spread_threshold: 0.05
+  fee_threshold: 30
+lstm_bot:
+  model_path: crypto_bot/models/lstm_model.pth
+  sequence_length: 60
+  threshold_pct: 0.01
 solana_scalping:
   macd_fast: 10
   macd_signal: 8
@@ -365,6 +388,7 @@ solana_scanner:
   api_keys:
     bitquery: YOUR_KEY
     moralis: YOUR_KEY
+    lunarcrush_api_key: YOUR_KEY
   enabled: true
   gecko_search: true
   interval_minutes: 0.1
@@ -391,32 +415,41 @@ strategy_router:
     breakout_volume_multiplier: 3
     trend_adx_threshold: 20
   mean_reverting_timeframe: 1h
+  flash_crash_timeframe: 1m
   min_confidence: 0.001
   regimes:
     bounce:
     - bounce_scalper
+    - lstm_bot
     breakout:
     - breakout_bot
+    - lstm_bot
     dip_hunter:
     - dip_hunter
+    - lstm_bot
     mean-reverting:
     - dip_hunter
     - mean_bot
     - stat_arb_bot
     - flash_crash_bot
+    - lstm_bot
     scalp:
     - micro_scalp
+    - lstm_bot
     sideways:
     - grid
+    - lstm_bot
     trending:
     - trend
     - momentum_bot
+    - lstm_bot
     volatile:
     - sniper_bot
     - sniper_solana
     - momentum_bot
     - meme_wave_bot
     - flash_crash_bot
+    - lstm_bot
   scalp_timeframe: 1m
   sideways_timeframe: 1h
   trending_timeframe: 1h
