@@ -231,6 +231,27 @@ def is_market_pumping(
     avg_change = sum(changes) / len(changes) if changes else 0.0
     return avg_change >= 0.05
 
+async def maybe_scan_solana_tokens(config: dict, last_scan: float) -> float:
+    """Scan for new Solana tokens if the interval has elapsed."""
+    sol_cfg = config.get("solana_scanner", {})
+    if not sol_cfg.get("enabled") or config.get("solana_symbols") or config.get("onchain_symbols"):
+        return last_scan
+    interval = sol_cfg.get("interval_minutes", 5) * 60
+    now = time.time()
+    if now - last_scan < interval:
+        return last_scan
+    try:
+        tokens = await get_solana_new_tokens(sol_cfg)
+        if tokens:
+            async with QUEUE_LOCK:
+                enqueue_solana_tokens(tokens)
+                for sym in reversed(tokens):
+                    symbol_priority_queue.appendleft(sym)
+                    NEW_SOLANA_TOKENS.add(sym)
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.error("Solana scan error: %s", exc)
+    return now
+
 
 async def get_market_regime(ctx: BotContext) -> str:
     """Return the market regime for the first cached symbol."""
@@ -2286,6 +2307,7 @@ async def _main_impl() -> TelegramNotifier:
     loop_count = 0
     last_weight_update = last_optimize = 0.0
 
+    last_solana_scan = 0.0
     try:
         while True:
             maybe_reload_config(state, config)
@@ -2303,6 +2325,7 @@ async def _main_impl() -> TelegramNotifier:
                 await force_exit_all(ctx)
                 state["liquidate_all"] = False
 
+            last_solana_scan = await maybe_scan_solana_tokens(config, last_solana_scan)
             if config.get("arbitrage_enabled", True):
                 try:
                     if ctx.secondary_exchange:
