@@ -81,6 +81,10 @@ stat_arb_bot:
     - SOL/USDC,ETH/USDC
   z_threshold: 2.0
   window: 50
+cross_chain_arb_bot:
+  pairs:
+    - SOL/USDC,ETH/USDC
+  spread_thr: 0.005
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.05
 exchange: kraken
@@ -407,6 +411,7 @@ strategy_router:
     - micro_scalp
     sideways:
     - grid
+    - cross_chain_arb_bot
     trending:
     - trend
     - momentum_bot
@@ -415,6 +420,7 @@ strategy_router:
     - sniper_solana
     - momentum_bot
     - meme_wave_bot
+    - cross_chain_arb_bot
   scalp_timeframe: 1m
   sideways_timeframe: 1h
   trending_timeframe: 1h
