@@ -81,7 +81,9 @@ The router performs quick checks for exceptionally strong setups before running
 the full regime classifier. When the Bollinger Band width over a 20 candle
 window drops below **0.05** and volume is more than **5×** the average,
 `breakout_bot` is called immediately. If the ADX from the same window exceeds
-**35**, the router dispatches straight to `trend_bot`. These defaults live under
+**35**, the router dispatches straight to `trend_bot`. When a breakdown pattern
+appears and the most recent volume is well above average, the router jumps
+directly to the sniper strategy. These defaults live under
 `strategy_router.fast_path` in `crypto_bot/config.yaml` and can be tuned as
 needed.
 

@@ -693,6 +693,22 @@ def route(
             if adx_val > adx_thr:
                 logger.info("FAST-PATH: trend_bot via ADX > %.1f", adx_thr)
                 return _wrap(trend_bot.generate_signal)
+
+            # 3) breakdown pattern with heavy volume
+            from crypto_bot.regime.pattern_detector import detect_patterns
+
+            bd_win = int(fp.get("breakdown_window", 20))
+            bd_mult = float(fp.get("breakdown_volume_multiplier", 4))
+            patterns = detect_patterns(df)
+            if patterns.get("breakdown", 0) >= 1.0:
+                vol_avg = df["volume"].rolling(bd_win).mean().iloc[-1]
+                if vol_avg > 0 and df["volume"].iloc[-1] > vol_avg * bd_mult:
+                    logger.info(
+                        "FAST-PATH: sniper bot via breakdown pattern + volume spike"
+                    )
+                    if mode == "onchain":
+                        return _wrap(sniper_solana.generate_signal)
+                    return _wrap(sniper_bot.generate_signal)
         except Exception:  # pragma: no cover - safety
             pass
     # === end fast-path ===
