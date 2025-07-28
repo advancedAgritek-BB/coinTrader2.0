@@ -176,6 +176,36 @@ def test_tx_count_filter(monkeypatch):
                     "liquidity": 100.0,
                     "txCount": 20,
                 },
+            ]
+        }
+    }
+    session = DummySession(data)
+    aiohttp_mod = type(
+        "M",
+        (),
+        {
+            "ClientSession": lambda: session,
+            "ClientError": Exception,
+            "ClientResponseError": Exception,
+        },
+    )
+    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
+
+    w = PoolWatcher("http://test", interval=0)
+    w.websocket_url = None
+    w.program_ids = []
+
+    async def run_once():
+        gen = w.watch()
+        event = await gen.__anext__()
+        w.stop()
+        await gen.aclose()
+        return event
+
+    event = asyncio.run(run_once())
+    assert event.pool_address == "B"
+    assert event.tx_count == 20
+
 def test_ml_filter_blocks_low_score(monkeypatch):
     data = {
         "result": {
