@@ -27,6 +27,7 @@ from crypto_bot.strategy import (
     cross_chain_arb_bot,
     lstm_bot,
     meme_wave_bot,
+    cross_chain_arb_bot,
     flash_crash_bot,
 )
 
@@ -101,6 +102,7 @@ _STRATEGY_FN_MAP = {
     "solana_scalping_bot": solana_scalping.generate_signal,
     "dca": dca_bot.generate_signal,
     "dca_bot": dca_bot.generate_signal,
+    "cross_chain_arb_bot": cross_chain_arb_bot.generate_signal,
     "flash_crash_bot": flash_crash_bot.generate_signal,
 }
 _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {}
