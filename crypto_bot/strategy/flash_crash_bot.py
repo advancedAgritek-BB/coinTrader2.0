@@ -1,47 +1,5 @@
-import pandas as pd
 from typing import Optional, Tuple
 
-
-def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
-    """Return signal when a potential flash crash is detected."""
-    if df is None or df.empty or "close" not in df:
-        return 0.0, "none"
-
-    if len(df) >= 2:
-        prev = df["close"].iloc[-2]
-        last = df["close"].iloc[-1]
-        if last < prev * 0.9:
-            return 1.0, "long"
-    return 0.0, "none"
-from typing import Optional, Tuple
-
-import pandas as pd
-
-
-def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
-    """Detect flash crash or pump conditions.
-
-    This placeholder implementation simply returns no signal. The real
-    implementation would analyze extreme candle movements and volume.
-    """
-    if df is None or df.empty:
-        return 0.0, "none"
-    return 0.0, "none"
-from crypto_bot.utils.logger import LOG_DIR, setup_logger
-
-logger = setup_logger(__name__, LOG_DIR / "bot.log")
-
-
-def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
-    """Dummy flash crash strategy returning no signal.
-
-    The actual logic is not implemented in tests; this stub allows routing
-    behaviour to be validated.
-    """
-    symbol = config.get("symbol") if config else ""
-    logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
-    return 0.0, "none"
-from typing import Tuple, Optional
 import pandas as pd
 import ta
 from crypto_bot.utils.volatility import normalize_score_by_volatility
