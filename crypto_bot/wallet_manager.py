@@ -139,6 +139,24 @@ def load_or_create() -> dict:
         with open(CONFIG_FILE) as f:
             creds.update(yaml.safe_load(f))
     else:
+        env_creds = {
+            "coinbase_api_key": os.getenv("COINBASE_API_KEY"),
+            "coinbase_api_secret": os.getenv("COINBASE_API_SECRET"),
+            "coinbase_passphrase": os.getenv("COINBASE_API_PASSPHRASE"),
+            "kraken_api_key": os.getenv("KRAKEN_API_KEY"),
+            "kraken_api_secret": os.getenv("KRAKEN_API_SECRET"),
+        }
+        if any(env_creds.values()):
+            logger.info("user_config.yaml not found; using environment credentials")
+            creds.update({k: v for k, v in env_creds.items() if v is not None})
+            if os.getenv("EXCHANGE"):
+                creds.setdefault("exchange", os.getenv("EXCHANGE"))
+        else:
+            logger.info("user_config.yaml not found; prompting for credentials")
+            creds.update(prompt_user())
+            logger.info("Creating new user configuration at %s", CONFIG_FILE)
+            with open(CONFIG_FILE, "w") as f:
+                yaml.safe_dump(creds, f)
         logger.info("user_config.yaml not found; credentials must be provided via .env")
         logger.info("Creating new user configuration at %s", CONFIG_FILE)
         with open(CONFIG_FILE, "w") as f:
