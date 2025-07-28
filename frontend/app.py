@@ -6,6 +6,7 @@ process and provides REST API routes used by the UI and tests.
 
 from flask import Flask, render_template, redirect, url_for, request, jsonify
 from pathlib import Path
+import os
 
 from crypto_bot.utils.logger import LOG_DIR
 import subprocess
@@ -20,6 +21,7 @@ from crypto_bot import ml_signal_model as ml
 from . import utils
 
 app = Flask(__name__)
+DEBUG = os.getenv("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
 
 # Handle the async trading bot process
 bot_proc = None
@@ -299,4 +301,4 @@ def trades_data():
 if __name__ == '__main__':
     watch_thread = threading.Thread(target=watch_bot, daemon=True)
     watch_thread.start()
-    app.run(debug=True)
+    app.run(debug=DEBUG)
