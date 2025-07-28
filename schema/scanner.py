@@ -56,6 +56,9 @@ class SolanaScannerApiKeys(BaseModel):
     bitquery: str = Field(
         default_factory=lambda: os.getenv("BITQUERY_KEY", "YOUR_KEY")
     )
+    lunarcrush_api_key: str = Field(
+        default_factory=lambda: os.getenv("LUNARCRUSH_API_KEY", "YOUR_KEY")
+    )
 
 
 class SolanaScannerConfig(BaseModel):
