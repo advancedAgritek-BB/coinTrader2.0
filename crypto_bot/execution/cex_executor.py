@@ -113,6 +113,7 @@ def execute_trade(
     config: Optional[Dict] = None,
     score: float = 0.0,
     max_retries: int = 3,
+    poll_timeout: int = 60,
 ) -> Dict:
     """Place a market or limit order with optional retries.
 
@@ -121,6 +122,9 @@ def execute_trade(
     max_retries:
         Number of attempts when API calls fail with transient errors.
         Defaults to ``3``.
+    poll_timeout:
+        Seconds to wait for each order to close before placing the
+        remaining quantity. Defaults to ``60``.
     """
     if notifier is None:
         if isinstance(token, TelegramNotifier):
@@ -150,95 +154,92 @@ def execute_trade(
                 logger.error("Failed to send message: %s", err_msg)
             return False
 
-    def place(size: float) -> Dict:
+    def place(size: float) -> List[Dict]:
+        """Place ``size`` amount and wait for completion.
+
+        Returns a list of executed order dictionaries which may contain
+        multiple entries if the order was only partially filled and a
+        new order was required for the remainder."""
+
         if dry_run:
-            return {"symbol": symbol, "side": side, "amount": size, "dry_run": True}
+            return [{"symbol": symbol, "side": side, "amount": size, "dry_run": True}]
 
-        delay = 1.0
-        for attempt in range(max_retries):
-            try:
-                if score > 0.8 and hasattr(exchange, "create_limit_order"):
-                    price = None
-                    try:
-                        t = exchange.fetch_ticker(symbol)
-                        bid = t.get("bid")
-                        ask = t.get("ask")
-                        if bid and ask:
-                            price = (bid + ask) / 2
-                    except Exception as err:
-                        logger.warning("Limit price fetch failed: %s", err)
-                    if price:
-                        params = {"postOnly": True}
-                        if config.get("hidden_limit"):
-                            params["hidden"] = True
-                        return exchange.create_limit_order(symbol, side, size, price, params)
+        remaining = size
+        results: List[Dict] = []
 
-                if ws_client is not None:
-                    return ws_client.add_order(symbol, side, size)
-                return exchange.create_market_order(symbol, side, size)
-            except (NetworkError, RateLimitExceeded) as exc:
-                if attempt < max_retries - 1:
-                    logger.warning(
-                        "Retry %s placing %s %s due to %s",
-                        attempt + 1,
-                        side,
-                        symbol,
-                        exc,
-                    )
-                    time.sleep(delay)
-                    delay *= 2
-                    continue
-                raise
-            except ExchangeError:
-                raise
-            except Exception as exc:
-                logger.exception("Order placement failed: %s", exc)
-                err_msg = notifier.notify(f"Order failed: {exc}")
-                if err_msg:
-                    logger.error("Failed to send message: %s", err_msg)
-                raise
-            except Exception as exc:
-                if attempt < max_retries - 1:
-                    time.sleep(1)
-                    continue
-                err_msg = notifier.notify(f"Order failed: {exc}")
-                if err_msg:
-                    logger.error("Failed to send message: %s", err_msg)
-                return {}
-
-        try:
-            if score > 0.8 and hasattr(exchange, "create_limit_order"):
-                price = None
+        while remaining > 0:
+            delay = 1.0
+            for attempt in range(max_retries):
                 try:
-                    t = exchange.fetch_ticker(symbol)
-                    bid = t.get("bid")
-                    ask = t.get("ask")
-                    if bid and ask:
-                        price = (bid + ask) / 2
-                except Exception as err:
-                    logger.warning("Limit price fetch failed: %s", err)
-                if price:
-                    params = {"postOnly": True}
-                    if config.get("hidden_limit"):
-                        params["hidden"] = True
-                    return exchange.create_limit_order(symbol, side, size, price, params)
+                    if score > 0.8 and hasattr(exchange, "create_limit_order"):
+                        price = None
+                        try:
+                            t = exchange.fetch_ticker(symbol)
+                            bid = t.get("bid")
+                            ask = t.get("ask")
+                            if bid and ask:
+                                price = (bid + ask) / 2
+                        except Exception as err:
+                            logger.warning("Limit price fetch failed: %s", err)
+                        if price:
+                            params = {"postOnly": True}
+                            if config.get("hidden_limit"):
+                                params["hidden"] = True
+                            order = exchange.create_limit_order(symbol, side, remaining, price, params)
+                            break
 
-            if ws_client is not None:
-                return ws_client.add_order(symbol, side, size)
-            return exchange.create_market_order(symbol, side, size)
-        except Exception as exc:
-            err_msg = notifier.notify(f"Order failed: {exc}")
-            if err_msg:
-                logger.error("Failed to send message: %s", err_msg)
-            logger.error(
-                "Order failed - symbol=%s side=%s amount=%s: %s",
-                symbol,
-                side,
-                size,
-                exc,
-                exc_info=True,
-            )
-            return {}
+                    if ws_client is not None:
+                        order = ws_client.add_order(symbol, side, remaining)
+                    else:
+                        order = exchange.create_market_order(symbol, side, remaining)
+                    break
+                except (NetworkError, RateLimitExceeded) as exc:
+                    if attempt < max_retries - 1:
+                        logger.warning(
+                            "Retry %s placing %s %s due to %s",
+                            attempt + 1,
+                            side,
+                            symbol,
+                            exc,
+                        )
+                        time.sleep(delay)
+                        delay *= 2
+                        continue
+                    raise
+                except ExchangeError:
+                    raise
+                except Exception as exc:
+                    logger.exception("Order placement failed: %s", exc)
+                    err_msg = notifier.notify(f"Order failed: {exc}")
+                    if err_msg:
+                        logger.error("Failed to send message: %s", err_msg)
+                    raise
+
+            start = time.time()
+            filled = 0.0
+            while time.time() - start < poll_timeout:
+                try:
+                    info = exchange.fetch_order(order["id"], symbol)
+                    filled = float(info.get("filled") or 0.0)
+                    order.update(info)
+                    if 0 < filled < remaining:
+                        err_pf = notifier.notify(
+                            f"Partial fill: {filled}/{remaining} {symbol}"
+                        )
+                        if err_pf:
+                            logger.error("Failed to send message: %s", err_pf)
+                    if info.get("status") == "closed":
+                        break
+                except Exception as err:
+                    logger.debug("Order polling error: %s", err)
+                time.sleep(1)
+
+            results.append(order)
+            if filled and filled < remaining:
+                remaining -= filled
+            else:
+                remaining = 0
+        return results
 
     err = notifier.notify(f"Placing {side} order for {amount} {symbol}")
     if err:
@@ -284,8 +285,8 @@ def execute_trade(
                 if err_liq:
                     logger.error("Failed to send message: %s", err_liq)
                 break
-            order = place(slice_amount)
-            if order:
+            placed = place(slice_amount)
+            for order in placed:
                 if dry_run:
                     try:
                         t = exchange.fetch_ticker(symbol)
@@ -325,8 +326,8 @@ def execute_trade(
             if i < slices - 1:
                 time.sleep(delay)
     else:
-        order = place(amount)
-        if order:
+        placed = place(amount)
+        for order in placed:
             if dry_run:
                 try:
                     t = exchange.fetch_ticker(symbol)
@@ -380,7 +381,9 @@ async def execute_trade_async(
     score: float = 0.0,
     max_retries: int = 1,
     max_retries: int = 3,
+    poll_timeout: int = 60,
 ) -> Dict:
+    """Asynchronous version of :func:`execute_trade` with retry support."""
     """Simplified async trade execution used in tests."""
 
     if notifier is None:
@@ -391,15 +394,167 @@ async def execute_trade_async(
                 raise ValueError("token/chat_id or notifier must be provided")
             notifier = TelegramNotifier(token, chat_id)
 
+    err = notifier.notify(f"Placing {side} order for {amount} {symbol}")
     msg = f"Placing {side} order for {amount} {symbol}"
     err = notifier.notify(msg)
     if err:
         logger.error("Failed to send message: %s", err)
 
-    async def place(size: float) -> Dict:
+    async def place(size: float) -> List[Dict]:
         if dry_run:
-            return {"symbol": symbol, "side": side, "amount": size, "dry_run": True}
+            return [{"symbol": symbol, "side": side, "amount": size, "dry_run": True}]
 
+        remaining = size
+        orders: List[Dict] = []
+
+        while remaining > 0:
+            delay = 1.0
+            for attempt in range(max_retries):
+                try:
+                    if score > 0.8 and hasattr(exchange, "create_limit_order"):
+                        price = None
+                        try:
+                            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
+                                t = await exchange.fetch_ticker(symbol)
+                            else:
+                                t = await asyncio.to_thread(exchange.fetch_ticker, symbol)
+                            bid = t.get("bid")
+                            ask = t.get("ask")
+                            if bid and ask:
+                                price = (bid + ask) / 2
+                        except Exception as err:
+                            logger.warning("Limit price fetch failed: %s", err)
+                        if price:
+                            params = {"postOnly": True}
+                            if config and config.get("hidden_limit"):
+                                params["hidden"] = True
+                            if asyncio.iscoroutinefunction(getattr(exchange, "create_limit_order", None)):
+                                order = await exchange.create_limit_order(symbol, side, remaining, price, params)
+                            else:
+                                order = await asyncio.to_thread(
+                                    exchange.create_limit_order, symbol, side, remaining, price, params
+                                )
+                            break
+
+                    if use_websocket and ws_client is not None and not ccxtpro:
+                        order = ws_client.add_order(symbol, side, remaining)
+                    elif asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
+                        order = await exchange.create_market_order(symbol, side, remaining)
+                    else:
+                        order = await asyncio.to_thread(exchange.create_market_order, symbol, side, remaining)
+                    break
+                except (NetworkError, RateLimitExceeded) as exc:
+                    if attempt < max_retries - 1:
+                        logger.warning(
+                            "Retry %s placing %s %s due to %s",
+                            attempt + 1,
+                            side,
+                            symbol,
+                            exc,
+                        )
+                        await asyncio.sleep(delay)
+                        delay *= 2
+                        continue
+                    raise
+                except ExchangeError:
+                    raise
+                except Exception as exc:
+                    logger.exception("Order placement failed: %s", exc)
+                    err_msg = notifier.notify(f"Order failed: {exc}")
+                    if err_msg:
+                        logger.error("Failed to send message: %s", err_msg)
+                    raise
+
+            start = time.time()
+            filled = 0.0
+            while time.time() - start < poll_timeout:
+                try:
+                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_order", None)):
+                        info = await exchange.fetch_order(order["id"], symbol)
+                    else:
+                        info = await asyncio.to_thread(exchange.fetch_order, order["id"], symbol)
+                    filled = float(info.get("filled") or 0.0)
+                    order.update(info)
+                    if 0 < filled < remaining:
+                        err_pf = notifier.notify(f"Partial fill: {filled}/{remaining} {symbol}")
+                        if err_pf:
+                            logger.error("Failed to send message: %s", err_pf)
+                    if info.get("status") == "closed":
+                        break
+                except Exception as err:
+                    logger.debug("Order polling error: %s", err)
+                await asyncio.sleep(1)
+
+            orders.append(order)
+            if filled and filled < remaining:
+                remaining -= filled
+            else:
+                remaining = 0
+
+        return orders
+
+    all_orders: List[Dict] = []
+
+    if config and config.get("twap_enabled", False) and config.get("twap_slices", 1) > 1:
+        slices = config.get("twap_slices", 1)
+        delay = config.get("twap_interval_seconds", 1)
+        slice_amount = amount / slices
+        for i in range(slices):
+            placed = await place(slice_amount)
+            for order in placed:
+                if dry_run:
+                    try:
+                        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
+                            t = await exchange.fetch_ticker(symbol)
+                        else:
+                            t = await asyncio.to_thread(exchange.fetch_ticker, symbol)
+                        order["price"] = t.get("last") or t.get("bid") or t.get("ask") or 0.0
+                    except Exception:
+                        order["price"] = (config or {}).get("entry_price", 0.0)
+                log_trade(order)
+                if (config or {}).get("tax_tracking", {}).get("enabled"):
+                    try:
+                        if order.get("side") == "buy":
+                            tax_logger.record_entry(order)
+                        else:
+                            tax_logger.record_exit(order)
+                    except Exception:
+                        pass
+                all_orders.append(order)
+                err_slice = notifier.notify(f"TWAP slice {i+1}/{slices} executed: {order}")
+                if err_slice:
+                    logger.error("Failed to send message: %s", err_slice)
+            if i < slices - 1:
+                await asyncio.sleep(delay)
+    else:
+        placed = await place(amount)
+        for order in placed:
+            if dry_run:
+                try:
+                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
+                        t = await exchange.fetch_ticker(symbol)
+                    else:
+                        t = await asyncio.to_thread(exchange.fetch_ticker, symbol)
+                    order["price"] = t.get("last") or t.get("bid") or t.get("ask") or 0.0
+                except Exception:
+                    order["price"] = (config or {}).get("entry_price", 0.0)
+            log_trade(order)
+            if (config or {}).get("tax_tracking", {}).get("enabled"):
+                try:
+                    if order.get("side") == "buy":
+                        tax_logger.record_entry(order)
+                    else:
+                        tax_logger.record_exit(order)
+                except Exception:
+                    pass
+            all_orders.append(order)
+            err_exec = notifier.notify(f"Order executed: {order}")
+            if err_exec:
+                logger.error("Failed to send message: %s", err_exec)
+
+    if len(all_orders) == 1:
+        return all_orders[0]
+    return {"orders": all_orders}
         delay = 1.0
     if dry_run:
         order = {"symbol": symbol, "side": side, "amount": amount, "dry_run": True}

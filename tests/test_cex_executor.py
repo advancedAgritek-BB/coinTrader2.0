@@ -63,7 +63,10 @@ class DummyExchange:
 
     def create_market_order(self, symbol, side, amount):
         self.called = True
-        return {"exchange": True}
+        return {"exchange": True, "id": "1", "amount": amount}
+
+    def fetch_order(self, order_id, symbol):
+        return {"id": order_id, "status": "closed", "filled": float(self.called and 1)}
 
 
 class DummyWS:
@@ -85,7 +88,7 @@ class DummyWS:
                     "order_type": ordertype,
                 },
             }
-        return {"ws": True}
+        return {"ws": True, "id": "5", "amount": amount}
 
 
 def test_execute_trade_rest_path(monkeypatch):
@@ -105,7 +108,8 @@ def test_execute_trade_rest_path(monkeypatch):
         notifier=notifier,
         dry_run=False,
     )
-    assert order == {"exchange": True}
+    assert order.get("exchange") is True
+    assert order.get("status") == "closed"
     assert ex.called
 
 
@@ -120,10 +124,13 @@ class LimitExchange:
     def create_limit_order(self, symbol, side, amount, price, params=None):
         self.limit_called = True
         self.params = params
-        return {"limit": True, "price": price, "params": params}
+        return {"limit": True, "price": price, "params": params, "id": "2", "amount": amount}
 
     def create_market_order(self, symbol, side, amount):
         raise AssertionError("market order should not be used")
+
+    def fetch_order(self, order_id, symbol):
+        return {"id": order_id, "status": "closed", "filled": float(self.limit_called and 1)}
 
 
 def test_execute_trade_uses_limit(monkeypatch):
@@ -148,6 +155,7 @@ def test_execute_trade_uses_limit(monkeypatch):
     assert ex.limit_called
     assert order["params"]["postOnly"] is True
     assert order["params"].get("hidden") is True
+    assert order["status"] == "closed"
 
 
 def test_execute_trade_ws_path(monkeypatch):
@@ -157,8 +165,12 @@ def test_execute_trade_ws_path(monkeypatch):
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     ws = DummyWS()
     notifier = DummyNotifier()
+    class PollEx:
+        def fetch_order(self, order_id, symbol):
+            return {"id": order_id, "status": "closed", "filled": 1.0}
+
     order = cex_executor.execute_trade(
-        object(),
+        PollEx(),
         ws,
         "XBT/USDT",
         "buy",
@@ -168,7 +180,8 @@ def test_execute_trade_ws_path(monkeypatch):
         dry_run=False,
         use_websocket=True,
     )
-    assert order == {"ws": True}
+    assert order.get("ws") is True
+    assert order.get("status") == "closed"
     assert ws.called
     assert ws.msg["method"] == "add_order"
     assert ws.msg["params"]["symbol"] == "XBT/USDT"
@@ -216,8 +229,9 @@ def test_get_exchange_websocket(monkeypatch):
     class DummyCCXT:
         def __init__(self, params):
             created["params"] = params
+            self.options = {}
 
-    monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: DummyCCXT(params))
+    monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: DummyCCXT(params), raising=False)
     if getattr(cex_executor, "ccxtpro", None):
         monkeypatch.setattr(
             cex_executor.ccxtpro, "kraken", lambda params: DummyCCXT(params)
@@ -225,7 +239,11 @@ def test_get_exchange_websocket(monkeypatch):
 
     exchange, ws = cex_executor.get_exchange(config)
     assert isinstance(ws, DummyWSClient)
-    assert created["args"] == ("key", "sec", "token", "apitoken")
+    if cex_executor.ccxtpro:
+        expected = ("key", "sec", "token", "apitoken")
+    else:
+        expected = ("key", "sec", None, None)
+    assert created["args"] == expected
 
 
 def test_get_exchange_websocket_missing_creds(monkeypatch):
@@ -234,12 +252,19 @@ def test_get_exchange_websocket_missing_creds(monkeypatch):
     monkeypatch.delenv("API_SECRET", raising=False)
     monkeypatch.delenv("KRAKEN_WS_TOKEN", raising=False)
 
-    monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: object())
+    class DummyCCXT2:
+        def __init__(self, params):
+            self.options = {}
+
+    monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: DummyCCXT2(params), raising=False)
     if getattr(cex_executor, "ccxtpro", None):
         monkeypatch.setattr(cex_executor.ccxtpro, "kraken", lambda params: object())
 
     exchange, ws = cex_executor.get_exchange(config)
-    assert ws is None
+    if cex_executor.ccxtpro:
+        assert ws is None
+    else:
+        assert isinstance(ws, cex_executor.KrakenWSClient)
 
 
 class SlippageExchange:
@@ -426,7 +451,10 @@ def test_execute_trade_retries_network_error(monkeypatch):
             self.calls += 1
             if self.calls == 1:
                 raise ccxt.NetworkError("boom")
-            return {"ok": True}
+            return {"ok": True, "id": "3", "amount": amount}
+
+        def fetch_order(self, order_id, symbol):
+            return {"id": order_id, "status": "closed", "filled": 1.0}
 
     sleeps: list[float] = []
 
@@ -435,9 +463,12 @@ def test_execute_trade_retries_network_error(monkeypatch):
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
 
     ex = RetryEx()
-    order = cex_executor.execute_trade(ex, None, "BTC/USD", "buy", 1, dry_run=False)
+    order = cex_executor.execute_trade(
+        ex, None, "BTC/USD", "buy", 1, notifier=DummyNotifier(), dry_run=False
+    )
 
-    assert order == {"ok": True}
+    assert order.get("ok") is True
+    assert order.get("status") == "closed"
     assert ex.calls == 2
     assert sleeps == [1.0]
 
@@ -454,7 +485,10 @@ def test_execute_trade_async_retries(monkeypatch):
             self.calls += 1
             if self.calls == 1:
                 raise ccxt.NetworkError("boom")
-            return {"ok": True}
+            return {"ok": True, "id": "4", "amount": amount}
+
+        async def fetch_order(self, order_id, symbol):
+            return {"id": order_id, "status": "closed", "filled": 1.0}
 
     sleeps: list[float] = []
 
@@ -467,10 +501,13 @@ def test_execute_trade_async_retries(monkeypatch):
 
     ex = RetryEx()
     order = asyncio.run(
-        cex_executor.execute_trade_async(ex, None, "BTC/USD", "buy", 1, dry_run=False)
+        cex_executor.execute_trade_async(
+            ex, None, "BTC/USD", "buy", 1, notifier=DummyNotifier(), dry_run=False
+        )
     )
 
-    assert order == {"ok": True}
+    assert order.get("ok") is True
+    assert order.get("status") == "closed"
     assert ex.calls == 2
     assert sleeps == [1.0]
 
