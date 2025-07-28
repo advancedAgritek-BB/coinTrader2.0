@@ -10,6 +10,9 @@ async def watch_pool(
     api_key: str, pool_program: str, min_liquidity: float = 0.0
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """Connect to Helius enhanced websocket and yield transaction data."""
+    # Use the standard Helius mainnet endpoint by default. Enhanced endpoints
+    # such as ``atlas-mainnet.helius-rpc.com`` are only available to business
+    # plans, so point to the broadly accessible URL.
     url = f"wss://mainnet.helius-rpc.com/?api-key={api_key}"
     async with aiohttp.ClientSession() as session:
         backoff = 0
@@ -48,9 +51,15 @@ async def watch_pool(
                                 if liquidity < min_liquidity or tx_count <= 10:
                                     continue
                                 yield result
-                        elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
+                        elif msg.type in (
+                            aiohttp.WSMsgType.CLOSED,
+                            aiohttp.WSMsgType.ERROR,
+                        ):
                             reconnect = True
                             break
+                    else:
+                        # Loop exhausted without break -> no more messages
+                        return
             except aiohttp.WSServerHandshakeError:
                 reconnect = True
             except Exception:
