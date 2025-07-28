@@ -328,10 +328,3 @@ async def rug_check(
                 "risk_score": risk_score,
                 "details": details,
             }
-
-# Example usage within ``generate_signal``:
-# async def generate_signal(...):
-#     check = await rug_check(token_mint)
-#     if not check["safe"]:
-#         logger.warning(f"Rug risk for {token_mint}: {check['risk_score']}")
-#         return 0.0, "none"
