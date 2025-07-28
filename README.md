@@ -137,6 +137,8 @@ needed.
    ```yaml
    risk:
      trade_size_pct: 1.5  # new value
+     win_rate_threshold: 0.8
+     win_rate_boost_factor: 2.0
    ```
 
    Save the file and type `reload` in the console or send `/reload` via Telegram
@@ -353,6 +355,8 @@ symbol_score_weights:
 ### Risk Parameters
 * **risk** – default stop loss, take profit and drawdown limits. `min_volume` is set to `0.0001` to filter thin markets. The stop is 1.5× ATR and the take profit is 3× ATR by default.
 * **trade_size_pct** – percent of capital used per trade.
+* **win_rate_threshold**/**win_rate_boost_factor** – boost position sizing when a
+  strategy's win rate exceeds this threshold.
 * **max_open_trades** – maximum simultaneous open trades.
 * **max_slippage_pct** – slippage threshold for the depth-based check.
 * **liquidity_check**/**liquidity_depth** – verify order book depth.
@@ -431,8 +435,8 @@ size = risk_manager.position_size(
 )
 ```
 * Passing a ``name`` parameter causes ``position_size`` to check
-  ``get_recent_win_rate``. When the win rate exceeds ``0.7`` the
-  calculated size is boosted by **50%**.
+  ``get_recent_win_rate``. When the win rate exceeds ``win_rate_threshold``
+  the calculated size is multiplied by ``win_rate_boost_factor``.
 * **ml_signal_model**/**signal_weight_optimizer** – blend strategy scores with machine-learning predictions.
 * **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade. `min_confidence_score` and `signal_fusion.min_confidence` default to `0.0001`.
 * **regime_timeframes**/**regime_return_period** – windows used for regime detection.
