@@ -165,7 +165,7 @@ meme_wave_sniper:
     websocket_url: wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
   risk:
     daily_loss_cap: 2.0
-    max_concurrent: 15
+    max_concurrent: 5
   risk_file: crypto_bot/logs/sniper_risk.json
   safety:
     min_liquidity: 50
@@ -532,7 +532,7 @@ token_registry:
 top_n_symbols: 50
 tp_mult: 2.0
 tp_pct: 0.1
-trade_size_pct: 0.3
+trade_size_pct: 0.001
 trend:
   atr_period: 10
   k: 0.8
