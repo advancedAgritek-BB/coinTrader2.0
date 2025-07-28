@@ -1443,7 +1443,8 @@ real time:
    plans; standard tiers should use the mainnet URL shown above.
 3. Run `python -m crypto_bot.solana.pool_ws_monitor`.
 
-`pool_ws_monitor.py` subscribes to the Raydium program and prints each update:
+`pool_ws_monitor.py` subscribes to the Raydium program and prints each update.
+Use `watch_pool(api_key, program_id)` to get an async generator of transactions:
 
 ```python
 import os
