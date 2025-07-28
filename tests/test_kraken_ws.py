@@ -7,6 +7,22 @@ sys.modules.setdefault("scipy", types.ModuleType("scipy"))
 sys.modules.setdefault("scipy.stats", types.SimpleNamespace(pearsonr=lambda *a, **k: 0))
 
 from crypto_bot.execution.kraken_ws import KrakenWSClient, PUBLIC_URL, PRIVATE_URL
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _dummy_creds(monkeypatch):
+    monkeypatch.setenv("API_KEY", "dummy")
+    monkeypatch.setenv("API_SECRET", "dummy")
+    monkeypatch.setattr(
+        "crypto_bot.execution.kraken_ws.keyring.get_password",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(
+        "crypto_bot.execution.kraken_ws.ccxt",
+        types.SimpleNamespace(kraken=lambda params: object()),
+        raising=False,
+    )
 
 class DummyWS:
     def __init__(self):
