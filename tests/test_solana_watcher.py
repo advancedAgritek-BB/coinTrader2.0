@@ -400,3 +400,44 @@ def test_watch_ws_reconnect(monkeypatch):
     event = asyncio.run(run_once())
     assert event.pool_address == "PX"
 
+
+def test_watch_ws_fallback_to_polling(monkeypatch):
+    async def fake_watch_ws(self):
+        self._running = True
+        yield NewPoolEvent(pool_address="WS", token_mint="", creator="", liquidity=0.0)
+        return
+
+    data = {
+        "result": {
+            "pools": [
+                {"address": "PL"}
+            ]
+        }
+    }
+    session = DummySession(data)
+    monkeypatch.setattr(PoolWatcher, "_watch_ws", fake_watch_ws)
+    monkeypatch.setattr(
+        watcher,
+        "aiohttp",
+        type("M", (), {"ClientSession": lambda: session}),
+    )
+
+    w = PoolWatcher(
+        "http://test",
+        interval=0,
+        websocket_url="ws://x",
+        raydium_program_id="PGM",
+    )
+
+    async def run_once():
+        gen = w.watch()
+        evt_ws = await gen.__anext__()
+        evt_poll = await gen.__anext__()
+        w.stop()
+        await gen.aclose()
+        return evt_ws, evt_poll
+
+    evt_ws, evt_poll = asyncio.run(run_once())
+    assert evt_ws.pool_address == "WS"
+    assert evt_poll.pool_address == "PL"
+
