@@ -557,6 +557,19 @@ momentum_bot:
     risk_pct: 0.01
 ```
 
+#### Cross-Chain Arbitrage Bot
+`cross_chain_arb_bot` watches price differences between a centralized
+exchange and Solana DEX quotes. When the gap for a pair in `pairs` exceeds
+`spread_thr` (fractional), the bot buys on the cheaper venue and sells on the
+other, covering bridge costs in the process.
+
+```yaml
+cross_chain_arb_bot:
+  pairs: [SOL/USDC, ETH/USDT]
+  spread_thr: 0.007
+```
+
+
 #### Flash Crash Scalper
 The flash crash scalper enters after a rapid ~10% drop confirmed by a spike in
 volume and exits once price rebounds about 5%.
