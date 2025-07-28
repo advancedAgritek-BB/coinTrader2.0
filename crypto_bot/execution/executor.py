@@ -1,17 +1,15 @@
-try:
-    import ccxt  # type: ignore
-    from ccxt import NetworkError, RateLimitExceeded, ExchangeError  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    import types
-
-    ccxt = types.SimpleNamespace()
-    NetworkError = RateLimitExceeded = ExchangeError = Exception
-from typing import Dict
+import ccxt  # type: ignore
+NetworkError = getattr(ccxt, "NetworkError", Exception)
+RateLimitExceeded = getattr(ccxt, "RateLimitExceeded", Exception)
+ExchangeError = getattr(ccxt, "ExchangeError", Exception)
+from typing import Dict, Any
 import time
 from pathlib import Path
 import time
 
-from crypto_bot.utils.telegram import TelegramNotifier
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:  # pragma: no cover - type hints only
+    from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.trade_logger import log_trade
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
@@ -19,7 +17,7 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
 
 
-def load_exchange(api_key: str, api_secret: str) -> ccxt.Exchange:
+def load_exchange(api_key: str, api_secret: str) -> 'ccxt.Exchange':
     exchange = ccxt.binance({
         'apiKey': api_key,
         'secret': api_secret,
@@ -29,15 +27,16 @@ def load_exchange(api_key: str, api_secret: str) -> ccxt.Exchange:
 
 
 def execute_trade(
-    exchange: ccxt.Exchange,
+    exchange: 'ccxt.Exchange',
     symbol: str,
     side: str,
     amount: float,
     config: Dict,
-    notifier: TelegramNotifier,
+    notifier: Any,
     dry_run: bool = True,
     max_retries: int = 3,
-) -> None:
+    poll_timeout: int = 60,
+) -> Dict:
     """Execute a market trade with optional retry logic.
 
     Parameters
@@ -52,28 +51,15 @@ def execute_trade(
     if err:
         logger.error("Failed to send message: %s", err)
 
-    if not dry_run:
-        for attempt in range(max_retries):
-            try:
-                order = exchange.create_market_order(symbol, side, amount)
-                break
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    time.sleep(1)
-                    continue
-                err_msg = notifier.notify(f"Order failed: {e}")
-                if err_msg:
-                    logger.error("Failed to send message: %s", err_msg)
-                return
     if dry_run:
         order = {"symbol": symbol, "side": side, "amount": amount, "dry_run": True}
         err = notifier.notify(f"Order executed: {order}")
         if err:
             logger.error("Failed to send message: %s", err)
         log_trade(order)
-        return
+        return order
 
-    order = None
+    order: Dict | None = None
     for retry in range(max_retries):
         try:
             order = exchange.create_market_order(symbol, side, amount)
@@ -92,16 +78,7 @@ def execute_trade(
             err_msg = notifier.notify(f"Order failed: {exc}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
-            logger.error(
-                "Order failed - symbol=%s side=%s amount=%s: %s",
-                symbol,
-                side,
-                amount,
-                e,
-                exc_info=True,
-            )
-            return
-            raise
+            return {}
     else:
         logger.error("Order failed after %s retries", max_retries)
         err_msg = notifier.notify("Order failed after retries")
@@ -109,7 +86,49 @@ def execute_trade(
             logger.error("Failed to send message: %s", err_msg)
         raise RuntimeError("Order execution failed after retries")
 
-    err = notifier.notify(f"Order executed: {order}")
-    if err:
-        logger.error("Failed to send message: %s", err)
-    log_trade(order)
+    assert order is not None
+    start = time.monotonic()
+    while True:
+        if time.monotonic() - start >= poll_timeout:
+            err_msg = notifier.notify("Order polling timed out")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
+            raise TimeoutError("Order polling timed out")
+        try:
+            order_status = exchange.fetch_order(order["id"], symbol)
+        except Exception as exc:  # pragma: no cover - fetch may fail
+            logger.warning("Order status fetch failed: %s", exc)
+            time.sleep(1)
+            continue
+
+        if order_status.get("status") == "closed":
+            filled = float(order_status.get("filled", 0))
+            total = float(order_status.get("amount", amount))
+            if filled < total:
+                remaining = total - filled
+                msg = notifier.notify(
+                    f"Partial fill detected ({filled}/{total}). Placing remaining {remaining}"
+                )
+                if msg:
+                    logger.error("Failed to send message: %s", msg)
+                amount = remaining
+                for retry in range(max_retries):
+                    try:
+                        order = exchange.create_market_order(symbol, side, remaining)
+                        start = time.monotonic()
+                        break
+                    except (NetworkError, RateLimitExceeded):
+                        time.sleep(2 ** retry)
+                        continue
+                else:
+                    logger.error("Order failed after %s retries", max_retries)
+                    raise RuntimeError("Order execution failed after retries")
+                continue
+
+            err = notifier.notify(f"Order executed: {order_status}")
+            if err:
+                logger.error("Failed to send message: %s", err)
+            log_trade(order_status)
+            return order_status
+
+        time.sleep(1)

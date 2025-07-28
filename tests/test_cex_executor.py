@@ -3,6 +3,7 @@ import asyncio
 from crypto_bot.execution.cex_executor import place_stop_order
 from crypto_bot.utils import trade_logger
 from crypto_bot.utils.telegram import TelegramNotifier
+from crypto_bot.execution import executor as simple_executor
 
 
 class DummyExchange:
@@ -62,7 +63,10 @@ class DummyExchange:
 
     def create_market_order(self, symbol, side, amount):
         self.called = True
-        return {"exchange": True}
+        return {"exchange": True, "id": "1", "amount": amount}
+
+    def fetch_order(self, order_id, symbol):
+        return {"id": order_id, "status": "closed", "filled": float(self.called and 1)}
 
 
 class DummyWS:
@@ -84,7 +88,7 @@ class DummyWS:
                     "order_type": ordertype,
                 },
             }
-        return {"ws": True}
+        return {"ws": True, "id": "5", "amount": amount}
 
 
 def test_execute_trade_rest_path(monkeypatch):
@@ -104,7 +108,8 @@ def test_execute_trade_rest_path(monkeypatch):
         notifier=notifier,
         dry_run=False,
     )
-    assert order == {"exchange": True}
+    assert order.get("exchange") is True
+    assert order.get("status") == "closed"
     assert ex.called
 
 
@@ -119,10 +124,13 @@ class LimitExchange:
     def create_limit_order(self, symbol, side, amount, price, params=None):
         self.limit_called = True
         self.params = params
-        return {"limit": True, "price": price, "params": params}
+        return {"limit": True, "price": price, "params": params, "id": "2", "amount": amount}
 
     def create_market_order(self, symbol, side, amount):
         raise AssertionError("market order should not be used")
+
+    def fetch_order(self, order_id, symbol):
+        return {"id": order_id, "status": "closed", "filled": float(self.limit_called and 1)}
 
 
 def test_execute_trade_uses_limit(monkeypatch):
@@ -147,6 +155,7 @@ def test_execute_trade_uses_limit(monkeypatch):
     assert ex.limit_called
     assert order["params"]["postOnly"] is True
     assert order["params"].get("hidden") is True
+    assert order["status"] == "closed"
 
 
 def test_execute_trade_ws_path(monkeypatch):
@@ -156,8 +165,12 @@ def test_execute_trade_ws_path(monkeypatch):
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     ws = DummyWS()
     notifier = DummyNotifier()
+    class PollEx:
+        def fetch_order(self, order_id, symbol):
+            return {"id": order_id, "status": "closed", "filled": 1.0}
+
     order = cex_executor.execute_trade(
-        object(),
+        PollEx(),
         ws,
         "XBT/USDT",
         "buy",
@@ -167,7 +180,8 @@ def test_execute_trade_ws_path(monkeypatch):
         dry_run=False,
         use_websocket=True,
     )
-    assert order == {"ws": True}
+    assert order.get("ws") is True
+    assert order.get("status") == "closed"
     assert ws.called
     assert ws.msg["method"] == "add_order"
     assert ws.msg["params"]["symbol"] == "XBT/USDT"
@@ -215,8 +229,9 @@ def test_get_exchange_websocket(monkeypatch):
     class DummyCCXT:
         def __init__(self, params):
             created["params"] = params
+            self.options = {}
 
-    monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: DummyCCXT(params))
+    monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: DummyCCXT(params), raising=False)
     if getattr(cex_executor, "ccxtpro", None):
         monkeypatch.setattr(
             cex_executor.ccxtpro, "kraken", lambda params: DummyCCXT(params)
@@ -224,7 +239,11 @@ def test_get_exchange_websocket(monkeypatch):
 
     exchange, ws = cex_executor.get_exchange(config)
     assert isinstance(ws, DummyWSClient)
-    assert created["args"] == ("key", "sec", "token", "apitoken")
+    if cex_executor.ccxtpro:
+        expected = ("key", "sec", "token", "apitoken")
+    else:
+        expected = ("key", "sec", None, None)
+    assert created["args"] == expected
 
 
 def test_get_exchange_websocket_missing_creds(monkeypatch):
@@ -233,12 +252,19 @@ def test_get_exchange_websocket_missing_creds(monkeypatch):
     monkeypatch.delenv("API_SECRET", raising=False)
     monkeypatch.delenv("KRAKEN_WS_TOKEN", raising=False)
 
-    monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: object())
+    class DummyCCXT2:
+        def __init__(self, params):
+            self.options = {}
+
+    monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: DummyCCXT2(params), raising=False)
     if getattr(cex_executor, "ccxtpro", None):
         monkeypatch.setattr(cex_executor.ccxtpro, "kraken", lambda params: object())
 
     exchange, ws = cex_executor.get_exchange(config)
-    assert ws is None
+    if cex_executor.ccxtpro:
+        assert ws is None
+    else:
+        assert isinstance(ws, cex_executor.KrakenWSClient)
 
 
 class SlippageExchange:
@@ -355,6 +381,44 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
     assert float(row.split(",")[3]) > 0
 
 
+def test_execute_trade_async_retries(monkeypatch):
+    calls = {"count": 0}
+    delays = []
+
+    class DummyEx:
+        async def create_market_order(self, symbol, side, amount):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise cex_executor.ccxt.NetworkError("fail")
+            return {"id": "1"}
+
+    async def fake_sleep(d):
+        delays.append(d)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    NetworkError = type("NetworkError", (Exception,), {})
+    monkeypatch.setattr(cex_executor.ccxt, "NetworkError", NetworkError, raising=False)
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+
+    order = asyncio.run(
+        cex_executor.execute_trade_async(
+            DummyEx(),
+            None,
+            "XBT/USDT",
+            "buy",
+            1.0,
+            notifier=DummyNotifier(),
+            dry_run=False,
+            max_retries=2,
+        )
+    )
+
+    assert order == {"id": "1"}
+    assert delays
+
+
 def test_execute_trade_no_message_when_disabled(monkeypatch):
     calls = {"count": 0}
     monkeypatch.setattr(
@@ -387,7 +451,10 @@ def test_execute_trade_retries_network_error(monkeypatch):
             self.calls += 1
             if self.calls == 1:
                 raise ccxt.NetworkError("boom")
-            return {"ok": True}
+            return {"ok": True, "id": "3", "amount": amount}
+
+        def fetch_order(self, order_id, symbol):
+            return {"id": order_id, "status": "closed", "filled": 1.0}
 
     sleeps: list[float] = []
 
@@ -396,9 +463,12 @@ def test_execute_trade_retries_network_error(monkeypatch):
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
 
     ex = RetryEx()
-    order = cex_executor.execute_trade(ex, None, "BTC/USD", "buy", 1, dry_run=False)
+    order = cex_executor.execute_trade(
+        ex, None, "BTC/USD", "buy", 1, notifier=DummyNotifier(), dry_run=False
+    )
 
-    assert order == {"ok": True}
+    assert order.get("ok") is True
+    assert order.get("status") == "closed"
     assert ex.calls == 2
     assert sleeps == [1.0]
 
@@ -415,7 +485,10 @@ def test_execute_trade_async_retries(monkeypatch):
             self.calls += 1
             if self.calls == 1:
                 raise ccxt.NetworkError("boom")
-            return {"ok": True}
+            return {"ok": True, "id": "4", "amount": amount}
+
+        async def fetch_order(self, order_id, symbol):
+            return {"id": order_id, "status": "closed", "filled": 1.0}
 
     sleeps: list[float] = []
 
@@ -428,9 +501,78 @@ def test_execute_trade_async_retries(monkeypatch):
 
     ex = RetryEx()
     order = asyncio.run(
-        cex_executor.execute_trade_async(ex, None, "BTC/USD", "buy", 1, dry_run=False)
+        cex_executor.execute_trade_async(
+            ex, None, "BTC/USD", "buy", 1, notifier=DummyNotifier(), dry_run=False
+        )
     )
 
-    assert order == {"ok": True}
+    assert order.get("ok") is True
+    assert order.get("status") == "closed"
     assert ex.calls == 2
     assert sleeps == [1.0]
+
+
+def test_simple_executor_partial_fill(monkeypatch):
+    monkeypatch.setattr(simple_executor, "ccxt", ccxt)
+    class PartialEx:
+        def __init__(self):
+            self.orders = []
+
+        def create_market_order(self, symbol, side, amount):
+            oid = f"o{len(self.orders)}"
+            self.orders.append((oid, amount))
+            return {"id": oid, "symbol": symbol, "amount": amount}
+
+        def fetch_order(self, oid, symbol):
+            if oid == "o0":
+                return {"id": oid, "status": "closed", "filled": 0.4, "amount": 1.0, "symbol": symbol}
+            return {"id": oid, "status": "closed", "filled": 0.6, "amount": 0.6, "symbol": symbol}
+
+    times = {"t": 0.0}
+
+    def fake_sleep(sec):
+        times["t"] += sec
+
+    def fake_monotonic():
+        return times["t"]
+
+    monkeypatch.setattr(simple_executor.time, "sleep", fake_sleep)
+    monkeypatch.setattr(simple_executor.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(simple_executor, "log_trade", lambda order: None)
+
+    ex = PartialEx()
+    notifier = DummyNotifier()
+    order = simple_executor.execute_trade(ex, "XBT/USDT", "buy", 1.0, {}, notifier, dry_run=False, poll_timeout=10)
+
+    assert order["id"] == "o1"
+    assert ex.orders == [("o0", 1.0), ("o1", 0.6)]
+    assert any("Partial fill" in m for m in notifier.messages)
+
+
+def test_simple_executor_timeout(monkeypatch):
+    monkeypatch.setattr(simple_executor, "ccxt", ccxt)
+    class TimeoutEx:
+        def create_market_order(self, symbol, side, amount):
+            return {"id": "t1", "symbol": symbol, "amount": amount}
+
+        def fetch_order(self, oid, symbol):
+            return {"id": oid, "status": "open", "filled": 0.0, "amount": 1.0, "symbol": symbol}
+
+    times = {"t": 0.0}
+
+    def fake_sleep(sec):
+        times["t"] += sec
+
+    def fake_monotonic():
+        return times["t"]
+
+    monkeypatch.setattr(simple_executor.time, "sleep", fake_sleep)
+    monkeypatch.setattr(simple_executor.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(simple_executor, "log_trade", lambda order: None)
+
+    ex = TimeoutEx()
+    notifier = DummyNotifier()
+    with pytest.raises(TimeoutError):
+        simple_executor.execute_trade(ex, "XBT/USDT", "buy", 1.0, {}, notifier, dry_run=False, poll_timeout=2)
+
+    assert any("timed out" in m for m in notifier.messages)
