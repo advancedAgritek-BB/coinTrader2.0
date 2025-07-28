@@ -109,12 +109,20 @@ logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 # Track WebSocket ping tasks
 WS_PING_TASKS: set[asyncio.Task] = set()
 # Track async sniper trade tasks
+# Track async sniper trade tasks
 SNIPER_TASKS: set[asyncio.Task] = set()
+# Track newly scanned Solana tokens pending evaluation
+NEW_SOLANA_TOKENS: set[str] = set()
 # Track async cross-chain arb tasks
 CROSS_ARB_TASKS: set[asyncio.Task] = set()
 
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
+
+# Cache of recently queued Solana tokens to avoid duplicates
+SOLANA_CACHE_SIZE = 50
+recent_solana_tokens: deque[str] = deque()
+recent_solana_set: set[str] = set()
 
 # Protects shared queues for future multi-tasking scenarios
 QUEUE_LOCK = asyncio.Lock()
@@ -173,6 +181,22 @@ def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> f
             continue
         atr_values.append(calc_atr(df))
     return sum(atr_values) / len(atr_values) if atr_values else 0.0
+
+
+def enqueue_solana_tokens(tokens: list[str]) -> None:
+    """Add Solana ``tokens`` to the priority queue skipping recently queued ones."""
+
+    global recent_solana_tokens, recent_solana_set
+
+    for sym in reversed(tokens):
+        if sym in recent_solana_set:
+            continue
+        symbol_priority_queue.appendleft(sym)
+        recent_solana_tokens.append(sym)
+        recent_solana_set.add(sym)
+        if len(recent_solana_tokens) > SOLANA_CACHE_SIZE:
+            old = recent_solana_tokens.popleft()
+            recent_solana_set.discard(old)
 
 
 def is_market_pumping(
@@ -767,8 +791,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
             for sym in reversed(onchain_syms):
                 symbol_priority_queue.appendleft(sym)
         if solana_tokens:
-            for sym in reversed(solana_tokens):
-                symbol_priority_queue.appendleft(sym)
+            enqueue_solana_tokens(solana_tokens)
         if len(symbol_priority_queue) < batch_size:
             symbol_priority_queue.extend(
                 build_priority_queue(symbols + [(s, 0.0) for s in onchain_syms])
@@ -777,6 +800,14 @@ async def fetch_candidates(ctx: BotContext) -> None:
             symbol_priority_queue.popleft()
             for _ in range(min(batch_size, len(symbol_priority_queue)))
         ]
+
+        for sym in ctx.current_batch:
+            if sym in recent_solana_set:
+                recent_solana_set.discard(sym)
+                try:
+                    recent_solana_tokens.remove(sym)
+                except ValueError:
+                    pass
 
 
 async def scan_arbitrage(exchange: object, config: dict) -> list[str]:
@@ -1297,7 +1328,16 @@ async def execute_signals(ctx: BotContext) -> None:
         elif sym.endswith("/USDC"):
             from crypto_bot.solana import sniper_solana
 
+            if sym in NEW_SOLANA_TOKENS:
+                reg = candidate.get("regime")
+                if reg not in {"volatile", "breakout"}:
+                    logger.info("[EVAL] %s -> regime %s not tradable", sym, reg)
+                    NEW_SOLANA_TOKENS.discard(sym)
+                    continue
+
             sol_score, _ = sniper_solana.generate_signal(df)
+            if sym in NEW_SOLANA_TOKENS:
+                NEW_SOLANA_TOKENS.discard(sym)
             if sol_score > 0.7:
                 from crypto_bot.solana_trading import sniper_trade
 
@@ -1720,7 +1760,13 @@ async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
             return pos["entry_price"]
         return float(df["close"].iloc[-1])
 
-    res = await monitor_price(feed, pos["entry_price"], {})
+    res = await monitor_price(
+        feed,
+        pos["entry_price"],
+        {},
+        mempool_monitor=ctx.mempool_monitor,
+        mempool_cfg=ctx.mempool_cfg,
+    )
     exit_price = res.get("exit_price", feed())
 
     await cex_trade_async(
@@ -1865,8 +1911,10 @@ async def _main_impl() -> TelegramNotifier:
                 tokens = await get_solana_new_tokens(cfg)
                 if tokens:
                     async with QUEUE_LOCK:
+                        enqueue_solana_tokens(tokens)
                         for sym in reversed(tokens):
                             symbol_priority_queue.appendleft(sym)
+                            NEW_SOLANA_TOKENS.add(sym)
             except asyncio.CancelledError:
                 break
             except Exception as exc:  # pragma: no cover - best effort
@@ -2494,6 +2542,7 @@ async def _main_impl() -> TelegramNotifier:
             except asyncio.CancelledError:
                 pass
         CROSS_ARB_TASKS.clear()
+        NEW_SOLANA_TOKENS.clear()
 
     return notifier
 
