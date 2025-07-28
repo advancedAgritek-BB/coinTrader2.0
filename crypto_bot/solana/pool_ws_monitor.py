@@ -10,7 +10,7 @@ async def watch_pool(
     api_key: str, pool_program: str, min_liquidity: float = 0.0
 ) -> AsyncGenerator[Dict[str, Any], None]:
     """Connect to Helius enhanced websocket and yield transaction data."""
-    url = f"wss://atlas-mainnet.helius-rpc.com/?api-key={api_key}"
+    url = f"wss://mainnet.helius-rpc.com/?api-key={api_key}"
     async with aiohttp.ClientSession() as session:
         backoff = 0
         while True:
@@ -59,3 +59,5 @@ async def watch_pool(
             if reconnect:
                 backoff += 1
                 await asyncio.sleep(2 ** backoff)
+            else:
+                return

@@ -46,6 +46,7 @@ class PoolWatcher:
         raydium_program_id: str | None = None,
         max_failures: int = 3,
         min_liquidity: float | None = None,
+        ml_filter: bool | None = None,
     ) -> None:
         pump_fun_program_id = None
         if (
@@ -71,6 +72,8 @@ class PoolWatcher:
                 raydium_program_id = pool_cfg.get("raydium_program_id", "")
             if min_liquidity is None:
                 min_liquidity = float(safety_cfg.get("min_liquidity", 0))
+            if ml_filter is None:
+                ml_filter = bool(pool_cfg.get("ml_filter", False))
         key = os.getenv("HELIUS_KEY")
         if not url or "YOUR_KEY" in url or url.endswith("api-key="):
             if not key:
@@ -96,17 +99,39 @@ class PoolWatcher:
         if pump_fun_program_id:
             self.program_ids.append(pump_fun_program_id)
         self.min_liquidity = float(min_liquidity or 0)
+        self.ml_filter = bool(ml_filter)
         self._running = False
         self._seen: set[str] = set()
         self._max_failures = max_failures
         self._failures = 0
+
+    def _predict_breakout(self, event: NewPoolEvent) -> float:
+        """Return breakout probability using the Supabase snapshot."""
+        if not self.ml_filter or not event.token_mint:
+            return 1.0
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_KEY")
+        if not url or not key:
+            return 1.0
+        try:  # pragma: no cover - optional dependency
+            from supabase import create_client
+            from coinTrader_Trainer import regime_lgbm
+
+            client = create_client(url, key)
+            data = client.table("snapshots").select("*").eq("token_mint", event.token_mint).single().execute()
+            snapshot = getattr(data, "data", data)
+            return float(regime_lgbm.predict(snapshot))
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.error("ML filter failed: %s", exc)
+            return 1.0
 
     async def watch(self) -> AsyncGenerator[NewPoolEvent, None]:
         """Yield :class:`NewPoolEvent` objects as they are discovered."""
         if self.websocket_url and any(self.program_ids):
             async for evt in self._watch_ws():
                 yield evt
-            return
+            if not self._running:
+                return
 
         self._running = True
         async with aiohttp.ClientSession() as session:
@@ -161,8 +186,7 @@ class PoolWatcher:
                     tx_count = int(item.get("txCount", item.get("tx_count", 0)))
                     if liquidity < self.min_liquidity or tx_count <= 10:
                         continue
-                    self._seen.add(addr)
-                    yield NewPoolEvent(
+                    event = NewPoolEvent(
                         pool_address=addr,
                         token_mint=item.get("tokenMint")
                         or item.get("token_mint")
@@ -178,6 +202,10 @@ class PoolWatcher:
                         or "",
                         timestamp=float(item.get("timestamp", 0.0)),
                     )
+                    if self._predict_breakout(event) < 0.5:
+                        continue
+                    self._seen.add(addr)
+                    yield event
 
                 await asyncio.sleep(self.interval)
 
@@ -229,6 +257,9 @@ class PoolWatcher:
                                 creator="",
                                 liquidity=0.0,
                             )
+                            if self._predict_breakout(event) < 0.5:
+                                continue
+                            self._seen.add(addr)
                             try:
                                 df = await self._fetch_snapshot(event.pool_address)
                                 tx_count = len(df)
