@@ -1952,11 +1952,25 @@ async def _main_impl() -> TelegramNotifier:
 
         if discovered:
             config["symbols"] = discovered + config.get("onchain_symbols", [])
+            onchain_syms = config.get("onchain_symbols", [])
+            cex_count = len([s for s in config["symbols"] if s not in onchain_syms])
+            logger.info(
+                "Loaded %d CEX symbols and %d onchain symbols",
+                cex_count,
+                len(onchain_syms),
+            )
         elif discovered is None:
             cached = load_liquid_pairs()
             if isinstance(cached, list):
                 config["symbols"] = cached + config.get("onchain_symbols", [])
                 logger.warning("Using cached pairs due to symbol scan failure")
+                onchain_syms = config.get("onchain_symbols", [])
+                cex_count = len([s for s in config["symbols"] if s not in onchain_syms])
+                logger.info(
+                    "Loaded %d CEX symbols and %d onchain symbols",
+                    cex_count,
+                    len(onchain_syms),
+                )
             else:
                 logger.error(
                     "No symbols discovered after %d attempts; aborting startup",
