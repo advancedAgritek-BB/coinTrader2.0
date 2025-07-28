@@ -3,7 +3,7 @@ adaptive_scan:
   enabled: true
   max_factor: 10.0
 adx_threshold: 15
-allow_short: false
+allow_short: true
 arbitrage_enabled: true
 arbitrage_threshold: 0.005
 atr_normalization: true
@@ -104,7 +104,7 @@ exit_strategy:
   - 100
   scale_out: true
   trailing_stop_factor: 1.2
-  trailing_stop_pct: 0.01
+  trailing_stop_pct: 0.005
 force_websocket_history: false
 gas_threshold_gwei: 50
 gecko_limit: 10
@@ -118,7 +118,7 @@ grid_bot:
   breakout_mult: 1.0
   cooldown_bars: 1
   dynamic_grid: true
-  leverage: 2
+  leverage: 3
   max_active_legs: 12
   min_range_pct: 0.0003
   range_window: 15
@@ -136,13 +136,13 @@ liquidity_check: true
 liquidity_depth: 5
 listing_date_concurrency: 5
 log_to_google: true
-loop_interval_minutes: 0.1
+loop_interval_minutes: 0.05
 max_age_days: 90
 max_change_pct: 20
-max_concurrent_ohlcv: 2
+max_concurrent_ohlcv: 10
 max_concurrent_tickers: 20
 max_latency_ms: 500
-max_ohlcv_failures: 3
+max_ohlcv_failures: 2
 max_open_trades: 5
 max_parallel: 50
 max_slippage_pct: 0.2
@@ -176,7 +176,7 @@ mempool_monitor:
   action: reprice
   enabled: true
   reprice_multiplier: 1.1
-  suspicious_fee_threshold: 30
+  suspicious_fee_threshold: 20
 meta_selector:
   enabled: true
 metrics_backend: csv
@@ -202,7 +202,7 @@ micro_scalp:
   volume_window: 15
   wick_pct: 0.1
 min_agreeing_votes: 1
-min_confidence_score: 0.0001
+min_confidence_score: 0.00001
 min_consistent_agreement: 1
 min_cooldown: 0
 min_history_fraction: 0.1
@@ -211,7 +211,7 @@ min_symbol_score: 0
 ml_enabled: false
 ml_signal_model:
   enabled: true
-  weight: 0.7
+  weight: 0.9
 mode: auto
 mode_degrade_window: 15
 mode_threshold: 0.3
@@ -233,7 +233,7 @@ momentum_bot:
 ohlcv_batch_size: 10
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
-ohlcv_timeout: 120
+ohlcv_timeout: 60
 onchain_default_quote: USDC
 onchain_min_volume_usd: 5000
 onchain_symbols:
@@ -254,7 +254,7 @@ onchain_symbols:
 - TRUMP/USDC
 optimization:
   enabled: true
-  interval_days: 0.25
+  interval_days: 0.1
   parameter_ranges:
     trend:
       stop_loss:
@@ -285,6 +285,7 @@ refresh_pairs:
   top_k: 100
 regime_return_period: 3
 regime_timeframes:
+- 30s
 - 1m
 - 5m
 - 15m
@@ -292,7 +293,7 @@ risk:
   atr_long_window: 40
   atr_period: 10
   atr_short_window: 10
-  max_drawdown: 0.3
+  max_drawdown: 0.35
   max_volatility_factor: 3
   min_atr_pct: 0.0005
   min_expected_value: 0.0
@@ -334,7 +335,7 @@ sentiment_filter:
 signal_fusion:
   enabled: true
   fusion_method: weight
-  min_confidence: 0.05
+  min_confidence: 0.01
   strategies:
   - - trend
     - 0.5
@@ -342,14 +343,14 @@ signal_fusion:
     - 0.3
   - - sniper_bot
     - 0.2
-signal_threshold: 0.001
+signal_threshold: 0.0001
 signal_weight_optimizer:
   enabled: true
   learning_rate: 0.05
   min_weight: 0.01
 skip_symbol_filters: false
 sl_mult: 1.0
-sl_pct: 0.03
+sl_pct: 0.015
 sniper_bot:
   atr_window: 10
   breakout_pct: 0.01
@@ -466,7 +467,7 @@ strategy_router:
   trending_timeframe: 1h
   volatile_timeframe: 1m
 symbol: BTC/USDT
-symbol_batch_size: 20
+symbol_batch_size: 50
 symbol_filter:
   change_pct_percentile: 10
   correlation_max_pairs: 200
@@ -480,11 +481,11 @@ symbol_filter:
   max_concurrent_ohlcv: 10
   max_correlation: 0.9
   max_spread_pct: 8
-  min_volume_usd: 20
+  min_volume_usd: 5
   ohlcv_batch_size: 10
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
-  volume_percentile: 10
+  volume_percentile: 5
 symbol_refresh_minutes: 1
 symbol_score_weights:
   age: 0.1
@@ -515,6 +516,7 @@ ticker_backoff_max: 60
 ticker_rate_limit: null
 timeframe: 15m
 timeframes:
+- 30s
 - 1m
 - 5m
 - 15m
@@ -523,8 +525,8 @@ token_registry:
   refresh_interval_minutes: 15
 top_n_symbols: 50
 tp_mult: 2.0
-tp_pct: 0.2
-trade_size_pct: 0.2
+tp_pct: 0.1
+trade_size_pct: 0.3
 trend:
   atr_period: 10
   k: 0.8
@@ -545,4 +547,4 @@ voting_strategies:
 - sniper_bot
 wallet_address: your_wallet
 ws_failures_before_disable: 1
-ws_ping_interval: 10
+ws_ping_interval: 5
