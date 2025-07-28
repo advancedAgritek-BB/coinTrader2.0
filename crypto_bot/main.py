@@ -62,10 +62,16 @@ from crypto_bot.utils.market_loader import (
     configure as market_loader_configure,
     fetch_order_book_async,
 )
-from crypto_bot.utils.pair_cache import load_liquid_pairs
+from crypto_bot.utils.pair_cache import PAIR_FILE, load_liquid_pairs
+from tasks.refresh_pairs import (
+    DEFAULT_MIN_VOLUME_USD,
+    DEFAULT_TOP_K,
+    refresh_pairs_async,
+)
 from crypto_bot.utils.eval_queue import build_priority_queue
 from crypto_bot.solana import get_solana_new_tokens
 from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
+from crypto_bot.utils import symbol_utils
 from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
 from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
@@ -460,6 +466,11 @@ def reload_config(
     config.clear()
     config.update(new_config)
     ctx.config = config
+
+    # Reset cached symbols when configuration changes to ensure
+    # symbol selections reflect the latest settings
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
 
     rotator.config = config.get("portfolio_rotation", rotator.config)
     position_guard.max_open_trades = config.get(
@@ -1952,21 +1963,52 @@ async def _main_impl() -> TelegramNotifier:
 
         if discovered:
             config["symbols"] = discovered + config.get("onchain_symbols", [])
+            onchain_syms = config.get("onchain_symbols", [])
+            cex_count = len([s for s in config["symbols"] if s not in onchain_syms])
+            logger.info(
+                "Loaded %d CEX symbols and %d onchain symbols",
+                cex_count,
+                len(onchain_syms),
+            )
         elif discovered is None:
             cached = load_liquid_pairs()
             if isinstance(cached, list):
                 config["symbols"] = cached + config.get("onchain_symbols", [])
                 logger.warning("Using cached pairs due to symbol scan failure")
-            else:
-                logger.error(
-                    "No symbols discovered after %d attempts; aborting startup",
-                    MAX_SYMBOL_SCAN_ATTEMPTS,
+                onchain_syms = config.get("onchain_symbols", [])
+                cex_count = len([s for s in config["symbols"] if s not in onchain_syms])
+                logger.info(
+                    "Loaded %d CEX symbols and %d onchain symbols",
+                    cex_count,
+                    len(onchain_syms),
                 )
-                if status_updates:
-                    notifier.notify(
-                        f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
+            else:
+                fallback: list[str] | None = None
+                if not PAIR_FILE.exists():
+                    rp_cfg = config.get("refresh_pairs", {})
+                    min_vol = float(
+                        rp_cfg.get("min_quote_volume_usd", DEFAULT_MIN_VOLUME_USD)
                     )
-                return notifier
+                    top_k = int(rp_cfg.get("top_k", DEFAULT_TOP_K))
+                    try:
+                        fallback = await refresh_pairs_async(
+                            min_vol, top_k, config, force_refresh=True
+                        )
+                    except Exception as exc:  # pragma: no cover - network errors
+                        logger.error("refresh_pairs_async failed: %s", exc)
+                if fallback:
+                    config["symbols"] = fallback + config.get("onchain_symbols", [])
+                    logger.warning("Loaded fresh pairs after scan failure")
+                else:
+                    logger.error(
+                        "No symbols discovered after %d attempts; aborting startup",
+                        MAX_SYMBOL_SCAN_ATTEMPTS,
+                    )
+                    if status_updates:
+                        notifier.notify(
+                            f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
+                        )
+                    return notifier
         else:
             logger.error(
                 "No symbols discovered after %d attempts; aborting startup",
@@ -2048,7 +2090,12 @@ async def _main_impl() -> TelegramNotifier:
         )
 
     monitor_task = asyncio.create_task(
-        console_monitor.monitor_loop(exchange, paper_wallet, LOG_DIR / "bot.log")
+        console_monitor.monitor_loop(
+            exchange,
+            paper_wallet,
+            LOG_DIR / "bot.log",
+            quiet_mode=config.get("quiet_mode", False),
+        )
     )
 
     max_open_trades = config.get("max_open_trades", 1)

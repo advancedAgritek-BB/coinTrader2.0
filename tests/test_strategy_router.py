@@ -19,11 +19,11 @@ from crypto_bot.strategy import (
 SAMPLE_CFG = {
     "strategy_router": {
         "regimes": {
-            "trending": ["trend"],
+            "trending": ["trend", "momentum_bot"],
             "sideways": ["grid"],
-            "mean-reverting": ["dip_hunter"],
+            "mean-reverting": ["dip_hunter", "stat_arb_bot"],
             "breakout": ["breakout_bot"],
-            "volatile": ["sniper_bot"],
+            "volatile": ["sniper_bot", "momentum_bot"],
             "scalp": ["micro_scalp"],
             "bounce": ["bounce_scalper"],
         }
@@ -52,6 +52,16 @@ def test_strategy_for_mapping():
     assert strategy_for("scalp", cfg).__name__ == micro_scalp_bot.generate_signal.__name__
     assert strategy_for("bounce", cfg).__name__ == bounce_scalper.generate_signal.__name__
     assert strategy_for("unknown", cfg).__name__ == sniper_bot.generate_signal.__name__
+
+
+def test_strategy_for_momentum_bot():
+    from crypto_bot.strategy import momentum_bot
+
+    data = {"strategy_router": {"regimes": {"trending": ["momentum_bot"], "volatile": ["momentum_bot"]}}}
+    cfg = RouterConfig.from_dict(data)
+
+    assert strategy_for("trending", cfg).__name__ == momentum_bot.generate_signal.__name__
+    assert strategy_for("volatile", cfg).__name__ == momentum_bot.generate_signal.__name__
 
 
 def test_strategy_for_solana_scalping():

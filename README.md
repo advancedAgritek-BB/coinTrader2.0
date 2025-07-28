@@ -93,6 +93,11 @@ needed.
    The optional `rich` package is included and provides colorized
    console output when viewing live positions.
    Exchange connectivity relies on [ccxt](https://github.com/ccxt/ccxt) which is installed with these requirements. Make sure the `ccxt` package is available when running the trading bot.
+   The reinforcement learning strategy selector requires additional packages:
+   `gymnasium` and `stable-baselines3`. These are included in `requirements.txt`.
+   Install them with `pip install -r requirements.txt` when `rl_selector.enabled`
+   is set to `true` in `crypto_bot/config.yaml`. Set `rl_selector.enabled: false`
+   if you prefer not to install these extra dependencies.
 2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:
@@ -102,8 +107,9 @@ needed.
    When dry-run mode is selected you will be prompted for the starting USDT balance.
    The console now refreshes with your wallet balance and any active
    trades in real time. Profitable positions are shown in green while
-   losing ones appear in red. The monitor lists open trades on a single
-   line formatted as `Symbol -- entry -- unrealized PnL`.
+   losing ones appear in red. The monitor prints a single status line
+   followed by additional lines for each open trade formatted as
+   `Symbol -- entry -- unrealized PnL`.
    The program prints "Bot running..." before the [Monitor] lines.
    Before trading begins the bot performs a full market scan to populate
    its caches. Progress is logged and, when `telegram.status_updates` is
@@ -327,12 +333,14 @@ symbol_score_weights:
   liquidity: 0.0
 ```
 * **uncached_volume_multiplier** – extra volume factor applied when a pair is missing from `cache/liquid_pairs.json`.
+* If the cache file does not exist and the initial scan yields no symbols, the bot calls `tasks.refresh_pairs.refresh_pairs_async` to fetch a fresh list before aborting.
 * **min_symbol_age_days** – skip newly listed pairs.
 * **min_symbol_score** – minimum score required for trading.
 * **top_n_symbols** – maximum number of active markets.
 * **max_age_days**, **max_change_pct**, **max_spread_pct**, **max_latency_ms**, **max_vol** – additional scanning limits.
 * **use_numba_scoring** – enable numba acceleration for symbol scoring when available.
-* **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle.
+* **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle. See
+  `scan_cex_arbitrage` in `crypto_bot/main.py` for multi-exchange support.
 * **solana_scanner.gecko_search** – query GeckoTerminal to verify volume for new Solana tokens.
 * **gecko_limit** – maximum simultaneous requests to GeckoTerminal. Reduce this if you encounter HTTP 429 errors.
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
@@ -364,7 +372,8 @@ symbol_score_weights:
 * **exec** – advanced order execution settings.
 * **exit_strategy** – default stop loss/take profit settings plus partial profit
   taking and trailing stops. The trailing stop follows price by 2% after at
-  least 1% gain.
+  least 1% gain. `momentum_bot` uses the `trailing_stop_factor` setting for an
+  ATR-based stop.
 
 ### Strategy and Signals
 * **strategy_allocation** – capital split across strategies.
@@ -434,6 +443,10 @@ regime_overrides:
 * **optimization** – periodic parameter optimisation.
 * **portfolio_rotation** – rotate holdings based on scoring metrics.
 * **arbitrage_enabled** – enable cross-exchange arbitrage features.
+  The previous `cross_chain_arb_bot.py` module has been
+  consolidated into helper functions. Use `scan_cex_arbitrage` or
+  `scan_arbitrage` in `crypto_bot/main.py` when implementing a
+  multi-exchange arbitrage strategy.
 * **scoring_weights** - weighting factors for regime confidence, symbol score and volume metrics.
 * **signal_fusion** – enable to combine scores from multiple strategies via a `fusion_method` for improved selection.
 * **strategy_router** - maps market regimes to lists of strategy names. Each regime also accepts a `<regime>_timeframe` key (e.g. `trending_timeframe: 1h`, `volatile_timeframe: 1m`).
@@ -515,6 +528,21 @@ Repeatedly adding exposure can amplify losses during prolonged downtrends, so
 keep the order size small and stop averaging if drawdown exceeds your risk
 tolerance.
 
+#### Momentum Bot
+The momentum bot rides strong trends using an ATR-based trailing stop. Set
+`momentum_bot.risk.trailing_stop_factor` in `crypto_bot/config.yaml` to control
+the stop distance.
+
+```yaml
+# crypto_bot/config.yaml
+momentum_bot:
+  fast_length: 20
+  slow_length: 50
+  risk:
+    trailing_stop_factor: 1.5  # ATR multiple
+    risk_pct: 0.01
+```
+
 ### Data and Logging
 * **timeframe** – base interval for most indicators (default `15m`).
 * **timeframes** – list of additional intervals cached for reuse by strategies.
@@ -530,6 +558,7 @@ tolerance.
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
 * **ticker_rate_limit** – delay in milliseconds after each ticker API call.
 * **log_to_google** – export trades to Google Sheets.
+* **quiet_mode** – suppress monitor output when stdout is not a TTY.
 * **telegram** – bot token, chat ID and trade notifications. Optional
   **status_updates** and **balance_updates** flags control startup and
   balance alerts.
@@ -1088,11 +1117,39 @@ Run the script from the project root so that `cache/liquid_pairs.json` is
 written where the bot expects it. Executing the command from another
 directory may create a separate `cache` folder and lead to missing symbols.
 Removing the `--once` flag keeps it running on the configured interval.
-To automate updates you can run the script periodically via cron:
+To ensure `cache/liquid_pairs.json` stays current you should schedule this
+command to run automatically. One option is cron:
 
 ```cron
 0 * * * * cd /path/to/coinTrader2.0 && /usr/bin/python3 tasks/refresh_pairs.py
 ```
+You can accomplish the same thing with a systemd timer. Create the following
+service and timer units:
+
+```ini
+# /etc/systemd/system/refresh_pairs.service
+[Unit]
+Description=Update trading pair cache
+
+[Service]
+Type=oneshot
+WorkingDirectory=/path/to/coinTrader2.0
+ExecStart=/usr/bin/python3 tasks/refresh_pairs.py --once
+
+# /etc/systemd/system/refresh_pairs.timer
+[Unit]
+Description=Run refresh_pairs hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Enable it with `sudo systemctl enable --now refresh_pairs.timer`.
+
 Delete `cache/liquid_pairs.json` to force a full rebuild on the next run.
 If you see warnings about unsupported markets in the logs, regenerate the file
 with `tasks/refresh_pairs.py --once`.
