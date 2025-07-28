@@ -17,6 +17,17 @@ def stub_solana_keypair(monkeypatch):
                 return None
 
         monkeypatch.setattr(module, "Keypair", Dummy, raising=False)
+    for var in (
+        "API_KEY",
+        "API_SECRET",
+        "API_PASSPHRASE",
+        "COINBASE_API_KEY",
+        "COINBASE_API_SECRET",
+        "COINBASE_API_PASSPHRASE",
+        "KRAKEN_API_KEY",
+        "KRAKEN_API_SECRET",
+    ):
+        monkeypatch.delenv(var, raising=False)
     yield
 
 
@@ -85,4 +96,31 @@ def test_get_wallet_success(monkeypatch):
     key = wallet_manager.get_wallet()
     assert key == "k"
     assert KP.called == bytes([1, 2, 3, 4])
+
+
+def test_env_creds_no_config(tmp_path, monkeypatch):
+    cfg = tmp_path / "missing.yaml"
+    monkeypatch.setattr(wallet_manager, "CONFIG_FILE", cfg)
+    for k, v in {
+        "COINBASE_API_KEY": "env_key",
+        "COINBASE_API_SECRET": "ZW52X3NlY3JldA==",
+        "COINBASE_API_PASSPHRASE": "env_pass",
+        "KRAKEN_API_KEY": "kr_key",
+        "KRAKEN_API_SECRET": "a3Jfc2VjcmV0",
+    }.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("API_KEY", "env_key")
+    monkeypatch.setenv("API_SECRET", "env_secret")
+
+    def fail(*args, **kwargs):
+        raise AssertionError("input called")
+
+    monkeypatch.setattr("builtins.input", fail)
+    creds = wallet_manager.load_or_create()
+    assert creds["coinbase_api_key"] == "env_key"
+    assert creds["coinbase_api_secret"] == "ZW52X3NlY3JldA=="
+    assert creds["coinbase_passphrase"] == "env_pass"
+    assert creds["kraken_api_key"] == "kr_key"
+    assert creds["kraken_api_secret"] == "a3Jfc2VjcmV0"
+    assert not cfg.exists()
 
