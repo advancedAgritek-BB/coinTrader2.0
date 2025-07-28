@@ -182,6 +182,7 @@ MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 SUPABASE_URL=https://xyzcompany.supabase.co
 SUPABASE_KEY=your_service_key
+LUNARCRUSH_API_KEY=your_lunarcrush_api_key  # optional, LunarCrush social metrics
 token_registry.refresh_interval_minutes=720  # optional cache update interval
 ```
 
@@ -714,6 +715,13 @@ FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-fundin
 
 `volatility_filter.py` will append the instrument symbol directly to this URL
 when requesting funding information.
+
+### LunarCrush API
+
+Sign up at [LunarCrush](https://lunarcrush.com/developers) to generate an API
+key. Set `LUNARCRUSH_API_KEY` in `crypto_bot/.env` or export it in your
+environment so the bot can retrieve social metrics. The free tier allows about
+100 requests per day.
 
 
 4. In `crypto_bot/config.yaml` set:
