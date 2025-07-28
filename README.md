@@ -1468,6 +1468,16 @@ The resulting statistics are written automatically to
 `crypto_bot/logs/strategy_stats.json`. The home page indicates whether the bot
 is running so you can quickly see if it has stopped.
 
+You can also replay historical pool creations on Solana. The
+`backtest.historical_pools` module queries QuickNode for past events and runs
+the sniper heuristics on each one:
+
+```bash
+python -m backtest.historical_pools \
+    --start 2024-01-01 --end 2024-01-02 \
+    --rpc-url https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY
+```
+
 ## Meme Wave Rider
 
 This scalper rides trending meme coins by watching mempool volume alongside
