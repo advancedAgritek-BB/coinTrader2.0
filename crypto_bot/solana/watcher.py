@@ -183,7 +183,8 @@ class PoolWatcher:
                     if not addr or addr in self._seen:
                         continue
                     liquidity = float(item.get("liquidity", 0.0))
-                    if liquidity < self.min_liquidity:
+                    tx_count = int(item.get("txCount", item.get("tx_count", 0)))
+                    if liquidity < self.min_liquidity or tx_count <= 10:
                         continue
                     event = NewPoolEvent(
                         pool_address=addr,
@@ -192,7 +193,7 @@ class PoolWatcher:
                         or "",
                         creator=item.get("creator", ""),
                         liquidity=liquidity,
-                        tx_count=int(item.get("txCount", item.get("tx_count", 0))),
+                        tx_count=tx_count,
                         freeze_authority=item.get("freezeAuthority")
                         or item.get("freeze_authority")
                         or "",
@@ -261,10 +262,15 @@ class PoolWatcher:
                             self._seen.add(addr)
                             try:
                                 df = await self._fetch_snapshot(event.pool_address)
+                                tx_count = len(df)
                                 from coinTrader_Trainer.ml_trainer import predict_regime
                                 regime = predict_regime(df)
                             except Exception:
+                                tx_count = 0
                                 regime = "volatile"
+                            event.tx_count = tx_count
+                            if event.liquidity < self.min_liquidity or tx_count <= 10:
+                                continue
                             if regime not in ["volatile", "breakout"]:
                                 continue
                             yield event
