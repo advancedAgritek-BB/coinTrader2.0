@@ -2,6 +2,7 @@ import asyncio
 import logging
 import types
 import json
+import pandas as pd
 import pytest
 
 from crypto_bot.solana import watcher
@@ -64,19 +65,26 @@ def test_watcher_yields_event(monkeypatch):
                     "tokenMint": "M1",
                     "creator": "C1",
                     "liquidity": 10.5,
-                    "txCount": 3,
+                    "txCount": 11,
                 }
             ]
         }
     }
     session = DummySession(data)
-    monkeypatch.setattr(
-        watcher,
-        "aiohttp",
-        type("M", (), {"ClientSession": lambda: session}),
+    aiohttp_mod = type(
+        "M",
+        (),
+        {
+            "ClientSession": lambda: session,
+            "ClientError": Exception,
+            "ClientResponseError": Exception,
+        },
     )
+    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
 
     w = PoolWatcher("http://test", interval=0)
+    w.websocket_url = None
+    w.program_ids = []
 
     async def run_once():
         gen = w.watch()
@@ -91,7 +99,7 @@ def test_watcher_yields_event(monkeypatch):
     assert event.token_mint == "M1"
     assert event.creator == "C1"
     assert event.liquidity == 10.5
-    assert event.tx_count == 3
+    assert event.tx_count == 11
     assert session.json["method"] == "dex.getNewPools"
     assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
     assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
@@ -110,26 +118,33 @@ def test_min_liquidity_filter(monkeypatch):
                     "tokenMint": "M1",
                     "creator": "C1",
                     "liquidity": 10.0,
-                    "txCount": 1,
+                    "txCount": 15,
                 },
                 {
                     "address": "H",
                     "tokenMint": "M2",
                     "creator": "C2",
                     "liquidity": 60.0,
-                    "txCount": 2,
+                    "txCount": 20,
                 },
             ]
         }
     }
     session = DummySession(data)
-    monkeypatch.setattr(
-        watcher,
-        "aiohttp",
-        type("M", (), {"ClientSession": lambda: session}),
+    aiohttp_mod = type(
+        "M",
+        (),
+        {
+            "ClientSession": lambda: session,
+            "ClientError": Exception,
+            "ClientResponseError": Exception,
+        },
     )
+    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
 
     w = PoolWatcher("http://test", interval=0, min_liquidity=50)
+    w.websocket_url = None
+    w.program_ids = []
 
     async def run_once():
         gen = w.watch()
@@ -141,6 +156,93 @@ def test_min_liquidity_filter(monkeypatch):
     event = asyncio.run(run_once())
     assert event.pool_address == "H"
     assert event.liquidity == 60.0
+
+
+def test_tx_count_filter(monkeypatch):
+    data = {
+        "result": {
+            "pools": [
+                {
+                    "address": "A",
+                    "tokenMint": "M1",
+                    "creator": "C1",
+                    "liquidity": 100.0,
+                    "txCount": 5,
+                },
+                {
+                    "address": "B",
+                    "tokenMint": "M2",
+                    "creator": "C2",
+                    "liquidity": 100.0,
+                    "txCount": 20,
+                },
+def test_ml_filter_blocks_low_score(monkeypatch):
+    data = {
+        "result": {
+            "pools": [
+                {"address": "P1", "tokenMint": "M1", "creator": "C1", "liquidity": 10.0}
+            ]
+        }
+    }
+    session = DummySession(data)
+    monkeypatch.setattr(
+        watcher,
+        "aiohttp",
+        type("M", (), {"ClientSession": lambda: session}),
+    )
+
+    w = PoolWatcher("http://test", interval=0)
+    w.websocket_url = None
+    w.program_ids = []
+    monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, evt: 0.4)
+    async def dummy_sleep(_):
+        pass
+    monkeypatch.setattr(watcher, "asyncio", types.SimpleNamespace(sleep=dummy_sleep))
+
+    w = PoolWatcher("http://test", interval=0, websocket_url="", raydium_program_id="", ml_filter=True)
+
+    async def run_once():
+        gen = w.watch()
+        try:
+            return await asyncio.wait_for(gen.__anext__(), timeout=0.01)
+        except asyncio.TimeoutError:
+            w.stop()
+            await gen.aclose()
+            return None
+
+    event = asyncio.run(run_once())
+    assert event is None
+
+
+def test_ml_filter_allows_high_score(monkeypatch):
+    data = {
+        "result": {
+            "pools": [
+                {"address": "P1", "tokenMint": "M1", "creator": "C1", "liquidity": 10.0}
+            ]
+        }
+    }
+    session = DummySession(data)
+    monkeypatch.setattr(
+        watcher,
+        "aiohttp",
+        type("M", (), {"ClientSession": lambda: session}),
+    )
+    monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, evt: 0.8)
+
+    w = PoolWatcher("http://test", interval=0, websocket_url="", raydium_program_id="", ml_filter=True)
+
+    async def run_once():
+        gen = w.watch()
+        event = await gen.__anext__()
+        w.stop()
+        await gen.aclose()
+        return event
+
+    event = asyncio.run(run_once())
+    assert event.pool_address == "B"
+    assert event.tx_count == 20
+    assert event.pool_address == "P1"
 
 
 def test_env_substitution(monkeypatch):
@@ -162,7 +264,7 @@ def test_watcher_continues_after_error(monkeypatch):
                     "tokenMint": "M2",
                     "creator": "C2",
                     "liquidity": 1.0,
-                    "txCount": 1,
+                    "txCount": 12,
                 }
             ]
         }
@@ -198,7 +300,11 @@ def test_watcher_continues_after_error(monkeypatch):
 
 
 def test_watcher_logs_404_and_continues(monkeypatch, caplog):
-    data_ok = {"pools": [{"address": "P3"}]}
+    data_ok = {
+        "pools": [
+            {"address": "P3", "liquidity": 55, "txCount": 11}
+        ]
+    }
 
     class Dummy404(Exception):
         def __init__(self, status=404):
@@ -250,6 +356,8 @@ def test_watcher_raises_after_consecutive_404(monkeypatch):
     )
     monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
     w = PoolWatcher("http://test", interval=0, max_failures=2)
+    w.websocket_url = None
+    w.program_ids = []
 
     async def run_once():
         gen = w.watch()
@@ -376,6 +484,9 @@ def test_watch_ws_reconnect(monkeypatch):
     )
     monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
     monkeypatch.setattr(watcher, "asyncio", types.SimpleNamespace(sleep=dummy_sleep))
+    async def fake_snap(_self, addr):
+        return pd.DataFrame([{"timestamp": 1}] * 11)
+    monkeypatch.setattr(PoolWatcher, "_fetch_snapshot", fake_snap)
 
     w = PoolWatcher(
         "http://test",
@@ -393,4 +504,45 @@ def test_watch_ws_reconnect(monkeypatch):
 
     event = asyncio.run(run_once())
     assert event.pool_address == "PX"
+
+
+def test_watch_ws_fallback_to_polling(monkeypatch):
+    async def fake_watch_ws(self):
+        self._running = True
+        yield NewPoolEvent(pool_address="WS", token_mint="", creator="", liquidity=0.0)
+        return
+
+    data = {
+        "result": {
+            "pools": [
+                {"address": "PL"}
+            ]
+        }
+    }
+    session = DummySession(data)
+    monkeypatch.setattr(PoolWatcher, "_watch_ws", fake_watch_ws)
+    monkeypatch.setattr(
+        watcher,
+        "aiohttp",
+        type("M", (), {"ClientSession": lambda: session}),
+    )
+
+    w = PoolWatcher(
+        "http://test",
+        interval=0,
+        websocket_url="ws://x",
+        raydium_program_id="PGM",
+    )
+
+    async def run_once():
+        gen = w.watch()
+        evt_ws = await gen.__anext__()
+        evt_poll = await gen.__anext__()
+        w.stop()
+        await gen.aclose()
+        return evt_ws, evt_poll
+
+    evt_ws, evt_poll = asyncio.run(run_once())
+    assert evt_ws.pool_address == "WS"
+    assert evt_poll.pool_address == "PL"
 

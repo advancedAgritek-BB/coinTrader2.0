@@ -1,5 +1,7 @@
 import asyncio
 from pathlib import Path
+import sys
+import types
 
 from crypto_bot.utils import trade_logger
 from crypto_bot.execution import cex_executor
@@ -94,3 +96,35 @@ def test_stop_order_logged(tmp_path, monkeypatch):
     assert fields[6] == "9000"
     text = exec_log.read_text()
     assert text.count("Stop order placed") == 1
+
+
+def test_upload_trade_record_supabase(monkeypatch):
+    calls = {}
+
+    class FakeTable:
+        def insert(self, record):
+            calls["record"] = record
+            return self
+
+        def execute(self):
+            calls["executed"] = True
+            return None
+
+    class FakeClient:
+        def table(self, name):
+            calls["table"] = name
+            return FakeTable()
+
+    monkeypatch.setenv("SUPABASE_URL", "url")
+    monkeypatch.setenv("SUPABASE_KEY", "key")
+    monkeypatch.setitem(
+        sys.modules,
+        "supabase",
+        types.SimpleNamespace(create_client=lambda u, k: FakeClient()),
+    )
+
+    trade_logger.upload_trade_record("XBT/USDT", 100.0, 110.0, "buy", "t")
+
+    assert calls.get("table") == "trade_logs"
+    assert calls["record"]["symbol"] == "XBT/USDT"
+    assert calls.get("executed") is True

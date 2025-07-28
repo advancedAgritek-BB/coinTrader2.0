@@ -6,12 +6,13 @@ import asyncio
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 import os
 
 import aiohttp
 import logging
 import yaml
+import pandas as pd
 
 
 @dataclass
@@ -36,7 +37,6 @@ logger = logging.getLogger(__name__)
 
 class PoolWatcher:
     """Async engine that polls for new pools and yields :class:`NewPoolEvent`."""
-
     def __init__(
         self,
         url: str | None = None,
@@ -45,7 +45,9 @@ class PoolWatcher:
         raydium_program_id: str | None = None,
         max_failures: int = 3,
         min_liquidity: float | None = None,
+        ml_filter: bool | None = None,
     ) -> None:
+        pump_fun_program_id = None
         if (
             url is None
             or interval is None
@@ -58,6 +60,7 @@ class PoolWatcher:
             sniper_cfg = cfg.get("meme_wave_sniper", {})
             pool_cfg = sniper_cfg.get("pool", {})
             safety_cfg = sniper_cfg.get("safety", {})
+            pump_fun_program_id = pool_cfg.get("pump_fun_program_id")
             if url is None:
                 url = pool_cfg.get("url", "")
             if interval is None:
@@ -68,6 +71,8 @@ class PoolWatcher:
                 raydium_program_id = pool_cfg.get("raydium_program_id", "")
             if min_liquidity is None:
                 min_liquidity = float(safety_cfg.get("min_liquidity", 0))
+            if ml_filter is None:
+                ml_filter = bool(pool_cfg.get("ml_filter", False))
         key = os.getenv("HELIUS_KEY")
         if not url or "YOUR_KEY" in url or url.endswith("api-key="):
             if not key:
@@ -89,18 +94,43 @@ class PoolWatcher:
         self.interval = interval
         self.websocket_url = websocket_url
         self.raydium_program_id = raydium_program_id
+        self.program_ids = [self.raydium_program_id]
+        if pump_fun_program_id:
+            self.program_ids.append(pump_fun_program_id)
         self.min_liquidity = float(min_liquidity or 0)
+        self.ml_filter = bool(ml_filter)
         self._running = False
         self._seen: set[str] = set()
         self._max_failures = max_failures
         self._failures = 0
 
+    def _predict_breakout(self, event: NewPoolEvent) -> float:
+        """Return breakout probability using the Supabase snapshot."""
+        if not self.ml_filter or not event.token_mint:
+            return 1.0
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_KEY")
+        if not url or not key:
+            return 1.0
+        try:  # pragma: no cover - optional dependency
+            from supabase import create_client
+            from coinTrader_Trainer import regime_lgbm
+
+            client = create_client(url, key)
+            data = client.table("snapshots").select("*").eq("token_mint", event.token_mint).single().execute()
+            snapshot = getattr(data, "data", data)
+            return float(regime_lgbm.predict(snapshot))
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.error("ML filter failed: %s", exc)
+            return 1.0
+
     async def watch(self) -> AsyncGenerator[NewPoolEvent, None]:
         """Yield :class:`NewPoolEvent` objects as they are discovered."""
-        if self.websocket_url and self.raydium_program_id:
+        if self.websocket_url and any(self.program_ids):
             async for evt in self._watch_ws():
                 yield evt
-            return
+            if not self._running:
+                return
 
         self._running = True
         async with aiohttp.ClientSession() as session:
@@ -152,17 +182,17 @@ class PoolWatcher:
                     if not addr or addr in self._seen:
                         continue
                     liquidity = float(item.get("liquidity", 0.0))
-                    if liquidity < self.min_liquidity:
+                    tx_count = int(item.get("txCount", item.get("tx_count", 0)))
+                    if liquidity < self.min_liquidity or tx_count <= 10:
                         continue
-                    self._seen.add(addr)
-                    yield NewPoolEvent(
+                    event = NewPoolEvent(
                         pool_address=addr,
                         token_mint=item.get("tokenMint")
                         or item.get("token_mint")
                         or "",
                         creator=item.get("creator", ""),
                         liquidity=liquidity,
-                        tx_count=int(item.get("txCount", item.get("tx_count", 0))),
+                        tx_count=tx_count,
                         freeze_authority=item.get("freezeAuthority")
                         or item.get("freeze_authority")
                         or "",
@@ -171,6 +201,10 @@ class PoolWatcher:
                         or "",
                         timestamp=float(item.get("timestamp", 0.0)),
                     )
+                    if self._predict_breakout(event) < 0.5:
+                        continue
+                    self._seen.add(addr)
+                    yield event
 
                 await asyncio.sleep(self.interval)
 
@@ -183,14 +217,15 @@ class PoolWatcher:
                 reconnect = False
                 try:
                     async with session.ws_connect(self.websocket_url) as ws:
-                        await ws.send_json(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": 1,
-                                "method": "programSubscribe",
-                                "params": [self.raydium_program_id, {"encoding": "jsonParsed"}],
-                            }
-                        )
+                        for prog_id in self.program_ids:
+                            await ws.send_json(
+                                {
+                                    "jsonrpc": "2.0",
+                                    "id": 1,
+                                    "method": "programSubscribe",
+                                    "params": [prog_id, {"encoding": "jsonParsed"}],
+                                }
+                            )
                         backoff = 0
                         async for msg in ws:
                             if not self._running:
@@ -215,12 +250,29 @@ class PoolWatcher:
                             if not addr or addr in self._seen:
                                 continue
                             self._seen.add(addr)
-                            yield NewPoolEvent(
+                            event = NewPoolEvent(
                                 pool_address=addr,
                                 token_mint="",
                                 creator="",
                                 liquidity=0.0,
                             )
+                            if self._predict_breakout(event) < 0.5:
+                                continue
+                            self._seen.add(addr)
+                            try:
+                                df = await self._fetch_snapshot(event.pool_address)
+                                tx_count = len(df)
+                                from coinTrader_Trainer.ml_trainer import predict_regime
+                                regime = predict_regime(df)
+                            except Exception:
+                                tx_count = 0
+                                regime = "volatile"
+                            event.tx_count = tx_count
+                            if event.liquidity < self.min_liquidity or tx_count <= 10:
+                                continue
+                            if regime not in ["volatile", "breakout"]:
+                                continue
+                            yield event
                 except aiohttp.WSServerHandshakeError as e:
                     reconnect = True
                     if e.status == 401:
@@ -242,3 +294,23 @@ class PoolWatcher:
     def stop(self) -> None:
         """Stop the watcher loop."""
         self._running = False
+
+    async def _fetch_snapshot(self, pool_addr: str) -> pd.DataFrame:
+        """Return a simple OHLCV-like snapshot for ``pool_addr``."""
+        async with aiohttp.ClientSession() as sess:
+            async with sess.post(
+                self.url,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "getSignaturesForAddress",
+                    "params": [pool_addr, {"limit": 20}],
+                },
+            ) as resp:
+                data = await resp.json()
+        result = data.get("result", [])
+        rows = [
+            {"timestamp": r.get("blockTime", 0), "volume": 1}
+            for r in result
+        ]
+        return pd.DataFrame(rows)

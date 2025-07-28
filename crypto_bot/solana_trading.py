@@ -129,8 +129,12 @@ async def sniper_trade(
     profit_threshold: float = 0.2,
     mempool_monitor: SolanaMempoolMonitor | None = None,
     mempool_cfg: dict | None = None,
+    config: dict | None = None,
 ) -> Dict:
     """Buy ``target_token`` then convert profits when threshold reached."""
+
+    if mempool_monitor is None and (mempool_cfg or {}).get("enabled"):
+        mempool_monitor = SolanaMempoolMonitor()
 
     trade = await execute_swap(
         base_token,
@@ -145,6 +149,15 @@ async def sniper_trade(
     tx_sig = trade.get("tx_hash")
     if not tx_sig or tx_sig == "DRYRUN":
         return trade
+
+    if config:
+        from crypto_bot.solana.exit import quick_exit
+
+        async def price_feed():
+            return await _fetch_price(target_token, base_token, max_retries=3)
+
+        entry_price = await price_feed()
+        await quick_exit(price_feed, entry_price, config)
 
     profit = await monitor_profit(tx_sig, profit_threshold)
     if profit > 0:
@@ -199,6 +212,9 @@ async def cross_chain_trade(
         token_in = base_mint
         token_out = quote_mint
         cex_side = "buy"
+
+    if mempool_monitor is None and (mempool_cfg or {}).get("enabled"):
+        mempool_monitor = SolanaMempoolMonitor()
 
     dex_trade = await execute_swap(
         token_in,
