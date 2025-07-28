@@ -1374,6 +1374,25 @@ The resulting statistics are written automatically to
 `crypto_bot/logs/strategy_stats.json`. The home page indicates whether the bot
 is running so you can quickly see if it has stopped.
 
+## Meme Wave Rider
+
+This scalper rides trending meme coins by watching mempool volume alongside
+Twitter sentiment. A rolling volume window flags spikes in Solana swaps while a
+sentiment API call checks for positive chatter. When both metrics exceed your
+thresholds, a trade is executed using `solana_trading.py`.
+
+### Configuration
+
+Add a `meme_wave_bot` section to `crypto_bot/config.yaml`:
+
+```yaml
+meme_wave_bot:
+  enabled: true
+  mempool_window: 60        # seconds to track volume
+  volume_threshold: 5000    # SOL per minute
+  sentiment_threshold: 0.7  # positive ratio
+```
+
 ## PhaseRunner
 
 `PhaseRunner` orchestrates the main trading cycle by executing a list of async
