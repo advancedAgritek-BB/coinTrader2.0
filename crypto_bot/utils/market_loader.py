@@ -1532,6 +1532,25 @@ async def load_ohlcv_parallel(
     if not symbols:
         return {}
 
+    if (
+        use_websocket
+        and hasattr(exchange, "watch_ohlcv")
+        and len(symbols) > 1
+    ):
+        params = inspect.signature(exchange.watch_ohlcv).parameters
+        if "symbols" in params and not any(since_map.get(s) for s in symbols):
+            try:
+                result = await _watch_ohlcv_with_retry(
+                    exchange,
+                    symbols=list(symbols),
+                    timeframe=timeframe,
+                    limit=limit,
+                )
+                if isinstance(result, dict):
+                    return result
+            except Exception:
+                pass
+
     if max_concurrent is not None:
         if not isinstance(max_concurrent, int) or max_concurrent < 1:
             raise ValueError("max_concurrent must be a positive integer or None")
