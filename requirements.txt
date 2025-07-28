@@ -42,4 +42,5 @@ pytest-asyncio
 supabase
 gymnasium
 stable-baselines3
+lunarcrush
 

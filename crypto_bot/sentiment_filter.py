@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 
 import requests
+from lunarcrush import LunarCrush as LunarCrushClient
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from pathlib import Path
@@ -38,14 +39,40 @@ def fetch_fng_index() -> int:
     return 50
 
 
-def fetch_twitter_sentiment(query: str = "bitcoin") -> int:
-    """Return sentiment score for ``query`` between 0-100."""
+def fetch_lunarcrush_sentiment(symbol: str) -> int:
+    """Return LunarCrush sentiment score for ``symbol`` between 0-100."""
+    key = os.getenv("LUNARCRUSH_API_KEY")
+    if not key:
+        return 50
+    try:
+        client = LunarCrushClient(api_key=key)
+        data = client.get_assets(symbol=[symbol])
+        if isinstance(data, dict):
+            rows = data.get("data")
+            if isinstance(rows, list) and rows:
+                sentiment = rows[0].get("average_sentiment")
+                if sentiment is not None:
+                    return int((float(sentiment) + 1) * 50)
+    except Exception as exc:
+        logger.error("Failed to fetch LunarCrush sentiment: %s", exc)
+    return 50
+
+
+def fetch_twitter_sentiment(query: str = "bitcoin", symbol: str | None = None) -> int:
+    """Return sentiment score for ``query`` between 0-100.
+
+    When ``symbol`` is provided and ``LUNARCRUSH_API_KEY`` is set this will
+    return LunarCrush sentiment for that symbol instead of calling the
+    external Twitter API.
+    """
     mock = os.getenv("MOCK_TWITTER_SENTIMENT")
     if mock is not None:
         try:
             return int(mock)
         except ValueError:
             return 50
+    if symbol and os.getenv("LUNARCRUSH_API_KEY"):
+        return fetch_lunarcrush_sentiment(symbol)
     try:
         resp = requests.get(f"{SENTIMENT_URL}?q={query}", timeout=5)
         resp.raise_for_status()
@@ -57,18 +84,18 @@ def fetch_twitter_sentiment(query: str = "bitcoin") -> int:
     return 50
 
 
-def too_bearish(min_fng: int, min_sentiment: int) -> bool:
+def too_bearish(min_fng: int, min_sentiment: int, symbol: str | None = None) -> bool:
     """Return ``True`` when sentiment is below thresholds."""
     fng = fetch_fng_index()
-    sentiment = fetch_twitter_sentiment()
+    sentiment = fetch_twitter_sentiment(symbol=symbol)
     logger.info("FNG %s, sentiment %s", fng, sentiment)
     return fng < min_fng or sentiment < min_sentiment
 
 
-def boost_factor(bull_fng: int, bull_sentiment: int) -> float:
+def boost_factor(bull_fng: int, bull_sentiment: int, symbol: str | None = None) -> float:
     """Return a trade size boost factor based on strong sentiment."""
     fng = fetch_fng_index()
-    sentiment = fetch_twitter_sentiment()
+    sentiment = fetch_twitter_sentiment(symbol=symbol)
     if fng > bull_fng and sentiment > bull_sentiment:
         factor = 1 + ((fng - bull_fng) + (sentiment - bull_sentiment)) / 200
         logger.info("Applying boost factor %.2f", factor)
