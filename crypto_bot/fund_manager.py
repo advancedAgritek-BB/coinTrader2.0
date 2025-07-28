@@ -131,6 +131,8 @@ async def auto_convert_funds(
         logger.info("Conversion result: %s", result)
         return result
     else:
+        if mempool_monitor is None and (mempool_cfg or {}).get("enabled"):
+            mempool_monitor = SolanaMempoolMonitor()
         try:
             result = await execute_swap(
                 from_mint,

@@ -25,4 +25,6 @@ async def snipe(event: NewPoolEvent, score: float, cfg: Mapping[str, object]) ->
         dry_run=bool(cfg.get("dry_run", True)),
         slippage_bps=int(cfg.get("slippage_bps", 50)),
         notifier=cfg.get("notifier"),
+        mempool_monitor=cfg.get("mempool_monitor"),
+        mempool_cfg=cfg.get("mempool_cfg"),
     )

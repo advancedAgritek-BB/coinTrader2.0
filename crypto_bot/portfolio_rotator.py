@@ -88,8 +88,14 @@ class PortfolioRotator:
         wallet: str,
         current_holdings: Dict[str, float],
         notifier: TelegramNotifier | None = None,
+        *,
+        mempool_monitor: SolanaMempoolMonitor | None = None,
+        mempool_cfg: dict | None = None,
     ) -> Dict[str, float]:
         """Rebalance holdings toward the highest scored assets."""
+
+        if mempool_monitor is None and (mempool_cfg or {}).get("enabled"):
+            mempool_monitor = SolanaMempoolMonitor()
 
         method = self.config.get("scoring_method", "sharpe")
         lookback = self.config.get("lookback_days", 30)
@@ -164,6 +170,8 @@ class PortfolioRotator:
                 amount,
                 dry_run=True,
                 notifier=notifier,
+                mempool_monitor=mempool_monitor,
+                mempool_cfg=mempool_cfg,
             )
             new_alloc.pop(token)
             new_alloc[target] = new_alloc.get(target, 0) + amount

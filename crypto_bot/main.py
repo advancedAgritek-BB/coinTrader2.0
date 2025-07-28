@@ -1351,6 +1351,8 @@ async def execute_signals(ctx: BotContext) -> None:
                         dry_run=ctx.config.get("execution_mode") == "dry_run",
                         slippage_bps=ctx.config.get("solana_slippage_bps", 50),
                         notifier=ctx.notifier,
+                        mempool_monitor=ctx.mempool_monitor,
+                        mempool_cfg=ctx.mempool_cfg,
                     )
                 )
                 SNIPER_TASKS.add(task)
@@ -1850,7 +1852,14 @@ async def _rotation_loop(
                     k: (v.get("total") if isinstance(v, dict) else v)
                     for k, v in bal.items()
                 }
-                await rotator.rotate(exchange, wallet, holdings, notifier)
+                await rotator.rotate(
+                    exchange,
+                    wallet,
+                    holdings,
+                    notifier,
+                    mempool_monitor=ctx.mempool_monitor,
+                    mempool_cfg=ctx.mempool_cfg,
+                )
         except asyncio.CancelledError:
             break
         except Exception as exc:  # pragma: no cover - rotation errors
