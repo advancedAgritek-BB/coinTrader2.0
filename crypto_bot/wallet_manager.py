@@ -59,8 +59,8 @@ def _sanitize_secret(secret: str) -> str:
 
 
 def _env_or_prompt(name: str, prompt: str) -> str:
-    """Return environment variable value or prompt the user."""
-    return os.getenv(name) or input(prompt)
+    """Return environment variable value or empty string if unset."""
+    return os.getenv(name, "")
 
 
 def load_external_secrets(provider: str, path: str) -> Dict[str, str]:
@@ -157,6 +157,10 @@ def load_or_create() -> dict:
             logger.info("Creating new user configuration at %s", CONFIG_FILE)
             with open(CONFIG_FILE, "w") as f:
                 yaml.safe_dump(creds, f)
+        logger.info("user_config.yaml not found; credentials must be provided via .env")
+        logger.info("Creating new user configuration at %s", CONFIG_FILE)
+        with open(CONFIG_FILE, "w") as f:
+            yaml.safe_dump(creds, f)
 
     provider = os.getenv("SECRETS_PROVIDER")
     if provider:

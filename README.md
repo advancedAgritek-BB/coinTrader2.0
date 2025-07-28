@@ -101,7 +101,7 @@ needed.
    Install them with `pip install -r requirements.txt` when `rl_selector.enabled`
    is set to `true` in `crypto_bot/config.yaml`. Set `rl_selector.enabled: false`
    if you prefer not to install these extra dependencies.
-2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials.
+2. Create `crypto_bot/.env` and enter your API credentials. The `wallet_manager.py` script simply reads these values from `.env` without prompting when they are present.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:
    ```bash
@@ -146,7 +146,7 @@ needed.
    Save the file and type `reload` in the console or send `/reload` via Telegram
    to apply the changes immediately.
 
-Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
+Populate `crypto_bot/.env` with your exchange credentials instead of running `wallet_manager.py` interactively. The wallet manager simply loads values from this file without prompting when they exist. Set `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` to load credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`.
 
 ## Configuration Files
 
@@ -673,15 +673,10 @@ cap.
 
 
 1. Create API keys on **Coinbase Advanced Trade** or **Kraken**.
-2. Run `python crypto_bot/wallet_manager.py` to generate `user_config.yaml`. Any
-   credentials found in the environment will be used automatically.
-3. Place your API keys in `crypto_bot/.env` as shown in the configuration
-   section above. Environment variables take precedence over values stored in
-   `user_config.yaml`.
-3. Fill out `crypto_bot/.env` with your API keys and optional `FERNET_KEY`.
-   Environment variables take precedence over values stored in
-   `user_config.yaml`. If you prefer to enter credentials interactively,
-   leave the entries commented out.
+2. Fill out `crypto_bot/.env` with your API keys and optional `FERNET_KEY`.
+   Running `python crypto_bot/wallet_manager.py` will simply load these values
+   from `.env` without prompting. Environment variables take precedence over any
+   values stored in `user_config.yaml`.
 
    ```env
    # EXCHANGE=coinbase  # or kraken
