@@ -52,6 +52,7 @@ __all__ = [
         "lstm_bot",
         "sniper_bot",
         "trend_bot",
+        "lstm_bot",
         "sniper_solana",
         "solana_scalping",
     ]
