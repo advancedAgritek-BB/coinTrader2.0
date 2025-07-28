@@ -11,6 +11,11 @@ import pandas as pd
 import numpy as np
 import ccxt
 import aiohttp
+
+try:  # optional redis for caching
+    import redis  # type: ignore
+except Exception:  # pragma: no cover - redis optional
+    redis = None
 import datetime
 import base58
 from .gecko import gecko_request
@@ -56,6 +61,27 @@ MAX_WS_LIMIT = 500
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 STATUS_UPDATES = True
 SEMA: asyncio.Semaphore | None = None
+
+# Redis settings
+REDIS_TTL = 3600  # cache expiry in seconds
+_REDIS_URL: str | None = None
+_REDIS_CONN: Any | None = None
+
+def _get_redis_conn(url: str | None):
+    """Return Redis connection for ``url`` if available."""
+    global _REDIS_URL, _REDIS_CONN
+    if not url or redis is None or not hasattr(redis, "Redis"):
+        return None
+    if _REDIS_CONN is None or url != _REDIS_URL:
+        try:
+            if hasattr(redis.Redis, "from_url"):
+                _REDIS_CONN = redis.Redis.from_url(url)
+            else:  # pragma: no cover - older redis package
+                _REDIS_CONN = redis.Redis()
+            _REDIS_URL = url
+        except Exception:
+            _REDIS_CONN = None
+    return _REDIS_CONN
 
 # Mapping of common symbols to CoinGecko IDs for OHLC fallback
 COINGECKO_IDS = {
@@ -1662,6 +1688,22 @@ async def _update_ohlcv_cache_inner(
 
     from crypto_bot.regime.regime_classifier import clear_regime_cache
 
+    # Redis warm cache
+    redis_conn = _get_redis_conn((config or {}).get("redis_url"))
+    if redis_conn:
+        for sym in symbols:
+            try:
+                raw = redis_conn.get(f"ohlcv:{sym}:{timeframe}")
+            except Exception:
+                raw = None
+            if raw:
+                try:
+                    if isinstance(raw, bytes):
+                        raw = raw.decode()
+                    cache[sym] = pd.read_json(raw, orient="split")
+                except Exception:
+                    pass
+
     # Use the provided limit without enforcing a fixed minimum
     limit = int(limit)
     # Request the number of candles specified by the caller
@@ -1842,6 +1884,15 @@ async def _update_ohlcv_cache_inner(
             cache[sym] = cache[sym].tail(limit).reset_index(drop=True)
             cache[sym]["return"] = cache[sym]["close"].pct_change()
             clear_regime_cache(sym, timeframe)
+            if redis_conn:
+                try:
+                    redis_conn.setex(
+                        f"ohlcv:{sym}:{timeframe}",
+                        REDIS_TTL,
+                        cache[sym].to_json(orient="split"),
+                    )
+                except Exception:
+                    pass
     logger.info("Completed OHLCV update for timeframe %s", timeframe)
     return cache
 

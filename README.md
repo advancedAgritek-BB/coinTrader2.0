@@ -597,6 +597,7 @@ flash_crash_scalper:
 * **loop_interval_minutes** – delay between trading cycles (default `0.05`). Shorter delays increase CPU usage as the loop runs more often.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
 * **ohlcv_batch_size** – number of symbols grouped per OHLCV request.
+* **redis_url** – optional Redis connection string for caching OHLCV data.
 * **max_parallel** – number of markets processed concurrently.
 * **gecko_limit** – concurrent GeckoTerminal requests.
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
@@ -613,6 +614,8 @@ flash_crash_scalper:
 * **tax_tracking** – CSV export of executed trades.
 * **metrics_enabled**, **metrics_backend**, **metrics_output_file** – cycle metrics output.
 * **testing_mode** – indicates a sandbox environment.
+
+Set `redis_url` to a standard Redis connection string (e.g. `redis://localhost:6379/0`) to cache recent OHLCV candles and reduce API calls.
 
 ### Kraken Call Rate Limits
 
