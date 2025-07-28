@@ -37,6 +37,14 @@ def execute_trade(exchange: ccxt.Exchange, symbol: str, side: str, amount: float
             err_msg = notifier.notify(f"Order failed: {e}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
+            logger.error(
+                "Order failed - symbol=%s side=%s amount=%s: %s",
+                symbol,
+                side,
+                amount,
+                e,
+                exc_info=True,
+            )
             return
     else:
         order = {'symbol': symbol, 'side': side, 'amount': amount, 'dry_run': True}

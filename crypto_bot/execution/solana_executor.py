@@ -174,7 +174,14 @@ async def execute_swap(
                     logger.error("Failed to send message: %s", err_skip)
                 return {}
         except Exception as err:  # pragma: no cover - network
-            logger.warning("Slippage check failed: %s", err)
+            logger.warning(
+                "Slippage check failed for %s->%s amount=%s: %s",
+                token_in,
+                token_out,
+                amount,
+                err,
+                exc_info=True,
+            )
 
         async with session.post(
             JUPITER_SWAP_URL,

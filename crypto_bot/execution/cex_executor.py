@@ -166,6 +166,14 @@ def execute_trade(
             err_msg = notifier.notify(f"Order failed: {exc}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
+            logger.error(
+                "Order failed - symbol=%s side=%s amount=%s: %s",
+                symbol,
+                side,
+                size,
+                exc,
+                exc_info=True,
+            )
             return {}
 
     err = notifier.notify(f"Placing {side} order for {amount} {symbol}")
@@ -376,6 +384,14 @@ async def execute_trade_async(
             err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
+            logger.error(
+                "Order failed - symbol=%s side=%s amount=%s: %s",
+                symbol,
+                side,
+                amount,
+                e,
+                exc_info=True,
+            )
             return {}
     err = notifier.notify(f"Order executed: {order}")
     if err:
@@ -464,6 +480,14 @@ def place_stop_order(
             err_msg = notifier.notify(f"Stop order failed: {e}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
+            logger.error(
+                "Stop order failed - symbol=%s side=%s amount=%s: %s",
+                symbol,
+                side,
+                amount,
+                e,
+                exc_info=True,
+            )
             return {}
     err = notifier.notify(f"Stop order submitted: {order}")
     if err:
