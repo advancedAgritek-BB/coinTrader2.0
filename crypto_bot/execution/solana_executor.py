@@ -36,7 +36,6 @@ async def execute_swap(
     mempool_cfg: Optional[Dict] = None,
     config: Optional[Dict] = None,
     jito_key: Optional[str] = None,
-    max_retries: int = 1,
     max_retries: int = 3,
 ) -> Dict:
     """Execute a swap on Solana using the Jupiter aggregator.
@@ -136,9 +135,6 @@ async def execute_swap(
     client = Client(rpc_url)
 
     async with aiohttp.ClientSession() as session:
-        attempt = 0
-        while True:
-        for attempt in range(1, max_retries + 1):
         for attempt in range(max_retries):
             try:
                 async with session.get(
@@ -161,36 +157,6 @@ async def execute_swap(
                         logger.error("Failed to send message: %s", err_msg)
                     return {}
                 await asyncio.sleep(1)
-                attempt += 1
-                    if getattr(quote_resp, "status", 200) >= 500:
-                        raise aiohttp.ClientResponseError(
-                            quote_resp.request_info,
-                            quote_resp.history,
-                            status=quote_resp.status,
-                            message=quote_resp.reason,
-                            headers=quote_resp.headers,
-                        )
-                    quote_resp.raise_for_status()
-                    quote_data = await quote_resp.json()
-                break
-            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-                logger.warning(
-                    "Quote request failed (attempt %s/%s): %s",
-                    attempt,
-                    max_retries,
-                    err,
-                    exc_info=True,
-                )
-                if attempt == max_retries:
-                    logger.error("Failed to fetch Jupiter quote after %s attempts", max_retries)
-                    nerr = notifier.notify("Swap failed: could not fetch quote")
-                    if nerr:
-                        logger.error("Failed to send message: %s", nerr)
-                    raise RuntimeError("Failed to fetch Jupiter quote") from err
-                await asyncio.sleep(2 ** attempt)
-                    quote_resp.raise_for_status()
-                    quote_data = await quote_resp.json()
-                break
             except Exception as err:
                 if attempt < max_retries - 1:
                     await asyncio.sleep(1)
@@ -203,6 +169,22 @@ async def execute_swap(
             logger.warning("No routes returned from Jupiter")
             return {}
         route = quote_data["data"][0]
+
+        # Abort if available liquidity is too low
+        liq = route.get("liquidity")
+        if liq is None:
+            try:
+                liq = (route.get("marketInfos") or [{}])[0].get("liquidity")
+            except Exception:
+                liq = None
+        if liq is not None:
+            max_use = amount * config.get("max_liquidity_usage", 0.8)
+            if liq < max_use:
+                logger.warning("Swap aborted due to low liquidity: %s", liq)
+                err = notifier.notify("Swap aborted: insufficient liquidity")
+                if err:
+                    logger.error("Failed to send message: %s", err)
+                return {}
 
         try:
             async with session.get(
