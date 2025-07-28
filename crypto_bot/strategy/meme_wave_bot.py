@@ -32,7 +32,13 @@ async def trade(symbol: str, amount: float, cfg: Mapping[str, object]) -> dict:
 
 async def exit_trade(price_feed, entry_price: float, cfg: Mapping[str, float]) -> dict:
     """Exit a meme-wave trade using :func:`monitor_price`."""
-    return await monitor_price(price_feed, entry_price, cfg)
+    return await monitor_price(
+        price_feed,
+        entry_price,
+        cfg,
+        mempool_monitor=cfg.get("mempool_monitor"),
+        mempool_cfg=cfg.get("mempool_cfg"),
+    )
 
 
 def generate_signal(

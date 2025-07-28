@@ -1760,7 +1760,13 @@ async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
             return pos["entry_price"]
         return float(df["close"].iloc[-1])
 
-    res = await monitor_price(feed, pos["entry_price"], {})
+    res = await monitor_price(
+        feed,
+        pos["entry_price"],
+        {},
+        mempool_monitor=ctx.mempool_monitor,
+        mempool_cfg=ctx.mempool_cfg,
+    )
     exit_price = res.get("exit_price", feed())
 
     await cex_trade_async(
