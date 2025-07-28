@@ -7,7 +7,7 @@ from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.execution import executor as simple_executor
 
 
-class DummyExchange:
+class DummyStopExchange:
     def create_order(self, symbol, type_, side, amount, params=None):
         return {
             "id": "1",
@@ -39,7 +39,7 @@ def test_place_stop_order_dry_run(monkeypatch):
 
     notifier = DummyNotifier()
     order = place_stop_order(
-        DummyExchange(),
+        DummyStopExchange(),
         "XBT/USDT",
         "sell",
         1,
@@ -58,7 +58,7 @@ import pytest
 from crypto_bot.execution import cex_executor
 
 
-class DummyExchange:
+class DummyMarketExchange:
     def __init__(self):
         self.called = False
 
@@ -97,7 +97,7 @@ def test_execute_trade_rest_path(monkeypatch):
     monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
-    ex = DummyExchange()
+    ex = DummyMarketExchange()
     notifier = DummyNotifier()
     order = cex_executor.execute_trade(
         ex,
@@ -222,7 +222,7 @@ def test_execute_trade_calls_sync(monkeypatch):
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
 
-    ex = DummyExchange()
+    ex = DummyMarketExchange()
     cex_executor.execute_trade(
         ex,
         None,
@@ -447,7 +447,7 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
     assert float(row.split(",")[3]) > 0
 
 
-def test_execute_trade_async_retries(monkeypatch):
+def test_execute_trade_async_retries_network_error(monkeypatch):
     calls = {"count": 0}
     delays = []
 
