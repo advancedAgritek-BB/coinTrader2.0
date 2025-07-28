@@ -73,6 +73,11 @@ def test_load_config_returns_dict():
     assert isinstance(fc_bot, dict)
     for key in ["drop_thr", "vol_thr", "tp_thr"]:
         assert key in fc_bot
+    assert "cross_chain_arb_bot" in config
+    cca = config["cross_chain_arb_bot"]
+    assert isinstance(cca, dict)
+    for key in ["pair", "spread_threshold", "fee_threshold"]:
+        assert key in cca
 
     assert "dca" in config
     dca_cfg = config["dca"]

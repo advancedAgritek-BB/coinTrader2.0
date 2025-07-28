@@ -41,5 +41,7 @@ base58
 pytest-asyncio
 supabase
 gymnasium
+torch
 stable-baselines3
+lunarcrush
 
