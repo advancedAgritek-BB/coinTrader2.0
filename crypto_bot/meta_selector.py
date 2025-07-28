@@ -26,6 +26,7 @@ from crypto_bot.strategy import (
     solana_scalping,
     lstm_bot,
     meme_wave_bot,
+    flash_crash_bot,
 )
 
 LOG_FILE = LOG_DIR / "strategy_performance.json"
@@ -98,6 +99,7 @@ _STRATEGY_FN_MAP = {
     "solana_scalping_bot": solana_scalping.generate_signal,
     "dca": dca_bot.generate_signal,
     "dca_bot": dca_bot.generate_signal,
+    "flash_crash_bot": flash_crash_bot.generate_signal,
 }
 _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {}
 
@@ -128,6 +130,7 @@ _register(lstm_bot, "lstm_bot")
 _register(solana_scalping, "solana_scalping", "solana_scalping_bot")
 _register(meme_wave_bot, "meme_wave_bot")
 _register(dca_bot, "dca", "dca_bot")
+_register(flash_crash_bot, "flash_crash_bot")
 
 
 def get_strategy_by_name(

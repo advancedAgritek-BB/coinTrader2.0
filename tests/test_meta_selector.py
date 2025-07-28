@@ -89,6 +89,12 @@ def test_strategy_map_contains_meme_wave_bot():
     )
 
 
+def test_strategy_map_contains_flash_crash_bot():
+    from crypto_bot.strategy import flash_crash_bot
+
+    assert (
+        meta_selector._STRATEGY_FN_MAP.get("flash_crash_bot")
+        is flash_crash_bot.generate_signal
 def test_strategy_map_contains_lstm_bot():
     from crypto_bot.strategy import lstm_bot
 
