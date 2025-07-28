@@ -6,6 +6,7 @@ except Exception:  # pragma: no cover - optional dependency
     ccxt = types.SimpleNamespace()
 from typing import Dict
 from pathlib import Path
+import time
 
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.trade_logger import log_trade
@@ -24,20 +25,43 @@ def load_exchange(api_key: str, api_secret: str) -> ccxt.Exchange:
     return exchange
 
 
-def execute_trade(exchange: ccxt.Exchange, symbol: str, side: str, amount: float, config: Dict, notifier: TelegramNotifier, dry_run: bool = True) -> None:
+def execute_trade(
+    exchange: ccxt.Exchange,
+    symbol: str,
+    side: str,
+    amount: float,
+    config: Dict,
+    notifier: TelegramNotifier,
+    dry_run: bool = True,
+    max_retries: int = 3,
+) -> None:
+    """Execute a market trade with optional retry logic.
+
+    Parameters
+    ----------
+    max_retries:
+        Number of attempts when order placement fails due to a transient
+        error. Defaults to ``3``.
+    """
+
     pre_msg = f"Placing {side} order for {amount} {symbol}"
     err = notifier.notify(pre_msg)
     if err:
         logger.error("Failed to send message: %s", err)
 
     if not dry_run:
-        try:
-            order = exchange.create_market_order(symbol, side, amount)
-        except Exception as e:
-            err_msg = notifier.notify(f"Order failed: {e}")
-            if err_msg:
-                logger.error("Failed to send message: %s", err_msg)
-            return
+        for attempt in range(max_retries):
+            try:
+                order = exchange.create_market_order(symbol, side, amount)
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                err_msg = notifier.notify(f"Order failed: {e}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                return
     else:
         order = {'symbol': symbol, 'side': side, 'amount': amount, 'dry_run': True}
 

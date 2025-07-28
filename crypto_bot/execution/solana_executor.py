@@ -35,8 +35,15 @@ async def execute_swap(
     mempool_cfg: Optional[Dict] = None,
     config: Optional[Dict] = None,
     jito_key: Optional[str] = None,
+    max_retries: int = 3,
 ) -> Dict:
-    """Execute a swap on Solana using the Jupiter aggregator."""
+    """Execute a swap on Solana using the Jupiter aggregator.
+
+    Parameters
+    ----------
+    max_retries:
+        Number of attempts when network calls fail. Defaults to ``3``.
+    """
 
     if notifier is None:
         if telegram_token is None or chat_id is None:
@@ -127,18 +134,29 @@ async def execute_swap(
     client = Client(rpc_url)
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(
-            JUPITER_QUOTE_URL,
-            params={
-                "inputMint": token_in,
-                "outputMint": token_out,
-                "amount": int(amount),
-                "slippageBps": slippage_bps,
-            },
-            timeout=10,
-        ) as quote_resp:
-            quote_resp.raise_for_status()
-            quote_data = await quote_resp.json()
+        for attempt in range(max_retries):
+            try:
+                async with session.get(
+                    JUPITER_QUOTE_URL,
+                    params={
+                        "inputMint": token_in,
+                        "outputMint": token_out,
+                        "amount": int(amount),
+                        "slippageBps": slippage_bps,
+                    },
+                    timeout=10,
+                ) as quote_resp:
+                    quote_resp.raise_for_status()
+                    quote_data = await quote_resp.json()
+                break
+            except Exception as err:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                err_msg = notifier.notify(f"Quote error: {err}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                return {}
         if not quote_data.get("data"):
             logger.warning("No routes returned from Jupiter")
             return {}
@@ -176,13 +194,24 @@ async def execute_swap(
         except Exception as err:  # pragma: no cover - network
             logger.warning("Slippage check failed: %s", err)
 
-        async with session.post(
-            JUPITER_SWAP_URL,
-            json={"route": route, "userPublicKey": str(keypair.public_key)},
-            timeout=10,
-        ) as swap_resp:
-            swap_resp.raise_for_status()
-            swap_data = await swap_resp.json()
+        for attempt in range(max_retries):
+            try:
+                async with session.post(
+                    JUPITER_SWAP_URL,
+                    json={"route": route, "userPublicKey": str(keypair.public_key)},
+                    timeout=10,
+                ) as swap_resp:
+                    swap_resp.raise_for_status()
+                    swap_data = await swap_resp.json()
+                break
+            except Exception as err:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                err_msg = notifier.notify(f"Swap failed: {err}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                return {}
         swap_tx = swap_data["swapTransaction"]
 
     raw_tx = base64.b64decode(swap_tx)

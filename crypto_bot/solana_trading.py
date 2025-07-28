@@ -21,21 +21,35 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 logger = setup_logger(__name__, LOG_DIR / "solana_trading.log")
 
 
-async def _fetch_price(token_in: str, token_out: str) -> float:
-    """Return current price for ``token_in``/``token_out`` using Jupiter."""
+async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> float:
+    """Return current price for ``token_in``/``token_out`` using Jupiter.
+
+    Parameters
+    ----------
+    max_retries:
+        Maximum attempts when the price request fails. Defaults to ``3``.
+    """
     async with aiohttp.ClientSession() as session:
-        async with session.get(
-            JUPITER_QUOTE_URL,
-            params={
-                "inputMint": token_in,
-                "outputMint": token_out,
-                "amount": 1_000_000,
-                "slippageBps": 50,
-            },
-            timeout=10,
-        ) as resp:
-            resp.raise_for_status()
-            data = await resp.json()
+        for attempt in range(max_retries):
+            try:
+                async with session.get(
+                    JUPITER_QUOTE_URL,
+                    params={
+                        "inputMint": token_in,
+                        "outputMint": token_out,
+                        "amount": 1_000_000,
+                        "slippageBps": 50,
+                    },
+                    timeout=10,
+                ) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json()
+                break
+            except Exception:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                return 0.0
     route = (data.get("data") or [{}])[0]
     try:
         return float(route["outAmount"]) / float(route["inAmount"])
