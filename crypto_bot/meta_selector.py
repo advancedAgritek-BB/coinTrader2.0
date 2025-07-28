@@ -20,6 +20,7 @@ from crypto_bot.strategy import (
     micro_scalp_bot,
     momentum_bot,
     bounce_scalper,
+    meme_wave_bot,
     solana_scalping,
     meme_wave_bot,
 )
@@ -69,6 +70,31 @@ class MetaRegressor:
         return {k: float(v) for k, v in zip(df.index, preds)}
 
 
+_STRATEGY_FN_MAP = {
+    "trend": trend_bot.generate_signal,
+    "trend_bot": trend_bot.generate_signal,
+    "grid": grid_bot.generate_signal,
+    "grid_bot": grid_bot.generate_signal,
+    "sniper": sniper_bot.generate_signal,
+    "sniper_bot": sniper_bot.generate_signal,
+    "dex_scalper": dex_scalper.generate_signal,
+    "dex_scalper_bot": dex_scalper.generate_signal,
+    "mean_bot": mean_bot.generate_signal,
+    "breakout_bot": breakout_bot.generate_signal,
+    "micro_scalp": micro_scalp_bot.generate_signal,
+    "micro_scalp_bot": micro_scalp_bot.generate_signal,
+    "momentum": momentum_bot.generate_signal,
+    "momentum_bot": momentum_bot.generate_signal,
+    "bounce_scalper": bounce_scalper.generate_signal,
+    "bounce_scalper_bot": bounce_scalper.generate_signal,
+    "dip_hunter": dip_hunter.generate_signal,
+    "meme_wave": meme_wave_bot.generate_signal,
+    "meme_wave_bot": meme_wave_bot.generate_signal,
+    "solana_scalping": solana_scalping.generate_signal,
+    "solana_scalping_bot": solana_scalping.generate_signal,
+    "dca": dca_bot.generate_signal,
+    "dca_bot": dca_bot.generate_signal,
+}
 _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {}
 
 

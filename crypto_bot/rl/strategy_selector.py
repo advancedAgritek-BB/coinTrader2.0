@@ -14,6 +14,7 @@ from crypto_bot.strategy import (
     dca_bot,
     mean_bot,
     breakout_bot,
+    meme_wave_bot,
     solana_scalping,
     meme_wave_bot,
     momentum_bot,
@@ -31,6 +32,7 @@ _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {
     "dca_bot": dca_bot.generate_signal,
     "mean_bot": mean_bot.generate_signal,
     "breakout_bot": breakout_bot.generate_signal,
+    "meme_wave_bot": meme_wave_bot.generate_signal,
     "solana_scalping": solana_scalping.generate_signal,
     "meme_wave_bot": meme_wave_bot.generate_signal,
 }
