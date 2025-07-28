@@ -315,11 +315,15 @@ def get_strategy_by_name(
 ) -> Callable[[pd.DataFrame], Tuple[float, str]] | None:
     """Return strategy callable for ``name`` if available."""
     from . import meta_selector
-    from .rl import strategy_selector as rl_selector
+    try:
+        from .rl import strategy_selector as rl_selector
+    except Exception:  # pragma: no cover - optional RL deps
+        rl_selector = None
 
     mapping: Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]] = {}
     mapping.update(getattr(meta_selector, "_STRATEGY_FN_MAP", {}))
-    mapping.update(getattr(rl_selector, "_STRATEGY_FN_MAP", {}))
+    if rl_selector is not None:
+        mapping.update(getattr(rl_selector, "_STRATEGY_FN_MAP", {}))
     return mapping.get(name)
 
 

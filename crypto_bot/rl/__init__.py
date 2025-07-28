@@ -12,9 +12,4 @@ except Exception:  # pragma: no cover - fallback when deps missing
     def get_rl_strategy(*_a, **_k):
         raise NotImplementedError("RL dependencies missing")
 
-__all__ = [
-    "strategy_selector",
-    "RLStrategySelector",
-    "train_rl_selector",
-    "get_rl_strategy",
-]
+__all__ = ["strategy_selector"]
