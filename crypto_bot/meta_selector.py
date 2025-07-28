@@ -21,6 +21,7 @@ from crypto_bot.strategy import (
     momentum_bot,
     bounce_scalper,
     meme_wave_bot,
+    flash_crash_bot,
     solana_scalping,
     meme_wave_bot,
 )
@@ -117,6 +118,7 @@ _register(breakout_bot, "breakout_bot")
 _register(micro_scalp_bot, "micro_scalp", "micro_scalp_bot")
 _register(momentum_bot, "momentum", "momentum_bot")
 _register(bounce_scalper, "bounce_scalper", "bounce_scalper_bot")
+_register(flash_crash_bot, "flash_crash_bot")
 _register(dip_hunter, "dip_hunter")
 _register(solana_scalping, "solana_scalping", "solana_scalping_bot")
 _register(meme_wave_bot, "meme_wave_bot")
