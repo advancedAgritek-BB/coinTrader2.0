@@ -89,6 +89,15 @@ def test_strategy_map_contains_meme_wave_bot():
     )
 
 
+def test_strategy_map_contains_cross_chain_arb_bot():
+    from crypto_bot.strategy import cross_chain_arb_bot
+
+    assert (
+        meta_selector._STRATEGY_FN_MAP.get("cross_chain_arb_bot")
+        is cross_chain_arb_bot.generate_signal
+    )
+
+
 def test_get_strategy_by_name_returns_callable():
     for name, fn in meta_selector._STRATEGY_FN_MAP.items():
         returned = meta_selector.get_strategy_by_name(name)
