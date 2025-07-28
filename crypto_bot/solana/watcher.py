@@ -163,9 +163,10 @@ class PoolWatcher:
     async def _watch_ws(self) -> AsyncGenerator[NewPoolEvent, None]:
         """Yield events from a websocket subscription."""
         self._running = True
-        retries = 0
+        backoff = 0
         async with aiohttp.ClientSession() as session:
-            while self._running and retries < 3:
+            while self._running:
+                reconnect = False
                 try:
                     async with session.ws_connect(self.websocket_url) as ws:
                         await ws.send_json(
@@ -176,8 +177,12 @@ class PoolWatcher:
                                 "params": [self.raydium_program_id, {"encoding": "jsonParsed"}],
                             }
                         )
+                        backoff = 0
                         async for msg in ws:
                             if not self._running:
+                                break
+                            if msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
+                                reconnect = True
                                 break
                             if msg.type != aiohttp.WSMsgType.TEXT:
                                 continue
@@ -202,22 +207,22 @@ class PoolWatcher:
                                 creator="",
                                 liquidity=0.0,
                             )
-                    # Reset retries after a clean exit
-                    retries = 0
                 except aiohttp.WSServerHandshakeError as e:
+                    reconnect = True
                     if e.status == 401:
                         logger.error(
                             "Unauthorized WebSocket connection – check HELIUS_KEY or subscription tier"
                         )
                         self._running = False
                         return
-                    logger.error("WS error: %s", e)
-                    retries += 1
-                    await asyncio.sleep(2 ** retries)
+                    logger.error("WebSocket handshake failed with status %s", e.status)
                 except Exception as e:  # pragma: no cover - generic catch for stability
+                    reconnect = True
                     logger.error("WS error: %s", e)
-                    retries += 1
-                    await asyncio.sleep(2 ** retries)
+
+                if self._running and reconnect:
+                    backoff += 1
+                    await asyncio.sleep(2 ** backoff)
 
 
     def stop(self) -> None:

@@ -7,8 +7,12 @@ from crypto_bot.solana import pool_ws_monitor
 
 class DummyMsg:
     def __init__(self, data):
-        self.data = data
-        self.type = pool_ws_monitor.aiohttp.WSMsgType.TEXT
+        if hasattr(data, "type"):
+            self.type = data.type
+            self.data = data.data
+        else:
+            self.data = data
+            self.type = pool_ws_monitor.aiohttp.WSMsgType.TEXT
 
     def json(self):
         return self.data
@@ -40,12 +44,18 @@ class DummyWS:
 
 class DummySession:
     def __init__(self, ws):
-        self.ws = ws
+        if isinstance(ws, list):
+            self.ws_list = ws
+        else:
+            self.ws_list = [ws]
+        self.calls = 0
         self.url = None
 
     def ws_connect(self, url):
         self.url = url
-        return self.ws
+        ws = self.ws_list[self.calls]
+        self.calls += 1
+        return ws
 
     async def __aenter__(self):
         return self
@@ -56,6 +66,8 @@ class DummySession:
 
 class AiohttpMod:
     WSMsgType = types.SimpleNamespace(TEXT="text", CLOSED="closed", ERROR="error")
+
+    WSServerHandshakeError = Exception
 
     def __init__(self, session):
         self._session = session
@@ -99,3 +111,21 @@ def test_yields_transactions(monkeypatch):
 
     res = asyncio.run(run())
     assert res == [{"tx": 1}, {"tx": 2}]
+
+
+def test_reconnect_on_close(monkeypatch):
+    ws1 = DummyWS([])
+    ws2 = DummyWS([{"params": {"result": {"tx": 3}}}])
+    session = DummySession([ws1, ws2])
+    aiohttp_mod = AiohttpMod(session)
+    monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
+    ws1.messages = [types.SimpleNamespace(type=aiohttp_mod.WSMsgType.CLOSED, data=None)]
+
+    async def run():
+        gen = pool_ws_monitor.watch_pool("KEY", "PGM")
+        result = await gen.__anext__()
+        return result
+
+    res = asyncio.run(run())
+    assert res == {"tx": 3}
+    assert session.calls == 2

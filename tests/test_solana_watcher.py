@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import types
+import json
 import pytest
 
 from crypto_bot.solana import watcher
@@ -266,3 +267,88 @@ def test_watch_ws_unauthorized(monkeypatch, caplog):
     assert any(
         "Unauthorized WebSocket connection" in rec.message for rec in caplog.records
     )
+
+
+def test_watch_ws_reconnect(monkeypatch):
+    class DummyMsg:
+        def __init__(self, data, t):
+            self.data = data
+            self.type = t
+
+    class DummyWS:
+        def __init__(self, messages):
+            self.messages = messages
+            self.sent = []
+
+        async def send_json(self, data):
+            self.sent.append(data)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def __aiter__(self):
+            async def gen():
+                for m in self.messages:
+                    yield m
+            return gen()
+
+    class DummySession:
+        def __init__(self, wss):
+            self.wss = wss
+            self.calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def ws_connect(self, url):
+            ws = self.wss[self.calls]
+            self.calls += 1
+            return ws
+
+    async def dummy_sleep(_):
+        pass
+
+    aiohttp_mod = types.SimpleNamespace(
+        ClientSession=lambda: DummySession([
+            DummyWS([DummyMsg(None, "closed")]),
+            DummyWS([
+                DummyMsg(
+                    json.dumps(
+                        {
+                            "method": "programNotification",
+                            "params": {"result": {"value": {"pubkey": "PX"}}},
+                        }
+                    ),
+                    "text",
+                )
+            ]),
+        ]),
+        WSServerHandshakeError=Exception,
+        WSMsgType=types.SimpleNamespace(TEXT="text", CLOSED="closed", ERROR="error"),
+    )
+    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(watcher, "asyncio", types.SimpleNamespace(sleep=dummy_sleep))
+
+    w = PoolWatcher(
+        "http://test",
+        interval=0,
+        websocket_url="ws://x",
+        raydium_program_id="PGM",
+    )
+
+    async def run_once():
+        gen = w.watch()
+        evt = await gen.__anext__()
+        w.stop()
+        await gen.aclose()
+        return evt
+
+    event = asyncio.run(run_once())
+    assert event.pool_address == "PX"
+
