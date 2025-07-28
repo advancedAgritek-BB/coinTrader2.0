@@ -594,7 +594,7 @@ flash_crash_scalper:
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options. A separate cache is maintained for each timeframe listed in `timeframes`.
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis. Default `timeframe` is `15m` and `timeframes` include `1m`, `5m`, `15m`, and `1h` (Coinbase lacks a `4h` interval).
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options. The snapshot limit defaults to `500`.
-* **loop_interval_minutes** – delay between trading cycles.
+* **loop_interval_minutes** – delay between trading cycles (default `0.05`). Shorter delays increase CPU usage as the loop runs more often.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
 * **ohlcv_batch_size** – number of symbols grouped per OHLCV request.
 * **max_parallel** – number of markets processed concurrently.
@@ -813,7 +813,7 @@ twap_slices: 4               # number of slices when TWAP is enabled
 twap_interval_seconds: 10    # delay between TWAP slices
 timeframe: 15m               # candles for regime detection
 scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
-loop_interval_minutes: 0.5   # wait time between trading cycles
+loop_interval_minutes: 0.05  # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
 max_ws_limit: 50             # skip WebSocket when request exceeds this
 gecko_limit: 10              # concurrent GeckoTerminal requests
@@ -835,7 +835,9 @@ metrics:
 ```
 
 `loop_interval_minutes` determines how long the bot sleeps between each
-evaluation cycle, giving the market time to evolve before scanning again.
+evaluation cycle. The default of `0.05` minutes (~3 seconds) balances
+responsiveness with CPU usage. Shortening this delay can noticeably increase
+CPU load.
 `max_concurrent_ohlcv` caps how many OHLCV requests run in parallel when
 `update_ohlcv_cache` gathers new candles. The new `ohlcv_timeout` option
 controls the timeout for each fetch call. If you still encounter timeouts after
