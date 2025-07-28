@@ -243,7 +243,7 @@ def test_ml_filter_allows_high_score(monkeypatch):
     data = {
         "result": {
             "pools": [
-                {"address": "P1", "tokenMint": "M1", "creator": "C1", "liquidity": 10.0}
+                {"address": "P1", "tokenMint": "M1", "creator": "C1", "liquidity": 10.0, "txCount": 20}
             ]
         }
     }
@@ -265,9 +265,8 @@ def test_ml_filter_allows_high_score(monkeypatch):
         return event
 
     event = asyncio.run(run_once())
-    assert event.pool_address == "B"
-    assert event.tx_count == 20
     assert event.pool_address == "P1"
+    assert event.tx_count == 20
 
 
 def test_env_substitution(monkeypatch):
