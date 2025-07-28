@@ -11,6 +11,7 @@ if not hasattr(yaml, "__file__"):
         real_yaml = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(real_yaml)
         yaml = real_yaml
+    sys.modules.setdefault("yaml", yaml)
 
 CONFIG_PATH = Path("crypto_bot/config.yaml")
 
@@ -140,3 +141,71 @@ def test_load_config_normalizes_symbol(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "yaml", types.SimpleNamespace(safe_load=_simple_yaml))
     loaded = main.load_config()
     assert loaded["symbol"] == "BTC/USDT"
+
+
+def test_reload_config_clears_symbol_cache(monkeypatch):
+    import types
+    import sys
+
+    # Ensure stub modules are available before importing main
+    sys.modules.setdefault("yaml", yaml)
+    sys.modules.setdefault("redis", types.SimpleNamespace())
+    sys.modules.setdefault("crypto_bot.solana", types.SimpleNamespace(get_solana_new_tokens=lambda *_a, **_k: []))
+    sys.modules.setdefault("crypto_bot.solana.scalping", types.SimpleNamespace())
+    sys.modules.setdefault("crypto_bot.solana.exit", types.SimpleNamespace(monitor_price=lambda *_a, **_k: None))
+    sys.modules.setdefault(
+        "crypto_bot.execution.solana_mempool",
+        types.SimpleNamespace(SolanaMempoolMonitor=object),
+    )
+    sys.modules.setdefault("crypto_bot.utils.market_analyzer", types.SimpleNamespace(analyze_symbol=lambda *_a, **_k: None))
+    sys.modules.setdefault(
+        "crypto_bot.strategy_router", types.SimpleNamespace(strategy_for=lambda *_a, **_k: None)
+    )
+    sys.modules.setdefault("websocket", types.SimpleNamespace(WebSocketApp=object))
+    sys.modules.setdefault("gspread", types.SimpleNamespace(authorize=lambda *a, **k: None))
+    sys.modules.setdefault(
+        "oauth2client.service_account",
+        types.SimpleNamespace(ServiceAccountCredentials=types.SimpleNamespace(from_json_keyfile_name=lambda *a, **k: None)),
+    )
+    sys.modules.setdefault("rich.console", types.SimpleNamespace(Console=object))
+    sys.modules.setdefault("rich.table", types.SimpleNamespace(Table=object))
+    sys.modules.setdefault(
+        "crypto_bot.utils.symbol_pre_filter",
+        types.SimpleNamespace(filter_symbols=lambda *_a, **_k: ([], [])),
+    )
+    class _FakeGen:
+        pass
+    sys.modules.setdefault(
+        "numpy.random",
+        types.SimpleNamespace(default_rng=lambda *_a, **_k: _FakeGen(), Generator=_FakeGen),
+    )
+
+    import crypto_bot.main as main
+    from crypto_bot.utils import symbol_utils
+
+    # Pre-populate symbol cache
+    symbol_utils._cached_symbols = ([("ETH/USD", 1.0)], [])
+    symbol_utils._last_refresh = 123.0
+
+    def fake_load_config():
+        return {
+            "symbol": "BTC/USDT",
+            "risk": {
+                "max_drawdown": 1.0,
+                "stop_loss_pct": 0.0,
+                "take_profit_pct": 0.0,
+            },
+        }
+
+    monkeypatch.setattr(main, "load_config", fake_load_config)
+
+    config = {}
+    ctx = main.BotContext({}, {}, {}, config)
+    risk_manager = main.RiskManager(main.RiskConfig(1.0, 0.0, 0.0))
+    rotator = types.SimpleNamespace(config={})
+    guard = main.OpenPositionGuard(1)
+
+    main.reload_config(config, ctx, risk_manager, rotator, guard, force=True)
+
+    assert symbol_utils._cached_symbols is None
+    assert symbol_utils._last_refresh == 0.0
