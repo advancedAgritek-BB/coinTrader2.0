@@ -1,18 +1,11 @@
 from crypto_bot.strategy import flash_crash_bot
 from crypto_bot import strategy_router
+import pandas as pd
 
 
 def test_get_strategy_by_name():
     fn = strategy_router.get_strategy_by_name("flash_crash_bot")
     assert callable(fn)
-import importlib.util
-import pathlib
-import pandas as pd
-
-path = pathlib.Path(__file__).resolve().parents[1] / "crypto_bot" / "strategy" / "flash_crash_bot.py"
-spec = importlib.util.spec_from_file_location("flash_crash_bot", path)
-flash_crash_bot = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(flash_crash_bot)
 
 
 def _make_df(drop=True, volume_spike=True):
