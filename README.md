@@ -299,6 +299,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **onchain_default_quote** – quote currency used when appending to entries in
   `onchain_symbols`. Defaults to `USDC`.
 * **allow_short** – enable short selling. Set to `true` only when your exchange account supports short selling.
+* Trades and swaps automatically retry transient errors up to three times.
 
 ### Market Scanning
 * **symbol_batch_size** – number of symbols processed each cycle.

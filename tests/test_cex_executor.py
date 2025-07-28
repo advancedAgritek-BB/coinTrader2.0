@@ -411,3 +411,64 @@ def test_execute_trade_no_message_when_disabled(monkeypatch):
     )
 
     assert calls["count"] == 0
+
+
+def test_execute_trade_retries_network_error(monkeypatch):
+    class RetryEx:
+        def __init__(self):
+            self.calls = 0
+
+        def fetch_ticker(self, symbol):
+            return {"bid": 1, "ask": 1}
+
+        def create_market_order(self, symbol, side, amount):
+            self.calls += 1
+            if self.calls == 1:
+                raise ccxt.NetworkError("boom")
+            return {"ok": True}
+
+    sleeps: list[float] = []
+
+    monkeypatch.setattr("time.sleep", lambda x: sleeps.append(x))
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
+
+    ex = RetryEx()
+    order = cex_executor.execute_trade(ex, None, "BTC/USD", "buy", 1, dry_run=False)
+
+    assert order == {"ok": True}
+    assert ex.calls == 2
+    assert sleeps == [1.0]
+
+
+def test_execute_trade_async_retries(monkeypatch):
+    class RetryEx:
+        def __init__(self):
+            self.calls = 0
+
+        async def fetch_ticker(self, symbol):
+            return {"bid": 1, "ask": 1}
+
+        async def create_market_order(self, symbol, side, amount):
+            self.calls += 1
+            if self.calls == 1:
+                raise ccxt.NetworkError("boom")
+            return {"ok": True}
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(secs):
+        sleeps.append(secs)
+
+    monkeypatch.setattr(cex_executor.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
+
+    ex = RetryEx()
+    order = asyncio.run(
+        cex_executor.execute_trade_async(ex, None, "BTC/USD", "buy", 1, dry_run=False)
+    )
+
+    assert order == {"ok": True}
+    assert ex.calls == 2
+    assert sleeps == [1.0]
