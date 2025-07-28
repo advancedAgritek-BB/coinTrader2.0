@@ -1352,6 +1352,29 @@ async def main():
 asyncio.run(main())
 ```
 
+### Meme Wave Bot
+
+The meme wave bot trades sudden hype cycles discovered on centralized
+exchanges and in Solana mempools. It monitors for sharp volume spikes,
+mempool activity and optional Twitter excitement before buying. Most
+profits will likely arise from Solana where new tokens see the fastest
+hype waves.
+Add a `meme_wave_bot` section to `crypto_bot/config.yaml`:
+
+```yaml
+meme_wave_bot:
+  vol_spike_thr: 2.0        # volume spike multiple triggering the bot
+  sentiment_thr: 0.6        # minimum sentiment score on Twitter
+  twitter_query: null       # optional query for the sentiment API
+```
+
+- **vol_spike_thr** – ratio of current volume to the recent average required
+  to consider entering a trade.
+- **sentiment_thr** – threshold for the normalized Twitter sentiment score
+  before a meme wave trade is executed.
+- **twitter_query** – search term used when fetching sentiment. If omitted the
+  trading symbol is used.
+
 ### Backtesting
 
 The `BacktestRunner` class in `crypto_bot.backtest.backtest_runner` can evaluate
