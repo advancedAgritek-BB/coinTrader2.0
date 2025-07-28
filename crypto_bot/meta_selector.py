@@ -22,6 +22,7 @@ from crypto_bot.strategy import (
     bounce_scalper,
     meme_wave_bot,
     solana_scalping,
+    cross_chain_arb_bot,
     meme_wave_bot,
 )
 
@@ -88,6 +89,7 @@ _STRATEGY_FN_MAP = {
     "bounce_scalper": bounce_scalper.generate_signal,
     "bounce_scalper_bot": bounce_scalper.generate_signal,
     "dip_hunter": dip_hunter.generate_signal,
+    "cross_chain_arb_bot": cross_chain_arb_bot.generate_signal,
     "meme_wave": meme_wave_bot.generate_signal,
     "meme_wave_bot": meme_wave_bot.generate_signal,
     "solana_scalping": solana_scalping.generate_signal,
@@ -121,6 +123,7 @@ _register(dip_hunter, "dip_hunter")
 _register(solana_scalping, "solana_scalping", "solana_scalping_bot")
 _register(meme_wave_bot, "meme_wave_bot")
 _register(dca_bot, "dca", "dca_bot")
+_register(cross_chain_arb_bot, "cross_chain_arb_bot")
 
 
 def get_strategy_by_name(
