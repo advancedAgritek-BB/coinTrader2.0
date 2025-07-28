@@ -6,7 +6,13 @@ import pandas as pd
 import ta
 
 from crypto_bot.utils.pyth_utils import get_pyth_price
-from crypto_bot.utils.pattern_logger import recent_pattern_strength
+from crypto_bot.utils.pattern_logger import (
+    recent_pattern_strength,
+    average_pattern_strength,
+)
+from crypto_bot.regime.pattern_detector import detect_patterns
+from crypto_bot.regime.regime_classifier import classify_regime
+from crypto_bot.utils.market_loader import fetch_geckoterminal_ohlcv
 
 from .risk import RiskTracker
 from .safety import is_safe
@@ -95,7 +101,39 @@ def score_new_pool(
     if not is_safe(event, config.get("safety", {})):
         return 0.0, "none"
 
+    if event.liquidity < 100:
+        return 0.0, "none"
+
     if not risk_tracker.allow_snipe(event.token_mint, config.get("risk", {})):
+        return 0.0, "none"
+
+    ohlcv_res = asyncio.run(
+        fetch_geckoterminal_ohlcv(f"{event.token_mint}/USDC", limit=50)
+    )
+    if not ohlcv_res:
+        return 0.0, "none"
+    data = ohlcv_res[0] if isinstance(ohlcv_res, tuple) else ohlcv_res
+    df = pd.DataFrame(
+        data or [],
+        columns=["timestamp", "open", "high", "low", "close", "volume"],
+    )
+
+    patterns = detect_patterns(df)
+    spike = patterns.get("volume_spike", 0.0)
+    avg_strength = average_pattern_strength("volume_spike")
+    if spike < 2 * avg_strength:
+        return 0.0, "none"
+
+    label, info = classify_regime(df)
+    conf = 0.0
+    if isinstance(info, dict):
+        conf = float(info.get(label, 0.0))
+    else:
+        try:
+            conf = float(info)
+        except Exception:
+            conf = 0.0
+    if conf < 0.7:
         return 0.0, "none"
 
     scoring_cfg = config.get("scoring", {})
