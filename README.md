@@ -388,6 +388,7 @@ solana_scanner:
 * **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment to avoid bearish markets.
 * **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
 * **mempool_monitor** – pause or reprice when Solana fees spike.
+* **pool.ml_filter** – skip new pools with low ML breakout probability.
 * **gas_threshold_gwei** – abort scalper trades when priority fees exceed this.
 * **min_cooldown** – minimum minutes between trades.
 * **cycle_bias** – optional on-chain metrics to bias trades.
@@ -1395,6 +1396,7 @@ meme_wave_sniper:
     interval: 5
     websocket_url: wss://atlas-mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
     raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
+    ml_filter: false
   scoring:
     weight_liquidity: 1.0
     weight_tx: 1.0
