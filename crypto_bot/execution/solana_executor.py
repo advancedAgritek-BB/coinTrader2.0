@@ -8,6 +8,11 @@ import asyncio
 import aiohttp
 from solana.rpc.async_api import AsyncClient
 
+try:  # pragma: no cover - optional dependency
+    import keyring  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    keyring = None  # type: ignore
+
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.notifier import Notifier
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
@@ -125,6 +130,11 @@ async def execute_swap(
     from solana.transaction import Transaction
 
     private_key = os.getenv("SOLANA_PRIVATE_KEY")
+    if not private_key and keyring:
+        try:
+            private_key = keyring.get_password("solana", "private_key")
+        except Exception:
+            private_key = None
     if not private_key:
         raise ValueError("SOLANA_PRIVATE_KEY environment variable not set")
 
@@ -225,6 +235,16 @@ async def execute_swap(
                 err,
                 exc_info=True,
             )
+
+        confirm_exec = (config or {}).get("confirm_execution")
+        if confirm_exec is None:
+            try:
+                confirm_exec = input("Execute swap? [y/N]: ").strip().lower() in ("y", "yes")
+            except Exception:
+                confirm_exec = False
+        if not confirm_exec:
+            logger.info("Swap aborted by user")
+            return {}
 
         for attempt in range(max_retries):
             try:
