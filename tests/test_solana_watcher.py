@@ -77,6 +77,8 @@ def test_watcher_yields_event(monkeypatch):
     )
 
     w = PoolWatcher("http://test", interval=0)
+    w.websocket_url = None
+    w.program_ids = []
 
     async def run_once():
         gen = w.watch()
@@ -130,6 +132,8 @@ def test_min_liquidity_filter(monkeypatch):
     )
 
     w = PoolWatcher("http://test", interval=0, min_liquidity=50)
+    w.websocket_url = None
+    w.program_ids = []
 
     async def run_once():
         gen = w.watch()
@@ -250,6 +254,8 @@ def test_watcher_raises_after_consecutive_404(monkeypatch):
     )
     monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
     w = PoolWatcher("http://test", interval=0, max_failures=2)
+    w.websocket_url = None
+    w.program_ids = []
 
     async def run_once():
         gen = w.watch()

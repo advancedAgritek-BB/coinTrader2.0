@@ -12,6 +12,7 @@ import os
 import aiohttp
 import logging
 import yaml
+import pandas as pd
 
 
 @dataclass
@@ -46,6 +47,7 @@ class PoolWatcher:
         max_failures: int = 3,
         min_liquidity: float | None = None,
     ) -> None:
+        pump_fun_program_id = None
         if (
             url is None
             or interval is None
@@ -58,6 +60,7 @@ class PoolWatcher:
             sniper_cfg = cfg.get("meme_wave_sniper", {})
             pool_cfg = sniper_cfg.get("pool", {})
             safety_cfg = sniper_cfg.get("safety", {})
+            pump_fun_program_id = pool_cfg.get("pump_fun_program_id")
             if url is None:
                 url = pool_cfg.get("url", "")
             if interval is None:
@@ -89,6 +92,9 @@ class PoolWatcher:
         self.interval = interval
         self.websocket_url = websocket_url
         self.raydium_program_id = raydium_program_id
+        self.program_ids = [self.raydium_program_id]
+        if pump_fun_program_id:
+            self.program_ids.append(pump_fun_program_id)
         self.min_liquidity = float(min_liquidity or 0)
         self._running = False
         self._seen: set[str] = set()
@@ -97,7 +103,7 @@ class PoolWatcher:
 
     async def watch(self) -> AsyncGenerator[NewPoolEvent, None]:
         """Yield :class:`NewPoolEvent` objects as they are discovered."""
-        if self.websocket_url and self.raydium_program_id:
+        if self.websocket_url and any(self.program_ids):
             async for evt in self._watch_ws():
                 yield evt
             return
@@ -183,14 +189,15 @@ class PoolWatcher:
                 reconnect = False
                 try:
                     async with session.ws_connect(self.websocket_url) as ws:
-                        await ws.send_json(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": 1,
-                                "method": "programSubscribe",
-                                "params": [self.raydium_program_id, {"encoding": "jsonParsed"}],
-                            }
-                        )
+                        for prog_id in self.program_ids:
+                            await ws.send_json(
+                                {
+                                    "jsonrpc": "2.0",
+                                    "id": 1,
+                                    "method": "programSubscribe",
+                                    "params": [prog_id, {"encoding": "jsonParsed"}],
+                                }
+                            )
                         backoff = 0
                         async for msg in ws:
                             if not self._running:
@@ -215,12 +222,21 @@ class PoolWatcher:
                             if not addr or addr in self._seen:
                                 continue
                             self._seen.add(addr)
-                            yield NewPoolEvent(
+                            event = NewPoolEvent(
                                 pool_address=addr,
                                 token_mint="",
                                 creator="",
                                 liquidity=0.0,
                             )
+                            try:
+                                df = await self._fetch_snapshot(event.pool_address)
+                                from coinTrader_Trainer.ml_trainer import predict_regime
+                                regime = predict_regime(df)
+                            except Exception:
+                                regime = "volatile"
+                            if regime not in ["volatile", "breakout"]:
+                                continue
+                            yield event
                 except aiohttp.WSServerHandshakeError as e:
                     reconnect = True
                     if e.status == 401:
@@ -242,3 +258,23 @@ class PoolWatcher:
     def stop(self) -> None:
         """Stop the watcher loop."""
         self._running = False
+
+    async def _fetch_snapshot(self, pool_addr: str) -> pd.DataFrame:
+        """Return a simple OHLCV-like snapshot for ``pool_addr``."""
+        async with aiohttp.ClientSession() as sess:
+            async with sess.post(
+                self.url,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "getSignaturesForAddress",
+                    "params": [pool_addr, {"limit": 20}],
+                },
+            ) as resp:
+                data = await resp.json()
+        result = data.get("result", [])
+        rows = [
+            {"timestamp": r.get("blockTime", 0), "volume": 1}
+            for r in result
+        ]
+        return pd.DataFrame(rows)
