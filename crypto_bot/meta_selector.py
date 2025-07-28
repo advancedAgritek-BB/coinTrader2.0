@@ -22,6 +22,7 @@ from crypto_bot.strategy import (
     bounce_scalper,
     meme_wave_bot,
     solana_scalping,
+    meme_wave_bot,
 )
 
 LOG_FILE = LOG_DIR / "strategy_performance.json"
@@ -94,6 +95,32 @@ _STRATEGY_FN_MAP = {
     "dca": dca_bot.generate_signal,
     "dca_bot": dca_bot.generate_signal,
 }
+_STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {}
+
+
+def _register(module, *names: str) -> None:
+    """Register strategy signal generator under given names if available."""
+
+    if module is None:
+        return
+    fn = module.generate_signal
+    for name in names:
+        _STRATEGY_FN_MAP[name] = fn
+
+
+_register(trend_bot, "trend", "trend_bot")
+_register(grid_bot, "grid", "grid_bot")
+_register(sniper_bot, "sniper", "sniper_bot")
+_register(dex_scalper, "dex_scalper", "dex_scalper_bot")
+_register(mean_bot, "mean_bot")
+_register(breakout_bot, "breakout_bot")
+_register(micro_scalp_bot, "micro_scalp", "micro_scalp_bot")
+_register(momentum_bot, "momentum", "momentum_bot")
+_register(bounce_scalper, "bounce_scalper", "bounce_scalper_bot")
+_register(dip_hunter, "dip_hunter")
+_register(solana_scalping, "solana_scalping", "solana_scalping_bot")
+_register(meme_wave_bot, "meme_wave_bot")
+_register(dca_bot, "dca", "dca_bot")
 
 
 def get_strategy_by_name(

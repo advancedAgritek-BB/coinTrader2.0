@@ -16,10 +16,12 @@ from crypto_bot.strategy import (
     breakout_bot,
     meme_wave_bot,
     solana_scalping,
+    meme_wave_bot,
+    momentum_bot,
 )
 
 # Default log file location
-LOG_FILE = Path("crypto_bot/logs/strategy_pnl.csv")
+LOG_FILE = LOG_DIR / "strategy_pnl.csv"
 
 # Map strategy names to generation functions
 _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {
@@ -32,7 +34,11 @@ _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {
     "breakout_bot": breakout_bot.generate_signal,
     "meme_wave_bot": meme_wave_bot.generate_signal,
     "solana_scalping": solana_scalping.generate_signal,
+    "meme_wave_bot": meme_wave_bot.generate_signal,
 }
+
+if momentum_bot is not None:
+    _STRATEGY_FN_MAP["momentum_bot"] = momentum_bot.generate_signal
 
 
 class RLStrategySelector:

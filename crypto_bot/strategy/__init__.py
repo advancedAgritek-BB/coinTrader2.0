@@ -46,6 +46,7 @@ __all__ = [
         "dip_hunter",
         "micro_scalp_bot",
         "momentum_bot",
+        "meme_wave_bot",
         "sniper_bot",
         "trend_bot",
         "momentum_bot",
