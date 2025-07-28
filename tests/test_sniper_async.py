@@ -56,10 +56,11 @@ def load_execute_signals(sniper_stub):
         "refresh_balance": lambda ctx: asyncio.sleep(0),
         "sniper_trade": sniper_stub,
         "SNIPER_TASKS": set(),
+        "NEW_SOLANA_TOKENS": set(),
     }
     exec(funcs["direction_to_side"], ns)
     exec(funcs["execute_signals"], ns)
-    return ns["execute_signals"], ns["SNIPER_TASKS"]
+    return ns["execute_signals"], ns["SNIPER_TASKS"], ns["NEW_SOLANA_TOKENS"]
 
 
 @pytest.mark.asyncio
@@ -72,7 +73,7 @@ async def test_execute_signals_spawns_sniper_task():
         await asyncio.sleep(0.05)
         finished.set()
 
-    execute_signals, sniper_tasks = load_execute_signals(stub)
+    execute_signals, sniper_tasks, new_tokens = load_execute_signals(stub)
 
     df = pd.DataFrame({"close": [1.0]})
     candidate = {
@@ -107,3 +108,88 @@ async def test_execute_signals_spawns_sniper_task():
     assert len(sniper_tasks) == 1
     await asyncio.gather(*sniper_tasks)
     assert finished.is_set()
+
+
+@pytest.mark.asyncio
+async def test_new_token_regime_filter():
+    called = asyncio.Event()
+
+    async def stub(*a, **k):
+        called.set()
+
+    execute_signals, sniper_tasks, new_tokens = load_execute_signals(stub)
+    new_tokens.add("SOL/USDC")
+
+    df = pd.DataFrame({"close": [1.0]})
+    candidate = {
+        "symbol": "SOL/USDC",
+        "direction": "long",
+        "df": df,
+        "name": "test",
+        "probabilities": {},
+        "regime": "bull",
+        "score": 1.0,
+    }
+
+    ctx = BotContext(
+        positions={},
+        df_cache={"1h": {"SOL/USDC": df}},
+        regime_cache={},
+        config={"execution_mode": "dry_run", "top_n_symbols": 1},
+        exchange=object(),
+        ws_client=None,
+        risk_manager=DummyRM(),
+        notifier=None,
+        paper_wallet=PaperWallet(1000.0),
+        position_guard=DummyPG(),
+    )
+    ctx.balance = 1000.0
+    ctx.analysis_results = [candidate]
+    ctx.timing = {}
+
+    await execute_signals(ctx)
+    assert not called.is_set()
+    assert len(sniper_tasks) == 0
+
+
+@pytest.mark.asyncio
+async def test_new_token_regime_allows_trade():
+    started = asyncio.Event()
+
+    async def stub(*a, **k):
+        started.set()
+
+    execute_signals, sniper_tasks, new_tokens = load_execute_signals(stub)
+    new_tokens.add("SOL/USDC")
+
+    df = pd.DataFrame({"close": [1.0]})
+    candidate = {
+        "symbol": "SOL/USDC",
+        "direction": "long",
+        "df": df,
+        "name": "test",
+        "probabilities": {},
+        "regime": "volatile",
+        "score": 1.0,
+    }
+
+    ctx = BotContext(
+        positions={},
+        df_cache={"1h": {"SOL/USDC": df}},
+        regime_cache={},
+        config={"execution_mode": "dry_run", "top_n_symbols": 1},
+        exchange=object(),
+        ws_client=None,
+        risk_manager=DummyRM(),
+        notifier=None,
+        paper_wallet=PaperWallet(1000.0),
+        position_guard=DummyPG(),
+    )
+    ctx.balance = 1000.0
+    ctx.analysis_results = [candidate]
+    ctx.timing = {}
+
+    await execute_signals(ctx)
+    await asyncio.wait_for(started.wait(), 0.05)
+    assert len(sniper_tasks) == 1
+    await asyncio.gather(*sniper_tasks)

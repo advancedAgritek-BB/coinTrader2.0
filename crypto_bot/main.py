@@ -109,7 +109,10 @@ logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 # Track WebSocket ping tasks
 WS_PING_TASKS: set[asyncio.Task] = set()
 # Track async sniper trade tasks
+# Track async sniper trade tasks
 SNIPER_TASKS: set[asyncio.Task] = set()
+# Track newly scanned Solana tokens pending evaluation
+NEW_SOLANA_TOKENS: set[str] = set()
 # Track async cross-chain arb tasks
 CROSS_ARB_TASKS: set[asyncio.Task] = set()
 
@@ -1325,7 +1328,16 @@ async def execute_signals(ctx: BotContext) -> None:
         elif sym.endswith("/USDC"):
             from crypto_bot.solana import sniper_solana
 
+            if sym in NEW_SOLANA_TOKENS:
+                reg = candidate.get("regime")
+                if reg not in {"volatile", "breakout"}:
+                    logger.info("[EVAL] %s -> regime %s not tradable", sym, reg)
+                    NEW_SOLANA_TOKENS.discard(sym)
+                    continue
+
             sol_score, _ = sniper_solana.generate_signal(df)
+            if sym in NEW_SOLANA_TOKENS:
+                NEW_SOLANA_TOKENS.discard(sym)
             if sol_score > 0.7:
                 from crypto_bot.solana_trading import sniper_trade
 
@@ -1894,6 +1906,9 @@ async def _main_impl() -> TelegramNotifier:
                 if tokens:
                     async with QUEUE_LOCK:
                         enqueue_solana_tokens(tokens)
+                        for sym in reversed(tokens):
+                            symbol_priority_queue.appendleft(sym)
+                            NEW_SOLANA_TOKENS.add(sym)
             except asyncio.CancelledError:
                 break
             except Exception as exc:  # pragma: no cover - best effort
@@ -2521,6 +2536,7 @@ async def _main_impl() -> TelegramNotifier:
             except asyncio.CancelledError:
                 pass
         CROSS_ARB_TASKS.clear()
+        NEW_SOLANA_TOKENS.clear()
 
     return notifier
 
