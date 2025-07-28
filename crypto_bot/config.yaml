@@ -396,6 +396,7 @@ strategy_router:
     breakout_volume_multiplier: 3
     trend_adx_threshold: 20
   mean_reverting_timeframe: 1h
+  flash_crash_timeframe: 1m
   min_confidence: 0.001
   regimes:
     bounce:

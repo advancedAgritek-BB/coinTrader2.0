@@ -38,6 +38,7 @@ from crypto_bot.strategy import (
     micro_scalp_bot,
     lstm_bot,
     bounce_scalper,
+    flash_crash_bot,
 )
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
@@ -91,6 +92,7 @@ class RouterConfig:
     sideways_timeframe: str | None = None
     scalp_timeframe: str | None = None
     breakout_timeframe: str | None = None
+    flash_crash_timeframe: str | None = None
     commit_lock_intervals: int = 0
     onchain_default_quote: str = "USDC"
     onchain_quotes: list[str] = field(default_factory=list)
@@ -122,6 +124,7 @@ class RouterConfig:
             sideways_timeframe=str(router.get("sideways_timeframe", data.get("sideways_timeframe", tf))) or None,
             scalp_timeframe=str(router.get("scalp_timeframe", data.get("scalp_timeframe", tf))) or None,
             breakout_timeframe=str(router.get("breakout_timeframe", data.get("breakout_timeframe", tf))) or None,
+            flash_crash_timeframe=str(router.get("flash_crash_timeframe", data.get("flash_crash_timeframe", None))) or None,
             commit_lock_intervals=int(router.get("commit_lock_intervals", 0)),
             onchain_default_quote=str(data.get("onchain_default_quote", "USDC")),
             onchain_quotes=[str(q) for q in data.get("onchain_quotes", [])],
@@ -393,6 +396,8 @@ def strategy_for(
         base = sniper_bot.generate_signal if regime == "unknown" else grid_bot.generate_signal
     tf_key = f"{regime.replace('-', '_')}_timeframe"
     tf = cfg_get(cfg, tf_key, cfg_get(cfg, "timeframe", "1h"))
+    if base is flash_crash_bot.generate_signal or getattr(base, "__name__", "") == flash_crash_bot.generate_signal.__name__:
+        tf = cfg_get(cfg, "flash_crash_timeframe", "1m")
     return wrap_with_tf(base, tf)
 
 
@@ -429,7 +434,13 @@ def evaluate_regime(
     cfg = config or DEFAULT_ROUTER_CFG
     tf_key = f"{regime.replace('-', '_')}_timeframe"
     tf = cfg_get(cfg, tf_key, cfg_get(cfg, "timeframe", "1h"))
-    strategies = [wrap_with_tf(s, tf) for s in get_strategies_for_regime(regime, cfg)]
+    strategies = []
+    for s in get_strategies_for_regime(regime, cfg):
+        if s is flash_crash_bot.generate_signal or getattr(s, "__name__", "") == flash_crash_bot.generate_signal.__name__:
+            s_tf = cfg_get(cfg, "flash_crash_timeframe", "1m")
+        else:
+            s_tf = tf
+        strategies.append(wrap_with_tf(s, s_tf))
 
     if isinstance(cfg, RouterConfig):
         method = cfg.fusion_method
