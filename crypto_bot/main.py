@@ -110,6 +110,8 @@ logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 WS_PING_TASKS: set[asyncio.Task] = set()
 # Track async sniper trade tasks
 SNIPER_TASKS: set[asyncio.Task] = set()
+# Track async cross-chain arb tasks
+CROSS_ARB_TASKS: set[asyncio.Task] = set()
 
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
@@ -1266,7 +1268,30 @@ async def execute_signals(ctx: BotContext) -> None:
             continue
         start_exec = time.perf_counter()
         executed_via_sniper = False
-        if sym.endswith("/USDC"):
+        executed_via_cross = False
+        if strategy == "cross_chain_arb_bot":
+            from crypto_bot.solana_trading import cross_chain_trade
+
+            task = asyncio.create_task(
+                cross_chain_trade(
+                    ctx.exchange,
+                    ctx.ws_client,
+                    sym,
+                    side,
+                    amount,
+                    dry_run=ctx.config.get("execution_mode") == "dry_run",
+                    slippage_bps=ctx.config.get("solana_slippage_bps", 50),
+                    use_websocket=ctx.config.get("use_websocket", False),
+                    notifier=ctx.notifier,
+                    mempool_monitor=ctx.mempool_monitor,
+                    mempool_cfg=ctx.mempool_cfg,
+                    config=ctx.config,
+                )
+            )
+            CROSS_ARB_TASKS.add(task)
+            task.add_done_callback(CROSS_ARB_TASKS.discard)
+            executed_via_cross = True
+        elif sym.endswith("/USDC"):
             from crypto_bot.solana import sniper_solana
 
             sol_score, _ = sniper_solana.generate_signal(df)
@@ -1289,7 +1314,7 @@ async def execute_signals(ctx: BotContext) -> None:
                 task.add_done_callback(SNIPER_TASKS.discard)
                 executed_via_sniper = True
 
-        if not executed_via_sniper:
+        if not executed_via_sniper and not executed_via_cross:
             order = await cex_trade_async(
                 ctx.exchange,
                 ctx.ws_client,
@@ -2451,6 +2476,14 @@ async def _main_impl() -> TelegramNotifier:
             except asyncio.CancelledError:
                 pass
         SNIPER_TASKS.clear()
+        for task in list(CROSS_ARB_TASKS):
+            task.cancel()
+        for task in list(CROSS_ARB_TASKS):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        CROSS_ARB_TASKS.clear()
 
     return notifier
 
