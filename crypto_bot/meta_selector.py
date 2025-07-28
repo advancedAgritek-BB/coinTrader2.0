@@ -1,34 +1,28 @@
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-from crypto_bot.utils.logger import LOG_DIR
-from datetime import datetime
-
 import pandas as pd
 
-
+from crypto_bot.utils.logger import LOG_DIR
 from crypto_bot.strategy import (
-    trend_bot,
-    grid_bot,
-    sniper_bot,
-    dex_scalper,
-    dca_bot,
-    mean_bot,
-    dip_hunter,
+    bounce_scalper,
     breakout_bot,
+    cross_chain_arb_bot,
+    dca_bot,
+    dex_scalper,
+    dip_hunter,
+    flash_crash_bot,
+    grid_bot,
+    lstm_bot,
+    mean_bot,
+    meme_wave_bot,
     micro_scalp_bot,
     momentum_bot,
-    lstm_bot,
-    bounce_scalper,
-    meme_wave_bot,
-    flash_crash_bot,
+    sniper_bot,
     solana_scalping,
-    cross_chain_arb_bot,
-    lstm_bot,
-    meme_wave_bot,
-    cross_chain_arb_bot,
-    flash_crash_bot,
+    trend_bot,
 )
 
 LOG_FILE = LOG_DIR / "strategy_performance.json"
@@ -76,35 +70,6 @@ class MetaRegressor:
         return {k: float(v) for k, v in zip(df.index, preds)}
 
 
-_STRATEGY_FN_MAP = {
-    "trend": trend_bot.generate_signal,
-    "trend_bot": trend_bot.generate_signal,
-    "grid": grid_bot.generate_signal,
-    "grid_bot": grid_bot.generate_signal,
-    "sniper": sniper_bot.generate_signal,
-    "sniper_bot": sniper_bot.generate_signal,
-    "dex_scalper": dex_scalper.generate_signal,
-    "dex_scalper_bot": dex_scalper.generate_signal,
-    "mean_bot": mean_bot.generate_signal,
-    "breakout_bot": breakout_bot.generate_signal,
-    "micro_scalp": micro_scalp_bot.generate_signal,
-    "micro_scalp_bot": micro_scalp_bot.generate_signal,
-    "momentum": momentum_bot.generate_signal,
-    "momentum_bot": momentum_bot.generate_signal,
-    "lstm_bot": lstm_bot.generate_signal,
-    "bounce_scalper": bounce_scalper.generate_signal,
-    "bounce_scalper_bot": bounce_scalper.generate_signal,
-    "dip_hunter": dip_hunter.generate_signal,
-    "cross_chain_arb_bot": cross_chain_arb_bot.generate_signal,
-    "meme_wave": meme_wave_bot.generate_signal,
-    "meme_wave_bot": meme_wave_bot.generate_signal,
-    "solana_scalping": solana_scalping.generate_signal,
-    "solana_scalping_bot": solana_scalping.generate_signal,
-    "dca": dca_bot.generate_signal,
-    "dca_bot": dca_bot.generate_signal,
-    "cross_chain_arb_bot": cross_chain_arb_bot.generate_signal,
-    "flash_crash_bot": flash_crash_bot.generate_signal,
-}
 _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {}
 
 
@@ -130,13 +95,10 @@ _register(lstm_bot, "lstm_bot")
 _register(bounce_scalper, "bounce_scalper", "bounce_scalper_bot")
 _register(flash_crash_bot, "flash_crash_bot")
 _register(dip_hunter, "dip_hunter")
-_register(flash_crash_bot, "flash_crash_bot")
-_register(lstm_bot, "lstm_bot")
 _register(solana_scalping, "solana_scalping", "solana_scalping_bot")
 _register(meme_wave_bot, "meme_wave_bot")
 _register(dca_bot, "dca", "dca_bot")
 _register(cross_chain_arb_bot, "cross_chain_arb_bot")
-_register(flash_crash_bot, "flash_crash_bot")
 
 
 def get_strategy_by_name(
