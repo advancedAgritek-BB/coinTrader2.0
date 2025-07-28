@@ -392,6 +392,7 @@ strategy_router:
     mean-reverting:
     - dip_hunter
     - mean_bot
+    - stat_arb_bot
     scalp:
     - micro_scalp
     sideways:
