@@ -27,6 +27,7 @@ sniper_bot = _optional_import("sniper_bot")
 trend_bot = _optional_import("trend_bot")
 dip_hunter = _optional_import("dip_hunter")
 momentum_bot = _optional_import("momentum_bot")
+meme_wave_bot = _optional_import("meme_wave_bot")
 
 # Export Solana sniper strategy module under a unified name
 sniper_solana = importlib.import_module("crypto_bot.strategies.sniper_solana")
@@ -51,6 +52,7 @@ __all__ = [
         "sniper_solana",
         "solana_scalping",
         "momentum_bot",
+        "meme_wave_bot",
     ]
     if globals().get(name) is not None
 ]
