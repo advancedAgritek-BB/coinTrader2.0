@@ -359,6 +359,10 @@ momentum_bot:
     trailing_stop_factor: 1.5  # ATR multiple for trailing stop
     risk_pct: 0.01
     max_drawdown: 0.4
+cross_chain_arb_bot:
+  pair: SOL/USDC
+  spread_threshold: 0.05
+  fee_threshold: 30
 lstm_bot:
   model_path: crypto_bot/models/lstm_model.pth
   sequence_length: 60
