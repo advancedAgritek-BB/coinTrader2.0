@@ -556,6 +556,7 @@ momentum_bot:
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
 * **ticker_rate_limit** – delay in milliseconds after each ticker API call.
 * **log_to_google** – export trades to Google Sheets.
+* **quiet_mode** – suppress monitor output when stdout is not a TTY.
 * **telegram** – bot token, chat ID and trade notifications. Optional
   **status_updates** and **balance_updates** flags control startup and
   balance alerts.
