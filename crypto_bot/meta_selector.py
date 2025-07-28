@@ -19,9 +19,11 @@ from crypto_bot.strategy import (
     breakout_bot,
     micro_scalp_bot,
     momentum_bot,
+    lstm_bot,
     bounce_scalper,
     meme_wave_bot,
     solana_scalping,
+    lstm_bot,
     meme_wave_bot,
 )
 
@@ -85,6 +87,7 @@ _STRATEGY_FN_MAP = {
     "micro_scalp_bot": micro_scalp_bot.generate_signal,
     "momentum": momentum_bot.generate_signal,
     "momentum_bot": momentum_bot.generate_signal,
+    "lstm_bot": lstm_bot.generate_signal,
     "bounce_scalper": bounce_scalper.generate_signal,
     "bounce_scalper_bot": bounce_scalper.generate_signal,
     "dip_hunter": dip_hunter.generate_signal,
@@ -116,8 +119,10 @@ _register(mean_bot, "mean_bot")
 _register(breakout_bot, "breakout_bot")
 _register(micro_scalp_bot, "micro_scalp", "micro_scalp_bot")
 _register(momentum_bot, "momentum", "momentum_bot")
+_register(lstm_bot, "lstm_bot")
 _register(bounce_scalper, "bounce_scalper", "bounce_scalper_bot")
 _register(dip_hunter, "dip_hunter")
+_register(lstm_bot, "lstm_bot")
 _register(solana_scalping, "solana_scalping", "solana_scalping_bot")
 _register(meme_wave_bot, "meme_wave_bot")
 _register(dca_bot, "dca", "dca_bot")

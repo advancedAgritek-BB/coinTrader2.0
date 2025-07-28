@@ -17,6 +17,7 @@ from crypto_bot.strategy import (
     meme_wave_bot,
     solana_scalping,
     meme_wave_bot,
+    lstm_bot,
     momentum_bot,
 )
 
@@ -35,6 +36,7 @@ _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {
     "meme_wave_bot": meme_wave_bot.generate_signal,
     "solana_scalping": solana_scalping.generate_signal,
     "meme_wave_bot": meme_wave_bot.generate_signal,
+    "lstm_bot": lstm_bot.generate_signal,
 }
 
 if momentum_bot is not None:
