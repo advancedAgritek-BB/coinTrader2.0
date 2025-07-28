@@ -1398,7 +1398,8 @@ class AlwaysFailWatchExchange(DummyExchange):
         return {"ETH/USD": data["XETHZUSD"], "BTC/USD": data["XXBTZUSD"]}
 
 
-def test_ws_failures_disable_scan(monkeypatch):
+def test_ws_failures_disable_scan(monkeypatch, caplog):
+    caplog.set_level("WARNING")
     monkeypatch.setattr(sp, "_fetch_ticker_async", lambda _p, **_k: {"result": {}})
 
     sp.ticker_cache.clear()
@@ -1432,6 +1433,7 @@ def test_ws_failures_disable_scan(monkeypatch):
     assert ex.fetch_calls == 1
     assert ex.options.get("ws_failures") == 2
     assert ex.options.get("ws_scan") is False
+    assert any("Disabling WebSocket scanning" in r.getMessage() for r in caplog.records)
 
     t["now"] += 6
     asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"], cfg))
