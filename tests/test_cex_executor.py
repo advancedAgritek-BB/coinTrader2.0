@@ -268,8 +268,8 @@ def test_get_exchange_websocket_missing_creds(monkeypatch):
 
 
 class SlippageExchange:
-    def fetch_ticker(self, symbol):
-        return {"bid": 100, "ask": 110}
+    def fetch_order_book(self, symbol, limit=10):
+        return {"bids": [[100, 10]], "asks": [[120, 10]]}
 
     def create_market_order(self, symbol, side, amount):
         raise AssertionError("should not execute")
@@ -290,7 +290,35 @@ def test_execute_trade_skips_on_slippage(monkeypatch):
         TelegramNotifier("t", "c"),
         notifier=notifier,
         dry_run=False,
-        config={"max_slippage_pct": 0.05},
+        config={"max_slippage_pct": 0.05, "liquidity_depth": 10},
+    )
+    assert order == {}
+
+
+class LowBookExchange:
+    def fetch_order_book(self, symbol, limit=10):
+        return {"bids": [[100, 1]], "asks": [[101, 1]]}
+
+    def create_market_order(self, symbol, side, amount):
+        raise AssertionError("should not execute")
+
+
+def test_execute_trade_skips_on_liquidity_usage(monkeypatch):
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+    notifier = DummyNotifier()
+    order = cex_executor.execute_trade(
+        LowBookExchange(),
+        None,
+        "XBT/USDT",
+        "buy",
+        1.0,
+        TelegramNotifier("t", "c"),
+        notifier=notifier,
+        dry_run=False,
+        config={"max_liquidity_usage": 0.5, "liquidity_depth": 10},
     )
     assert order == {}
 
