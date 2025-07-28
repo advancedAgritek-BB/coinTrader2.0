@@ -521,12 +521,18 @@ def _clear_strategy_router_cache():
 @pytest.fixture(autouse=True)
 def _mock_listing_date(monkeypatch):
     """Avoid network calls for Kraken listing timestamps."""
-    from crypto_bot.utils import market_loader
+    try:
+        from crypto_bot.utils import market_loader  # type: ignore
+    except Exception:  # pragma: no cover - module may have unmet deps
+        market_loader = None
 
     async def _no_listing(*_a, **_k):
         return None
 
-    monkeypatch.setattr(market_loader, "get_kraken_listing_date", _no_listing)
+    if market_loader is not None:
+        monkeypatch.setattr(
+            market_loader, "get_kraken_listing_date", _no_listing, raising=False
+        )
     yield
 
 

@@ -8,7 +8,10 @@ import json
 
 async def watch_pool(api_key: str, pool_program: str) -> AsyncGenerator[Dict[str, Any], None]:
     """Connect to Helius enhanced websocket and yield transaction data."""
-    url = f"wss://atlas-mainnet.helius-rpc.com/?api-key={api_key}"
+    # Use the standard Helius mainnet endpoint by default. Enhanced endpoints
+    # such as ``atlas-mainnet.helius-rpc.com`` are only available to business
+    # plans, so point to the broadly accessible URL.
+    url = f"wss://mainnet.helius-rpc.com/?api-key={api_key}"
     async with aiohttp.ClientSession() as session:
         backoff = 0
         while True:
@@ -42,9 +45,15 @@ async def watch_pool(api_key: str, pool_program: str) -> AsyncGenerator[Dict[str
                                 result = data.get("params", {}).get("result")
                             if result is not None:
                                 yield result
-                        elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
+                        elif msg.type in (
+                            aiohttp.WSMsgType.CLOSED,
+                            aiohttp.WSMsgType.ERROR,
+                        ):
                             reconnect = True
                             break
+                    else:
+                        # Loop exhausted without break -> no more messages
+                        return
             except aiohttp.WSServerHandshakeError:
                 reconnect = True
             except Exception:

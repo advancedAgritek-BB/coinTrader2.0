@@ -1,8 +1,15 @@
 import asyncio
 import types
 import pytest
+import importlib.util
+from pathlib import Path
 
-from crypto_bot.solana import pool_ws_monitor
+spec = importlib.util.spec_from_file_location(
+    "pool_ws_monitor",
+    Path(__file__).resolve().parents[1] / "crypto_bot/solana/pool_ws_monitor.py",
+)
+pool_ws_monitor = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(pool_ws_monitor)
 
 
 class DummyMsg:
@@ -88,7 +95,7 @@ def test_subscription_message(monkeypatch):
             await gen.__anext__()
 
     asyncio.run(run())
-    assert session.url == "wss://atlas-mainnet.helius-rpc.com/?api-key=KEY"
+    assert session.url == "wss://mainnet.helius-rpc.com/?api-key=KEY"
     assert ws.sent and ws.sent[0]["params"][0]["accountInclude"] == ["PGM"]
 
 
