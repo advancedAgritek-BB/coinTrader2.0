@@ -3,6 +3,7 @@ import asyncio
 from crypto_bot.execution.cex_executor import place_stop_order
 from crypto_bot.utils import trade_logger
 from crypto_bot.utils.telegram import TelegramNotifier
+from crypto_bot.execution import executor as simple_executor
 
 
 class DummyExchange:
@@ -380,6 +381,44 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
     assert float(row.split(",")[3]) > 0
 
 
+def test_execute_trade_async_retries(monkeypatch):
+    calls = {"count": 0}
+    delays = []
+
+    class DummyEx:
+        async def create_market_order(self, symbol, side, amount):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise cex_executor.ccxt.NetworkError("fail")
+            return {"id": "1"}
+
+    async def fake_sleep(d):
+        delays.append(d)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    NetworkError = type("NetworkError", (Exception,), {})
+    monkeypatch.setattr(cex_executor.ccxt, "NetworkError", NetworkError, raising=False)
+    monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
+
+    order = asyncio.run(
+        cex_executor.execute_trade_async(
+            DummyEx(),
+            None,
+            "XBT/USDT",
+            "buy",
+            1.0,
+            notifier=DummyNotifier(),
+            dry_run=False,
+            max_retries=2,
+        )
+    )
+
+    assert order == {"id": "1"}
+    assert delays
+
+
 def test_execute_trade_no_message_when_disabled(monkeypatch):
     calls = {"count": 0}
     monkeypatch.setattr(
@@ -471,3 +510,69 @@ def test_execute_trade_async_retries(monkeypatch):
     assert order.get("status") == "closed"
     assert ex.calls == 2
     assert sleeps == [1.0]
+
+
+def test_simple_executor_partial_fill(monkeypatch):
+    monkeypatch.setattr(simple_executor, "ccxt", ccxt)
+    class PartialEx:
+        def __init__(self):
+            self.orders = []
+
+        def create_market_order(self, symbol, side, amount):
+            oid = f"o{len(self.orders)}"
+            self.orders.append((oid, amount))
+            return {"id": oid, "symbol": symbol, "amount": amount}
+
+        def fetch_order(self, oid, symbol):
+            if oid == "o0":
+                return {"id": oid, "status": "closed", "filled": 0.4, "amount": 1.0, "symbol": symbol}
+            return {"id": oid, "status": "closed", "filled": 0.6, "amount": 0.6, "symbol": symbol}
+
+    times = {"t": 0.0}
+
+    def fake_sleep(sec):
+        times["t"] += sec
+
+    def fake_monotonic():
+        return times["t"]
+
+    monkeypatch.setattr(simple_executor.time, "sleep", fake_sleep)
+    monkeypatch.setattr(simple_executor.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(simple_executor, "log_trade", lambda order: None)
+
+    ex = PartialEx()
+    notifier = DummyNotifier()
+    order = simple_executor.execute_trade(ex, "XBT/USDT", "buy", 1.0, {}, notifier, dry_run=False, poll_timeout=10)
+
+    assert order["id"] == "o1"
+    assert ex.orders == [("o0", 1.0), ("o1", 0.6)]
+    assert any("Partial fill" in m for m in notifier.messages)
+
+
+def test_simple_executor_timeout(monkeypatch):
+    monkeypatch.setattr(simple_executor, "ccxt", ccxt)
+    class TimeoutEx:
+        def create_market_order(self, symbol, side, amount):
+            return {"id": "t1", "symbol": symbol, "amount": amount}
+
+        def fetch_order(self, oid, symbol):
+            return {"id": oid, "status": "open", "filled": 0.0, "amount": 1.0, "symbol": symbol}
+
+    times = {"t": 0.0}
+
+    def fake_sleep(sec):
+        times["t"] += sec
+
+    def fake_monotonic():
+        return times["t"]
+
+    monkeypatch.setattr(simple_executor.time, "sleep", fake_sleep)
+    monkeypatch.setattr(simple_executor.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(simple_executor, "log_trade", lambda order: None)
+
+    ex = TimeoutEx()
+    notifier = DummyNotifier()
+    with pytest.raises(TimeoutError):
+        simple_executor.execute_trade(ex, "XBT/USDT", "buy", 1.0, {}, notifier, dry_run=False, poll_timeout=2)
+
+    assert any("timed out" in m for m in notifier.messages)
