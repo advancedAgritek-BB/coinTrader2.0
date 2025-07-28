@@ -33,6 +33,7 @@ scikit-optimize
 pydantic<2
 numba
 cachetools
+tenacity
 prometheus-client
 solders
 pythclient
