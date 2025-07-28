@@ -1,4 +1,6 @@
 import ccxt  # type: ignore
+import os
+import keyring
 NetworkError = getattr(ccxt, "NetworkError", Exception)
 RateLimitExceeded = getattr(ccxt, "RateLimitExceeded", Exception)
 ExchangeError = getattr(ccxt, "ExchangeError", Exception)
@@ -17,12 +19,31 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
 
 
-def load_exchange(api_key: str, api_secret: str) -> 'ccxt.Exchange':
-    exchange = ccxt.binance({
-        'apiKey': api_key,
-        'secret': api_secret,
-        'enableRateLimit': True
-    })
+def load_exchange(
+    api_key: str | None = None, api_secret: str | None = None
+) -> 'ccxt.Exchange':
+    """Instantiate a Binance exchange using provided or stored credentials."""
+
+    if api_key is None:
+        api_key = keyring.get_password("binance", "api_key")
+        if api_key is None:
+            api_key = os.getenv("API_KEY")
+
+    if api_secret is None:
+        api_secret = keyring.get_password("binance", "api_secret")
+        if api_secret is None:
+            api_secret = os.getenv("API_SECRET")
+
+    if not api_key or not api_secret:
+        raise ValueError("Missing Binance API credentials")
+
+    exchange = ccxt.binance(
+        {
+            "apiKey": api_key,
+            "secret": api_secret,
+            "enableRateLimit": True,
+        }
+    )
     return exchange
 
 

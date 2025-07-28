@@ -45,3 +45,4 @@ torch
 stable-baselines3
 lunarcrush
 
+keyring
