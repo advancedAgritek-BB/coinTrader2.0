@@ -1,19 +1,19 @@
-import ccxt  # type: ignore
 import os
+import time
+from typing import TYPE_CHECKING, Any, Dict
+
+import ccxt  # type: ignore
 import keyring
+
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils.trade_logger import log_trade
+
 NetworkError = getattr(ccxt, "NetworkError", Exception)
 RateLimitExceeded = getattr(ccxt, "RateLimitExceeded", Exception)
 ExchangeError = getattr(ccxt, "ExchangeError", Exception)
-from typing import Dict, Any
-import time
-from pathlib import Path
-import time
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:  # pragma: no cover - type hints only
     from crypto_bot.utils.telegram import TelegramNotifier
-from crypto_bot.utils.trade_logger import log_trade
-from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
