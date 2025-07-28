@@ -23,6 +23,7 @@ mean_bot = _optional_import("mean_bot")
 stat_arb_bot = _optional_import("stat_arb_bot")
 micro_scalp_bot = _optional_import("micro_scalp_bot")
 momentum_bot = _optional_import("momentum_bot")
+lstm_bot = _optional_import("lstm_bot")
 sniper_bot = _optional_import("sniper_bot")
 trend_bot = _optional_import("trend_bot")
 dip_hunter = _optional_import("dip_hunter")
@@ -46,6 +47,7 @@ __all__ = [
         "dip_hunter",
         "micro_scalp_bot",
         "momentum_bot",
+        "lstm_bot",
         "meme_wave_bot",
         "lstm_bot",
         "sniper_bot",
