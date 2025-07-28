@@ -359,6 +359,10 @@ momentum_bot:
     trailing_stop_factor: 1.5  # ATR multiple for trailing stop
     risk_pct: 0.01
     max_drawdown: 0.4
+lstm_bot:
+  model_path: crypto_bot/models/lstm_model.pth
+  sequence_length: 60
+  threshold_pct: 0.01
 solana_scalping:
   macd_fast: 10
   macd_signal: 8
@@ -396,26 +400,34 @@ strategy_router:
   regimes:
     bounce:
     - bounce_scalper
+    - lstm_bot
     breakout:
     - breakout_bot
+    - lstm_bot
     dip_hunter:
     - dip_hunter
+    - lstm_bot
     mean-reverting:
     - dip_hunter
     - mean_bot
     - stat_arb_bot
+    - lstm_bot
     scalp:
     - micro_scalp
+    - lstm_bot
     sideways:
     - grid
+    - lstm_bot
     trending:
     - trend
     - momentum_bot
+    - lstm_bot
     volatile:
     - sniper_bot
     - sniper_solana
     - momentum_bot
     - meme_wave_bot
+    - lstm_bot
   scalp_timeframe: 1m
   sideways_timeframe: 1h
   trending_timeframe: 1h
