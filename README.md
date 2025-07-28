@@ -183,10 +183,13 @@ SOLANA_RPC_URL=https://devnet.solana.com  # optional custom endpoint
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
 # SOLANA_RPC_URL=https://api.devnet.solana.com      # devnet example
 HELIUS_KEY=your_helius_api_key          # required for Jupiter/Helius registry
+# also needed for WebSocket pool monitoring
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 SUPABASE_URL=https://xyzcompany.supabase.co
 SUPABASE_KEY=your_service_key
+# optional custom model name stored in Supabase
+SUPABASE_MODEL_FILE=regime_lgbm.pkl
 LUNARCRUSH_API_KEY=your_lunarcrush_api_key  # optional, LunarCrush social metrics
 token_registry.refresh_interval_minutes=720  # optional cache update interval
 ```
@@ -198,7 +201,9 @@ token_registry.refresh_interval_minutes=720  # optional cache update interval
 admin chats. Omit it to restrict control to the single `chat_id` in the
 configuration file.
 
-`SUPABASE_URL` and `SUPABASE_KEY` are required for downloading models used by `regime_classifier`.
+`SUPABASE_URL` and `SUPABASE_KEY` are required for downloading models used by
+`regime_classifier`.  Use `SUPABASE_MODEL_FILE` to override the default model
+file name if needed.
 
 ### Solana token registry
 
@@ -349,10 +354,24 @@ symbol_score_weights:
 * **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle. See
   `scan_cex_arbitrage` in `crypto_bot/main.py` for multi-exchange support.
 * **solana_scanner.gecko_search** – query GeckoTerminal to verify volume for new Solana tokens.
+* **solana_scanner.use_ws** – subscribe to Raydium pools via WebSockets instead of polling.
+* **solana_scanner.helius_ws_url** – custom WebSocket endpoint (defaults to `wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}`).
+* **solana_scanner.raydium_program_id** – Raydium program ID to monitor.
+* **solana_scanner.min_liquidity** – skip pools with less liquidity.
+* **solana_scanner.filter_tf** – timeframe used when classifying new tokens.
+* **solana_scanner.filter_regime** – skip tokens that do not match these regimes.
 * **gecko_limit** – maximum simultaneous requests to GeckoTerminal. Reduce this if you encounter HTTP 429 errors.
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
 * **ticker_rate_limit** – delay in milliseconds after each ticker API call.
 * Solana tokens are filtered using symbol scoring; adjust `min_symbol_score` to control the threshold.
+
+Example configuration:
+
+```yaml
+solana_scanner:
+  filter_tf: 5m
+  filter_regime: [volatile, breakout]
+```
 
 ### Risk Parameters
 * **risk** – default stop loss, take profit and drawdown limits. `min_volume` is set to `0.0001` to filter thin markets. The stop is 1.5× ATR and the take profit is 3× ATR by default.
@@ -369,6 +388,7 @@ symbol_score_weights:
 * **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment to avoid bearish markets.
 * **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
 * **mempool_monitor** – pause or reprice when Solana fees spike.
+* **pool.ml_filter** – skip new pools with low ML breakout probability.
 * **gas_threshold_gwei** – abort scalper trades when priority fees exceed this.
 * **min_cooldown** – minimum minutes between trades.
 * **cycle_bias** – optional on-chain metrics to bias trades.
@@ -385,6 +405,13 @@ symbol_score_weights:
   taking and trailing stops. The trailing stop follows price by 2% after at
   least 1% gain. `momentum_bot` uses the `trailing_stop_factor` setting for an
   ATR-based stop.
+* **quick_sell_profit_pct**/**quick_sell_hold_timeout** – automatically close a
+  position when profit exceeds the configured percentage and it has been held for
+  at least this many seconds.
+
+Quick sell uses `quick_sell_profit_pct` as the profit target. Once a trade has
+been open longer than `quick_sell_hold_timeout` seconds and the unrealized gain
+exceeds this percentage, the position is closed immediately.
 
 ### Strategy and Signals
 * **strategy_allocation** – capital split across strategies.
@@ -1369,6 +1396,7 @@ meme_wave_sniper:
     interval: 5
     websocket_url: wss://atlas-mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
     raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
+    ml_filter: false
   scoring:
     weight_liquidity: 1.0
     weight_tx: 1.0
@@ -1392,6 +1420,11 @@ PoolWatcher -> Safety -> Score -> RiskTracker -> Executor -> Exit
 
 Sniping begins immediately at startup. The initial symbol scan now runs in the
 background so new pools can be acted on without waiting for caches to fill.
+
+Before any token from the scanner is queued for execution its price history is
+fetched and passed through `classify_regime_cached`. Only those labeled with one
+of the regimes in `solana_scanner.filter_regime` at `solana_scanner.filter_tf`
+are enqueued.
 
 API requirements: [Helius](https://www.helius.xyz/) for pool data,
 [Jupiter](https://jup.ag/) for quotes, [Jito](https://www.jito.network/) for
@@ -1538,7 +1571,8 @@ python ml_trainer.py train regime --use-gpu --federated
 ```
 
 Ensure `SUPABASE_URL` and `SUPABASE_KEY` are set in `crypto_bot/.env` so the
-upload succeeds. Set `use_ml_regime_classifier: true` in
+upload succeeds. Optionally set `SUPABASE_MODEL_FILE` if you renamed the
+stored model. Set `use_ml_regime_classifier: true` in
 `crypto_bot/regime/regime_config.yaml` to enable downloads of the trained model
 when the bot starts.
 

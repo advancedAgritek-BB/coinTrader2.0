@@ -27,4 +27,5 @@ async def snipe(event: NewPoolEvent, score: float, cfg: Mapping[str, object]) ->
         notifier=cfg.get("notifier"),
         mempool_monitor=cfg.get("mempool_monitor"),
         mempool_cfg=cfg.get("mempool_cfg"),
+        config=cfg,
     )

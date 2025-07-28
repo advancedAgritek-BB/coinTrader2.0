@@ -163,7 +163,10 @@ def test_reload_config_clears_symbol_cache(monkeypatch):
     sys.modules.setdefault("redis", types.SimpleNamespace())
     sys.modules.setdefault("crypto_bot.solana", types.SimpleNamespace(get_solana_new_tokens=lambda *_a, **_k: []))
     sys.modules.setdefault("crypto_bot.solana.scalping", types.SimpleNamespace())
-    sys.modules.setdefault("crypto_bot.solana.exit", types.SimpleNamespace(monitor_price=lambda *_a, **_k: None))
+    sys.modules.setdefault(
+        "crypto_bot.solana.exit",
+        types.SimpleNamespace(monitor_price=lambda *_a, **_k: None, quick_exit=lambda *_a, **_k: None),
+    )
     sys.modules.setdefault(
         "crypto_bot.execution.solana_mempool",
         types.SimpleNamespace(SolanaMempoolMonitor=object),

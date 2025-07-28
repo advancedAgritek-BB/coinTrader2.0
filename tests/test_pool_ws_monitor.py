@@ -1,8 +1,22 @@
 import asyncio
+import importlib.util
 import types
+from pathlib import Path
+
 import pytest
 
-from crypto_bot.solana import pool_ws_monitor
+spec = importlib.util.spec_from_file_location(
+    "pool_ws_monitor",
+    Path(__file__).resolve().parents[1] / "crypto_bot/solana/pool_ws_monitor.py",
+)
+pool_ws_monitor = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(pool_ws_monitor)
+
+
+@pytest.fixture(autouse=True)
+def _mock_listing_date():
+    """Override global fixture to avoid heavy imports."""
+    yield
 
 
 class DummyMsg:
@@ -88,14 +102,14 @@ def test_subscription_message(monkeypatch):
             await gen.__anext__()
 
     asyncio.run(run())
-    assert session.url == "wss://atlas-mainnet.helius-rpc.com/?api-key=KEY"
+    assert session.url == "wss://mainnet.helius-rpc.com/?api-key=KEY"
     assert ws.sent and ws.sent[0]["params"][0]["accountInclude"] == ["PGM"]
 
 
 def test_yields_transactions(monkeypatch):
     messages = [
-        {"params": {"result": {"tx": 1}}},
-        {"params": {"result": {"tx": 2}}},
+        {"params": {"result": {"tx": 1, "txCount": 11, "liquidity": 100}}},
+        {"params": {"result": {"tx": 2, "txCount": 12, "liquidity": 100}}},
     ]
     ws = DummyWS(messages)
     session = DummySession(ws)
@@ -110,12 +124,17 @@ def test_yields_transactions(monkeypatch):
         return results
 
     res = asyncio.run(run())
-    assert res == [{"tx": 1}, {"tx": 2}]
+    assert res == [
+        {"tx": 1, "txCount": 11, "liquidity": 100},
+        {"tx": 2, "txCount": 12, "liquidity": 100},
+    ]
 
 
 def test_reconnect_on_close(monkeypatch):
     ws1 = DummyWS([])
-    ws2 = DummyWS([{"params": {"result": {"tx": 3}}}])
+    ws2 = DummyWS([
+        {"params": {"result": {"tx": 3, "txCount": 15, "liquidity": 100}}}
+    ])
     session = DummySession([ws1, ws2])
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
@@ -127,5 +146,26 @@ def test_reconnect_on_close(monkeypatch):
         return result
 
     res = asyncio.run(run())
-    assert res == {"tx": 3}
+    assert res == {"tx": 3, "txCount": 15, "liquidity": 100}
     assert session.calls == 2
+
+
+def test_watch_pool_filters(monkeypatch):
+    messages = [
+        {"params": {"result": {"tx": 1, "txCount": 5, "liquidity": 40}}},
+        {"params": {"result": {"tx": 2, "txCount": 12, "liquidity": 60}}},
+    ]
+    ws = DummyWS(messages)
+    session = DummySession(ws)
+    aiohttp_mod = AiohttpMod(session)
+    monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
+
+    async def run():
+        gen = pool_ws_monitor.watch_pool("KEY", "PGM", min_liquidity=50)
+        result = await gen.__anext__()
+        with pytest.raises(StopAsyncIteration):
+            await gen.__anext__()
+        return result
+
+    res = asyncio.run(run())
+    assert res == {"tx": 2, "txCount": 12, "liquidity": 60}
