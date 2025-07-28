@@ -1168,6 +1168,8 @@ Start the UI with:
 python -m frontend.app
 ```
 
+Set `FLASK_DEBUG=1` before running the command to enable Flask debug mode.
+
 Navigate to `http://localhost:5000` to start or stop the bot, watch the logs
 refresh live and review the trade statistics stored in
 `crypto_bot/logs/strategy_stats.json` (automatically produced from
