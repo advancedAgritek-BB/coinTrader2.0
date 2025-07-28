@@ -16,6 +16,7 @@ from crypto_bot.strategy import (
     breakout_bot,
     solana_scalping,
     meme_wave_bot,
+    momentum_bot,
 )
 
 # Default log file location
@@ -33,6 +34,9 @@ _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {
     "solana_scalping": solana_scalping.generate_signal,
     "meme_wave_bot": meme_wave_bot.generate_signal,
 }
+
+if momentum_bot is not None:
+    _STRATEGY_FN_MAP["momentum_bot"] = momentum_bot.generate_signal
 
 
 class RLStrategySelector:
