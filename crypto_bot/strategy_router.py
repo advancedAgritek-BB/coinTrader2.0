@@ -37,6 +37,7 @@ from crypto_bot.strategy import (
     breakout_bot,
     micro_scalp_bot,
     bounce_scalper,
+    flash_crash_bot,
 )
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
