@@ -76,6 +76,15 @@ dip_hunter:
   rsi_window: 14
   vol_mult: 1.5
   vol_window: 20
+stat_arb_bot:
+  pairs:
+    - SOL/USDC,ETH/USDC
+  z_threshold: 2.0
+  window: 50
+cross_chain_arb_bot:
+  pairs:
+    - SOL/USDC,ETH/USDC
+  spread_thr: 0.005
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.05
 exchange: kraken
@@ -442,6 +451,7 @@ strategy_router:
     - lstm_bot
     sideways:
     - grid
+    - cross_chain_arb_bot
     - lstm_bot
     trending:
     - trend
@@ -452,6 +462,7 @@ strategy_router:
     - sniper_solana
     - momentum_bot
     - meme_wave_bot
+    - cross_chain_arb_bot
     - flash_crash_bot
     - lstm_bot
   scalp_timeframe: 1m
