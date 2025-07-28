@@ -3,3 +3,4 @@ flask
 base58
 python-dotenv
 websocket-client
+keyring
