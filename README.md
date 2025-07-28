@@ -107,8 +107,9 @@ needed.
    When dry-run mode is selected you will be prompted for the starting USDT balance.
    The console now refreshes with your wallet balance and any active
    trades in real time. Profitable positions are shown in green while
-   losing ones appear in red. The monitor lists open trades on a single
-   line formatted as `Symbol -- entry -- unrealized PnL`.
+   losing ones appear in red. The monitor prints a single status line
+   followed by additional lines for each open trade formatted as
+   `Symbol -- entry -- unrealized PnL`.
    The program prints "Bot running..." before the [Monitor] lines.
    Before trading begins the bot performs a full market scan to populate
    its caches. Progress is logged and, when `telegram.status_updates` is
