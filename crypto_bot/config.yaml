@@ -159,7 +159,7 @@ meme_wave_sniper:
   execution:
     dry_run: true
   pool:
-    interval: 3
+    interval: 0.5
     raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
     url: https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY
     websocket_url: wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}

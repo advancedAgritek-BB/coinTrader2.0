@@ -106,7 +106,8 @@ class PoolWatcher:
         if self.websocket_url and any(self.program_ids):
             async for evt in self._watch_ws():
                 yield evt
-            return
+            if not self._running:
+                return
 
         self._running = True
         async with aiohttp.ClientSession() as session:
