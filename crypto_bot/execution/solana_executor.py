@@ -4,6 +4,7 @@ from typing import Dict, Optional
 import os
 import json
 import base64
+import asyncio
 import aiohttp
 
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -35,6 +36,7 @@ async def execute_swap(
     mempool_cfg: Optional[Dict] = None,
     config: Optional[Dict] = None,
     jito_key: Optional[str] = None,
+    max_retries: int = 1,
 ) -> Dict:
     """Execute a swap on Solana using the Jupiter aggregator."""
 
@@ -127,18 +129,30 @@ async def execute_swap(
     client = Client(rpc_url)
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(
-            JUPITER_QUOTE_URL,
-            params={
-                "inputMint": token_in,
-                "outputMint": token_out,
-                "amount": int(amount),
-                "slippageBps": slippage_bps,
-            },
-            timeout=10,
-        ) as quote_resp:
-            quote_resp.raise_for_status()
-            quote_data = await quote_resp.json()
+        attempt = 0
+        while True:
+            try:
+                async with session.get(
+                    JUPITER_QUOTE_URL,
+                    params={
+                        "inputMint": token_in,
+                        "outputMint": token_out,
+                        "amount": int(amount),
+                        "slippageBps": slippage_bps,
+                    },
+                    timeout=10,
+                ) as quote_resp:
+                    quote_resp.raise_for_status()
+                    quote_data = await quote_resp.json()
+                break
+            except aiohttp.ClientError as exc:
+                if attempt >= max_retries - 1:
+                    err_msg = notifier.notify(f"Quote failed: {exc}")
+                    if err_msg:
+                        logger.error("Failed to send message: %s", err_msg)
+                    return {}
+                await asyncio.sleep(1)
+                attempt += 1
         if not quote_data.get("data"):
             logger.warning("No routes returned from Jupiter")
             return {}
