@@ -132,7 +132,6 @@ async def test_sniper_trade(monkeypatch):
 
     res = await solana_trading.sniper_trade("SOL", "USDC", 1, rm)
     assert res == "SIG"
-from crypto_bot import solana_trading
 
 
 class DummyClient:
@@ -189,7 +188,7 @@ async def fake_monitor(tx, threshold):
     return 1.0
 
 
-def test_sniper_trade(monkeypatch):
+def test_sniper_trade_profit_conversion(monkeypatch):
     monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(solana_trading, "execute_swap", fake_execute)
     monkeypatch.setattr(solana_trading, "auto_convert_funds", fake_convert)
