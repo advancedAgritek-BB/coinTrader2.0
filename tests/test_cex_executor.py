@@ -1,4 +1,5 @@
 import ccxt
+import types
 import asyncio
 from crypto_bot.execution.cex_executor import place_stop_order
 from crypto_bot.utils import trade_logger
@@ -251,6 +252,15 @@ def test_get_exchange_websocket_missing_creds(monkeypatch):
     monkeypatch.delenv("API_KEY", raising=False)
     monkeypatch.delenv("API_SECRET", raising=False)
     monkeypatch.delenv("KRAKEN_WS_TOKEN", raising=False)
+    monkeypatch.setattr(
+        "crypto_bot.execution.kraken_ws.keyring.get_password",
+        lambda *a, **k: "dummy",
+    )
+    monkeypatch.setattr(
+        "crypto_bot.execution.kraken_ws.ccxt",
+        types.SimpleNamespace(kraken=lambda params: object()),
+        raising=False,
+    )
 
     class DummyCCXT2:
         def __init__(self, params):
