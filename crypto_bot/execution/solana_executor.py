@@ -256,6 +256,29 @@ async def execute_swap(
     if jito_key is None:
         jito_key = os.getenv("JITO_KEY")
 
+    if jito_key:
+        signed_tx = base64.b64encode(tx.serialize()).decode()
+        async with aiohttp.ClientSession() as jito_session:
+            async with jito_session.post(
+                JITO_BUNDLE_URL,
+                json={"transactions": [signed_tx]},
+                headers={"Authorization": f"Bearer {jito_key}"},
+                timeout=10,
+            ) as bundle_resp:
+                bundle_resp.raise_for_status()
+                bundle_data = await bundle_resp.json()
+        tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
+    else:
+        for attempt in range(max_retries):
+            try:
+                send_res = client.send_transaction(tx, keypair)
+                break
+            except Exception as err:
+                if "congestion" in str(err).lower() and attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                raise
+        tx_hash = send_res["result"]
     retries = 0
     tx_hash = None
     while retries < 3:
@@ -290,6 +313,8 @@ async def execute_swap(
 
     try:
         async with AsyncClient(rpc_url) as aclient:
+            confirm_res = await asyncio.wait_for(
+                aclient.confirm_transaction(tx_hash),
             await asyncio.wait_for(
                 aclient.confirm_transaction(tx_hash, commitment="confirmed"),
                 timeout=poll_timeout,
@@ -300,6 +325,9 @@ async def execute_swap(
             logger.error("Failed to send message: %s", err_msg)
         raise TimeoutError("Transaction confirmation failed") from err
 
+    status = None
+    if isinstance(confirm_res, dict):
+        status = confirm_res.get("status") or confirm_res.get("value", {}).get("confirmationStatus")
     result = {
         "token_in": token_in,
         "token_out": token_out,
@@ -307,6 +335,7 @@ async def execute_swap(
         "tx_hash": tx_hash,
         "status": "confirmed",
         "route": route,
+        "status": status or "confirmed",
     }
     err = notifier.notify(f"Swap executed: {result}")
     if err:
