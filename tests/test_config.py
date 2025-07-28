@@ -68,6 +68,11 @@ def test_load_config_returns_dict():
     ]:
         assert key in grid_bot
 
+    assert "flash_crash_bot" in config
+    fc_bot = config["flash_crash_bot"]
+    assert isinstance(fc_bot, dict)
+    for key in ["drop_thr", "vol_thr", "tp_thr"]:
+        assert key in fc_bot
     assert "cross_chain_arb_bot" in config
     cca = config["cross_chain_arb_bot"]
     assert isinstance(cca, dict)
