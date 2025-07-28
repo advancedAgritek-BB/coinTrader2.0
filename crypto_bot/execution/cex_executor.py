@@ -378,6 +378,7 @@ async def execute_trade_async(
     use_websocket: bool = False,
     config: Optional[Dict] = None,
     score: float = 0.0,
+    max_retries: int = 1,
     max_retries: int = 3,
 ) -> Dict:
     """Asynchronous version of :func:`execute_trade` with retry support.
@@ -410,6 +411,8 @@ async def execute_trade_async(
     if dry_run:
         order = {"symbol": symbol, "side": side, "amount": amount, "dry_run": True}
     else:
+        attempt = 0
+        while True:
         for attempt in range(max_retries):
             try:
                 if score > 0.8 and hasattr(exchange, "create_limit_order"):
@@ -462,6 +465,16 @@ async def execute_trade_async(
                         order = await asyncio.to_thread(
                             exchange.create_market_order, symbol, side, amount
                         )
+            except ccxt.NetworkError as e:  # pragma: no cover - network
+                if attempt >= max_retries - 1:
+                    err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
+                    if err_msg:
+                        logger.error("Failed to send message: %s", err_msg)
+                    return {}
+                await asyncio.sleep(1)
+                attempt += 1
+                continue
+            except Exception as e:  # pragma: no cover - network
                 break
             except Exception as e:  # pragma: no cover - network
                 if attempt < max_retries - 1:
@@ -471,6 +484,7 @@ async def execute_trade_async(
                 if err_msg:
                     logger.error("Failed to send message: %s", err_msg)
                 return {}
+            break
             else:
                 if use_websocket and ws_client is not None and not ccxtpro:
                     return ws_client.add_order(symbol, side, size)

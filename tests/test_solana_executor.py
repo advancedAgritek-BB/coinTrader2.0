@@ -1,4 +1,5 @@
 import asyncio
+import aiohttp
 from crypto_bot.execution import solana_executor
 
 
@@ -287,6 +288,102 @@ def test_execute_swap_no_routes(monkeypatch):
         )
     )
     assert res == {}
+
+
+class ErrorSession(DummySession):
+    def __init__(self):
+        super().__init__()
+        self.calls = 0
+
+    def get(self, url, params=None, timeout=10):
+        self.calls += 1
+        if self.calls == 1:
+            raise solana_executor.aiohttp.ClientError("boom")
+        return super().get(url, params=params, timeout=timeout)
+
+    def post(self, url, json=None, timeout=10):
+        class R:
+            async def json(self):
+                return {"swapTransaction": "dHg="}
+
+            def raise_for_status(self):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                pass
+
+        return R()
+
+
+def test_execute_swap_quote_retry(monkeypatch):
+    import importlib, sys
+    sys.modules["aiohttp"] = importlib.import_module("aiohttp")
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    session = ErrorSession()
+    monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: session)
+    NetworkError = type("ClientError", (Exception,), {})
+    monkeypatch.setattr(solana_executor.aiohttp, "ClientError", NetworkError, raising=False)
+    monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")
+
+    class KP:
+        public_key = "k"
+
+        @staticmethod
+        def from_secret_key(b):
+            return KP()
+
+        def sign(self, tx):
+            pass
+
+    class Tx:
+        @staticmethod
+        def deserialize(raw):
+            return Tx()
+
+        def sign(self, kp):
+            pass
+
+    class Client:
+        def __init__(self, *a, **k):
+            pass
+
+        def send_transaction(self, tx, kp):
+            return {"result": "h"}
+
+    import sys, types
+    sys.modules.setdefault("solana.keypair", types.ModuleType("solana.keypair"))
+    sys.modules.setdefault("solana.transaction", types.ModuleType("solana.transaction"))
+    sys.modules.setdefault("solana.rpc.api", types.ModuleType("solana.rpc.api"))
+    monkeypatch.setattr(sys.modules["solana.keypair"], "Keypair", KP, raising=False)
+    monkeypatch.setattr(sys.modules["solana.transaction"], "Transaction", Tx, raising=False)
+    monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
+
+    delays = []
+
+    async def fake_sleep(d):
+        delays.append(d)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+    res = asyncio.run(
+        solana_executor.execute_swap(
+            "SOL",
+            "USDC",
+            100,
+            notifier=DummyNotifier(),
+            dry_run=False,
+            max_retries=2,
+        )
+    )
+
+    assert res.get("tx_hash") == "h"
+    assert delays
 
 
 class DummyMempool:
