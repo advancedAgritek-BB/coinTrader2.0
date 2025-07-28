@@ -412,6 +412,11 @@ async def _refresh_tickers(
                     failures = opts.get("ws_failures", 0) + 1
                     opts["ws_failures"] = failures
                     if failures >= ws_limit:
+                        if opts.get("ws_scan", True):
+                            logger.warning(
+                                "Disabling WebSocket scanning after %d errors",
+                                failures,
+                            )
                         opts["ws_scan"] = False
                 telemetry.inc("scan.ws_errors")
                 attempted_syms.clear()
