@@ -500,6 +500,8 @@ async def load_kraken_symbols(
         logger.warning("No active trading pairs were discovered")
         return None
 
+    logger.info("%d active Kraken pairs discovered", len(symbols))
+
     return symbols
 
 

@@ -332,12 +332,14 @@ symbol_score_weights:
   liquidity: 0.0
 ```
 * **uncached_volume_multiplier** – extra volume factor applied when a pair is missing from `cache/liquid_pairs.json`.
+* If the cache file does not exist and the initial scan yields no symbols, the bot calls `tasks.refresh_pairs.refresh_pairs_async` to fetch a fresh list before aborting.
 * **min_symbol_age_days** – skip newly listed pairs.
 * **min_symbol_score** – minimum score required for trading.
 * **top_n_symbols** – maximum number of active markets.
 * **max_age_days**, **max_change_pct**, **max_spread_pct**, **max_latency_ms**, **max_vol** – additional scanning limits.
 * **use_numba_scoring** – enable numba acceleration for symbol scoring when available.
-* **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle.
+* **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle. See
+  `scan_cex_arbitrage` in `crypto_bot/main.py` for multi-exchange support.
 * **solana_scanner.gecko_search** – query GeckoTerminal to verify volume for new Solana tokens.
 * **gecko_limit** – maximum simultaneous requests to GeckoTerminal. Reduce this if you encounter HTTP 429 errors.
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
@@ -440,6 +442,10 @@ regime_overrides:
 * **optimization** – periodic parameter optimisation.
 * **portfolio_rotation** – rotate holdings based on scoring metrics.
 * **arbitrage_enabled** – enable cross-exchange arbitrage features.
+  The previous `cross_chain_arb_bot.py` module has been
+  consolidated into helper functions. Use `scan_cex_arbitrage` or
+  `scan_arbitrage` in `crypto_bot/main.py` when implementing a
+  multi-exchange arbitrage strategy.
 * **scoring_weights** - weighting factors for regime confidence, symbol score and volume metrics.
 * **signal_fusion** – enable to combine scores from multiple strategies via a `fusion_method` for improved selection.
 * **strategy_router** - maps market regimes to lists of strategy names. Each regime also accepts a `<regime>_timeframe` key (e.g. `trending_timeframe: 1h`, `volatile_timeframe: 1m`).
@@ -1109,11 +1115,39 @@ Run the script from the project root so that `cache/liquid_pairs.json` is
 written where the bot expects it. Executing the command from another
 directory may create a separate `cache` folder and lead to missing symbols.
 Removing the `--once` flag keeps it running on the configured interval.
-To automate updates you can run the script periodically via cron:
+To ensure `cache/liquid_pairs.json` stays current you should schedule this
+command to run automatically. One option is cron:
 
 ```cron
 0 * * * * cd /path/to/coinTrader2.0 && /usr/bin/python3 tasks/refresh_pairs.py
 ```
+You can accomplish the same thing with a systemd timer. Create the following
+service and timer units:
+
+```ini
+# /etc/systemd/system/refresh_pairs.service
+[Unit]
+Description=Update trading pair cache
+
+[Service]
+Type=oneshot
+WorkingDirectory=/path/to/coinTrader2.0
+ExecStart=/usr/bin/python3 tasks/refresh_pairs.py --once
+
+# /etc/systemd/system/refresh_pairs.timer
+[Unit]
+Description=Run refresh_pairs hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Enable it with `sudo systemctl enable --now refresh_pairs.timer`.
+
 Delete `cache/liquid_pairs.json` to force a full rebuild on the next run.
 If you see warnings about unsupported markets in the logs, regenerate the file
 with `tasks/refresh_pairs.py --once`.
