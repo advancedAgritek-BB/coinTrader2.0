@@ -110,7 +110,6 @@ logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 # Track WebSocket ping tasks
 WS_PING_TASKS: set[asyncio.Task] = set()
 # Track async sniper trade tasks
-# Track async sniper trade tasks
 SNIPER_TASKS: set[asyncio.Task] = set()
 # Track newly scanned Solana tokens pending evaluation
 NEW_SOLANA_TOKENS: set[str] = set()
