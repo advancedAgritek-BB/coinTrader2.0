@@ -64,12 +64,51 @@ class SolanaScannerApiKeys(BaseModel):
 class SolanaScannerConfig(BaseModel):
     """Configuration for scanning Solana tokens."""
 
-    enabled: bool = False
-    interval_minutes: int = 5
-    api_keys: SolanaScannerApiKeys = Field(default_factory=SolanaScannerApiKeys)
-    min_volume_usd: float = 0.0
-    max_tokens_per_scan: int = 20
-    gecko_search: bool = True
+    enabled: bool = Field(
+        default=False, description="Enable Solana token scanner"
+    )
+    interval_minutes: float = Field(
+        default=0.1,
+        ge=0.05,
+        description="Scan interval in minutes",
+    )
+    max_tokens_per_scan: int = Field(
+        default=200,
+        ge=1,
+        description="Max tokens to process per scan",
+    )
+    min_volume_usd: float = Field(
+        default=10.0,
+        ge=0.0,
+        description="Minimum USD volume for new tokens",
+    )
+    gecko_search: bool = Field(
+        default=True, description="Enable GeckoTerminal search fallback"
+    )
+    # WebSocket / polling options
+    helius_ws_url: str | None = Field(
+        default=None,
+        description=(
+            "Helius WebSocket URL (e.g.,"
+            " wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY})"
+        ),
+    )
+    raydium_program_id: str | None = Field(
+        default="EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk",
+        description="Raydium program ID for subscription",
+    )
+    pump_fun_program_id: str | None = Field(
+        default=None, description="Pump.fun program ID for subscription"
+    )
+    use_ws: bool = Field(
+        default=True, description="Prefer WebSocket over polling"
+    )
+    min_liquidity: float = Field(
+        default=50.0,
+        ge=0.0,
+        description="Minimum liquidity for new pools (in SOL)",
+    )
+    api_keys: SolanaScannerApiKeys | None = None
 
     class Config:
         extra = "forbid"

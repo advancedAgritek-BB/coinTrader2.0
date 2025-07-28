@@ -1,7 +1,12 @@
 import pytest
 from pydantic import ValidationError
 
-from schema.scanner import ScannerConfig, SolanaScannerConfig, PythConfig
+from schema.scanner import (
+    ScannerConfig,
+    SolanaScannerConfig,
+    SolanaScannerApiKeys,
+    PythConfig,
+)
 
 
 def test_symbols_required_when_not_scanning():
@@ -24,11 +29,11 @@ def test_positive_values_enforced():
 def test_solana_scanner_defaults():
     cfg = SolanaScannerConfig()
     assert cfg.enabled is False
-    assert cfg.interval_minutes == 5
-    assert cfg.api_keys.moralis == "YOUR_KEY"
-    assert cfg.api_keys.lunarcrush_api_key == "YOUR_KEY"
-    assert cfg.max_tokens_per_scan == 20
+    assert cfg.interval_minutes == 0.1
+    assert cfg.max_tokens_per_scan == 200
+    assert cfg.min_volume_usd == 10.0
     assert cfg.gecko_search is True
+    assert cfg.api_keys is None
 
 
 def test_solana_scanner_invalid_type():
@@ -39,7 +44,7 @@ def test_solana_scanner_invalid_type():
 def test_solana_scanner_env_override(monkeypatch):
     monkeypatch.setenv("MORALIS_KEY", "env_key")
     monkeypatch.setenv("LUNARCRUSH_API_KEY", "env_lunar")
-    cfg = SolanaScannerConfig()
+    cfg = SolanaScannerConfig(api_keys=SolanaScannerApiKeys())
     assert cfg.api_keys.moralis == "env_key"
     assert cfg.api_keys.lunarcrush_api_key == "env_lunar"
 
