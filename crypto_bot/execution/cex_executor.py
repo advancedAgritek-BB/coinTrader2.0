@@ -635,6 +635,13 @@ async def execute_trade_async(
         return all_orders[0]
     return {"orders": all_orders}
 
+    order = await place(amount)
+    err = notifier.notify(f"Order executed: {order}")
+    if err:
+        logger.error("Failed to send message: %s", err)
+    log_trade(order)
+    return order
+
 
 def place_stop_order(
     exchange: ccxt.Exchange,
@@ -739,3 +746,58 @@ def place_stop_order(
         logger.error("Failed to send message: %s", err)
     log_trade(order, is_stop=True)
     return order
+
+
+def estimate_book_slippage(order_book: Dict[str, List[List[float]]], side: str, amount: float) -> float:
+    """Estimate slippage percentage for a market order using an order book."""
+
+    if amount <= 0:
+        return 0.0
+
+    levels = order_book.get("asks" if side == "buy" else "bids") or []
+    if not levels:
+        return 0.0
+
+    best_price = float(levels[0][0])
+    remaining = amount
+    cost = 0.0
+    filled = 0.0
+    for price, qty in levels:
+        take = min(remaining, float(qty))
+        cost += take * float(price)
+        filled += take
+        remaining -= take
+        if remaining <= 0:
+            break
+
+    if filled == 0:
+        return 0.0
+    avg_price = cost / filled
+    if side == "buy":
+        return (avg_price - best_price) / best_price
+    else:
+        return (best_price - avg_price) / best_price
+
+
+async def estimate_book_slippage_async(
+    exchange,
+    symbol: str,
+    side: str,
+    amount: float,
+    depth: int = 10,
+) -> float:
+    """Fetch order book and return slippage estimate asynchronously."""
+
+    fetch_fn = getattr(exchange, "fetch_order_book", None)
+    if fetch_fn is None:
+        return 0.0
+
+    try:
+        if asyncio.iscoroutinefunction(fetch_fn):
+            book = await fetch_fn(symbol, limit=depth)
+        else:
+            book = await asyncio.to_thread(fetch_fn, symbol, depth)
+    except Exception:  # pragma: no cover - network
+        return 0.0
+
+    return estimate_book_slippage(book, side, amount)

@@ -632,3 +632,47 @@ def test_simple_executor_timeout(monkeypatch):
         simple_executor.execute_trade(ex, "XBT/USDT", "buy", 1.0, {}, notifier, dry_run=False, poll_timeout=2)
 
     assert any("timed out" in m for m in notifier.messages)
+
+
+def test_estimate_book_slippage():
+    book = {
+        "asks": [[1.0, 2], [1.1, 1]],
+        "bids": [[0.9, 2], [0.8, 3]],
+    }
+    slip = cex_executor.estimate_book_slippage(book, "buy", 3)
+    assert slip == pytest.approx(0.033333, rel=1e-3)
+
+
+def test_estimate_book_slippage_async_sync_exchange():
+    class DummySync:
+        def __init__(self):
+            self.called = False
+
+        def fetch_order_book(self, symbol, limit=2):
+            self.called = True
+            return {
+                "asks": [[1.0, 1], [1.1, 2]],
+                "bids": [[0.9, 2], [0.8, 3]],
+            }
+
+    ex = DummySync()
+    slip = asyncio.run(
+        cex_executor.estimate_book_slippage_async(ex, "BTC/USD", "sell", 3, depth=2)
+    )
+    assert ex.called is True
+    assert slip == pytest.approx(0.037037, rel=1e-3)
+
+
+def test_estimate_book_slippage_async_async_exchange():
+    class DummyAsync:
+        async def fetch_order_book(self, symbol, limit=2):
+            return {
+                "asks": [[1.0, 2], [1.1, 1]],
+                "bids": [[0.9, 2], [0.8, 3]],
+            }
+
+    ex = DummyAsync()
+    slip = asyncio.run(
+        cex_executor.estimate_book_slippage_async(ex, "BTC/USD", "buy", 3, depth=2)
+    )
+    assert slip == pytest.approx(0.033333, rel=1e-3)
