@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import time
-import math
 try:
     import ccxt  # type: ignore
     from ccxt.base.errors import NetworkError, RateLimitExceeded, ExchangeError
@@ -13,15 +12,13 @@ except Exception:  # pragma: no cover - optional dependency
     NetworkError = RateLimitExceeded = ExchangeError = Exception
 import asyncio
 from typing import Dict, Optional, Tuple, List
-from pathlib import Path
 
 try:
     import ccxt.pro as ccxtpro  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
     ccxtpro = None
 
-from crypto_bot.utils.telegram import TelegramNotifier, send_message
-from crypto_bot.utils.notifier import Notifier
+from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.execution.kraken_ws import KrakenWSClient
 from crypto_bot.utils.trade_logger import log_trade
 from crypto_bot import tax_logger
@@ -100,69 +97,6 @@ def get_exchanges(config) -> Dict[str, Tuple[ccxt.Exchange, Optional[KrakenWSCli
     return result
 
 
-def estimate_book_slippage(order_book: Dict, side: str, amount: float) -> float:
-    """Return expected slippage for ``amount`` using ``order_book``.
-
-    Parameters
-    ----------
-    order_book:
-        Mapping with ``bids`` and ``asks`` lists.
-    side:
-        ``"buy"`` or ``"sell"``.
-    amount:
-        Order size to simulate.
-    """
-
-    bids = order_book.get("bids") or []
-    asks = order_book.get("asks") or []
-    if not bids or not asks:
-        return 0.0
-
-    mid = (bids[0][0] + asks[0][0]) / 2
-    levels = asks if side == "buy" else bids
-    qty = 0.0
-    cost = 0.0
-    for price, vol in levels:
-        take = min(amount - qty, vol)
-        cost += take * price
-        qty += take
-        if qty >= amount:
-            break
-    if qty < amount:
-        return float("inf")
-    avg_price = cost / amount
-    if side == "buy":
-        impact = (avg_price - mid) / mid
-    else:
-        impact = (mid - avg_price) / mid
-    return impact
-async def estimate_book_slippage_async(
-    exchange: ccxt.Exchange,
-    symbol: str,
-    side: str,
-    amount: float,
-    depth: int = 10,
-) -> float:
-    """Estimate slippage using the order book snapshot."""
-    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_order_book", None)):
-        book = await exchange.fetch_order_book(symbol, limit=depth)
-    else:
-        book = await asyncio.to_thread(exchange.fetch_order_book, symbol, depth)
-
-    levels = book["asks" if side == "buy" else "bids"]
-    remaining = amount
-    cost = 0.0
-    for price, qty in levels:
-        take = qty if qty < remaining else remaining
-        cost += price * take
-        remaining -= take
-        if remaining <= 0:
-            break
-    if remaining > 0:
-        return float("inf")
-    avg_price = cost / amount
-    best_price = levels[0][0]
-    return abs(avg_price - best_price) / best_price
 
 
 def execute_trade(
@@ -470,7 +404,6 @@ async def execute_trade_async(
                 raise ValueError("token/chat_id or notifier must be provided")
             notifier = TelegramNotifier(token, chat_id)
 
-    err = notifier.notify(f"Placing {side} order for {amount} {symbol}")
     msg = f"Placing {side} order for {amount} {symbol}"
     err = notifier.notify(msg)
     if err:
@@ -689,13 +622,6 @@ async def execute_trade_async(
         return all_orders[0]
     return {"orders": all_orders}
 
-    order = await place(amount)
-    err = notifier.notify(f"Order executed: {order}")
-    if err:
-        logger.error("Failed to send message: %s", err)
-    log_trade(order)
-    return order
-
 
 def place_stop_order(
     exchange: ccxt.Exchange,
@@ -735,6 +661,7 @@ def place_stop_order(
         }
     else:
         delay = 1.0
+        order = None
         for attempt in range(max_retries):
             try:
                 order = exchange.create_order(
@@ -765,35 +692,11 @@ def place_stop_order(
                 err_msg = notifier.notify(f"Stop order failed: {e}")
                 if err_msg:
                     logger.error("Failed to send message: %s", err_msg)
-                raise
-            except Exception as e:
                 if attempt < max_retries - 1:
                     time.sleep(1)
                     continue
-                err_msg = notifier.notify(f"Stop order failed: {e}")
-                if err_msg:
-                    logger.error("Failed to send message: %s", err_msg)
                 return {}
-        try:
-            order = exchange.create_order(
-                symbol,
-                "stop_market",
-                side,
-                amount,
-                params={"stopPrice": stop_price},
-            )
-        except Exception as e:
-            err_msg = notifier.notify(f"Stop order failed: {e}")
-            if err_msg:
-                logger.error("Failed to send message: %s", err_msg)
-            logger.error(
-                "Stop order failed - symbol=%s side=%s amount=%s: %s",
-                symbol,
-                side,
-                amount,
-                e,
-                exc_info=True,
-            )
+        if order is None:
             return {}
     err = notifier.notify(f"Stop order submitted: {order}")
     if err:
