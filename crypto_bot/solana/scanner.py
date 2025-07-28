@@ -1,109 +1,67 @@
 from __future__ import annotations
 
-"""Utilities for scanning new Solana tokens."""
+"""Utilities for scanning new Solana tokens using :class:`PoolWatcher`."""
 
 import asyncio
 import logging
-import os
 from typing import Mapping, List
 
-import aiohttp
-import ccxt.async_support as ccxt
-
-from crypto_bot.utils.solana_scanner import search_geckoterminal_token
-from crypto_bot.utils import symbol_scoring
+from .watcher import PoolWatcher
+from crypto_bot.utils.token_registry import TOKEN_MINTS
 
 logger = logging.getLogger(__name__)
 
 
-async def get_solana_new_tokens(cfg: Mapping[str, object]) -> List[str]:
-    """Return a list of new token mint addresses using ``cfg`` options."""
+async def get_solana_new_tokens(config: Mapping[str, object]) -> List[str]:
+    """Return new Solana token mints using ``config`` options.
 
-    url = str(cfg.get("url", ""))
-    if not url:
+    Parameters
+    ----------
+    config:
+        Configuration mapping. ``config["solana_scanner"]`` is used when
+        available to retrieve the watcher settings.
+    """
+
+    sol_cfg = config.get("solana_scanner") if "solana_scanner" in config else config
+    if not isinstance(sol_cfg, Mapping):
         return []
 
-    key = os.getenv("HELIUS_KEY", "")
-    if "${HELIUS_KEY}" in url:
-        url = url.replace("${HELIUS_KEY}", key)
-    if "YOUR_KEY" in url:
-        url = url.replace("YOUR_KEY", key)
-
-    limit = int(cfg.get("limit", 0))
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=10) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
-    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
-        logger.error("Solana scanner error: %s", exc)
+    max_tokens = int(sol_cfg.get("max_tokens_per_scan", 0))
+    if max_tokens <= 0:
         return []
 
-    tokens = data.get("tokens") or data.get("mints") or data
-    results: List[str] = []
-    if isinstance(tokens, list):
-        for item in tokens:
-            if isinstance(item, str):
-                results.append(item)
-            elif isinstance(item, Mapping):
-                mint = item.get("mint") or item.get("tokenMint") or item.get("token_mint")
-                if mint:
-                    results.append(str(mint))
-    elif isinstance(tokens, Mapping):
-        for mint in tokens.values():
-            if isinstance(mint, str):
-                results.append(mint)
-    if limit:
-        results = results[:limit]
+    interval_sec = float(sol_cfg.get("interval_minutes", 0)) * 60.0
+    websocket_url = (
+        sol_cfg.get("helius_ws_url") if sol_cfg.get("use_ws", False) else None
+    )
+    raydium_program_id = sol_cfg.get("raydium_program_id")
+    url = sol_cfg.get("url")
+    min_liquidity = float(sol_cfg.get("min_liquidity", 0.0))
+    min_tx = int(sol_cfg.get("min_tx_count", 0))
 
-    if not results:
-        return []
-
-    search_results = await asyncio.gather(
-        *[search_geckoterminal_token(m) for m in results]
+    watcher = PoolWatcher(
+        url,
+        interval_sec or None,
+        websocket_url,
+        raydium_program_id,
+        min_liquidity=min_liquidity,
     )
 
-    resolved: list[tuple[str, float]] = []
+    tokens: List[str] = []
     seen: set[str] = set()
-    for res in search_results:
-        if not res:
-            continue
-        mint, vol = res
-        sym = f"{mint}/USDC"
-        if sym not in seen:
-            seen.add(sym)
-            resolved.append((sym, vol))
-
-    if not resolved:
-        return []
-
-    min_score = float(cfg.get("min_symbol_score", 0.0))
-    ex_name = str(cfg.get("exchange", "kraken")).lower()
-    exchange_cls = getattr(ccxt, ex_name)
-    exchange = exchange_cls({"enableRateLimit": True})
-
     try:
-        scores = await asyncio.gather(
-            *[
-                symbol_scoring.score_symbol(
-                    exchange, sym, vol, 0.0, 0.0, 1.0, cfg
-                )
-                for sym, vol in resolved
-            ]
-        )
+        async for event in watcher.watch():
+            if event.liquidity < min_liquidity or event.tx_count < min_tx:
+                continue
+            mint = event.token_mint
+            if not mint or mint in seen or mint in TOKEN_MINTS.values():
+                continue
+            seen.add(mint)
+            tokens.append(mint)
+            if len(tokens) >= max_tokens:
+                watcher.stop()
+                break
     finally:
-        close = getattr(exchange, "close", None)
-        if close:
-            try:
-                if asyncio.iscoroutinefunction(close):
-                    await close()
-                else:
-                    close()
-            except Exception:  # pragma: no cover - best effort
-                pass
+        watcher.stop()
 
-    scored = [
-        (sym, score) for (sym, _), score in zip(resolved, scores) if score >= min_score
-    ]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    return [sym for sym, _ in scored]
+    return tokens
