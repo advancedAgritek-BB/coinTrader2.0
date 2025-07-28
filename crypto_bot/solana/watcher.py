@@ -44,12 +44,20 @@ class PoolWatcher:
         websocket_url: str | None = None,
         raydium_program_id: str | None = None,
         max_failures: int = 3,
+        min_liquidity: float | None = None,
     ) -> None:
-        if url is None or interval is None:
+        if (
+            url is None
+            or interval is None
+            or websocket_url is None
+            or raydium_program_id is None
+            or min_liquidity is None
+        ):
             with open(CONFIG_PATH) as f:
                 cfg = yaml.safe_load(f) or {}
             sniper_cfg = cfg.get("meme_wave_sniper", {})
             pool_cfg = sniper_cfg.get("pool", {})
+            safety_cfg = sniper_cfg.get("safety", {})
             if url is None:
                 url = pool_cfg.get("url", "")
             if interval is None:
@@ -58,6 +66,8 @@ class PoolWatcher:
                 websocket_url = pool_cfg.get("websocket_url", "")
             if raydium_program_id is None:
                 raydium_program_id = pool_cfg.get("raydium_program_id", "")
+            if min_liquidity is None:
+                min_liquidity = float(safety_cfg.get("min_liquidity", 0))
         key = os.getenv("HELIUS_KEY")
         if not url or "YOUR_KEY" in url or url.endswith("api-key="):
             if not key:
@@ -79,6 +89,7 @@ class PoolWatcher:
         self.interval = interval
         self.websocket_url = websocket_url
         self.raydium_program_id = raydium_program_id
+        self.min_liquidity = float(min_liquidity or 0)
         self._running = False
         self._seen: set[str] = set()
         self._max_failures = max_failures
@@ -140,6 +151,9 @@ class PoolWatcher:
                     )
                     if not addr or addr in self._seen:
                         continue
+                    liquidity = float(item.get("liquidity", 0.0))
+                    if liquidity < self.min_liquidity:
+                        continue
                     self._seen.add(addr)
                     yield NewPoolEvent(
                         pool_address=addr,
@@ -147,7 +161,7 @@ class PoolWatcher:
                         or item.get("token_mint")
                         or "",
                         creator=item.get("creator", ""),
-                        liquidity=float(item.get("liquidity", 0.0)),
+                        liquidity=liquidity,
                         tx_count=int(item.get("txCount", item.get("tx_count", 0))),
                         freeze_authority=item.get("freezeAuthority")
                         or item.get("freeze_authority")
