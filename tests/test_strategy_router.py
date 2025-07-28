@@ -119,6 +119,14 @@ def test_route_returns_meme_wave_bot():
     assert fn.__name__ == meme_wave_bot.generate_signal.__name__
 
 
+def test_route_returns_lstm_bot():
+    from crypto_bot.strategy import lstm_bot
+
+    cfg = {"strategy_router": {"regimes": {"trending": ["lstm_bot"]}}}
+    fn = route("trending", "cex", cfg)
+    assert fn.__name__ == lstm_bot.generate_signal.__name__
+
+
 def test_route_notifier(monkeypatch):
     msgs = []
 
