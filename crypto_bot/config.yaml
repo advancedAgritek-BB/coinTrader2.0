@@ -76,6 +76,11 @@ dip_hunter:
   rsi_window: 14
   vol_mult: 1.5
   vol_window: 20
+stat_arb_bot:
+  pairs:
+    - SOL/USDC,ETH/USDC
+  z_threshold: 2.0
+  window: 50
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.05
 exchange: kraken
