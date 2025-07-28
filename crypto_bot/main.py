@@ -66,6 +66,7 @@ from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.utils.eval_queue import build_priority_queue
 from crypto_bot.solana import get_solana_new_tokens
 from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
+from crypto_bot.utils import symbol_utils
 from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
 from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
@@ -460,6 +461,11 @@ def reload_config(
     config.clear()
     config.update(new_config)
     ctx.config = config
+
+    # Reset cached symbols when configuration changes to ensure
+    # symbol selections reflect the latest settings
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
 
     rotator.config = config.get("portfolio_rotation", rotator.config)
     position_guard.max_open_trades = config.get(
