@@ -529,6 +529,19 @@ Repeatedly adding exposure can amplify losses during prolonged downtrends, so
 keep the order size small and stop averaging if drawdown exceeds your risk
 tolerance.
 
+#### LSTM Bot
+The LSTM bot forecasts short-term price movement using a recurrent neural
+network. It opens trades in the predicted direction once the model
+confidence exceeds a threshold. Configure the feature in
+`crypto_bot/config.yaml`:
+
+```yaml
+lstm_bot:
+  enabled: true             # activate the LSTM strategy
+  forecast_horizon: 3       # bars to predict ahead
+  confidence_threshold: 0.55
+```
+
 #### Momentum Bot
 The momentum bot rides strong trends using an ATR-based trailing stop. Set
 `momentum_bot.risk.trailing_stop_factor` in `crypto_bot/config.yaml` to control
