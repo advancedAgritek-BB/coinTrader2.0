@@ -22,7 +22,6 @@ from crypto_bot.strategy import (
     bounce_scalper,
     solana_scalping,
     meme_wave_bot,
-    momentum_bot,
 )
 
 LOG_FILE = LOG_DIR / "strategy_performance.json"
@@ -70,33 +69,32 @@ class MetaRegressor:
         return {k: float(v) for k, v in zip(df.index, preds)}
 
 
-_STRATEGY_FN_MAP = {
-    "trend": trend_bot.generate_signal,
-    "trend_bot": trend_bot.generate_signal,
-    "grid": grid_bot.generate_signal,
-    "grid_bot": grid_bot.generate_signal,
-    "sniper": sniper_bot.generate_signal,
-    "sniper_bot": sniper_bot.generate_signal,
-    "dex_scalper": dex_scalper.generate_signal,
-    "dex_scalper_bot": dex_scalper.generate_signal,
-    "mean_bot": mean_bot.generate_signal,
-    "breakout_bot": breakout_bot.generate_signal,
-    "micro_scalp": micro_scalp_bot.generate_signal,
-    "micro_scalp_bot": micro_scalp_bot.generate_signal,
-    "momentum": momentum_bot.generate_signal,
-    "momentum_bot": momentum_bot.generate_signal,
-    "bounce_scalper": bounce_scalper.generate_signal,
-    "bounce_scalper_bot": bounce_scalper.generate_signal,
-    "dip_hunter": dip_hunter.generate_signal,
-    "solana_scalping": solana_scalping.generate_signal,
-    "solana_scalping_bot": solana_scalping.generate_signal,
-    "meme_wave_bot": meme_wave_bot.generate_signal,
-    "dca": dca_bot.generate_signal,
-    "dca_bot": dca_bot.generate_signal,
-}
+_STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {}
 
-if momentum_bot is not None:
-    _STRATEGY_FN_MAP["momentum_bot"] = momentum_bot.generate_signal
+
+def _register(module, *names: str) -> None:
+    """Register strategy signal generator under given names if available."""
+
+    if module is None:
+        return
+    fn = module.generate_signal
+    for name in names:
+        _STRATEGY_FN_MAP[name] = fn
+
+
+_register(trend_bot, "trend", "trend_bot")
+_register(grid_bot, "grid", "grid_bot")
+_register(sniper_bot, "sniper", "sniper_bot")
+_register(dex_scalper, "dex_scalper", "dex_scalper_bot")
+_register(mean_bot, "mean_bot")
+_register(breakout_bot, "breakout_bot")
+_register(micro_scalp_bot, "micro_scalp", "micro_scalp_bot")
+_register(momentum_bot, "momentum", "momentum_bot")
+_register(bounce_scalper, "bounce_scalper", "bounce_scalper_bot")
+_register(dip_hunter, "dip_hunter")
+_register(solana_scalping, "solana_scalping", "solana_scalping_bot")
+_register(meme_wave_bot, "meme_wave_bot")
+_register(dca_bot, "dca", "dca_bot")
 
 
 def get_strategy_by_name(
