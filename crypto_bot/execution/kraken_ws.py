@@ -1,7 +1,9 @@
 import json
 import threading
+import time
 import os
-from typing import Optional, Callable, Union, List, Any, Dict
+from collections import deque
+from typing import Optional, Callable, Union, List, Any, Dict, Deque
 from datetime import datetime, timedelta, timezone
 
 try:
@@ -443,6 +445,8 @@ class KrakenWSClient:
         self.last_private_heartbeat: Optional[datetime] = None
         self._public_subs = []
         self._private_subs = []
+        self._responses: Deque[dict] = deque()
+        self._response_cond = threading.Condition()
 
     def _handle_message(self, ws: WebSocketApp, message: str) -> None:
         """Default ``on_message`` handler that records heartbeats."""
@@ -453,12 +457,18 @@ class KrakenWSClient:
             return
 
         def update(obj: Any) -> None:
-            if isinstance(obj, dict) and obj.get("channel") == "heartbeat":
+            if not isinstance(obj, dict):
+                return
+            if obj.get("channel") == "heartbeat":
                 now = datetime.now(timezone.utc)
                 if ws == self.private_ws:
                     self.last_private_heartbeat = now
                 else:
                     self.last_public_heartbeat = now
+            if obj.get("method") or obj.get("errorMessage"):
+                with self._response_cond:
+                    self._responses.append(obj)
+                    self._response_cond.notify_all()
 
         if isinstance(data, list):
             for item in data:
@@ -571,6 +581,27 @@ class KrakenWSClient:
             self._regenerate_private_subs()
             for sub in self._private_subs:
                 self.private_ws.send(sub)
+
+    def _wait_for_response(self, method: str, timeout: float = 5.0) -> dict:
+        """Wait for a response message matching the given method."""
+        end = time.time() + timeout
+        while time.time() < end:
+            with self._response_cond:
+                if not self._responses:
+                    remaining = end - time.time()
+                    if remaining <= 0:
+                        break
+                    self._response_cond.wait(timeout=remaining)
+                    continue
+                for _ in range(len(self._responses)):
+                    msg = self._responses.popleft()
+                    if isinstance(msg, dict) and (
+                        msg.get("method") == method or msg.get("errorMessage")
+                    ):
+                        return msg
+                    self._responses.append(msg)
+            time.sleep(0.01)
+        raise TimeoutError(f"No response for {method}")
 
     def subscribe_ticker(
         self,
@@ -1001,7 +1032,10 @@ class KrakenWSClient:
         }
         data = json.dumps(msg)
         self.private_ws.send(data)
-        return msg
+        resp = self._wait_for_response("add_order")
+        if isinstance(resp, dict) and resp.get("errorMessage"):
+            raise RuntimeError(resp["errorMessage"])
+        return resp
 
     def edit_order(
         self,
