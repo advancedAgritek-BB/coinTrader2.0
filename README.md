@@ -332,6 +332,7 @@ symbol_score_weights:
   liquidity: 0.0
 ```
 * **uncached_volume_multiplier** – extra volume factor applied when a pair is missing from `cache/liquid_pairs.json`.
+* If the cache file does not exist and the initial scan yields no symbols, the bot calls `tasks.refresh_pairs.refresh_pairs_async` to fetch a fresh list before aborting.
 * **min_symbol_age_days** – skip newly listed pairs.
 * **min_symbol_score** – minimum score required for trading.
 * **top_n_symbols** – maximum number of active markets.
