@@ -349,10 +349,20 @@ symbol_score_weights:
 * **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle. See
   `scan_cex_arbitrage` in `crypto_bot/main.py` for multi-exchange support.
 * **solana_scanner.gecko_search** – query GeckoTerminal to verify volume for new Solana tokens.
+* **solana_scanner.filter_tf** – timeframe used when classifying new tokens.
+* **solana_scanner.filter_regime** – skip tokens that do not match these regimes.
 * **gecko_limit** – maximum simultaneous requests to GeckoTerminal. Reduce this if you encounter HTTP 429 errors.
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
 * **ticker_rate_limit** – delay in milliseconds after each ticker API call.
 * Solana tokens are filtered using symbol scoring; adjust `min_symbol_score` to control the threshold.
+
+Example configuration:
+
+```yaml
+solana_scanner:
+  filter_tf: 5m
+  filter_regime: [volatile, breakout]
+```
 
 ### Risk Parameters
 * **risk** – default stop loss, take profit and drawdown limits. `min_volume` is set to `0.0001` to filter thin markets. The stop is 1.5× ATR and the take profit is 3× ATR by default.
@@ -1392,6 +1402,11 @@ PoolWatcher -> Safety -> Score -> RiskTracker -> Executor -> Exit
 
 Sniping begins immediately at startup. The initial symbol scan now runs in the
 background so new pools can be acted on without waiting for caches to fill.
+
+Before any token from the scanner is queued for execution its price history is
+fetched and passed through `classify_regime_cached`. Only those labeled with one
+of the regimes in `solana_scanner.filter_regime` at `solana_scanner.filter_tf`
+are enqueued.
 
 API requirements: [Helius](https://www.helius.xyz/) for pool data,
 [Jupiter](https://jup.ag/) for quotes, [Jito](https://www.jito.network/) for
