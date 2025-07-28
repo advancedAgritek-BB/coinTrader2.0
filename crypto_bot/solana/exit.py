@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Callable, Mapping, Dict, Awaitable
-from typing import Callable, Mapping, Dict, Optional
+from typing import Callable, Mapping, Dict, Awaitable, Optional
 
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
