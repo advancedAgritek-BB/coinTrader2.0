@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, validator
 
 
 class ScannerConfig(BaseModel):
@@ -94,17 +94,18 @@ class SolanaScannerConfig(BaseModel):
         ),
     )
     raydium_program_id: str | None = Field(
-        default="EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk",
+        default="EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6oKEWSCPPu",
         description="Raydium program ID for subscription",
     )
     pump_fun_program_id: str | None = Field(
-        default=None, description="Pump.fun program ID for subscription"
+        default="EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6oKEWSCPPu",
+        description="Pump.fun program ID for subscription",
     )
     use_ws: bool = Field(
         default=True, description="Prefer WebSocket over polling"
     )
     min_liquidity: float = Field(
-        default=50.0,
+        default=100.0,
         ge=0.0,
         description="Minimum liquidity for new pools (in SOL)",
     )
