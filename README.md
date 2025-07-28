@@ -1446,11 +1446,14 @@ real time:
 `pool_ws_monitor.py` subscribes to the Raydium program and prints each update:
 
 ```python
+import os
 import asyncio
-from crypto_bot.solana.pool_ws_monitor import watch_pools
+from crypto_bot.solana.pool_ws_monitor import watch_pool
 
 async def main():
-    async for event in watch_pools():
+    api_key = os.environ.get("HELIUS_KEY", "")
+    program = "EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk"
+    async for event in watch_pool(api_key, program):
         print(event)
 
 asyncio.run(main())
