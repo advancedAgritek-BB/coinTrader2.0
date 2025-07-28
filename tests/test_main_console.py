@@ -33,21 +33,21 @@ class PriceExchange:
         return {"last": self.prices[symbol]}
 
 
-def test_trade_stats_line(tmp_path):
+def test_trade_stats_lines(tmp_path):
     trade_file = tmp_path / "trades.csv"
     trade_file.write_text(
         "XBT/USDT,buy,1,100,ts1\nETH/USDT,sell,2,60,ts2\n"
     )
     ex = PriceExchange({"XBT/USDT": 110, "ETH/USDT": 55})
-    line = asyncio.run(console_monitor.trade_stats_line(ex, trade_file))
-    assert "XBT/USDT -- 100.00 -- +10.00" in line
-    assert "ETH/USDT -- 60.00 -- +10.00" in line
-
     lines = asyncio.run(console_monitor.trade_stats_lines(ex, trade_file))
     assert sorted(lines) == [
         "XBT/USDT -- 100.00 -- +10.00",
         "ETH/USDT -- 60.00 -- +10.00",
     ]
+
+    joined = " | ".join(lines)
+    assert "XBT/USDT -- 100.00 -- +10.00" in joined
+    assert "ETH/USDT -- 60.00 -- +10.00" in joined
 
 
 class StopLoop(Exception):
