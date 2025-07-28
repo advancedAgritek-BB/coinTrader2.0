@@ -1109,11 +1109,39 @@ Run the script from the project root so that `cache/liquid_pairs.json` is
 written where the bot expects it. Executing the command from another
 directory may create a separate `cache` folder and lead to missing symbols.
 Removing the `--once` flag keeps it running on the configured interval.
-To automate updates you can run the script periodically via cron:
+To ensure `cache/liquid_pairs.json` stays current you should schedule this
+command to run automatically. One option is cron:
 
 ```cron
 0 * * * * cd /path/to/coinTrader2.0 && /usr/bin/python3 tasks/refresh_pairs.py
 ```
+You can accomplish the same thing with a systemd timer. Create the following
+service and timer units:
+
+```ini
+# /etc/systemd/system/refresh_pairs.service
+[Unit]
+Description=Update trading pair cache
+
+[Service]
+Type=oneshot
+WorkingDirectory=/path/to/coinTrader2.0
+ExecStart=/usr/bin/python3 tasks/refresh_pairs.py --once
+
+# /etc/systemd/system/refresh_pairs.timer
+[Unit]
+Description=Run refresh_pairs hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Enable it with `sudo systemctl enable --now refresh_pairs.timer`.
+
 Delete `cache/liquid_pairs.json` to force a full rebuild on the next run.
 If you see warnings about unsupported markets in the logs, regenerate the file
 with `tasks/refresh_pairs.py --once`.
