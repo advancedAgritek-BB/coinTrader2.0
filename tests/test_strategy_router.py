@@ -21,7 +21,7 @@ SAMPLE_CFG = {
         "regimes": {
             "trending": ["trend", "momentum_bot"],
             "sideways": ["grid"],
-            "mean-reverting": ["dip_hunter"],
+            "mean-reverting": ["dip_hunter", "stat_arb_bot"],
             "breakout": ["breakout_bot"],
             "volatile": ["sniper_bot", "momentum_bot"],
             "scalp": ["micro_scalp"],
