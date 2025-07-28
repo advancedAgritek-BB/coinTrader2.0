@@ -4,10 +4,12 @@ import os
 import time
 try:
     import ccxt  # type: ignore
+    from ccxt.base.errors import NetworkError, RateLimitExceeded, ExchangeError
 except Exception:  # pragma: no cover - optional dependency
     import types
 
     ccxt = types.SimpleNamespace()
+    NetworkError = RateLimitExceeded = ExchangeError = Exception
 import asyncio
 from typing import Dict, Optional, Tuple, List
 from pathlib import Path
@@ -110,7 +112,16 @@ def execute_trade(
     use_websocket: bool = False,
     config: Optional[Dict] = None,
     score: float = 0.0,
+    max_retries: int = 3,
 ) -> Dict:
+    """Place a market or limit order with optional retries.
+
+    Parameters
+    ----------
+    max_retries:
+        Number of attempts when API calls fail with transient errors.
+        Defaults to ``3``.
+    """
     if notifier is None:
         if isinstance(token, TelegramNotifier):
             notifier = token
@@ -142,6 +153,59 @@ def execute_trade(
     def place(size: float) -> Dict:
         if dry_run:
             return {"symbol": symbol, "side": side, "amount": size, "dry_run": True}
+
+        delay = 1.0
+        for attempt in range(max_retries):
+            try:
+                if score > 0.8 and hasattr(exchange, "create_limit_order"):
+                    price = None
+                    try:
+                        t = exchange.fetch_ticker(symbol)
+                        bid = t.get("bid")
+                        ask = t.get("ask")
+                        if bid and ask:
+                            price = (bid + ask) / 2
+                    except Exception as err:
+                        logger.warning("Limit price fetch failed: %s", err)
+                    if price:
+                        params = {"postOnly": True}
+                        if config.get("hidden_limit"):
+                            params["hidden"] = True
+                        return exchange.create_limit_order(symbol, side, size, price, params)
+
+                if ws_client is not None:
+                    return ws_client.add_order(symbol, side, size)
+                return exchange.create_market_order(symbol, side, size)
+            except (NetworkError, RateLimitExceeded) as exc:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "Retry %s placing %s %s due to %s",
+                        attempt + 1,
+                        side,
+                        symbol,
+                        exc,
+                    )
+                    time.sleep(delay)
+                    delay *= 2
+                    continue
+                raise
+            except ExchangeError:
+                raise
+            except Exception as exc:
+                logger.exception("Order placement failed: %s", exc)
+                err_msg = notifier.notify(f"Order failed: {exc}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                raise
+            except Exception as exc:
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                err_msg = notifier.notify(f"Order failed: {exc}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                return {}
+
         try:
             if score > 0.8 and hasattr(exchange, "create_limit_order"):
                 price = None
@@ -166,6 +230,14 @@ def execute_trade(
             err_msg = notifier.notify(f"Order failed: {exc}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
+            logger.error(
+                "Order failed - symbol=%s side=%s amount=%s: %s",
+                symbol,
+                side,
+                size,
+                exc,
+                exc_info=True,
+            )
             return {}
 
     err = notifier.notify(f"Placing {side} order for {amount} {symbol}")
@@ -306,9 +378,15 @@ async def execute_trade_async(
     use_websocket: bool = False,
     config: Optional[Dict] = None,
     score: float = 0.0,
+    max_retries: int = 3,
 ) -> Dict:
-    """Asynchronous version of :func:`execute_trade`. It supports both
-    ``ccxt.pro`` exchanges and the threaded ``KrakenWSClient`` fallback."""
+    """Asynchronous version of :func:`execute_trade` with retry support.
+
+    Parameters
+    ----------
+    max_retries:
+        Number of attempts when API calls fail. Defaults to ``3``.
+    """
 
     if notifier is None:
         if isinstance(token, TelegramNotifier):
@@ -320,36 +398,59 @@ async def execute_trade_async(
 
     msg = f"Placing {side} order for {amount} {symbol}"
     err = notifier.notify(msg)
-    
+
     if err:
         logger.error("Failed to send message: %s", err)
+
+    async def place(size: float) -> Dict:
+        if dry_run:
+            return {"symbol": symbol, "side": side, "amount": size, "dry_run": True}
+
+        delay = 1.0
     if dry_run:
         order = {"symbol": symbol, "side": side, "amount": amount, "dry_run": True}
     else:
-        try:
-            if score > 0.8 and hasattr(exchange, "create_limit_order"):
-                price = None
-                try:
-                    if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
-                        t = await exchange.fetch_ticker(symbol)
-                    else:
-                        t = await asyncio.to_thread(exchange.fetch_ticker, symbol)
-                    bid = t.get("bid")
-                    ask = t.get("ask")
-                    if bid and ask:
-                        price = (bid + ask) / 2
-                except Exception as err:
-                    logger.warning("Limit price fetch failed: %s", err)
-                if price:
-                    params = {"postOnly": True}
-                    if config.get("hidden_limit"):
-                        params["hidden"] = True
-                    if asyncio.iscoroutinefunction(getattr(exchange, "create_limit_order", None)):
-                        order = await exchange.create_limit_order(symbol, side, amount, price, params)
-                    else:
-                        order = await asyncio.to_thread(
-                            exchange.create_limit_order, symbol, side, amount, price, params
+        for attempt in range(max_retries):
+            try:
+                if score > 0.8 and hasattr(exchange, "create_limit_order"):
+                    price = None
+                    try:
+                        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
+                            t = await exchange.fetch_ticker(symbol)
+                        else:
+                            t = await asyncio.to_thread(exchange.fetch_ticker, symbol)
+                        bid = t.get("bid")
+                        ask = t.get("ask")
+                        if bid and ask:
+                            price = (bid + ask) / 2
+                    except Exception as err:
+                        logger.warning("Limit price fetch failed: %s", err)
+                    if price:
+                        params = {"postOnly": True}
+                        if config.get("hidden_limit"):
+                            params["hidden"] = True
+                        if asyncio.iscoroutinefunction(getattr(exchange, "create_limit_order", None)):
+                            return await exchange.create_limit_order(symbol, side, size, price, params)
+                        return await asyncio.to_thread(
+                            exchange.create_limit_order, symbol, side, size, price, params
                         )
+
+                            order = await exchange.create_limit_order(symbol, side, amount, price, params)
+                        else:
+                            order = await asyncio.to_thread(
+                                exchange.create_limit_order, symbol, side, amount, price, params
+                            )
+                    else:
+                        if use_websocket and ws_client is not None and not ccxtpro:
+                            order = ws_client.add_order(symbol, side, amount)
+                        elif asyncio.iscoroutinefunction(
+                            getattr(exchange, "create_market_order", None)
+                        ):
+                            order = await exchange.create_market_order(symbol, side, amount)
+                        else:
+                            order = await asyncio.to_thread(
+                                exchange.create_market_order, symbol, side, amount
+                            )
                 else:
                     if use_websocket and ws_client is not None and not ccxtpro:
                         order = ws_client.add_order(symbol, side, amount)
@@ -361,21 +462,56 @@ async def execute_trade_async(
                         order = await asyncio.to_thread(
                             exchange.create_market_order, symbol, side, amount
                         )
+                break
+            except Exception as e:  # pragma: no cover - network
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                return {}
             else:
                 if use_websocket and ws_client is not None and not ccxtpro:
-                    order = ws_client.add_order(symbol, side, amount)
-                elif asyncio.iscoroutinefunction(
-                    getattr(exchange, "create_market_order", None)
-                ):
-                    order = await exchange.create_market_order(symbol, side, amount)
-                else:
-                    order = await asyncio.to_thread(
-                        exchange.create_market_order, symbol, side, amount
+                    return ws_client.add_order(symbol, side, size)
+                if asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
+                    return await exchange.create_market_order(symbol, side, size)
+                return await asyncio.to_thread(exchange.create_market_order, symbol, side, size)
+            except (NetworkError, RateLimitExceeded) as exc:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "Retry %s placing %s %s due to %s",
+                        attempt + 1,
+                        side,
+                        symbol,
+                        exc,
                     )
+                    await asyncio.sleep(delay)
+                    delay *= 2
+                    continue
+                raise
+            except ExchangeError:
+                raise
+            except Exception as e:
+                logger.exception("Order placement failed: %s", e)
+                err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                raise
+
+    order = await place(amount)
         except Exception as e:  # pragma: no cover - network
             err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
+            logger.error(
+                "Order failed - symbol=%s side=%s amount=%s: %s",
+                symbol,
+                side,
+                amount,
+                e,
+                exc_info=True,
+            )
             return {}
     err = notifier.notify(f"Order executed: {order}")
     if err:
@@ -432,8 +568,15 @@ def place_stop_order(
     chat_id: Optional[str] = None,
     notifier: Optional[TelegramNotifier] = None,
     dry_run: bool = True,
+    max_retries: int = 3,
 ) -> Dict:
-    """Submit a stop-loss order on the exchange."""
+    """Submit a stop-loss order on the exchange.
+
+    Parameters
+    ----------
+    max_retries:
+        Retry attempts when order placement fails. Defaults to ``3``.
+    """
     if notifier is None:
         if token is None or chat_id is None:
             raise ValueError("token/chat_id or notifier must be provided")
@@ -452,6 +595,46 @@ def place_stop_order(
             "dry_run": True,
         }
     else:
+        delay = 1.0
+        for attempt in range(max_retries):
+            try:
+                order = exchange.create_order(
+                    symbol,
+                    "stop_market",
+                    side,
+                    amount,
+                    params={"stopPrice": stop_price},
+                )
+                break
+            except (NetworkError, RateLimitExceeded) as exc:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "Retry %s placing stop %s %s due to %s",
+                        attempt + 1,
+                        side,
+                        symbol,
+                        exc,
+                    )
+                    time.sleep(delay)
+                    delay *= 2
+                    continue
+                raise
+            except ExchangeError:
+                raise
+            except Exception as e:
+                logger.exception("Stop order failed: %s", e)
+                err_msg = notifier.notify(f"Stop order failed: {e}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                raise
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                err_msg = notifier.notify(f"Stop order failed: {e}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                return {}
         try:
             order = exchange.create_order(
                 symbol,
@@ -464,6 +647,14 @@ def place_stop_order(
             err_msg = notifier.notify(f"Stop order failed: {e}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
+            logger.error(
+                "Stop order failed - symbol=%s side=%s amount=%s: %s",
+                symbol,
+                side,
+                amount,
+                e,
+                exc_info=True,
+            )
             return {}
     err = notifier.notify(f"Stop order submitted: {order}")
     if err:

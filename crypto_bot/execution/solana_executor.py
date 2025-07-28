@@ -38,7 +38,13 @@ async def execute_swap(
     jito_key: Optional[str] = None,
     max_retries: int = 3,
 ) -> Dict:
-    """Execute a swap on Solana using the Jupiter aggregator."""
+    """Execute a swap on Solana using the Jupiter aggregator.
+
+    Parameters
+    ----------
+    max_retries:
+        Number of attempts when network calls fail. Defaults to ``3``.
+    """
 
     if notifier is None:
         if telegram_token is None or chat_id is None:
@@ -130,6 +136,7 @@ async def execute_swap(
 
     async with aiohttp.ClientSession() as session:
         for attempt in range(1, max_retries + 1):
+        for attempt in range(max_retries):
             try:
                 async with session.get(
                     JUPITER_QUOTE_URL,
@@ -167,6 +174,17 @@ async def execute_swap(
                         logger.error("Failed to send message: %s", nerr)
                     raise RuntimeError("Failed to fetch Jupiter quote") from err
                 await asyncio.sleep(2 ** attempt)
+                    quote_resp.raise_for_status()
+                    quote_data = await quote_resp.json()
+                break
+            except Exception as err:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                err_msg = notifier.notify(f"Quote error: {err}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                return {}
         if not quote_data.get("data"):
             logger.warning("No routes returned from Jupiter")
             return {}
@@ -234,6 +252,16 @@ async def execute_swap(
             logger.warning("Slippage check failed: %s", err)
 
         for attempt in range(1, max_retries + 1):
+            logger.warning(
+                "Slippage check failed for %s->%s amount=%s: %s",
+                token_in,
+                token_out,
+                amount,
+                err,
+                exc_info=True,
+            )
+
+        for attempt in range(max_retries):
             try:
                 async with session.post(
                     JUPITER_SWAP_URL,
@@ -272,6 +300,18 @@ async def execute_swap(
         swap_tx = swap_data.get("swapTransaction")
         if not swap_tx:
             swap_tx = (swap_data.get("data") or [{}])[0].get("swapTransaction")
+                    swap_resp.raise_for_status()
+                    swap_data = await swap_resp.json()
+                break
+            except Exception as err:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                err_msg = notifier.notify(f"Swap failed: {err}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                return {}
+        swap_tx = swap_data["swapTransaction"]
 
     try:
         raw_tx = base64.b64decode(swap_tx)
