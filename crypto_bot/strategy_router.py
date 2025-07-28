@@ -38,6 +38,7 @@ from crypto_bot.strategy import (
     micro_scalp_bot,
     lstm_bot,
     bounce_scalper,
+    cross_chain_arb_bot,
     flash_crash_bot,
 )
 
