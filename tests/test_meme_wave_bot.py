@@ -2,7 +2,6 @@ import importlib.util
 import pathlib
 import sys
 import types
-
 import pandas as pd
 import pytest
 
@@ -32,6 +31,20 @@ sniper_mod = types.ModuleType("crypto_bot.strategies.sniper_solana")
 sniper_mod.generate_signal = lambda *a, **k: (0.0, "none")
 sys.modules.setdefault("crypto_bot.strategies.sniper_solana", sniper_mod)
 sys.modules.setdefault("redis", types.ModuleType("redis"))
+
+# The meme-wave strategy imports Solana helpers which depend on the optional
+# ``solana`` package. Tests should run even when that dependency isn't
+# installed, so we provide minimal stub modules mirroring the pattern used in
+# ``tests/test_solana_executor.py``.
+if importlib.util.find_spec("solana") is None:  # pragma: no cover - optional
+    sys.modules.setdefault("solana", types.ModuleType("solana"))
+    sys.modules.setdefault("solana.rpc", types.ModuleType("solana.rpc"))
+    async_mod = types.ModuleType("solana.rpc.async_api")
+    setattr(async_mod, "AsyncClient", object)
+    sys.modules.setdefault("solana.rpc.async_api", async_mod)
+    sys.modules.setdefault("solana.keypair", types.ModuleType("solana.keypair"))
+    sys.modules.setdefault("solana.transaction", types.ModuleType("solana.transaction"))
+    sys.modules.setdefault("solana.rpc.api", types.ModuleType("solana.rpc.api"))
 
 path = pathlib.Path(__file__).resolve().parents[1] / "crypto_bot" / "strategy" / "meme_wave_bot.py"
 spec = importlib.util.spec_from_file_location("meme_wave_bot", path)
