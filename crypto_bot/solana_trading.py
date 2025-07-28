@@ -133,6 +133,9 @@ async def sniper_trade(
 ) -> Dict:
     """Buy ``target_token`` then convert profits when threshold reached."""
 
+    if mempool_monitor is None and (mempool_cfg or {}).get("enabled"):
+        mempool_monitor = SolanaMempoolMonitor()
+
     trade = await execute_swap(
         base_token,
         target_token,
@@ -209,6 +212,9 @@ async def cross_chain_trade(
         token_in = base_mint
         token_out = quote_mint
         cex_side = "buy"
+
+    if mempool_monitor is None and (mempool_cfg or {}).get("enabled"):
+        mempool_monitor = SolanaMempoolMonitor()
 
     dex_trade = await execute_swap(
         token_in,
