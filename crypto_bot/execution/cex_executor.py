@@ -181,6 +181,40 @@ def execute_trade(
                     logger.error("Failed to send message: %s", err_msg)
                 return {}
 
+        try:
+            if score > 0.8 and hasattr(exchange, "create_limit_order"):
+                price = None
+                try:
+                    t = exchange.fetch_ticker(symbol)
+                    bid = t.get("bid")
+                    ask = t.get("ask")
+                    if bid and ask:
+                        price = (bid + ask) / 2
+                except Exception as err:
+                    logger.warning("Limit price fetch failed: %s", err)
+                if price:
+                    params = {"postOnly": True}
+                    if config.get("hidden_limit"):
+                        params["hidden"] = True
+                    return exchange.create_limit_order(symbol, side, size, price, params)
+
+            if ws_client is not None:
+                return ws_client.add_order(symbol, side, size)
+            return exchange.create_market_order(symbol, side, size)
+        except Exception as exc:
+            err_msg = notifier.notify(f"Order failed: {exc}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
+            logger.error(
+                "Order failed - symbol=%s side=%s amount=%s: %s",
+                symbol,
+                side,
+                size,
+                exc,
+                exc_info=True,
+            )
+            return {}
+
     err = notifier.notify(f"Placing {side} order for {amount} {symbol}")
     if err:
         logger.error("Failed to send message: %s", err)
@@ -401,6 +435,30 @@ async def execute_trade_async(
                 if err_msg:
                     logger.error("Failed to send message: %s", err_msg)
                 return {}
+            else:
+                if use_websocket and ws_client is not None and not ccxtpro:
+                    order = ws_client.add_order(symbol, side, amount)
+                elif asyncio.iscoroutinefunction(
+                    getattr(exchange, "create_market_order", None)
+                ):
+                    order = await exchange.create_market_order(symbol, side, amount)
+                else:
+                    order = await asyncio.to_thread(
+                        exchange.create_market_order, symbol, side, amount
+                    )
+        except Exception as e:  # pragma: no cover - network
+            err_msg = notifier.notify(f"\u26a0\ufe0f Error: Order failed: {e}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
+            logger.error(
+                "Order failed - symbol=%s side=%s amount=%s: %s",
+                symbol,
+                side,
+                amount,
+                e,
+                exc_info=True,
+            )
+            return {}
     err = notifier.notify(f"Order executed: {order}")
     if err:
         logger.error("Failed to send message: %s", err)
@@ -501,6 +559,27 @@ def place_stop_order(
                 if err_msg:
                     logger.error("Failed to send message: %s", err_msg)
                 return {}
+        try:
+            order = exchange.create_order(
+                symbol,
+                "stop_market",
+                side,
+                amount,
+                params={"stopPrice": stop_price},
+            )
+        except Exception as e:
+            err_msg = notifier.notify(f"Stop order failed: {e}")
+            if err_msg:
+                logger.error("Failed to send message: %s", err_msg)
+            logger.error(
+                "Stop order failed - symbol=%s side=%s amount=%s: %s",
+                symbol,
+                side,
+                amount,
+                e,
+                exc_info=True,
+            )
+            return {}
     err = notifier.notify(f"Stop order submitted: {order}")
     if err:
         logger.error("Failed to send message: %s", err)
