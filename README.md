@@ -21,6 +21,7 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 * Trade history page highlighting buys in green and sells in red
 * Backtesting module with PnL, drawdown and Sharpe metrics
 * Utility functions automatically handle synchronous or asynchronous exchange clients
+* Trade execution helpers poll for order status on CEXs or transaction confirmation on Solana with a 60s timeout. Partial fills are handled automatically via the optional `poll_timeout` parameter.
 
 On-chain DEX execution submits real transactions when not running in dry-run mode.
 
@@ -818,6 +819,7 @@ max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
 ohlcv_batch_size: 10         # group symbols per OHLCV fetch
 max_concurrent_tickers: 20   # limit simultaneous ticker fetches
 ticker_rate_limit: 0         # override exchange rate limit (ms)
+poll_timeout: 60             # seconds to wait for order fill or transaction confirmation
 force_websocket_history: true  # set false to enable REST fallback
 max_ws_limit: 200            # skip WebSocket when request exceeds this
 gecko_limit: 10              # concurrent GeckoTerminal requests
@@ -836,6 +838,7 @@ evaluation cycle, giving the market time to evolve before scanning again.
 controls the timeout for each fetch call. If you still encounter timeouts after
 raising this value, try lowering `max_concurrent_ohlcv` or `ohlcv_batch_size` to reduce pressure on
 the exchange API.
+Trade execution helpers now poll for order status or transaction confirmation for up to `poll_timeout` seconds (default 60) and gracefully handle partial fills.
 The updater automatically determines how many candles are missing from the
 cache, so even when `limit` is large it only requests the data required to fill
 the gap, avoiding needless delays.
