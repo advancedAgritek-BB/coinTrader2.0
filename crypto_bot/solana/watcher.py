@@ -163,47 +163,61 @@ class PoolWatcher:
     async def _watch_ws(self) -> AsyncGenerator[NewPoolEvent, None]:
         """Yield events from a websocket subscription."""
         self._running = True
+        retries = 0
         async with aiohttp.ClientSession() as session:
-            try:
-                async with session.ws_connect(self.websocket_url) as ws:
-                    await ws.send_json(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": 1,
-                            "method": "programSubscribe",
-                            "params": [self.raydium_program_id, {"encoding": "jsonParsed"}],
-                        }
-                    )
-                    async for msg in ws:
-                        if not self._running:
-                            break
-                        if msg.type != aiohttp.WSMsgType.TEXT:
-                            continue
-                        try:
-                            data = json.loads(msg.data)
-                        except ValueError:
-                            continue
-                        if data.get("method") != "programNotification":
-                            continue
-                        value = data.get("params", {}).get("result", {}).get("value", {})
-                        addr = value.get("pubkey") or ""
-                        if not addr or addr in self._seen:
-                            continue
-                        self._seen.add(addr)
-                        yield NewPoolEvent(
-                            pool_address=addr,
-                            token_mint="",
-                            creator="",
-                            liquidity=0.0,
+            while self._running and retries < 3:
+                try:
+                    async with session.ws_connect(self.websocket_url) as ws:
+                        await ws.send_json(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": 1,
+                                "method": "programSubscribe",
+                                "params": [self.raydium_program_id, {"encoding": "jsonParsed"}],
+                            }
                         )
-            except aiohttp.WSServerHandshakeError as e:
-                if e.status == 401:
-                    logger.error(
-                        "Unauthorized WebSocket connection – check HELIUS_KEY or subscription tier"
-                    )
-                    self._running = False
-                    return
-                raise
+                        async for msg in ws:
+                            if not self._running:
+                                break
+                            if msg.type != aiohttp.WSMsgType.TEXT:
+                                continue
+                            try:
+                                data = json.loads(msg.data)
+                            except ValueError:
+                                continue
+                            if data.get("method") != "programNotification":
+                                continue
+                            value = (
+                                data.get("params", {})
+                                .get("result", {})
+                                .get("value", {})
+                            )
+                            addr = value.get("pubkey") or ""
+                            if not addr or addr in self._seen:
+                                continue
+                            self._seen.add(addr)
+                            yield NewPoolEvent(
+                                pool_address=addr,
+                                token_mint="",
+                                creator="",
+                                liquidity=0.0,
+                            )
+                    # Reset retries after a clean exit
+                    retries = 0
+                except aiohttp.WSServerHandshakeError as e:
+                    if e.status == 401:
+                        logger.error(
+                            "Unauthorized WebSocket connection – check HELIUS_KEY or subscription tier"
+                        )
+                        self._running = False
+                        return
+                    logger.error("WS error: %s", e)
+                    retries += 1
+                    await asyncio.sleep(2 ** retries)
+                except Exception as e:  # pragma: no cover - generic catch for stability
+                    logger.error("WS error: %s", e)
+                    retries += 1
+                    await asyncio.sleep(2 ** retries)
 
 
     def stop(self) -> None:
