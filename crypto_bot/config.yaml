@@ -76,11 +76,6 @@ dip_hunter:
   rsi_window: 14
   vol_mult: 1.5
   vol_window: 20
-stat_arb_bot:
-  pairs:
-    - SOL/USDC,ETH/USDC
-  z_threshold: 2.0
-  window: 50
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.05
 exchange: kraken
@@ -136,7 +131,6 @@ liquidity_check: true
 liquidity_depth: 5
 listing_date_concurrency: 5
 log_to_google: true
-quiet_mode: false
 loop_interval_minutes: 0.1
 max_age_days: 90
 max_change_pct: 20
@@ -150,6 +144,10 @@ max_slippage_pct: 0.2
 max_spread_pct: 10
 max_vol: 50000000
 max_ws_limit: 200
+meme_wave_bot:
+  sentiment_thr: 0.6
+  twitter_query: null
+  vol_spike_thr: 2.0
 meme_wave_sniper:
   enabled: true
   execution:
@@ -169,10 +167,6 @@ meme_wave_sniper:
     weight_liquidity: 0.8
     weight_social: 0.7
     weight_tx: 1.2
-meme_wave_bot:
-  vol_spike_thr: 2.0
-  sentiment_thr: 0.6
-  twitter_query: null
 mempool_monitor:
   action: reprice
   enabled: true
@@ -216,6 +210,21 @@ ml_signal_model:
 mode: auto
 mode_degrade_window: 15
 mode_threshold: 0.3
+momentum_bot:
+  adx_threshold: 25
+  atr_period: 14
+  donchian_period: 20
+  fast_length: 20
+  risk:
+    max_drawdown: 0.4
+    risk_pct: 0.01
+    stop_loss_pct: 0.01
+    take_profit_pct: 0.03
+    trailing_stop_factor: 1.5
+  setup_window: 10
+  slow_length: 50
+  trigger_window: 3
+  vol_multiplier: 1.0
 ohlcv_batch_size: 10
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
@@ -262,6 +271,7 @@ pyth:
   solana_ws_endpoint: wss://api.mainnet-beta.solana.com
 pyth_quotes:
 - USDC
+quiet_mode: false
 refresh_pairs:
   allowed_quote_currencies: []
   blacklist_assets: []
@@ -385,6 +395,11 @@ solana_scanner:
   max_tokens_per_scan: 200
   min_volume_usd: 10
 solana_slippage_bps: 10
+stat_arb_bot:
+  pairs:
+  - SOL/USDC,ETH/USDC
+  window: 50
+  z_threshold: 2.0
 strategy_allocation:
   grid: 0.2
   sniper_solana: 0.6
@@ -416,6 +431,7 @@ strategy_router:
     - dip_hunter
     - mean_bot
     - stat_arb_bot
+    - flash_crash_bot
     - lstm_bot
     scalp:
     - micro_scalp
@@ -432,6 +448,7 @@ strategy_router:
     - sniper_solana
     - momentum_bot
     - meme_wave_bot
+    - flash_crash_bot
     - lstm_bot
   scalp_timeframe: 1m
   sideways_timeframe: 1h
