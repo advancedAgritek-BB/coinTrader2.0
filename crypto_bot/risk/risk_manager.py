@@ -48,6 +48,8 @@ class RiskConfig:
     max_pair_drawdown: float = 0.0
     pair_drawdown_lookback: int = 20
     min_history_bars: int = 20
+    win_rate_threshold: float = 0.7
+    win_rate_boost_factor: float = 1.5
 
 
 class RiskManager:
@@ -139,7 +141,8 @@ class RiskManager:
         using ``risk_pct`` relative to that distance.  Otherwise the fixed
         ``trade_size_pct`` is scaled by volatility and current drawdown.
         When ``name`` is supplied the recent win rate for that strategy is
-        fetched and a 50%% boost is applied when the rate exceeds ``0.7``.
+        fetched and the size is boosted by ``win_rate_boost_factor`` when the
+        rate exceeds ``win_rate_threshold``.
         """
 
         volatility_factor = 1.0
@@ -187,8 +190,8 @@ class RiskManager:
                 win_rate = get_recent_win_rate(strategy=name)
             except Exception:
                 win_rate = 0.0
-            if win_rate > 0.7:
-                size *= 1.5
+            if win_rate > self.config.win_rate_threshold:
+                size *= self.config.win_rate_boost_factor
 
         if size <= 0:
             logger.info(

@@ -119,3 +119,19 @@ def test_low_win_rate_no_boost(monkeypatch):
     rm = RiskManager(_simple_cfg())
     size = rm.position_size(1.0, 1000, name="trend_bot")
     assert size == pytest.approx(100.0)
+
+
+def test_custom_win_rate_settings(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.risk.risk_manager.get_recent_win_rate", lambda *a, **k: 0.7
+    )
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        win_rate_threshold=0.6,
+        win_rate_boost_factor=2.0,
+    )
+    rm = RiskManager(cfg)
+    size = rm.position_size(1.0, 1000, name="trend_bot")
+    assert size == pytest.approx(200.0)
