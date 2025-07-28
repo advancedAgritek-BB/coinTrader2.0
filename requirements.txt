@@ -43,4 +43,5 @@ supabase
 gymnasium
 torch
 stable-baselines3
+lunarcrush
 

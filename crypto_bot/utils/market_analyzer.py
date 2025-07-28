@@ -203,7 +203,12 @@ async def analyze_symbol(
     try:
         from crypto_bot.sentiment_filter import boost_factor
 
-        bias = boost_factor(bias_cfg.get("bull_fng", 50), bias_cfg.get("bull_sentiment", 50))
+        base_symbol = symbol.split("/")[0] if isinstance(symbol, str) else None
+        bias = boost_factor(
+            bias_cfg.get("bull_fng", 50),
+            bias_cfg.get("bull_sentiment", 50),
+            base_symbol,
+        )
     except Exception:
         bias = 1.0
     if bias > 1:
