@@ -58,6 +58,7 @@ from crypto_bot.utils.market_loader import (
     update_ohlcv_cache,
     update_multi_tf_ohlcv_cache,
     update_regime_tf_cache,
+    fetch_ohlcv_for_token,
     timeframe_seconds,
     configure as market_loader_configure,
     fetch_order_book_async,
@@ -1904,11 +1905,24 @@ async def _main_impl() -> TelegramNotifier:
             try:
                 tokens = await get_solana_new_tokens(cfg)
                 if tokens:
-                    async with QUEUE_LOCK:
-                        enqueue_solana_tokens(tokens)
-                        for sym in reversed(tokens):
-                            symbol_priority_queue.appendleft(sym)
-                            NEW_SOLANA_TOKENS.add(sym)
+                    filtered: list[str] = []
+                    for sym in tokens:
+                        try:
+                            df = await fetch_ohlcv_for_token(sym)
+                            if df is None:
+                                continue
+                            regime, _ = await classify_regime_cached(sym, "1m", df)
+                            regime = regime.split("_")[-1]
+                            if regime in {"volatile", "breakout"}:
+                                filtered.append(sym)
+                        except Exception as exc:
+                            logger.error("Solana token %s processing error: %s", sym, exc)
+                    if filtered:
+                        async with QUEUE_LOCK:
+                            enqueue_solana_tokens(filtered)
+                            for sym in reversed(filtered):
+                                symbol_priority_queue.appendleft(sym)
+                                NEW_SOLANA_TOKENS.add(sym)
             except asyncio.CancelledError:
                 break
             except Exception as exc:  # pragma: no cover - best effort
