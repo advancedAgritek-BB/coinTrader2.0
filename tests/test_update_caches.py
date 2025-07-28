@@ -199,3 +199,41 @@ def test_update_caches_warns_and_skips_empty_df(monkeypatch, caplog):
 
     assert "No OHLCV data for BTC/USDT" in caplog.text
     assert ctx.current_batch == []
+
+
+def test_update_caches_ws_subscribes_each(monkeypatch):
+    df = pd.DataFrame(
+        {
+            "timestamp": [1],
+            "open": [1],
+            "high": [1],
+            "low": [1],
+            "close": [1],
+            "volume": [1],
+        }
+    )
+
+    async def fake_update(*args, **kwargs):
+        return {"1h": {"BTC/USDT": df, "ETH/USDT": df}}
+
+    calls: list[str] = []
+
+    class DummyExchange:
+        async def watch_ohlcv(self, symbol, timeframe="1h"):
+            calls.append(symbol)
+            return []
+
+    ctx = BotContext(
+        positions={},
+        df_cache={},
+        regime_cache={},
+        config={"timeframe": "1h", "use_websocket": True},
+    )
+    ctx.exchange = DummyExchange()
+    ctx.current_batch = ["BTC/USDT", "ETH/USDT"]
+    monkeypatch.setattr(main, "update_multi_tf_ohlcv_cache", fake_update)
+    monkeypatch.setattr(main, "update_regime_tf_cache", dummy_update)
+
+    asyncio.run(main.update_caches(ctx))
+
+    assert set(calls) == {"BTC/USDT", "ETH/USDT"}

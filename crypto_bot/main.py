@@ -1002,13 +1002,16 @@ async def update_caches(ctx: BotContext) -> None:
                 if status_updates and ctx.notifier:
                     ctx.notifier.notify(msg)
 
-    if ctx.config.get("use_websocket", True):
+    if ctx.config.get("use_websocket", True) and ctx.current_batch:
         timeframe = ctx.config.get("timeframe", "1h")
-        try:
-            # Subscribe to WS for live candles
-            await ctx.exchange.watch_ohlcv(batch, timeframe)
-        except Exception as exc:  # pragma: no cover - network
-            logger.warning("WS subscribe failed: %s", exc)
+
+        async def subscribe(sym: str) -> None:
+            try:
+                await ctx.exchange.watch_ohlcv(sym, timeframe)
+            except Exception as exc:  # pragma: no cover - network
+                logger.warning("WS subscribe failed for %s: %s", sym, exc)
+
+        await asyncio.gather(*(subscribe(sym) for sym in ctx.current_batch))
 
     ctx.timing["ohlcv_fetch_latency"] = time.perf_counter() - start
 
