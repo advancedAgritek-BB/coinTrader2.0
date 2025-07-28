@@ -81,10 +81,6 @@ stat_arb_bot:
     - SOL/USDC,ETH/USDC
   z_threshold: 2.0
   window: 50
-cross_chain_arb_bot:
-  pairs:
-    - SOL/USDC,ETH/USDC
-  spread_thr: 0.005
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.05
 exchange: kraken
