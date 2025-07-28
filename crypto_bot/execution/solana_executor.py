@@ -211,9 +211,14 @@ async def execute_swap(
                 back_resp.raise_for_status()
                 back_data = await back_resp.json()
             back_route = back_data["data"][0]
-            ask = float(route["outAmount"]) / float(route["inAmount"])
-            bid = float(back_route["inAmount"]) / float(back_route["outAmount"])
-            slippage = (ask - bid) / ((ask + bid) / 2)
+            try:
+                ask = float(route["outAmount"]) / float(route["inAmount"])
+                bid = float(back_route["inAmount"]) / float(back_route["outAmount"])
+            except (KeyError, ValueError, ZeroDivisionError) as e:
+                logger.warning("Slippage calc failed: %s - skipping check", e)
+                slippage = 0.0
+            else:
+                slippage = (ask - bid) / ((ask + bid) / 2)
             if slippage > config.get("max_slippage_pct", 1.0):
                 logger.warning("Trade skipped due to slippage.")
                 logger.info(

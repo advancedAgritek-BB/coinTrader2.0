@@ -98,6 +98,15 @@ class DummySession:
         return PR({"swapTransaction": "tx"})
 
 
+class BadRouteSession(DummySession):
+    def get(self, url, params=None, timeout=10):
+        if params.get("inputMint") == "SOL":
+            data = {"inAmount": 100, "outAmount": 110}
+        else:
+            data = {"inAmount": 110}  # missing outAmount
+        return DummyResp(data)
+
+
 class DummyJitoSession(DummySession):
     def post(self, url, json=None, headers=None, timeout=10):
         if "jito" in url:
@@ -211,6 +220,84 @@ def test_execute_swap_skips_on_slippage(monkeypatch):
     monkeypatch.setattr(sys.modules["solana.keypair"], "Keypair", KP, raising=False)
     monkeypatch.setattr(sys.modules["solana.transaction"], "Transaction", Tx, raising=False)
     monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
+    monkeypatch.setattr(solana_executor, "Client", Client, raising=False)
+    class AC:
+        def __init__(self, url):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def confirm_transaction(self, *a, **k):
+            return {}
+
+    monkeypatch.setattr(sys.modules["solana.rpc.async_api"], "AsyncClient", AC, raising=False)
+    monkeypatch.setattr(solana_executor, "AsyncClient", AC, raising=False)
+    async def no_wait(coro, timeout):
+        return await coro
+    monkeypatch.setattr(asyncio, "wait_for", no_wait)
+
+    notifier = DummyNotifier()
+    res = asyncio.run(
+        solana_executor.execute_swap(
+            "SOL",
+            "USDC",
+            100,
+            TelegramNotifier("t", "c"),
+            notifier=notifier,
+            dry_run=False,
+            config={"max_slippage_pct": 0.05, "confirm_execution": True},
+        )
+    )
+    assert res == {}
+
+
+def test_slippage_calc_failure(monkeypatch):
+    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
+    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
+    monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
+    monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: BadRouteSession())
+    monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")
+
+    class KP:
+        public_key = "k"
+
+        @staticmethod
+        def from_secret_key(b):
+            return KP()
+
+        def sign(self, tx):
+            pass
+
+    class Tx:
+        @staticmethod
+        def deserialize(raw):
+            return Tx()
+
+        def sign(self, kp):
+            pass
+
+    class Client:
+        def __init__(self, *a, **k):
+            pass
+
+        def send_transaction(self, tx, kp):
+            return {"result": "h"}
+
+    import sys, types
+
+    sys.modules.setdefault("solana.keypair", types.ModuleType("solana.keypair"))
+    sys.modules.setdefault("solana.transaction", types.ModuleType("solana.transaction"))
+    sys.modules.setdefault("solana.rpc.api", types.ModuleType("solana.rpc.api"))
+    sys.modules.setdefault("solana.rpc.async_api", types.ModuleType("solana.rpc.async_api"))
+    monkeypatch.setattr(sys.modules["solana.keypair"], "Keypair", KP, raising=False)
+    monkeypatch.setattr(sys.modules["solana.transaction"], "Transaction", Tx, raising=False)
+    monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
+
     class AC:
         def __init__(self, url):
             pass
@@ -232,13 +319,20 @@ def test_execute_swap_skips_on_slippage(monkeypatch):
             "SOL",
             "USDC",
             100,
-            TelegramNotifier("t", "c"),
             notifier=notifier,
             dry_run=False,
             config={"max_slippage_pct": 0.05, "confirm_execution": True},
         )
     )
-    assert res == {}
+
+    assert res == {
+        "token_in": "SOL",
+        "token_out": "USDC",
+        "amount": 100,
+        "tx_hash": "h",
+        "route": {"inAmount": 100, "outAmount": 110},
+        "status": "confirmed",
+    }
 
 
 def test_swap_no_message_when_disabled(monkeypatch):
@@ -949,9 +1043,6 @@ def test_keyring_fallback(monkeypatch):
     )
 
     assert res.get("tx_hash") == "h"
-            max_retries=5,
-        )
-    )
 
     assert res == {
         "token_in": "SOL",
