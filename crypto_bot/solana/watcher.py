@@ -258,7 +258,6 @@ class PoolWatcher:
                             )
                             if self._predict_breakout(event) < 0.5:
                                 continue
-                            self._seen.add(addr)
                             try:
                                 df = await self._fetch_snapshot(event.pool_address)
                                 tx_count = len(df)
