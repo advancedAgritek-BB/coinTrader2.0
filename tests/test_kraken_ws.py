@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta, timezone
 import sys
 import types
+import asyncio
 
 sys.modules.setdefault("scipy", types.ModuleType("scipy"))
 sys.modules.setdefault("scipy.stats", types.SimpleNamespace(pearsonr=lambda *a, **k: 0))
@@ -1165,3 +1166,93 @@ def test_add_order_waits_for_response(monkeypatch):
     assert ws.sent == [expected]
     assert result == response
     assert called["method"] == "add_order"
+
+
+def test_watch_ohlcv_multi_symbol(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    async def run():
+        async def feed():
+            await asyncio.sleep(0.01)
+            candle1 = [
+                "1",
+                "1",
+                "1",
+                "1",
+                "1",
+                "1",
+                "1",
+                1,
+            ]
+            msg1 = json.dumps(
+                [1, {"channel": "ohlc-1", "symbol": "BTC/USD"}, candle1, {"channel": "ohlc", "symbol": "BTC/USD"}]
+            )
+            client._handle_message(ws, msg1)
+            await asyncio.sleep(0.01)
+            candle2 = [
+                "2",
+                "2",
+                "2",
+                "2",
+                "2",
+                "2",
+                "2",
+                1,
+            ]
+            msg2 = json.dumps(
+                [1, {"channel": "ohlc-1", "symbol": "ETH/USD"}, candle2, {"channel": "ohlc", "symbol": "ETH/USD"}]
+            )
+            client._handle_message(ws, msg2)
+
+        producer = asyncio.create_task(feed())
+        res = await client.watch_ohlcv(["BTC/USD", "ETH/USD"], "1m", limit=1)
+        await producer
+        return res
+
+    result = asyncio.run(run())
+    sub = json.dumps(
+        {
+            "method": "subscribe",
+            "params": {
+                "channel": "ohlc",
+                "symbol": ["BTC/USD", "ETH/USD"],
+                "interval": 1,
+                "snapshot": True,
+            },
+        }
+    )
+    assert ws.sent == [sub]
+    assert set(result.keys()) == {"BTC/USD", "ETH/USD"}
+    assert len(result["BTC/USD"]) == len(result["ETH/USD"]) == 1
+
+
+def test_watch_ohlcv_multi_symbol_limit(monkeypatch):
+    client = KrakenWSClient()
+    ws = DummyWS()
+    monkeypatch.setattr(client, "_start_ws", lambda *a, **k: ws)
+
+    async def run():
+        async def feed():
+            for i in range(2):
+                candle_b = [str(i), "1", "1", "1", "1", "1", "1", 1]
+                msg_b = json.dumps(
+                    [1, {"channel": "ohlc-1", "symbol": "BTC/USD"}, candle_b, {"channel": "ohlc", "symbol": "BTC/USD"}]
+                )
+                client._handle_message(ws, msg_b)
+                candle_e = [str(i), "2", "2", "2", "2", "2", "2", 1]
+                msg_e = json.dumps(
+                    [1, {"channel": "ohlc-1", "symbol": "ETH/USD"}, candle_e, {"channel": "ohlc", "symbol": "ETH/USD"}]
+                )
+                client._handle_message(ws, msg_e)
+                await asyncio.sleep(0.01)
+
+        prod = asyncio.create_task(feed())
+        res = await client.watch_ohlcv(["BTC/USD", "ETH/USD"], "1m", limit=2)
+        await prod
+        return res
+
+    result = asyncio.run(run())
+    assert len(result["BTC/USD"]) == 2
+    assert len(result["ETH/USD"]) == 2

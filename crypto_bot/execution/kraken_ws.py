@@ -2,6 +2,7 @@ import json
 import threading
 import time
 import os
+import asyncio
 from collections import deque
 from typing import Optional, Callable, Union, List, Any, Dict, Deque
 from datetime import datetime, timedelta, timezone
@@ -461,6 +462,8 @@ class KrakenWSClient:
         self._private_subs = []
         self._responses: Deque[dict] = deque()
         self._response_cond = threading.Condition()
+        self._messages: Deque[str] = deque()
+        self._message_cond = threading.Condition()
 
     def _handle_message(self, ws: WebSocketApp, message: str) -> None:
         """Default ``on_message`` handler that records heartbeats."""
@@ -489,6 +492,10 @@ class KrakenWSClient:
                 update(item)
         else:
             update(data)
+
+        with self._message_cond:
+            self._messages.append(message)
+            self._message_cond.notify_all()
 
     def _regenerate_private_subs(self) -> None:
         """Update stored private subscription messages with the current token."""
@@ -616,6 +623,18 @@ class KrakenWSClient:
                     self._responses.append(msg)
             time.sleep(0.01)
         raise TimeoutError(f"No response for {method}")
+
+    def _pop_message(self, timeout: Optional[float] = None) -> Optional[str]:
+        with self._message_cond:
+            if not self._messages:
+                self._message_cond.wait(timeout=timeout)
+            if self._messages:
+                return self._messages.popleft()
+        return None
+
+    async def _next_message(self, timeout: Optional[float] = None) -> Optional[str]:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._pop_message, timeout)
 
     def subscribe_ticker(
         self,
@@ -885,6 +904,62 @@ class KrakenWSClient:
             )
 
         self._public_subs = [s for s in self._public_subs if not _matches(s)]
+
+    async def watch_ohlcv(
+        self, symbols: List[str], timeframe: str, limit: int = 1
+    ) -> Dict[str, List[List[float]]]:
+        """Return the latest ``limit`` candles per symbol via WebSocket."""
+
+        tf_map = {
+            "1m": 1,
+            "5m": 5,
+            "15m": 15,
+            "30m": 30,
+            "1h": 60,
+            "4h": 240,
+            "1d": 1440,
+        }
+        interval = tf_map.get(timeframe)
+        if interval is None:
+            raise ValueError(f"Unsupported timeframe {timeframe}")
+
+        with self._message_cond:
+            self._messages.clear()
+
+        self.subscribe_ohlc(symbols, interval)
+
+        per_sym: Dict[str, Deque[List[float]]] = {
+            s: deque(maxlen=limit) for s in symbols
+        }
+        remaining = set(symbols)
+        while remaining:
+            msg = await self._next_message(timeout=5.0)
+            if msg is None:
+                continue
+            candle = parse_ohlc_message(msg)
+            if not candle:
+                continue
+            try:
+                data = json.loads(msg)
+            except Exception:
+                continue
+            symbol = None
+            if isinstance(data, dict):
+                symbol = data.get("symbol")
+                if not symbol and isinstance(data.get("data"), list):
+                    first = data["data"][0]
+                    if isinstance(first, dict):
+                        symbol = first.get("symbol")
+            elif isinstance(data, list):
+                if len(data) > 1 and isinstance(data[1], dict):
+                    symbol = data[1].get("symbol")
+                if not symbol and len(data) > 3 and isinstance(data[3], dict):
+                    symbol = data[3].get("symbol")
+            if symbol in per_sym:
+                per_sym[symbol].append(candle)
+                if len(per_sym[symbol]) >= limit:
+                    remaining.discard(symbol)
+        return {s: list(per_sym[s]) for s in symbols}
 
     def subscribe_orders(self, symbol: Optional[str] = None) -> None:
         """Subscribe to private open order updates.
