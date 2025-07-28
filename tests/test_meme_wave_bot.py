@@ -18,6 +18,7 @@ sol_pkg = types.ModuleType("crypto_bot.solana")
 sol_pkg.__path__ = []
 exit_mod = types.ModuleType("crypto_bot.solana.exit")
 exit_mod.monitor_price = lambda *a, **k: {}
+exit_mod.quick_exit = lambda *a, **k: {}
 trading_mod = types.ModuleType("crypto_bot.solana_trading")
 trading_mod.sniper_trade = lambda *a, **k: {}
 sol_pkg.exit = exit_mod
