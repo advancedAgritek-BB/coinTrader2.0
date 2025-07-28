@@ -354,8 +354,10 @@ symbol_score_weights:
 * **risk** – default stop loss, take profit and drawdown limits. `min_volume` is set to `0.0001` to filter thin markets. The stop is 1.5× ATR and the take profit is 3× ATR by default.
 * **trade_size_pct** – percent of capital used per trade.
 * **max_open_trades** – maximum simultaneous open trades.
-* **max_slippage_pct** – slippage tolerance for orders.
+* **max_slippage_pct** – slippage threshold for the depth-based check.
 * **liquidity_check**/**liquidity_depth** – verify order book depth.
+* **max_liquidity_usage** – limit how much of the visible liquidity a single
+  order may consume.
 * **weight_liquidity** – scoring weight for available pool liquidity on Solana pairs.
 * **volatility_filter** - skips trading when ATR is too low or funding exceeds `max_funding_rate`. The minimum ATR percent is `0.0005`.
 * **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment to avoid bearish markets.
@@ -804,6 +806,7 @@ Additional execution flags:
 ```yaml
 liquidity_check: true        # verify order book liquidity before placing orders
 liquidity_depth: 10          # order book depth levels to inspect
+max_liquidity_usage: 0.8     # cap order size to this fraction of depth
 weight_liquidity: 0.0        # symbol score weight for pool liquidity
 twap_enabled: false          # split large orders into slices
 twap_slices: 4               # number of slices when TWAP is enabled
@@ -839,6 +842,10 @@ controls the timeout for each fetch call. If you still encounter timeouts after
 raising this value, try lowering `max_concurrent_ohlcv` or `ohlcv_batch_size` to reduce pressure on
 the exchange API.
 Trade execution helpers now poll for order status or transaction confirmation for up to `poll_timeout` seconds (default 60) and gracefully handle partial fills.
+Orders now compute slippage using the specified `liquidity_depth`. When the
+calculated slippage exceeds `max_slippage_pct` the bot automatically switches to
+TWAP execution, dividing the trade into slices so each consumes at most
+`max_liquidity_usage` of the visible depth.
 The updater automatically determines how many candles are missing from the
 cache, so even when `limit` is large it only requests the data required to fill
 the gap, avoiding needless delays.
