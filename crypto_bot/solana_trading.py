@@ -13,6 +13,7 @@ from crypto_bot.execution.solana_executor import (
     JUPITER_QUOTE_URL,
 )
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
+from crypto_bot.execution.cex_executor import execute_trade_async as cex_trade_async
 from crypto_bot.fund_manager import auto_convert_funds
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
@@ -145,3 +146,68 @@ async def sniper_trade(
             mempool_cfg=mempool_cfg,
         )
     return trade
+
+
+async def cross_chain_trade(
+    exchange: object,
+    ws_client: object | None,
+    symbol: str,
+    side: str,
+    amount: float,
+    *,
+    dry_run: bool = True,
+    slippage_bps: int = 50,
+    use_websocket: bool = False,
+    notifier: object | None = None,
+    mempool_monitor: SolanaMempoolMonitor | None = None,
+    mempool_cfg: dict | None = None,
+    config: dict | None = None,
+) -> Dict:
+    """Execute a DEX trade then the opposite side on the CEX."""
+
+    base, quote = symbol.split("/")
+    from crypto_bot.utils.token_registry import TOKEN_MINTS
+
+    base_mint = TOKEN_MINTS.get(base)
+    quote_mint = TOKEN_MINTS.get(quote)
+    if base_mint is None or quote_mint is None:
+        logger.error("Unknown mint for %s", symbol)
+        return {"error": "unknown_mint"}
+
+    if side == "buy":
+        price = await _fetch_price(quote_mint, base_mint)
+        in_amount = amount / price if price else amount
+        token_in = quote_mint
+        token_out = base_mint
+        cex_side = "sell"
+    else:
+        in_amount = amount
+        token_in = base_mint
+        token_out = quote_mint
+        cex_side = "buy"
+
+    dex_trade = await execute_swap(
+        token_in,
+        token_out,
+        in_amount,
+        notifier=notifier,
+        slippage_bps=slippage_bps,
+        dry_run=dry_run,
+        mempool_monitor=mempool_monitor,
+        mempool_cfg=mempool_cfg,
+        config=config,
+    )
+
+    cex_trade = await cex_trade_async(
+        exchange,
+        ws_client,
+        symbol,
+        cex_side,
+        amount,
+        notifier,
+        dry_run=dry_run,
+        use_websocket=use_websocket,
+        config=config,
+    )
+
+    return {"dex": dex_trade, "cex": cex_trade}
