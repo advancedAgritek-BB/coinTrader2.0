@@ -559,14 +559,16 @@ momentum_bot:
 
 #### Cross-Chain Arbitrage Bot
 `cross_chain_arb_bot` watches price differences between a centralized
-exchange and Solana DEX quotes. When the gap for a pair in `pairs` exceeds
-`spread_thr` (fractional), the bot buys on the cheaper venue and sells on the
+exchange and Solana DEX quotes. When the gap for a configured `pair` exceeds
+`spread_threshold` (fractional), the bot buys on the cheaper venue and sells on the
 other, covering bridge costs in the process.
+The optional `fee_threshold` key helps avoid trades during periods of high on-chain fees.
 
 ```yaml
 cross_chain_arb_bot:
-  pairs: [SOL/USDC, ETH/USDT]
-  spread_thr: 0.007
+  pair: SOL/USDC
+  spread_threshold: 0.05
+  fee_threshold: 30
 ```
 
 
