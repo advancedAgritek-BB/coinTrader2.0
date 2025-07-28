@@ -543,6 +543,17 @@ momentum_bot:
     risk_pct: 0.01
 ```
 
+#### Flash Crash Scalper
+The flash crash scalper enters after a rapid ~10% drop confirmed by a spike in
+volume and exits once price rebounds about 5%.
+
+```yaml
+flash_crash_scalper:
+  drop_threshold: 0.10      # enter after a 10% decline
+  rebound_target: 0.05      # take profit on 5% bounce
+  volume_multiplier: 2.0    # volume spike relative to average
+```
+
 ### Data and Logging
 * **timeframe** – base interval for most indicators (default `15m`).
 * **timeframes** – list of additional intervals cached for reuse by strategies.
