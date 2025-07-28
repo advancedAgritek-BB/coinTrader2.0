@@ -182,6 +182,7 @@ MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 SUPABASE_URL=https://xyzcompany.supabase.co
 SUPABASE_KEY=your_service_key
+LUNARCRUSH_API_KEY=your_lunarcrush_api_key  # optional, LunarCrush social metrics
 token_registry.refresh_interval_minutes=720  # optional cache update interval
 ```
 
@@ -528,6 +529,19 @@ Repeatedly adding exposure can amplify losses during prolonged downtrends, so
 keep the order size small and stop averaging if drawdown exceeds your risk
 tolerance.
 
+#### LSTM Bot
+The LSTM bot forecasts short-term price movement using a recurrent neural
+network. It opens trades in the predicted direction once the model
+confidence exceeds a threshold. Configure the feature in
+`crypto_bot/config.yaml`:
+
+```yaml
+lstm_bot:
+  enabled: true             # activate the LSTM strategy
+  forecast_horizon: 3       # bars to predict ahead
+  confidence_threshold: 0.55
+```
+
 #### Momentum Bot
 The momentum bot rides strong trends using an ATR-based trailing stop. Set
 `momentum_bot.risk.trailing_stop_factor` in `crypto_bot/config.yaml` to control
@@ -714,6 +728,13 @@ FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-fundin
 
 `volatility_filter.py` will append the instrument symbol directly to this URL
 when requesting funding information.
+
+### LunarCrush API
+
+Sign up at [LunarCrush](https://lunarcrush.com/developers) to generate an API
+key. Set `LUNARCRUSH_API_KEY` in `crypto_bot/.env` or export it in your
+environment so the bot can retrieve social metrics. The free tier allows about
+100 requests per day.
 
 
 4. In `crypto_bot/config.yaml` set:

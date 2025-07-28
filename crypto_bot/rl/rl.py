@@ -41,6 +41,7 @@ STRATEGIES = [
     "dca_bot",         # 10: Averaging for longs (safety net)
     "solana_scalping",  # 11: MACD/RSI for Solana scalps (mempool-integrated)
     "flash_crash_bot"   # 12: Opportunistic flash crash entries
+    "lstm_bot",        # 12: LSTM-based model predictions
 ]
 NUM_STRATEGIES = len(STRATEGIES)
 

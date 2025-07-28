@@ -36,6 +36,7 @@ from crypto_bot.strategy import (
     mean_bot,
     breakout_bot,
     micro_scalp_bot,
+    lstm_bot,
     bounce_scalper,
 )
 
