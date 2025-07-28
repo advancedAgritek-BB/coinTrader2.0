@@ -4,6 +4,7 @@ from typing import Dict, Optional
 import os
 import json
 import base64
+import asyncio
 import aiohttp
 
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -35,6 +36,7 @@ async def execute_swap(
     mempool_cfg: Optional[Dict] = None,
     config: Optional[Dict] = None,
     jito_key: Optional[str] = None,
+    max_retries: int = 3,
 ) -> Dict:
     """Execute a swap on Solana using the Jupiter aggregator."""
 
@@ -127,36 +129,91 @@ async def execute_swap(
     client = Client(rpc_url)
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(
-            JUPITER_QUOTE_URL,
-            params={
-                "inputMint": token_in,
-                "outputMint": token_out,
-                "amount": int(amount),
-                "slippageBps": slippage_bps,
-            },
-            timeout=10,
-        ) as quote_resp:
-            quote_resp.raise_for_status()
-            quote_data = await quote_resp.json()
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with session.get(
+                    JUPITER_QUOTE_URL,
+                    params={
+                        "inputMint": token_in,
+                        "outputMint": token_out,
+                        "amount": int(amount),
+                        "slippageBps": slippage_bps,
+                    },
+                    timeout=10,
+                ) as quote_resp:
+                    if getattr(quote_resp, "status", 200) >= 500:
+                        raise aiohttp.ClientResponseError(
+                            quote_resp.request_info,
+                            quote_resp.history,
+                            status=quote_resp.status,
+                            message=quote_resp.reason,
+                            headers=quote_resp.headers,
+                        )
+                    quote_resp.raise_for_status()
+                    quote_data = await quote_resp.json()
+                break
+            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                logger.warning(
+                    "Quote request failed (attempt %s/%s): %s",
+                    attempt,
+                    max_retries,
+                    err,
+                    exc_info=True,
+                )
+                if attempt == max_retries:
+                    logger.error("Failed to fetch Jupiter quote after %s attempts", max_retries)
+                    nerr = notifier.notify("Swap failed: could not fetch quote")
+                    if nerr:
+                        logger.error("Failed to send message: %s", nerr)
+                    raise RuntimeError("Failed to fetch Jupiter quote") from err
+                await asyncio.sleep(2 ** attempt)
         if not quote_data.get("data"):
             logger.warning("No routes returned from Jupiter")
             return {}
         route = quote_data["data"][0]
 
         try:
-            async with session.get(
-                JUPITER_QUOTE_URL,
-                params={
-                    "inputMint": token_out,
-                    "outputMint": token_in,
-                    "amount": int(route["outAmount"]),
-                    "slippageBps": slippage_bps,
-                },
-                timeout=10,
-            ) as back_resp:
-                back_resp.raise_for_status()
-                back_data = await back_resp.json()
+            for attempt in range(1, max_retries + 1):
+                try:
+                    async with session.get(
+                        JUPITER_QUOTE_URL,
+                        params={
+                            "inputMint": token_out,
+                            "outputMint": token_in,
+                            "amount": int(route["outAmount"]),
+                            "slippageBps": slippage_bps,
+                        },
+                        timeout=10,
+                    ) as back_resp:
+                        if getattr(back_resp, "status", 200) >= 500:
+                            raise aiohttp.ClientResponseError(
+                                back_resp.request_info,
+                                back_resp.history,
+                                status=back_resp.status,
+                                message=back_resp.reason,
+                                headers=back_resp.headers,
+                            )
+                        back_resp.raise_for_status()
+                        back_data = await back_resp.json()
+                    break
+                except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                    logger.warning(
+                        "Back quote attempt %s/%s failed: %s",
+                        attempt,
+                        max_retries,
+                        err,
+                        exc_info=True,
+                    )
+                    if attempt == max_retries:
+                        logger.error(
+                            "Failed to fetch back quote after %s attempts",
+                            max_retries,
+                        )
+                        nerr = notifier.notify("Swap failed: could not fetch back quote")
+                        if nerr:
+                            logger.error("Failed to send message: %s", nerr)
+                        raise RuntimeError("Failed to fetch back quote") from err
+                    await asyncio.sleep(2 ** attempt)
             back_route = back_data["data"][0]
             ask = float(route["outAmount"]) / float(route["inAmount"])
             bid = float(back_route["inAmount"]) / float(back_route["outAmount"])
@@ -176,16 +233,50 @@ async def execute_swap(
         except Exception as err:  # pragma: no cover - network
             logger.warning("Slippage check failed: %s", err)
 
-        async with session.post(
-            JUPITER_SWAP_URL,
-            json={"route": route, "userPublicKey": str(keypair.public_key)},
-            timeout=10,
-        ) as swap_resp:
-            swap_resp.raise_for_status()
-            swap_data = await swap_resp.json()
-        swap_tx = swap_data["swapTransaction"]
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with session.post(
+                    JUPITER_SWAP_URL,
+                    json={"route": route, "userPublicKey": str(keypair.public_key)},
+                    timeout=10,
+                ) as swap_resp:
+                    if getattr(swap_resp, "status", 200) >= 500:
+                        raise aiohttp.ClientResponseError(
+                            swap_resp.request_info,
+                            swap_resp.history,
+                            status=swap_resp.status,
+                            message=swap_resp.reason,
+                            headers=swap_resp.headers,
+                        )
+                    swap_resp.raise_for_status()
+                    swap_data = await swap_resp.json()
+                break
+            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                logger.warning(
+                    "Swap request failed (attempt %s/%s): %s",
+                    attempt,
+                    max_retries,
+                    err,
+                    exc_info=True,
+                )
+                if attempt == max_retries:
+                    logger.error(
+                        "Failed to submit Jupiter swap after %s attempts",
+                        max_retries,
+                    )
+                    nerr = notifier.notify("Swap failed: could not execute")
+                    if nerr:
+                        logger.error("Failed to send message: %s", nerr)
+                    raise RuntimeError("Failed to execute swap") from err
+                await asyncio.sleep(2 ** attempt)
+        swap_tx = swap_data.get("swapTransaction")
+        if not swap_tx:
+            swap_tx = (swap_data.get("data") or [{}])[0].get("swapTransaction")
 
-    raw_tx = base64.b64decode(swap_tx)
+    try:
+        raw_tx = base64.b64decode(swap_tx)
+    except Exception:
+        raw_tx = swap_tx.encode()
     tx = Transaction.deserialize(raw_tx)
     tx.sign(keypair)
 
@@ -194,16 +285,50 @@ async def execute_swap(
 
     if jito_key:
         signed_tx = base64.b64encode(tx.serialize()).decode()
-        async with aiohttp.ClientSession() as jito_session:
-            async with jito_session.post(
-                JITO_BUNDLE_URL,
-                json={"transactions": [signed_tx]},
-                headers={"Authorization": f"Bearer {jito_key}"},
-                timeout=10,
-            ) as bundle_resp:
-                bundle_resp.raise_for_status()
-                bundle_data = await bundle_resp.json()
-        tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with aiohttp.ClientSession() as jito_session:
+                    async with jito_session.post(
+                        JITO_BUNDLE_URL,
+                        json={"transactions": [signed_tx]},
+                        headers={"Authorization": f"Bearer {jito_key}"},
+                        timeout=10,
+                    ) as bundle_resp:
+                        if getattr(bundle_resp, "status", 200) >= 500:
+                            raise aiohttp.ClientResponseError(
+                                bundle_resp.request_info,
+                                bundle_resp.history,
+                                status=bundle_resp.status,
+                                message=bundle_resp.reason,
+                                headers=bundle_resp.headers,
+                            )
+                        bundle_resp.raise_for_status()
+                        bundle_data = await bundle_resp.json()
+                break
+            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                logger.warning(
+                    "Jito submission failed (attempt %s/%s): %s",
+                    attempt,
+                    max_retries,
+                    err,
+                    exc_info=True,
+                )
+                if attempt == max_retries:
+                    logger.error(
+                        "Failed to submit Jito bundle after %s attempts",
+                        max_retries,
+                    )
+                    nerr = notifier.notify("Swap failed: bundle submission error")
+                    if nerr:
+                        logger.error("Failed to send message: %s", nerr)
+                    raise RuntimeError("Failed to submit Jito bundle") from err
+                await asyncio.sleep(2 ** attempt)
+        tx_hash = (
+            bundle_data.get("signature")
+            or bundle_data.get("bundleId")
+            or (bundle_data.get("data") or [{}])[0].get("signature")
+            or (bundle_data.get("data") or [{}])[0].get("bundleId")
+        )
     else:
         send_res = client.send_transaction(tx, keypair)
         tx_hash = send_res["result"]
