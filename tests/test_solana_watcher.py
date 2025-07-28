@@ -70,11 +70,16 @@ def test_watcher_yields_event(monkeypatch):
         }
     }
     session = DummySession(data)
-    monkeypatch.setattr(
-        watcher,
-        "aiohttp",
-        type("M", (), {"ClientSession": lambda: session}),
+    aiohttp_mod = type(
+        "M",
+        (),
+        {
+            "ClientSession": lambda: session,
+            "ClientError": Exception,
+            "ClientResponseError": Exception,
+        },
     )
+    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
 
     w = PoolWatcher("http://test", interval=0)
 
@@ -123,11 +128,16 @@ def test_min_liquidity_filter(monkeypatch):
         }
     }
     session = DummySession(data)
-    monkeypatch.setattr(
-        watcher,
-        "aiohttp",
-        type("M", (), {"ClientSession": lambda: session}),
+    aiohttp_mod = type(
+        "M",
+        (),
+        {
+            "ClientSession": lambda: session,
+            "ClientError": Exception,
+            "ClientResponseError": Exception,
+        },
     )
+    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
 
     w = PoolWatcher("http://test", interval=0, min_liquidity=50)
 
@@ -141,6 +151,69 @@ def test_min_liquidity_filter(monkeypatch):
     event = asyncio.run(run_once())
     assert event.pool_address == "H"
     assert event.liquidity == 60.0
+
+
+def test_ml_filter_blocks_low_score(monkeypatch):
+    data = {
+        "result": {
+            "pools": [
+                {"address": "P1", "tokenMint": "M1", "creator": "C1", "liquidity": 10.0}
+            ]
+        }
+    }
+    session = DummySession(data)
+    monkeypatch.setattr(
+        watcher,
+        "aiohttp",
+        type("M", (), {"ClientSession": lambda: session}),
+    )
+    monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, evt: 0.4)
+    async def dummy_sleep(_):
+        pass
+    monkeypatch.setattr(watcher, "asyncio", types.SimpleNamespace(sleep=dummy_sleep))
+
+    w = PoolWatcher("http://test", interval=0, websocket_url="", raydium_program_id="", ml_filter=True)
+
+    async def run_once():
+        gen = w.watch()
+        try:
+            return await asyncio.wait_for(gen.__anext__(), timeout=0.01)
+        except asyncio.TimeoutError:
+            w.stop()
+            await gen.aclose()
+            return None
+
+    event = asyncio.run(run_once())
+    assert event is None
+
+
+def test_ml_filter_allows_high_score(monkeypatch):
+    data = {
+        "result": {
+            "pools": [
+                {"address": "P1", "tokenMint": "M1", "creator": "C1", "liquidity": 10.0}
+            ]
+        }
+    }
+    session = DummySession(data)
+    monkeypatch.setattr(
+        watcher,
+        "aiohttp",
+        type("M", (), {"ClientSession": lambda: session}),
+    )
+    monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, evt: 0.8)
+
+    w = PoolWatcher("http://test", interval=0, websocket_url="", raydium_program_id="", ml_filter=True)
+
+    async def run_once():
+        gen = w.watch()
+        event = await gen.__anext__()
+        w.stop()
+        await gen.aclose()
+        return event
+
+    event = asyncio.run(run_once())
+    assert event.pool_address == "P1"
 
 
 def test_env_substitution(monkeypatch):
