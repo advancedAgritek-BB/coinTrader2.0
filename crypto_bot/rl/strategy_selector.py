@@ -18,6 +18,7 @@ from crypto_bot.strategy import (
     solana_scalping,
     meme_wave_bot,
     momentum_bot,
+    cross_chain_arb_bot,
 )
 
 # Default log file location
@@ -35,6 +36,7 @@ _STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {
     "meme_wave_bot": meme_wave_bot.generate_signal,
     "solana_scalping": solana_scalping.generate_signal,
     "meme_wave_bot": meme_wave_bot.generate_signal,
+    "cross_chain_arb_bot": cross_chain_arb_bot.generate_signal,
 }
 
 if momentum_bot is not None:
