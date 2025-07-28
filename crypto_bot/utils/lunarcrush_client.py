@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any, Mapping
 
 import aiohttp
@@ -15,8 +16,9 @@ class LunarCrushClient:
 
     BASE_URL = "https://api.lunarcrush.com/v2"
 
-    def __init__(self, api_key: str) -> None:
-        self.api_key = api_key
+    def __init__(self, api_key: str | None = None) -> None:
+        """Create client using ``api_key`` or ``LUNARCRUSH_API_KEY`` env var."""
+        self.api_key = api_key or os.getenv("LUNARCRUSH_API_KEY")
         self._session: aiohttp.ClientSession | None = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
