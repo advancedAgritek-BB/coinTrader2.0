@@ -58,3 +58,23 @@ async def test_close_position_price_fallback(monkeypatch, tmp_path):
 
     assert log_file.exists()
     assert "$1010.00" in log_file.read_text()
+
+
+def _init_controller(monkeypatch):
+    monkeypatch.setattr(
+        TradingBotController,
+        "_load_config",
+        lambda self: {},
+    )
+    monkeypatch.setattr(
+        "crypto_bot.bot_controller.get_exchange", lambda *_a, **_k: (object(), None)
+    )
+    return TradingBotController()
+
+
+@pytest.mark.asyncio
+async def test_enabled_strategies_include_flash_crash(monkeypatch):
+    controller = _init_controller(monkeypatch)
+    assert controller.enabled.get("flash_crash_bot") is True
+    strategies = await controller.list_strategies()
+    assert "flash_crash_bot" in strategies
