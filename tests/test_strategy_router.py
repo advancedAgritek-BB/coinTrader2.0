@@ -1,5 +1,33 @@
 import pytest
 import asyncio
+import sys
+import types
+
+sys.modules.setdefault("solana.rpc.async_api", types.ModuleType("solana.rpc.async_api"))
+if not hasattr(sys.modules["solana.rpc.async_api"], "AsyncClient"):
+    class DummyClient:
+        pass
+
+    sys.modules["solana.rpc.async_api"].AsyncClient = DummyClient
+sys.modules.setdefault("solana.keypair", types.ModuleType("solana.keypair"))
+sys.modules.setdefault("solana.transaction", types.ModuleType("solana.transaction"))
+sys.modules.setdefault("solana.rpc.api", types.ModuleType("solana.rpc.api"))
+sys.modules.setdefault("solders.pubkey", types.ModuleType("solders.pubkey"))
+sys.modules.setdefault("solders.rpc.responses", types.ModuleType("solders.rpc.responses"))
+if not hasattr(sys.modules["solders.pubkey"], "Pubkey"):
+    class DummyPubkey:
+        @staticmethod
+        def from_string(s):
+            return s
+
+    sys.modules["solders.pubkey"].Pubkey = DummyPubkey
+if not hasattr(sys.modules["solders.rpc.responses"], "GetTokenAccountBalanceResp"):
+    class DummyResp:
+        pass
+
+    sys.modules["solders.rpc.responses"].GetTokenAccountBalanceResp = DummyResp
+    sys.modules["solders.rpc.responses"].GetAccountInfoResp = DummyResp
+sys.modules.setdefault("redis", types.ModuleType("redis"))
 
 from crypto_bot import strategy_router
 from crypto_bot.strategy_router import strategy_for, route, RouterConfig
@@ -13,6 +41,7 @@ from crypto_bot.strategy import (
     sniper_solana,
     micro_scalp_bot,
     bounce_scalper,
+    flash_crash_bot,
 )
 
 
@@ -88,6 +117,14 @@ def test_route_returns_meme_wave_bot():
     }
     fn = route("volatile", "cex", cfg)
     assert fn.__name__ == meme_wave_bot.generate_signal.__name__
+
+
+def test_route_returns_lstm_bot():
+    from crypto_bot.strategy import lstm_bot
+
+    cfg = {"strategy_router": {"regimes": {"trending": ["lstm_bot"]}}}
+    fn = route("trending", "cex", cfg)
+    assert fn.__name__ == lstm_bot.generate_signal.__name__
 
 
 def test_route_notifier(monkeypatch):
@@ -278,6 +315,28 @@ def test_strategy_timeframe_routing(monkeypatch):
     fn = route("breakout", "cex", cfg)
     fn(df_map)
     assert captured.get('df') is df_map["5m"]
+
+
+def test_flash_crash_timeframe_override(monkeypatch):
+    captured = {}
+
+    def dummy(df, cfg=None):
+        captured['df'] = df
+        return 0.0, "none"
+
+    monkeypatch.setattr(flash_crash_bot, "generate_signal", dummy)
+
+    data = {
+        "mean_reverting_timeframe": "1h",
+        "flash_crash_timeframe": "1m",
+        "strategy_router": {"regimes": {"mean-reverting": ["flash_crash_bot"]}},
+    }
+    cfg = RouterConfig.from_dict(data)
+
+    df_map = {"1m": pd.DataFrame({"v": [1]}), "1h": pd.DataFrame({"v": [60]})}
+    fn = route("mean-reverting", "cex", cfg)
+    fn(df_map)
+    assert captured.get("df") is df_map["1m"]
 
 
 def test_route_mempool_blocks_signal(monkeypatch):
