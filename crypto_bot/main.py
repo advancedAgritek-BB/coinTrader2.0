@@ -80,7 +80,7 @@ from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import write_cycle_metrics
 from crypto_bot.utils.token_registry import TOKEN_MINTS
 from crypto_bot.utils import regime_pnl_tracker
-from crypto_bot.utils import pnl_logger, regime_pnl_tracker
+from crypto_bot.utils import pnl_logger, regime_pnl_tracker, trade_logger
 
 from crypto_bot.monitoring import record_sol_scanner_metrics
 from crypto_bot.fund_manager import (
@@ -1823,6 +1823,12 @@ async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
         exit_price,
         realized_pnl,
         pos.get("confidence", 0.0),
+        pos["side"],
+    )
+    trade_logger.upload_trade_record(
+        sym,
+        pos["entry_price"],
+        exit_price,
         pos["side"],
     )
     regime_pnl_tracker.log_trade(
