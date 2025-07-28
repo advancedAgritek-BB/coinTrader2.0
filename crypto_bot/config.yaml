@@ -554,3 +554,5 @@ voting_strategies:
 wallet_address: your_wallet
 ws_failures_before_disable: 1
 ws_ping_interval: 5
+quick_sell_profit_pct: 10
+quick_sell_timeout_sec: 120
