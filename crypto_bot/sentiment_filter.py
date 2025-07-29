@@ -49,3 +49,8 @@ def boost_factor(bull_sentiment: int, *, symbol: str | None = None) -> float:
         return factor
     return 1.0
 
+
+def fetch_twitter_sentiment(symbol: str) -> int:
+    """Backward compatible wrapper for :func:`fetch_lunarcrush_sentiment`."""
+    return fetch_lunarcrush_sentiment(symbol)
+
