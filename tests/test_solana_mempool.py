@@ -1,5 +1,20 @@
 import asyncio
+import sys
+import types
 import pytest
+
+# Stub optional solana modules so imports succeed without the package
+sys.modules.setdefault("solana", types.ModuleType("solana"))
+sys.modules.setdefault("solana.rpc", types.ModuleType("solana.rpc"))
+sys.modules.setdefault("solana.rpc.async_api", types.ModuleType("solana.rpc.async_api"))
+sys.modules.setdefault("solana.keypair", types.ModuleType("solana.keypair"))
+sys.modules.setdefault("solana.transaction", types.ModuleType("solana.transaction"))
+sys.modules.setdefault("solana.rpc.api", types.ModuleType("solana.rpc.api"))
+if not hasattr(sys.modules["solana.rpc.async_api"], "AsyncClient"):
+    class DummyClient:
+        pass
+
+    sys.modules["solana.rpc.async_api"].AsyncClient = DummyClient
 
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.execution import solana_executor
@@ -52,22 +67,21 @@ class DummySession:
         return DummyResp(data)
 
 
-@pytest.mark.asyncio
-async def test_volume_collection(monkeypatch):
+def test_volume_collection(monkeypatch):
     data = [{"volume": 10}, {"volume": 20}]
     session = DummySession(data)
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
     monkeypatch.setattr("crypto_bot.execution.solana_mempool.aiohttp", aiohttp_mod)
 
     monitor = SolanaMempoolMonitor(volume_url="http://dummy")
-    first = await monitor.get_recent_volume()
-    second = await monitor._fetch_volume()
+    first = monitor.get_recent_volume()
+    second = monitor._run_coro(monitor._fetch_volume())
     monitor._volume_history.append(second)
-    avg = await monitor.get_average_volume()
+    avg = monitor.get_average_volume()
 
     assert first == 10
     assert second == 20
-    assert avg == pytest.approx(15.0)
+    assert avg == 15.0
 
 
 class DummyNotifier:

@@ -36,6 +36,15 @@ class SolanaMempoolMonitor:
         self._volume_history: Deque[float] = deque(maxlen=history_size)
         self._volume_task: asyncio.Task | None = None
 
+    def _run_coro(self, coro):
+        """Run ``coro`` depending on event loop state."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+        else:
+            return coro
+
     def fetch_priority_fee(self) -> float:
         """Return the current priority fee per compute unit in micro lamports."""
         mock_fee = os.getenv("MOCK_PRIORITY_FEE")
@@ -88,25 +97,35 @@ class SolanaMempoolMonitor:
 
     def start_volume_collection(self, interval: float = 60.0) -> None:
         """Start a background task updating the volume history."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
         if self._volume_task is None or self._volume_task.done():
-            self._volume_task = asyncio.create_task(self._volume_loop(interval))
+            self._volume_task = loop.create_task(self._volume_loop(interval))
 
     def stop_volume_collection(self) -> None:
         """Stop the background volume collection task."""
         if self._volume_task and not self._volume_task.done():
             self._volume_task.cancel()
 
-    async def get_recent_volume(self) -> float:
+    async def _get_recent_volume(self) -> float:
         """Return the most recent volume reading, fetching if necessary."""
         if not self._volume_history:
             vol = await self._fetch_volume()
             self._volume_history.append(vol)
         return self._volume_history[-1] if self._volume_history else 0.0
 
-    async def get_average_volume(self) -> float:
+    def get_recent_volume(self) -> float:
+        return self._run_coro(self._get_recent_volume())
+
+    async def _get_average_volume(self) -> float:
         """Return the average of the recorded volume history."""
         if not self._volume_history:
-            await self.get_recent_volume()
+            await self._get_recent_volume()
         if not self._volume_history:
             return 0.0
         return sum(self._volume_history) / len(self._volume_history)
+
+    def get_average_volume(self) -> float:
+        return self._run_coro(self._get_average_volume())
