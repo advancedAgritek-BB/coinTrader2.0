@@ -14,6 +14,7 @@ sys.modules.setdefault("oauth2client", oauth_module)
 sys.modules.setdefault("oauth2client.service_account", oauth_module.service_account)
 
 import crypto_bot.main as main
+import crypto_bot.execution.cex_executor as cex_exec
 from crypto_bot.phase_runner import BotContext
 from crypto_bot.utils import symbol_utils
 
@@ -52,6 +53,8 @@ def setup_main_common(monkeypatch, cfg):
         return DummyExchange(), None
 
     monkeypatch.setattr(main, "get_exchange", fake_get_exchange)
+    monkeypatch.setattr(main, "get_exchanges", lambda conf: {"kraken": fake_get_exchange(conf)})
+    monkeypatch.setattr(cex_exec, "get_exchanges", lambda conf: {"kraken": fake_get_exchange(conf)})
     return captured
 
 
@@ -117,3 +120,44 @@ def test_fetch_candidates_adds_onchain(monkeypatch):
     asyncio.run(main.fetch_candidates(ctx))
 
     assert set(ctx.current_batch) == {"BTC/USD", "BONK/USDC"}
+
+
+def test_get_filtered_symbols_none(monkeypatch):
+    async def fake_filter_symbols(ex, syms, cfg):
+        return [("ETH/USD", 1.0)], []
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+    cfg = {"symbols": ["ETH/USD"], "onchain_symbols": None}
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+
+    res = asyncio.run(symbol_utils.get_filtered_symbols(object(), cfg))
+    assert res[0] == [("ETH/USD", 1.0)]
+    assert res[1] == []
+
+
+@pytest.mark.parametrize("val", [pytest.param(None, id="none"), pytest.param("absent", id="absent")])
+def test_scan_runs_without_onchain(monkeypatch, val):
+    cfg = {"scan_markets": True, "exchange": "kraken"}
+    if val is None:
+        cfg["onchain_symbols"] = None
+    captured = setup_main_common(monkeypatch, cfg)
+
+    calls = {"loader": 0}
+
+    async def fake_loader(ex, exclude=None, config=None):
+        calls["loader"] += 1
+        return ["BTC/USD"]
+
+    monkeypatch.setattr(main, "load_kraken_symbols", fake_loader)
+
+    class DummyRM:
+        def __init__(self, *_a, **_k):
+            pass
+
+    monkeypatch.setattr(main, "RiskManager", DummyRM)
+
+    asyncio.run(main.main())
+
+    assert calls["loader"] == 1
+    assert captured["cfg"]["symbols"] == ["BTC/USD"]
