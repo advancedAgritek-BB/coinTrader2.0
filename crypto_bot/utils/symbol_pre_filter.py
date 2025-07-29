@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import time
+import re
 from pathlib import Path
 from typing import Iterable, List, Dict
 
@@ -126,6 +127,9 @@ TICKER_BACKOFF_MAX = 60
 
 # Cache of recent liquidity metrics per symbol
 liq_cache = TTLCache(maxsize=2000, ttl=900)
+
+# Track pairs that returned an unsupported pair error when requesting tickers
+unsupported_pairs: set[str] = set()
 
 
 # tenacity wrapped helper for WebSocket ticker requests
@@ -387,6 +391,8 @@ async def _refresh_tickers(
     start_time = time.perf_counter()
 
     symbols = list(symbols)
+    symbols = [s for s in symbols if _norm_symbol(s) not in unsupported_pairs]
+    symbols = [s for s in symbols if _norm_symbol(s) not in unsupported_pairs]
     cfg = config if config is not None else globals().get("cfg", {})
     sf = cfg.get("symbol_filter", {})
     init_ticker_semaphore(
@@ -503,6 +509,14 @@ async def _refresh_tickers(
                     exc,
                     exc_info=log_exc,
                 )
+                if isinstance(exc, ccxt.ExchangeError):
+                    m = re.search(r"Currency pair not supported[:\s]*([^\s]+)", str(exc))
+                    if m:
+                        bad = _norm_symbol(m.group(1))
+                        unsupported_pairs.add(bad)
+                        symbols = [s for s in symbols if _norm_symbol(s) != bad]
+                        to_fetch = [s for s in to_fetch if _norm_symbol(s) != bad]
+                        logger.warning("Dropping unsupported pair %s", bad)
                 telemetry.inc("scan.api_errors")
                 opts = getattr(exchange, "options", None)
                 if opts is not None:
