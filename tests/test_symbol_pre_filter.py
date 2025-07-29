@@ -573,6 +573,39 @@ def test_watch_tickers_unsupported_pair(monkeypatch, caplog):
     assert any("BAD/USD" in r.getMessage() for r in caplog.records)
 
 
+class RetryUnsupportedExchange(DummyExchange):
+    def __init__(self):
+        self.has = {"watchTickers": True}
+        self.watch_calls = 0
+
+    async def watch_tickers(self, symbols):
+        self.watch_calls += 1
+        if any(s == "BAD/USD" for s in symbols):
+            raise sp.ccxt.ExchangeError("Currency pair not supported BAD/USD")
+        data = (await fake_fetch(None))["result"]
+        return {"ETH/USD": data["XETHZUSD"]}
+
+
+def test_watch_tickers_retry_remaining(monkeypatch):
+    import importlib
+    sys.modules.pop("ccxt", None)
+    real_ccxt = importlib.import_module("ccxt")
+    monkeypatch.setitem(sys.modules, "ccxt", real_ccxt)
+    monkeypatch.setattr(sp, "ccxt", real_ccxt)
+
+    sp.ticker_cache.clear()
+    sp.ticker_ts.clear()
+    sp.ticker_failures.clear()
+    ex = RetryUnsupportedExchange()
+
+    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BAD/USD"]))
+
+    assert ex.watch_calls >= 2
+    assert set(result) == {"ETH/USD"}
+    assert "BAD/USD" in sp.unsupported_pairs
+    assert "ETH/USD" not in sp.ticker_failures
+
+
 class DummyExchangeList:
     # markets_by_id values may be lists of market dictionaries
     markets_by_id = {"XETHZUSD": [{"symbol": "ETH/USD"}]}
