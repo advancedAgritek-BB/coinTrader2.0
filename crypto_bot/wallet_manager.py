@@ -187,6 +187,8 @@ def load_or_create() -> dict:
     env_mapping.setdefault("coinbase_passphrase", []).append("API_PASSPHRASE")
     env_mapping.setdefault("kraken_api_key", []).append("API_KEY")
     env_mapping.setdefault("kraken_api_secret", []).append("API_SECRET")
+    env_mapping.setdefault("telegram_token", []).append("TELEGRAM_TOKEN")
+    env_mapping.setdefault("telegram_chat_id", []).append("TELEGRAM_CHAT_ID")
 
     for key, env_keys in env_mapping.items():
         for env_key in env_keys:
@@ -205,6 +207,8 @@ def load_or_create() -> dict:
     os.environ["COINBASE_API_PASSPHRASE"] = creds.get("coinbase_passphrase", "")
     os.environ["KRAKEN_API_KEY"] = creds.get("kraken_api_key", "")
     os.environ["KRAKEN_API_SECRET"] = creds.get("kraken_api_secret", "")
+    os.environ["TELEGRAM_TOKEN"] = creds.get("telegram_token", "")
+    os.environ["TELEGRAM_CHAT_ID"] = creds.get("telegram_chat_id", "")
 
     # expose selected exchange credentials via generic env vars for ccxt
     exch = creds.get("primary_exchange") or creds.get("exchange")
