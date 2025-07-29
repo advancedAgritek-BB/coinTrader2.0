@@ -392,7 +392,6 @@ async def _refresh_tickers(
 
     symbols = list(symbols)
     symbols = [s for s in symbols if _norm_symbol(s) not in unsupported_pairs]
-    symbols = [s for s in symbols if _norm_symbol(s) not in unsupported_pairs]
     cfg = config if config is not None else globals().get("cfg", {})
     sf = cfg.get("symbol_filter", {})
     init_ticker_semaphore(
