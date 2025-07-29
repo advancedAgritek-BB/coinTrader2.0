@@ -18,7 +18,13 @@ logger = setup_logger(__name__, LOG_DIR / "wallet.log")
 CONFIG_FILE = Path(__file__).resolve().parent / 'user_config.yaml'
 
 FERNET_KEY = os.getenv("FERNET_KEY")
-_fernet = Fernet(FERNET_KEY) if FERNET_KEY and Fernet else None
+_fernet = None
+if FERNET_KEY and Fernet:
+    try:
+        _fernet = Fernet(FERNET_KEY)
+    except Exception:
+        logger.error("Invalid FERNET_KEY, disabling encryption")
+        _fernet = None
 
 SENSITIVE_FIELDS = {
     "coinbase_api_key",
