@@ -59,7 +59,7 @@ cycle_bias:
   sopr_url: https://api.example.com/sopr
 cycle_lookback_limit: 150
 dca:
-  enabled: false
+  enabled: true
   max_entries: 3
   size_multiplier: 1.0
 dip_hunter:
@@ -107,7 +107,7 @@ exit_strategy:
   trailing_stop_pct: 0.005
   # Close a position quickly when profit exceeds ``profit_pct``
   # and the trade has been held for at least ``hold_timeout`` seconds.
-  quick_sell_profit_pct: 0.02
+  quick_sell_profit_pct: 0.05
   quick_sell_hold_timeout: 300
 force_websocket_history: false
 gas_threshold_gwei: 50
@@ -148,7 +148,7 @@ max_concurrent_ohlcv: 10
 max_concurrent_tickers: 20
 max_latency_ms: 500
 max_ohlcv_failures: 2
-max_open_trades: 5
+max_open_trades: 10
 max_parallel: 50
 max_slippage_pct: 0.2
 max_spread_pct: 10
@@ -207,7 +207,7 @@ micro_scalp:
   volume_window: 15
   wick_pct: 0.1
 min_agreeing_votes: 1
-min_confidence_score: 0.00001
+min_confidence_score: 0.000001
 min_consistent_agreement: 1
 min_cooldown: 0
 min_history_fraction: 0.1
@@ -242,7 +242,7 @@ ohlcv_snapshot_limit: 500
 ohlcv_timeout: 60
 redis_url: null
 onchain_default_quote: USDC
-onchain_min_volume_usd: 5000
+onchain_min_volume_usd: 1000
 onchain_symbols:
 - SOL/USDC
 - BONK/USDC
@@ -413,7 +413,7 @@ solana_scanner:
   min_liquidity: 100.0
   enabled: true
   gecko_search: true
-  interval_minutes: 0.1
+  interval_minutes: 0.05
   max_tokens_per_scan: 200
   min_volume_usd: 10
 solana_slippage_bps: 10
@@ -471,6 +471,7 @@ strategy_router:
     volatile:
     - sniper_bot
     - sniper_solana
+    - trend
     - momentum_bot
     - meme_wave_bot
     - cross_chain_arb_bot
@@ -483,7 +484,7 @@ strategy_router:
   trending_timeframe: 1h
   volatile_timeframe: 1m
 symbol: BTC/USDT
-symbol_batch_size: 50
+symbol_batch_size: 100
 symbol_filter:
   change_pct_percentile: 10
   correlation_max_pairs: 200
@@ -497,11 +498,11 @@ symbol_filter:
   max_concurrent_ohlcv: 10
   max_correlation: 0.9
   max_spread_pct: 8
-  min_volume_usd: 5
+  min_volume_usd: 1
   ohlcv_batch_size: 10
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
-  volume_percentile: 5
+  volume_percentile: 20
 symbol_refresh_minutes: 1
 symbol_score_weights:
   age: 0.1
@@ -510,7 +511,11 @@ symbol_score_weights:
   liquidity: 0.1
   spread: 0.15
   volume: 0.3
-symbols: []
+symbols:
+- BTC/USDT
+- ETH/USDT
+- SOL/USDT
+- XRP/USDT
 tax_tracking:
   enabled: true
   export_path: crypto_bot/logs/tax_trades.csv
@@ -539,10 +544,10 @@ timeframes:
 - 1h
 token_registry:
   refresh_interval_minutes: 15
-top_n_symbols: 50
+top_n_symbols: 100
 tp_mult: 2.0
 tp_pct: 0.1
-trade_size_pct: 0.001
+trade_size_pct: 0.01
 trend:
   atr_period: 10
   k: 0.8
