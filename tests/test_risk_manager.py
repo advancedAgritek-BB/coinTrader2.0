@@ -385,13 +385,14 @@ def _df() -> pd.DataFrame:
 
 
 def test_allow_trade_rejects_on_bearish_sentiment(monkeypatch):
-    monkeypatch.setenv("MOCK_FNG_VALUE", "10")
-    monkeypatch.setenv("MOCK_TWITTER_SENTIMENT", "20")
+    monkeypatch.setattr(
+        "crypto_bot.sentiment_filter.lunar_client.get_sentiment",
+        lambda symbol: 20,
+    )
     cfg = RiskConfig(
         max_drawdown=1,
         stop_loss_pct=0.01,
         take_profit_pct=0.01,
-        min_fng=30,
         min_sentiment=30,
     )
     allowed, reason = RiskManager(cfg).allow_trade(_df(), symbol="XBT/USDT")
@@ -400,13 +401,14 @@ def test_allow_trade_rejects_on_bearish_sentiment(monkeypatch):
 
 
 def test_allow_trade_allows_on_positive_sentiment(monkeypatch):
-    monkeypatch.setenv("MOCK_FNG_VALUE", "80")
-    monkeypatch.setenv("MOCK_TWITTER_SENTIMENT", "80")
+    monkeypatch.setattr(
+        "crypto_bot.sentiment_filter.lunar_client.get_sentiment",
+        lambda symbol: 80,
+    )
     cfg = RiskConfig(
         max_drawdown=1,
         stop_loss_pct=0.01,
         take_profit_pct=0.01,
-        min_fng=30,
         min_sentiment=40,
     )
     allowed, _ = RiskManager(cfg).allow_trade(_df(), symbol="XBT/USDT")

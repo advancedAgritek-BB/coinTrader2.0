@@ -72,7 +72,7 @@ The regime configuration exposes additional tuning parameters:
 * **pattern_min_conf** – minimum pattern confidence required to apply a score
   weight.
 * **ml_blend_weight** – blend ratio for combining ML and indicator scores.
-* **bull_fng** – Fear & Greed index level considered bullish.
+* **bull_sentiment** – LunarCrush sentiment score considered bullish.
 * **atr_baseline** – ATR level corresponding to a 1× score factor.
 
 ## Fast-Path Checks
@@ -173,7 +173,6 @@ TELEGRAM_TOKEN=your_telegram_token
 TELE_CHAT_ADMINS=123456,789012         # optional comma separated admin IDs
 TELE_CHAT_ADMINS=12345,67890          # comma-separated chat IDs
 GOOGLE_CRED_JSON=path_to_google_credentials.json
-TWITTER_SENTIMENT_URL=https://api.example.com/twitter-sentiment
 FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
 SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
@@ -385,7 +384,7 @@ solana_scanner:
   order may consume.
 * **weight_liquidity** – scoring weight for available pool liquidity on Solana pairs.
 * **volatility_filter** - skips trading when ATR is too low or funding exceeds `max_funding_rate`. The minimum ATR percent is `0.0005`.
-* **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment to avoid bearish markets.
+* **sentiment_filter** - checks LunarCrush sentiment to avoid bearish markets.
 * **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
 * **mempool_monitor** – pause or reprice when Solana fees spike.
 * **pool.ml_filter** – skip new pools with low ML breakout probability.
@@ -766,13 +765,6 @@ If the call fails or you do not receive a message, check for these common issues
 * **Wrong chat ID** – the bot does not have permission to message that chat.
 * **Bot not started** – you have not sent `/start` to your bot yet.
 * **Network restrictions** – firewalls or proxies are blocking Telegram.
-
-### Twitter Sentiment API
-
-Add `TWITTER_SENTIMENT_URL` to `crypto_bot/.env` to point at the sentiment
-service used by `sentiment_filter.py`. If this variable is not provided, the bot
-defaults to the placeholder `https://api.example.com/twitter-sentiment`, so
-sentiment fetches will fail until a real URL is supplied.
 
 ### Funding Rate API
 
@@ -1373,7 +1365,7 @@ the priority fee exceeds this limit.
 This module watches for new liquidity pools on Solana and attempts to buy
 into meme tokens before the crowd. Events from a Helius endpoint are
 filtered through safety checks, scored, and executed using Jupiter quotes
-bundled via Jito. A Twitter sentiment score can boost the ranking when the
+bundled via Jito. A LunarCrush sentiment score can boost the ranking when the
 tweet volume is high.
 
 ### Configuration
@@ -1423,8 +1415,7 @@ are enqueued.
 
 API requirements: [Helius](https://www.helius.xyz/) for pool data,
 [Jupiter](https://jup.ag/) for quotes, [Jito](https://www.jito.network/) for
-bundle submission, and a [Twitter](https://developer.twitter.com/) token for
-sentiment scores.
+bundle submission, and a LunarCrush API key for sentiment scores.
 
 ### Monitoring Raydium Pools via WebSockets
 
@@ -1459,7 +1450,7 @@ asyncio.run(main())
 
 The meme wave bot trades sudden hype cycles discovered on centralized
 exchanges and in Solana mempools. It monitors for sharp volume spikes,
-mempool activity and optional Twitter excitement before buying. Most
+mempool activity and optional social sentiment before buying. Most
 profits will likely arise from Solana where new tokens see the fastest
 hype waves.
 Add a `meme_wave_bot` section to `crypto_bot/config.yaml`:
@@ -1467,16 +1458,13 @@ Add a `meme_wave_bot` section to `crypto_bot/config.yaml`:
 ```yaml
 meme_wave_bot:
   vol_spike_thr: 2.0        # volume spike multiple triggering the bot
-  sentiment_thr: 0.6        # minimum sentiment score on Twitter
-  twitter_query: null       # optional query for the sentiment API
+  sentiment_thr: 0.6        # minimum LunarCrush sentiment score
 ```
 
 - **vol_spike_thr** – ratio of current volume to the recent average required
   to consider entering a trade.
-- **sentiment_thr** – threshold for the normalized Twitter sentiment score
+- **sentiment_thr** – threshold for the normalized LunarCrush sentiment score
   before a meme wave trade is executed.
-- **twitter_query** – search term used when fetching sentiment. If omitted the
-  trading symbol is used.
 
 ### Backtesting
 
@@ -1513,7 +1501,7 @@ python -m backtest.historical_pools \
 ## Meme Wave Rider
 
 This scalper rides trending meme coins by watching mempool volume alongside
-Twitter sentiment. A rolling volume window flags spikes in Solana swaps while a
+LunarCrush sentiment. A rolling volume window flags spikes in Solana swaps while a
 sentiment API call checks for positive chatter. When both metrics exceed your
 thresholds, a trade is executed using `solana_trading.py`.
 

@@ -24,9 +24,7 @@ class RiskConfig:
     max_drawdown: float
     stop_loss_pct: float
     take_profit_pct: float
-    min_fng: int = 0
     min_sentiment: int = 0
-    bull_fng: int = 101
     bull_sentiment: int = 101
     min_atr_pct: float = 0.0
     max_funding_rate: float = 1.0
