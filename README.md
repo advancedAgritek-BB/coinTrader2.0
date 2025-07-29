@@ -311,7 +311,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * Trades and swaps automatically retry transient errors up to three times.
 
 ### Market Scanning
-* **symbol_batch_size** – number of symbols processed each cycle.
+* **symbol_batch_size** – number of symbols processed each cycle (default `100`).
   The same batch size controls the initial market scan at startup where
   progress is logged after each batch.
 * **scan_lookback_limit** – default maximum candles per timeframe fetched during
@@ -347,7 +347,7 @@ symbol_score_weights:
 * If the cache file does not exist and the initial scan yields no symbols, the bot calls `tasks.refresh_pairs.refresh_pairs_async` to fetch a fresh list before aborting.
 * **min_symbol_age_days** – skip newly listed pairs.
 * **min_symbol_score** – minimum score required for trading.
-* **top_n_symbols** – maximum number of active markets.
+* **top_n_symbols** – maximum number of active markets (default `100`).
 * **max_age_days**, **max_change_pct**, **max_spread_pct**, **max_latency_ms**, **max_vol** – additional scanning limits.
 * **use_numba_scoring** – enable numba acceleration for symbol scoring when available.
 * **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle. See
@@ -1033,7 +1033,7 @@ onchain_symbols: ["SOL", "BONK", "AI16Z"]             # quote appended automatic
 excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 2           # skip pairs with less history
-symbol_batch_size: 50            # symbols processed per cycle
+symbol_batch_size: 100           # symbols processed per cycle
 scan_lookback_limit: 700         # max candles per pair during startup
                                  # trimmed using Kraken listing data
 scan_deep_top: 50                # deep load this many ranked symbols
@@ -1087,8 +1087,8 @@ to use the provided list without any filtering:
 
 ```yaml
 symbol_filter:
-  min_volume_usd: 500
-  volume_percentile: 5           # keep pairs above this volume percentile
+  min_volume_usd: 1
+  volume_percentile: 20          # keep pairs above this volume percentile
   change_pct_percentile: 5       # require 24h change in the top movers
   max_spread_pct: 4              # allow spreads up to 4%
   uncached_volume_multiplier: 1.5  # extra volume when not cached
