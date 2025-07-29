@@ -525,9 +525,20 @@ async def load_kraken_symbols(
         df.drop(columns=["symbol"], inplace=True)
     df.reset_index(inplace=True)
 
-    df["active"] = df.get("active", True).fillna(True)
+    # Fill missing active flag with False
+    df["active"] = df["active"].fillna(False)
+
     df["reason"] = None
-    df.loc[~df["active"], "reason"] = "inactive"
+    df.loc[~df["active"], "reason"] = "inactive (CCXT flag)"
+
+    for idx, row in df.iterrows():
+        info = row.get("info", {})
+        if not isinstance(info, dict):
+            df.at[idx, "reason"] = "missing info dict"
+            continue
+        status = str(info.get("status", "")).lower()
+        if status != "online":
+            df.at[idx, "reason"] = f"status '{status}' (not online)"
 
     mask_type = df.apply(lambda r: is_symbol_type(r.to_dict(), allowed_types), axis=1)
     df.loc[df["reason"].isna() & ~mask_type, "reason"] = (
