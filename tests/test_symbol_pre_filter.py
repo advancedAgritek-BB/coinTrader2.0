@@ -275,9 +275,7 @@ def test_usdc_min_volume_halved(monkeypatch):
     )
 
     ex = USDCVolumeExchange()
-    result = asyncio.run(
-        filter_symbols(ex, ["LOW/USDC", "LOW/USDT"], CONFIG)
-    )
+    result = asyncio.run(filter_symbols(ex, ["LOW/USDC", "LOW/USDT"], CONFIG))
 
     assert result == [("LOW/USDC", 0.3)]
 
@@ -291,17 +289,21 @@ class DummyOnchainEx:
 def test_onchain_volume_below_threshold(monkeypatch):
     async def no_fetch(*_a, **_k):
         return {}
+
     monkeypatch.setattr(sp, "_refresh_tickers", no_fetch)
 
     async def fake_gecko(*_a, **_k):
         return [], 500_000.0, 0.0
 
     from crypto_bot.utils import token_registry
+
     monkeypatch.setitem(token_registry.TOKEN_MINTS, "AAA", "mint")
     monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
 
     res = asyncio.run(
-        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000})
+        sp.filter_symbols(
+            DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000}
+        )
     )
 
     assert res == ([], [])
@@ -310,17 +312,21 @@ def test_onchain_volume_below_threshold(monkeypatch):
 def test_onchain_volume_above_threshold(monkeypatch):
     async def no_fetch(*_a, **_k):
         return {}
+
     monkeypatch.setattr(sp, "_refresh_tickers", no_fetch)
 
     async def fake_gecko(*_a, **_k):
         return [], 2_000_000.0, 0.0
 
     from crypto_bot.utils import token_registry
+
     monkeypatch.setitem(token_registry.TOKEN_MINTS, "AAA", "mint")
     monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
 
     res = asyncio.run(
-        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000})
+        sp.filter_symbols(
+            DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000}
+        )
     )
 
     assert res == ([], [("AAA/USDC", 2.0)])
@@ -336,9 +342,12 @@ def test_onchain_lookup_via_helius(monkeypatch):
         return [], 1_500_000.0, 0.0
 
     from crypto_bot.utils import token_registry
+
     token_registry.TOKEN_MINTS.clear()
+
     async def none_gecko(*_a):
         return None
+
     monkeypatch.setattr(token_registry, "get_mint_from_gecko", none_gecko)
 
     async def fake_helius(symbols):
@@ -349,11 +358,15 @@ def test_onchain_lookup_via_helius(monkeypatch):
     monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
 
     res = asyncio.run(
-        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000})
+        sp.filter_symbols(
+            DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000}
+        )
     )
 
     assert res == ([], [("AAA/USDC", 1.5)])
     assert token_registry.TOKEN_MINTS["AAA"] == "mint"
+
+
 def test_blacklisted_base_omitted(monkeypatch, caplog):
     caplog.set_level("WARNING")
     import crypto_bot.utils.token_registry as tr
@@ -370,9 +383,7 @@ def test_blacklisted_base_omitted(monkeypatch, caplog):
         has = {}
         markets_by_id = {}
 
-    result = asyncio.run(
-        sp.filter_symbols(DummyEx(), ["SOL/USDC", "BNB/USDC"], CONFIG)
-    )
+    result = asyncio.run(sp.filter_symbols(DummyEx(), ["SOL/USDC", "BNB/USDC"], CONFIG))
 
     assert result == ([], [("SOL/USDC", 1.0)])
     assert not any("No mint" in r.getMessage() for r in caplog.records)
@@ -1219,11 +1230,17 @@ def test_refresh_tickers_batches(monkeypatch):
             return {s: {} for s in symbols}
 
     ex = BatchExchange()
-    monkeypatch.setattr(sp, "cfg", {"symbol_filter": {"kraken_batch_size": 2, "http_timeout": 10}})
+    monkeypatch.setattr(
+        sp, "cfg", {"symbol_filter": {"kraken_batch_size": 2, "http_timeout": 10}}
+    )
 
     result = asyncio.run(sp._refresh_tickers(ex, list(ex.markets)))
 
-    assert ex.calls == [["PAIR0/USD", "PAIR1/USD"], ["PAIR2/USD", "PAIR3/USD"], ["PAIR4/USD"]]
+    assert ex.calls == [
+        ["PAIR0/USD", "PAIR1/USD"],
+        ["PAIR2/USD", "PAIR3/USD"],
+        ["PAIR4/USD"],
+    ]
     assert result == {}
 
 
@@ -1249,7 +1266,11 @@ def test_watch_tickers_batches(monkeypatch):
 
     asyncio.run(sp._refresh_tickers(ex, list(ex.markets)))
 
-    assert calls == [["PAIR0/USD", "PAIR1/USD"], ["PAIR2/USD", "PAIR3/USD"], ["PAIR4/USD"]]
+    assert calls == [
+        ["PAIR0/USD", "PAIR1/USD"],
+        ["PAIR2/USD", "PAIR3/USD"],
+        ["PAIR4/USD"],
+    ]
 
 
 def test_fetch_ticker_async_timeout(monkeypatch):
@@ -1278,6 +1299,8 @@ def test_fetch_ticker_async_timeout(monkeypatch):
     asyncio.run(sp._fetch_ticker_async(["XBTUSD"], timeout=5))
 
     assert calls == [5]
+
+
 def test_ticker_retry_attempts(monkeypatch):
     class RetryExchange(DummyExchange):
         def __init__(self):
@@ -1327,7 +1350,11 @@ def test_ticker_failure_backoff(monkeypatch):
     t = {"now": 0}
     monkeypatch.setattr(sp.time, "time", lambda: t["now"])
 
-    cfg = {"ticker_backoff_initial": 2, "ticker_backoff_max": 8, "symbol_filter": {"ticker_retry_attempts": 1}}
+    cfg = {
+        "ticker_backoff_initial": 2,
+        "ticker_backoff_max": 8,
+        "symbol_filter": {"ticker_retry_attempts": 1},
+    }
 
     asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
     assert sp.ticker_failures["ETH/USD"]["delay"] == 2
@@ -1371,7 +1398,11 @@ def test_ticker_backoff_resets_on_success(monkeypatch):
     t = {"now": 0}
     monkeypatch.setattr(sp.time, "time", lambda: t["now"])
 
-    cfg = {"ticker_backoff_initial": 2, "ticker_backoff_max": 8, "symbol_filter": {"ticker_retry_attempts": 1}}
+    cfg = {
+        "ticker_backoff_initial": 2,
+        "ticker_backoff_max": 8,
+        "symbol_filter": {"ticker_retry_attempts": 1},
+    }
 
     asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
     assert sp.ticker_failures["ETH/USD"]["delay"] == 2
@@ -1511,6 +1542,8 @@ def test_unknown_pair_not_cached(monkeypatch):
     result = asyncio.run(sp.filter_symbols(MarketIDExchange(), ["BTC/USDT"], CONFIG))
     assert result == []
     assert "BTC/USDT" not in sp.liq_cache
+
+
 def test_refresh_tickers_empty_result(monkeypatch, caplog):
     caplog.set_level("WARNING")
 
@@ -1560,13 +1593,18 @@ def test_filter_symbols_missing_mint_logs_debug(monkeypatch, caplog):
 
     async def no_refresh(*_a, **_k):
         return {}
+
     monkeypatch.setattr(sp, "_refresh_tickers", no_refresh)
     from crypto_bot.utils import token_registry
+
     async def none_gecko(*_a):
         return None
+
     monkeypatch.setattr(token_registry, "get_mint_from_gecko", none_gecko)
+
     async def helius_empty(*_a):
         return {}
+
     monkeypatch.setattr(token_registry, "fetch_from_helius", helius_empty)
 
     result = asyncio.run(sp.filter_symbols(DummyExchange(), ["AAA/USDC"], CONFIG))
@@ -1587,14 +1625,17 @@ def test_refresh_tickers_semaphore(monkeypatch):
 
         async def fetch_tickers(self, symbols):
             self.times.append(time.time())
-            return {s: {
-                "a": ["1", "1", "1"],
-                "b": ["1", "1", "1"],
-                "c": ["1", "1"],
-                "v": ["1", "1"],
-                "p": ["1", "1"],
-                "o": "1",
-            } for s in symbols}
+            return {
+                s: {
+                    "a": ["1", "1", "1"],
+                    "b": ["1", "1", "1"],
+                    "c": ["1", "1"],
+                    "v": ["1", "1"],
+                    "p": ["1", "1"],
+                    "o": "1",
+                }
+                for s in symbols
+            }
 
     sleeps: list[float] = []
 
@@ -1660,3 +1701,56 @@ def test_quote_volume_converted(monkeypatch):
     result = asyncio.run(filter_symbols(BTCQuoteExchange(), ["ETH/BTC"], cfg))
 
     assert [s for s, _ in result[0]] == ["ETH/BTC"]
+
+
+class ZeroVolumeExchange:
+    def __init__(self):
+        self.has = {"fetchTicker": True}
+        self.called = 0
+
+    async def fetch_ticker(self, symbol):
+        assert symbol == "ETH/USD"
+        self.called += 1
+        return {
+            "last": 101,
+            "open": 100,
+            "ask": 101,
+            "bid": 100,
+            "vwap": 100,
+            "baseVolume": 2,
+        }
+
+
+def test_parse_metrics_zero_volume_triggers_fetch(monkeypatch):
+    ex = ZeroVolumeExchange()
+    ticker = {
+        "last": 1,
+        "open": 1,
+        "ask": 1,
+        "bid": 1,
+        "vwap": 1,
+        "baseVolume": 0,
+    }
+    vol, change, spread = asyncio.run(sp._parse_metrics(ex, "ETH/USD", ticker))
+    assert ex.called == 1
+    assert vol == 200
+
+
+class NaNVolumeExchange(ZeroVolumeExchange):
+    async def fetch_ticker(self, symbol):
+        return await super().fetch_ticker(symbol)
+
+
+def test_parse_metrics_nan_volume_triggers_fetch():
+    ex = NaNVolumeExchange()
+    ticker = {
+        "last": 1,
+        "open": 1,
+        "ask": 1,
+        "bid": 1,
+        "vwap": float("nan"),
+        "baseVolume": 1,
+    }
+    vol, change, spread = asyncio.run(sp._parse_metrics(ex, "ETH/USD", ticker))
+    assert ex.called == 1
+    assert vol == 200
