@@ -299,12 +299,15 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **scan_markets** – load all exchange pairs when `symbols` is empty (enabled by default).
 * **scan_in_background** – start the initial scan in the background so trading can begin immediately.
 * **excluded_symbols** – markets to skip during scanning.
-* **onchain_symbols** – base tokens traded on-chain. Tickers are automatically
-  resolved to mint addresses using a hybrid Jupiter/Helius registry cached at
-  `cache/token_mints.json`. Each entry is appended with the quote defined by
-  `onchain_default_quote` (defaults to `USDC`). If a ticker isn't found in the
-  registry, the base value must be a valid mint address. If your configuration
-  still contains `solana_symbols`, rename that section to `onchain_symbols`.
+* **onchain_symbols** – optional list of base tokens traded on-chain. When this
+  list is omitted or empty, the Solana scanner automatically discovers
+  tradeable tokens. Providing a list restricts swaps to those entries only.
+  Tickers are automatically resolved to mint addresses using a hybrid
+  Jupiter/Helius registry cached at `cache/token_mints.json`. Each entry is
+  appended with the quote defined by `onchain_default_quote` (defaults to
+  `USDC`). If a ticker isn't found in the registry, the base value must be a
+  valid mint address. If your configuration still contains `solana_symbols`,
+  rename that section to `onchain_symbols`.
 * **onchain_default_quote** – quote currency used when appending to entries in
   `onchain_symbols`. Defaults to `USDC`.
 * **allow_short** – enable short selling. Set to `true` only when your exchange account supports short selling.
@@ -1027,8 +1030,11 @@ scan_markets: true    # default
 scan_in_background: true
 symbols: []            # automatically populated
 onchain_default_quote: USDT
-onchain_symbols: ["SOL", "BONK", "AI16Z"]             # quote appended automatically
-                                                # to mints via Jupiter/Helius
+onchain_symbols: ["SOL", "BONK", "AI16Z"]             # optional list
+                                                # restricts swaps to these tokens
+                                                # leave empty to discover tokens
+                                                # quote appended automatically to
+                                                # mints via Jupiter/Helius
                                                 # base must be mint if unknown
 excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
