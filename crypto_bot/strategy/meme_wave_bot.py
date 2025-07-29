@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from typing import Mapping, Optional, Tuple
 
 import pandas as pd
@@ -114,57 +113,12 @@ def generate_signal(
             sentiment_ok = False
 
     if mempool_ok and sentiment_ok:
-        return 1.0, "long" if price_change > 0 else "short"
+        score = 1.0
+        if config is None or config.get("atr_normalization", True):
+            score = normalize_score_by_volatility(df, score)
+        return score, "long" if price_change > 0 else "short"
 
     return 0.0, "none"
-        score = 1.0
-        direction = "long"
-    else:
-        spike = (
-            abs(price_change) >= atr.iloc[-1] * jump_mult
-            and avg_vol > 0
-            and vol >= avg_vol * vol_mult
-        )
-
-        if spike:
-            mempool_ok = True
-            if mempool_monitor is not None and vol_spike_thr is not None:
-                try:
-                    import asyncio
-
-                    try:
-                        recent_vol = asyncio.run(mempool_monitor.get_recent_volume())
-                        avg_mempool = asyncio.run(mempool_monitor.get_average_volume())
-                    except RuntimeError:
-                        recent_vol = 0.0
-                        avg_mempool = 0.0
-                except Exception:
-                    recent_vol = 0.0
-                    avg_mempool = 0.0
-
-                if avg_mempool <= 0 or recent_vol < float(vol_spike_thr) * avg_mempool:
-                    mempool_ok = False
-
-            sentiment_ok = True
-            if sentiment_thr is not None:
-                try:
-                    q = query
-                    if not q:
-                        q = config.get("symbol") if isinstance(config, dict) else None
-                    sentiment = fetch_twitter_sentiment(q or "") / 100.0
-                    if sentiment < float(sentiment_thr):
-                        sentiment_ok = False
-                except Exception:
-                    sentiment_ok = False
-
-            if mempool_ok and sentiment_ok:
-                score = 1.0
-                direction = "long" if price_change > 0 else "short"
-
-    if score > 0 and (config is None or config.get("atr_normalization", True)):
-        score = normalize_score_by_volatility(df, score)
-
-    return score, direction
 
 
 class regime_filter:
