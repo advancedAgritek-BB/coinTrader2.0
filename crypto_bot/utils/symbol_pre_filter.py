@@ -419,6 +419,12 @@ async def _refresh_tickers(
     for s in symbols:
         info = ticker_failures.get(s)
         if info and now - info["time"] < info["delay"]:
+            remaining = max(info["delay"] - (now - info["time"]), 0)
+            logger.debug(
+                "Skipping %s due to previous ticker failure; %.2fs remaining",
+                s,
+                remaining,
+            )
             continue
         filtered.append(s)
     symbols = filtered
@@ -455,8 +461,7 @@ async def _refresh_tickers(
         symbols = [
             s
             for s in symbols
-            if not isinstance(markets.get(s), dict)
-            or markets[s].get("active") is True
+            if not isinstance(markets.get(s), dict) or markets[s].get("active") is True
         ]
 
     attempted_syms: set[str] = set()
@@ -510,7 +515,9 @@ async def _refresh_tickers(
                     exc_info=log_exc,
                 )
                 if isinstance(exc, ccxt.ExchangeError):
-                    m = re.search(r"Currency pair not supported[:\s]*([^\s]+)", str(exc))
+                    m = re.search(
+                        r"Currency pair not supported[:\s]*([^\s]+)", str(exc)
+                    )
                     if m:
                         bad = _norm_symbol(m.group(1))
                         unsupported_pairs.add(bad)
