@@ -413,7 +413,6 @@ async def _refresh_tickers(
     now = time.time()
     batch = cfg.get("symbol_filter", {}).get("kraken_batch_size", 100)
     timeout = cfg.get("symbol_filter", {}).get("http_timeout", 10)
-    symbols = list(symbols)
     filtered: list[str] = []
     for s in symbols:
         info = ticker_failures.get(s)
