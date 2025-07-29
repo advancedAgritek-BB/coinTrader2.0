@@ -169,7 +169,6 @@ def load_or_create() -> dict:
                     for k, v in creds.items()
                 }
                 yaml.safe_dump(dump, f)
-                yaml.safe_dump(creds, f)
 
     provider = os.getenv("SECRETS_PROVIDER")
     if provider:
