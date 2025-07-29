@@ -58,6 +58,8 @@ REST_OHLCV_TIMEOUT = 90
 # Number of consecutive failures allowed before disabling a symbol
 MAX_OHLCV_FAILURES = 10
 MAX_WS_LIMIT = 500
+# Skip fetching historical OHLCV if listing age exceeds this many candles
+SKIP_AGE_THRESHOLD_CANDLES = 1000
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 STATUS_UPDATES = True
 SEMA: asyncio.Semaphore | None = None
@@ -2098,6 +2100,9 @@ async def update_multi_tf_ohlcv_cache(
         dynamic_limits: dict[str, int] = {}
         snapshot_cap = int(config.get("ohlcv_snapshot_limit", limit))
         max_cap = min(snapshot_cap, 720)
+        threshold = int(
+            config.get("skip_age_threshold_candles", SKIP_AGE_THRESHOLD_CANDLES)
+        )
 
         concurrency = int(config.get("listing_date_concurrency", 5) or 0)
         semaphore = asyncio.Semaphore(concurrency) if concurrency > 0 else None
@@ -2119,7 +2124,7 @@ async def update_multi_tf_ohlcv_cache(
                 hist_candles = age_ms // (tf_sec * 1000)
                 if hist_candles <= 0:
                     continue
-                if hist_candles > snapshot_cap * 1000:
+                if hist_candles > threshold:
                     logger.info(
                         "Skipping OHLCV history for %s on %s (age %d candles)",
                         sym,

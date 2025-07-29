@@ -2382,13 +2382,13 @@ def test_dynamic_limits_skip_extreme_age(monkeypatch):
         called = True
         return {}
 
-    now = 1_000_000
+    now = 10_000_000
     monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
     monkeypatch.setattr(market_loader.time, "time", lambda: float(now))
 
     async def listing_date(_sym):
-        # 100 years ago
-        return int(now * 1000 - 100 * 365 * 24 * 3600 * 1000)
+        # 2000 hours ago so hist_candles exceeds default threshold (1000)
+        return int(now * 1000 - 2000 * 3600 * 1000)
 
     monkeypatch.setattr(market_loader, "get_kraken_listing_date", listing_date)
 
@@ -2398,7 +2398,7 @@ def test_dynamic_limits_skip_extreme_age(monkeypatch):
             ex,
             {},
             ["BTC/USD"],
-            {"timeframes": ["1h"]},
+            {"timeframes": ["1h"], "ohlcv_snapshot_limit": 1_000_000},
             limit=100,
         )
     )
