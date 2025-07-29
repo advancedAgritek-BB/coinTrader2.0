@@ -233,20 +233,28 @@ def is_market_pumping(
 async def maybe_scan_solana_tokens(config: dict, last_scan: float) -> float:
     """Scan for new Solana tokens if the interval has elapsed."""
     sol_cfg = config.get("solana_scanner", {})
-    if not sol_cfg.get("enabled") or config.get("solana_symbols") or config.get("onchain_symbols"):
+    if not sol_cfg.get("enabled"):
+        logger.info("Solana scan skipped: scanner disabled")
+        return last_scan
+    if config.get("solana_symbols") or config.get("onchain_symbols"):
+        logger.info("Solana scan skipped: tokens already configured")
         return last_scan
     interval = sol_cfg.get("interval_minutes", 5) * 60
     now = time.time()
     if now - last_scan < interval:
         return last_scan
+    logger.info("Scanning Solana tokens")
     try:
         tokens = await get_solana_new_tokens(sol_cfg)
         if tokens:
+            logger.info("Discovered %d new Solana tokens", len(tokens))
             async with QUEUE_LOCK:
                 enqueue_solana_tokens(tokens)
                 for sym in reversed(tokens):
                     symbol_priority_queue.appendleft(sym)
                     NEW_SOLANA_TOKENS.add(sym)
+        else:
+            logger.info("Solana scan found no new tokens")
     except Exception as exc:  # pragma: no cover - best effort
         logger.error("Solana scan error: %s", exc)
     return now
