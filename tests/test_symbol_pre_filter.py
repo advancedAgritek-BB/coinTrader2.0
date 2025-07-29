@@ -1227,6 +1227,31 @@ def test_refresh_tickers_batches(monkeypatch):
     assert result == {}
 
 
+def test_watch_tickers_batches(monkeypatch):
+    class BatchExchange(DummyExchange):
+        def __init__(self):
+            self.has = {"watchTickers": True}
+            self.options = {}
+            self.markets = {f"PAIR{i}/USD": {} for i in range(5)}
+
+    calls: list[list[str]] = []
+
+    async def fake_watch(_ex, symbols):
+        calls.append(list(symbols))
+        return {s: {} for s in symbols}
+
+    monkeypatch.setattr(sp, "_watch_tickers_with_retry", fake_watch)
+    monkeypatch.setattr(sp, "cfg", {**sp.cfg, "ws_ticker_batch_size": 2})
+
+    ex = BatchExchange()
+    sp.ticker_cache.clear()
+    sp.ticker_ts.clear()
+
+    asyncio.run(sp._refresh_tickers(ex, list(ex.markets)))
+
+    assert calls == [["PAIR0/USD", "PAIR1/USD"], ["PAIR2/USD", "PAIR3/USD"], ["PAIR4/USD"]]
+
+
 def test_fetch_ticker_async_timeout(monkeypatch):
     calls: list[int | None] = []
 

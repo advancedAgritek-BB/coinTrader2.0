@@ -362,6 +362,7 @@ symbol_score_weights:
 * **gecko_limit** – maximum simultaneous requests to GeckoTerminal. Reduce this if you encounter HTTP 429 errors.
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
 * **ticker_rate_limit** – delay in milliseconds after each ticker API call.
+* **ws_ticker_batch_size** – number of symbols per WebSocket ticker call.
 * Solana tokens are filtered using symbol scoring; adjust `min_symbol_score` to control the threshold.
 
 Example configuration:
@@ -662,6 +663,7 @@ within the limit:
 * **ohlcv_batch_size** – number of symbols loaded per OHLCV batch.
 * **ticker_backoff_initial** – seconds to wait after a ticker failure.
 * **ticker_backoff_max** – maximum delay between ticker retries.
+* **ws_ticker_batch_size** – maximum symbols per WebSocket ticker request.
 
 Start with low values (e.g. 2 tickers and 4 OHLCV requests) and raise them only
 if you remain under the limit. If you notice log messages like
@@ -1101,6 +1103,7 @@ max_concurrent_ohlcv: 2          # simultaneous OHLCV requests during startup
   ticker_rate_limit: 0             # ms delay after each ticker request
   ticker_backoff_initial: 2        # seconds after first failure
   ticker_backoff_max: 60           # cap for exponential backoff
+  ws_ticker_batch_size: 100        # symbols per watchTickers call
   initial_timeframes: [1m, 5m, 15m, 1h]  # preloaded intervals (4h unsupported on Coinbase)
 initial_history_candles: 700     # candles fetched per timeframe initially
 ```
