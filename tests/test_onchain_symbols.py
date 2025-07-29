@@ -161,3 +161,68 @@ def test_scan_runs_without_onchain(monkeypatch, val):
 
     assert calls["loader"] == 1
     assert captured["cfg"]["symbols"] == ["BTC/USD"]
+
+
+def test_main_impl_adds_onchain_pairs(monkeypatch, caplog):
+    caplog.set_level("INFO")
+    cfg = {"scan_markets": True, "solana_scanner": {"enabled": True}}
+
+    monkeypatch.setattr(main, "load_config", lambda: cfg)
+    monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
+    monkeypatch.setattr(main, "dotenv_values", lambda *_a: {})
+    monkeypatch.setattr(main, "load_or_create", lambda: {})
+    monkeypatch.setattr(main, "send_test_message", lambda *_a, **_k: True)
+    monkeypatch.setattr(main, "log_balance", lambda *_a, **_k: None)
+    monkeypatch.setattr(main.asyncio, "sleep", lambda *_a: None)
+    monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_ATTEMPTS", 1)
+    monkeypatch.setattr(main, "SYMBOL_SCAN_RETRY_DELAY", 0)
+    monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_DELAY", 0)
+
+    class DummyRM:
+        def __init__(self, *_a, **_k):
+            pass
+
+    monkeypatch.setattr(main, "RiskConfig", lambda *_a, **_k: None)
+    monkeypatch.setattr(main, "RiskManager", DummyRM)
+
+    async def fake_loader(ex, exclude=None, config=None):
+        return ["BTC/USD"]
+
+    async def fake_refresh(*_a, **_k):
+        return ["SOL/USDC", "BONK/USDC"]
+
+    monkeypatch.setattr(main, "load_kraken_symbols", fake_loader)
+    monkeypatch.setattr(main, "refresh_pairs_async", fake_refresh)
+
+    import importlib
+    registry = importlib.import_module("crypto_bot.utils.token_registry")
+
+    async def fake_load_token_mints(*_a, **_k):
+        return {}
+
+    monkeypatch.setattr(registry, "load_token_mints", fake_load_token_mints)
+    monkeypatch.setattr(registry, "set_token_mints", lambda *_a, **_k: None)
+
+    class DummyExchange:
+        def __init__(self):
+            self.options = {}
+
+        def fetch_balance(self):
+            return {"USDT": {"free": 0}}
+
+    def fake_get_exchanges(conf):
+        return {"kraken": (DummyExchange(), None)}
+
+    monkeypatch.setattr(main, "get_exchanges", fake_get_exchanges)
+    monkeypatch.setattr(cex_exec, "get_exchanges", fake_get_exchanges)
+
+    def raise_stop(*_a, **_k):
+        raise StopLoop
+
+    monkeypatch.setattr(main, "build_risk_params", raise_stop)
+
+    with pytest.raises(StopLoop):
+        asyncio.run(main._main_impl())
+
+    assert cfg["symbols"] == ["BTC/USD", "SOL/USDC", "BONK/USDC"]
+    assert any("Loaded 2 onchain symbols via refresh_pairs" in r.getMessage() for r in caplog.records)
