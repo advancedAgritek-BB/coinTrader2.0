@@ -155,3 +155,22 @@ def test_encryption_roundtrip(tmp_path, monkeypatch):
     creds2 = wallet_manager.load_or_create()
     assert creds2["coinbase_api_key"] == "abc"
 
+
+def test_invalid_fernet_key(tmp_path, monkeypatch):
+    cfg = tmp_path / "user_config.yaml"
+    data = {"coinbase_api_key": "abc"}
+    cfg.write_text(yaml.safe_dump(data))
+
+    monkeypatch.setenv("FERNET_KEY", "invalid")
+    import importlib
+    import crypto_bot.wallet_manager as wm
+    wm = importlib.reload(wm)
+    monkeypatch.setattr(wm, "CONFIG_FILE", cfg)
+
+    creds = wm.load_or_create()
+    assert creds["coinbase_api_key"] == "abc"
+    assert yaml.safe_load(cfg.read_text())["coinbase_api_key"] == "abc"
+
+    monkeypatch.delenv("FERNET_KEY", raising=False)
+    importlib.reload(wm)
+
