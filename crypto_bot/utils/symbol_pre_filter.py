@@ -227,17 +227,36 @@ async def _fetch_ticker_async(
                 return resp
 
         tasks = []
+        chunks: list[list[str]] = []
         for i in range(0, len(pairs_list), 20):
             chunk = pairs_list[i : i + 20]
+            chunks.append(chunk)
             url = f"{API_URL}/Ticker?pair={','.join(chunk)}"
             tasks.append(asyncio.create_task(fetch(url)))
 
         responses = await asyncio.gather(*tasks)
-        for resp in responses:
+        for chunk, resp in zip(chunks, responses):
             resp.raise_for_status()
             data = await resp.json()
-            combined["error"] += data.get("error", [])
-            combined["result"].update(data.get("result", {}))
+            errors = data.get("error", [])
+            result = data.get("result")
+            if errors and not result:
+                for pair in chunk:
+                    url = f"{API_URL}/Ticker?pair={pair}"
+                    single = await fetch(url)
+                    single.raise_for_status()
+                    sdata = await single.json()
+                    serrors = sdata.get("error", [])
+                    sresult = sdata.get("result")
+                    if sresult:
+                        combined["result"].update(sresult)
+                        combined["error"] += serrors
+                    elif not any("Unknown asset pair" in e for e in serrors):
+                        combined["error"] += serrors
+                continue
+            combined["error"] += errors
+            if result:
+                combined["result"].update(result)
 
     return combined
 
@@ -526,7 +545,42 @@ async def _refresh_tickers(
                             exc,
                         )
                         telemetry.inc("scan.api_errors")
-                        return {}
+                        chunk_pairs = [_id_for_symbol(exchange, s) for s in chunk]
+                        try:
+                            async with TICKER_SEMA:
+                                resp = await _fetch_ticker_async(
+                                    chunk_pairs, timeout=timeout, exchange=exchange
+                                )
+                                if delay:
+                                    await asyncio.sleep(delay)
+                        except TypeError:
+                            async with TICKER_SEMA:
+                                resp = await _fetch_ticker_async(
+                                    chunk_pairs, exchange=exchange
+                                )
+                                if delay:
+                                    await asyncio.sleep(delay)
+                        raw = resp.get("result", {})
+                        chunk_data = {}
+                        if len(raw) == len(chunk):
+                            for sym, (_, ticker) in zip(chunk, raw.items()):
+                                if ticker:
+                                    chunk_data[sym] = ticker
+                        else:
+                            extra = iter(raw.values())
+                            for sym, pair in zip(chunk, chunk_pairs):
+                                ticker = raw.get(pair) or raw.get(pair.upper())
+                                if ticker is None:
+                                    pu = pair.upper()
+                                    for k, v in raw.items():
+                                        if pu in k.upper():
+                                            ticker = v
+                                            break
+                                if ticker is None:
+                                    ticker = next(extra, None)
+                                if ticker:
+                                    chunk_data[sym] = ticker
+                        break
                     except (
                         ccxt.ExchangeError,
                         ccxt.NetworkError,
@@ -579,7 +633,8 @@ async def _refresh_tickers(
                                 exc,
                             )
                             telemetry.inc("scan.api_errors")
-                            return {}
+                            data = None
+                            break
                         except (
                             ccxt.ExchangeError,
                             ccxt.NetworkError,
