@@ -124,3 +124,34 @@ def test_env_creds_no_config(tmp_path, monkeypatch):
     assert creds["kraken_api_secret"] == "a3Jfc2VjcmV0"
     assert not cfg.exists()
 
+
+def test_encryption_roundtrip(tmp_path, monkeypatch):
+    cfg = tmp_path / "user_config.yaml"
+    monkeypatch.setattr(wallet_manager, "CONFIG_FILE", cfg)
+
+    from cryptography.fernet import Fernet
+
+    key = Fernet.generate_key()
+    f = Fernet(key)
+    monkeypatch.setattr(wallet_manager, "_fernet", f, raising=False)
+    monkeypatch.setattr(wallet_manager, "FERNET_KEY", key.decode(), raising=False)
+
+    monkeypatch.delenv("COINBASE_API_KEY", raising=False)
+    monkeypatch.delenv("COINBASE_API_SECRET", raising=False)
+    monkeypatch.delenv("COINBASE_API_PASSPHRASE", raising=False)
+    monkeypatch.delenv("KRAKEN_API_KEY", raising=False)
+    monkeypatch.delenv("KRAKEN_API_SECRET", raising=False)
+
+    monkeypatch.setattr(wallet_manager, "prompt_user", lambda: {"coinbase_api_key": "abc"})
+
+    creds = wallet_manager.load_or_create()
+    assert creds["coinbase_api_key"] == "abc"
+    text = cfg.read_text()
+    loaded = yaml.safe_load(text)
+    assert loaded["coinbase_api_key"] != "abc"
+    assert wallet_manager._decrypt(loaded["coinbase_api_key"]) == "abc"
+
+    # Loading again should decrypt automatically
+    creds2 = wallet_manager.load_or_create()
+    assert creds2["coinbase_api_key"] == "abc"
+

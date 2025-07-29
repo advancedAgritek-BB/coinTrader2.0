@@ -137,7 +137,11 @@ def load_or_create() -> dict:
     if CONFIG_FILE.exists():
         logger.info("Loading user configuration from %s", CONFIG_FILE)
         with open(CONFIG_FILE) as f:
-            creds.update(yaml.safe_load(f))
+            file_creds = yaml.safe_load(f) or {}
+        for field in SENSITIVE_FIELDS:
+            if field in file_creds and file_creds[field] is not None:
+                file_creds[field] = _decrypt(str(file_creds[field]))
+        creds.update(file_creds)
     else:
         env_creds = {
             "coinbase_api_key": os.getenv("COINBASE_API_KEY"),
@@ -156,11 +160,11 @@ def load_or_create() -> dict:
             creds.update(prompt_user())
             logger.info("Creating new user configuration at %s", CONFIG_FILE)
             with open(CONFIG_FILE, "w") as f:
-                yaml.safe_dump(creds, f)
-        logger.info("user_config.yaml not found; credentials must be provided via .env")
-        logger.info("Creating new user configuration at %s", CONFIG_FILE)
-        with open(CONFIG_FILE, "w") as f:
-            yaml.safe_dump(creds, f)
+                dump = {
+                    k: _encrypt(str(v)) if k in SENSITIVE_FIELDS and v is not None else v
+                    for k, v in creds.items()
+                }
+                yaml.safe_dump(dump, f)
 
     provider = os.getenv("SECRETS_PROVIDER")
     if provider:
