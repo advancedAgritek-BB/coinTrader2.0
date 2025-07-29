@@ -23,10 +23,10 @@ class DummyExchange:
 
     def load_markets(self):
         return {
-            "BTC/USD": {"active": True, "type": "spot"},
-            "ETH/USD": {"active": True, "type": "margin"},
-            "XBT/USD-PERP": {"active": True, "type": "futures"},
-            "XRP/USD": {"active": False, "type": "spot"},
+            "BTC/USD": {"active": True, "type": "spot", "info": {"status": "online"}},
+            "ETH/USD": {"active": True, "type": "margin", "info": {"status": "online"}},
+            "XBT/USD-PERP": {"active": True, "type": "futures", "info": {"status": "online"}},
+            "XRP/USD": {"active": False, "type": "spot", "info": {"status": "delisted"}},
         }
 
 
@@ -67,8 +67,8 @@ def test_load_kraken_symbols_market_type_filter():
 class DummyTypeExchange:
     def load_markets(self):
         return {
-            "BTC/USD": {"active": True, "type": "spot"},
-            "ETH/USD": {"active": True, "type": "future"},
+            "BTC/USD": {"active": True, "type": "spot", "info": {"status": "online"}},
+            "ETH/USD": {"active": True, "type": "future", "info": {"status": "online"}},
         }
 
 
@@ -89,10 +89,10 @@ class DummySliceExchange:
         self.called.append(market_type)
         data = {
             "spot": [
-                {"symbol": "BTC/USD", "active": True, "type": "spot"},
+                {"symbol": "BTC/USD", "active": True, "type": "spot", "info": {"status": "online"}},
             ],
             "future": [
-                {"symbol": "XBT/USD-PERP", "active": True, "type": "future"},
+                {"symbol": "XBT/USD-PERP", "active": True, "type": "future", "info": {"status": "online"}},
             ],
         }
         return data.get(market_type, [])
@@ -111,8 +111,8 @@ class DummySymbolFieldExchange:
 
     def load_markets(self):
         return {
-            "BTC/USD": {"symbol": "BTC/USD", "active": True, "type": "spot"},
-            "ETH/USD": {"symbol": "ETH/USD", "active": False, "type": "spot"},
+            "BTC/USD": {"symbol": "BTC/USD", "active": True, "type": "spot", "info": {"status": "online"}},
+            "ETH/USD": {"symbol": "ETH/USD", "active": False, "type": "spot", "info": {"status": "delisted"}},
         }
 
 
