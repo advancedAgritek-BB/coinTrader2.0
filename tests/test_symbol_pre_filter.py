@@ -73,7 +73,6 @@ CONFIG = {
         "age": 0,
         "latency": 0,
     },
-    "max_vol": 100000,
     "min_symbol_score": 0.0,
 }
 
