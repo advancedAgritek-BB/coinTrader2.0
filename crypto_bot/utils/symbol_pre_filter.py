@@ -498,13 +498,31 @@ async def _refresh_tickers(
             ws_batch = int(cfg.get("ws_ticker_batch_size", 100) or 100)
             try:
                 data = {}
-                for i in range(0, len(to_fetch), ws_batch):
+                i = 0
+                while i < len(to_fetch):
                     chunk = to_fetch[i : i + ws_batch]
-                    async with TICKER_SEMA:
-                        chunk_data = await _watch_tickers_with_retry(exchange, chunk)
-                        if delay:
-                            await asyncio.sleep(delay)
-                    data.update(chunk_data)
+                    try:
+                        async with TICKER_SEMA:
+                            chunk_data = await _watch_tickers_with_retry(exchange, chunk)
+                            if delay:
+                                await asyncio.sleep(delay)
+                        data.update(chunk_data)
+                        i += ws_batch
+                    except Exception as exc:  # pragma: no cover - network
+                        if isinstance(exc, ccxt.ExchangeError):
+                            m = re.search(r"Currency pair not supported[:\s]*([^\s]+)", str(exc))
+                            if m:
+                                bad = _norm_symbol(m.group(1))
+                                if any(_norm_symbol(s) == bad for s in chunk):
+                                    unsupported_pairs.add(bad)
+                                    attempted_syms.discard(bad)
+                                    symbols = [s for s in symbols if _norm_symbol(s) != bad]
+                                    to_fetch = [s for s in to_fetch if _norm_symbol(s) != bad]
+                                    logger.warning("Dropping unsupported pair %s", bad)
+                                    continue  # retry this chunk without the bad pair
+                                else:
+                                    raise
+                        raise
                 opts = getattr(exchange, "options", None)
                 if opts is not None:
                     opts["ws_failures"] = 0
