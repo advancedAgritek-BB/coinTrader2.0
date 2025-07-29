@@ -79,7 +79,6 @@ from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import write_cycle_metrics
 from crypto_bot.utils.token_registry import TOKEN_MINTS
-from crypto_bot.utils import regime_pnl_tracker
 from crypto_bot.utils import pnl_logger, regime_pnl_tracker, trade_logger
 
 from crypto_bot.monitoring import record_sol_scanner_metrics
