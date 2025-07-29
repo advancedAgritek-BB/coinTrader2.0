@@ -2161,6 +2161,23 @@ async def _main_impl() -> TelegramNotifier:
                 )
             return notifier
 
+    # Load onchain pairs if none configured and Solana scanner is enabled
+    if not config.get("onchain_symbols") and config.get("solana_scanner", {}).get("enabled"):
+        rp_cfg = config.get("refresh_pairs", {})
+        min_vol = float(rp_cfg.get("min_quote_volume_usd", DEFAULT_MIN_VOLUME_USD))
+        top_k = int(rp_cfg.get("top_k", DEFAULT_TOP_K))
+        try:
+            sol_pairs = await refresh_pairs_async(min_vol, top_k, config, force_refresh=True)
+        except Exception as exc:  # pragma: no cover - network errors
+            logger.error("refresh_pairs_async failed: %s", exc)
+            sol_pairs = []
+        if sol_pairs:
+            config.setdefault("symbols", [])
+            existing = set(config["symbols"])
+            new_pairs = [s for s in sol_pairs if s not in existing]
+            config["symbols"].extend(new_pairs)
+            logger.info("Loaded %d onchain symbols via refresh_pairs", len(new_pairs))
+
     balance_threshold = config.get("balance_change_threshold", 0.01)
     previous_balance = 0.0
 
