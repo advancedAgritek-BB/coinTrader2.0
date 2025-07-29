@@ -151,16 +151,16 @@ def load_or_create() -> dict:
             creds.update({k: v for k, v in env_creds.items() if v is not None})
             if os.getenv("EXCHANGE"):
                 creds.setdefault("exchange", os.getenv("EXCHANGE"))
+            should_write = False
         else:
             logger.info("user_config.yaml not found; prompting for credentials")
             creds.update(prompt_user())
+            should_write = True
+
+        if should_write:
             logger.info("Creating new user configuration at %s", CONFIG_FILE)
             with open(CONFIG_FILE, "w") as f:
                 yaml.safe_dump(creds, f)
-        logger.info("user_config.yaml not found; credentials must be provided via .env")
-        logger.info("Creating new user configuration at %s", CONFIG_FILE)
-        with open(CONFIG_FILE, "w") as f:
-            yaml.safe_dump(creds, f)
 
     provider = os.getenv("SECRETS_PROVIDER")
     if provider:
