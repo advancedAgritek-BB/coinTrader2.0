@@ -66,17 +66,6 @@ def generate_signal(
     recent_vol = mempool_monitor.get_recent_volume()
     avg_vol = mempool_monitor.get_average_volume()
 
-    try:
-        import asyncio
-        import inspect
-
-        if inspect.iscoroutine(recent_vol):
-            recent_vol = asyncio.run(recent_vol)
-        if inspect.iscoroutine(avg_vol):
-            avg_vol = asyncio.run(avg_vol)
-    except Exception:
-        pass
-
     sentiment = fetch_twitter_sentiment(query) / 100.0
 
     if avg_vol and recent_vol >= avg_vol * vol_threshold and sentiment >= sentiment_thr:
@@ -93,18 +82,8 @@ def generate_signal(
 
     mempool_ok = True
     if mempool_monitor is not None and vol_spike_thr is not None:
-        try:
-            import asyncio
-
-            try:
-                recent_vol = asyncio.run(mempool_monitor.get_recent_volume())
-                avg_mempool = asyncio.run(mempool_monitor.get_average_volume())
-            except RuntimeError:
-                recent_vol = 0.0
-                avg_mempool = 0.0
-        except Exception:
-            recent_vol = 0.0
-            avg_mempool = 0.0
+        recent_vol = mempool_monitor.get_recent_volume()
+        avg_mempool = mempool_monitor.get_average_volume()
 
         if avg_mempool <= 0 or recent_vol < float(vol_spike_thr) * avg_mempool:
             mempool_ok = False
