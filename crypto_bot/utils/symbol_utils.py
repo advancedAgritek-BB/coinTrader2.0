@@ -45,7 +45,7 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         return result, []
 
     symbols = config.get("symbols", [config.get("symbol")])
-    onchain = list(config.get("onchain_symbols", []))
+    onchain = list(config.get("onchain_symbols") or [])
     if not symbols:
         _cached_symbols = []
         _last_refresh = now

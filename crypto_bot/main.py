@@ -729,7 +729,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     pump = is_market_pumping(
         (ctx.config.get("symbols") or [ctx.config.get("symbol")])
-        + ctx.config.get("onchain_symbols", []),
+        + (ctx.config.get("onchain_symbols") or []),
         ctx.df_cache,
         ctx.config.get("timeframe", "1h"),
     )
@@ -802,7 +802,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     total_available = len(
         (ctx.config.get("symbols") or [ctx.config.get("symbol")])
-        + ctx.config.get("onchain_symbols", [])
+        + (ctx.config.get("onchain_symbols") or [])
     )
     ctx.timing["symbol_filter_ratio"] = (
         len(symbols) / total_available if total_available else 1.0
@@ -1930,7 +1930,7 @@ async def _main_impl() -> TelegramNotifier:
     mapping = await load_token_mints()
     if mapping:
         set_token_mints({**TOKEN_MINTS, **mapping})
-    onchain_syms = [fix_symbol(s) for s in config.get("onchain_symbols", [])]
+    onchain_syms = [fix_symbol(s) for s in (config.get("onchain_symbols") or [])]
     onchain_syms = [f"{s}/USDC" if "/" not in s else s for s in onchain_syms]
     if onchain_syms:
         config["onchain_symbols"] = onchain_syms
@@ -2103,8 +2103,8 @@ async def _main_impl() -> TelegramNotifier:
             delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
 
         if discovered:
-            config["symbols"] = discovered + config.get("onchain_symbols", [])
-            onchain_syms = config.get("onchain_symbols", [])
+            config["symbols"] = discovered + (config.get("onchain_symbols") or [])
+            onchain_syms = config.get("onchain_symbols") or []
             cex_count = len([s for s in config["symbols"] if s not in onchain_syms])
             logger.info(
                 "Loaded %d CEX symbols and %d onchain symbols",
@@ -2114,9 +2114,9 @@ async def _main_impl() -> TelegramNotifier:
         elif discovered is None:
             cached = load_liquid_pairs()
             if isinstance(cached, list):
-                config["symbols"] = cached + config.get("onchain_symbols", [])
+                config["symbols"] = cached + (config.get("onchain_symbols") or [])
                 logger.warning("Using cached pairs due to symbol scan failure")
-                onchain_syms = config.get("onchain_symbols", [])
+                onchain_syms = config.get("onchain_symbols") or []
                 cex_count = len([s for s in config["symbols"] if s not in onchain_syms])
                 logger.info(
                     "Loaded %d CEX symbols and %d onchain symbols",
@@ -2138,7 +2138,7 @@ async def _main_impl() -> TelegramNotifier:
                     except Exception as exc:  # pragma: no cover - network errors
                         logger.error("refresh_pairs_async failed: %s", exc)
                 if fallback:
-                    config["symbols"] = fallback + config.get("onchain_symbols", [])
+                    config["symbols"] = fallback + (config.get("onchain_symbols") or [])
                     logger.warning("Loaded fresh pairs after scan failure")
                 else:
                     logger.error(
