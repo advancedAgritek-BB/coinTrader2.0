@@ -280,6 +280,41 @@ def test_usdc_min_volume_halved(monkeypatch):
     assert result == [("LOW/USDC", 0.3)]
 
 
+class InactiveMarketExchange(DummyExchange):
+    def __init__(self):
+        self.has = {"fetchTickers": True}
+        self.markets_by_id = DummyExchange.markets_by_id
+        self.markets = {"ETH/USD": {"active": False}, "BTC/USD": {"active": True}}
+
+    async def fetch_tickers(self, symbols):
+        assert symbols == ["BTC/USD"]
+        data = (await fake_fetch(None))["result"]
+        ticker = {
+            "a": ["51", "1", "1"],
+            "b": ["50", "1", "1"],
+            "c": ["51", "1"],
+            "v": ["600", "600"],
+            "p": ["100", "100"],
+            "o": "49",
+        }
+        return {"BTC/USD": ticker}
+
+
+def test_filter_symbols_skips_inactive(monkeypatch):
+    async def raise_if_called(*_a, **_k):
+        raise AssertionError("_fetch_ticker_async should not be called")
+
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async",
+        raise_if_called,
+    )
+
+    ex = InactiveMarketExchange()
+    result = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
+
+    assert [s for s, _ in result[0]] == ["BTC/USD"]
+
+
 class DummyOnchainEx:
     has = {}
     markets_by_id = {}
@@ -1090,6 +1125,40 @@ def test_refresh_tickers_filters_missing(monkeypatch, caplog):
 
     assert calls == [["ETH/USD"]]
     assert not any("BadSymbol" in r.getMessage() for r in caplog.records)
+
+
+def test_refresh_tickers_filters_inactive(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+
+    calls = []
+
+    class DummyExchange:
+        has = {"fetchTickers": True}
+        markets = {"ETH/USD": {"active": False}, "BTC/USD": {"active": True}}
+
+        async def fetch_tickers(self, symbols):
+            calls.append(list(symbols))
+            ticker = {
+                "a": ["51", "1", "1"],
+                "b": ["50", "1", "1"],
+                "c": ["51", "1"],
+                "v": ["600", "600"],
+                "p": ["100", "100"],
+                "o": "49",
+            }
+            return {s: ticker for s in symbols}
+
+    async def never_call(*_a, **_k):
+        raise AssertionError("_fetch_ticker_async should not be called")
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", never_call)
+
+    ex = DummyExchange()
+    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"]))
+
+    assert calls == [["BTC/USD"]]
+    assert set(result) == {"BTC/USD"}
+    assert any("inactive" in r.getMessage().lower() for r in caplog.records)
 
 
 def test_refresh_tickers_retry_520(monkeypatch):

@@ -417,6 +417,22 @@ async def _refresh_tickers(
                 ", ".join(missing),
             )
         symbols = [s for s in symbols if s in markets]
+        inactive = [
+            s
+            for s in symbols
+            if isinstance(markets.get(s), dict) and markets[s].get("active") is not True
+        ]
+        if inactive:
+            logger.warning(
+                "Skipping inactive symbols: %s",
+                ", ".join(inactive),
+            )
+        symbols = [
+            s
+            for s in symbols
+            if not isinstance(markets.get(s), dict)
+            or markets[s].get("active") is True
+        ]
 
     attempted_syms: set[str] = set()
 
