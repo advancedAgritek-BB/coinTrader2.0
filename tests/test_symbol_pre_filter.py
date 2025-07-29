@@ -592,6 +592,21 @@ def test_watch_tickers_retry_remaining(monkeypatch):
     real_ccxt = importlib.import_module("ccxt")
     monkeypatch.setitem(sys.modules, "ccxt", real_ccxt)
     monkeypatch.setattr(sp, "ccxt", real_ccxt)
+def test_watch_tickers_unsupported_pair_no_failures(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+
+    async def raise_if_called(*_a, **_k):
+        raise AssertionError("_fetch_ticker_async should not be called")
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", raise_if_called)
+
+    class _CCXT:
+        class ExchangeError(Exception):
+            pass
+
+    monkeypatch.setattr(sp, "ccxt", _CCXT)
+    monkeypatch.setitem(sys.modules, "ccxt", _CCXT)
+    monkeypatch.setattr(sys.modules[__name__], "ccxt", _CCXT)
 
     sp.ticker_cache.clear()
     sp.ticker_ts.clear()
@@ -604,6 +619,17 @@ def test_watch_tickers_retry_remaining(monkeypatch):
     assert set(result) == {"ETH/USD"}
     assert "BAD/USD" in sp.unsupported_pairs
     assert "ETH/USD" not in sp.ticker_failures
+    ex = UnsupportedWatchExchange()
+
+    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BAD/USD"]))
+
+    assert ex.watch_calls >= 1
+    assert ex.fetch_calls == 1
+    assert set(result) == {"ETH/USD"}
+    assert "ETH/USD" not in sp.ticker_failures
+    assert "BAD/USD" not in sp.ticker_failures
+    assert "BAD/USD" in sp.unsupported_pairs
+    assert any("BAD/USD" in r.getMessage() for r in caplog.records)
 
 
 class DummyExchangeList:
