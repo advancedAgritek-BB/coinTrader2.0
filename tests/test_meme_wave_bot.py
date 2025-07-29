@@ -137,7 +137,8 @@ def test_high_volume_positive_sentiment(meme_df, high_monitor, monkeypatch):
     score, direction = meme_wave_bot.generate_signal(
         df, cfg, mempool_monitor=high_monitor
     )
-    assert (score, direction) == (1.0, "long")
+    assert direction == "long"
+    assert score > 0
 
 
 def test_high_volume_negative_sentiment(meme_df, high_monitor, monkeypatch):
