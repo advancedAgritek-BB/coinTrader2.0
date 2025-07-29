@@ -1862,6 +1862,9 @@ async def _rotation_loop(
     state: dict,
     notifier: TelegramNotifier | None,
     check_balance_change: callable,
+    *,
+    mempool_monitor: SolanaMempoolMonitor | None = None,
+    mempool_cfg: dict | None = None,
 ) -> None:
     """Periodically rotate portfolio holdings."""
 
@@ -1890,8 +1893,8 @@ async def _rotation_loop(
                     wallet,
                     holdings,
                     notifier,
-                    mempool_monitor=ctx.mempool_monitor,
-                    mempool_cfg=ctx.mempool_cfg,
+                    mempool_monitor=mempool_monitor,
+                    mempool_cfg=mempool_cfg,
                 )
         except asyncio.CancelledError:
             break
@@ -2249,6 +2252,8 @@ async def _main_impl() -> TelegramNotifier:
             state,
             notifier,
             check_balance_change,
+            mempool_monitor=mempool_monitor,
+            mempool_cfg=mempool_cfg,
         )
     )
     solana_scan_task: asyncio.Task | None = None
