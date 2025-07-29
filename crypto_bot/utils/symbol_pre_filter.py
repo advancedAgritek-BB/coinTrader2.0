@@ -999,10 +999,7 @@ async def filter_symbols(
         if sym in liq_cache:
             cached_data[sym] = liq_cache[sym]
 
-    try:
-        data = await _refresh_tickers(exchange, cex_syms, cfg)
-    except Exception:
-        raise
+    data = await _refresh_tickers(exchange, cex_syms, cfg)
 
     # map of ids returned by Kraken to human readable symbols
     id_map: dict[str, str] = {}
