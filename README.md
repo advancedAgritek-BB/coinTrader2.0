@@ -367,6 +367,9 @@ symbol_score_weights:
 * **ticker_rate_limit** – delay in milliseconds after each ticker API call.
 * **ws_ticker_batch_size** – number of symbols per WebSocket ticker call.
 * Solana tokens are filtered using symbol scoring; adjust `min_symbol_score` to control the threshold.
+* Informational logs indicate when a scan begins, how many tokens were found,
+  and when scanning is skipped because the scanner is disabled or tokens are
+  preconfigured.
 
 Example configuration:
 
