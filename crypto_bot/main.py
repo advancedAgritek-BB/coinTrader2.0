@@ -486,6 +486,29 @@ def _flatten_config(data: dict, parent: str = "") -> dict:
     return flat
 
 
+def build_risk_params(config: dict, volume_ratio: float) -> dict:
+    """Return risk configuration parameters derived from ``config``."""
+
+    params = {**config.get("risk", {})}
+    params.update(config.get("sentiment_filter", {}))
+    params.update(config.get("volatility_filter", {}))
+    params["symbol"] = config.get("symbol", "")
+    params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
+    params["strategy_allocation"] = config.get("strategy_allocation", {})
+    params["volume_threshold_ratio"] = config.get("risk", {}).get(
+        "volume_threshold_ratio", 0.05
+    )
+    params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
+    params["stop_loss_atr_mult"] = config.get("risk", {}).get(
+        "stop_loss_atr_mult", 2.0
+    )
+    params["take_profit_atr_mult"] = config.get("risk", {}).get(
+        "take_profit_atr_mult", 4.0
+    )
+    params["volume_ratio"] = volume_ratio
+    return params
+
+
 def reload_config(
     config: dict,
     ctx: BotContext,
@@ -538,24 +561,8 @@ def reload_config(
     )
 
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
-    risk_params = {**config.get("risk", {})}
-    risk_params.update(config.get("sentiment_filter", {}))
-    risk_params.update(config.get("volatility_filter", {}))
-    risk_params["symbol"] = config.get("symbol", "")
-    risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
-    risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
-    risk_params["volume_threshold_ratio"] = config.get("risk", {}).get(
-        "volume_threshold_ratio", 0.05
-    )
-    risk_params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
-    risk_params["stop_loss_atr_mult"] = config.get("risk", {}).get(
-        "stop_loss_atr_mult", 2.0
-    )
-    risk_params["take_profit_atr_mult"] = config.get("risk", {}).get(
-        "take_profit_atr_mult", 4.0
-    )
-    risk_params["volume_ratio"] = volume_ratio
-    risk_manager.config = RiskConfig(**risk_params)
+    params = build_risk_params(config, volume_ratio)
+    risk_manager.config = RiskConfig(**params)
 
 
 async def _ws_ping_loop(exchange: object, interval: float) -> None:
@@ -2184,24 +2191,8 @@ async def _main_impl() -> TelegramNotifier:
             if err:
                 logger.error("Failed to notify user: %s", err)
         return notifier
-    risk_params = {**config.get("risk", {})}
-    risk_params.update(config.get("sentiment_filter", {}))
-    risk_params.update(config.get("volatility_filter", {}))
-    risk_params["symbol"] = config.get("symbol", "")
-    risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
-    risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
-    risk_params["volume_threshold_ratio"] = config.get("risk", {}).get(
-        "volume_threshold_ratio", 0.05
-    )
-    risk_params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
-    risk_params["stop_loss_atr_mult"] = config.get("risk", {}).get(
-        "stop_loss_atr_mult", 2.0
-    )
-    risk_params["take_profit_atr_mult"] = config.get("risk", {}).get(
-        "take_profit_atr_mult", 4.0
-    )
-    risk_params["volume_ratio"] = volume_ratio
-    risk_config = RiskConfig(**risk_params)
+    params = build_risk_params(config, volume_ratio)
+    risk_config = RiskConfig(**params)
     risk_manager = RiskManager(risk_config)
 
     paper_wallet = None
