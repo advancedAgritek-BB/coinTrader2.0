@@ -3,6 +3,7 @@ import json
 import pandas as pd
 import pytest
 import ccxt
+import sys
 import logging
 import time
 import crypto_bot.utils.symbol_scoring as sc
@@ -1093,11 +1094,24 @@ def test_refresh_tickers_bad_symbol(monkeypatch, caplog):
         async def fetch_tickers(self, symbols):
             raise ccxt.BadSymbol("bad symbol")
 
+    monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch)
+    class _CCXT:
+        class BadSymbol(Exception):
+            pass
+        class ExchangeError(Exception):
+            pass
+        class NetworkError(Exception):
+            pass
+
+    monkeypatch.setattr(sp, "ccxt", _CCXT)
+    monkeypatch.setitem(sys.modules, "ccxt", _CCXT)
+    monkeypatch.setattr(sys.modules[__name__], "ccxt", _CCXT)
+
     result = asyncio.run(
         sp._refresh_tickers(BadSymbolExchange(), ["ETH/USD", "BTC/USD"])
     )
 
-    assert result == {}
+    assert set(result) == {"ETH/USD", "BTC/USD"}
     assert any("BadSymbol" in r.getMessage() for r in caplog.records)
     assert any("BTC/USD" in r.getMessage() for r in caplog.records)
 
@@ -1368,6 +1382,47 @@ def test_fetch_ticker_async_timeout(monkeypatch):
     asyncio.run(sp._fetch_ticker_async(["XBTUSD"], timeout=5))
 
     assert calls == [5]
+
+
+def test_fetch_ticker_async_chunk_error_recovery(monkeypatch):
+    urls: list[str] = []
+
+    class FakeResp:
+        def __init__(self, data):
+            self.data = data
+
+        def raise_for_status(self):
+            pass
+
+        async def json(self):
+            return self.data
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            pass
+
+        async def get(self, url, timeout=None):
+            urls.append(url)
+            query = url.split("pair=")[1]
+            if "," in query:
+                return FakeResp({"error": ["boom"], "result": {}})
+            if query == "XBTUSD":
+                return FakeResp({"result": {"XBTUSD": {"a": ["1", "1", "1"]}}})
+            return FakeResp({"error": ["EQuery:Unknown asset pair"], "result": {}})
+
+    monkeypatch.setattr(sp.aiohttp, "ClientSession", lambda: FakeSession())
+
+    res = asyncio.run(sp._fetch_ticker_async(["XBTUSD", "BAD"], timeout=5))
+
+    assert res["result"] == {"XBTUSD": {"a": ["1", "1", "1"]}}
+    assert urls == [
+        f"{sp.API_URL}/Ticker?pair=XBTUSD,BAD",
+        f"{sp.API_URL}/Ticker?pair=XBTUSD",
+        f"{sp.API_URL}/Ticker?pair=BAD",
+    ]
 
 
 def test_ticker_retry_attempts(monkeypatch):
