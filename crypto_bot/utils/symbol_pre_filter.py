@@ -414,11 +414,16 @@ async def _refresh_tickers(
             attempted_syms.update(to_fetch)
             if ws_failures:
                 await asyncio.sleep(min(2 ** (ws_failures - 1), 30))
+            ws_batch = int(cfg.get("ws_ticker_batch_size", 100) or 100)
             try:
-                async with TICKER_SEMA:
-                    data = await _watch_tickers_with_retry(exchange, to_fetch)
-                    if delay:
-                        await asyncio.sleep(delay)
+                data = {}
+                for i in range(0, len(to_fetch), ws_batch):
+                    chunk = to_fetch[i : i + ws_batch]
+                    async with TICKER_SEMA:
+                        chunk_data = await _watch_tickers_with_retry(exchange, chunk)
+                        if delay:
+                            await asyncio.sleep(delay)
+                    data.update(chunk_data)
                 opts = getattr(exchange, "options", None)
                 if opts is not None:
                     opts["ws_failures"] = 0
