@@ -65,8 +65,14 @@ def _sanitize_secret(secret: str) -> str:
 
 
 def _env_or_prompt(name: str, prompt: str) -> str:
-    """Return environment variable value or empty string if unset."""
-    return os.getenv(name, "")
+    """Return the value of ``name`` from the environment or prompt the user."""
+    val = os.getenv(name)
+    if val:
+        return val
+    try:
+        return input(prompt)
+    except EOFError:
+        return ""
 
 
 def load_external_secrets(provider: str, path: str) -> Dict[str, str]:
