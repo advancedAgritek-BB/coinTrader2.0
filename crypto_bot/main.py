@@ -470,6 +470,16 @@ def load_config() -> dict:
         print("Invalid configuration (pyth):\n", exc)
         raise SystemExit(1)
 
+    if (
+        data.get("solana_scanner", {}).get("enabled")
+        and data.get("onchain_symbols")
+    ):
+        logger.warning(
+            "solana_scanner.enabled is true but onchain_symbols are provided; the"
+            " scanner only runs when onchain_symbols is empty. See README.md"
+            " section on onchain_symbols."
+        )
+
     return data
 
 
