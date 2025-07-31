@@ -301,10 +301,7 @@ async def maybe_scan_solana_tokens(config: dict, last_scan: float) -> float:
             if tokens:
                 logger.info("Discovered %d new Solana tokens", len(tokens))
                 async with QUEUE_LOCK:
-                    enqueue_solana_tokens(tokens)
-                    for sym in reversed(tokens):
-                        symbol_priority_queue.appendleft(sym)
-                        NEW_SOLANA_TOKENS.add(sym)
+                    enqueue_solana_tokens(tokens, mark_new=True)
             else:
                 logger.info("Solana scan found no new tokens")
         except Exception as exc:  # pragma: no cover - best effort
@@ -2323,9 +2320,9 @@ async def _main_impl() -> TelegramNotifier:
             mempool_cfg=mempool_cfg,
         )
     )
-    solana_scan_task: asyncio.Task | None = None
+    global SOLANA_SCAN_TASK
     if config.get("solana_scanner", {}).get("enabled"):
-        solana_scan_task = asyncio.create_task(solana_scan_loop())
+        SOLANA_SCAN_TASK = asyncio.create_task(solana_scan_loop())
     registry_task = asyncio.create_task(
         registry_update_loop(
             config.get("token_registry", {}).get("refresh_interval_minutes", 15)
@@ -2589,12 +2586,6 @@ async def _main_impl() -> TelegramNotifier:
             else:
                 with contextlib.suppress(Exception):
                     await asyncio.to_thread(exchange.close)
-        if solana_scan_task:
-            solana_scan_task.cancel()
-            try:
-                await solana_scan_task
-            except asyncio.CancelledError:
-                pass
         if registry_task:
             registry_task.cancel()
             try:

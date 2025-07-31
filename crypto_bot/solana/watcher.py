@@ -125,7 +125,7 @@ class PoolWatcher:
             return 1.0
 
     async def watch(self) -> AsyncGenerator[NewPoolEvent, None]:
-        """Yield NewPoolEvent from WebSocket subscription."""
+        """Yield :class:`NewPoolEvent` objects from a logs subscription."""
         self._running = True
         backoff = 0
         async with aiohttp.ClientSession() as session:
@@ -133,22 +133,14 @@ class PoolWatcher:
                 reconnect = False
                 try:
                     async with session.ws_connect(self.websocket_url) as ws:
-                        for prog_id in self.program_ids:
-                            request = {
+                        for i, prog_id in enumerate(self.program_ids):
+                            req = {
                                 "jsonrpc": "2.0",
-                                "id": 1,
-                                "method": "transactionSubscribe",
-                                "params": [
-                                    {"failed": False, "accountInclude": [prog_id]},
-                                    {
-                                        "commitment": "processed",
-                                        "encoding": "jsonParsed",
-                                        "transactionDetails": "full",
-                                        "maxSupportedTransactionVersion": 0,
-                                    },
-                                ],
+                                "id": i,
+                                "method": "logsSubscribe",
+                                "params": [{"mentions": [prog_id]}, {"commitment": "processed"}],
                             }
-                            await ws.send_json(request)
+                            await ws.send_json(req)
                         backoff = 0
                         async for msg in ws:
                             if not self._running:
@@ -160,42 +152,102 @@ class PoolWatcher:
                                 continue
                             try:
                                 data = json.loads(msg.data)
-                                if data.get("method") != "transactionNotification":
+                                if data.get("method") != "logsNotification":
                                     continue
                                 result = data.get("params", {}).get("result", {})
-                                logs = result.get("transaction", {}).get("meta", {}).get("logMessages", [])
-                                account_keys = (
-                                    result.get("transaction", {})
-                                    .get("transaction", {})
-                                    .get("message", {})
-                                    .get("accountKeys", [])
-                                )
-
-                                if any("initialize2: InitializeInstruction2" in log for log in logs):
-                                    pool_addr = account_keys[2] if len(account_keys) > 2 else ""
-                                    token_mint = account_keys[1] if len(account_keys) > 1 else ""
-                                    creator = account_keys[0] if account_keys else ""
-                                    event = NewPoolEvent(pool_address=pool_addr, token_mint=token_mint, creator=creator, liquidity=0.0)
-                                    if self._predict_breakout(event) >= 0.5:
+                                signature = result.get("signature", "")
+                                if not signature or signature in self._seen:
+                                    continue
+                                self._seen.add(signature)
+                                logs = result.get("logs", [])
+                                logs_lower = [l.lower() for l in logs]
+                                if any("initialize2" in l for l in logs_lower) or any("initializemint2" in l for l in logs_lower):
+                                    event = NewPoolEvent("", "", "", 0.0)
+                                    await self._enrich_event(event, signature, session)
+                                    if event.liquidity >= self.min_liquidity and self._predict_breakout(event) >= 0.5:
                                         yield event
-
-                                elif any("Program log: Instruction: InitializeMint2" in log for log in logs):
-                                    token_mint = account_keys[1] if len(account_keys) > 1 else ""
-                                    creator = account_keys[0] if account_keys else ""
-                                    event = NewPoolEvent(pool_address="", token_mint=token_mint, creator=creator, liquidity=0.0)
-                                    if self._predict_breakout(event) >= 0.5:
-                                        yield event
-
-                            except Exception as e:
-                                logger.error("Event parsing error: %s", e)
-                except Exception as e:
+                            except Exception as exc:  # pragma: no cover - best effort
+                                logger.error("Event parsing error: %s", exc)
+                except Exception as exc:  # pragma: no cover - best effort
                     reconnect = True
-                    logger.error("WS connection error: %s", e)
+                    logger.error("WS connection error: %s", exc)
 
                 if self._running and reconnect:
                     backoff = min(backoff + 1, 5)
                     await asyncio.sleep(2 ** backoff)
 
+
+
+    async def _enrich_event(self, event: NewPoolEvent, signature: str, session: aiohttp.ClientSession) -> None:
+        """Populate ``event`` fields using ``getTransaction`` for ``signature``."""
+        try:
+            async with session.post(
+                self.url,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "getTransaction",
+                    "params": [
+                        signature,
+                        {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0},
+                    ],
+                },
+            ) as resp:
+                data = await resp.json()
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.error("getTransaction failed: %s", exc)
+            return
+
+        result = data.get("result", {})
+        meta = result.get("meta", {})
+        message = result.get("transaction", {}).get("message", {})
+
+        keys = []
+        for k in message.get("accountKeys", []):
+            if isinstance(k, str):
+                keys.append(k)
+            else:
+                keys.append(k.get("pubkey", ""))
+
+        logs = meta.get("logMessages", [])
+        logs_l = " ".join(logs).lower()
+        if "initialize2" in logs_l:
+            if len(keys) > 2:
+                event.pool_address = keys[2]
+            if len(keys) > 1:
+                event.token_mint = keys[1]
+            if keys:
+                event.creator = keys[0]
+        elif "initializemint2" in logs_l:
+            if len(keys) > 1:
+                event.token_mint = keys[1]
+            if keys:
+                event.creator = keys[0]
+
+        pre = meta.get("preTokenBalances") or []
+        post = meta.get("postTokenBalances") or []
+        liquidity = 0.0
+        tx_count = 0
+        for p, q in zip(pre, post):
+            try:
+                pre_amt = float(
+                    p.get("uiTokenAmount", {}).get("uiAmount", p.get("uiTokenAmount", {}).get("uiAmountString", 0))
+                    or 0
+                )
+                post_amt = float(
+                    q.get("uiTokenAmount", {}).get("uiAmount", q.get("uiTokenAmount", {}).get("uiAmountString", 0))
+                    or 0
+                )
+                diff = abs(post_amt - pre_amt)
+                if diff:
+                    liquidity += diff
+                    tx_count += 1
+            except Exception:
+                continue
+
+        event.liquidity = liquidity
+        event.tx_count = tx_count
+        event.timestamp = float(result.get("blockTime") or 0)
 
 
     def stop(self) -> None:

@@ -59,16 +59,8 @@ class AiohttpMod:
 @pytest.mark.asyncio
 async def test_parses_raydium_event(monkeypatch):
     msg = json.dumps({
-        "method": "transactionNotification",
-        "params": {
-            "result": {
-                "signature": "sig",
-                "transaction": {
-                    "meta": {"logMessages": ["initialize2: InitializeInstruction2"]},
-                    "transaction": {"message": {"accountKeys": ["C","M","P"]}}
-                }
-            }
-        }
+        "method": "logsNotification",
+        "params": {"result": {"signature": "sig", "logs": ["initialize2"]}}
     })
     ws = DummyWS([msg])
     session = DummySession(ws)
@@ -78,6 +70,12 @@ async def test_parses_raydium_event(monkeypatch):
         evt.liquidity = self.min_liquidity
         return evt
     monkeypatch.setattr(PoolWatcher, "_enrich_event", _enrich, raising=False)
+    async def enrich(self, event, sig, sess):
+        event.pool_address = "P"
+        event.token_mint = "M"
+        event.creator = "C"
+        event.liquidity = 10.0
+    monkeypatch.setattr(PoolWatcher, "_enrich_event", enrich)
     monkeypatch.setattr("crypto_bot.solana.watcher.aiohttp", aiohttp_mod)
 
     watcher = PoolWatcher("u", 0, "ws://x", "PGM")
@@ -95,16 +93,8 @@ async def test_parses_raydium_event(monkeypatch):
 @pytest.mark.asyncio
 async def test_parses_pump_fun(monkeypatch):
     msg = json.dumps({
-        "method": "transactionNotification",
-        "params": {
-            "result": {
-                "signature": "sig",
-                "transaction": {
-                    "meta": {"logMessages": ["Program log: Instruction: InitializeMint2"]},
-                    "transaction": {"message": {"accountKeys": ["C","M"]}}
-                }
-            }
-        }
+        "method": "logsNotification",
+        "params": {"result": {"signature": "sig", "logs": ["InitializeMint2"]}}
     })
     ws = DummyWS([msg])
     session = DummySession(ws)
@@ -114,6 +104,11 @@ async def test_parses_pump_fun(monkeypatch):
         evt.liquidity = self.min_liquidity
         return evt
     monkeypatch.setattr(PoolWatcher, "_enrich_event", _enrich, raising=False)
+    async def enrich(self, event, sig, sess):
+        event.token_mint = "M"
+        event.creator = "C"
+        event.liquidity = 20.0
+    monkeypatch.setattr(PoolWatcher, "_enrich_event", enrich)
     monkeypatch.setattr("crypto_bot.solana.watcher.aiohttp", aiohttp_mod)
 
     watcher = PoolWatcher("u", 0, "ws://x", "PGM")
@@ -130,8 +125,8 @@ async def test_parses_pump_fun(monkeypatch):
 async def test_reconnect_on_close(monkeypatch):
     msg_close = DummyMsg(None, "closed")
     msg_ok = json.dumps({
-        "method": "transactionNotification",
-        "params": {"result": {"transaction": {"meta": {"logMessages": ["initialize2: InitializeInstruction2"]}, "transaction": {"message": {"accountKeys": ["C","M","P"]}}}}}
+        "method": "logsNotification",
+        "params": {"result": {"signature": "sig", "logs": ["initialize2"]}}
     })
     ws1 = DummyWS([msg_close])
     ws2 = DummyWS([msg_ok])
@@ -142,6 +137,12 @@ async def test_reconnect_on_close(monkeypatch):
         evt.liquidity = self.min_liquidity
         return evt
     monkeypatch.setattr(PoolWatcher, "_enrich_event", _enrich, raising=False)
+    async def enrich(self, event, sig, sess):
+        event.pool_address = "P"
+        event.token_mint = "M"
+        event.creator = "C"
+        event.liquidity = 10.0
+    monkeypatch.setattr(PoolWatcher, "_enrich_event", enrich)
     monkeypatch.setattr("crypto_bot.solana.watcher.aiohttp", aiohttp_mod)
 
     watcher = PoolWatcher("u", 0, "ws://x", "PGM")

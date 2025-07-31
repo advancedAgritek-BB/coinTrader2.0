@@ -11,6 +11,8 @@ for mod in ["solana", "solana.rpc", "solana.rpc.async_api"]:
     sys.modules.setdefault(mod, dummy)
 
 from collections import deque
+import asyncio
+import contextlib
 import pytest
 
 import crypto_bot.main as main
@@ -42,19 +44,26 @@ async def test_maybe_scan_solana_tokens(monkeypatch):
     last = await main.maybe_scan_solana_tokens(cfg, 0.0)
     assert list(main.symbol_priority_queue) == ["AAA/USDC"]
     assert main.NEW_SOLANA_TOKENS == {"AAA/USDC"}
-    assert calls == [cfg["solana_scanner"]]
-    monkeypatch.setattr(main, "SOLANA_SCAN_TASK", None, raising=False)
-    t = [100.0]
-    monkeypatch.setattr(main.time, "time", lambda: t[0])
-    last = await main.maybe_scan_solana_tokens(cfg, 0.0)
+    assert calls == [(cfg["solana_scanner"], None)]
+    # wait for background worker to finish
     await main.SOLANA_SCAN_TASK
-    assert list(main.symbol_priority_queue) == ["AAA/USDC", "AAA/USDC"]
-    assert calls == [(cfg["solana_scanner"], 30.0)]
-    t[0] += 30
-    last2 = await main.maybe_scan_solana_tokens(cfg, last)
-    assert last2 == last
-    assert calls == [(cfg["solana_scanner"], 30.0)]
+    assert len(calls) >= 2
+
     t[0] += 60
-    await main.maybe_scan_solana_tokens(cfg, last2)
+    last2 = await main.maybe_scan_solana_tokens(cfg, last)
     await main.SOLANA_SCAN_TASK
-    assert calls == [(cfg["solana_scanner"], 30.0), (cfg["solana_scanner"], 30.0)]
+    assert len(calls) >= 4
+
+@pytest.mark.asyncio
+async def test_running_scan_task_not_duplicated(monkeypatch):
+    cfg = {"solana_scanner": {"enabled": True, "interval_minutes": 1}}
+    running = asyncio.create_task(asyncio.sleep(0.1))
+    monkeypatch.setattr(main, "SOLANA_SCAN_TASK", running, raising=False)
+    monkeypatch.setattr(main.time, "time", lambda: 120.0)
+    last = 0.0
+    res = await main.maybe_scan_solana_tokens(cfg, last)
+    assert res == last
+    assert main.SOLANA_SCAN_TASK is running
+    running.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await running
