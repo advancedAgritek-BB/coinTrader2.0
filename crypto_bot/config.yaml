@@ -398,7 +398,7 @@ solana_scanner:
   min_liquidity: 50
   enabled: true
   gecko_search: true
-  interval_minutes: 0.5
+  interval_minutes: 0.1
   max_tokens_per_scan: 20
   timeout_seconds: 30
   max_iterations: 100
