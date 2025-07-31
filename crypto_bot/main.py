@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 import inspect
 
 import aiohttp
+from typing import Mapping
 
 try:
     import ccxt  # type: ignore
@@ -114,6 +115,8 @@ SNIPER_TASKS: set[asyncio.Task] = set()
 NEW_SOLANA_TOKENS: set[str] = set()
 # Track async cross-chain arb tasks
 CROSS_ARB_TASKS: set[asyncio.Task] = set()
+# Background task for one-off Solana scans
+SOLANA_SCAN_TASK: asyncio.Task | None = None
 
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
@@ -182,8 +185,13 @@ def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> f
     return sum(atr_values) / len(atr_values) if atr_values else 0.0
 
 
-def enqueue_solana_tokens(tokens: list[str]) -> None:
-    """Add Solana ``tokens`` to the priority queue skipping recently queued ones."""
+def enqueue_solana_tokens(tokens: list[str], mark_new: bool = False) -> None:
+    """Add Solana ``tokens`` to the priority queue.
+
+    ``mark_new`` controls whether the tokens are flagged in
+    :data:`NEW_SOLANA_TOKENS` for special handling by the sniper logic.
+    Duplicate entries are ignored using :data:`recent_solana_set`.
+    """
 
     global recent_solana_tokens, recent_solana_set
 
@@ -191,6 +199,8 @@ def enqueue_solana_tokens(tokens: list[str]) -> None:
         if sym in recent_solana_set:
             continue
         symbol_priority_queue.appendleft(sym)
+        if mark_new:
+            NEW_SOLANA_TOKENS.add(sym)
         recent_solana_tokens.append(sym)
         recent_solana_set.add(sym)
         if len(recent_solana_tokens) > SOLANA_CACHE_SIZE:
@@ -230,8 +240,39 @@ def is_market_pumping(
     avg_change = sum(changes) / len(changes) if changes else 0.0
     return avg_change >= 0.05
 
+
+async def scan_and_enqueue_solana_tokens(cfg: Mapping[str, object]) -> list[str]:
+    """Fetch and queue new Solana tokens using ``cfg`` settings."""
+
+    tokens = await get_solana_new_tokens(cfg)
+    if not tokens:
+        logger.info("Solana scan found no new tokens")
+        return []
+
+    filtered: list[str] = []
+    for sym in tokens:
+        try:
+            df = await fetch_ohlcv_for_token(sym)
+            if df is None:
+                continue
+            regime, _ = await classify_regime_cached(sym, "1m", df)
+            regime = regime.split("_")[-1]
+            if regime in {"volatile", "breakout"}:
+                filtered.append(sym)
+        except Exception as exc:
+            logger.error("Solana token %s processing error: %s", sym, exc)
+
+    if filtered:
+        async with QUEUE_LOCK:
+            enqueue_solana_tokens(filtered, mark_new=True)
+        logger.info("Discovered %d new Solana tokens", len(filtered))
+    else:
+        logger.info("Solana scan found no tradable tokens")
+    return filtered
+
 async def maybe_scan_solana_tokens(config: dict, last_scan: float) -> float:
-    """Scan for new Solana tokens if the interval has elapsed."""
+    """Start a background scan for new Solana tokens if needed."""
+    global SOLANA_SCAN_TASK
     sol_cfg = config.get("solana_scanner", {})
     if not sol_cfg.get("enabled"):
         logger.info("Solana scan skipped: scanner disabled")
@@ -239,24 +280,42 @@ async def maybe_scan_solana_tokens(config: dict, last_scan: float) -> float:
     if config.get("solana_symbols") or config.get("onchain_symbols"):
         logger.info("Solana scan skipped: tokens already configured")
         return last_scan
+
+    if SOLANA_SCAN_TASK and SOLANA_SCAN_TASK.done():
+        try:
+            await SOLANA_SCAN_TASK
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.error("Solana scan error: %s", exc)
+        SOLANA_SCAN_TASK = None
+
     interval = sol_cfg.get("interval_minutes", 5) * 60
     now = time.time()
-    if now - last_scan < interval:
+    if now - last_scan < interval or (SOLANA_SCAN_TASK and not SOLANA_SCAN_TASK.done()):
         return last_scan
+
+    async def _worker() -> None:
+        try:
+            tokens = await get_solana_new_tokens(
+                sol_cfg, sol_cfg.get("timeout_seconds", 30)
+            )
+            if tokens:
+                logger.info("Discovered %d new Solana tokens", len(tokens))
+                async with QUEUE_LOCK:
+                    enqueue_solana_tokens(tokens)
+                    for sym in reversed(tokens):
+                        symbol_priority_queue.appendleft(sym)
+                        NEW_SOLANA_TOKENS.add(sym)
+            else:
+                logger.info("Solana scan found no new tokens")
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.error("Solana scan error: %s", exc)
+
     logger.info("Scanning Solana tokens")
     try:
-        tokens = await get_solana_new_tokens(sol_cfg)
-        if tokens:
-            logger.info("Discovered %d new Solana tokens", len(tokens))
-            async with QUEUE_LOCK:
-                enqueue_solana_tokens(tokens)
-                for sym in reversed(tokens):
-                    symbol_priority_queue.appendleft(sym)
-                    NEW_SOLANA_TOKENS.add(sym)
-        else:
-            logger.info("Solana scan found no new tokens")
+        await scan_and_enqueue_solana_tokens(sol_cfg)
     except Exception as exc:  # pragma: no cover - best effort
         logger.error("Solana scan error: %s", exc)
+    SOLANA_SCAN_TASK = asyncio.create_task(_worker())
     return now
 
 
@@ -469,6 +528,16 @@ def load_config() -> dict:
     except ValidationError as exc:
         print("Invalid configuration (pyth):\n", exc)
         raise SystemExit(1)
+
+    if (
+        data.get("solana_scanner", {}).get("enabled")
+        and data.get("onchain_symbols")
+    ):
+        logger.warning(
+            "solana_scanner.enabled is true but onchain_symbols are provided; the"
+            " scanner only runs when onchain_symbols is empty. See README.md"
+            " section on onchain_symbols."
+        )
 
     return data
 
@@ -789,7 +858,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     if regime == "volatile" and sol_cfg.get("enabled"):
         try:
-            new_tokens = await get_solana_new_tokens(sol_cfg)
+            new_tokens = await scan_and_enqueue_solana_tokens(sol_cfg)
             solana_tokens.extend(new_tokens)
             symbols.extend((m, 0.0) for m in new_tokens)
         except Exception as exc:  # pragma: no cover - best effort
@@ -825,8 +894,8 @@ async def fetch_candidates(ctx: BotContext) -> None:
         if onchain_syms:
             for sym in reversed(onchain_syms):
                 symbol_priority_queue.appendleft(sym)
-        if solana_tokens:
-            enqueue_solana_tokens(solana_tokens)
+        if onchain_syms:
+            enqueue_solana_tokens(onchain_syms)
         if len(symbol_priority_queue) < batch_size:
             symbol_priority_queue.extend(
                 build_priority_queue(symbols + [(s, 0.0) for s in onchain_syms])
@@ -1961,26 +2030,7 @@ async def _main_impl() -> TelegramNotifier:
         interval = cfg.get("interval_minutes", 5) * 60
         while True:
             try:
-                tokens = await get_solana_new_tokens(cfg)
-                if tokens:
-                    filtered: list[str] = []
-                    for sym in tokens:
-                        try:
-                            df = await fetch_ohlcv_for_token(sym)
-                            if df is None:
-                                continue
-                            regime, _ = await classify_regime_cached(sym, "1m", df)
-                            regime = regime.split("_")[-1]
-                            if regime in {"volatile", "breakout"}:
-                                filtered.append(sym)
-                        except Exception as exc:
-                            logger.error("Solana token %s processing error: %s", sym, exc)
-                    if filtered:
-                        async with QUEUE_LOCK:
-                            enqueue_solana_tokens(filtered)
-                            for sym in reversed(filtered):
-                                symbol_priority_queue.appendleft(sym)
-                                NEW_SOLANA_TOKENS.add(sym)
+                await scan_and_enqueue_solana_tokens(cfg)
             except asyncio.CancelledError:
                 break
             except Exception as exc:  # pragma: no cover - best effort
@@ -2361,7 +2411,6 @@ async def _main_impl() -> TelegramNotifier:
     loop_count = 0
     last_weight_update = last_optimize = 0.0
 
-    last_solana_scan = 0.0
     try:
         while True:
             maybe_reload_config(state, config)
@@ -2379,7 +2428,6 @@ async def _main_impl() -> TelegramNotifier:
                 await force_exit_all(ctx)
                 state["liquidate_all"] = False
 
-            last_solana_scan = await maybe_scan_solana_tokens(config, last_solana_scan)
             if config.get("arbitrage_enabled", True):
                 try:
                     if ctx.secondary_exchange:
@@ -2613,6 +2661,13 @@ async def _main_impl() -> TelegramNotifier:
             except asyncio.CancelledError:
                 pass
         CROSS_ARB_TASKS.clear()
+        if SOLANA_SCAN_TASK:
+            SOLANA_SCAN_TASK.cancel()
+            try:
+                await SOLANA_SCAN_TASK
+            except asyncio.CancelledError:
+                pass
+            SOLANA_SCAN_TASK = None
         NEW_SOLANA_TOKENS.clear()
 
     return notifier
