@@ -273,7 +273,10 @@ def _id_for_symbol(exchange, symbol: str) -> str:
             return market_id(symbol)
     except Exception:  # pragma: no cover - best effort
         pass
-    return symbol.replace("/", "")
+    pair = symbol.replace("/", "")
+    if getattr(exchange, "id", "").lower() == "kraken" and pair.upper().startswith("BTC"):
+        pair = "XBT" + pair[3:]
+    return pair
 
 
 USD_STABLES = {"USD", "USDT", "USDC"}
@@ -1066,7 +1069,7 @@ async def filter_symbols(
             norm = norm.replace("ZUSD", "USD").replace("ZUSDT", "USDT")
             norm = _norm_symbol(norm)
             symbol = id_map.get(norm)
-        if not symbol and "/" in pair_id:
+        if not symbol:
             symbol = _norm_symbol(pair_id)
         if not symbol:
             symbol = request_map.get(norm)
