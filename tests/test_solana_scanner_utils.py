@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import importlib.util
 import pathlib
 import sys
@@ -336,3 +337,31 @@ def test_get_solana_new_tokens_ml_filter_sort(monkeypatch):
     }
     tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
     assert tokens == ["A/USDC", "B/USDC"]
+
+
+def test_get_solana_new_tokens_missing_keys(monkeypatch, caplog):
+    caplog.set_level(logging.WARNING)
+    monkeypatch.setattr(solana_scanner, "fetch_new_raydium_pools", lambda *_a, **_k: [])
+    monkeypatch.setattr(solana_scanner, "fetch_pump_fun_launches", lambda *_a, **_k: [])
+
+    cfg = {"max_tokens_per_scan": 5}
+    tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
+    assert tokens == []
+    assert any("raydium_api_key" in r.getMessage() for r in caplog.records)
+    assert any("pump_fun_api_key" in r.getMessage() for r in caplog.records)
+
+
+def test_get_solana_new_tokens_fetch_failure(monkeypatch, caplog):
+    caplog.set_level(logging.WARNING)
+
+    async def fake_fetch_json(url):
+        return None
+
+    monkeypatch.setattr(solana_scanner, "_fetch_json", fake_fetch_json)
+    # use real fetch_new_raydium_pools which will log when _fetch_json returns None
+    monkeypatch.setattr(solana_scanner, "fetch_pump_fun_launches", lambda *_a, **_k: [])
+
+    cfg = {"raydium_api_key": "k", "gecko_search": False}
+    tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
+    assert tokens == []
+    assert any("Failed to fetch Raydium" in r.getMessage() for r in caplog.records)
