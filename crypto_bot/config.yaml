@@ -480,7 +480,7 @@ symbol_filter:
   initial_timeframes:
   - 1h
   - 1d
-  kraken_batch_size: 200
+  kraken_batch_size: 20
   log_ticker_exceptions: true
   max_concurrent_ohlcv: 10
   max_correlation: 0.9

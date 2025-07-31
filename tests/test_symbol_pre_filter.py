@@ -1411,6 +1411,25 @@ def test_refresh_tickers_public_api_fallback(monkeypatch):
     assert set(result) == {"ETH/USD", "BTC/USD"}
 
 
+def test_refresh_tickers_unsorted_response(monkeypatch):
+    class RestExchange(DummyExchange):
+        def __init__(self):
+            self.has = {}
+            self.markets = {"ETH/USD": {}, "BTC/USD": {}}
+
+    async def fake_unsorted(pairs, *_, **__):
+        data = (await fake_fetch(None))["result"]
+        return {"result": {"XXBTZUSD": data["XXBTZUSD"], "XETHZUSD": data["XETHZUSD"]}}
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", fake_unsorted)
+
+    ex = RestExchange()
+    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"]))
+
+    assert result["ETH/USD"]["o"] == "99"
+    assert result["BTC/USD"]["o"] == "49"
+
+
 def test_refresh_tickers_batches(monkeypatch):
     class BatchExchange(DummyExchange):
         def __init__(self):

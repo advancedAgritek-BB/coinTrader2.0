@@ -615,24 +615,22 @@ async def _refresh_tickers(
                                     await asyncio.sleep(delay)
                         raw = resp.get("result", {})
                         chunk_data = {}
-                        if len(raw) == len(chunk):
-                            for sym, (_, ticker) in zip(chunk, raw.items()):
-                                if ticker:
-                                    chunk_data[sym] = ticker
-                        else:
-                            extra = iter(raw.values())
-                            for sym, pair in zip(chunk, chunk_pairs):
-                                ticker = raw.get(pair) or raw.get(pair.upper())
-                                if ticker is None:
-                                    pu = pair.upper()
-                                    for k, v in raw.items():
-                                        if pu in k.upper():
-                                            ticker = v
-                                            break
-                                if ticker is None:
-                                    ticker = next(extra, None)
-                                if ticker:
-                                    chunk_data[sym] = ticker
+                        for sym, pair in zip(chunk, chunk_pairs):
+                            ticker = raw.get(pair) or raw.get(pair.upper())
+                            if ticker is None:
+                                pu = pair.upper()
+                                for k, v in raw.items():
+                                    if pu in k.upper():
+                                        ticker = v
+                                        break
+                            if ticker:
+                                chunk_data[sym] = ticker
+                            else:
+                                logger.warning(
+                                    "No matching ticker found for %s (pair %s)",
+                                    sym,
+                                    pair,
+                                )
                         break
                     except (
                         ccxt.ExchangeError,
@@ -769,28 +767,22 @@ async def _refresh_tickers(
                                 if delay:
                                     await asyncio.sleep(delay)
                     data = {}
-                    if len(raw) == len(symbols):
-                        for sym, (_, ticker) in zip(symbols, raw.items()):
-                            if ticker:
-                                data[sym] = ticker
-                            else:
-                                logger.warning("Empty ticker result for %s", sym)
-                    else:
-                        extra = iter(raw.values())
-                        for sym, pair in zip(symbols, pairs):
-                            ticker = raw.get(pair) or raw.get(pair.upper())
-                            if ticker is None:
-                                pu = pair.upper()
-                                for k, v in raw.items():
-                                    if pu in k.upper():
-                                        ticker = v
-                                        break
-                            if ticker is None:
-                                ticker = next(extra, None)
-                            if ticker:
-                                data[sym] = ticker
-                            else:
-                                logger.warning("Empty ticker result for %s", sym)
+                    for sym, pair in zip(symbols, pairs):
+                        ticker = raw.get(pair) or raw.get(pair.upper())
+                        if ticker is None:
+                            pu = pair.upper()
+                            for k, v in raw.items():
+                                if pu in k.upper():
+                                    ticker = v
+                                    break
+                        if ticker:
+                            data[sym] = ticker
+                        else:
+                            logger.warning(
+                                "No matching ticker found for %s (pair %s)",
+                                sym,
+                                pair,
+                            )
                 except Exception:  # pragma: no cover - network
                     telemetry.inc("scan.api_errors")
                     data = {}
@@ -832,28 +824,20 @@ async def _refresh_tickers(
                             if delay:
                                 await asyncio.sleep(delay)
                 data = {}
-                if len(raw) == len(symbols):
-                    for sym, (_, ticker) in zip(symbols, raw.items()):
-                        if ticker:
-                            data[sym] = ticker
-                        else:
-                            logger.warning("Empty ticker result for %s", sym)
-                else:
-                    extra = iter(raw.values())
-                    for sym, pair in zip(symbols, pairs):
-                        ticker = raw.get(pair) or raw.get(pair.upper())
-                        if ticker is None:
-                            pu = pair.upper()
-                            for k, v in raw.items():
-                                if pu in k.upper():
-                                    ticker = v
-                                    break
-                        if ticker is None:
-                            ticker = next(extra, None)
-                        if ticker:
-                            data[sym] = ticker
-                        else:
-                            logger.warning("Empty ticker result for %s", sym)
+                for sym, pair in zip(symbols, pairs):
+                    ticker = raw.get(pair) or raw.get(pair.upper())
+                    if ticker is None:
+                        pu = pair.upper()
+                        for k, v in raw.items():
+                            if pu in k.upper():
+                                ticker = v
+                                break
+                    if ticker:
+                        data[sym] = ticker
+                    else:
+                        logger.warning(
+                            "No matching ticker found for %s (pair %s)", sym, pair
+                        )
             except Exception:  # pragma: no cover - network
                 telemetry.inc("scan.api_errors")
                 data = {}
