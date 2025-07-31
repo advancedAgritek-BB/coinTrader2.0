@@ -22,6 +22,10 @@ _MIN_VOLUME_USD = 0.0
 RAYDIUM_URL = "https://api.raydium.io/pairs"
 PUMP_FUN_URL = "https://client-api.prod.pump.fun/v1/launches"
 
+# Optional API keys loaded from environment
+RAYDIUM_API_KEY = os.getenv("RAYDIUM_API_KEY")
+PUMP_FUN_API_KEY = os.getenv("PUMP_FUN_API_KEY")
+
 
 async def search_geckoterminal_token(query: str) -> tuple[str, float] | None:
     """Return ``(mint, volume)`` from GeckoTerminal token search.
@@ -207,8 +211,12 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
 
     limit = int(config.get("max_tokens_per_scan", 0)) or 20
     _MIN_VOLUME_USD = float(config.get("min_volume_usd", 0.0))
-    raydium_key = str(config.get("raydium_api_key", ""))
-    pump_key = str(config.get("pump_fun_api_key", ""))
+    raydium_key = str(
+        config.get("raydium_api_key") or RAYDIUM_API_KEY or ""
+    )
+    pump_key = str(
+        config.get("pump_fun_api_key") or PUMP_FUN_API_KEY or ""
+    )
     gecko_search = bool(config.get("gecko_search", True))
 
     if not raydium_key:
