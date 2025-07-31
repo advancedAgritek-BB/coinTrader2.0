@@ -385,12 +385,24 @@ async def _refresh_tickers(
     exchange,
     symbols: Iterable[str],
     config: dict | None = None,
-) -> dict:
-    """Return ticker data using WS/HTTP and fall back to per-symbol fetch."""
+    *,
+    return_attempted: bool = False,
+) -> dict | tuple[dict, set[str]]:
+    """Return ticker data using WS/HTTP and fall back to per-symbol fetch.
+
+    When ``return_attempted`` is ``True`` the function returns a 2-tuple of the
+    ticker data and the set of symbols that were actually requested.
+    """
 
     start_time = time.perf_counter()
 
     symbols = list(symbols)
+    removed = [s for s in symbols if _norm_symbol(s) in unsupported_pairs]
+    if removed:
+        logger.warning(
+            "Skipping unsupported symbols: %s",
+            ", ".join(removed),
+        )
     symbols = [s for s in symbols if _norm_symbol(s) not in unsupported_pairs]
     cfg = config if config is not None else globals().get("cfg", {})
     sf = cfg.get("symbol_filter", {})
@@ -564,6 +576,11 @@ async def _refresh_tickers(
         result = {s: ticker_cache[s] for s in symbols if s in ticker_cache}
         if result:
             record_results(result)
+            if return_attempted:
+                return (
+                    {s: t.get("info", t) for s, t in result.items()},
+                    set(attempted_syms),
+                )
             return {s: t.get("info", t) for s, t in result.items()}
 
     if try_http:
@@ -868,6 +885,11 @@ async def _refresh_tickers(
                 ticker_cache[sym] = ticker.get("info", ticker)
                 ticker_ts[sym] = now
             record_results({s: t for s, t in data.items() if s in symbols})
+            if return_attempted:
+                return (
+                    {s: t.get("info", t) for s, t in data.items() if s in symbols and t},
+                    set(attempted_syms),
+                )
             return {s: t.get("info", t) for s, t in data.items() if s in symbols and t}
 
     result: dict[str, dict] = {}
@@ -917,6 +939,8 @@ async def _refresh_tickers(
         len(symbols),
         elapsed,
     )
+    if return_attempted:
+        return result, set(attempted_syms)
     return result
 
 
@@ -999,7 +1023,10 @@ async def filter_symbols(
         if sym in liq_cache:
             cached_data[sym] = liq_cache[sym]
 
-    data = await _refresh_tickers(exchange, cex_syms, cfg)
+    data, attempted = await _refresh_tickers(
+        exchange, cex_syms, cfg, return_attempted=True
+    )
+    attempted = {_norm_symbol(s) for s in attempted}
 
     # map of ids returned by Kraken to human readable symbols
     id_map: dict[str, str] = {}
@@ -1101,7 +1128,7 @@ async def filter_symbols(
 
     for sym in cex_syms:
         norm_sym = _norm_symbol(sym)
-        if norm_sym in seen:
+        if norm_sym in seen or norm_sym not in attempted:
             continue
         cached = cached_data.get(sym) or cached_data.get(norm_sym)
         if cached is None:
