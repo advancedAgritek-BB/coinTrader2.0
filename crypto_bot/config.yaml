@@ -410,11 +410,11 @@ solana_scanner:
   raydium_program_id: "EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6oKEWSCPPu"
   pump_fun_program_id: "6EF8rrecthR5Dkzon8NQiDSKX6EYxsCPt6oKEWSCPPu"
   use_ws: true
-  min_liquidity: 100.0
+  min_liquidity: 50
   enabled: true
   gecko_search: true
-  interval_minutes: 0.05
-  max_tokens_per_scan: 200
+  interval_minutes: 0.5
+  max_tokens_per_scan: 20
   min_volume_usd: 10
 solana_slippage_bps: 10
 stat_arb_bot:
