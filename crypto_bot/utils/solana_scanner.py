@@ -213,10 +213,14 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
     _MIN_VOLUME_USD = float(config.get("min_volume_usd", 0.0))
     raydium_key = str(
         config.get("raydium_api_key") or RAYDIUM_API_KEY or ""
-    )
+    ).strip()
     pump_key = str(
         config.get("pump_fun_api_key") or PUMP_FUN_API_KEY or ""
-    )
+    ).strip()
+    if raydium_key.upper().startswith("YOUR_"):
+        raydium_key = ""
+    if pump_key.upper().startswith("YOUR_"):
+        pump_key = ""
     gecko_search = bool(config.get("gecko_search", True))
 
     if not raydium_key:

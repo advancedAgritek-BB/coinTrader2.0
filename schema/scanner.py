@@ -60,10 +60,10 @@ class SolanaScannerApiKeys(BaseModel):
         default_factory=lambda: os.getenv("LUNARCRUSH_API_KEY", "YOUR_KEY")
     )
     raydium_api_key: str = Field(
-        default_factory=lambda: os.getenv("RAYDIUM_API_KEY", "YOUR_KEY")
+        default_factory=lambda: os.getenv("RAYDIUM_API_KEY", "")
     )
     pump_fun_api_key: str = Field(
-        default_factory=lambda: os.getenv("PUMP_FUN_API_KEY", "YOUR_KEY")
+        default_factory=lambda: os.getenv("PUMP_FUN_API_KEY", "")
     )
 
 

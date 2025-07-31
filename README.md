@@ -184,8 +184,8 @@ HELIUS_KEY=your_helius_api_key          # required for Jupiter/Helius registry
 # also needed for WebSocket pool monitoring
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
-RAYDIUM_API_KEY=your_raydium_api_key   # required for Solana scanner
-PUMP_FUN_API_KEY=your_pump_fun_api_key # required for Solana scanner
+RAYDIUM_API_KEY=your_raydium_api_key   # optional for Solana scanner
+PUMP_FUN_API_KEY=your_pump_fun_api_key # optional for Solana scanner
 SUPABASE_URL=https://xyzcompany.supabase.co
 SUPABASE_KEY=your_service_key
 # optional custom model name stored in Supabase
@@ -1435,7 +1435,7 @@ are enqueued.
 API requirements: [Helius](https://www.helius.xyz/) for pool data,
 [Jupiter](https://jup.ag/) for quotes, [Jito](https://www.jito.network/) for
 bundle submission, and a LunarCrush API key for sentiment scores.
-Raydium and Pump.fun API keys are required for discovering new tokens.
+Raydium and Pump.fun API keys are optional but improve new-token discovery.
 
 ### Monitoring Raydium Pools via WebSockets
 
