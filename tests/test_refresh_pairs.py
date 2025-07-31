@@ -26,8 +26,11 @@ from tasks import refresh_pairs as rp
 
 
 class DummyExchange:
-    def __init__(self, tickers):
+    def __init__(self, tickers, markets=None):
         self.tickers = tickers
+        if markets is None:
+            markets = tickers.keys()
+        self.markets = {sym: {} for sym in markets}
 
     async def fetch_tickers(self):
         return self.tickers
@@ -223,3 +226,40 @@ def test_refresh_pairs_respects_onchain_default_quote(monkeypatch, tmp_path):
     pairs = rp.refresh_pairs(1_000_000, 5, cfg)
     assert called["quote"] == "USDT"
     assert "SOL/USDT" in pairs
+
+
+def test_refresh_pairs_filters_secondary(monkeypatch, tmp_path):
+    cache_dir = tmp_path / "cache"
+    pair_file = cache_dir / "liquid_pairs.json"
+    monkeypatch.setattr(rp, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(rp, "PAIR_FILE", pair_file)
+
+    primary_tickers = {"BTC/USD": {"quoteVolume": 1_000_000}}
+    markets = ["BTC/USD", "ETH/USD"]
+    secondary_tickers = {
+        "ETH/USD": {"quoteVolume": 2_000_000},
+        "XRP/USD": {"quoteVolume": 3_000_000},
+    }
+
+    ex_primary = DummyExchange(primary_tickers, markets=markets)
+    ex_secondary = DummyExchange(secondary_tickers)
+
+    def fake_get_exchange(_cfg):
+        if not hasattr(fake_get_exchange, "count"):
+            fake_get_exchange.count = 0
+        if fake_get_exchange.count == 0:
+            fake_get_exchange.count += 1
+            return ex_primary
+        return ex_secondary
+
+    monkeypatch.setattr(rp, "get_exchange", fake_get_exchange)
+
+    async def no_sol(*_a):
+        return []
+
+    monkeypatch.setattr(rp, "get_solana_liquid_pairs", no_sol)
+
+    cfg = {"refresh_pairs": {"secondary_exchange": "foo"}}
+    pairs = rp.refresh_pairs(0, 10, cfg)
+    assert pairs == ["ETH/USD", "BTC/USD"]
+    assert set(json.loads(pair_file.read_text())) == {"ETH/USD", "BTC/USD"}
