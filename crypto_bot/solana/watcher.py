@@ -125,91 +125,7 @@ class PoolWatcher:
             return 1.0
 
     async def watch(self) -> AsyncGenerator[NewPoolEvent, None]:
-        """Yield :class:`NewPoolEvent` objects as they are discovered."""
-        if self.websocket_url and any(self.program_ids):
-            async for evt in self._watch_ws():
-                yield evt
-            if not self._running:
-                return
-
-        self._running = True
-        async with aiohttp.ClientSession() as session:
-            while self._running:
-                try:
-                    async with session.post(
-                        self.url,
-                        json={
-                            "jsonrpc": "2.0",
-                            "id": 1,
-                            "method": "dex.getNewPools",
-                            "params": {"protocols": ["raydium"], "limit": 50},
-                        },
-                        timeout=10,
-                    ) as resp:
-                        resp.raise_for_status()
-                        data = await resp.json()
-                        self._failures = 0
-                except aiohttp.ClientResponseError as e:
-                    if e.status == 404:
-                        self._failures += 1
-                        logger.error(
-                            "PoolWatcher error: 404 from %s - the configured URL is invalid or no longer supported. "
-                            "Try https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY",
-                            self.url,
-                        )
-                        if self._failures >= self._max_failures:
-                            self._running = False
-                            raise RuntimeError(f"Pools endpoint not found: {self.url}") from e
-                        await asyncio.sleep(self.interval)
-                        continue
-                    logger.error("PoolWatcher error: %s", e)
-                    await asyncio.sleep(self.interval)
-                    continue
-                except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
-                    logger.error("PoolWatcher error: %s", e)
-                    await asyncio.sleep(self.interval)
-                    continue
-
-                result = data.get("result", data)
-                pools = result.get("pools") or result.get("data") or result
-                for item in pools:
-                    addr = (
-                        item.get("address")
-                        or item.get("poolAddress")
-                        or item.get("pool_address")
-                        or ""
-                    )
-                    if not addr or addr in self._seen:
-                        continue
-                    liquidity = float(item.get("liquidity", 0.0))
-                    tx_count = int(item.get("txCount", item.get("tx_count", 0)))
-                    if liquidity < self.min_liquidity or tx_count <= 10:
-                        continue
-                    event = NewPoolEvent(
-                        pool_address=addr,
-                        token_mint=item.get("tokenMint")
-                        or item.get("token_mint")
-                        or "",
-                        creator=item.get("creator", ""),
-                        liquidity=liquidity,
-                        tx_count=tx_count,
-                        freeze_authority=item.get("freezeAuthority")
-                        or item.get("freeze_authority")
-                        or "",
-                        mint_authority=item.get("mintAuthority")
-                        or item.get("mint_authority")
-                        or "",
-                        timestamp=float(item.get("timestamp", 0.0)),
-                    )
-                    if self._predict_breakout(event) < 0.5:
-                        continue
-                    self._seen.add(addr)
-                    yield event
-
-                await asyncio.sleep(self.interval)
-
-    async def _watch_ws(self) -> AsyncGenerator[NewPoolEvent, None]:
-        """Yield events from a websocket subscription."""
+        """Yield NewPoolEvent from WebSocket subscription."""
         self._running = True
         backoff = 0
         async with aiohttp.ClientSession() as session:
@@ -218,14 +134,21 @@ class PoolWatcher:
                 try:
                     async with session.ws_connect(self.websocket_url) as ws:
                         for prog_id in self.program_ids:
-                            await ws.send_json(
-                                {
-                                    "jsonrpc": "2.0",
-                                    "id": 1,
-                                    "method": "programSubscribe",
-                                    "params": [prog_id, {"encoding": "jsonParsed"}],
-                                }
-                            )
+                            request = {
+                                "jsonrpc": "2.0",
+                                "id": 1,
+                                "method": "transactionSubscribe",
+                                "params": [
+                                    {"failed": False, "accountInclude": [prog_id]},
+                                    {
+                                        "commitment": "processed",
+                                        "encoding": "jsonParsed",
+                                        "transactionDetails": "full",
+                                        "maxSupportedTransactionVersion": 0,
+                                    },
+                                ],
+                            }
+                            await ws.send_json(request)
                         backoff = 0
                         async for msg in ws:
                             if not self._running:
@@ -237,57 +160,42 @@ class PoolWatcher:
                                 continue
                             try:
                                 data = json.loads(msg.data)
-                            except ValueError:
-                                continue
-                            if data.get("method") != "programNotification":
-                                continue
-                            value = (
-                                data.get("params", {})
-                                .get("result", {})
-                                .get("value", {})
-                            )
-                            addr = value.get("pubkey") or ""
-                            if not addr or addr in self._seen:
-                                continue
-                            self._seen.add(addr)
-                            event = NewPoolEvent(
-                                pool_address=addr,
-                                token_mint="",
-                                creator="",
-                                liquidity=0.0,
-                            )
-                            if self._predict_breakout(event) < 0.5:
-                                continue
-                            try:
-                                df = await self._fetch_snapshot(event.pool_address)
-                                tx_count = len(df)
-                                from coinTrader_Trainer.ml_trainer import predict_regime
-                                regime = predict_regime(df)
-                            except Exception:
-                                tx_count = 0
-                                regime = "volatile"
-                            event.tx_count = tx_count
-                            if event.liquidity < self.min_liquidity or tx_count <= 10:
-                                continue
-                            if regime not in ["volatile", "breakout"]:
-                                continue
-                            yield event
-                except aiohttp.WSServerHandshakeError as e:
+                                if data.get("method") != "transactionNotification":
+                                    continue
+                                result = data.get("params", {}).get("result", {})
+                                logs = result.get("transaction", {}).get("meta", {}).get("logMessages", [])
+                                account_keys = (
+                                    result.get("transaction", {})
+                                    .get("transaction", {})
+                                    .get("message", {})
+                                    .get("accountKeys", [])
+                                )
+
+                                if any("initialize2: InitializeInstruction2" in log for log in logs):
+                                    pool_addr = account_keys[2] if len(account_keys) > 2 else ""
+                                    token_mint = account_keys[1] if len(account_keys) > 1 else ""
+                                    creator = account_keys[0] if account_keys else ""
+                                    event = NewPoolEvent(pool_address=pool_addr, token_mint=token_mint, creator=creator, liquidity=0.0)
+                                    if self._predict_breakout(event) >= 0.5:
+                                        yield event
+
+                                elif any("Program log: Instruction: InitializeMint2" in log for log in logs):
+                                    token_mint = account_keys[1] if len(account_keys) > 1 else ""
+                                    creator = account_keys[0] if account_keys else ""
+                                    event = NewPoolEvent(pool_address="", token_mint=token_mint, creator=creator, liquidity=0.0)
+                                    if self._predict_breakout(event) >= 0.5:
+                                        yield event
+
+                            except Exception as e:
+                                logger.error("Event parsing error: %s", e)
+                except Exception as e:
                     reconnect = True
-                    if e.status == 401:
-                        logger.error(
-                            "Unauthorized WebSocket connection – check HELIUS_KEY or subscription tier"
-                        )
-                        self._running = False
-                        return
-                    logger.error("WebSocket handshake failed with status %s", e.status)
-                except Exception as e:  # pragma: no cover - generic catch for stability
-                    reconnect = True
-                    logger.error("WS error: %s", e)
+                    logger.error("WS connection error: %s", e)
 
                 if self._running and reconnect:
-                    backoff += 1
+                    backoff = min(backoff + 1, 5)
                     await asyncio.sleep(2 ** backoff)
+
 
 
     def stop(self) -> None:

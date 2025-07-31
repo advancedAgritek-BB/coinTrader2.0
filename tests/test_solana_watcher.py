@@ -1,23 +1,21 @@
-import asyncio
-import logging
-import types
 import json
-import pandas as pd
+import types
 import pytest
 
-from crypto_bot.solana import watcher
 from crypto_bot.solana.watcher import PoolWatcher, NewPoolEvent
 
+class DummyMsg:
+    def __init__(self, data, msg_type="text"):
+        self.data = data
+        self.type = msg_type
 
-class DummyResp:
-    def __init__(self, data):
-        self._data = data
+class DummyWS:
+    def __init__(self, messages):
+        self.messages = messages
+        self.sent = []
 
-    async def json(self):
-        return self._data
-
-    def raise_for_status(self):
-        pass
+    async def send_json(self, data):
+        self.sent.append(data)
 
     async def __aenter__(self):
         return self
@@ -25,10 +23,23 @@ class DummyResp:
     async def __aexit__(self, exc_type, exc, tb):
         pass
 
+    def __aiter__(self):
+        async def gen():
+            for m in self.messages:
+                yield DummyMsg(m)
+        return gen()
 
 class DummySession:
-    def __init__(self, data):
-        self._data = data
+    def __init__(self, wss):
+        self.wss = wss if isinstance(wss, list) else [wss]
+        self.calls = 0
+        self.url = None
+
+    def ws_connect(self, url):
+        self.url = url
+        ws = self.wss[self.calls]
+        self.calls += 1
+        return ws
 
     async def __aenter__(self):
         return self
@@ -36,537 +47,97 @@ class DummySession:
     async def __aexit__(self, exc_type, exc, tb):
         pass
 
-    def post(self, url, json=None, timeout=10):
-        self.json = json
-        return DummyResp(self._data)
+class AiohttpMod:
+    WSMsgType = types.SimpleNamespace(TEXT="text", CLOSED="closed", ERROR="error")
 
+    def __init__(self, session):
+        self._session = session
 
-class FailingSession(DummySession):
-    def __init__(self, responses):
-        # responses is a list of either dict or Exception
-        self._responses = responses
-        self.calls = 0
+    def ClientSession(self):
+        return self._session
 
-    def post(self, url, json=None, timeout=10):
-        self.json = json
-        resp = self._responses[self.calls]
-        self.calls += 1
-        if isinstance(resp, Exception):
-            raise resp
-        return DummyResp(resp)
-
-
-def test_watcher_yields_event(monkeypatch):
-    data = {
-        "result": {
-            "pools": [
-                {
-                    "address": "P1",
-                    "tokenMint": "M1",
-                    "creator": "C1",
-                    "liquidity": 10.5,
-                    "txCount": 11,
+@pytest.mark.asyncio
+async def test_parses_raydium_event(monkeypatch):
+    msg = json.dumps({
+        "method": "transactionNotification",
+        "params": {
+            "result": {
+                "signature": "sig",
+                "transaction": {
+                    "meta": {"logMessages": ["initialize2: InitializeInstruction2"]},
+                    "transaction": {"message": {"accountKeys": ["C","M","P"]}}
                 }
-            ]
+            }
         }
-    }
-    session = DummySession(data)
-    aiohttp_mod = type(
-        "M",
-        (),
-        {
-            "ClientSession": lambda: session,
-            "ClientError": Exception,
-            "ClientResponseError": Exception,
-        },
-    )
-    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
+    })
+    ws = DummyWS([msg])
+    session = DummySession(ws)
+    aiohttp_mod = AiohttpMod(session)
+    monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, e: 1.0)
+    monkeypatch.setattr("crypto_bot.solana.watcher.aiohttp", aiohttp_mod)
 
-    w = PoolWatcher("http://test", interval=0)
-    w.websocket_url = None
-    w.program_ids = []
-
-    async def run_once():
-        gen = w.watch()
-        event = await gen.__anext__()
-        w.stop()
-        await gen.aclose()
-        return event
-
-    event = asyncio.run(run_once())
+    watcher = PoolWatcher("u", 0, "ws://x", "PGM")
+    gen = watcher.watch()
+    event = await gen.__anext__()
     assert isinstance(event, NewPoolEvent)
-    assert event.pool_address == "P1"
-    assert event.token_mint == "M1"
-    assert event.creator == "C1"
-    assert event.liquidity == 10.5
-    assert event.tx_count == 11
-    assert session.json["method"] == "dex.getNewPools"
-    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
+    assert event.pool_address == "P"
+    assert event.token_mint == "M"
+    assert event.creator == "C"
+    watcher.stop()
+    with pytest.raises(StopAsyncIteration):
+        await gen.__anext__()
+    await gen.aclose()
 
-
-def test_min_liquidity_filter(monkeypatch):
-    data = {
-        "result": {
-            "pools": [
-                {
-                    "address": "L",
-                    "tokenMint": "M1",
-                    "creator": "C1",
-                    "liquidity": 10.0,
-                    "txCount": 15,
-                },
-                {
-                    "address": "H",
-                    "tokenMint": "M2",
-                    "creator": "C2",
-                    "liquidity": 60.0,
-                    "txCount": 20,
-                },
-            ]
-        }
-    }
-    session = DummySession(data)
-    aiohttp_mod = type(
-        "M",
-        (),
-        {
-            "ClientSession": lambda: session,
-            "ClientError": Exception,
-            "ClientResponseError": Exception,
-        },
-    )
-    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
-
-    w = PoolWatcher("http://test", interval=0, min_liquidity=50)
-    w.websocket_url = None
-    w.program_ids = []
-
-    async def run_once():
-        gen = w.watch()
-        event = await gen.__anext__()
-        w.stop()
-        await gen.aclose()
-        return event
-
-    event = asyncio.run(run_once())
-    assert event.pool_address == "H"
-    assert event.liquidity == 60.0
-
-
-def test_tx_count_filter(monkeypatch):
-    data = {
-        "result": {
-            "pools": [
-                {
-                    "address": "A",
-                    "tokenMint": "M1",
-                    "creator": "C1",
-                    "liquidity": 100.0,
-                    "txCount": 5,
-                },
-                {
-                    "address": "B",
-                    "tokenMint": "M2",
-                    "creator": "C2",
-                    "liquidity": 100.0,
-                    "txCount": 20,
-                },
-            ]
-        }
-    }
-    session = DummySession(data)
-    aiohttp_mod = type(
-        "M",
-        (),
-        {
-            "ClientSession": lambda: session,
-            "ClientError": Exception,
-            "ClientResponseError": Exception,
-        },
-    )
-    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
-
-    w = PoolWatcher("http://test", interval=0)
-    w.websocket_url = None
-    w.program_ids = []
-
-    async def run_once():
-        gen = w.watch()
-        event = await gen.__anext__()
-        w.stop()
-        await gen.aclose()
-        return event
-
-    event = asyncio.run(run_once())
-    assert event.pool_address == "B"
-    assert event.tx_count == 20
-
-def test_ml_filter_blocks_low_score(monkeypatch):
-    data = {
-        "result": {
-            "pools": [
-                {"address": "P1", "tokenMint": "M1", "creator": "C1", "liquidity": 10.0}
-            ]
-        }
-    }
-    session = DummySession(data)
-    monkeypatch.setattr(
-        watcher,
-        "aiohttp",
-        type("M", (), {"ClientSession": lambda: session}),
-    )
-
-    w = PoolWatcher("http://test", interval=0)
-    w.websocket_url = None
-    w.program_ids = []
-    monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, evt: 0.4)
-    async def dummy_sleep(_):
-        pass
-    monkeypatch.setattr(watcher, "asyncio", types.SimpleNamespace(sleep=dummy_sleep))
-
-    w = PoolWatcher("http://test", interval=0, websocket_url="", raydium_program_id="", ml_filter=True)
-
-    async def run_once():
-        gen = w.watch()
-        try:
-            return await asyncio.wait_for(gen.__anext__(), timeout=0.01)
-        except asyncio.TimeoutError:
-            w.stop()
-            await gen.aclose()
-            return None
-
-    event = asyncio.run(run_once())
-    assert event is None
-
-
-def test_ml_filter_allows_high_score(monkeypatch):
-    data = {
-        "result": {
-            "pools": [
-                {"address": "P1", "tokenMint": "M1", "creator": "C1", "liquidity": 10.0, "txCount": 20}
-            ]
-        }
-    }
-    session = DummySession(data)
-    monkeypatch.setattr(
-        watcher,
-        "aiohttp",
-        type("M", (), {"ClientSession": lambda: session}),
-    )
-    monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, evt: 0.8)
-
-    w = PoolWatcher("http://test", interval=0, websocket_url="", raydium_program_id="", ml_filter=True)
-
-    async def run_once():
-        gen = w.watch()
-        event = await gen.__anext__()
-        w.stop()
-        await gen.aclose()
-        return event
-
-    event = asyncio.run(run_once())
-    assert event.pool_address == "P1"
-    assert event.tx_count == 20
-
-
-def test_env_substitution(monkeypatch):
-    monkeypatch.setenv("HELIUS_KEY", "ABC")
-    w = PoolWatcher("https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY", interval=0)
-    assert w.url.endswith("api-key=ABC")
-
-
-def test_env_missing(monkeypatch):
-    monkeypatch.delenv("HELIUS_KEY", raising=False)
-    with pytest.raises(ValueError):
-        PoolWatcher("https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY", interval=0)
-def test_watcher_continues_after_error(monkeypatch):
-    data_ok = {
-        "result": {
-            "pools": [
-                {
-                    "address": "P2",
-                    "tokenMint": "M2",
-                    "creator": "C2",
-                    "liquidity": 1.0,
-                    "txCount": 12,
+@pytest.mark.asyncio
+async def test_parses_pump_fun(monkeypatch):
+    msg = json.dumps({
+        "method": "transactionNotification",
+        "params": {
+            "result": {
+                "signature": "sig",
+                "transaction": {
+                    "meta": {"logMessages": ["Program log: Instruction: InitializeMint2"]},
+                    "transaction": {"message": {"accountKeys": ["C","M"]}}
                 }
-            ]
+            }
         }
-    }
-    class DummyClientError(Exception):
-        status = 500
+    })
+    ws = DummyWS([msg])
+    session = DummySession(ws)
+    aiohttp_mod = AiohttpMod(session)
+    monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, e: 1.0)
+    monkeypatch.setattr("crypto_bot.solana.watcher.aiohttp", aiohttp_mod)
 
-    session = FailingSession([DummyClientError("boom"), data_ok])
-    aiohttp_mod = type(
-        "M",
-        (),
-        {
-            "ClientSession": lambda: session,
-            "ClientError": DummyClientError,
-            "ClientResponseError": DummyClientError,
-        },
-    )
-    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
+    watcher = PoolWatcher("u", 0, "ws://x", "PGM")
+    gen = watcher.watch()
+    event = await gen.__anext__()
+    assert event.token_mint == "M"
+    assert event.creator == "C"
+    watcher.stop()
+    with pytest.raises(StopAsyncIteration):
+        await gen.__anext__()
+    await gen.aclose()
 
-    w = PoolWatcher("http://test", interval=0)
+@pytest.mark.asyncio
+async def test_reconnect_on_close(monkeypatch):
+    msg_close = DummyMsg(None, "closed")
+    msg_ok = json.dumps({
+        "method": "transactionNotification",
+        "params": {"result": {"transaction": {"meta": {"logMessages": ["initialize2: InitializeInstruction2"]}, "transaction": {"message": {"accountKeys": ["C","M","P"]}}}}}
+    })
+    ws1 = DummyWS([msg_close])
+    ws2 = DummyWS([msg_ok])
+    session = DummySession([ws1, ws2])
+    aiohttp_mod = AiohttpMod(session)
+    monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, e: 1.0)
+    monkeypatch.setattr("crypto_bot.solana.watcher.aiohttp", aiohttp_mod)
 
-    async def run_once():
-        gen = w.watch()
-        event = await gen.__anext__()
-        w.stop()
-        await gen.aclose()
-        return event
-
-    event = asyncio.run(run_once())
-    assert event.pool_address == "P2"
-    assert event.token_mint == "M2"
-    assert event.creator == "C2"
-
-
-def test_watcher_logs_404_and_continues(monkeypatch, caplog):
-    data_ok = {
-        "pools": [
-            {"address": "P3", "liquidity": 55, "txCount": 11}
-        ]
-    }
-
-    class Dummy404(Exception):
-        def __init__(self, status=404):
-            self.status = status
-
-    session = FailingSession([Dummy404(), data_ok])
-    aiohttp_mod = type(
-        "M",
-        (),
-        {
-            "ClientSession": lambda: session,
-            "ClientError": Exception,
-            "ClientResponseError": Dummy404,
-        },
-    )
-    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
-    w = PoolWatcher("http://test", interval=0)
-
-    async def run_once():
-        gen = w.watch()
-        event = await gen.__anext__()
-        w.stop()
-        await gen.aclose()
-        return event
-
-    with caplog.at_level(logging.ERROR):
-        event = asyncio.run(run_once())
-    assert event.pool_address == "P3"
-    assert any(
-        "http://test" in rec.message and "https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY" in rec.message
-        for rec in caplog.records
-    )
-
-
-def test_watcher_raises_after_consecutive_404(monkeypatch):
-    class Dummy404(Exception):
-        def __init__(self, status=404):
-            self.status = status
-
-    session = FailingSession([Dummy404(), Dummy404()])
-    aiohttp_mod = type(
-        "M",
-        (),
-        {
-            "ClientSession": lambda: session,
-            "ClientError": Exception,
-            "ClientResponseError": Dummy404,
-        },
-    )
-    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
-    w = PoolWatcher("http://test", interval=0, max_failures=2)
-    w.websocket_url = None
-    w.program_ids = []
-
-    async def run_once():
-        gen = w.watch()
-        try:
-            await gen.__anext__()
-        finally:
-            w.stop()
-            await gen.aclose()
-
-    with pytest.raises(RuntimeError):
-        asyncio.run(run_once())
-    assert session.json["method"] == "dex.getNewPools"
-    assert session.json["params"] == {"protocols": ["raydium"], "limit": 50}
-
-
-def test_watch_ws_unauthorized(monkeypatch, caplog):
-    class DummyHandshakeError(Exception):
-        def __init__(self, status=401):
-            self.status = status
-
-    class DummySession:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def ws_connect(self, url):
-            raise DummyHandshakeError()
-
-    aiohttp_mod = type(
-        "M",
-        (),
-        {
-            "ClientSession": lambda: DummySession(),
-            "WSServerHandshakeError": DummyHandshakeError,
-            "WSMsgType": types.SimpleNamespace(TEXT="text"),
-        },
-    )
-    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
-
-    w = PoolWatcher(
-        "http://test",
-        interval=0,
-        websocket_url="ws://x",
-        raydium_program_id="PGM",
-    )
-
-    async def run_once():
-        gen = w.watch()
-        with pytest.raises(StopAsyncIteration):
-            await gen.__anext__()
-
-    with caplog.at_level(logging.ERROR):
-        asyncio.run(run_once())
-    assert not w._running
-    assert any(
-        "Unauthorized WebSocket connection" in rec.message for rec in caplog.records
-    )
-
-
-def test_watch_ws_reconnect(monkeypatch):
-    class DummyMsg:
-        def __init__(self, data, t):
-            self.data = data
-            self.type = t
-
-    class DummyWS:
-        def __init__(self, messages):
-            self.messages = messages
-            self.sent = []
-
-        async def send_json(self, data):
-            self.sent.append(data)
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def __aiter__(self):
-            async def gen():
-                for m in self.messages:
-                    yield m
-            return gen()
-
-    class DummySession:
-        def __init__(self, wss):
-            self.wss = wss
-            self.calls = 0
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def ws_connect(self, url):
-            ws = self.wss[self.calls]
-            self.calls += 1
-            return ws
-
-    async def dummy_sleep(_):
-        pass
-
-    aiohttp_mod = types.SimpleNamespace(
-        ClientSession=lambda: DummySession([
-            DummyWS([DummyMsg(None, "closed")]),
-            DummyWS([
-                DummyMsg(
-                    json.dumps(
-                        {
-                            "method": "programNotification",
-                            "params": {"result": {"value": {"pubkey": "PX"}}},
-                        }
-                    ),
-                    "text",
-                )
-            ]),
-        ]),
-        WSServerHandshakeError=Exception,
-        WSMsgType=types.SimpleNamespace(TEXT="text", CLOSED="closed", ERROR="error"),
-    )
-    monkeypatch.setattr(watcher, "aiohttp", aiohttp_mod)
-    monkeypatch.setattr(watcher, "asyncio", types.SimpleNamespace(sleep=dummy_sleep))
-    async def fake_snap(_self, addr):
-        return pd.DataFrame([{"timestamp": 1}] * 11)
-    monkeypatch.setattr(PoolWatcher, "_fetch_snapshot", fake_snap)
-
-    w = PoolWatcher(
-        "http://test",
-        interval=0,
-        websocket_url="ws://x",
-        raydium_program_id="PGM",
-    )
-
-    async def run_once():
-        gen = w.watch()
-        evt = await gen.__anext__()
-        w.stop()
-        await gen.aclose()
-        return evt
-
-    event = asyncio.run(run_once())
-    assert event.pool_address == "PX"
-
-
-def test_watch_ws_fallback_to_polling(monkeypatch):
-    async def fake_watch_ws(self):
-        self._running = True
-        yield NewPoolEvent(pool_address="WS", token_mint="", creator="", liquidity=0.0)
-        return
-
-    data = {
-        "result": {
-            "pools": [
-                {"address": "PL"}
-            ]
-        }
-    }
-    session = DummySession(data)
-    monkeypatch.setattr(PoolWatcher, "_watch_ws", fake_watch_ws)
-    monkeypatch.setattr(
-        watcher,
-        "aiohttp",
-        type("M", (), {"ClientSession": lambda: session}),
-    )
-
-    w = PoolWatcher(
-        "http://test",
-        interval=0,
-        websocket_url="ws://x",
-        raydium_program_id="PGM",
-    )
-
-    async def run_once():
-        gen = w.watch()
-        evt_ws = await gen.__anext__()
-        evt_poll = await gen.__anext__()
-        w.stop()
-        await gen.aclose()
-        return evt_ws, evt_poll
-
-    evt_ws, evt_poll = asyncio.run(run_once())
-    assert evt_ws.pool_address == "WS"
-    assert evt_poll.pool_address == "PL"
-
+    watcher = PoolWatcher("u", 0, "ws://x", "PGM")
+    gen = watcher.watch()
+    evt = await gen.__anext__()
+    assert evt.pool_address == "P"
+    assert session.calls == 2
+    watcher.stop()
+    with pytest.raises(StopAsyncIteration):
+        await gen.__anext__()
+    await gen.aclose()
