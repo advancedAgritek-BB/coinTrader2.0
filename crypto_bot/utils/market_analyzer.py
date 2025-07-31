@@ -163,7 +163,7 @@ async def analyze_symbol(
             "direction": "none",
         }
 
-    if len(df) < 50:
+    if len(df) < 10:
         telemetry.inc("analysis.skipped_short_data")
         analysis_logger.info(
             "Skipping %s: insufficient data (%d candles)", symbol, len(df)
