@@ -328,6 +328,8 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   before switching to realtime updates.
 * **min_history_fraction** – minimum portion of candles that must be retrieved
   for a pair to remain cached. Defaults to `0.5`.
+* **min_analysis_candles** – minimum number of candles required before a symbol
+  is analysed. Defaults to `50`.
 * **cycle_lookback_limit** – candles fetched each cycle. Defaults to `150`.
 * **adaptive_scan.enabled** – turn on dynamic sizing.
 * **adaptive_scan.atr_baseline** – ATR level corresponding to a 1× factor.
@@ -1048,6 +1050,7 @@ scan_lookback_limit: 700         # max candles per pair during startup
 scan_deep_top: 50                # deep load this many ranked symbols
 start_since: 365d                # backfill candles this far in the past
 min_history_fraction: 0.5        # minimum portion of history required
+min_analysis_candles: 50         # minimum candles required for analysis
 cycle_lookback_limit: 150        # candles fetched each cycle
 max_spread_pct: 4.0              # skip pairs with wide spreads
 ```

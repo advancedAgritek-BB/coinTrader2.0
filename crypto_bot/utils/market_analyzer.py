@@ -163,10 +163,16 @@ async def analyze_symbol(
             "direction": "none",
         }
 
-    if len(df) < 50:
+    min_analysis_candles = int(
+        config.get("min_analysis_candles", 50)
+    )
+    if len(df) < min_analysis_candles:
         telemetry.inc("analysis.skipped_short_data")
         analysis_logger.info(
-            "Skipping %s: insufficient data (%d candles)", symbol, len(df)
+            "Skipping %s: insufficient data (%d/%d candles)",
+            symbol,
+            len(df),
+            min_analysis_candles,
         )
         return {"symbol": symbol, "skip": "short_data"}
     baseline = float(
