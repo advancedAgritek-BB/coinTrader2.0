@@ -367,6 +367,7 @@ symbol_score_weights:
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
 * **ticker_rate_limit** – delay in milliseconds after each ticker API call.
 * **ws_ticker_batch_size** – number of symbols per WebSocket ticker call.
+* The scanner runs in a dedicated background loop that updates the evaluation queue whenever new pools appear.
 * Solana tokens are filtered using symbol scoring; adjust `min_symbol_score` to control the threshold.
 * Informational logs indicate when a scan begins, how many tokens were found,
   and when scanning is skipped because the scanner is disabled or tokens are
@@ -1422,6 +1423,8 @@ PoolWatcher -> Safety -> Score -> RiskTracker -> Executor -> Exit
 
 Sniping begins immediately at startup. The initial symbol scan now runs in the
 background so new pools can be acted on without waiting for caches to fill.
+The Solana scanner continues to run in its own loop, queuing tokens as they
+appear. Disable this behaviour by setting `solana_scanner.enabled` to `false`.
 
 Before any token from the scanner is queued for execution its price history is
 fetched and passed through `classify_regime_cached`. Only those labeled with one
