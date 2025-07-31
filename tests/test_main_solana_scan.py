@@ -10,7 +10,6 @@ for mod in ["telegram", "gspread", "scipy", "scipy.stats", "redis"]:
 for mod in ["solana", "solana.rpc", "solana.rpc.async_api"]:
     sys.modules.setdefault(mod, dummy)
 
-import asyncio
 from collections import deque
 import pytest
 
