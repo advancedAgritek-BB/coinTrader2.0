@@ -903,6 +903,8 @@ async def fetch_candidates(ctx: BotContext) -> None:
         ]
         # avoid repeated entries when only a few symbols are available
         ctx.current_batch = list(dict.fromkeys(ctx.current_batch))
+        if ctx.current_batch:
+            logger.debug("Current batch: %s", ctx.current_batch)
 
         for sym in ctx.current_batch:
             if sym in recent_solana_set:
