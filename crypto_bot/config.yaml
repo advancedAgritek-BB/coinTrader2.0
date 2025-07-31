@@ -207,7 +207,7 @@ micro_scalp:
   volume_window: 15
   wick_pct: 0.1
 min_agreeing_votes: 1
-min_confidence_score: 0.000001
+min_confidence_score: 0.001
 min_consistent_agreement: 1
 min_cooldown: 0
 min_history_fraction: 0.1
@@ -242,7 +242,7 @@ ohlcv_snapshot_limit: 500
 ohlcv_timeout: 60
 redis_url: null
 onchain_default_quote: USDC
-onchain_min_volume_usd: 1000
+onchain_min_volume_usd: 10000
 onchain_symbols:
 - SOL/USDC
 - BONK/USDC
@@ -489,7 +489,7 @@ symbol_filter:
   change_pct_percentile: 10
   correlation_max_pairs: 200
   http_timeout: 5
-  initial_history_candles: 50
+  initial_history_candles: 10
   initial_timeframes:
   - 1h
   - 1d
@@ -497,12 +497,12 @@ symbol_filter:
   log_ticker_exceptions: true
   max_concurrent_ohlcv: 10
   max_correlation: 0.9
-  max_spread_pct: 8
-  min_volume_usd: 1
+  max_spread_pct: 2.0
+  min_volume_usd: 1000
   ohlcv_batch_size: 10
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
-  volume_percentile: 20
+  volume_percentile: 5
 symbol_refresh_minutes: 1
 symbol_score_weights:
   age: 0.1
