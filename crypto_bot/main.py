@@ -301,10 +301,7 @@ async def maybe_scan_solana_tokens(config: dict, last_scan: float) -> float:
             if tokens:
                 logger.info("Discovered %d new Solana tokens", len(tokens))
                 async with QUEUE_LOCK:
-                    enqueue_solana_tokens(tokens)
-                    for sym in reversed(tokens):
-                        symbol_priority_queue.appendleft(sym)
-                        NEW_SOLANA_TOKENS.add(sym)
+                    enqueue_solana_tokens(tokens, mark_new=True)
             else:
                 logger.info("Solana scan found no new tokens")
         except Exception as exc:  # pragma: no cover - best effort
