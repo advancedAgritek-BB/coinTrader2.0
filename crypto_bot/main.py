@@ -2323,9 +2323,9 @@ async def _main_impl() -> TelegramNotifier:
             mempool_cfg=mempool_cfg,
         )
     )
-    solana_scan_task: asyncio.Task | None = None
+    global SOLANA_SCAN_TASK
     if config.get("solana_scanner", {}).get("enabled"):
-        solana_scan_task = asyncio.create_task(solana_scan_loop())
+        SOLANA_SCAN_TASK = asyncio.create_task(solana_scan_loop())
     registry_task = asyncio.create_task(
         registry_update_loop(
             config.get("token_registry", {}).get("refresh_interval_minutes", 15)
@@ -2589,12 +2589,6 @@ async def _main_impl() -> TelegramNotifier:
             else:
                 with contextlib.suppress(Exception):
                     await asyncio.to_thread(exchange.close)
-        if solana_scan_task:
-            solana_scan_task.cancel()
-            try:
-                await solana_scan_task
-            except asyncio.CancelledError:
-                pass
         if registry_task:
             registry_task.cancel()
             try:
