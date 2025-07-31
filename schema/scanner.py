@@ -73,9 +73,19 @@ class SolanaScannerConfig(BaseModel):
         description="Scan interval in minutes",
     )
     max_tokens_per_scan: int = Field(
-        default=200,
+        default=25,
         ge=1,
         description="Max tokens to process per scan",
+    )
+    timeout_seconds: float = Field(
+        default=30.0,
+        ge=1.0,
+        description="Maximum seconds to watch for new tokens",
+    )
+    max_iterations: int = Field(
+        default=100,
+        ge=1,
+        description="Maximum iterations when scanning",
     )
     min_volume_usd: float = Field(
         default=10.0,
@@ -108,6 +118,11 @@ class SolanaScannerConfig(BaseModel):
         default=100.0,
         ge=0.0,
         description="Minimum liquidity for new pools (in SOL)",
+    )
+    timeout_seconds: float = Field(
+        default=30.0,
+        ge=1.0,
+        description="Maximum time to wait for each scan",
     )
     api_keys: SolanaScannerApiKeys | None = None
 

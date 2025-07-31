@@ -360,6 +360,7 @@ symbol_score_weights:
 * **solana_scanner.helius_ws_url** – custom WebSocket endpoint (defaults to `wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}`).
 * **solana_scanner.raydium_program_id** – Raydium program ID to monitor.
 * **solana_scanner.min_liquidity** – skip pools with less liquidity.
+* **solana_scanner.timeout_seconds** – abort a Solana scan after this many seconds.
 * **solana_scanner.filter_tf** – timeframe used when classifying new tokens.
 * **solana_scanner.filter_regime** – skip tokens that do not match these regimes.
 * **gecko_limit** – maximum simultaneous requests to GeckoTerminal. Reduce this if you encounter HTTP 429 errors.
@@ -370,7 +371,8 @@ symbol_score_weights:
 * Solana tokens are filtered using symbol scoring; adjust `min_symbol_score` to control the threshold.
 * Informational logs indicate when a scan begins, how many tokens were found,
   and when scanning is skipped because the scanner is disabled or tokens are
-  preconfigured.
+  preconfigured. Scanning occurs in a background task so the main loop remains
+  responsive.
 
 Example configuration:
 

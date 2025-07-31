@@ -7,6 +7,9 @@ import types, sys
 dummy = types.ModuleType("dummy")
 for mod in ["telegram", "gspread", "scipy", "scipy.stats", "redis"]:
     sys.modules.setdefault(mod, dummy)
+for mod in ["solana", "solana.rpc", "solana.rpc.async_api"]:
+    sys.modules.setdefault(mod, dummy)
+dummy.AsyncClient = object
 oauth_module = types.ModuleType("oauth2client")
 oauth_module.service_account = types.SimpleNamespace(ServiceAccountCredentials=object)
 sys.modules.setdefault("oauth2client", oauth_module)
@@ -148,7 +151,7 @@ def test_volatile_queues_solana(monkeypatch):
     async def fake_scan(*a, **k):
         return []
 
-    async def fake_tokens(cfg):
+    async def fake_tokens(cfg, timeout=None):
         return ["SOL/USDC"]
 
     monkeypatch.setattr(main, "scan_arbitrage", fake_scan)
