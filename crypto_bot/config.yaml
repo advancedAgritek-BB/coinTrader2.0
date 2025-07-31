@@ -243,22 +243,7 @@ ohlcv_timeout: 60
 redis_url: null
 onchain_default_quote: USDC
 onchain_min_volume_usd: 1000
-onchain_symbols:
-- SOL/USDC
-- BONK/USDC
-- AI16Z/USDC
-- BERA/USDC
-- EUROP/USDC
-- FARTCOIN/USDC
-- RLUSD/USDC
-- USDG/USDC
-- VIRTUAL/USDC
-- XMR/USDC
-- MELANIA/USDC
-- PENGU/USDC
-- USDR/USDC
-- USTC/USDC
-- TRUMP/USDC
+onchain_symbols: []  # add tokens here to disable scanning
 optimization:
   enabled: true
   interval_days: 0.1
