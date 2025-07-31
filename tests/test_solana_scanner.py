@@ -99,38 +99,29 @@ class DummySession:
         return DummyResp(self._data)
 
 
-def test_get_solana_new_tokens_filters_by_score(monkeypatch):
-    data = {"tokens": [{"mint": "A"}, {"mint": "B"}]}
-    session = DummySession(data)
-    monkeypatch.setattr(scanner, "aiohttp", type("M", (), {"ClientSession": lambda: session}))
+def test_get_solana_new_tokens_returns_unique(monkeypatch):
+    from crypto_bot.solana.watcher import NewPoolEvent
 
-    async def fake_search(mint):
-        if mint == "A":
-            return ("A", 100.0)
-        if mint == "B":
-            return ("B", 200.0)
-        return None
+    events = [
+        NewPoolEvent("P1", "A", "C1", 50.0, 3),
+        NewPoolEvent("P2", "B", "C1", 60.0, 4),
+    ]
 
-    monkeypatch.setattr(scanner, "search_geckoterminal_token", fake_search)
+    async def watch_stub(self):
+        for evt in events:
+            yield evt
 
-    class DummyEx:
-        async def close(self):
-            pass
-
-    async def fake_score(_ex, sym, vol, *_a, **_k):
-        return {"A/USDC": 0.6, "B/USDC": 0.4}[sym]
-
-    monkeypatch.setattr(scanner.symbol_scoring, "score_symbol", fake_score)
-    monkeypatch.setattr(scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
+    monkeypatch.setattr(scanner.PoolWatcher, "watch", watch_stub)
 
     cfg = {
-        "url": "http://x", 
-        "limit": 5, 
-        "min_symbol_score": 0.5,
-        "exchange": "kraken",
+        "url": "http://x",
+        "max_tokens_per_scan": 5,
+        "timeout_seconds": 1,
+        "min_liquidity": 0,
+        "min_tx_count": 0,
     }
     tokens = asyncio.run(scanner.get_solana_new_tokens(cfg))
-    assert tokens == ["A/USDC"]
+    assert tokens == ["A", "B"]
 
 
 async def _scan_once(cfg, queue):
