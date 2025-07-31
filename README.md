@@ -301,7 +301,9 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **excluded_symbols** – markets to skip during scanning.
 * **onchain_symbols** – optional list of base tokens traded on-chain. When this
   list is omitted or empty, the Solana scanner automatically discovers
-  tradeable tokens. Providing a list restricts swaps to those entries only.
+  tradeable tokens. Providing entries disables automatic token scanning and
+  restricts swaps to those tokens only. Leave the list empty or remove the
+  setting entirely to re-enable scanning.
   Tickers are automatically resolved to mint addresses using a hybrid
   Jupiter/Helius registry cached at `cache/token_mints.json`. Each entry is
   appended with the quote defined by `onchain_default_quote` (defaults to
