@@ -885,23 +885,37 @@ async def fetch_candidates(ctx: BotContext) -> None:
     base_size = ctx.config.get("symbol_batch_size", 10)
     batch_size = int(base_size * volatility_factor)
     async with QUEUE_LOCK:
-        if not symbol_priority_queue:
-            all_scores = symbols + [(s, 0.0) for s in onchain_syms]
-            symbol_priority_queue = build_priority_queue(all_scores)
-        if onchain_syms:
-            for sym in reversed(onchain_syms):
-                symbol_priority_queue.appendleft(sym)
-        if onchain_syms:
-            enqueue_solana_tokens(onchain_syms)
-        if len(symbol_priority_queue) < batch_size:
-            symbol_priority_queue.extend(
-                build_priority_queue(symbols + [(s, 0.0) for s in onchain_syms])
-            )
+        existing = list(symbol_priority_queue)
+        combined: OrderedDict[str, float] = OrderedDict((s, 0.0) for s in existing)
+        for sym, score in symbols:
+            if sym not in combined or score > combined[sym]:
+                combined[sym] = score
+        for sym in onchain_syms:
+            combined.setdefault(sym, 0.0)
+        symbol_priority_queue = build_priority_queue(list(combined.items()))
+
+        for sym in reversed(solana_tokens):
+            try:
+                symbol_priority_queue.remove(sym)
+            except ValueError:
+                pass
+            symbol_priority_queue.appendleft(sym)
+
+        if solana_tokens:
+            enqueue_solana_tokens(solana_tokens)
+
+        seen: set[str] = set()
+        deduped: deque[str] = deque()
+        for sym in symbol_priority_queue:
+            if sym not in seen:
+                deduped.append(sym)
+                seen.add(sym)
+        symbol_priority_queue = deduped
+
         ctx.current_batch = [
             symbol_priority_queue.popleft()
             for _ in range(min(batch_size, len(symbol_priority_queue)))
         ]
-        # avoid repeated entries when only a few symbols are available
         ctx.current_batch = list(dict.fromkeys(ctx.current_batch))
         if ctx.current_batch:
             logger.debug("Current batch: %s", ctx.current_batch)
