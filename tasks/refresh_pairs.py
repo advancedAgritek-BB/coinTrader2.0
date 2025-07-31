@@ -214,7 +214,10 @@ async def refresh_pairs_async(
         if secondary:
             sec_res = results[1]
             if not isinstance(sec_res, Exception) and isinstance(sec_res, dict):
+                primary_markets = set(getattr(exchange, "markets", {}).keys())
                 for sym, data in sec_res.items():
+                    if sym not in primary_markets:
+                        continue
                     vol2 = data.get("quoteVolume")
                     if sym in tickers:
                         vol1 = tickers[sym].get("quoteVolume")
