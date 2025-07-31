@@ -498,11 +498,7 @@ symbol_score_weights:
   liquidity: 0.1
   spread: 0.15
   volume: 0.3
-symbols:
-- BTC/USDT
-- ETH/USDT
-- SOL/USDT
-- XRP/USDT
+symbols: []
 tax_tracking:
   enabled: true
   export_path: crypto_bot/logs/tax_trades.csv
