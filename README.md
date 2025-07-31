@@ -171,7 +171,6 @@ KRAKEN_WS_TOKEN=your_ws_token          # optional for Kraken
 KRAKEN_API_TOKEN=your_api_token        # optional for Kraken
 TELEGRAM_TOKEN=your_telegram_token
 TELE_CHAT_ADMINS=123456,789012         # optional comma separated admin IDs
-TELE_CHAT_ADMINS=12345,67890          # comma-separated chat IDs
 GOOGLE_CRED_JSON=path_to_google_credentials.json
 FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
 SECRETS_PROVIDER=aws                     # optional
@@ -304,9 +303,6 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   tradeable tokens. Providing entries disables automatic token scanning and
   restricts swaps to those tokens only. Leave the list empty or remove the
   setting entirely to re-enable scanning.
-  tradeable tokens. Providing a list restricts swaps to those entries only and
-  disables the automatic scanner.
- main
   Tickers are automatically resolved to mint addresses using a hybrid
   Jupiter/Helius registry cached at `cache/token_mints.json`. Each entry is
   appended with the quote defined by `onchain_default_quote` (defaults to
