@@ -631,6 +631,34 @@ def test_watch_tickers_unsupported_pair_no_failures(monkeypatch, caplog):
     assert any("BAD/USD" in r.getMessage() for r in caplog.records)
 
 
+def test_filter_symbols_no_warning_for_unsupported(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+
+    class FetchOnlyExchange(DummyExchange):
+        has = {"fetchTickers": True}
+
+        async def fetch_tickers(self, symbols):
+            assert symbols == ["ETH/USD"]
+            data = (await fake_fetch(None))["result"]
+            return {"ETH/USD": data["XETHZUSD"]}
+
+    async def never_call(*_a, **_k):
+        raise AssertionError("_fetch_ticker_async should not be called")
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", never_call)
+    sp.unsupported_pairs.add("BAD/USD")
+
+    symbols = asyncio.run(
+        filter_symbols(FetchOnlyExchange(), ["ETH/USD", "BAD/USD"], CONFIG)
+    )
+
+    assert [s for s, _ in symbols[0]] == ["ETH/USD"]
+    assert not any(
+        "No ticker data returned" in r.getMessage() and "BAD/USD" in r.getMessage()
+        for r in caplog.records
+    )
+
+
 class DummyExchangeList:
     # markets_by_id values may be lists of market dictionaries
     markets_by_id = {"XETHZUSD": [{"symbol": "ETH/USD"}]}
