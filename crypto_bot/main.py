@@ -114,6 +114,8 @@ SNIPER_TASKS: set[asyncio.Task] = set()
 NEW_SOLANA_TOKENS: set[str] = set()
 # Track async cross-chain arb tasks
 CROSS_ARB_TASKS: set[asyncio.Task] = set()
+# Background task for one-off Solana scans
+SOLANA_SCAN_TASK: asyncio.Task | None = None
 
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
@@ -231,7 +233,8 @@ def is_market_pumping(
     return avg_change >= 0.05
 
 async def maybe_scan_solana_tokens(config: dict, last_scan: float) -> float:
-    """Scan for new Solana tokens if the interval has elapsed."""
+    """Start a background scan for new Solana tokens if needed."""
+    global SOLANA_SCAN_TASK
     sol_cfg = config.get("solana_scanner", {})
     if not sol_cfg.get("enabled"):
         logger.info("Solana scan skipped: scanner disabled")
@@ -239,24 +242,38 @@ async def maybe_scan_solana_tokens(config: dict, last_scan: float) -> float:
     if config.get("solana_symbols") or config.get("onchain_symbols"):
         logger.info("Solana scan skipped: tokens already configured")
         return last_scan
+
+    if SOLANA_SCAN_TASK and SOLANA_SCAN_TASK.done():
+        try:
+            await SOLANA_SCAN_TASK
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.error("Solana scan error: %s", exc)
+        SOLANA_SCAN_TASK = None
+
     interval = sol_cfg.get("interval_minutes", 5) * 60
     now = time.time()
-    if now - last_scan < interval:
+    if now - last_scan < interval or (SOLANA_SCAN_TASK and not SOLANA_SCAN_TASK.done()):
         return last_scan
+
+    async def _worker() -> None:
+        try:
+            tokens = await get_solana_new_tokens(
+                sol_cfg, sol_cfg.get("timeout_seconds", 30)
+            )
+            if tokens:
+                logger.info("Discovered %d new Solana tokens", len(tokens))
+                async with QUEUE_LOCK:
+                    enqueue_solana_tokens(tokens)
+                    for sym in reversed(tokens):
+                        symbol_priority_queue.appendleft(sym)
+                        NEW_SOLANA_TOKENS.add(sym)
+            else:
+                logger.info("Solana scan found no new tokens")
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.error("Solana scan error: %s", exc)
+
     logger.info("Scanning Solana tokens")
-    try:
-        tokens = await get_solana_new_tokens(sol_cfg)
-        if tokens:
-            logger.info("Discovered %d new Solana tokens", len(tokens))
-            async with QUEUE_LOCK:
-                enqueue_solana_tokens(tokens)
-                for sym in reversed(tokens):
-                    symbol_priority_queue.appendleft(sym)
-                    NEW_SOLANA_TOKENS.add(sym)
-        else:
-            logger.info("Solana scan found no new tokens")
-    except Exception as exc:  # pragma: no cover - best effort
-        logger.error("Solana scan error: %s", exc)
+    SOLANA_SCAN_TASK = asyncio.create_task(_worker())
     return now
 
 
@@ -2613,6 +2630,13 @@ async def _main_impl() -> TelegramNotifier:
             except asyncio.CancelledError:
                 pass
         CROSS_ARB_TASKS.clear()
+        if SOLANA_SCAN_TASK:
+            SOLANA_SCAN_TASK.cancel()
+            try:
+                await SOLANA_SCAN_TASK
+            except asyncio.CancelledError:
+                pass
+            SOLANA_SCAN_TASK = None
         NEW_SOLANA_TOKENS.clear()
 
     return notifier
