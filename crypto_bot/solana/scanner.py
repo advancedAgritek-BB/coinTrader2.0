@@ -29,6 +29,8 @@ async def get_solana_new_tokens(config: Mapping[str, object]) -> List[str]:
     max_tokens = int(sol_cfg.get("max_tokens_per_scan", 0))
     if max_tokens <= 0:
         return []
+    timeout_seconds = float(sol_cfg.get("timeout_seconds", 30.0))
+    max_iterations = int(sol_cfg.get("max_iterations", 100))
 
     interval_sec = float(sol_cfg.get("interval_minutes", 0)) * 60.0
     websocket_url = (
@@ -49,8 +51,17 @@ async def get_solana_new_tokens(config: Mapping[str, object]) -> List[str]:
 
     tokens: List[str] = []
     seen: set[str] = set()
+    start = asyncio.get_running_loop().time()
+    iterations = 0
     try:
         async for event in watcher.watch():
+            iterations += 1
+            if (
+                iterations > max_iterations
+                or asyncio.get_running_loop().time() - start > timeout_seconds
+            ):
+                watcher.stop()
+                break
             if event.liquidity < min_liquidity or event.tx_count < min_tx:
                 continue
             mint = event.token_mint

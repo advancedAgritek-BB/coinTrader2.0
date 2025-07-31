@@ -96,6 +96,8 @@ def test_load_config_returns_dict():
         "api_keys",
         "min_volume_usd",
         "max_tokens_per_scan",
+        "timeout_seconds",
+        "max_iterations",
     ]:
         assert key in sol_scanner
 
