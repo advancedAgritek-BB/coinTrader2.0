@@ -182,7 +182,8 @@ async def fetch_new_raydium_pools(api_key: str, limit: int) -> List[str]:
     """Return new Raydium pool token mints."""
     url = f"{RAYDIUM_URL}?apiKey={api_key}&limit={limit}"
     data = await _fetch_json(url)
-    if not data:
+    if data is None:
+        logger.warning("Failed to fetch Raydium pools")
         return []
     tokens = await _extract_tokens(data)
     return tokens[:limit]
@@ -192,7 +193,8 @@ async def fetch_pump_fun_launches(api_key: str, limit: int) -> List[str]:
     """Return recent Pump.fun launches."""
     url = f"{PUMP_FUN_URL}?api-key={api_key}&limit={limit}"
     data = await _fetch_json(url)
-    if not data:
+    if data is None:
+        logger.warning("Failed to fetch Pump.fun launches")
         return []
     tokens = await _extract_tokens(data)
     return tokens[:limit]
@@ -208,6 +210,11 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
     raydium_key = str(config.get("raydium_api_key", ""))
     pump_key = str(config.get("pump_fun_api_key", ""))
     gecko_search = bool(config.get("gecko_search", True))
+
+    if not raydium_key:
+        logger.warning("raydium_api_key not set; skipping Raydium pools")
+    if not pump_key:
+        logger.warning("pump_fun_api_key not set; skipping Pump.fun launches")
 
     tasks = []
     if raydium_key:
@@ -226,6 +233,7 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
         tasks.append(coro)
 
     if not tasks:
+        logger.warning("No Solana API keys provided; skipping token scan")
         return []
 
     results = await asyncio.gather(*tasks)
