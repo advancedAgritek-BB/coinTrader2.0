@@ -1825,6 +1825,27 @@ def test_unknown_pair_not_cached(monkeypatch):
     assert "BTC/USDT" not in sp.liq_cache
 
 
+class MissingMarketsExchange:
+    id = "kraken"
+    has = {}
+    markets_by_id = {}
+
+    def market_id(self, _symbol):
+        raise RuntimeError("markets not loaded")
+
+
+async def fake_fetch_raw_id(pairs):
+    assert list(pairs) == ["BTCUSDT"]
+    data = (await fake_fetch(None))["result"]
+    return {"result": {"XBTUSDT": data["XXBTZUSD"]}}
+
+
+def test_symbol_mapping_without_markets(monkeypatch):
+    monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch_raw_id)
+    symbols = asyncio.run(sp.filter_symbols(MissingMarketsExchange(), ["BTC/USDT"], CONFIG))
+    assert symbols == [("BTC/USDT", 0.6)]
+
+
 def test_refresh_tickers_empty_result(monkeypatch, caplog):
     caplog.set_level("WARNING")
 
