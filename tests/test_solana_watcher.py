@@ -66,6 +66,10 @@ async def test_parses_raydium_event(monkeypatch):
     session = DummySession(ws)
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, e: 1.0)
+    async def _enrich(self, evt):
+        evt.liquidity = self.min_liquidity
+        return evt
+    monkeypatch.setattr(PoolWatcher, "_enrich_event", _enrich, raising=False)
     async def enrich(self, event, sig, sess):
         event.pool_address = "P"
         event.token_mint = "M"
@@ -96,6 +100,10 @@ async def test_parses_pump_fun(monkeypatch):
     session = DummySession(ws)
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, e: 1.0)
+    async def _enrich(self, evt):
+        evt.liquidity = self.min_liquidity
+        return evt
+    monkeypatch.setattr(PoolWatcher, "_enrich_event", _enrich, raising=False)
     async def enrich(self, event, sig, sess):
         event.token_mint = "M"
         event.creator = "C"
@@ -125,6 +133,10 @@ async def test_reconnect_on_close(monkeypatch):
     session = DummySession([ws1, ws2])
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, e: 1.0)
+    async def _enrich(self, evt):
+        evt.liquidity = self.min_liquidity
+        return evt
+    monkeypatch.setattr(PoolWatcher, "_enrich_event", _enrich, raising=False)
     async def enrich(self, event, sig, sess):
         event.pool_address = "P"
         event.token_mint = "M"
