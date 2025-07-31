@@ -1103,14 +1103,19 @@ async def update_caches(ctx: BotContext) -> None:
         )
 
     filtered_batch: list[str] = []
+    dropped: list[str] = []
     for sym in batch:
         df = ctx.df_cache.get(timeframe, {}).get(sym)
         count = len(df) if isinstance(df, pd.DataFrame) else 0
         logger.info("%s OHLCV: %d candles", sym, count)
         if count == 0:
             logger.warning("No OHLCV data for %s; skipping analysis", sym)
+            dropped.append(sym)
             continue
         filtered_batch.append(sym)
+
+    if dropped:
+        logger.info("Dropped symbols due to missing OHLCV: %s", dropped)
 
     ctx.current_batch = filtered_batch
 

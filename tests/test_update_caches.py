@@ -237,3 +237,23 @@ def test_update_caches_ws_subscribes_each(monkeypatch):
     asyncio.run(main.update_caches(ctx))
 
     assert set(calls) == {"BTC/USDT", "ETH/USDT"}
+
+
+def test_update_caches_logs_dropped_symbols(monkeypatch, caplog):
+    df = pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+
+    async def fake_update(*args, **kwargs):
+        return {"1h": {"FOO/USDT": df}}
+
+    ctx = BotContext(
+        positions={}, df_cache={}, regime_cache={}, config={"timeframe": "1h"}
+    )
+    ctx.exchange = object()
+    ctx.current_batch = ["FOO/USDT"]
+    monkeypatch.setattr(main, "update_multi_tf_ohlcv_cache", fake_update)
+    monkeypatch.setattr(main, "update_regime_tf_cache", dummy_update)
+    caplog.set_level("INFO")
+
+    asyncio.run(main.update_caches(ctx))
+
+    assert "Dropped symbols due to missing OHLCV: ['FOO/USDT']" in caplog.text
