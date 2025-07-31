@@ -904,6 +904,8 @@ async def fetch_candidates(ctx: BotContext) -> None:
             symbol_priority_queue.popleft()
             for _ in range(min(batch_size, len(symbol_priority_queue)))
         ]
+        # avoid repeated entries when only a few symbols are available
+        ctx.current_batch = list(dict.fromkeys(ctx.current_batch))
 
         for sym in ctx.current_batch:
             if sym in recent_solana_set:
