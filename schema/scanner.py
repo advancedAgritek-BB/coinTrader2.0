@@ -109,6 +109,11 @@ class SolanaScannerConfig(BaseModel):
         ge=0.0,
         description="Minimum liquidity for new pools (in SOL)",
     )
+    timeout_seconds: float = Field(
+        default=30.0,
+        ge=1.0,
+        description="Maximum time to wait for each scan",
+    )
     api_keys: SolanaScannerApiKeys | None = None
 
     class Config:
