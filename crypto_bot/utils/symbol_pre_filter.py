@@ -399,6 +399,8 @@ async def _refresh_tickers(
 
     start_time = time.perf_counter()
 
+    ws_result: dict[str, dict] = {}
+
     symbols = list(symbols)
     removed = [s for s in symbols if _norm_symbol(s) in unsupported_pairs]
     if removed:
@@ -579,12 +581,20 @@ async def _refresh_tickers(
         result = {s: ticker_cache[s] for s in symbols if s in ticker_cache}
         if result:
             record_results(result)
-            if return_attempted:
-                return (
-                    {s: t.get("info", t) for s, t in result.items()},
-                    set(attempted_syms),
-                )
-            return {s: t.get("info", t) for s, t in result.items()}
+            missing = [s for s in symbols if s not in result]
+            if not missing:
+                if return_attempted:
+                    return (
+                        {s: t.get("info", t) for s, t in result.items()},
+                        set(attempted_syms),
+                    )
+                return {s: t.get("info", t) for s, t in result.items()}
+            else:
+                # continue with HTTP for symbols missing from WebSocket data
+                symbols = missing
+                ws_result = {s: t.get("info", t) for s, t in result.items()}
+        else:
+            ws_result = {}
 
     if try_http:
         if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)(
@@ -920,6 +930,7 @@ async def _refresh_tickers(
             ticker_cache[sym] = ticker
             ticker_ts[sym] = now
     record_results(result)
+    final_result = {**ws_result, **result}
     elapsed = time.perf_counter() - start_time
     logger.debug(
         "_refresh_tickers fetched %d tickers in %.2fs",
@@ -927,8 +938,8 @@ async def _refresh_tickers(
         elapsed,
     )
     if return_attempted:
-        return result, set(attempted_syms)
-    return result
+        return final_result, set(attempted_syms)
+    return final_result
 
 
 def _history_in_cache(df: pd.DataFrame | None, days: int, seconds: int) -> bool:
