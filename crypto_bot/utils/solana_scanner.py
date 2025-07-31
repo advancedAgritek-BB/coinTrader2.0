@@ -211,11 +211,18 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
 
     limit = int(config.get("max_tokens_per_scan", 0)) or 20
     _MIN_VOLUME_USD = float(config.get("min_volume_usd", 0.0))
+    keys_cfg = config.get("api_keys", {})
     raydium_key = str(
-        config.get("raydium_api_key") or RAYDIUM_API_KEY or ""
+        config.get("raydium_api_key")
+        or keys_cfg.get("raydium_api_key")
+        or RAYDIUM_API_KEY
+        or ""
     )
     pump_key = str(
-        config.get("pump_fun_api_key") or PUMP_FUN_API_KEY or ""
+        config.get("pump_fun_api_key")
+        or keys_cfg.get("pump_fun_api_key")
+        or PUMP_FUN_API_KEY
+        or ""
     )
     gecko_search = bool(config.get("gecko_search", True))
 

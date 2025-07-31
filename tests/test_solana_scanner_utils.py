@@ -365,3 +365,28 @@ def test_get_solana_new_tokens_fetch_failure(monkeypatch, caplog):
     tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
     assert tokens == []
     assert any("Failed to fetch Raydium" in r.getMessage() for r in caplog.records)
+
+
+def test_get_solana_new_tokens_nested_api_keys(monkeypatch):
+    seen: dict[str, str] = {}
+
+    def fake_raydium(key, limit):
+        seen["raydium"] = key
+        return ["A"]
+
+    def fake_pump(key, limit):
+        seen["pump"] = key
+        return []
+
+    monkeypatch.setattr(solana_scanner, "fetch_new_raydium_pools", fake_raydium)
+    monkeypatch.setattr(solana_scanner, "fetch_pump_fun_launches", fake_pump)
+
+    cfg = {
+        "api_keys": {"raydium_api_key": "r", "pump_fun_api_key": "p"},
+        "max_tokens_per_scan": 5,
+        "gecko_search": False,
+        "min_volume_usd": 0,
+    }
+    tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
+    assert tokens == ["A/USDC"]
+    assert seen == {"raydium": "r", "pump": "p"}
