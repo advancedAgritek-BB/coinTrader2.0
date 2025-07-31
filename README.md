@@ -304,6 +304,9 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   tradeable tokens. Providing entries disables automatic token scanning and
   restricts swaps to those tokens only. Leave the list empty or remove the
   setting entirely to re-enable scanning.
+  tradeable tokens. Providing a list restricts swaps to those entries only and
+  disables the automatic scanner.
+ main
   Tickers are automatically resolved to mint addresses using a hybrid
   Jupiter/Helius registry cached at `cache/token_mints.json`. Each entry is
   appended with the quote defined by `onchain_default_quote` (defaults to
@@ -362,16 +365,19 @@ symbol_score_weights:
 * **solana_scanner.helius_ws_url** – custom WebSocket endpoint (defaults to `wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}`).
 * **solana_scanner.raydium_program_id** – Raydium program ID to monitor.
 * **solana_scanner.min_liquidity** – skip pools with less liquidity.
+* **solana_scanner.timeout_seconds** – abort a Solana scan after this many seconds.
 * **solana_scanner.filter_tf** – timeframe used when classifying new tokens.
 * **solana_scanner.filter_regime** – skip tokens that do not match these regimes.
 * **gecko_limit** – maximum simultaneous requests to GeckoTerminal. Reduce this if you encounter HTTP 429 errors.
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
 * **ticker_rate_limit** – delay in milliseconds after each ticker API call.
 * **ws_ticker_batch_size** – number of symbols per WebSocket ticker call.
+* The scanner runs in a dedicated background loop that updates the evaluation queue whenever new pools appear.
 * Solana tokens are filtered using symbol scoring; adjust `min_symbol_score` to control the threshold.
 * Informational logs indicate when a scan begins, how many tokens were found,
   and when scanning is skipped because the scanner is disabled or tokens are
-  preconfigured.
+  preconfigured. Scanning occurs in a background task so the main loop remains
+  responsive.
 
 Example configuration:
 
@@ -1035,9 +1041,7 @@ scan_markets: true    # default
 scan_in_background: true
 symbols: []            # automatically populated
 onchain_default_quote: USDT
-onchain_symbols: ["SOL", "BONK", "AI16Z"]             # optional list
-                                                # restricts swaps to these tokens
-                                                # leave empty to discover tokens
+onchain_symbols: []                            # add tokens to disable scanning
                                                 # quote appended automatically to
                                                 # mints via Jupiter/Helius
                                                 # base must be mint if unknown
@@ -1422,6 +1426,8 @@ PoolWatcher -> Safety -> Score -> RiskTracker -> Executor -> Exit
 
 Sniping begins immediately at startup. The initial symbol scan now runs in the
 background so new pools can be acted on without waiting for caches to fill.
+The Solana scanner continues to run in its own loop, queuing tokens as they
+appear. Disable this behaviour by setting `solana_scanner.enabled` to `false`.
 
 Before any token from the scanner is queued for execution its price history is
 fetched and passed through `classify_regime_cached`. Only those labeled with one

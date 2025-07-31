@@ -96,6 +96,8 @@ def test_load_config_returns_dict():
         "api_keys",
         "min_volume_usd",
         "max_tokens_per_scan",
+        "timeout_seconds",
+        "max_iterations",
     ]:
         assert key in sol_scanner
 
@@ -152,6 +154,66 @@ def test_load_config_normalizes_symbol(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "yaml", types.SimpleNamespace(safe_load=_simple_yaml))
     loaded = main.load_config()
     assert loaded["symbol"] == "BTC/USDT"
+
+
+def test_load_config_warns_scanner_onchain(tmp_path, monkeypatch, caplog):
+    path = tmp_path / "config.yaml"
+    path.write_text("")
+    import types, sys
+
+    dummy = types.ModuleType("dummy")
+    dummy.AsyncClient = object
+    for mod in ["solana", "solana.rpc", "solana.rpc.async_api"]:
+        sys.modules.setdefault(mod, dummy)
+
+    sys.modules.setdefault("redis", types.SimpleNamespace())
+    sys.modules.setdefault("crypto_bot.solana", types.SimpleNamespace(get_solana_new_tokens=lambda *_a, **_k: []))
+    sys.modules.setdefault("crypto_bot.solana.scalping", types.SimpleNamespace())
+    sys.modules.setdefault(
+        "crypto_bot.solana.exit",
+        types.SimpleNamespace(monitor_price=lambda *_a, **_k: None, quick_exit=lambda *_a, **_k: None),
+    )
+    sys.modules.setdefault(
+        "crypto_bot.execution.solana_mempool",
+        types.SimpleNamespace(SolanaMempoolMonitor=object),
+    )
+    sys.modules.setdefault("crypto_bot.utils.market_analyzer", types.SimpleNamespace(analyze_symbol=lambda *_a, **_k: None))
+    sys.modules.setdefault("crypto_bot.strategy_router", types.SimpleNamespace(strategy_for=lambda *_a, **_k: None))
+    sys.modules.setdefault("websocket", types.SimpleNamespace(WebSocketApp=object))
+    sys.modules.setdefault("gspread", types.SimpleNamespace(authorize=lambda *a, **k: None))
+    sys.modules.setdefault(
+        "oauth2client.service_account",
+        types.SimpleNamespace(ServiceAccountCredentials=types.SimpleNamespace(from_json_keyfile_name=lambda *a, **k: None)),
+    )
+    sys.modules.setdefault("rich.console", types.SimpleNamespace(Console=object))
+    sys.modules.setdefault("rich.table", types.SimpleNamespace(Table=object))
+    sys.modules.setdefault(
+        "crypto_bot.utils.symbol_pre_filter",
+        types.SimpleNamespace(filter_symbols=lambda *_a, **_k: ([], [])),
+    )
+    class _FakeGen:
+        pass
+
+    sys.modules.setdefault(
+        "numpy.random",
+        types.SimpleNamespace(default_rng=lambda *_a, **_k: _FakeGen(), Generator=_FakeGen),
+    )
+
+    import crypto_bot.main as main
+
+    monkeypatch.setattr(main, "CONFIG_PATH", path)
+
+    def _fake_safe_load(_f):
+        return {
+            "solana_scanner": {"enabled": True},
+            "onchain_symbols": ["SOL/USDC"],
+        }
+
+    monkeypatch.setattr(main, "yaml", types.SimpleNamespace(safe_load=_fake_safe_load))
+    monkeypatch.setattr(main, "_ensure_ml", lambda *_a, **_k: None)
+    caplog.set_level("WARNING")
+    main.load_config()
+    assert any("onchain_symbols" in r.getMessage() for r in caplog.records)
 
 
 def test_reload_config_clears_symbol_cache(monkeypatch):
