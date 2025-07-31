@@ -45,6 +45,14 @@ solana_scanner = importlib.util.module_from_spec(scanner_spec)
 sys.modules["crypto_bot.utils.solana_scanner"] = solana_scanner
 scanner_spec.loader.exec_module(solana_scanner)
 
+scanner2_spec = importlib.util.spec_from_file_location(
+    "crypto_bot.solana.scanner",
+    pathlib.Path(__file__).resolve().parents[1] / "crypto_bot" / "solana" / "scanner.py",
+)
+solana_scan_mod = importlib.util.module_from_spec(scanner2_spec)
+sys.modules["crypto_bot.solana.scanner"] = solana_scan_mod
+scanner2_spec.loader.exec_module(solana_scan_mod)
+
 
 # Use PoolWatcher and NewPoolEvent from the loaded watcher module
 PoolWatcher = watcher.PoolWatcher
@@ -90,3 +98,25 @@ def test_get_solana_new_tokens_filters_and_limits(monkeypatch):
     }
     tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
     assert tokens == ["A/USDC", "D/USDC"]
+
+
+async def watch_infinite(self):
+    while True:
+        for evt in events:
+            yield evt
+
+
+def test_scanner_stops_on_iteration_limit(monkeypatch):
+    monkeypatch.setattr(PoolWatcher, "watch", watch_infinite)
+    monkeypatch.setattr(solana_scan_mod, "TOKEN_MINTS", {}, raising=False)
+
+    cfg = {
+        "max_tokens_per_scan": 100,
+        "max_iterations": 3,
+        "timeout_seconds": 30,
+        "min_liquidity": 0,
+        "min_tx_count": 0,
+    }
+
+    tokens = asyncio.run(solana_scan_mod.get_solana_new_tokens(cfg))
+    assert tokens == ["A", "B", "C"]

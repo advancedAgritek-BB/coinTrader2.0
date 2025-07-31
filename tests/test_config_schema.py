@@ -30,7 +30,9 @@ def test_solana_scanner_defaults():
     cfg = SolanaScannerConfig()
     assert cfg.enabled is False
     assert cfg.interval_minutes == 0.1
-    assert cfg.max_tokens_per_scan == 200
+    assert cfg.max_tokens_per_scan == 25
+    assert cfg.timeout_seconds == 30.0
+    assert cfg.max_iterations == 100
     assert cfg.min_volume_usd == 10.0
     assert cfg.gecko_search is True
     assert cfg.timeout_seconds == 30.0
