@@ -80,6 +80,15 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
     onchain_syms.extend([s for s, _ in extra_onchain])
     skipped_main = telemetry.snapshot().get("scan.symbols_skipped", 0) - skipped_before
     if not scored:
+        sf = config.get("symbol_filter", {})
+        if skipped_main >= len(symbols) and (
+            sf.get("min_volume_usd") or sf.get("volume_percentile")
+        ):
+            logger.debug(
+                "All symbols rejected by volume filter (min_volume_usd=%s volume_percentile=%s); try lighter values for volatile markets",
+                sf.get("min_volume_usd"),
+                sf.get("volume_percentile"),
+            )
         fallback = config.get("symbol")
         excluded = [s.upper() for s in config.get("excluded_symbols", [])]
         if fallback and fallback.upper() in excluded:
