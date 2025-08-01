@@ -97,3 +97,8 @@ def test_predict_bundle_regime_model(monkeypatch):
     label = api_helpers.predict_bundle_regime({"priority_fee": 1, "tx_count": 2})
     assert label == "volatile"
 
+    monkeypatch.setattr(api_helpers, "predict_bundle_regime", lambda _d: "vol")
+    data = asyncio.run(api_helpers.fetch_jito_bundle("123", "key"))
+    assert data == {"bundle": "ok", "predicted_regime": "vol"}
+    assert session.http_url.endswith("/123")
+    assert session.closed
