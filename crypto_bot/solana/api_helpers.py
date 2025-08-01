@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import aiohttp
 from contextlib import asynccontextmanager
+import os
+from typing import Mapping, Any
+
+import numpy as np
 
 # Base endpoints from the blueprint
 # Helius WebSocket: wss://mainnet.helius-rpc.com
@@ -18,7 +22,7 @@ async def helius_ws(api_key: str):
 
     url = f"wss://mainnet.helius-rpc.com/?api-key={api_key}"
     session = aiohttp.ClientSession()
-    ws = await session.ws_connect(url)
+    ws = await session.ws_connect(url, timeout=30)
     try:
         yield ws
     finally:
@@ -42,4 +46,38 @@ async def fetch_jito_bundle(bundle_id: str, api_key: str, session: aiohttp.Clien
         data = await resp.json()
     if close:
         await session.close()
+    if isinstance(data, Mapping):
+        data = dict(data)
+        data["predicted_regime"] = predict_bundle_regime(data)
     return data
+
+
+def predict_bundle_regime(bundle: Mapping[str, Any]) -> str:
+    """Predict bundle regime using a Supabase hosted model."""
+
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_KEY")
+    if not url or not key:
+        return "unknown"
+
+    try:  # pragma: no cover - optional dependency
+        from supabase import create_client  # type: ignore
+        from coinTrader_Trainer.ml_trainer import load_model  # type: ignore
+    except Exception:
+        return "unknown"
+
+    try:
+        create_client(url, key)
+        model = load_model("bundle_regime")
+        priority = float(bundle.get("priority_fee", 0))
+        txs = float(bundle.get("tx_count", 0))
+        preds = model.predict([[priority, txs]])
+        pred = preds[0] if isinstance(preds, (list, tuple, np.ndarray)) else preds
+        if isinstance(pred, (list, tuple, np.ndarray)):
+            idx = int(np.argmax(pred))
+            labels = ["stable", "volatile"]
+            return labels[idx] if idx < len(labels) else str(idx)
+        return str(pred)
+    except Exception:
+        return "unknown"
+
