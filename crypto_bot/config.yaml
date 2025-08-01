@@ -393,7 +393,7 @@ strategy_allocation:
   grid: 0.2
   sniper_solana: 0.6
   trend: 0.2
-strategy_evaluation_mode: ensemble
+strategy_evaluation_mode: any
 strategy_router:
   bandit_enabled: true
   bounce_timeframe: 5m

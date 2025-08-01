@@ -429,7 +429,8 @@ exceeds this percentage, the position is closed immediately.
 
 ### Strategy and Signals
 * **strategy_allocation** – capital split across strategies.
-* **strategy_evaluation_mode** – how the router chooses a strategy.
+* **strategy_evaluation_mode** – how the router chooses a strategy. Options are
+  `mapped` (default), `best`, `ensemble` or `any`.
 * **ensemble_min_conf** – minimum confidence required for a strategy to
   participate in ensemble evaluation.
 * **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
@@ -536,6 +537,9 @@ to the current regime are scored concurrently. The helper `run_candidates`
 ranks them by `score × edge` and executes the best result. Details about
 the second‑highest strategy are written to the CSV file defined by
 `second_place_csv`.
+When set to `any`, all strategies listed for the regime are scored in the
+same way but the `ensemble_min_conf` threshold is ignored, so even low
+confidence signals may trigger a trade.
 #### Bounce Scalper
 The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry. Set `pattern_timeframe` (default `1m`) to fetch a separate candle interval for confirming engulfing or hammer patterns. When in cooldown the scalper only signals if the recent win rate falls below 50%, effectively skipping the cooldown during a drawdown. Set `cooldown_enabled` to `false` to disable this behaviour.
 
