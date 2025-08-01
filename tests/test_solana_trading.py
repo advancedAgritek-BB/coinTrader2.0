@@ -1,4 +1,5 @@
 import asyncio
+import sys
 import types
 
 import pytest
@@ -169,9 +170,21 @@ def test_monitor_profit(monkeypatch):
     monkeypatch.setattr(solana_trading, "AsyncClient", lambda url: dummy)
     monkeypatch.setattr(solana_trading, "_fetch_price", fake_price)
 
+    calls = {"used": False}
+
+    class DummyModel:
+        def predict(self, *_):
+            calls["used"] = True
+            return [0.8]
+
+    ml_mod = types.SimpleNamespace(load_model=lambda *a, **k: DummyModel())
+    sys.modules.setdefault("coinTrader_Trainer", types.ModuleType("coinTrader_Trainer"))
+    monkeypatch.setitem(sys.modules, "coinTrader_Trainer.ml_trainer", ml_mod)
+
     profit = asyncio.run(solana_trading.monitor_profit("tx", threshold=0.2))
     assert profit == pytest.approx(0.6)
     assert dummy.closed
+    assert calls["used"]
 
 
 async def fake_execute(*a, **k):

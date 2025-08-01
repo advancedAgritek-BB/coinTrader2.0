@@ -73,6 +73,17 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
         f"https://mainnet.helius-rpc.com/?api-key={os.getenv('HELIUS_KEY', '')}",
     )
     client = AsyncClient(rpc_url)
+
+    try:  # optional ML model
+        from coinTrader_Trainer.ml_trainer import load_model
+
+        ml_model = load_model("profit")
+        try:
+            ml_model.predict([[0.0]])
+        except Exception:  # pragma: no cover - best effort
+            pass
+    except Exception:  # pragma: no cover - optional dependency
+        ml_model = None
     try:
         entry_price = None
         out_amount = 0.0

@@ -108,12 +108,40 @@ def test_subscription_message(monkeypatch):
     asyncio.run(run())
     assert session.url == "wss://mainnet.helius-rpc.com/?api-key=KEY"
     assert ws.sent and ws.sent[0]["params"][0]["accountInclude"] == ["PGM"]
+    assert ws.sent[0]["params"][1]["encoding"] == "jsonParsed"
+    assert ws.sent[0]["params"][1]["maxSupportedTransactionVersion"] == 0
 
 
 def test_yields_transactions(monkeypatch):
     messages = [
-        {"params": {"result": {"tx": 1, "txCount": 11, "liquidity": 100}}},
-        {"params": {"result": {"tx": 2, "txCount": 12, "liquidity": 100}}},
+        {
+            "params": {
+                "result": {
+                    "tx": 1,
+                    "txCount": 11,
+                    "liquidity": 100,
+                    "meta": {
+                        "postTokenBalances": [
+                            {"uiTokenAmount": {"uiAmount": 100.0}}
+                        ]
+                    },
+                }
+            }
+        },
+        {
+            "params": {
+                "result": {
+                    "tx": 2,
+                    "txCount": 12,
+                    "liquidity": 100,
+                    "meta": {
+                        "postTokenBalances": [
+                            {"uiTokenAmount": {"uiAmount": 100.0}}
+                        ]
+                    },
+                }
+            }
+        },
     ]
     ws = DummyWS(messages)
     session = DummySession(ws)
@@ -129,15 +157,36 @@ def test_yields_transactions(monkeypatch):
 
     res = asyncio.run(run())
     assert res == [
-        {"tx": 1, "txCount": 11, "liquidity": 100},
-        {"tx": 2, "txCount": 12, "liquidity": 100},
+        {
+            "tx": 1,
+            "txCount": 11,
+            "liquidity": 100,
+            "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 100.0}}]},
+            "predicted_regime": "breakout",
+        },
+        {
+            "tx": 2,
+            "txCount": 12,
+            "liquidity": 100,
+            "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 100.0}}]},
+            "predicted_regime": "breakout",
+        },
     ]
 
 
 def test_reconnect_on_close(monkeypatch):
     ws1 = DummyWS([])
     ws2 = DummyWS([
-        {"params": {"result": {"tx": 3, "txCount": 15, "liquidity": 100}}}
+        {
+            "params": {
+                "result": {
+                    "tx": 3,
+                    "txCount": 15,
+                    "liquidity": 100,
+                    "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 100.0}}]},
+                }
+            }
+        }
     ])
     session = DummySession([ws1, ws2])
     aiohttp_mod = AiohttpMod(session)
@@ -150,14 +199,38 @@ def test_reconnect_on_close(monkeypatch):
         return result
 
     res = asyncio.run(run())
-    assert res == {"tx": 3, "txCount": 15, "liquidity": 100}
+    assert res == {
+        "tx": 3,
+        "txCount": 15,
+        "liquidity": 100,
+        "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 100.0}}]},
+        "predicted_regime": "breakout",
+    }
     assert session.calls == 2
 
 
 def test_watch_pool_filters(monkeypatch):
     messages = [
-        {"params": {"result": {"tx": 1, "txCount": 5, "liquidity": 40}}},
-        {"params": {"result": {"tx": 2, "txCount": 12, "liquidity": 60}}},
+        {
+            "params": {
+                "result": {
+                    "tx": 1,
+                    "txCount": 5,
+                    "liquidity": 40,
+                    "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 40.0}}]},
+                }
+            }
+        },
+        {
+            "params": {
+                "result": {
+                    "tx": 2,
+                    "txCount": 12,
+                    "liquidity": 60,
+                    "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 60.0}}]},
+                }
+            }
+        },
     ]
     ws = DummyWS(messages)
     session = DummySession(ws)
@@ -172,4 +245,10 @@ def test_watch_pool_filters(monkeypatch):
         return result
 
     res = asyncio.run(run())
-    assert res == {"tx": 2, "txCount": 12, "liquidity": 60}
+    assert res == {
+        "tx": 2,
+        "txCount": 12,
+        "liquidity": 60,
+        "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 60.0}}]},
+        "predicted_regime": "breakout",
+    }

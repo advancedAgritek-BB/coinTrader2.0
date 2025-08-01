@@ -57,8 +57,30 @@ def test_get_token_accounts(monkeypatch):
     data = {
         "result": {
             "value": [
-                {"account": {"data": {"parsed": {"info": {"tokenAmount": {"uiAmount": 1}}}}}},
-                {"account": {"data": {"parsed": {"info": {"tokenAmount": {"uiAmount": 0.0001}}}}}},
+                {
+                    "account": {
+                        "data": {
+                            "parsed": {
+                                "info": {
+                                    "tokenAmount": {"uiAmount": 1},
+                                    "mint": "A",
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "account": {
+                        "data": {
+                            "parsed": {
+                                "info": {
+                                    "tokenAmount": {"uiAmount": 1},
+                                    "mint": "B",
+                                }
+                            }
+                        }
+                    }
+                },
             ]
         }
     }
@@ -69,8 +91,19 @@ def test_get_token_accounts(monkeypatch):
     importlib.reload(token_utils)
     monkeypatch.setattr(token_utils, "aiohttp", aiohttp_mod)
 
+    async def fake_enrich(pubkey, session):
+        return {"mint": pubkey}
+
+    def fake_predict(meta):
+        return {"A": 0.6, "B": 0.4}[meta["mint"]]
+
+    monkeypatch.setattr(token_utils, "enrich_with_metadata", fake_enrich)
+    monkeypatch.setattr(token_utils, "predict_token_regime", fake_predict)
+
     accounts = asyncio.run(token_utils.get_token_accounts("wallet"))
     assert len(accounts) == 1
+    assert accounts[0]["metadata"] == {"mint": "A"}
+    assert accounts[0]["ml_score"] == 0.6
     assert session.json_payload["method"] == "getTokenAccountsByOwner"
 
 

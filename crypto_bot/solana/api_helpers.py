@@ -6,6 +6,11 @@ import aiohttp
 from contextlib import asynccontextmanager
 import logging
 import os
+from typing import Mapping, Any
+
+import numpy as np
+import logging
+import os
 import numpy as np
 
 
@@ -24,9 +29,13 @@ async def helius_ws(api_key: str):
 
     url = f"wss://mainnet.helius-rpc.com/?api-key={api_key}"
     session = aiohttp.ClientSession()
-    ws = await session.ws_connect(url)
+    ws = await session.ws_connect(url, timeout=30)
     try:
-        yield ws
+        try:
+            yield ws
+        except Exception as exc:
+            logger.error("Error while using Helius websocket", exc_info=exc)
+            raise
     finally:
         await ws.close()
         await session.close()
@@ -39,6 +48,50 @@ async def fetch_jito_bundle(bundle_id: str, api_key: str, session: aiohttp.Clien
     if session is None:
         session = aiohttp.ClientSession()
         close = True
+    async with session.get(
+        f"https://mainnet.block-engine.jito.wtf/api/v1/bundles/{bundle_id}",
+        headers={"Authorization": f"Bearer {api_key}"},
+        timeout=10,
+    ) as resp:
+        resp.raise_for_status()
+        data = await resp.json()
+    if close:
+        await session.close()
+    if isinstance(data, Mapping):
+        data = dict(data)
+        data["predicted_regime"] = predict_bundle_regime(data)
+    return data
+
+
+def predict_bundle_regime(bundle: Mapping[str, Any]) -> str:
+    """Predict bundle regime using a Supabase hosted model."""
+
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_KEY")
+    if not url or not key:
+        return "unknown"
+
+    try:  # pragma: no cover - optional dependency
+        from supabase import create_client  # type: ignore
+        from coinTrader_Trainer.ml_trainer import load_model  # type: ignore
+    except Exception:
+        return "unknown"
+
+    try:
+        create_client(url, key)
+        model = load_model("bundle_regime")
+        priority = float(bundle.get("priority_fee", 0))
+        txs = float(bundle.get("tx_count", 0))
+        preds = model.predict([[priority, txs]])
+        pred = preds[0] if isinstance(preds, (list, tuple, np.ndarray)) else preds
+        if isinstance(pred, (list, tuple, np.ndarray)):
+            idx = int(np.argmax(pred))
+            labels = ["stable", "volatile"]
+            return labels[idx] if idx < len(labels) else str(idx)
+        return str(pred)
+    except Exception:
+        return "unknown"
+
     try:
         async with session.get(
             f"https://mainnet.block-engine.jito.wtf/api/v1/bundles/{bundle_id}",
