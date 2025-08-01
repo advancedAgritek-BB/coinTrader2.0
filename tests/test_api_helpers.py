@@ -1,6 +1,8 @@
 import asyncio
 
 import pytest
+import sys
+import types
 
 from crypto_bot.solana import api_helpers
 
@@ -35,6 +37,7 @@ class DummySession:
         self.closed = False
 
     async def ws_connect(self, url, timeout=None):
+    async def ws_connect(self, url, *, timeout=None):
         self.ws_url = url
         self.ws_timeout = timeout
         return DummyWS()
@@ -66,6 +69,37 @@ def test_helius_ws(monkeypatch):
 def test_fetch_jito_bundle(monkeypatch):
     session = DummySession()
     monkeypatch.setattr(api_helpers, "aiohttp", type("M", (), {"ClientSession": lambda: session}))
+    monkeypatch.setattr(api_helpers, "predict_bundle_regime", lambda d: "volatile")
     data = asyncio.run(api_helpers.fetch_jito_bundle("123", "key"))
-    assert data == {"bundle": "ok"}
+    assert data == {"bundle": "ok", "predicted_regime": "volatile"}
     assert session.http_url.endswith("/123")
+
+
+def test_predict_bundle_regime_missing_env(monkeypatch):
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_KEY", raising=False)
+    assert api_helpers.predict_bundle_regime({}) == "unknown"
+
+
+def test_predict_bundle_regime_model(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "url")
+    monkeypatch.setenv("SUPABASE_KEY", "key")
+
+    class FakeModel:
+        def predict(self, X):
+            return [[0.2, 0.8]]
+
+    class FakeClient:
+        pass
+
+    monkeypatch.setitem(sys.modules, "supabase", types.SimpleNamespace(create_client=lambda u, k: FakeClient()))
+    monkeypatch.setitem(sys.modules, "coinTrader_Trainer.ml_trainer", types.SimpleNamespace(load_model=lambda name: FakeModel()))
+
+    label = api_helpers.predict_bundle_regime({"priority_fee": 1, "tx_count": 2})
+    assert label == "volatile"
+
+    monkeypatch.setattr(api_helpers, "predict_bundle_regime", lambda _d: "vol")
+    data = asyncio.run(api_helpers.fetch_jito_bundle("123", "key"))
+    assert data == {"bundle": "ok", "predicted_regime": "vol"}
+    assert session.http_url.endswith("/123")
+    assert session.closed
