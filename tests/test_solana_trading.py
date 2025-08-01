@@ -168,6 +168,11 @@ def test_monitor_profit(monkeypatch):
     dummy = DummyClient()
     monkeypatch.setattr(solana_trading, "AsyncClient", lambda url: dummy)
     monkeypatch.setattr(solana_trading, "_fetch_price", fake_price)
+    class DummyModel:
+        def predict(self, feats):
+            return [0.8]
+
+    monkeypatch.setattr(solana_trading, "load_model", lambda name: DummyModel())
 
     profit = asyncio.run(solana_trading.monitor_profit("tx", threshold=0.2))
     assert profit == pytest.approx(0.6)
