@@ -23,6 +23,7 @@ async def test_maybe_scan_solana_tokens(monkeypatch):
     calls = []
     async def fake_get(conf):
         calls.append(conf)
+        calls.append((conf,))
         return ["AAA/USDC"]
     monkeypatch.setattr(main, "get_solana_new_tokens", fake_get)
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
@@ -45,6 +46,7 @@ async def test_maybe_scan_solana_tokens(monkeypatch):
     assert list(main.symbol_priority_queue) == ["AAA/USDC"]
     assert main.NEW_SOLANA_TOKENS == {"AAA/USDC"}
     assert calls == [cfg["solana_scanner"]]
+    assert calls == [(cfg["solana_scanner"],)]
     # wait for background worker to finish
     await main.SOLANA_SCAN_TASK
     assert len(calls) >= 2

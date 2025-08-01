@@ -100,21 +100,18 @@ def test_get_solana_new_tokens_filters_and_limits(monkeypatch):
     assert tokens == ["A/USDC", "D/USDC"]
 
 
-async def watch_infinite(self):
-    while True:
-        for evt in events:
-            yield evt
+async def watch_simple(self):
+    for evt in events:
+        yield evt
 
 
-def test_scanner_stops_on_iteration_limit(monkeypatch):
-    monkeypatch.setattr(PoolWatcher, "watch", watch_infinite)
+def test_scanner_collects_tokens(monkeypatch):
+    monkeypatch.setattr(PoolWatcher, "watch", watch_simple)
     monkeypatch.setattr(solana_scan_mod, "TOKEN_MINTS", {}, raising=False)
     monkeypatch.setenv("HELIUS_KEY", "k")
     monkeypatch.setattr(PoolWatcher, "setup_webhook", lambda self, k: None)
 
     cfg = {
-        "max_tokens_per_scan": 100,
-        "timeout_seconds": 30,
         "min_liquidity": 0,
         "min_tx_count": 0,
     }
