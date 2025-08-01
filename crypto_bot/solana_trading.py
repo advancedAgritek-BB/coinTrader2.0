@@ -20,6 +20,9 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 logger = setup_logger(__name__, LOG_DIR / "solana_trading.log")
 
+# Proxy endpoint for Jupiter quotes
+proxy_url = "https://helius-proxy.raydium.io"
+
 
 async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> float:
     """Return current price for ``token_in``/``token_out`` using Jupiter.
@@ -30,10 +33,10 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
         Maximum attempts when the price request fails. Defaults to ``3``.
     """
     async with aiohttp.ClientSession() as session:
-        for attempt in range(max_retries):
+        for i in range(max_retries):
             try:
                 async with session.get(
-                    JUPITER_QUOTE_URL,
+                    proxy_url + JUPITER_QUOTE_URL,
                     params={
                         "inputMint": token_in,
                         "outputMint": token_out,
@@ -45,8 +48,9 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
                     resp.raise_for_status()
                     data = await resp.json()
                 break
-            except Exception:
-                if attempt < max_retries - 1:
+            except Exception as exc:
+                logger.error(f"Price fetch error (attempt {i}): {exc}")
+                if i < max_retries - 1:
                     await asyncio.sleep(1)
                     continue
                 return 0.0
