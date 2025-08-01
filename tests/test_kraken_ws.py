@@ -15,12 +15,15 @@ import pytest
 def _dummy_creds(monkeypatch):
     monkeypatch.setenv("API_KEY", "dummy")
     monkeypatch.setenv("API_SECRET", "dummy")
+
+    # Import here to ensure the real module object is patched even if other
+    # tests manipulate ``sys.modules``.
+    import crypto_bot.execution.kraken_ws as kw
+
+    monkeypatch.setattr(kw.keyring, "get_password", lambda *a, **k: None)
     monkeypatch.setattr(
-        "crypto_bot.execution.kraken_ws.keyring.get_password",
-        lambda *a, **k: None,
-    )
-    monkeypatch.setattr(
-        "crypto_bot.execution.kraken_ws.ccxt",
+        kw,
+        "ccxt",
         types.SimpleNamespace(kraken=lambda params: object()),
         raising=False,
     )
