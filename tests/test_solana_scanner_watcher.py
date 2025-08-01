@@ -74,7 +74,7 @@ async def watch_stub(self):
         yield evt
 
 
-async def fake_fetch_new_pools(_key: str, limit: int):
+async def fake_fetch_new_pools(limit: int):
     watcher_instance = PoolWatcher("u", 0)
     mints = []
     async for evt in watcher_instance.watch():

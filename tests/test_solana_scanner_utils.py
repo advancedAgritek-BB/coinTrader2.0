@@ -169,7 +169,7 @@ def test_get_solana_new_tokens_gecko_filter(monkeypatch):
     monkeypatch.setattr(
         solana_scanner,
         "fetch_new_raydium_pools",
-        lambda *_a, **_k: ["A", "B"],
+        lambda limit: ["A", "B"],
     )
     monkeypatch.setattr(
         solana_scanner,
@@ -206,7 +206,7 @@ def test_get_solana_new_tokens_scoring(monkeypatch):
     monkeypatch.setattr(
         solana_scanner,
         "fetch_new_raydium_pools",
-        lambda *_a, **_k: ["A", "B"],
+        lambda limit: ["A", "B"],
     )
     monkeypatch.setattr(
         solana_scanner,
@@ -247,7 +247,7 @@ def test_get_solana_new_tokens_ml_filter(monkeypatch):
     monkeypatch.setattr(
         solana_scanner,
         "fetch_new_raydium_pools",
-        lambda *_a, **_k: ["A", "B"],
+        lambda limit: ["A", "B"],
     )
     monkeypatch.setattr(
         solana_scanner,
@@ -296,7 +296,7 @@ def test_get_solana_new_tokens_ml_filter_sort(monkeypatch):
     monkeypatch.setattr(
         solana_scanner,
         "fetch_new_raydium_pools",
-        lambda *_a, **_k: ["A", "B"],
+        lambda limit: ["A", "B"],
     )
     monkeypatch.setattr(
         solana_scanner,
@@ -338,7 +338,7 @@ def test_get_solana_new_tokens_ml_filter_sort(monkeypatch):
 
 def test_get_solana_new_tokens_missing_keys(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
-    monkeypatch.setattr(solana_scanner, "fetch_new_raydium_pools", lambda *_a, **_k: [])
+    monkeypatch.setattr(solana_scanner, "fetch_new_raydium_pools", lambda limit: [])
     monkeypatch.setattr(solana_scanner, "fetch_pump_fun_launches", lambda *_a, **_k: [])
 
     cfg = {"max_tokens_per_scan": 5}
