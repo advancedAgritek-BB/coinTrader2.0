@@ -502,7 +502,7 @@ regime_overrides:
   multi-exchange arbitrage strategy.
 * **scoring_weights** - weighting factors for regime confidence, symbol score and volume metrics.
 * **signal_fusion** – enable to combine scores from multiple strategies via a `fusion_method` for improved selection.
-* **strategy_router** - maps market regimes to lists of strategy names. Each regime also accepts a `<regime>_timeframe` key (e.g. `trending_timeframe: 1h`, `volatile_timeframe: 1m`).
+* **strategy_router** - maps market regimes to lists of strategy names. Each regime also accepts a `<regime>_timeframe` key (e.g. `trending_timeframe: 1h`, `volatile_timeframe: 1m`). The `meme_wave_bot` strategy is included in the default `volatile` regime.
 * **mode_threshold**/**mode_degrade_window** - degrade to manual mode when auto selection underperforms.
 * **meta_selector**/**rl_selector** – experimental strategy routers. Enable these along with `signal_fusion` for improved strategy selection.
   Train the meta selector on your historical trade results with:
