@@ -230,15 +230,19 @@ class PoolWatcher:
         tx_count = 0
         for p, q in zip(pre, post):
             try:
+                ui_pre = p.get("uiTokenAmount", {})
+                ui_post = q.get("uiTokenAmount", {})
+                dec = int(ui_pre.get("decimals", ui_post.get("decimals", 0)))
                 pre_amt = float(
-                    p.get("uiTokenAmount", {}).get("uiAmount", p.get("uiTokenAmount", {}).get("uiAmountString", 0))
-                    or 0
+                    ui_pre.get("uiAmount", ui_pre.get("uiAmountString", 0)) or 0
                 )
                 post_amt = float(
-                    q.get("uiTokenAmount", {}).get("uiAmount", q.get("uiTokenAmount", {}).get("uiAmountString", 0))
+                    ui_post.get("uiAmount", ui_post.get("uiAmountString", 0))
                     or 0
                 )
-                diff = abs(post_amt - pre_amt)
+                pre_raw = pre_amt * 10**dec
+                post_raw = post_amt * 10**dec
+                diff = abs(post_raw - pre_raw)
                 if diff:
                     liquidity += diff
                     tx_count += 1
