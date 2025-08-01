@@ -36,6 +36,7 @@ class DummySession:
         self.http_url = None
         self.closed = False
 
+    async def ws_connect(self, url, timeout=None):
     async def ws_connect(self, url, *, timeout=None):
         self.ws_url = url
         self.ws_timeout = timeout

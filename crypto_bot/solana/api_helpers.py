@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import aiohttp
 from contextlib import asynccontextmanager
+import logging
 import os
 from typing import Mapping, Any
 
@@ -30,7 +31,11 @@ async def helius_ws(api_key: str):
     session = aiohttp.ClientSession()
     ws = await session.ws_connect(url, timeout=30)
     try:
-        yield ws
+        try:
+            yield ws
+        except Exception as exc:
+            logger.error("Error while using Helius websocket", exc_info=exc)
+            raise
     finally:
         await ws.close()
         await session.close()
