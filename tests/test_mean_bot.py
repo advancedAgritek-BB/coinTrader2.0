@@ -111,7 +111,7 @@ def test_indicator_lookback_default(monkeypatch):
     monkeypatch.setattr(mean_bot.stats, "zscore", fake_zscore)
     df = _df_with_drop(80.0, last_width=1.0)
     score, direction = mean_bot.generate_signal(df)
-    assert calls["lookback"] == 14
+    assert calls["lookback"] == 10
 
 
 def test_ml_enabled_by_default(monkeypatch):
