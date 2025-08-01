@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import aiohttp
 from contextlib import asynccontextmanager
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Base endpoints from the blueprint
 # Helius WebSocket: wss://mainnet.helius-rpc.com
@@ -18,9 +21,13 @@ async def helius_ws(api_key: str):
 
     url = f"wss://mainnet.helius-rpc.com/?api-key={api_key}"
     session = aiohttp.ClientSession()
-    ws = await session.ws_connect(url)
+    ws = await session.ws_connect(url, timeout=30)
     try:
-        yield ws
+        try:
+            yield ws
+        except Exception as exc:
+            logger.error("Error while using Helius websocket", exc_info=exc)
+            raise
     finally:
         await ws.close()
         await session.close()

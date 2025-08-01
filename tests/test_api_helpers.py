@@ -30,11 +30,13 @@ class DummyResp:
 class DummySession:
     def __init__(self):
         self.ws_url = None
+        self.ws_timeout = None
         self.http_url = None
         self.closed = False
 
-    async def ws_connect(self, url):
+    async def ws_connect(self, url, timeout=None):
         self.ws_url = url
+        self.ws_timeout = timeout
         return DummyWS()
 
     def get(self, url, headers=None, timeout=10):
@@ -57,6 +59,7 @@ def test_helius_ws(monkeypatch):
 
     asyncio.run(_run())
     assert session.ws_url.endswith("k")
+    assert session.ws_timeout == 30
     assert session.closed
 
 
