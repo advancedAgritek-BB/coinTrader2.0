@@ -25,6 +25,7 @@ def _dummy_creds(monkeypatch):
         raising=False,
     )
 
+
 class DummyWS:
     def __init__(self):
         self.sent = []

@@ -4,10 +4,12 @@ import pytest
 
 from crypto_bot.solana.watcher import PoolWatcher, NewPoolEvent
 
+
 class DummyMsg:
     def __init__(self, data, msg_type="text"):
         self.data = data
         self.type = msg_type
+
 
 class DummyWS:
     def __init__(self, messages):
@@ -29,6 +31,7 @@ class DummyWS:
                 yield DummyMsg(m)
         return gen()
 
+
 class DummySession:
     def __init__(self, wss):
         self.wss = wss if isinstance(wss, list) else [wss]
@@ -47,14 +50,20 @@ class DummySession:
     async def __aexit__(self, exc_type, exc, tb):
         pass
 
+
 class AiohttpMod:
-    WSMsgType = types.SimpleNamespace(TEXT="text", CLOSED="closed", ERROR="error")
+    WSMsgType = types.SimpleNamespace(
+        TEXT="text",
+        CLOSED="closed",
+        ERROR="error",
+    )
 
     def __init__(self, session):
         self._session = session
 
     def ClientSession(self):
         return self._session
+
 
 @pytest.mark.asyncio
 async def test_parses_raydium_event(monkeypatch):
@@ -70,11 +79,13 @@ async def test_parses_raydium_event(monkeypatch):
         evt.liquidity = self.min_liquidity
         return evt
     monkeypatch.setattr(PoolWatcher, "_enrich_event", _enrich, raising=False)
+
     async def enrich(self, event, sig, sess):
         event.pool_address = "P"
         event.token_mint = "M"
         event.creator = "C"
         event.liquidity = 10.0
+
     monkeypatch.setattr(PoolWatcher, "_enrich_event", enrich)
     monkeypatch.setattr("crypto_bot.solana.watcher.aiohttp", aiohttp_mod)
 
@@ -90,6 +101,7 @@ async def test_parses_raydium_event(monkeypatch):
         await gen.__anext__()
     await gen.aclose()
 
+
 @pytest.mark.asyncio
 async def test_parses_pump_fun(monkeypatch):
     msg = json.dumps({
@@ -104,10 +116,12 @@ async def test_parses_pump_fun(monkeypatch):
         evt.liquidity = self.min_liquidity
         return evt
     monkeypatch.setattr(PoolWatcher, "_enrich_event", _enrich, raising=False)
+
     async def enrich(self, event, sig, sess):
         event.token_mint = "M"
         event.creator = "C"
         event.liquidity = 20.0
+
     monkeypatch.setattr(PoolWatcher, "_enrich_event", enrich)
     monkeypatch.setattr("crypto_bot.solana.watcher.aiohttp", aiohttp_mod)
 
@@ -120,6 +134,7 @@ async def test_parses_pump_fun(monkeypatch):
     with pytest.raises(StopAsyncIteration):
         await gen.__anext__()
     await gen.aclose()
+
 
 @pytest.mark.asyncio
 async def test_reconnect_on_close(monkeypatch):
@@ -137,11 +152,13 @@ async def test_reconnect_on_close(monkeypatch):
         evt.liquidity = self.min_liquidity
         return evt
     monkeypatch.setattr(PoolWatcher, "_enrich_event", _enrich, raising=False)
+
     async def enrich(self, event, sig, sess):
         event.pool_address = "P"
         event.token_mint = "M"
         event.creator = "C"
         event.liquidity = 10.0
+
     monkeypatch.setattr(PoolWatcher, "_enrich_event", enrich)
     monkeypatch.setattr("crypto_bot.solana.watcher.aiohttp", aiohttp_mod)
 

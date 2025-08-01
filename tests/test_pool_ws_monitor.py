@@ -79,7 +79,11 @@ class DummySession:
 
 
 class AiohttpMod:
-    WSMsgType = types.SimpleNamespace(TEXT="text", CLOSED="closed", ERROR="error")
+    WSMsgType = types.SimpleNamespace(
+        TEXT="text",
+        CLOSED="closed",
+        ERROR="error",
+    )
 
     WSServerHandshakeError = Exception
 
