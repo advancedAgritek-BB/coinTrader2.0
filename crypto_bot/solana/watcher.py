@@ -1,5 +1,3 @@
-"""Pool watcher utilities for Solana."""
-
 from __future__ import annotations
 
 import asyncio
@@ -8,16 +6,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncGenerator
 import os
+import time
 
 import aiohttp
 import logging
 import yaml
+import requests  # For webhook setup
 
 
 @dataclass
 class NewPoolEvent:
-    """Event emitted when a new liquidity pool is detected."""
-
     pool_address: str
     token_mint: str
     creator: str
@@ -30,12 +28,10 @@ class NewPoolEvent:
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 
-
 logger = logging.getLogger(__name__)
 
 
 class PoolWatcher:
-    """Async engine that polls for new pools and yields :class:`NewPoolEvent`."""
     def __init__(
         self,
         url: str | None = None,
@@ -45,7 +41,6 @@ class PoolWatcher:
         min_liquidity: float | None = None,
         ml_filter: bool | None = None,
     ) -> None:
-        pump_fun_program_id = None
         if (
             url is None
             or interval is None
@@ -58,7 +53,6 @@ class PoolWatcher:
             sniper_cfg = cfg.get("meme_wave_sniper", {})
             pool_cfg = sniper_cfg.get("pool", {})
             safety_cfg = sniper_cfg.get("safety", {})
-            pump_fun_program_id = pool_cfg.get("pump_fun_program_id")
             if url is None:
                 url = pool_cfg.get("url", "")
             if interval is None:
@@ -66,62 +60,87 @@ class PoolWatcher:
             if websocket_url is None:
                 websocket_url = pool_cfg.get("websocket_url", "")
             if raydium_program_id is None:
-                raydium_program_id = pool_cfg.get("raydium_program_id", "")
+                raydium_program_id = pool_cfg.get(
+                    "raydium_program_id",
+                    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+                )  # Updated to v4
             if ml_filter is None:
                 ml_filter = bool(pool_cfg.get("ml_filter", False))
         if min_liquidity is None:
             min_liquidity = 0.0
         key = os.getenv("HELIUS_KEY")
-        if not url or "YOUR_KEY" in url or url.endswith("api-key="):
-            if not key:
-                raise ValueError(
-                    "Helius API key missing. Set HELIUS_KEY or update pool.url"
-                )
-            if not url:
-                url = f"https://mainnet.helius-rpc.com/v1/?api-key={key}"
-            else:
-                url = url.replace("YOUR_KEY", key)
-                if url.endswith("api-key="):
-                    url += key
-        if websocket_url:
-            if "${HELIUS_KEY}" in websocket_url:
-                websocket_url = websocket_url.replace("${HELIUS_KEY}", key or "")
-            if "YOUR_KEY" in websocket_url:
-                websocket_url = websocket_url.replace("YOUR_KEY", key or "")
+        if not key:
+            raise ValueError("HELIUS_KEY not set")
+        if not url:
+            url = f"https://api.helius.xyz/v0/?api-key={key}"
         self.url = url
         self.interval = interval
-        self.websocket_url = websocket_url
+        self.websocket_url = websocket_url or f"wss://mainnet.helius-rpc.com/?api-key={key}"
         self.raydium_program_id = raydium_program_id
         self.program_ids = [self.raydium_program_id]
-        if pump_fun_program_id:
-            self.program_ids.append(pump_fun_program_id)
         self.min_liquidity = float(min_liquidity or 0)
         self.ml_filter = bool(ml_filter)
         self._running = False
         self._seen: set[str] = set()
 
+        # One-time webhook setup
+        self.setup_webhook(key)
+
+    def setup_webhook(self, api_key: str):
+        """Set up Helius webhook for real-time notifications (from docs)."""
+        webhook_url = "YOUR_BOT_WEBHOOK_URL"  # e.g., Ngrok or Cloudflare Worker URL
+        helius_url = f"https://api.helius.xyz/v0/webhooks?api-key={api_key}"
+        payload = {
+            "webhookURL": webhook_url,
+            "transactionTypes": ["CREATE_POOL", "ADD_LIQUIDITY", "TOKEN_MINT"],
+            "accountAddresses": [self.raydium_program_id],
+            "webhookType": "enhanced",
+        }
+        try:
+            response = requests.post(helius_url, json=payload)
+            if response.status_code == 200:
+                logger.info("Webhook setup successful")
+            else:
+                logger.error(f"Webhook setup failed: {response.text}")
+        except Exception as e:  # pragma: no cover - best effort
+            logger.error(f"Webhook error: {e}")
+
     def _predict_breakout(self, event: NewPoolEvent) -> float:
-        """Return breakout probability using the Supabase snapshot."""
+        """Predict breakout using regime_lgbm (from coinTrader_Trainer via Supabase)."""
         if not self.ml_filter or not event.token_mint:
             return 1.0
-        url = os.getenv("SUPABASE_URL")
-        key = os.getenv("SUPABASE_KEY")
-        if not url or not key:
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
+        if not supabase_url or not supabase_key:
+            logger.warning("Supabase creds missing; skipping ML")
             return 1.0
         try:  # pragma: no cover - optional dependency
             from supabase import create_client
-            from coinTrader_Trainer import regime_lgbm
+            from coinTrader_Trainer.ml_trainer import load_model
 
-            client = create_client(url, key)
-            data = client.table("snapshots").select("*").eq("token_mint", event.token_mint).single().execute()
-            snapshot = getattr(data, "data", data)
-            return float(regime_lgbm.predict(snapshot))
+            client = create_client(supabase_url, supabase_key)
+            data = (
+                client.table("snapshots")
+                .select("*")
+                .eq("token_mint", event.token_mint)
+                .execute()
+            )
+            snapshot = data.data[0] if data.data else None
+            if snapshot:
+                model = load_model("regime_lgbm")
+                features = [
+                    snapshot.get("liquidity", 0),
+                    snapshot.get("volume", 0),
+                    event.tx_count,
+                ]
+                prediction = model.predict([features])[0]
+                return float(prediction[1])
+            return 0.0
         except Exception as exc:  # pragma: no cover - best effort
-            logger.error("ML filter failed: %s", exc)
-            return 1.0
+            logger.error(f"ML prediction failed: {exc}")
+            return 0.0
 
     async def watch(self) -> AsyncGenerator[NewPoolEvent, None]:
-        """Yield :class:`NewPoolEvent` objects from a logs subscription."""
         self._running = True
         backoff = 0
         async with aiohttp.ClientSession() as session:
@@ -133,49 +152,64 @@ class PoolWatcher:
                             req = {
                                 "jsonrpc": "2.0",
                                 "id": i,
-                                "method": "logsSubscribe",
-                                "params": [{"mentions": [prog_id]}, {"commitment": "processed"}],
+                                "method": "transactionSubscribe",
+                                "params": [
+                                    {"failed": False, "accountInclude": [prog_id]},
+                                    {
+                                        "commitment": "processed",
+                                        "encoding": "jsonParsed",
+                                        "transactionDetails": "full",
+                                        "showRewards": True,
+                                        "maxSupportedTransactionVersion": 0,
+                                    },
+                                ],
                             }
                             await ws.send_json(req)
                         backoff = 0
                         async for msg in ws:
                             if not self._running:
                                 break
-                            if msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
+                            if msg.type in (
+                                aiohttp.WSMsgType.CLOSED,
+                                aiohttp.WSMsgType.ERROR,
+                            ):
                                 reconnect = True
                                 break
                             if msg.type != aiohttp.WSMsgType.TEXT:
                                 continue
                             try:
                                 data = json.loads(msg.data)
-                                if data.get("method") != "logsNotification":
+                                if data.get("method") != "transactionNotification":
                                     continue
                                 result = data.get("params", {}).get("result", {})
                                 signature = result.get("signature", "")
                                 if not signature or signature in self._seen:
                                     continue
                                 self._seen.add(signature)
-                                logs = result.get("logs", [])
-                                logs_lower = [l.lower() for l in logs]
-                                if any("initialize2" in l for l in logs_lower) or any("initializemint2" in l for l in logs_lower):
+                                tx = result.get("transaction", {})
+                                if tx and "initialize" in json.dumps(tx).lower():
                                     event = NewPoolEvent("", "", "", 0.0)
                                     await self._enrich_event(event, signature, session)
                                     if event.liquidity >= self.min_liquidity and self._predict_breakout(event) >= 0.5:
                                         yield event
+                                        logger.info(f"New pool event yielded: {event}")
                             except Exception as exc:  # pragma: no cover - best effort
-                                logger.error("Event parsing error: %s", exc)
+                                logger.error(f"Event parsing error: {exc}")
                 except Exception as exc:  # pragma: no cover - best effort
                     reconnect = True
-                    logger.error("WS connection error: %s", exc)
+                    logger.error(f"WS connection error: {exc}")
 
                 if self._running and reconnect:
                     backoff = min(backoff + 1, 5)
                     await asyncio.sleep(2 ** backoff)
 
-
-
-    async def _enrich_event(self, event: NewPoolEvent, signature: str, session: aiohttp.ClientSession) -> None:
-        """Populate ``event`` fields using ``getTransaction`` for ``signature``."""
+    async def _enrich_event(
+        self,
+        event: NewPoolEvent,
+        signature: str,
+        session: aiohttp.ClientSession,
+    ) -> None:
+        """Enrich event with full tx details (from Helius docs)."""
         try:
             async with session.post(
                 self.url,
@@ -190,67 +224,40 @@ class PoolWatcher:
                 },
             ) as resp:
                 data = await resp.json()
+                result = data.get("result", {})
+                meta = result.get("meta", {})
+                message = result.get("transaction", {}).get("message", {})
+
+                keys = [k.get("pubkey", "") for k in message.get("accountKeys", [])]
+                if len(keys) > 2:
+                    event.pool_address = keys[2]
+                if len(keys) > 1:
+                    event.token_mint = keys[1]
+                if keys:
+                    event.creator = keys[0]
+
+                pre = meta.get("preTokenBalances", [])
+                post = meta.get("postTokenBalances", [])
+                liquidity = 0.0
+                tx_count = 0
+                for p, q in zip(pre, post):
+                    try:
+                        pre_amt = float(q.get("uiTokenAmount", {}).get("uiAmount", 0))
+                        post_amt = float(p.get("uiTokenAmount", {}).get("uiAmount", 0))
+                        diff = abs(post_amt - pre_amt)
+                        if diff > 0:
+                            liquidity += diff
+                            tx_count += 1
+                    except Exception:
+                        continue
+                event.liquidity = liquidity
+                event.tx_count = tx_count
+                event.timestamp = float(result.get("blockTime") or time.time())
+                logger.debug(
+                    f"Enriched event: liquidity={liquidity}, tx_count={tx_count}"
+                )
         except Exception as exc:  # pragma: no cover - best effort
-            logger.error("getTransaction failed: %s", exc)
-            return
-
-        result = data.get("result", {})
-        meta = result.get("meta", {})
-        message = result.get("transaction", {}).get("message", {})
-
-        keys = []
-        for k in message.get("accountKeys", []):
-            if isinstance(k, str):
-                keys.append(k)
-            else:
-                keys.append(k.get("pubkey", ""))
-
-        logs = meta.get("logMessages", [])
-        logs_l = " ".join(logs).lower()
-        if "initialize2" in logs_l:
-            if len(keys) > 2:
-                event.pool_address = keys[2]
-            if len(keys) > 1:
-                event.token_mint = keys[1]
-            if keys:
-                event.creator = keys[0]
-        elif "initializemint2" in logs_l:
-            if len(keys) > 1:
-                event.token_mint = keys[1]
-            if keys:
-                event.creator = keys[0]
-
-        pre = meta.get("preTokenBalances") or []
-        post = meta.get("postTokenBalances") or []
-        liquidity = 0.0
-        tx_count = 0
-        for p, q in zip(pre, post):
-            try:
-                ui_pre = p.get("uiTokenAmount", {})
-                ui_post = q.get("uiTokenAmount", {})
-                dec = int(ui_pre.get("decimals", ui_post.get("decimals", 0)))
-                pre_amt = float(
-                    ui_pre.get("uiAmount", ui_pre.get("uiAmountString", 0)) or 0
-                )
-                post_amt = float(
-                    ui_post.get("uiAmount", ui_post.get("uiAmountString", 0))
-                    or 0
-                )
-                pre_raw = pre_amt * 10**dec
-                post_raw = post_amt * 10**dec
-                diff = abs(post_raw - pre_raw)
-                if diff:
-                    liquidity += diff
-                    tx_count += 1
-            except Exception:
-                continue
-
-        event.liquidity = liquidity
-        event.tx_count = tx_count
-        event.timestamp = float(result.get("blockTime") or 0)
-
+            logger.error(f"Enrich error: {exc}")
 
     def stop(self) -> None:
-        """Stop the watcher loop."""
         self._running = False
-

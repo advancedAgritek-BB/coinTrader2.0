@@ -89,6 +89,7 @@ def test_get_solana_new_tokens_filters_and_limits(monkeypatch):
     monkeypatch.setattr(PoolWatcher, "watch", watch_stub)
     monkeypatch.setattr(solana_scanner, "fetch_new_raydium_pools", fake_fetch_new_pools)
     monkeypatch.setattr(solana_scanner, "fetch_pump_fun_launches", lambda *_a, **_k: [])
+    monkeypatch.setattr(PoolWatcher, "setup_webhook", lambda self, k: None)
 
     cfg = {
         "max_tokens_per_scan": 2,
@@ -109,6 +110,7 @@ def test_scanner_stops_on_iteration_limit(monkeypatch):
     monkeypatch.setattr(PoolWatcher, "watch", watch_infinite)
     monkeypatch.setattr(solana_scan_mod, "TOKEN_MINTS", {}, raising=False)
     monkeypatch.setenv("HELIUS_KEY", "k")
+    monkeypatch.setattr(PoolWatcher, "setup_webhook", lambda self, k: None)
 
     cfg = {
         "max_tokens_per_scan": 100,

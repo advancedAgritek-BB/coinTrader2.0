@@ -69,13 +69,14 @@ class AiohttpMod:
 @pytest.mark.asyncio
 async def test_parses_raydium_event(monkeypatch):
     msg = json.dumps({
-        "method": "logsNotification",
-        "params": {"result": {"signature": "sig", "logs": ["initialize2"]}}
+        "method": "transactionNotification",
+        "params": {"result": {"signature": "sig", "transaction": {"init": "initialize"}}}
     })
     ws = DummyWS([msg])
     session = DummySession(ws)
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, e: 1.0)
+    monkeypatch.setattr(PoolWatcher, "setup_webhook", lambda self, k: None)
 
     async def enrich(self, event, sig, sess):
         event.pool_address = "P"
@@ -102,13 +103,14 @@ async def test_parses_raydium_event(monkeypatch):
 @pytest.mark.asyncio
 async def test_parses_pump_fun(monkeypatch):
     msg = json.dumps({
-        "method": "logsNotification",
-        "params": {"result": {"signature": "sig", "logs": ["InitializeMint2"]}}
+        "method": "transactionNotification",
+        "params": {"result": {"signature": "sig", "transaction": {"init": "InitializeMint2"}}}
     })
     ws = DummyWS([msg])
     session = DummySession(ws)
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, e: 1.0)
+    monkeypatch.setattr(PoolWatcher, "setup_webhook", lambda self, k: None)
 
     async def enrich(self, event, sig, sess):
         event.token_mint = "M"
@@ -133,14 +135,15 @@ async def test_parses_pump_fun(monkeypatch):
 async def test_reconnect_on_close(monkeypatch):
     msg_close = DummyMsg(None, "closed")
     msg_ok = json.dumps({
-        "method": "logsNotification",
-        "params": {"result": {"signature": "sig", "logs": ["initialize2"]}}
+        "method": "transactionNotification",
+        "params": {"result": {"signature": "sig", "transaction": {"init": "initialize2"}}}
     })
     ws1 = DummyWS([msg_close])
     ws2 = DummyWS([msg_ok])
     session = DummySession([ws1, ws2])
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, e: 1.0)
+    monkeypatch.setattr(PoolWatcher, "setup_webhook", lambda self, k: None)
 
     async def enrich(self, event, sig, sess):
         event.pool_address = "P"
@@ -187,7 +190,7 @@ class DummyHTTP:
 
 
 @pytest.mark.asyncio
-async def test_enrich_event_decimals():
+async def test_enrich_event_decimals(monkeypatch):
     payload = {
         "result": {
             "meta": {
@@ -209,6 +212,7 @@ async def test_enrich_event_decimals():
     }
 
     session = DummyHTTP(payload)
+    monkeypatch.setattr(PoolWatcher, "setup_webhook", lambda self, k: None)
     watcher = PoolWatcher("u", 0)
     event = NewPoolEvent("", "", "", 0.0)
     await watcher._enrich_event(event, "sig", session)
@@ -216,4 +220,4 @@ async def test_enrich_event_decimals():
     assert event.token_mint == "M"
     assert event.creator == "C"
     assert event.tx_count == 2
-    assert event.liquidity == 2001000
+    assert event.liquidity == 12.0
