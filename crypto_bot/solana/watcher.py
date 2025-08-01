@@ -12,7 +12,6 @@ import os
 import aiohttp
 import logging
 import yaml
-import pandas as pd
 
 
 @dataclass
@@ -43,7 +42,6 @@ class PoolWatcher:
         interval: float | None = None,
         websocket_url: str | None = None,
         raydium_program_id: str | None = None,
-        max_failures: int = 3,
         min_liquidity: float | None = None,
         ml_filter: bool | None = None,
     ) -> None:
@@ -101,8 +99,6 @@ class PoolWatcher:
         self.ml_filter = bool(ml_filter)
         self._running = False
         self._seen: set[str] = set()
-        self._max_failures = max_failures
-        self._failures = 0
 
     def _predict_breakout(self, event: NewPoolEvent) -> float:
         """Return breakout probability using the Supabase snapshot."""
@@ -258,22 +254,3 @@ class PoolWatcher:
         """Stop the watcher loop."""
         self._running = False
 
-    async def _fetch_snapshot(self, pool_addr: str) -> pd.DataFrame:
-        """Return a simple OHLCV-like snapshot for ``pool_addr``."""
-        async with aiohttp.ClientSession() as sess:
-            async with sess.post(
-                self.url,
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "getSignaturesForAddress",
-                    "params": [pool_addr, {"limit": 20}],
-                },
-            ) as resp:
-                data = await resp.json()
-        result = data.get("result", [])
-        rows = [
-            {"timestamp": r.get("blockTime", 0), "volume": 1}
-            for r in result
-        ]
-        return pd.DataFrame(rows)
