@@ -400,6 +400,28 @@ async def analyze_symbol(
                 name = strategy_name(sub_regime, env)
                 score = 0.0
                 direction = "none"
+        elif eval_mode == "any":
+            candidates = [wrap(s) for s in get_strategies_for_regime(sub_regime, router_cfg)]
+            if not candidates:
+                candidates = [wrap(strategy_for(sub_regime, router_cfg))]
+            ranked = await run_candidates(df, candidates, symbol, cfg, sub_regime)
+            if ranked:
+                best_fn, score, direction = ranked[0]
+                selected_fn = best_fn
+                name = _fn_name(best_fn)
+                if len(ranked) > 1:
+                    second = ranked[1]
+                    analysis_logger.info(
+                        "%s second %s %.4f %s",
+                        symbol,
+                        _fn_name(second[0]),
+                        second[1],
+                        second[2],
+                    )
+            else:
+                name = strategy_name(sub_regime, env)
+                score = 0.0
+                direction = "none"
         else:
             strategy_fn = wrap(
                 route(

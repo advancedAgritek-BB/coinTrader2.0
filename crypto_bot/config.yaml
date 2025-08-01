@@ -52,6 +52,10 @@ breakout:
   squeeze_threshold: 0.01
   vol_multiplier: 0.5
   volume_window: 15
+cross_chain_arb_bot:
+  fee_threshold: 30
+  pair: SOL/USDC
+  spread_threshold: 0.05
 cycle_bias:
   enabled: false
   mvrv_url: https://api.example.com/mvrv
@@ -76,11 +80,6 @@ dip_hunter:
   rsi_window: 14
   vol_mult: 1.5
   vol_window: 20
-stat_arb_bot:
-  pairs:
-    - SOL/USDC,ETH/USDC
-  z_threshold: 2.0
-  window: 50
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.05
 exchange: kraken
@@ -102,13 +101,15 @@ exit_strategy:
   - 50
   - 75
   - 100
+  quick_sell_hold_timeout: 300
+  quick_sell_profit_pct: 0.05
   scale_out: true
   trailing_stop_factor: 1.2
   trailing_stop_pct: 0.005
-  # Close a position quickly when profit exceeds ``profit_pct``
-  # and the trade has been held for at least ``hold_timeout`` seconds.
-  quick_sell_profit_pct: 0.05
-  quick_sell_hold_timeout: 300
+flash_crash_bot:
+  drop_thr: -0.1
+  tp_thr: 0.05
+  vol_thr: 5.0
 force_websocket_history: false
 gas_threshold_gwei: 50
 gecko_limit: 10
@@ -138,15 +139,19 @@ hidden_limit: true
 indicator_lookback: 14
 liquidity_check: true
 liquidity_depth: 5
-max_liquidity_usage: 0.8
 listing_date_concurrency: 5
 log_to_google: true
 loop_interval_minutes: 0.05
+lstm_bot:
+  model_path: crypto_bot/models/lstm_model.pth
+  sequence_length: 60
+  threshold_pct: 0.01
 max_age_days: 90
 max_change_pct: 20
 max_concurrent_ohlcv: 10
 max_concurrent_tickers: 20
 max_latency_ms: 500
+max_liquidity_usage: 0.8
 max_ohlcv_failures: 2
 max_open_trades: 10
 max_parallel: 50
@@ -163,10 +168,10 @@ meme_wave_sniper:
     dry_run: true
   pool:
     interval: 0.5
+    ml_filter: false
     raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
     url: https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY
     websocket_url: wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
-    ml_filter: false
   risk:
     daily_loss_cap: 2.0
     max_concurrent: 5
@@ -238,12 +243,10 @@ momentum_bot:
 ohlcv_batch_size: 10
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
-# skip_age_threshold_candles: 1000  # skip OHLCV history when older than this many candles
 ohlcv_timeout: 60
-redis_url: null
 onchain_default_quote: USDC
 onchain_min_volume_usd: 1000
-onchain_symbols: []  # add tokens here to disable scanning
+onchain_symbols: []
 optimization:
   enabled: true
   interval_days: 0.1
@@ -268,7 +271,10 @@ pyth:
   solana_ws_endpoint: wss://api.mainnet-beta.solana.com
 pyth_quotes:
 - USDC
+quick_sell_profit_pct: 10
+quick_sell_timeout_sec: 120
 quiet_mode: false
+redis_url: null
 refresh_pairs:
   allowed_quote_currencies: []
   blacklist_assets: []
@@ -295,8 +301,8 @@ risk:
   take_profit_atr_mult: 3.0
   take_profit_pct: 0.1
   volume_threshold_ratio: 0.01
-  win_rate_threshold: 0.7
   win_rate_boost_factor: 1.5
+  win_rate_threshold: 0.7
 rl_selector:
   enabled: true
 rsi_overbought_pct: 80
@@ -352,33 +358,6 @@ sniper_bot:
   price_fallback: true
   volume_multiple: 1.2
   volume_window: 3
-momentum_bot:
-  donchian_period: 20
-  vol_multiplier: 1.0
-  atr_period: 14
-  setup_window: 10
-  trigger_window: 3
-  fast_length: 20
-  slow_length: 50
-  adx_threshold: 25
-  risk:
-    stop_loss_pct: 0.01
-    take_profit_pct: 0.03
-    trailing_stop_factor: 1.5  # ATR multiple for trailing stop
-    risk_pct: 0.01
-    max_drawdown: 0.4
-flash_crash_bot:
-  drop_thr: -0.10   # 10% 1m drop
-  vol_thr: 5.0      # volume spike multiplier
-  tp_thr: 0.05      # take‑profit reversion threshold
-cross_chain_arb_bot:
-  pair: SOL/USDC
-  spread_threshold: 0.05
-  fee_threshold: 30
-lstm_bot:
-  model_path: crypto_bot/models/lstm_model.pth
-  sequence_length: 60
-  threshold_pct: 0.01
 solana_scalping:
   macd_fast: 10
   macd_signal: 8
@@ -389,21 +368,21 @@ solana_scalping:
 solana_scanner:
   api_keys:
     bitquery: YOUR_KEY
-    moralis: YOUR_KEY
     lunarcrush_api_key: YOUR_KEY
-  helius_ws_url: "wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}"
-  raydium_program_id: "EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6oKEWSCPPu"
-  pump_fun_program_id: "6EF8rrecthR5Dkzon8NQiDSKX6EYxsCPt6oKEWSCPPu"
-  use_ws: true
-  min_liquidity: 1000
+    moralis: YOUR_KEY
   enabled: true
   gecko_search: true
-  ml_filter: true
+  helius_ws_url: wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
   interval_minutes: 0.1
-  max_tokens_per_scan: 20
-  timeout_seconds: 30
   max_iterations: 100
+  max_tokens_per_scan: 20
+  min_liquidity: 1000
   min_volume_usd: 10
+  ml_filter: true
+  pump_fun_program_id: 6EF8rrecthR5Dkzon8NQiDSKX6EYxsCPt6oKEWSCPPu
+  raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6oKEWSCPPu
+  timeout_seconds: 30
+  use_ws: true
 solana_slippage_bps: 10
 stat_arb_bot:
   pairs:
@@ -414,20 +393,20 @@ strategy_allocation:
   grid: 0.2
   sniper_solana: 0.6
   trend: 0.2
-strategy_evaluation_mode: ensemble
+strategy_evaluation_mode: any
 strategy_router:
   bandit_enabled: true
   bounce_timeframe: 5m
   breakout_timeframe: 15m
   fast_path:
+    breakdown_volume_multiplier: 3
+    breakdown_window: 20
     breakout_max_bandwidth: 0.03
     breakout_squeeze_window: 10
     breakout_volume_multiplier: 3
     trend_adx_threshold: 20
-    breakdown_window: 20
-    breakdown_volume_multiplier: 3
-  mean_reverting_timeframe: 1h
   flash_crash_timeframe: 1m
+  mean_reverting_timeframe: 1h
   min_confidence: 0.001
   regimes:
     bounce:
@@ -445,6 +424,8 @@ strategy_router:
     - stat_arb_bot
     - flash_crash_bot
     - lstm_bot
+    new_pool:
+    - sniper_solana
     scalp:
     - micro_scalp
     - lstm_bot
@@ -465,8 +446,6 @@ strategy_router:
     - cross_chain_arb_bot
     - flash_crash_bot
     - lstm_bot
-    new_pool:
-    - sniper_solana
   scalp_timeframe: 1m
   sideways_timeframe: 1h
   trending_timeframe: 1h
@@ -554,5 +533,3 @@ wallet_address: your_wallet
 ws_failures_before_disable: 1
 ws_ping_interval: 5
 ws_ticker_batch_size: 100
-quick_sell_profit_pct: 10
-quick_sell_timeout_sec: 120

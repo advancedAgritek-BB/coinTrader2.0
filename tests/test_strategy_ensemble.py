@@ -125,3 +125,40 @@ def test_analyze_symbol_ensemble_default_min_conf(monkeypatch):
     assert captured[0] is base
     assert res["direction"] == "long"
 
+
+def test_analyze_symbol_any_mode_skips_min_conf(monkeypatch):
+    df = pd.DataFrame({"open": [1, 2], "high": [1, 2], "low": [1, 2], "close": [1, 2], "volume": [1, 1]})
+
+    async def fake_async(*_a, **_k):
+        return "trending", {"trending": 1.0}
+
+    async def fake_cached(*_a, **_k):
+        return "trending", 1.0
+
+    import crypto_bot.utils.market_analyzer as ma
+    monkeypatch.setattr(ma, "classify_regime_async", fake_async)
+    monkeypatch.setattr(ma, "classify_regime_cached", fake_cached)
+    monkeypatch.setattr(ma, "detect_patterns", lambda _df: {})
+    monkeypatch.setattr(ma, "calc_atr", lambda *_a, **_k: 0.0)
+
+    async def fake_run(df_, strategies, symbol, cfg_, regime=None):
+        return [(strategies[0], 0.2, "long")]
+
+    monkeypatch.setattr(ma, "run_candidates", fake_run)
+    monkeypatch.setattr(sr, "get_strategies_for_regime", lambda r, c=None: [strat_a])
+    monkeypatch.setattr(ma, "get_strategies_for_regime", lambda r, c=None: [strat_a])
+    monkeypatch.setattr(ma.meta_selector, "_scores_for", lambda r: {})
+
+    async def run():
+        cfg = {
+            "timeframe": "1h",
+            "strategy_evaluation_mode": "any",
+            "ensemble_min_conf": 0.5,
+            "scoring_weights": {"strategy_score": 1.0},
+            "signal_fusion": {"fusion_method": "weight"},
+        }
+        return await analyze_symbol("AAA", {"1h": df}, "cex", cfg, None)
+
+    res = asyncio.run(run())
+    assert res["direction"] == "long"
+
