@@ -1121,7 +1121,7 @@ max_concurrent_ohlcv: 2          # simultaneous OHLCV requests during startup
   ticker_backoff_max: 60           # cap for exponential backoff
   ws_ticker_batch_size: 100        # symbols per watchTickers call
   initial_timeframes: [1m, 5m, 15m, 1h]  # preloaded intervals (4h unsupported on Coinbase)
-initial_history_candles: 700     # candles fetched per timeframe initially
+initial_history_candles: 50     # candles fetched per timeframe initially
 ```
 
 For thin markets you may want to relax the filters and trading
@@ -1148,7 +1148,7 @@ data is fetched for regime detection and correlation checks before live trading
 starts.
   max_concurrent_ohlcv: 10       # limit OHLCV requests when loading history
   initial_timeframes: [1h, 1d]  # timeframes fetched for new symbols
-  initial_history_candles: 300   # candles per timeframe on first load
+  initial_history_candles: 50   # candles per timeframe on first load
 ```
 
 * **max_concurrent_ohlcv** – cap simultaneous OHLCV requests while scoring new symbols (default `10`).
