@@ -701,6 +701,7 @@ def test_update_ohlcv_cache_retry_incomplete_ws():
             cache,
             ["BTC/USD"],
             limit=10,
+            config={"min_history_fraction": 0.5},
             use_websocket=True,
             max_concurrent=1,
         )
@@ -719,6 +720,7 @@ def test_update_ohlcv_cache_skip_after_retry(caplog):
             cache,
             ["BTC/USD"],
             limit=10,
+            config={"min_history_fraction": 0.5},
             use_websocket=True,
             max_concurrent=1,
         )
