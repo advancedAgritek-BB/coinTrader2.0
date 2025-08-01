@@ -39,6 +39,10 @@ class DummySession:
         self.json_payload = json
         return DummyResp(self._data)
 
+    def get(self, url, timeout=10):
+        self.url = url
+        return DummyResp(self._data)
+
 
 class FailingSession(DummySession):
     def __init__(self, exc):
@@ -82,3 +86,41 @@ def test_get_token_accounts_error(monkeypatch):
 
     with pytest.raises(DummyErr):
         asyncio.run(token_utils.get_token_accounts("wallet"))
+
+
+def _setup_ml(monkeypatch, score):
+    """Helper to patch ML related functions."""
+
+    async def fake_enrich(acc):
+        enriched = {"enriched": True}
+        enriched.update(acc)
+        return enriched
+
+    monkeypatch.setattr(token_utils, "enrich_with_metadata", fake_enrich)
+    monkeypatch.setattr(token_utils, "predict_token_regime", lambda *_a, **_k: score)
+
+
+def test_get_token_accounts_ml_filter(monkeypatch):
+    data = {"result": {"value": [{"id": 1}]}}
+    session = DummySession(data)
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: session, "ClientError": Exception})
+    monkeypatch.setenv("HELIUS_KEY", "k")
+    importlib.reload(token_utils)
+    monkeypatch.setattr(token_utils, "aiohttp", aiohttp_mod)
+    _setup_ml(monkeypatch, 0.6)
+
+    accounts = asyncio.run(token_utils.get_token_accounts_ml_filter("wallet"))
+    assert accounts == [{"id": 1, "enriched": True, "ml_score": 0.6}]
+
+
+def test_get_token_accounts_ml_filter_low_score(monkeypatch):
+    data = {"result": {"value": [{"id": 1}]}}
+    session = DummySession(data)
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: session, "ClientError": Exception})
+    monkeypatch.setenv("HELIUS_KEY", "k")
+    importlib.reload(token_utils)
+    monkeypatch.setattr(token_utils, "aiohttp", aiohttp_mod)
+    _setup_ml(monkeypatch, 0.4)
+
+    accounts = asyncio.run(token_utils.get_token_accounts_ml_filter("wallet"))
+    assert accounts == []
