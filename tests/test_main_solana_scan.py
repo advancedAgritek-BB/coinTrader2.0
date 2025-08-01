@@ -21,8 +21,8 @@ import crypto_bot.main as main
 async def test_maybe_scan_solana_tokens(monkeypatch):
     cfg = {"solana_scanner": {"enabled": True, "interval_minutes": 1}}
     calls = []
-    async def fake_get(conf, timeout=None):
-        calls.append((conf, timeout))
+    async def fake_get(conf):
+        calls.append((conf,))
         return ["AAA/USDC"]
     monkeypatch.setattr(main, "get_solana_new_tokens", fake_get)
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
@@ -44,7 +44,7 @@ async def test_maybe_scan_solana_tokens(monkeypatch):
     last = await main.maybe_scan_solana_tokens(cfg, 0.0)
     assert list(main.symbol_priority_queue) == ["AAA/USDC"]
     assert main.NEW_SOLANA_TOKENS == {"AAA/USDC"}
-    assert calls == [(cfg["solana_scanner"], None)]
+    assert calls == [(cfg["solana_scanner"],)]
     # wait for background worker to finish
     await main.SOLANA_SCAN_TASK
     assert len(calls) >= 2

@@ -150,7 +150,7 @@ async def _scan_once(cfg, queue):
 
 
 def test_solana_scan_loop_enqueues_filtered(monkeypatch):
-    async def fake_get(cfg, timeout=None):
+    async def fake_get(cfg):
         return ["A/USDC", "B/USDC"]
 
     async def fake_fetch(sym, *a, **k):
