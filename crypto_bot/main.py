@@ -295,9 +295,7 @@ async def maybe_scan_solana_tokens(config: dict, last_scan: float) -> float:
 
     async def _worker() -> None:
         try:
-            tokens = await get_solana_new_tokens(
-                sol_cfg, sol_cfg.get("timeout_seconds", 30)
-            )
+            tokens = await get_solana_new_tokens(sol_cfg)
             if tokens:
                 logger.info("Discovered %d new Solana tokens", len(tokens))
                 async with QUEUE_LOCK:
