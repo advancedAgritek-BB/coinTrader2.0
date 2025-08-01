@@ -109,6 +109,7 @@ async def watch_infinite(self):
 def test_scanner_stops_on_iteration_limit(monkeypatch):
     monkeypatch.setattr(PoolWatcher, "watch", watch_infinite)
     monkeypatch.setattr(solana_scan_mod, "TOKEN_MINTS", {}, raising=False)
+    monkeypatch.setenv("HELIUS_KEY", "k")
 
     cfg = {
         "max_tokens_per_scan": 100,

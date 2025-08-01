@@ -3,6 +3,7 @@ import types
 import pytest
 
 from crypto_bot.solana.watcher import PoolWatcher, NewPoolEvent
+import crypto_bot.solana.watcher as watcher_mod
 
 
 class DummyMsg:
@@ -83,7 +84,7 @@ async def test_parses_raydium_event(monkeypatch):
         event.liquidity = 10.0
 
     monkeypatch.setattr(PoolWatcher, "_enrich_event", enrich)
-    monkeypatch.setattr("crypto_bot.solana.watcher.aiohttp", aiohttp_mod)
+    monkeypatch.setattr(watcher_mod, "aiohttp", aiohttp_mod)
 
     watcher = PoolWatcher("u", 0, "ws://x", "PGM")
     gen = watcher.watch()
@@ -115,7 +116,7 @@ async def test_parses_pump_fun(monkeypatch):
         event.liquidity = 20.0
 
     monkeypatch.setattr(PoolWatcher, "_enrich_event", enrich)
-    monkeypatch.setattr("crypto_bot.solana.watcher.aiohttp", aiohttp_mod)
+    monkeypatch.setattr(watcher_mod, "aiohttp", aiohttp_mod)
 
     watcher = PoolWatcher("u", 0, "ws://x", "PGM")
     gen = watcher.watch()
@@ -148,7 +149,7 @@ async def test_reconnect_on_close(monkeypatch):
         event.liquidity = 10.0
 
     monkeypatch.setattr(PoolWatcher, "_enrich_event", enrich)
-    monkeypatch.setattr("crypto_bot.solana.watcher.aiohttp", aiohttp_mod)
+    monkeypatch.setattr(watcher_mod, "aiohttp", aiohttp_mod)
 
     watcher = PoolWatcher("u", 0, "ws://x", "PGM")
     gen = watcher.watch()
@@ -159,3 +160,60 @@ async def test_reconnect_on_close(monkeypatch):
     with pytest.raises(StopAsyncIteration):
         await gen.__anext__()
     await gen.aclose()
+
+
+class Resp:
+    def __init__(self, data):
+        self.data = data
+
+    async def json(self):
+        return self.data
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
+
+
+class DummyHTTP:
+    def __init__(self, payload):
+        self.payload = payload
+        self.sent = None
+
+    def post(self, url, json=None):
+        self.sent = json
+        return Resp(self.payload)
+
+
+@pytest.mark.asyncio
+async def test_enrich_event_decimals():
+    payload = {
+        "result": {
+            "meta": {
+                "logMessages": ["initialize2"],
+                "preTokenBalances": [
+                    {"uiTokenAmount": {"uiAmount": 1, "decimals": 6}},
+                    {"uiTokenAmount": {"uiAmount": 0, "decimals": 2}},
+                ],
+                "postTokenBalances": [
+                    {"uiTokenAmount": {"uiAmount": 3, "decimals": 6}},
+                    {"uiTokenAmount": {"uiAmount": 10, "decimals": 2}},
+                ],
+            },
+            "transaction": {
+                "message": {"accountKeys": ["C", "M", "P"]}
+            },
+            "blockTime": 123,
+        }
+    }
+
+    session = DummyHTTP(payload)
+    watcher = PoolWatcher("u", 0)
+    event = NewPoolEvent("", "", "", 0.0)
+    await watcher._enrich_event(event, "sig", session)
+    assert event.pool_address == "P"
+    assert event.token_mint == "M"
+    assert event.creator == "C"
+    assert event.tx_count == 2
+    assert event.liquidity == 2001000
