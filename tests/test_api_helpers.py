@@ -63,6 +63,8 @@ def test_helius_ws(monkeypatch):
 def test_fetch_jito_bundle(monkeypatch):
     session = DummySession()
     monkeypatch.setattr(api_helpers, "aiohttp", type("M", (), {"ClientSession": lambda: session}))
+    monkeypatch.setattr(api_helpers, "predict_bundle_regime", lambda _d: "vol")
     data = asyncio.run(api_helpers.fetch_jito_bundle("123", "key"))
-    assert data == {"bundle": "ok"}
+    assert data == {"bundle": "ok", "predicted_regime": "vol"}
     assert session.http_url.endswith("/123")
+    assert session.closed
