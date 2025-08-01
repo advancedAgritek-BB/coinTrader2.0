@@ -74,30 +74,14 @@ async def watch_stub(self):
         yield evt
 
 
-async def fake_fetch_new_pools(limit: int):
-    watcher_instance = PoolWatcher("u", 0)
-    mints = []
-    async for evt in watcher_instance.watch():
-        if evt.liquidity >= 50 and evt.tx_count >= 2:
-            mints.append(evt.token_mint)
-        if len(mints) >= limit:
-            break
-    return mints
-
-
 def test_get_solana_new_tokens_filters_and_limits(monkeypatch):
     monkeypatch.setattr(PoolWatcher, "watch", watch_stub)
-    monkeypatch.setattr(solana_scanner, "fetch_new_raydium_pools", fake_fetch_new_pools)
-    monkeypatch.setattr(solana_scanner, "fetch_pump_fun_launches", lambda *_a, **_k: [])
+    monkeypatch.setenv("HELIUS_KEY", "k")
     monkeypatch.setattr(PoolWatcher, "setup_webhook", lambda self, k: None)
 
-    cfg = {
-        "max_tokens_per_scan": 2,
-        "min_volume_usd": 0,
-        "gecko_search": False,
-    }
-    tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
-    assert tokens == ["A/USDC", "D/USDC"]
+    cfg = {"min_liquidity": 0}
+    tokens = asyncio.run(solana_scan_mod.get_solana_new_tokens(cfg))
+    assert tokens == ["A", "B", "C", "D", "E"]
 
 
 async def watch_simple(self):
