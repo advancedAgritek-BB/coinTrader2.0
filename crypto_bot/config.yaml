@@ -477,7 +477,7 @@ symbol_filter:
   change_pct_percentile: 10
   correlation_max_pairs: 200
   http_timeout: 5
-  initial_history_candles: 10
+  initial_history_candles: 50
   initial_timeframes:
   - 1h
   - 1d
