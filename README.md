@@ -184,7 +184,6 @@ HELIUS_KEY=your_helius_api_key          # required for Jupiter/Helius registry
 # also needed for WebSocket pool monitoring
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
-RAYDIUM_API_KEY=your_raydium_api_key   # required for Solana scanner
 PUMP_FUN_API_KEY=your_pump_fun_api_key # required for Solana scanner
 SUPABASE_URL=https://xyzcompany.supabase.co
 SUPABASE_KEY=your_service_key
@@ -229,12 +228,11 @@ When using [Helius](https://www.helius.xyz/) endpoints, append `?api-key=${HELIU
 SOLANA_RPC_URL=https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
 ```
 
-New-token detection relies on several Solana-specific API keys. Add them to
+New-token detection relies on a few Solana-specific API keys. Add them to
 `crypto_bot/.env` (or your environment) before running the scanner:
 
 ```env
-HELIUS_KEY=your_helius_api_key         # required
-RAYDIUM_API_KEY=your_raydium_api_key   # required
+HELIUS_KEY=your_helius_api_key         # used for Raydium data
 PUMP_FUN_API_KEY=your_pump_fun_api_key # required
 ```
 
@@ -1452,10 +1450,11 @@ fetched and passed through `classify_regime_cached`. Only those labeled with one
 of the regimes in `solana_scanner.filter_regime` at `solana_scanner.filter_tf`
 are enqueued.
 
-API requirements: [Helius](https://www.helius.xyz/) for pool data,
-[Jupiter](https://jup.ag/) for quotes, [Jito](https://www.jito.network/) for
-bundle submission, and a LunarCrush API key for sentiment scores.
-Raydium and Pump.fun API keys are required for discovering new tokens.
+API requirements: [Helius](https://www.helius.xyz/) for pool data (also used to
+retrieve Raydium information), [Jupiter](https://jup.ag/) for quotes,
+[Jito](https://www.jito.network/) for bundle submission, and a LunarCrush API
+key for sentiment scores. A Pump.fun API key is required for discovering new
+tokens.
 
 ### Monitoring Raydium Pools via WebSockets
 
