@@ -1411,7 +1411,7 @@ meme_wave_sniper:
     url: https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
     interval: 5
     websocket_url: wss://atlas-mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
-    raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
+    raydium_program_id: 675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8
     ml_filter: false
   scoring:
     weight_liquidity: 1.0
@@ -1472,7 +1472,7 @@ from crypto_bot.solana.pool_ws_monitor import watch_pool
 
 async def main():
     api_key = os.environ.get("HELIUS_KEY", "")
-    program = "EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk"
+    program = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
     async for event in watch_pool(api_key, program):
         print(event)
 
