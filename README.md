@@ -176,6 +176,7 @@ SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
 # SOLANA_RPC_URL=https://api.devnet.solana.com      # devnet example
 HELIUS_KEY=your_helius_api_key          # required for Jupiter/Helius registry
 # also needed for WebSocket pool monitoring
+MIN_BALANCE_THRESHOLD=0.001             # optional minimum account balance
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 PUMP_FUN_API_KEY=your_pump_fun_api_key # required for Solana scanner
@@ -197,6 +198,10 @@ configuration file.
 `SUPABASE_URL` and `SUPABASE_KEY` are required for downloading models used by
 `regime_classifier`.  Use `SUPABASE_MODEL_FILE` to override the default model
 file name if needed.
+
+`HELIUS_KEY` must be defined so `get_token_accounts` can query the Helius DAS
+API. `MIN_BALANCE_THRESHOLD` is optional and sets the minimum token balance
+included in the results.
 
 ### Solana token registry
 
@@ -234,6 +239,12 @@ If any of these keys are missing the scanner will not be able to discover new
 tokens. See the `solana_scanner.api_keys` section in
 [`crypto_bot/config.yaml`](crypto_bot/config.yaml) for how they are referenced
 in the configuration.
+
+### Token account enrichment
+
+`get_token_accounts` now returns SPL token accounts enriched with metadata from
+the Helius DAS API.  Results are filtered using an ML regime score so only
+high‑quality accounts remain.
 
 You can generate a key and enable advanced features like **ShredStream** and **LaserStream** from the [Helius dashboard](https://dashboard.helius.xyz/). These streams can be configured directly in the bot's web dashboard.
 Install the `pythclient` package to fetch oracle prices:
