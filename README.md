@@ -233,6 +233,7 @@ New-token detection relies on a few Solana-specific API keys. Add them to
 
 ```env
 HELIUS_KEY=your_helius_api_key         # used for Raydium data
+HELIUS_KEY=your_helius_api_key         # required
 PUMP_FUN_API_KEY=your_pump_fun_api_key # required
 ```
 
