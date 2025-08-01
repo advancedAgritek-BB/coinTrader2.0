@@ -210,7 +210,7 @@ min_agreeing_votes: 1
 min_confidence_score: 0.001
 min_consistent_agreement: 1
 min_cooldown: 0
-min_history_fraction: 0.1
+min_history_fraction: 0
 min_symbol_age_days: 0
 min_symbol_score: 0
 ml_enabled: false
