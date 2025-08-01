@@ -20,7 +20,26 @@ from typing import Any, AsyncGenerator, Dict
 
 import aiohttp
 
-DEFAULT_PROGRAM_ID = "EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk"
+DEFAULT_PROGRAM_ID = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
+
+
+def parse_liquidity(tx_data: Dict[str, Any]) -> float:
+    """Return total liquidity from ``meta.postTokenBalances``."""
+    meta = tx_data.get("meta") or {}
+    balances = meta.get("postTokenBalances") or []
+    total = 0.0
+    for bal in balances:
+        amount = bal.get("uiTokenAmount", {}).get("uiAmount")
+        try:
+            total += float(amount)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def predict_regime(tx_data: Dict[str, Any]) -> str:
+    """Placeholder for regime prediction model."""
+    return "breakout"
 
 
 async def watch_pool(
@@ -45,9 +64,10 @@ async def watch_pool(
                             {"failed": False, "accountInclude": [pool_program]},
                             {
                                 "commitment": "processed",
-                                "encoding": "base64",
+                                "encoding": "jsonParsed",
                                 "transactionDetails": "full",
                                 "showRewards": True,
+                                "maxSupportedTransactionVersion": 0,
                             },
                         ],
                     }
@@ -63,10 +83,11 @@ async def watch_pool(
                             if isinstance(data, dict):
                                 result = data.get("params", {}).get("result")
                             if result is not None:
-                                liquidity = float(result.get("liquidity", 0.0))
+                                liquidity = parse_liquidity(result)
                                 tx_count = int(result.get("txCount", result.get("tx_count", 0)))
                                 if liquidity < min_liquidity or tx_count <= 10:
                                     continue
+                                result["predicted_regime"] = predict_regime(result)
                                 yield result
                         elif msg.type in (
                             aiohttp.WSMsgType.CLOSED,
