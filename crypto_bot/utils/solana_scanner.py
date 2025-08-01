@@ -19,11 +19,11 @@ logger = logging.getLogger(__name__)
 # Global min volume filter updated by ``get_solana_new_tokens``
 _MIN_VOLUME_USD = 0.0
 
-RAYDIUM_URL = "https://api.raydium.io/pairs"
+# Raydium endpoint proxied by Helius
+RAYDIUM_PROXY = "https://helius-proxy.raydium.io"
 PUMP_FUN_URL = "https://client-api.prod.pump.fun/v1/launches"
 
-# Optional API keys loaded from environment
-RAYDIUM_API_KEY = os.getenv("RAYDIUM_API_KEY")
+# Optional API key loaded from environment
 PUMP_FUN_API_KEY = os.getenv("PUMP_FUN_API_KEY")
 
 
@@ -182,9 +182,10 @@ async def _extract_tokens(data: list | dict) -> List[str]:
     return results
 
 
-async def fetch_new_raydium_pools(api_key: str, limit: int) -> List[str]:
+async def fetch_new_raydium_pools(limit: int) -> List[str]:
     """Return new Raydium pool token mints."""
-    url = f"{RAYDIUM_URL}?apiKey={api_key}&limit={limit}"
+    key = os.getenv("HELIUS_KEY", "")
+    url = f"{RAYDIUM_PROXY}/v0/tokens/new?api-key={key}&limit={limit}"
     data = await _fetch_json(url)
     if data is None:
         logger.warning("Failed to fetch Raydium pools")
@@ -212,12 +213,6 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
     limit = int(config.get("max_tokens_per_scan", 0)) or 20
     _MIN_VOLUME_USD = float(config.get("min_volume_usd", 0.0))
     keys_cfg = config.get("api_keys", {})
-    raydium_key = str(
-        config.get("raydium_api_key")
-        or keys_cfg.get("raydium_api_key")
-        or RAYDIUM_API_KEY
-        or ""
-    )
     pump_key = str(
         config.get("pump_fun_api_key")
         or keys_cfg.get("pump_fun_api_key")
@@ -226,19 +221,18 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
     )
     gecko_search = bool(config.get("gecko_search", True))
 
-    if not raydium_key:
-        logger.warning("raydium_api_key not set; skipping Raydium pools")
+    if not os.getenv("HELIUS_KEY"):
+        logger.warning("HELIUS_KEY not set")
     if not pump_key:
         logger.warning("pump_fun_api_key not set; skipping Pump.fun launches")
 
     tasks = []
-    if raydium_key:
-        coro = fetch_new_raydium_pools(raydium_key, limit)
-        if not asyncio.iscoroutine(coro):
-            async def _wrap(res=coro):
-                return res
-            coro = _wrap()
-        tasks.append(coro)
+    coro = fetch_new_raydium_pools(limit)
+    if not asyncio.iscoroutine(coro):
+        async def _wrap(res=coro):
+            return res
+        coro = _wrap()
+    tasks.append(coro)
     if pump_key:
         coro = fetch_pump_fun_launches(pump_key, limit)
         if not asyncio.iscoroutine(coro):
@@ -246,10 +240,6 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
                 return res
             coro = _wrap()
         tasks.append(coro)
-
-    if not tasks:
-        logger.warning("No Solana API keys provided; skipping token scan")
-        return []
 
     results = await asyncio.gather(*tasks)
     candidates: list[str] = []

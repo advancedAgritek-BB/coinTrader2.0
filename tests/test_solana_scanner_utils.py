@@ -76,8 +76,9 @@ def test_fetch_new_raydium_pools(monkeypatch):
     monkeypatch.setattr(solana_scanner, "get_mint_from_gecko", fake_gecko)
     monkeypatch.setattr(solana_scanner, "TOKEN_MINTS", {})
 
+    monkeypatch.setenv("HELIUS_KEY", "k")
     solana_scanner._MIN_VOLUME_USD = 100
-    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools("k", 5))
+    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools(5))
     assert tokens == ["A"]
     assert "k" in session.url
 
@@ -99,8 +100,9 @@ def test_fetch_new_raydium_pools_helius(monkeypatch):
     monkeypatch.setattr(solana_scanner, "fetch_from_helius", fake_helius)
     monkeypatch.setattr(solana_scanner, "TOKEN_MINTS", {})
 
+    monkeypatch.setenv("HELIUS_KEY", "k")
     solana_scanner._MIN_VOLUME_USD = 100
-    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools("k", 5))
+    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools(5))
     assert tokens == ["A"]
     assert solana_scanner.TOKEN_MINTS["A"] == "mint"
 
@@ -343,6 +345,7 @@ def test_get_solana_new_tokens_missing_keys(monkeypatch, caplog):
     tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
     assert tokens == []
     assert any("HELIUS_KEY" in r.getMessage() for r in caplog.records)
+    assert any("pump_fun_api_key" in r.getMessage() for r in caplog.records)
 
 
 def test_get_solana_new_tokens_fetch_failure(monkeypatch, caplog):

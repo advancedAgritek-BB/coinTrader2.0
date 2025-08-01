@@ -184,7 +184,6 @@ HELIUS_KEY=your_helius_api_key          # required for Jupiter/Helius registry
 # also needed for WebSocket pool monitoring
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
-RAYDIUM_API_KEY=your_raydium_api_key   # required for Solana scanner
 PUMP_FUN_API_KEY=your_pump_fun_api_key # required for Solana scanner
 SUPABASE_URL=https://xyzcompany.supabase.co
 SUPABASE_KEY=your_service_key
@@ -234,7 +233,6 @@ New-token detection relies on several Solana-specific API keys. Add them to
 
 ```env
 HELIUS_KEY=your_helius_api_key         # required
-RAYDIUM_API_KEY=your_raydium_api_key   # required
 PUMP_FUN_API_KEY=your_pump_fun_api_key # required
 ```
 
