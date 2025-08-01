@@ -363,6 +363,7 @@ symbol_score_weights:
 * **solana_scanner.helius_ws_url** – custom WebSocket endpoint (defaults to `wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}`).
 * **solana_scanner.raydium_program_id** – Raydium program ID to monitor.
 * **solana_scanner.min_liquidity** – skip pools with less liquidity.
+* **solana_scanner.ml_filter** – skip new pools with low ML breakout probability.
 * **solana_scanner.timeout_seconds** – abort a Solana scan after this many seconds.
 * **solana_scanner.filter_tf** – timeframe used when classifying new tokens.
 * **solana_scanner.filter_regime** – skip tokens that do not match these regimes.
@@ -381,6 +382,7 @@ Example configuration:
 
 ```yaml
 solana_scanner:
+  ml_filter: false
   filter_tf: 5m
   filter_regime: [volatile, breakout, new_pool]
 ```
