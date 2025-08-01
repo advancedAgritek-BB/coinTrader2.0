@@ -53,7 +53,7 @@ class PoolWatcher:
             or interval is None
             or websocket_url is None
             or raydium_program_id is None
-            or min_liquidity is None
+            or ml_filter is None
         ):
             with open(CONFIG_PATH) as f:
                 cfg = yaml.safe_load(f) or {}
@@ -69,10 +69,10 @@ class PoolWatcher:
                 websocket_url = pool_cfg.get("websocket_url", "")
             if raydium_program_id is None:
                 raydium_program_id = pool_cfg.get("raydium_program_id", "")
-            if min_liquidity is None:
-                min_liquidity = float(safety_cfg.get("min_liquidity", 0))
             if ml_filter is None:
                 ml_filter = bool(pool_cfg.get("ml_filter", False))
+        if min_liquidity is None:
+            min_liquidity = 0.0
         key = os.getenv("HELIUS_KEY")
         if not url or "YOUR_KEY" in url or url.endswith("api-key="):
             if not key:
