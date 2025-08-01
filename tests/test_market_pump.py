@@ -151,7 +151,7 @@ def test_volatile_queues_solana(monkeypatch):
     async def fake_scan(*a, **k):
         return []
 
-    async def fake_tokens(cfg, timeout=None):
+    async def fake_tokens(cfg):
         return ["SOL/USDC"]
 
     monkeypatch.setattr(main, "scan_arbitrage", fake_scan)
