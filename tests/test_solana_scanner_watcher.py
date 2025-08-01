@@ -91,7 +91,6 @@ def test_get_solana_new_tokens_filters_and_limits(monkeypatch):
     monkeypatch.setattr(solana_scanner, "fetch_pump_fun_launches", lambda *_a, **_k: [])
 
     cfg = {
-        "raydium_api_key": "k",
         "max_tokens_per_scan": 2,
         "min_volume_usd": 0,
         "gecko_search": False,
