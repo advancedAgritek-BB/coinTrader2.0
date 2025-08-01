@@ -43,7 +43,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         return 0.0, "none"
 
     params = config or {}
-    lookback_cfg = int(params.get("indicator_lookback", 14))
+    lookback_cfg = int(params.get("indicator_lookback", 10))
     rsi_overbought_pct = float(params.get("rsi_overbought_pct", 70))
     rsi_oversold_pct = float(params.get("rsi_oversold_pct", 30))
     adx_threshold = float(params.get("adx_threshold", 25))
