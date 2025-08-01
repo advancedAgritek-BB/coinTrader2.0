@@ -101,6 +101,10 @@ class SolanaScannerConfig(BaseModel):
     gecko_search: bool = Field(
         default=True, description="Enable GeckoTerminal search fallback"
     )
+    ml_filter: bool = Field(
+        default=False,
+        description="Skip new pools with low ML breakout probability",
+    )
     # WebSocket / polling options
     helius_ws_url: str | None = Field(
         default=None,
