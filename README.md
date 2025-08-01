@@ -229,6 +229,20 @@ When using [Helius](https://www.helius.xyz/) endpoints, append `?api-key=${HELIU
 SOLANA_RPC_URL=https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
 ```
 
+New-token detection relies on several Solana-specific API keys. Add them to
+`crypto_bot/.env` (or your environment) before running the scanner:
+
+```env
+HELIUS_KEY=your_helius_api_key         # required
+RAYDIUM_API_KEY=your_raydium_api_key   # required
+PUMP_FUN_API_KEY=your_pump_fun_api_key # required
+```
+
+If any of these keys are missing the scanner will not be able to discover new
+tokens. See the `solana_scanner.api_keys` section in
+[`crypto_bot/config.yaml`](crypto_bot/config.yaml) for how they are referenced
+in the configuration.
+
 You can generate a key and enable advanced features like **ShredStream** and **LaserStream** from the [Helius dashboard](https://dashboard.helius.xyz/). These streams can be configured directly in the bot's web dashboard.
 Install the `pythclient` package to fetch oracle prices:
 
