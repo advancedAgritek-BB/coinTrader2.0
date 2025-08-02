@@ -65,7 +65,15 @@ def predict_regime(tx_data: dict) -> str:
         model = load_model("regime_lgbm")
         features = np.array([[parse_liquidity(tx_data), tx_data.get("tx_count", 0)]])
         labels = ["trending", "volatile", "breakout", "mean-reverting"]
-        idx = int(model.predict(features)[0])
+        try:
+            pred = (
+                model.predict_proba(features)[0]
+                if hasattr(model, "predict_proba")
+                else model.predict(features)[0]
+            )
+        except Exception:
+            pred = model.predict(features)[0]
+        idx = int(np.argmax(pred)) if hasattr(pred, "__len__") else int(pred)
         return labels[idx]
     except Exception:
         logger.exception("predict_regime failed")
