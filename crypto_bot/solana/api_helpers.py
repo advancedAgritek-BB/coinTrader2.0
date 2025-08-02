@@ -69,31 +69,35 @@ async def fetch_jito_bundle(bundle_id: str, api_key: str, session: aiohttp.Clien
     return data
 
 
-def predict_bundle_regime(bundle: Mapping[str, Any]) -> str:
-    """Predict bundle regime using a Supabase hosted model."""
+def extract_bundle_features(bundle: Mapping[str, Any]) -> np.ndarray:
+    """Extract model features from a Jito bundle response."""
+
+    priority = float(bundle.get("priority_fee", 0))
+    txs = float(bundle.get("tx_count", 0))
+    return np.array([priority, txs], dtype=float)
+
+
+def predict_bundle_regime(bundle: Mapping[str, Any]) -> np.ndarray:
+    """Predict bundle regime probabilities using a Supabase hosted model."""
 
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
+    default = np.full(4, 0.25, dtype=float)
     if not url or not key:
-        return "unknown"
+        return default
 
     try:  # pragma: no cover - optional dependency
         from supabase import create_client  # type: ignore
         from coinTrader_Trainer.ml_trainer import load_model  # type: ignore
     except Exception:
-        return "unknown"
+        return default
 
     try:
         create_client(url, key)
         model = load_model("bundle_regime")
-        priority = float(bundle.get("priority_fee", 0))
-        txs = float(bundle.get("tx_count", 0))
-        preds = model.predict([[priority, txs]])
+        features = extract_bundle_features(bundle)
+        preds = model.predict([features])
         pred = preds[0] if isinstance(preds, (list, tuple, np.ndarray)) else preds
-        if isinstance(pred, (list, tuple, np.ndarray)):
-            idx = int(np.argmax(pred))
-            labels = ["stable", "volatile"]
-            return labels[idx] if idx < len(labels) else str(idx)
-        return str(pred)
+        return np.array(pred, dtype=float)
     except Exception:
-        return "unknown"
+        return default

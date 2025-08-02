@@ -2,6 +2,7 @@ import asyncio
 import sys
 import types
 
+import numpy as np
 import pytest
 
 from crypto_bot.solana import api_helpers
@@ -68,16 +69,18 @@ def test_helius_ws(monkeypatch):
 def test_fetch_jito_bundle(monkeypatch):
     session = DummySession()
     monkeypatch.setattr(api_helpers, "aiohttp", type("M", (), {"ClientSession": lambda: session}))
-    monkeypatch.setattr(api_helpers, "predict_bundle_regime", lambda d: "volatile")
+    arr = np.array([0.1, 0.2, 0.3, 0.4])
+    monkeypatch.setattr(api_helpers, "predict_bundle_regime", lambda d: arr)
     data = asyncio.run(api_helpers.fetch_jito_bundle("123", "key"))
-    assert data == {"bundle": "ok", "predicted_regime": "volatile"}
+    assert np.array_equal(data["predicted_regime"], arr)
     assert session.http_url.endswith("/123")
 
 
 def test_predict_bundle_regime_missing_env(monkeypatch):
     monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_KEY", raising=False)
-    assert api_helpers.predict_bundle_regime({}) == "unknown"
+    expected = np.array([0.25, 0.25, 0.25, 0.25])
+    assert np.array_equal(api_helpers.predict_bundle_regime({}), expected)
 
 
 def test_predict_bundle_regime_model(monkeypatch):
@@ -86,7 +89,7 @@ def test_predict_bundle_regime_model(monkeypatch):
 
     class FakeModel:
         def predict(self, X):
-            return [[0.2, 0.8]]
+            return np.array([[0.1, 0.2, 0.3, 0.4]])
 
     class FakeClient:
         pass
@@ -107,11 +110,17 @@ def test_predict_bundle_regime_model(monkeypatch):
         api_helpers, "aiohttp", type("M", (), {"ClientSession": lambda: session})
     )
 
-    label = api_helpers.predict_bundle_regime({"priority_fee": 1, "tx_count": 2})
-    assert label == "volatile"
+    probs = api_helpers.predict_bundle_regime({"priority_fee": 1, "tx_count": 2})
+    assert np.array_equal(probs, np.array([0.1, 0.2, 0.3, 0.4]))
 
-    monkeypatch.setattr(api_helpers, "predict_bundle_regime", lambda _d: "vol")
+    monkeypatch.setattr(api_helpers, "predict_bundle_regime", lambda _d: np.array([0.4, 0.3, 0.2, 0.1]))
     data = asyncio.run(api_helpers.fetch_jito_bundle("123", "key"))
-    assert data == {"bundle": "ok", "predicted_regime": "vol"}
+    assert np.array_equal(data["predicted_regime"], np.array([0.4, 0.3, 0.2, 0.1]))
     assert session.http_url.endswith("/123")
     assert session.closed
+
+
+def test_extract_bundle_features():
+    bundle = {"tx_count": 2, "priority_fee": 1}
+    feats = api_helpers.extract_bundle_features(bundle)
+    assert np.array_equal(feats, np.array([1.0, 2.0]))
