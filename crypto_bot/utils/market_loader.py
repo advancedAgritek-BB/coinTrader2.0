@@ -1364,6 +1364,31 @@ async def fetch_dex_ohlcv(
 ) -> list | None:
     """Fetch DEX OHLCV with fallback to CoinGecko, Coinbase then Kraken.
 
+    Parameters
+    ----------
+    exchange
+        Exchange instance used for REST/WebSocket calls.
+    symbol
+        Trading pair symbol.
+    timeframe
+        Candle timeframe (defaults to ``"1h"``).
+    limit
+        Maximum number of candles to retrieve.
+    min_volume_usd
+        Minimum 24h volume required for GeckoTerminal data to be used.
+    gecko_res
+        Optional pre-fetched GeckoTerminal response. Accepted formats are:
+
+        - ``list`` of OHLCV candles.
+        - ``(candles, volume)`` tuple.
+        - ``(candles, volume, reserve_or_price)`` tuple where the third
+          element is ignored.
+
+    Returns
+    -------
+    list | None
+        Only the candle list is returned. Any accompanying volume, reserve
+        or price information is discarded.
     GeckoTerminal may return a tuple with extra elements; only the first two
     (data and volume) are used and any additional values are ignored.
     """
@@ -1379,13 +1404,15 @@ async def fetch_dex_ohlcv(
     data = None
     if res:
         if isinstance(res, tuple):
+            data = res[0]
+            vol = res[1] if len(res) > 1 else min_volume_usd
             # GeckoTerminal can return more than two items; ignore extras
             data, vol, *_ = res
         else:
             data = res
             vol = min_volume_usd
         if data and vol >= min_volume_usd:
-            return data
+            return data  # Only return the candle list
 
     base, _, quote = symbol.partition("/")
     coin_id = COINGECKO_IDS.get(base)

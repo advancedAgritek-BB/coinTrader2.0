@@ -2122,6 +2122,22 @@ def test_dex_fetch_fallback_kraken(monkeypatch):
     assert calls["exchange"] == 1
 
 
+def test_fetch_dex_ohlcv_ignores_extra_gecko_data():
+    from crypto_bot.utils import market_loader
+
+    ex = DummyMultiTFExchange()
+    candles = [[1, 2, 3, 4, 5, 6]]
+    gecko_res = (candles, 10.0, 999.0)
+
+    data = asyncio.run(
+        market_loader.fetch_dex_ohlcv(
+            ex,
+            "FOO/USDC",
+            gecko_res=gecko_res,
+            min_volume_usd=1.0,
+        )
+    )
+    assert data == candles
 def test_fetch_dex_ohlcv_handles_three_element_gecko(monkeypatch):
     from crypto_bot.utils import market_loader
 
