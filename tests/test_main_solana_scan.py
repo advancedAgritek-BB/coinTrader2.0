@@ -50,7 +50,7 @@ async def test_maybe_scan_solana_tokens(monkeypatch):
     assert len(calls) >= 2
 
     t[0] += 60
-    last2 = await main.maybe_scan_solana_tokens(cfg, last)
+    await main.maybe_scan_solana_tokens(cfg, last)
     await main.SOLANA_SCAN_TASK
     assert len(calls) >= 4
 
