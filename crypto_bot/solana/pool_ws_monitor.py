@@ -119,9 +119,11 @@ async def watch_pool(
                                 tx_count = result.get("tx_count", 0)
                                 result["tx_count"] = tx_count
                                 if liquidity >= min_liquidity:
-                                    result["predicted_regime"] = predict_regime(result)
-                                    logger.info("Regime predicted: %s", result["predicted_regime"])
-                                    yield result
+                                    regime = predict_regime(result)
+                                    if regime == "breakout":
+                                        result["predicted_regime"] = regime
+                                        logger.info("Regime predicted: %s", regime)
+                                        yield result
                         elif msg.type in (
                             aiohttp.WSMsgType.CLOSED,
                             aiohttp.WSMsgType.ERROR,

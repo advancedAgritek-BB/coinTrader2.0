@@ -115,10 +115,11 @@ def test_subscription_message(monkeypatch):
 def test_yields_transactions(monkeypatch):
     messages = [
         {
+            "method": "transactionNotification",
             "params": {
                 "result": {
                     "tx": 1,
-                    "txCount": 11,
+                    "tx_count": 11,
                     "liquidity": 100,
                     "meta": {
                         "postTokenBalances": [
@@ -126,13 +127,14 @@ def test_yields_transactions(monkeypatch):
                         ]
                     },
                 }
-            }
+            },
         },
         {
+            "method": "transactionNotification",
             "params": {
                 "result": {
                     "tx": 2,
-                    "txCount": 12,
+                    "tx_count": 12,
                     "liquidity": 100,
                     "meta": {
                         "postTokenBalances": [
@@ -140,13 +142,14 @@ def test_yields_transactions(monkeypatch):
                         ]
                     },
                 }
-            }
+            },
         },
     ]
     ws = DummyWS(messages)
     session = DummySession(ws)
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(pool_ws_monitor, "predict_regime", lambda _: "breakout")
 
     async def run():
         gen = pool_ws_monitor.watch_pool("KEY", "PGM")
@@ -159,14 +162,14 @@ def test_yields_transactions(monkeypatch):
     assert res == [
         {
             "tx": 1,
-            "txCount": 11,
+            "tx_count": 11,
             "liquidity": 100,
             "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 100.0}}]},
             "predicted_regime": "breakout",
         },
         {
             "tx": 2,
-            "txCount": 12,
+            "tx_count": 12,
             "liquidity": 100,
             "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 100.0}}]},
             "predicted_regime": "breakout",
@@ -178,19 +181,21 @@ def test_reconnect_on_close(monkeypatch):
     ws1 = DummyWS([])
     ws2 = DummyWS([
         {
+            "method": "transactionNotification",
             "params": {
                 "result": {
                     "tx": 3,
-                    "txCount": 15,
+                    "tx_count": 15,
                     "liquidity": 100,
                     "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 100.0}}]},
                 }
-            }
+            },
         }
     ])
     session = DummySession([ws1, ws2])
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(pool_ws_monitor, "predict_regime", lambda _: "breakout")
     ws1.messages = [types.SimpleNamespace(type=aiohttp_mod.WSMsgType.CLOSED, data=None)]
 
     async def run():
@@ -201,7 +206,7 @@ def test_reconnect_on_close(monkeypatch):
     res = asyncio.run(run())
     assert res == {
         "tx": 3,
-        "txCount": 15,
+        "tx_count": 15,
         "liquidity": 100,
         "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 100.0}}]},
         "predicted_regime": "breakout",
@@ -212,30 +217,33 @@ def test_reconnect_on_close(monkeypatch):
 def test_watch_pool_filters(monkeypatch):
     messages = [
         {
+            "method": "transactionNotification",
             "params": {
                 "result": {
                     "tx": 1,
-                    "txCount": 5,
+                    "tx_count": 5,
                     "liquidity": 40,
                     "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 40.0}}]},
                 }
-            }
+            },
         },
         {
+            "method": "transactionNotification",
             "params": {
                 "result": {
                     "tx": 2,
-                    "txCount": 12,
+                    "tx_count": 12,
                     "liquidity": 60,
                     "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 60.0}}]},
                 }
-            }
+            },
         },
     ]
     ws = DummyWS(messages)
     session = DummySession(ws)
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(pool_ws_monitor, "predict_regime", lambda _: "breakout")
 
     async def run():
         gen = pool_ws_monitor.watch_pool("KEY", "PGM", min_liquidity=50)
@@ -247,8 +255,57 @@ def test_watch_pool_filters(monkeypatch):
     res = asyncio.run(run())
     assert res == {
         "tx": 2,
-        "txCount": 12,
+        "tx_count": 12,
         "liquidity": 60,
         "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 60.0}}]},
+        "predicted_regime": "breakout",
+    }
+
+
+def test_ignores_non_breakout(monkeypatch):
+    messages = [
+        {
+            "method": "transactionNotification",
+            "params": {
+                "result": {
+                    "tx": 1,
+                    "tx_count": 10,
+                    "liquidity": 80,
+                    "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 80.0}}]},
+                }
+            },
+        },
+        {
+            "method": "transactionNotification",
+            "params": {
+                "result": {
+                    "tx": 2,
+                    "tx_count": 20,
+                    "liquidity": 90,
+                    "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 90.0}}]},
+                }
+            },
+        },
+    ]
+    ws = DummyWS(messages)
+    session = DummySession(ws)
+    aiohttp_mod = AiohttpMod(session)
+    monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
+    labels = iter(["trending", "breakout"])
+    monkeypatch.setattr(pool_ws_monitor, "predict_regime", lambda _: next(labels))
+
+    async def run():
+        gen = pool_ws_monitor.watch_pool("KEY", "PGM")
+        result = await gen.__anext__()
+        with pytest.raises(StopAsyncIteration):
+            await gen.__anext__()
+        return result
+
+    res = asyncio.run(run())
+    assert res == {
+        "tx": 2,
+        "tx_count": 20,
+        "liquidity": 90,
+        "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 90.0}}]},
         "predicted_regime": "breakout",
     }
