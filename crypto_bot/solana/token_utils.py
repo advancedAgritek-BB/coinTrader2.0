@@ -1,3 +1,10 @@
+"""Utilities for enriching Solana token accounts with metadata.
+
+The functions in this module asynchronously query the Helius Digital Asset
+Standard (DAS) API to attach metadata to each account. Tokens are scored using
+the ``regime_lgbm`` model from ``coinTrader_Trainer``; those meeting or
+exceeding ``ML_SCORE_THRESHOLD`` are classified as *breakout* tokens.  Accounts
+with balances below ``MIN_BALANCE_THRESHOLD`` are ignored.
 <<<<<< codex/update-tests-for-token-utils
 import os
 import logging
@@ -164,6 +171,8 @@ async def get_token_accounts_ml_filter(
 
     Accounts are first fetched using :func:`get_token_accounts`, then enriched
     with metadata and scored via :func:`predict_token_regime`. Only accounts with
+    a prediction score of at least ``ML_SCORE_THRESHOLD`` (default ``0.5``) are
+    returned.
     a prediction score of at least ``ML_SCORE_THRESHOLD`` are returned.
     """
 
