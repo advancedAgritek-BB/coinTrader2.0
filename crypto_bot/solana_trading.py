@@ -201,6 +201,7 @@ async def sniper_trade(
 
     profit = await monitor_profit(tx_sig, profit_threshold)
     if profit > 0:
+        logger.info("Auto-converting %s %s profit to %s", profit, target_token, base_token)
         await auto_convert_funds(
             wallet,
             target_token,
