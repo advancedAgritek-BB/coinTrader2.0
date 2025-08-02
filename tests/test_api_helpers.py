@@ -1,8 +1,8 @@
 import asyncio
-
-import pytest
 import sys
 import types
+
+import pytest
 
 from crypto_bot.solana import api_helpers
 
