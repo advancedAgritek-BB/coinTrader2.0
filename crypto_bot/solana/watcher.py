@@ -133,8 +133,18 @@ class PoolWatcher:
                     snapshot.get("volume", 0),
                     event.tx_count,
                 ]
-                prediction = model.predict([features])[0]
-                return float(prediction[1])
+                try:
+                    pred = (
+                        model.predict_proba([features])[0]
+                        if hasattr(model, "predict_proba")
+                        else model.predict([features])[0]
+                    )
+                except Exception:  # pragma: no cover - best effort
+                    pred = model.predict([features])[0]
+
+                if hasattr(pred, "__iter__"):
+                    return float(pred[1])
+                return float(pred == 1)
             return 0.0
         except Exception as exc:  # pragma: no cover - best effort
             logger.error(f"ML prediction failed: {exc}")

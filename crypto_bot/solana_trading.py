@@ -144,8 +144,21 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
             if price:
                 change = (price - entry_price) / entry_price
                 features = [change, out_amount]
-                prediction = model.predict([features])[0]
-                if change >= threshold and np.argmax(prediction) == 2:
+                try:
+                    pred = (
+                        model.predict_proba([features])[0]
+                        if hasattr(model, "predict_proba")
+                        else model.predict([features])[0]
+                    )
+                except Exception:  # pragma: no cover - best effort
+                    pred = model.predict([features])[0]
+
+                cls = (
+                    int(np.argmax(pred))
+                    if hasattr(pred, "__len__") and len(pred) > 1
+                    else int(pred)
+                )
+                if change >= threshold and cls == 2:
                     logger.info("Profit threshold hit with breakout regime: %s", change)
                     return out_amount * change
             await asyncio.sleep(5)
