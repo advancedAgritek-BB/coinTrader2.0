@@ -55,7 +55,14 @@ def predict_token_regime(token_data: Dict[str, Any]) -> float:
             float(token_data.get("liquidity", 0)),
             float(token_data.get("tx_count", token_data.get("transaction_count", 0))),
         ]
-        pred = model.predict([features])[0]
+        try:
+            pred = (
+                model.predict_proba([features])[0]
+                if hasattr(model, "predict_proba")
+                else model.predict([features])[0]
+            )
+        except Exception:  # pragma: no cover - best effort
+            pred = model.predict([features])[0]
         return float(max(pred)) if hasattr(pred, "__iter__") else float(pred)
     except Exception as exc:  # pragma: no cover - best effort
         logger.error("Token regime prediction failed: %s", exc)
@@ -78,7 +85,7 @@ async def get_token_accounts(
     if not api_key:
         raise ValueError("HELIUS_KEY environment variable not set")
 
-    url = f"https://mainnet.helius-rpc.com/?api-key={api_key}"
+    url = f"https://api.helius.xyz/v0/?api-key={api_key}"
     payload = {
         "jsonrpc": "2.0",
         "id": 1,

@@ -56,16 +56,28 @@ async def fake_price(_in, _out, max_retries=3):
 
 def test_monitor_profit(monkeypatch):
     monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
+    dummy = DummyClient()
+    monkeypatch.setattr(solana_trading, "AsyncClient", lambda url: dummy)
+    monkeypatch.setattr(solana_trading, "_fetch_price", fake_price)
+    class DummyModel:
+        def predict(self, feats):
+            return [2]
+
+    monkeypatch.setattr(solana_trading, "load_model", lambda name: DummyModel())
+
     calls = {"used": False}
 
     class DummyModel:
         def predict(self, *_):
             calls["used"] = True
             return [[0.1, 0.1, 0.8]]
+            return [2]
 
     ml_mod = types.SimpleNamespace(load_model=lambda *a, **k: DummyModel())
-    sys.modules.setdefault("coinTrader_Trainer", types.ModuleType("coinTrader_Trainer"))
-    monkeypatch.setitem(sys.modules, "coinTrader_Trainer.ml_trainer", ml_mod)
+    trainer_pkg = types.ModuleType("coinTrader_Trainer")
+    trainer_pkg.ml_trainer = ml_mod
+    sys.modules["coinTrader_Trainer"] = trainer_pkg
+    sys.modules["coinTrader_Trainer.ml_trainer"] = ml_mod
 
     import importlib
 

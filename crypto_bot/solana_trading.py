@@ -8,7 +8,6 @@ from typing import Dict, Optional
 import aiohttp
 import numpy as np
 from solana.rpc.async_api import AsyncClient
-from urllib.parse import urlsplit
 
 from crypto_bot.execution.solana_executor import (
     execute_swap,
@@ -19,16 +18,8 @@ from crypto_bot.execution.cex_executor import execute_trade_async as cex_trade_a
 from crypto_bot.fund_manager import auto_convert_funds
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
-try:  # pragma: no cover - optional dependency
-    from coinTrader_Trainer.ml_trainer import load_model
-except Exception:  # pragma: no cover - fallback when trainer missing
-    load_model = None  # type: ignore[misc]
-
 
 logger = setup_logger(__name__, LOG_DIR / "solana_trading.log")
-
-# Proxy endpoint for Jupiter quotes
-proxy_url = "https://helius-proxy.raydium.io/api/v1/"
 
 
 async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> float:
@@ -39,9 +30,10 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
     max_retries:
         Maximum attempts when the price request fails. Defaults to ``3``.
     """
-    quote_path = urlsplit(JUPITER_QUOTE_URL).path.lstrip("/")
-    request_url = proxy_url + quote_path
-    for i in range(max_retries):
+    proxy_url = "https://helius-proxy.raydium.io/api/v1/"
+    request_url = proxy_url + JUPITER_QUOTE_URL.lstrip("/")
+
+    for attempt in range(max_retries):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -54,12 +46,15 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
                     },
                     timeout=10,
                 ) as resp:
+                    if resp.status == 401:
+                        logger.error("401 in price fetch: Invalid Helius key")
+                        return 0.0
                     resp.raise_for_status()
                     data = await resp.json()
             break
-        except Exception as exc:
-            logger.error(f"Price fetch error (attempt {i}): {exc}")
-            if i < max_retries - 1:
+        except Exception as e:
+            logger.error(f"Price fetch error (attempt {attempt+1}): {e}")
+            if attempt < max_retries - 1:
                 await asyncio.sleep(1)
                 continue
             return 0.0
@@ -88,20 +83,9 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
 
     rpc_url = os.getenv(
         "SOLANA_RPC_URL",
-        f"https://mainnet.helius-rpc.com/?api-key={os.getenv('HELIUS_KEY', '')}",
+        f"https://api.helius.xyz/v0/?api-key={os.getenv('HELIUS_KEY', '')}",
     )
     client = AsyncClient(rpc_url)
-
-    try:  # optional ML model
-        from coinTrader_Trainer.ml_trainer import load_model as trainer_load_model
-
-        ml_model = trainer_load_model("profit")
-        try:
-            ml_model.predict([[0.0]])
-        except Exception:  # pragma: no cover - best effort
-            pass
-    except Exception:  # pragma: no cover - optional dependency
-        ml_model = None
     try:
         entry_price = None
         out_amount = 0.0
@@ -133,7 +117,9 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
         if entry_price is None:
             return 0.0
 
-        if load_model is None:
+        try:  # pragma: no cover - optional dependency
+            from coinTrader_Trainer.ml_trainer import load_model
+        except Exception:
             logger.error("ML model loader not available")
             return 0.0
         model = load_model("regime_lgbm")
@@ -145,7 +131,29 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
                 change = (price - entry_price) / entry_price
                 features = [change, out_amount]
                 prediction = model.predict([features])[0]
-                if change >= threshold and np.argmax(prediction) == 2:
+                max_prob = float(np.max(prediction))
+                regime = int(np.argmax(prediction))
+                if (
+                    change >= threshold and max_prob >= 0.7 and regime == 2
+                ):
+                    logger.info(
+                        "Profit hit with breakout (prob %s): %s", max_prob, change
+                    )
+                try:
+                    pred = (
+                        model.predict_proba([features])[0]
+                        if hasattr(model, "predict_proba")
+                        else model.predict([features])[0]
+                    )
+                except Exception:  # pragma: no cover - best effort
+                    pred = model.predict([features])[0]
+
+                cls = (
+                    int(np.argmax(pred))
+                    if hasattr(pred, "__len__") and len(pred) > 1
+                    else int(pred)
+                )
+                if change >= threshold and cls == 2:
                     logger.info("Profit threshold hit with breakout regime: %s", change)
                     return out_amount * change
             await asyncio.sleep(5)
