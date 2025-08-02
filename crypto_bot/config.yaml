@@ -4,6 +4,18 @@ adaptive_scan:
   max_factor: 10.0
 adx_threshold: 15
 allow_short: true
+arbitrage:
+  amount: 0.0
+  dry_run: true
+  exchange: null
+  mempool_cfg: {}
+  mempool_monitor: null
+  notifier: null
+  side: buy
+  slippage_bps: 50
+  symbol: SOL/USDC
+  use_websocket: false
+  ws_client: null
 arbitrage_enabled: true
 arbitrage_threshold: 0.005
 atr_normalization: true
@@ -170,7 +182,7 @@ meme_wave_sniper:
     interval: 0.5
     ml_filter: false
     raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
-    url: https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY
+    url: https://api.helius.xyz/v0/?api-key=${HELIUS_KEY}
     websocket_url: wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
   risk:
     daily_loss_cap: 2.0
