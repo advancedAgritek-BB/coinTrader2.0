@@ -81,6 +81,8 @@ async def watch_pool(
                                 data = json.loads(msg.data)
                             result = None
                             if isinstance(data, dict):
+                                if data.get("method") != "transactionNotification":
+                                    continue
                                 result = data.get("params", {}).get("result")
                             if result is not None:
                                 liquidity = parse_liquidity(result)
