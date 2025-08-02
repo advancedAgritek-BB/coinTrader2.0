@@ -19,27 +19,56 @@ import os
 from typing import Any, AsyncGenerator, Dict
 
 import aiohttp
+import logging
+import numpy as np
 
 DEFAULT_PROGRAM_ID = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
 
+logger = logging.getLogger(__name__)
 
-def parse_liquidity(tx_data: Dict[str, Any]) -> float:
-    """Return total liquidity from ``meta.postTokenBalances``."""
+
+def parse_liquidity(tx_data: dict) -> float:
+    """Compare pre/post token balances and return absolute amount change."""
     meta = tx_data.get("meta") or {}
-    balances = meta.get("postTokenBalances") or []
+    pre = meta.get("preTokenBalances") or []
+    post = meta.get("postTokenBalances") or []
+
+    def _to_dict(balances: list[dict]) -> Dict[str, float]:
+        result: Dict[str, float] = {}
+        for bal in balances:
+            mint = bal.get("mint")
+            amount = bal.get("uiTokenAmount", {}).get("uiAmount")
+            try:
+                result[mint] = float(amount)
+            except (TypeError, ValueError):
+                continue
+        return result
+
+    pre_map = _to_dict(pre)
+    post_map = _to_dict(post)
+
     total = 0.0
-    for bal in balances:
-        amount = bal.get("uiTokenAmount", {}).get("uiAmount")
-        try:
-            total += float(amount)
-        except (TypeError, ValueError):
-            continue
+    for mint, post_amt in post_map.items():
+        pre_amt = pre_map.pop(mint, 0.0)
+        total += abs(post_amt - pre_amt)
+    for remaining in pre_map.values():
+        total += abs(remaining)
     return total
 
 
-def predict_regime(tx_data: Dict[str, Any]) -> str:
-    """Placeholder for regime prediction model."""
-    return "breakout"
+def predict_regime(tx_data: dict) -> str:
+    """Predict regime label using a trained model."""
+    try:
+        from coinTrader_Trainer.ml_trainer import load_model  # type: ignore
+
+        model = load_model("regime_lgbm")
+        features = np.array([[parse_liquidity(tx_data), tx_data.get("tx_count", 0)]])
+        labels = ["trending", "volatile", "breakout", "mean-reverting"]
+        idx = int(model.predict(features)[0])
+        return labels[idx]
+    except Exception:
+        logger.exception("predict_regime failed")
+        return "unknown"
 
 
 async def watch_pool(
@@ -84,11 +113,12 @@ async def watch_pool(
                                 result = data.get("params", {}).get("result")
                             if result is not None:
                                 liquidity = parse_liquidity(result)
-                                tx_count = int(result.get("txCount", result.get("tx_count", 0)))
-                                if liquidity < min_liquidity or tx_count <= 10:
-                                    continue
-                                result["predicted_regime"] = predict_regime(result)
-                                yield result
+                                tx_count = result.get("tx_count", 0)
+                                result["tx_count"] = tx_count
+                                if liquidity >= min_liquidity:
+                                    result["predicted_regime"] = predict_regime(result)
+                                    logger.info("Regime predicted: %s", result["predicted_regime"])
+                                    yield result
                         elif msg.type in (
                             aiohttp.WSMsgType.CLOSED,
                             aiohttp.WSMsgType.ERROR,
