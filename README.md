@@ -1501,8 +1501,9 @@ real time:
    plans; standard tiers should use the mainnet URL shown above.
 3. Run `python -m crypto_bot.solana.pool_ws_monitor`.
 
-`pool_ws_monitor.py` subscribes to the Raydium program and prints each update.
-Use `watch_pool(api_key, program_id)` to get an async generator of transactions:
+`pool_ws_monitor.py` subscribes to the Raydium program and yields only those
+transactions that `predict_regime` classifies as "breakout". Use
+`watch_pool(api_key, program_id)` to get an async generator of breakout events:
 
 ```python
 import os
@@ -1513,7 +1514,7 @@ async def main():
     api_key = os.environ.get("HELIUS_KEY", "")
     program = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
     async for event in watch_pool(api_key, program):
-        print(event)
+        print("Breakout event:", event)
 
 asyncio.run(main())
 ```
