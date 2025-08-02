@@ -5,11 +5,12 @@ from __future__ import annotations
 Run as a module to print pool events from Helius:
 
 ```
-HELIUS_KEY=your_key python -m crypto_bot.solana.pool_ws_monitor [-p PROGRAM_ID]
+python -m crypto_bot.solana.pool_ws_monitor -k YOUR_KEY [-p PROGRAM_ID]
 ```
 
-The program ID defaults to Raydium's AMM if not supplied via the
-``PROGRAM_ID`` environment variable or ``-p`` argument.
+Both the API key and program ID may also be supplied via ``HELIUS_KEY`` and
+``PROGRAM_ID`` environment variables. The program defaults to Raydium's AMM
+if not provided.
 """
 
 import asyncio
