@@ -85,7 +85,7 @@ async def get_token_accounts(
     if not api_key:
         raise ValueError("HELIUS_KEY environment variable not set")
 
-    url = f"https://mainnet.helius-rpc.com/?api-key={api_key}"
+    url = f"https://api.helius.xyz/v0/?api-key={api_key}"
     payload = {
         "jsonrpc": "2.0",
         "id": 1,

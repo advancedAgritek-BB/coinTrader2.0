@@ -18,11 +18,6 @@ from crypto_bot.execution.cex_executor import execute_trade_async as cex_trade_a
 from crypto_bot.fund_manager import auto_convert_funds
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
-try:  # pragma: no cover - optional dependency
-    from coinTrader_Trainer.ml_trainer import load_model
-except Exception:  # pragma: no cover - fallback when trainer missing
-    load_model = None  # type: ignore[misc]
-
 
 logger = setup_logger(__name__, LOG_DIR / "solana_trading.log")
 
@@ -88,20 +83,9 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
 
     rpc_url = os.getenv(
         "SOLANA_RPC_URL",
-        f"https://mainnet.helius-rpc.com/?api-key={os.getenv('HELIUS_KEY', '')}",
+        f"https://api.helius.xyz/v0/?api-key={os.getenv('HELIUS_KEY', '')}",
     )
     client = AsyncClient(rpc_url)
-
-    try:  # optional ML model
-        from coinTrader_Trainer.ml_trainer import load_model as trainer_load_model
-
-        ml_model = trainer_load_model("profit")
-        try:
-            ml_model.predict([[0.0]])
-        except Exception:  # pragma: no cover - best effort
-            pass
-    except Exception:  # pragma: no cover - optional dependency
-        ml_model = None
     try:
         entry_price = None
         out_amount = 0.0
@@ -133,7 +117,9 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
         if entry_price is None:
             return 0.0
 
-        if load_model is None:
+        try:  # pragma: no cover - optional dependency
+            from coinTrader_Trainer.ml_trainer import load_model
+        except Exception:
             logger.error("ML model loader not available")
             return 0.0
         model = load_model("regime_lgbm")
@@ -144,6 +130,15 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
             if price:
                 change = (price - entry_price) / entry_price
                 features = [change, out_amount]
+                prediction = model.predict([features])[0]
+                max_prob = float(np.max(prediction))
+                regime = int(np.argmax(prediction))
+                if (
+                    change >= threshold and max_prob >= 0.7 and regime == 2
+                ):
+                    logger.info(
+                        "Profit hit with breakout (prob %s): %s", max_prob, change
+                    )
                 try:
                     pred = (
                         model.predict_proba([features])[0]

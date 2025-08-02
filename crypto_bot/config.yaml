@@ -182,7 +182,7 @@ meme_wave_sniper:
     interval: 0.5
     ml_filter: false
     raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
-    url: https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY
+    url: https://api.helius.xyz/v0/?api-key=${HELIUS_KEY}
     websocket_url: wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
   risk:
     daily_loss_cap: 2.0
