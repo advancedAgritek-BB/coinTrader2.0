@@ -171,7 +171,7 @@ def test_monitor_profit(monkeypatch):
     monkeypatch.setattr(solana_trading, "_fetch_price", fake_price)
     class DummyModel:
         def predict(self, feats):
-            return [0.8]
+            return [2]
 
     monkeypatch.setattr(solana_trading, "load_model", lambda name: DummyModel())
 
@@ -180,7 +180,7 @@ def test_monitor_profit(monkeypatch):
     class DummyModel:
         def predict(self, *_):
             calls["used"] = True
-            return [0.8]
+            return [2]
 
     ml_mod = types.SimpleNamespace(load_model=lambda *a, **k: DummyModel())
     sys.modules.setdefault("coinTrader_Trainer", types.ModuleType("coinTrader_Trainer"))
