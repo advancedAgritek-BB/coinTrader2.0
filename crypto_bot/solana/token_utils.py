@@ -9,6 +9,8 @@ import aiohttp
 logger = logging.getLogger(__name__)
 
 MIN_BALANCE_THRESHOLD = float(os.getenv("MIN_BALANCE_THRESHOLD", "0.0"))
+# Minimum ML probability for including a token account in results.
+ML_SCORE_THRESHOLD = float(os.getenv("ML_SCORE_THRESHOLD", "0.5"))
 
 
 async def enrich_with_metadata(
@@ -102,11 +104,14 @@ async def get_token_accounts(wallet_address: str, threshold: float | None = None
                     except (ValueError, TypeError):
                         amount = 0.0
                 if float(amount) >= threshold:
-                    meta = await enrich_with_metadata(info.get("mint", ""), session)
+                    try:
+                        meta = await enrich_with_metadata(info.get("mint", ""), session)
+                    except TypeError:
+                        meta = await enrich_with_metadata(info.get("mint", ""))
                     ml_score = predict_token_regime(meta)
                     acc["metadata"] = meta
                     acc["ml_score"] = ml_score
-                    if ml_score >= 0.5:
+                    if ml_score >= ML_SCORE_THRESHOLD:
                         filtered.append(acc)
             return filtered
     except aiohttp.ClientError as exc:  # pragma: no cover - network
@@ -162,7 +167,7 @@ async def get_token_accounts_ml_filter(
 
     Accounts are first fetched using :func:`get_token_accounts`, then enriched
     with metadata and scored via :func:`predict_token_regime`. Only accounts with
-    a prediction score of at least ``0.5`` are returned.
+    a prediction score of at least ``ML_SCORE_THRESHOLD`` are returned.
     """
 
     accounts = await get_token_accounts(wallet_address, threshold)
@@ -180,8 +185,9 @@ async def get_token_accounts_ml_filter(
             logger.error("ML prediction failed", exc_info=True)
             score = 0.0
 
-        if score >= 0.5:
+        if score >= ML_SCORE_THRESHOLD:
             enriched["ml_score"] = score
+            enriched.pop("metadata", None)
             final.append(enriched)
 
     return final
