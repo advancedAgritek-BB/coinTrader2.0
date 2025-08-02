@@ -26,15 +26,17 @@ async def helius_ws(api_key: str):
 
     url = f"wss://mainnet.helius-rpc.com/?api-key={api_key}"
     session = aiohttp.ClientSession()
-    ws = await session.ws_connect(url, timeout=30)
+    ws = None
     try:
+        ws = await session.ws_connect(url, timeout=30)
         try:
             yield ws
         except Exception as exc:
             logger.error("Error while using Helius websocket", exc_info=exc)
             raise
     finally:
-        await ws.close()
+        if ws is not None:
+            await ws.close()
         await session.close()
 
 

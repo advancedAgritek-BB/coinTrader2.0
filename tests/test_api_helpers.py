@@ -66,6 +66,27 @@ def test_helius_ws(monkeypatch):
     assert session.closed
 
 
+def test_helius_ws_connect_failure(monkeypatch):
+    class FailSession(DummySession):
+        async def ws_connect(self, url, *, timeout=None):
+            self.ws_url = url
+            self.ws_timeout = timeout
+            raise RuntimeError("boom")
+
+    session = FailSession()
+    monkeypatch.setattr(
+        api_helpers, "aiohttp", type("M", (), {"ClientSession": lambda: session})
+    )
+
+    async def _run():
+        async with api_helpers.helius_ws("k"):
+            pass
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(_run())
+    assert session.closed
+
+
 def test_fetch_jito_bundle(monkeypatch):
     session = DummySession()
     monkeypatch.setattr(api_helpers, "aiohttp", type("M", (), {"ClientSession": lambda: session}))
