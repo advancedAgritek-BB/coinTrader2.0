@@ -1375,7 +1375,7 @@ async def fetch_dex_ohlcv(
     data = None
     if res:
         if isinstance(res, tuple):
-            data, vol = res
+            data, vol, *_ = res
         else:
             data = res
             vol = min_volume_usd
