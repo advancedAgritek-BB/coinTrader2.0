@@ -6,6 +6,7 @@ import time
 from typing import Dict, Optional
 
 import aiohttp
+import numpy as np
 from solana.rpc.async_api import AsyncClient
 from urllib.parse import urlsplit
 
@@ -70,12 +71,12 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
 
 
 async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
-    """Return profit when price increase and ML prediction exceed thresholds.
+    """Return profit when price increase and model predicts breakout regime.
 
-    The function monitors the swap price for up to 5 minutes.  Each new
+    The function monitors the swap price for up to 5 minutes. Each new
     quote is fed into the ``regime_lgbm`` model from ``coinTrader_Trainer``;
     profit is only returned when the price change is above ``threshold`` and
-    the model predicts a breakout with probability greater than ``0.7``.
+    the model identifies a breakout regime.
 
     Parameters
     ----------
@@ -92,9 +93,9 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
     client = AsyncClient(rpc_url)
 
     try:  # optional ML model
-        from coinTrader_Trainer.ml_trainer import load_model
+        from coinTrader_Trainer.ml_trainer import load_model as trainer_load_model
 
-        ml_model = load_model("profit")
+        ml_model = trainer_load_model("profit")
         try:
             ml_model.predict([[0.0]])
         except Exception:  # pragma: no cover - best effort
@@ -132,14 +133,10 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
         if entry_price is None:
             return 0.0
 
-        # load ML regime classifier after determining the entry price
-        model = None
-        try:  # pragma: no cover - optional dependency
-            if load_model:
-                model = load_model("regime_lgbm")
-        except Exception as exc:  # pragma: no cover - best effort
-            logger.error("Failed to load regime model: %s", exc)
-            model = None
+        if load_model is None:
+            logger.error("ML model loader not available")
+            return 0.0
+        model = load_model("regime_lgbm")
 
         start = time.time()
         while time.time() - start < 300:
@@ -147,12 +144,9 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
             if price:
                 change = (price - entry_price) / entry_price
                 features = [change, out_amount]
-                try:
-                    prediction = model.predict([features])[0] if model else 1.0
-                except Exception as exc:  # pragma: no cover - best effort
-                    logger.error("ML prediction failed: %s", exc)
-                    prediction = 0.0
-                if change >= threshold and prediction > 0.7:
+                prediction = model.predict([features])[0]
+                if change >= threshold and np.argmax(prediction) == 2:
+                    logger.info("Profit threshold hit with breakout regime: %s", change)
                     return out_amount * change
             await asyncio.sleep(5)
     finally:
