@@ -1,13 +1,3 @@
-"""Utilities for enriching Solana token accounts with metadata.
-
-The functions in this module asynchronously query the Helius Digital Asset
-Standard (DAS) API to attach metadata to each account. Tokens are scored using
-the ``regime_lgbm`` model from ``coinTrader_Trainer``; those meeting or
-exceeding ``ML_SCORE_THRESHOLD`` are classified as *breakout* tokens.  Accounts
-with balances below ``MIN_BALANCE_THRESHOLD`` are ignored.
-<<<<<< codex/update-tests-for-token-utils
-import os
-import logging
 """Token account helpers for Solana.
 
 This module fetches token accounts for a wallet, enriches them with metadata
@@ -23,14 +13,10 @@ from typing import Any, Dict, List
 
 import aiohttp
 
-
 logger = logging.getLogger(__name__)
 
 MIN_BALANCE_THRESHOLD = float(os.getenv("MIN_BALANCE_THRESHOLD", "0.0"))
 ML_SCORE_THRESHOLD = float(os.getenv("ML_SCORE_THRESHOLD", "0.5"))
-# Minimum ML probability for including a token account in results.
-ML_SCORE_THRESHOLD = float(os.getenv("ML_SCORE_THRESHOLD", "0.5"))
-ML_SCORE_THRESHOLD = float(os.getenv("ML_SCORE_THRESHOLD", "0.0"))
 
 
 async def enrich_with_metadata(
@@ -77,13 +63,6 @@ def predict_token_regime(token_data: Dict[str, Any]) -> float:
 
 
 async def get_token_accounts(
-    wallet_address: str, threshold: float | None = None
-) -> List[Dict[str, Any]]:
-    """Return SPL token accounts with balances above ``threshold``.
-
-    Accounts are enriched with metadata and scored via
-    :func:`predict_token_regime`. Only accounts with scores above
-    ``ML_SCORE_THRESHOLD`` are returned.
     wallet_address: str,
     threshold: float | None = None,
     ml_threshold: float | None = None,
@@ -138,16 +117,7 @@ async def get_token_accounts(
                         amount = float(amount_info.get("uiAmountString", 0))
                     except (ValueError, TypeError):
                         amount = 0.0
-                if float(amount) >= threshold:
-                    try:
-                        meta = await enrich_with_metadata(info.get("mint", ""), session)
-                    except TypeError:
-                        meta = await enrich_with_metadata(info.get("mint", ""))
-                    ml_score = predict_token_regime(meta)
-                    acc["metadata"] = meta
-                    acc["ml_score"] = ml_score
-                    if ml_score >= ML_SCORE_THRESHOLD:
-                        filtered.append(acc)
+
                 if float(amount) < threshold:
                     continue
 
@@ -165,39 +135,14 @@ async def get_token_accounts(
 
 
 async def get_token_accounts_ml_filter(
-    wallet_address: str, threshold: float | None = None
+    wallet_address: str,
+    threshold: float | None = None,
+    ml_threshold: float | None = None,
 ) -> List[Dict[str, Any]]:
     """Return enriched token accounts passing an ML probability filter.
 
-    Accounts are first fetched using :func:`get_token_accounts`, then enriched
-    with metadata and scored via :func:`predict_token_regime`. Only accounts with
-    a prediction score of at least ``ML_SCORE_THRESHOLD`` (default ``0.5``) are
-    returned.
-    a prediction score of at least ``ML_SCORE_THRESHOLD`` are returned.
-    """
-
-    accounts = await get_token_accounts(wallet_address, threshold)
-    final: List[Dict[str, Any]] = []
-    for acc in accounts:
-        try:
-            enriched = await enrich_with_metadata(acc)
-        except Exception:  # pragma: no cover - best effort
-            logger.error("metadata enrichment failed", exc_info=True)
-            continue
-
-        try:
-            score = float(predict_token_regime(enriched))
-        except Exception:  # pragma: no cover - best effort
-            logger.error("ML prediction failed", exc_info=True)
-            score = 0.0
-
-        if score >= ML_SCORE_THRESHOLD:
-            enriched["ml_score"] = score
-            enriched.pop("metadata", None)
-            final.append(enriched)
-
-    return final
     Wrapper around :func:`get_token_accounts` kept for backwards compatibility.
     """
 
-    return await get_token_accounts(wallet_address, threshold)
+    return await get_token_accounts(wallet_address, threshold, ml_threshold)
+
