@@ -3,6 +3,7 @@ from __future__ import annotations
 """Utilities for scanning new Solana tokens using :class:`PoolWatcher`."""
 
 import logging
+import os
 from typing import Mapping, List
 
 from .watcher import PoolWatcher
@@ -27,9 +28,8 @@ async def get_solana_new_tokens(config: Mapping[str, object]) -> List[str]:
         return []
 
     interval_sec = float(sol_cfg.get("interval_minutes", 0)) * 60.0
-    websocket_url = (
-        sol_cfg.get("helius_ws_url") if sol_cfg.get("use_ws", False) else None
-    )
+    helius_ws_url = os.path.expandvars(str(sol_cfg.get("helius_ws_url", "")))
+    websocket_url = helius_ws_url if sol_cfg.get("use_ws", False) else None
     raydium_program_id = sol_cfg.get("raydium_program_id")
     url = sol_cfg.get("url")
     min_liquidity = float(sol_cfg.get("min_liquidity", 0.0))

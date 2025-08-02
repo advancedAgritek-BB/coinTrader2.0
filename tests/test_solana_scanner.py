@@ -124,6 +124,43 @@ def test_get_solana_new_tokens_returns_unique(monkeypatch):
     assert tokens == ["A", "B"]
 
 
+def test_get_solana_new_tokens_expands_ws_url(monkeypatch):
+    captured: dict[str, str] = {}
+
+    class DummyWatcher:
+        def __init__(
+            self,
+            url,
+            interval,
+            websocket_url,
+            raydium_program_id,
+            min_liquidity=None,
+        ):
+            captured["websocket_url"] = websocket_url
+
+        async def watch(self):
+            if False:
+                yield None
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(scanner, "PoolWatcher", DummyWatcher)
+    monkeypatch.setenv("HELIUS_KEY", "abc123")
+
+    cfg = {
+        "helius_ws_url": "wss://example.com/${HELIUS_KEY}",
+        "use_ws": True,
+        "url": "http://x",
+        "raydium_program_id": "r",
+        "interval_minutes": 0,
+        "min_liquidity": 0,
+    }
+
+    asyncio.run(scanner.get_solana_new_tokens(cfg))
+    assert captured["websocket_url"] == "wss://example.com/abc123"
+
+
 async def _scan_once(cfg, queue):
     from crypto_bot.utils import market_loader
     from crypto_bot.regime import regime_classifier
