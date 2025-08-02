@@ -749,22 +749,16 @@ The built-in Telegram interface is provided by the `TelegramBotUI` class in
      token: your_telegram_token
      chat_id: your_chat_id
      chat_admins: your_chat_id
-     trade_updates: true
+     trade_updates: true  # set to false to disable trade notifications
      message_interval: 1.0
      max_messages_per_minute: 20
    ```
 
-   The bot reads the chat ID and token from `config.yaml` (not
-   `user_config.yaml`). Set `trade_updates` to `false` to disable trade entry
-   and exit messages.
-     trade_updates: true  # set false to disable trade notifications
-   ```
-
-   The bot reads these values only from `config.yaml`. Disable
-   `trade_updates` if you don't want trade entry and exit messages.
-   Set `chat_admins` to a comma-separated list of Telegram chat IDs allowed to
-   control the bot. You can also provide this list via the `TELE_CHAT_ADMINS`
-   environment variable.
+   The bot reads these values only from `config.yaml` (not `user_config.yaml`).
+   Toggle `trade_updates` to `true` for trade entry and exit messages or to
+   `false` to silence them. Set `chat_admins` to a comma-separated list of
+   Telegram chat IDs allowed to control the bot. You can also provide this list
+   via the `TELE_CHAT_ADMINS` environment variable.
 2. Send `/start` to your bot so it can message you. Use `/menu` at any time to
    open an interactive button menu—**Start**, **Stop**, **Status**, **Log**,
    **Rotate Now**, **Toggle Mode**, **PnL**, **Trades**, **Edit Config**,
