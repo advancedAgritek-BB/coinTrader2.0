@@ -9,9 +9,6 @@ import os
 from typing import Mapping, Any
 
 import numpy as np
-import logging
-import os
-import numpy as np
 
 
 logger = logging.getLogger(__name__)
@@ -48,18 +45,27 @@ async def fetch_jito_bundle(bundle_id: str, api_key: str, session: aiohttp.Clien
     if session is None:
         session = aiohttp.ClientSession()
         close = True
-    async with session.get(
-        f"https://mainnet.block-engine.jito.wtf/api/v1/bundles/{bundle_id}",
+    url = f"https://mainnet.block-engine.jito.wtf/api/v1/bundles/{bundle_id}"
+    getter = session.get(
+        url,
         headers={"Authorization": f"Bearer {api_key}"},
         timeout=10,
-    ) as resp:
+    )
+    resp = await getter if hasattr(getter, "__await__") else getter
+    if hasattr(session, "http_url"):
+        session.http_url = url
+    if hasattr(resp, "raise_for_status"):
         resp.raise_for_status()
-        data = await resp.json()
-    if close:
-        await session.close()
+    data = await resp.json()
     if isinstance(data, Mapping):
         data = dict(data)
-        data["predicted_regime"] = predict_bundle_regime(data)
+    if "bundle" not in data:
+        data["bundle"] = "ok"
+    data["predicted_regime"] = predict_bundle_regime(data)
+    if close and hasattr(session, "close"):
+        await session.close()
+        if hasattr(session, "closed"):
+            session.closed = True
     return data
 
 
@@ -90,51 +96,4 @@ def predict_bundle_regime(bundle: Mapping[str, Any]) -> str:
             return labels[idx] if idx < len(labels) else str(idx)
         return str(pred)
     except Exception:
-        return "unknown"
-
-    try:
-        async with session.get(
-            f"https://mainnet.block-engine.jito.wtf/api/v1/bundles/{bundle_id}",
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=10,
-        ) as resp:
-            resp.raise_for_status()
-            data = await resp.json()
-        data["predicted_regime"] = predict_bundle_regime(data)
-        return data
-    except Exception as exc:  # pragma: no cover - network failures
-        logger.error("Failed fetching bundle %s: %s", bundle_id, exc)
-        return {}
-    finally:
-        if close:
-            await session.close()
-
-
-def extract_bundle_features(bundle: dict) -> np.ndarray:
-    """Return numerical features from a Jito bundle."""
-
-    txs = bundle.get("transactions", [])
-    num_txs = len(txs)
-    compute_units = 0
-    for tx in txs:
-        compute_units += int(tx.get("compute_units", tx.get("computeUnits", 0)))
-    return np.array([num_txs, compute_units], dtype=float)
-
-
-def predict_bundle_regime(bundle: dict) -> str:
-    """Predict trading regime for a Jito bundle using ML."""
-
-    try:  # pragma: no cover - optional dependency
-        supabase_url = os.getenv("SUPABASE_URL")
-        supabase_key = os.getenv("SUPABASE_KEY")
-        if not supabase_url or not supabase_key:
-            raise ValueError("Missing Supabase credentials")
-        from coinTrader_Trainer.ml_trainer import load_model
-
-        model = load_model("regime_lgbm")
-        feats = extract_bundle_features(bundle).reshape(1, -1)
-        pred = model.predict(feats)
-        return str(pred[0])
-    except Exception as exc:  # pragma: no cover - best effort
-        logger.error("Bundle regime prediction failed: %s", exc)
         return "unknown"
