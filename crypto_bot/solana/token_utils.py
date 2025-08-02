@@ -1,3 +1,6 @@
+<<<<<< codex/update-tests-for-token-utils
+import os
+import logging
 """Token account helpers for Solana.
 
 This module fetches token accounts for a wallet, enriches them with metadata
@@ -13,9 +16,11 @@ from typing import Any, Dict, List
 
 import aiohttp
 
+
 logger = logging.getLogger(__name__)
 
 MIN_BALANCE_THRESHOLD = float(os.getenv("MIN_BALANCE_THRESHOLD", "0.0"))
+ML_SCORE_THRESHOLD = float(os.getenv("ML_SCORE_THRESHOLD", "0.5"))
 # Minimum ML probability for including a token account in results.
 ML_SCORE_THRESHOLD = float(os.getenv("ML_SCORE_THRESHOLD", "0.5"))
 ML_SCORE_THRESHOLD = float(os.getenv("ML_SCORE_THRESHOLD", "0.0"))
@@ -65,6 +70,13 @@ def predict_token_regime(token_data: Dict[str, Any]) -> float:
 
 
 async def get_token_accounts(
+    wallet_address: str, threshold: float | None = None
+) -> List[Dict[str, Any]]:
+    """Return SPL token accounts with balances above ``threshold``.
+
+    Accounts are enriched with metadata and scored via
+    :func:`predict_token_regime`. Only accounts with scores above
+    ``ML_SCORE_THRESHOLD`` are returned.
     wallet_address: str,
     threshold: float | None = None,
     ml_threshold: float | None = None,

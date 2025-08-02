@@ -1,8 +1,9 @@
 import asyncio
+import importlib
+
 import pytest
 
 from crypto_bot.solana import token_utils
-import importlib
 
 
 class DummyResp:
@@ -88,6 +89,7 @@ def test_get_token_accounts(monkeypatch):
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session, "ClientError": Exception})
     monkeypatch.setenv("HELIUS_KEY", "k")
     monkeypatch.setenv("MIN_BALANCE_THRESHOLD", "0.001")
+    monkeypatch.delenv("ML_SCORE_THRESHOLD", raising=False)
     importlib.reload(token_utils)
     monkeypatch.setattr(token_utils, "aiohttp", aiohttp_mod)
 
@@ -121,6 +123,7 @@ def test_get_token_accounts_error(monkeypatch):
         asyncio.run(token_utils.get_token_accounts("wallet"))
 
 
+def test_get_token_accounts_threshold_env(monkeypatch):
 def _setup_ml(monkeypatch, score):
     """Helper to patch ML related functions."""
 
@@ -146,6 +149,19 @@ def test_get_token_accounts_ml_filter(monkeypatch):
                             }
                         }
                     }
+                },
+                {
+                    "account": {
+                        "data": {
+                            "parsed": {
+                                "info": {
+                                    "tokenAmount": {"uiAmount": 1},
+                                    "mint": "B",
+                                }
+                            }
+                        }
+                    }
+                },
                 }
             ]
         }
@@ -153,10 +169,13 @@ def test_get_token_accounts_ml_filter(monkeypatch):
     session = DummySession(data)
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session, "ClientError": Exception})
     monkeypatch.setenv("HELIUS_KEY", "k")
+    monkeypatch.setenv("MIN_BALANCE_THRESHOLD", "0.001")
+    monkeypatch.setenv("ML_SCORE_THRESHOLD", "0.7")
     importlib.reload(token_utils)
     monkeypatch.setattr(token_utils, "aiohttp", aiohttp_mod)
-    _setup_ml(monkeypatch, 0.6)
 
+    async def fake_enrich(pubkey, session):
+        return {"mint": pubkey}
     accounts = asyncio.run(token_utils.get_token_accounts_ml_filter("wallet"))
     assert accounts == [
         {
@@ -175,7 +194,11 @@ def test_get_token_accounts_ml_filter(monkeypatch):
         }
     ]
 
+    def fake_predict(meta):
+        return {"A": 0.8, "B": 0.6}[meta["mint"]]
 
+    monkeypatch.setattr(token_utils, "enrich_with_metadata", fake_enrich)
+    monkeypatch.setattr(token_utils, "predict_token_regime", fake_predict)
 def test_get_token_accounts_ml_filter_low_score(monkeypatch):
     data = {
         "result": {
@@ -202,5 +225,7 @@ def test_get_token_accounts_ml_filter_low_score(monkeypatch):
     monkeypatch.setattr(token_utils, "aiohttp", aiohttp_mod)
     _setup_ml(monkeypatch, 0.4)
 
-    accounts = asyncio.run(token_utils.get_token_accounts_ml_filter("wallet"))
-    assert accounts == []
+    accounts = asyncio.run(token_utils.get_token_accounts("wallet"))
+    assert len(accounts) == 1
+    assert accounts[0]["metadata"] == {"mint": "A"}
+    assert accounts[0]["ml_score"] == 0.8
