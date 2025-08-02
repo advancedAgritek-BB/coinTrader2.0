@@ -170,7 +170,7 @@ FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-fundin
 SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
 SOLANA_PRIVATE_KEY="[1,2,3,...]"       # required for Solana trades
-# defaults to https://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
+# defaults to https://api.helius.xyz/v0/?api-key=${HELIUS_KEY}
 SOLANA_RPC_URL=https://devnet.solana.com  # optional custom endpoint
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
 # SOLANA_RPC_URL=https://api.devnet.solana.com      # devnet example
@@ -231,7 +231,7 @@ SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
 When using [Helius](https://www.helius.xyz/) endpoints, append `?api-key=${HELIUS_KEY}` to the URL:
 
 ```env
-SOLANA_RPC_URL=https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
+SOLANA_RPC_URL=https://api.helius.xyz/v0/?api-key=${HELIUS_KEY}
 ```
 
 New-token detection relies on a few Solana-specific API keys. Add them to
@@ -412,6 +412,31 @@ solana_scanner:
   filter_tf: 5m
   filter_regime: [volatile, breakout, new_pool]
 ```
+
+#### Breakout Arbitrage
+
+When the Solana runner predicts a breakout it can execute a cross-chain trade
+and hedge it on your exchange. Configure the `arbitrage` section so
+`cross_chain_trade` knows how to perform both legs:
+
+```yaml
+arbitrage:
+  exchange: null           # ccxt exchange instance for the CEX leg
+  ws_client: null          # optional websocket client
+  symbol: SOL/USDC         # market traded on the exchange
+  side: buy                # DEX side; the CEX uses the opposite
+  amount: 0.0              # notional quote amount
+  dry_run: true            # set to false to send real orders
+  slippage_bps: 50         # Raydium swap slippage tolerance
+  use_websocket: false     # confirm CEX order via WebSocket
+  notifier: null           # optional notifier for status messages
+  mempool_monitor: null    # optional Solana mempool monitor
+  mempool_cfg: {}
+```
+
+These fields are passed directly to `cross_chain_trade`, allowing the runner to
+attempt breakout arbitrage by swapping on Raydium and hedging on the CEX when
+probability warrants it.
 
 ### Risk Parameters
 * **risk** – default stop loss, take profit and drawdown limits. `min_volume` is set to `0.0001` to filter thin markets. The stop is 1.5× ATR and the take profit is 3× ATR by default.
@@ -1422,7 +1447,7 @@ URL should reference this key so Helius can authorize the requests:
 meme_wave_sniper:
   enabled: true
   pool:
-    url: https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
+    url: https://api.helius.xyz/v0/?api-key=${HELIUS_KEY}
     interval: 5
     websocket_url: wss://atlas-mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
     raydium_program_id: 675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8
@@ -1542,7 +1567,7 @@ the sniper heuristics on each one:
 ```bash
 python -m backtest.historical_pools \
     --start 2024-01-01 --end 2024-01-02 \
-    --rpc-url https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY
+    --rpc-url https://api.helius.xyz/v0/?api-key=YOUR_KEY
 ```
 
 ## Meme Wave Rider

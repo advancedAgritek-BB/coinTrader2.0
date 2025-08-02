@@ -2138,6 +2138,16 @@ def test_fetch_dex_ohlcv_ignores_extra_gecko_data():
         )
     )
     assert data == candles
+def test_fetch_dex_ohlcv_handles_three_element_gecko(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    async def fake_gecko(*_a, **_k):
+        return ([[0, 1, 2, 3, 4, 5]], 123.0, 456.0)
+
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
+
+    data = asyncio.run(market_loader.fetch_dex_ohlcv(None, "FOO/USDC", limit=1))
+    assert data == [[0, 1, 2, 3, 4, 5]]
 
 
 def test_update_multi_tf_ohlcv_cache_fallback_exchange(monkeypatch):

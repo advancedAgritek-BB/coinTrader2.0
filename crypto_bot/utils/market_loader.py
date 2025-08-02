@@ -1389,6 +1389,8 @@ async def fetch_dex_ohlcv(
     list | None
         Only the candle list is returned. Any accompanying volume, reserve
         or price information is discarded.
+    GeckoTerminal may return a tuple with extra elements; only the first two
+    (data and volume) are used and any additional values are ignored.
     """
 
     res = gecko_res
@@ -1404,6 +1406,8 @@ async def fetch_dex_ohlcv(
         if isinstance(res, tuple):
             data = res[0]
             vol = res[1] if len(res) > 1 else min_volume_usd
+            # GeckoTerminal can return more than two items; ignore extras
+            data, vol, *_ = res
         else:
             data = res
             vol = min_volume_usd

@@ -110,6 +110,9 @@ def test_predict_bundle_regime_model(monkeypatch):
 
     class FakeModel:
         def predict(self, X):
+            return np.array([2])
+
+        def predict_proba(self, X):
             return np.array([[0.1, 0.2, 0.3, 0.4]])
 
     class FakeClient:
