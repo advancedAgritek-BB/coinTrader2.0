@@ -132,3 +132,13 @@ async def get_token_accounts(
         logger.error("Helius request failed: %s", exc)
         raise
 
+
+async def get_token_accounts_ml_filter(
+    wallet_address: str, threshold: float | None = None
+) -> List[Dict[str, Any]]:
+    """Return enriched token accounts passing an ML probability filter.
+
+    Wrapper around :func:`get_token_accounts` kept for backwards compatibility.
+    """
+
+    return await get_token_accounts(wallet_address, threshold)

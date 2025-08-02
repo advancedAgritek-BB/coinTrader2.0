@@ -124,17 +124,32 @@ def test_get_token_accounts_error(monkeypatch):
 def _setup_ml(monkeypatch, score):
     """Helper to patch ML related functions."""
 
-    async def fake_enrich(acc):
-        enriched = {"enriched": True}
-        enriched.update(acc)
-        return enriched
+    async def fake_enrich(pubkey, session):
+        return {"mint": pubkey, "enriched": True}
 
     monkeypatch.setattr(token_utils, "enrich_with_metadata", fake_enrich)
     monkeypatch.setattr(token_utils, "predict_token_regime", lambda *_a, **_k: score)
 
 
 def test_get_token_accounts_ml_filter(monkeypatch):
-    data = {"result": {"value": [{"id": 1}]}}
+    data = {
+        "result": {
+            "value": [
+                {
+                    "account": {
+                        "data": {
+                            "parsed": {
+                                "info": {
+                                    "tokenAmount": {"uiAmount": 1},
+                                    "mint": "A",
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        }
+    }
     session = DummySession(data)
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session, "ClientError": Exception})
     monkeypatch.setenv("HELIUS_KEY", "k")
@@ -143,11 +158,43 @@ def test_get_token_accounts_ml_filter(monkeypatch):
     _setup_ml(monkeypatch, 0.6)
 
     accounts = asyncio.run(token_utils.get_token_accounts_ml_filter("wallet"))
-    assert accounts == [{"id": 1, "enriched": True, "ml_score": 0.6}]
+    assert accounts == [
+        {
+            "account": {
+                "data": {
+                    "parsed": {
+                        "info": {
+                            "tokenAmount": {"uiAmount": 1},
+                            "mint": "A",
+                        }
+                    }
+                }
+            },
+            "metadata": {"mint": "A", "enriched": True},
+            "ml_score": 0.6,
+        }
+    ]
 
 
 def test_get_token_accounts_ml_filter_low_score(monkeypatch):
-    data = {"result": {"value": [{"id": 1}]}}
+    data = {
+        "result": {
+            "value": [
+                {
+                    "account": {
+                        "data": {
+                            "parsed": {
+                                "info": {
+                                    "tokenAmount": {"uiAmount": 1},
+                                    "mint": "A",
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        }
+    }
     session = DummySession(data)
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session, "ClientError": Exception})
     monkeypatch.setenv("HELIUS_KEY", "k")

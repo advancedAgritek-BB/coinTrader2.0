@@ -6,7 +6,9 @@ import time
 from typing import Dict, Optional
 
 import aiohttp
+import numpy as np
 from solana.rpc.async_api import AsyncClient
+from urllib.parse import urlsplit
 
 from crypto_bot.execution.solana_executor import (
     execute_swap,
@@ -26,7 +28,7 @@ except Exception:  # pragma: no cover - fallback when trainer missing
 logger = setup_logger(__name__, LOG_DIR / "solana_trading.log")
 
 # Proxy endpoint for Jupiter quotes
-proxy_url = "https://helius-proxy.raydium.io"
+proxy_url = "https://helius-proxy.raydium.io/api/v1/"
 
 
 async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> float:
@@ -37,11 +39,13 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
     max_retries:
         Maximum attempts when the price request fails. Defaults to ``3``.
     """
-    async with aiohttp.ClientSession() as session:
-        for i in range(max_retries):
-            try:
+    quote_path = urlsplit(JUPITER_QUOTE_URL).path.lstrip("/")
+    request_url = proxy_url + quote_path
+    for i in range(max_retries):
+        try:
+            async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    proxy_url + JUPITER_QUOTE_URL,
+                    request_url,
                     params={
                         "inputMint": token_in,
                         "outputMint": token_out,
@@ -52,13 +56,13 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
                 ) as resp:
                     resp.raise_for_status()
                     data = await resp.json()
-                break
-            except Exception as exc:
-                logger.error(f"Price fetch error (attempt {i}): {exc}")
-                if i < max_retries - 1:
-                    await asyncio.sleep(1)
-                    continue
-                return 0.0
+            break
+        except Exception as exc:
+            logger.error(f"Price fetch error (attempt {i}): {exc}")
+            if i < max_retries - 1:
+                await asyncio.sleep(1)
+                continue
+            return 0.0
     route = (data.get("data") or [{}])[0]
     try:
         return float(route["outAmount"]) / float(route["inAmount"])
@@ -67,12 +71,12 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
 
 
 async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
-    """Return profit when price increase and ML prediction exceed thresholds.
+    """Return profit when price increase and model predicts breakout regime.
 
-    The function monitors the swap price for up to 5 minutes.  Each new
+    The function monitors the swap price for up to 5 minutes. Each new
     quote is fed into the ``regime_lgbm`` model from ``coinTrader_Trainer``;
     profit is only returned when the price change is above ``threshold`` and
-    the model predicts a breakout with probability greater than ``0.7``.
+    the model identifies a breakout regime.
 
     Parameters
     ----------
@@ -89,9 +93,9 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
     client = AsyncClient(rpc_url)
 
     try:  # optional ML model
-        from coinTrader_Trainer.ml_trainer import load_model
+        from coinTrader_Trainer.ml_trainer import load_model as trainer_load_model
 
-        ml_model = load_model("profit")
+        ml_model = trainer_load_model("profit")
         try:
             ml_model.predict([[0.0]])
         except Exception:  # pragma: no cover - best effort
@@ -129,14 +133,10 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
         if entry_price is None:
             return 0.0
 
-        # load ML regime classifier after determining the entry price
-        model = None
-        try:  # pragma: no cover - optional dependency
-            if load_model:
-                model = load_model("regime_lgbm")
-        except Exception as exc:  # pragma: no cover - best effort
-            logger.error("Failed to load regime model: %s", exc)
-            model = None
+        if load_model is None:
+            logger.error("ML model loader not available")
+            return 0.0
+        model = load_model("regime_lgbm")
 
         start = time.time()
         while time.time() - start < 300:
@@ -144,12 +144,9 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
             if price:
                 change = (price - entry_price) / entry_price
                 features = [change, out_amount]
-                try:
-                    prediction = model.predict([features])[0] if model else 1.0
-                except Exception as exc:  # pragma: no cover - best effort
-                    logger.error("ML prediction failed: %s", exc)
-                    prediction = 0.0
-                if change >= threshold and prediction > 0.7:
+                prediction = model.predict([features])[0]
+                if change >= threshold and np.argmax(prediction) == 2:
+                    logger.info("Profit threshold hit with breakout regime: %s", change)
                     return out_amount * change
             await asyncio.sleep(5)
     finally:
@@ -201,6 +198,7 @@ async def sniper_trade(
 
     profit = await monitor_profit(tx_sig, profit_threshold)
     if profit > 0:
+        logger.info("Auto-converting %s %s profit to %s", profit, target_token, base_token)
         await auto_convert_funds(
             wallet,
             target_token,
