@@ -5,20 +5,32 @@ Standard (DAS) API to attach metadata to each account. Tokens are scored using
 the ``regime_lgbm`` model from ``coinTrader_Trainer``; those meeting or
 exceeding ``ML_SCORE_THRESHOLD`` are classified as *breakout* tokens.  Accounts
 with balances below ``MIN_BALANCE_THRESHOLD`` are ignored.
+<<<<<< codex/update-tests-for-token-utils
+import os
+import logging
+"""Token account helpers for Solana.
+
+This module fetches token accounts for a wallet, enriches them with metadata
+from the Helius API and scores them using a machine learning model. Only
+accounts whose model probability exceeds a configurable threshold are returned.
 """
 
 from __future__ import annotations
 
-import os
 import logging
-from typing import List, Dict, Any
+import os
+from typing import Any, Dict, List
 
 import aiohttp
+
 
 logger = logging.getLogger(__name__)
 
 MIN_BALANCE_THRESHOLD = float(os.getenv("MIN_BALANCE_THRESHOLD", "0.0"))
 ML_SCORE_THRESHOLD = float(os.getenv("ML_SCORE_THRESHOLD", "0.5"))
+# Minimum ML probability for including a token account in results.
+ML_SCORE_THRESHOLD = float(os.getenv("ML_SCORE_THRESHOLD", "0.5"))
+ML_SCORE_THRESHOLD = float(os.getenv("ML_SCORE_THRESHOLD", "0.0"))
 
 
 async def enrich_with_metadata(
@@ -42,7 +54,12 @@ async def enrich_with_metadata(
 
 
 def predict_token_regime(token_data: Dict[str, Any]) -> float:
-    """Return breakout probability from ``token_data`` via ``regime_lgbm``."""
+    """Return the maximum regime probability for ``token_data``.
+
+    The function loads the ``regime_lgbm`` model via ``load_model`` and predicts
+    using basic features such as liquidity and transaction count. On any
+    failure the error is logged and ``0.0`` is returned.
+    """
 
     try:  # pragma: no cover - optional dependency
         from coinTrader_Trainer.ml_trainer import load_model
@@ -50,25 +67,32 @@ def predict_token_regime(token_data: Dict[str, Any]) -> float:
         model = load_model("regime_lgbm")
         features = [
             float(token_data.get("liquidity", 0)),
-            float(token_data.get("volume", 0)),
-            float(token_data.get("tx_count", 0)),
+            float(token_data.get("tx_count", token_data.get("transaction_count", 0))),
         ]
         pred = model.predict([features])[0]
-        return float(pred[1] if isinstance(pred, (list, tuple)) else pred)
-    except Exception as exc:
+        return float(max(pred)) if hasattr(pred, "__iter__") else float(pred)
+    except Exception as exc:  # pragma: no cover - best effort
         logger.error("Token regime prediction failed: %s", exc)
         return 0.0
 
 
-async def get_token_accounts(wallet_address: str, threshold: float | None = None) -> List[Dict[str, Any]]:
+async def get_token_accounts(
+    wallet_address: str, threshold: float | None = None
+) -> List[Dict[str, Any]]:
     """Return SPL token accounts with balances above ``threshold``.
 
-    Parameters
-    ----------
-    wallet_address: str
-        The Solana wallet address to query.
-    threshold: float, optional
-        Minimum balance required. Defaults to ``MIN_BALANCE_THRESHOLD``.
+    Accounts are enriched with metadata and scored via
+    :func:`predict_token_regime`. Only accounts with scores above
+    ``ML_SCORE_THRESHOLD`` are returned.
+    wallet_address: str,
+    threshold: float | None = None,
+    ml_threshold: float | None = None,
+) -> List[Dict[str, Any]]:
+    """Return SPL token accounts above ``threshold`` with ML scores.
+
+    Accounts are enriched with metadata and scored via
+    :func:`predict_token_regime`. Only accounts whose score exceeds
+    ``ml_threshold`` are included in the result.
     """
 
     api_key = os.getenv("HELIUS_KEY")
@@ -88,6 +112,9 @@ async def get_token_accounts(wallet_address: str, threshold: float | None = None
     }
 
     threshold = float(threshold if threshold is not None else MIN_BALANCE_THRESHOLD)
+    ml_threshold = float(
+        ml_threshold if ml_threshold is not None else ML_SCORE_THRESHOLD
+    )
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -112,57 +139,29 @@ async def get_token_accounts(wallet_address: str, threshold: float | None = None
                     except (ValueError, TypeError):
                         amount = 0.0
                 if float(amount) >= threshold:
-                    meta = await enrich_with_metadata(info.get("mint", ""), session)
+                    try:
+                        meta = await enrich_with_metadata(info.get("mint", ""), session)
+                    except TypeError:
+                        meta = await enrich_with_metadata(info.get("mint", ""))
                     ml_score = predict_token_regime(meta)
                     acc["metadata"] = meta
                     acc["ml_score"] = ml_score
                     if ml_score >= ML_SCORE_THRESHOLD:
                         filtered.append(acc)
+                if float(amount) < threshold:
+                    continue
+
+                meta = await enrich_with_metadata(info.get("mint", ""), session)
+                ml_score = predict_token_regime(meta)
+                acc["metadata"] = meta
+                acc["ml_score"] = ml_score
+                if ml_score >= ml_threshold:
+                    filtered.append(acc)
+
             return filtered
     except aiohttp.ClientError as exc:  # pragma: no cover - network
         logger.error("Helius request failed: %s", exc)
         raise
-
-    accounts = data.get("result", {}).get("value", [])
-    filtered: List[Dict[str, Any]] = []
-    for acc in accounts:
-        info = (
-            acc.get("account", {})
-            .get("data", {})
-            .get("parsed", {})
-            .get("info", {})
-        )
-        amount_info = info.get("tokenAmount", {})
-        amount = amount_info.get("uiAmount")
-        if amount is None:
-            try:
-                amount = float(amount_info.get("uiAmountString", 0))
-            except (ValueError, TypeError):
-                amount = 0.0
-        if float(amount) >= threshold:
-            filtered.append(acc)
-
-    return filtered
-
-
-async def enrich_with_metadata(account: Dict[str, Any]) -> Dict[str, Any]:
-    """Placeholder that can enrich an account with metadata.
-
-    This function is intentionally simple so that tests can patch it with
-    custom logic without requiring network access.
-    """
-
-    return account
-
-
-def predict_token_regime(account: Dict[str, Any]) -> float:
-    """Predict trading regime probability for a token account.
-
-    The default implementation returns ``0.0`` and is expected to be patched in
-    tests with a model that returns a value between 0 and 1.
-    """
-
-    return 0.0
 
 
 async def get_token_accounts_ml_filter(
@@ -174,6 +173,7 @@ async def get_token_accounts_ml_filter(
     with metadata and scored via :func:`predict_token_regime`. Only accounts with
     a prediction score of at least ``ML_SCORE_THRESHOLD`` (default ``0.5``) are
     returned.
+    a prediction score of at least ``ML_SCORE_THRESHOLD`` are returned.
     """
 
     accounts = await get_token_accounts(wallet_address, threshold)
@@ -193,6 +193,11 @@ async def get_token_accounts_ml_filter(
 
         if score >= ML_SCORE_THRESHOLD:
             enriched["ml_score"] = score
+            enriched.pop("metadata", None)
             final.append(enriched)
 
     return final
+    Wrapper around :func:`get_token_accounts` kept for backwards compatibility.
+    """
+
+    return await get_token_accounts(wallet_address, threshold)
