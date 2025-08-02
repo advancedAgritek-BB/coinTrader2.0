@@ -1362,7 +1362,11 @@ async def fetch_dex_ohlcv(
     gecko_res: list | tuple | None = None,
     use_gecko: bool = True,
 ) -> list | None:
-    """Fetch DEX OHLCV with fallback to CoinGecko, Coinbase then Kraken."""
+    """Fetch DEX OHLCV with fallback to CoinGecko, Coinbase then Kraken.
+
+    GeckoTerminal may return a tuple with extra elements; only the first two
+    (data and volume) are used and any additional values are ignored.
+    """
 
     res = gecko_res
     if res is None and use_gecko:
@@ -1375,6 +1379,7 @@ async def fetch_dex_ohlcv(
     data = None
     if res:
         if isinstance(res, tuple):
+            # GeckoTerminal can return more than two items; ignore extras
             data, vol, *_ = res
         else:
             data = res
