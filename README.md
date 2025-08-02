@@ -413,6 +413,31 @@ solana_scanner:
   filter_regime: [volatile, breakout, new_pool]
 ```
 
+#### Breakout Arbitrage
+
+When the Solana runner predicts a breakout it can execute a cross-chain trade
+and hedge it on your exchange. Configure the `arbitrage` section so
+`cross_chain_trade` knows how to perform both legs:
+
+```yaml
+arbitrage:
+  exchange: null           # ccxt exchange instance for the CEX leg
+  ws_client: null          # optional websocket client
+  symbol: SOL/USDC         # market traded on the exchange
+  side: buy                # DEX side; the CEX uses the opposite
+  amount: 0.0              # notional quote amount
+  dry_run: true            # set to false to send real orders
+  slippage_bps: 50         # Raydium swap slippage tolerance
+  use_websocket: false     # confirm CEX order via WebSocket
+  notifier: null           # optional notifier for status messages
+  mempool_monitor: null    # optional Solana mempool monitor
+  mempool_cfg: {}
+```
+
+These fields are passed directly to `cross_chain_trade`, allowing the runner to
+attempt breakout arbitrage by swapping on Raydium and hedging on the CEX when
+probability warrants it.
+
 ### Risk Parameters
 * **risk** – default stop loss, take profit and drawdown limits. `min_volume` is set to `0.0001` to filter thin markets. The stop is 1.5× ATR and the take profit is 3× ATR by default.
 * **trade_size_pct** – percent of capital used per trade.

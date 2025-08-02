@@ -4,6 +4,18 @@ adaptive_scan:
   max_factor: 10.0
 adx_threshold: 15
 allow_short: true
+arbitrage:
+  amount: 0.0
+  dry_run: true
+  exchange: null
+  mempool_cfg: {}
+  mempool_monitor: null
+  notifier: null
+  side: buy
+  slippage_bps: 50
+  symbol: SOL/USDC
+  use_websocket: false
+  ws_client: null
 arbitrage_enabled: true
 arbitrage_threshold: 0.005
 atr_normalization: true

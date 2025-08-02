@@ -8,7 +8,6 @@ from typing import Dict, Optional
 import aiohttp
 import numpy as np
 from solana.rpc.async_api import AsyncClient
-from urllib.parse import urlsplit
 
 from crypto_bot.execution.solana_executor import (
     execute_swap,
@@ -22,9 +21,6 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 logger = setup_logger(__name__, LOG_DIR / "solana_trading.log")
 
-# Proxy endpoint for Jupiter quotes
-proxy_url = "https://helius-proxy.raydium.io/api/v1/"
-
 
 async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> float:
     """Return current price for ``token_in``/``token_out`` using Jupiter.
@@ -34,9 +30,10 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
     max_retries:
         Maximum attempts when the price request fails. Defaults to ``3``.
     """
-    quote_path = urlsplit(JUPITER_QUOTE_URL).path.lstrip("/")
-    request_url = proxy_url + quote_path
-    for i in range(max_retries):
+    proxy_url = "https://helius-proxy.raydium.io/api/v1/"
+    request_url = proxy_url + JUPITER_QUOTE_URL.lstrip("/")
+
+    for attempt in range(max_retries):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -49,12 +46,15 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
                     },
                     timeout=10,
                 ) as resp:
+                    if resp.status == 401:
+                        logger.error("401 in price fetch: Invalid Helius key")
+                        return 0.0
                     resp.raise_for_status()
                     data = await resp.json()
             break
-        except Exception as exc:
-            logger.error(f"Price fetch error (attempt {i}): {exc}")
-            if i < max_retries - 1:
+        except Exception as e:
+            logger.error(f"Price fetch error (attempt {attempt+1}): {e}")
+            if attempt < max_retries - 1:
                 await asyncio.sleep(1)
                 continue
             return 0.0
@@ -139,6 +139,22 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
                     logger.info(
                         "Profit hit with breakout (prob %s): %s", max_prob, change
                     )
+                try:
+                    pred = (
+                        model.predict_proba([features])[0]
+                        if hasattr(model, "predict_proba")
+                        else model.predict([features])[0]
+                    )
+                except Exception:  # pragma: no cover - best effort
+                    pred = model.predict([features])[0]
+
+                cls = (
+                    int(np.argmax(pred))
+                    if hasattr(pred, "__len__") and len(pred) > 1
+                    else int(pred)
+                )
+                if change >= threshold and cls == 2:
+                    logger.info("Profit threshold hit with breakout regime: %s", change)
                     return out_amount * change
             await asyncio.sleep(5)
     finally:

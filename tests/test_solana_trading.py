@@ -169,6 +169,11 @@ def test_monitor_profit(monkeypatch):
     dummy = DummyClient()
     monkeypatch.setattr(solana_trading, "AsyncClient", lambda url: dummy)
     monkeypatch.setattr(solana_trading, "_fetch_price", fake_price)
+    class DummyModel:
+        def predict(self, feats):
+            return [2]
+
+    monkeypatch.setattr(solana_trading, "load_model", lambda name: DummyModel())
 
     calls = {"used": False}
 
@@ -176,6 +181,7 @@ def test_monitor_profit(monkeypatch):
         def predict(self, *_):
             calls["used"] = True
             return [[0.1, 0.1, 0.8]]
+            return [2]
 
     ml_mod = types.SimpleNamespace(load_model=lambda *a, **k: DummyModel())
     trainer_pkg = types.ModuleType("coinTrader_Trainer")

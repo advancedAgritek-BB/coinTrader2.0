@@ -98,7 +98,14 @@ def predict_bundle_regime(bundle: Mapping[str, Any]) -> np.ndarray:
         create_client(url, key)
         model = load_model("bundle_regime")
         features = extract_bundle_features(bundle)
-        preds = model.predict([features])
+        try:
+            preds = (
+                model.predict_proba([features])
+                if hasattr(model, "predict_proba")
+                else model.predict([features])
+            )
+        except Exception:
+            preds = model.predict([features])
         pred = preds[0] if isinstance(preds, (list, tuple, np.ndarray)) else preds
         return np.array(pred, dtype=float)
     except Exception:
