@@ -36,7 +36,6 @@ class DummySession:
         self.http_url = None
         self.closed = False
 
-    async def ws_connect(self, url, timeout=None):
     async def ws_connect(self, url, *, timeout=None):
         self.ws_url = url
         self.ws_timeout = timeout
@@ -92,8 +91,21 @@ def test_predict_bundle_regime_model(monkeypatch):
     class FakeClient:
         pass
 
-    monkeypatch.setitem(sys.modules, "supabase", types.SimpleNamespace(create_client=lambda u, k: FakeClient()))
-    monkeypatch.setitem(sys.modules, "coinTrader_Trainer.ml_trainer", types.SimpleNamespace(load_model=lambda name: FakeModel()))
+    monkeypatch.setitem(
+        sys.modules,
+        "supabase",
+        types.SimpleNamespace(create_client=lambda u, k: FakeClient()),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "coinTrader_Trainer.ml_trainer",
+        types.SimpleNamespace(load_model=lambda name: FakeModel()),
+    )
+
+    session = DummySession()
+    monkeypatch.setattr(
+        api_helpers, "aiohttp", type("M", (), {"ClientSession": lambda: session})
+    )
 
     label = api_helpers.predict_bundle_regime({"priority_fee": 1, "tx_count": 2})
     assert label == "volatile"
