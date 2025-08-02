@@ -7,6 +7,7 @@ from typing import Dict, Optional
 
 import aiohttp
 from solana.rpc.async_api import AsyncClient
+from urllib.parse import urlsplit
 
 from crypto_bot.execution.solana_executor import (
     execute_swap,
@@ -26,7 +27,7 @@ except Exception:  # pragma: no cover - fallback when trainer missing
 logger = setup_logger(__name__, LOG_DIR / "solana_trading.log")
 
 # Proxy endpoint for Jupiter quotes
-proxy_url = "https://helius-proxy.raydium.io"
+proxy_url = "https://helius-proxy.raydium.io/api/v1/"
 
 
 async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> float:
@@ -37,11 +38,13 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
     max_retries:
         Maximum attempts when the price request fails. Defaults to ``3``.
     """
-    async with aiohttp.ClientSession() as session:
-        for i in range(max_retries):
-            try:
+    quote_path = urlsplit(JUPITER_QUOTE_URL).path.lstrip("/")
+    request_url = proxy_url + quote_path
+    for i in range(max_retries):
+        try:
+            async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    proxy_url + JUPITER_QUOTE_URL,
+                    request_url,
                     params={
                         "inputMint": token_in,
                         "outputMint": token_out,
@@ -52,13 +55,13 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
                 ) as resp:
                     resp.raise_for_status()
                     data = await resp.json()
-                break
-            except Exception as exc:
-                logger.error(f"Price fetch error (attempt {i}): {exc}")
-                if i < max_retries - 1:
-                    await asyncio.sleep(1)
-                    continue
-                return 0.0
+            break
+        except Exception as exc:
+            logger.error(f"Price fetch error (attempt {i}): {exc}")
+            if i < max_retries - 1:
+                await asyncio.sleep(1)
+                continue
+            return 0.0
     route = (data.get("data") or [{}])[0]
     try:
         return float(route["outAmount"]) / float(route["inAmount"])
