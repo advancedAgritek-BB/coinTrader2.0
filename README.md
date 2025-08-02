@@ -177,6 +177,7 @@ SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
 HELIUS_KEY=your_helius_api_key          # required for Jupiter/Helius registry
 # also needed for WebSocket pool monitoring
 MIN_BALANCE_THRESHOLD=0.001             # optional minimum account balance
+ML_SCORE_THRESHOLD=0.5                  # optional minimum ML score for breakout tokens
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 PUMP_FUN_API_KEY=your_pump_fun_api_key # required for Solana scanner
@@ -200,8 +201,9 @@ configuration file.
 file name if needed.
 
 `HELIUS_KEY` must be defined so `get_token_accounts` can query the Helius DAS
-API. `MIN_BALANCE_THRESHOLD` is optional and sets the minimum token balance
-included in the results.
+API. `MIN_BALANCE_THRESHOLD` sets the minimum token balance included in the
+results, while `ML_SCORE_THRESHOLD` controls the minimum `regime_lgbm` score a
+token must achieve to be considered a breakout.
 
 ### Solana token registry
 
@@ -242,9 +244,11 @@ in the configuration.
 
 ### Token account enrichment
 
-`get_token_accounts` now returns SPL token accounts enriched with metadata from
-the Helius DAS API.  Results are filtered using an ML regime score so only
-high‑quality accounts remain.
+`get_token_accounts` now asynchronously enriches SPL token accounts with
+metadata from the Helius DAS API. Each account is evaluated by the
+`regime_lgbm` model and only *breakout* tokens—those scoring at or above
+`ML_SCORE_THRESHOLD` (default `0.5`)—are returned. Use `MIN_BALANCE_THRESHOLD`
+to skip accounts whose balances fall below the desired minimum.
 
 You can generate a key and enable advanced features like **ShredStream** and **LaserStream** from the [Helius dashboard](https://dashboard.helius.xyz/). These streams can be configured directly in the bot's web dashboard.
 Install the `pythclient` package to fetch oracle prices:
