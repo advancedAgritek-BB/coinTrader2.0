@@ -177,6 +177,7 @@ SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
 HELIUS_KEY=your_helius_api_key          # required for Jupiter/Helius registry
 # also needed for WebSocket pool monitoring
 MIN_BALANCE_THRESHOLD=0.001             # optional minimum account balance
+ML_SCORE_THRESHOLD=0.5                  # optional minimum ML score for tokens
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 PUMP_FUN_API_KEY=your_pump_fun_api_key # required for Solana scanner
@@ -201,7 +202,9 @@ file name if needed.
 
 `HELIUS_KEY` must be defined so `get_token_accounts` can query the Helius DAS
 API. `MIN_BALANCE_THRESHOLD` is optional and sets the minimum token balance
-included in the results.
+included in the results. `ML_SCORE_THRESHOLD` (default ``0.5``) filters out
+tokens whose machine-learning breakout probability falls below the
+threshold.
 
 ### Solana token registry
 

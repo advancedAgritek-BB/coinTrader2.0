@@ -16,6 +16,8 @@ import aiohttp
 logger = logging.getLogger(__name__)
 
 MIN_BALANCE_THRESHOLD = float(os.getenv("MIN_BALANCE_THRESHOLD", "0.0"))
+# Minimum ML probability for including a token account in results.
+ML_SCORE_THRESHOLD = float(os.getenv("ML_SCORE_THRESHOLD", "0.5"))
 ML_SCORE_THRESHOLD = float(os.getenv("ML_SCORE_THRESHOLD", "0.0"))
 
 
@@ -117,6 +119,16 @@ async def get_token_accounts(
                         amount = float(amount_info.get("uiAmountString", 0))
                     except (ValueError, TypeError):
                         amount = 0.0
+                if float(amount) >= threshold:
+                    try:
+                        meta = await enrich_with_metadata(info.get("mint", ""), session)
+                    except TypeError:
+                        meta = await enrich_with_metadata(info.get("mint", ""))
+                    ml_score = predict_token_regime(meta)
+                    acc["metadata"] = meta
+                    acc["ml_score"] = ml_score
+                    if ml_score >= ML_SCORE_THRESHOLD:
+                        filtered.append(acc)
                 if float(amount) < threshold:
                     continue
 
@@ -138,6 +150,32 @@ async def get_token_accounts_ml_filter(
 ) -> List[Dict[str, Any]]:
     """Return enriched token accounts passing an ML probability filter.
 
+    Accounts are first fetched using :func:`get_token_accounts`, then enriched
+    with metadata and scored via :func:`predict_token_regime`. Only accounts with
+    a prediction score of at least ``ML_SCORE_THRESHOLD`` are returned.
+    """
+
+    accounts = await get_token_accounts(wallet_address, threshold)
+    final: List[Dict[str, Any]] = []
+    for acc in accounts:
+        try:
+            enriched = await enrich_with_metadata(acc)
+        except Exception:  # pragma: no cover - best effort
+            logger.error("metadata enrichment failed", exc_info=True)
+            continue
+
+        try:
+            score = float(predict_token_regime(enriched))
+        except Exception:  # pragma: no cover - best effort
+            logger.error("ML prediction failed", exc_info=True)
+            score = 0.0
+
+        if score >= ML_SCORE_THRESHOLD:
+            enriched["ml_score"] = score
+            enriched.pop("metadata", None)
+            final.append(enriched)
+
+    return final
     Wrapper around :func:`get_token_accounts` kept for backwards compatibility.
     """
 
