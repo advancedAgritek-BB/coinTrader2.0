@@ -1937,40 +1937,16 @@ async def _update_ohlcv_cache_inner(
             .reset_index()
         )
         df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
-        frac = config.get("min_history_fraction", 0.5)
-        try:
-            frac_val = float(frac)
-        except (TypeError, ValueError):
-            frac_val = 0.5
-        min_candles_required = int(limit * frac_val)
-        if len(df_new) < min_candles_required:
-            since_val = since_map.get(sym)
-            retry = await load_ohlcv_parallel(
-                exchange,
-                [sym],
-                timeframe,
-                limit * 2,
-                {sym: since_val},
-                False,
-                force_websocket_history,
-                max_concurrent,
-                notifier,
-            )
-            retry_data = retry.get(sym)
-            if retry_data and len(retry_data) > len(data):
-                data = retry_data
-                df_new = pd.DataFrame(
-                    data,
-                    columns=["timestamp", "open", "high", "low", "close", "volume"],
-                )
-            if len(df_new) < min_candles_required:
-                logger.warning(
-                    "Skipping %s: only %d/%d candles",
-                    sym,
-                    len(df_new),
-                    limit,
-                )
-                continue
+        # If we received fewer candles than requested, pad the history so the
+        # resulting DataFrame always has ``limit`` rows.  Missing leading rows
+        # are left as NaN to indicate unavailable data.
+        if 0 < len(df_new) < limit:
+            tf_sec = timeframe_seconds(exchange, timeframe)
+            end = pd.to_datetime(df_new["timestamp"].iloc[-1], unit="s")
+            idx = pd.date_range(end=end, periods=limit, freq=f"{tf_sec}s")
+            df_new = df_new.set_index(pd.to_datetime(df_new["timestamp"], unit="s")).reindex(idx)
+            df_new["timestamp"] = df_new.index.astype(int) // 10 ** 9
+            df_new = df_new.reset_index(drop=True)
         changed = False
         if sym in cache and not cache[sym].empty:
             last_ts = cache[sym]["timestamp"].iloc[-1]

@@ -701,19 +701,18 @@ def test_update_ohlcv_cache_retry_incomplete_ws():
             cache,
             ["BTC/USD"],
             limit=10,
-            config={"min_history_fraction": 0.5},
             use_websocket=True,
             max_concurrent=1,
         )
     )
     assert len(res["BTC/USD"]) == 10
-    assert ex.fetch_calls == 2
+    # Partial histories are padded without additional REST retries
+    assert ex.fetch_calls == 1
 
 
-def test_update_ohlcv_cache_skip_after_retry(caplog):
+def test_update_ohlcv_cache_accepts_incomplete_history():
     ex = AlwaysIncompleteExchange()
     cache: dict[str, pd.DataFrame] = {}
-    caplog.set_level(logging.WARNING)
     res = asyncio.run(
         update_ohlcv_cache(
             ex,
@@ -725,10 +724,9 @@ def test_update_ohlcv_cache_skip_after_retry(caplog):
             max_concurrent=1,
         )
     )
-    assert "BTC/USD" not in res
-    assert any(
-        "Skipping BTC/USD: only 4/10 candles" in r.getMessage() for r in caplog.records
-    )
+    # Symbol should be retained with padded data
+    assert "BTC/USD" in res
+    assert len(res["BTC/USD"]) == 10
 
 
 class PartialHistoryExchange:
@@ -756,7 +754,8 @@ def test_min_history_fraction_allows_partial_history():
             max_concurrent=1,
         )
     )
-    assert len(cache["BTC/USD"]) == 142
+    # Missing history is padded up to the requested limit
+    assert len(cache["BTC/USD"]) == 700
     market_loader._last_snapshot_time = 0
 
 
