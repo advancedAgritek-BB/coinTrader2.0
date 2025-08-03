@@ -260,19 +260,19 @@ class USDCVolumeExchange:
         }
 
     async def fetch_tickers(self, symbols):
-        assert symbols == ["LOW/USDC", "LOW/USDT"]
+        assert symbols == ["LOW/USDT"]
         ticker = {
             "a": ["101", "1", "1"],
             "b": ["100", "1", "1"],
             "c": ["101", "1"],
-            "v": ["300", "300"],
+            "v": ["1", "1"],
             "p": ["100", "100"],
             "o": "99",
         }
-        return {"LOW/USDC": ticker, "LOW/USDT": ticker}
+        return {"LOW/USDT": ticker}
 
 
-def test_usdc_min_volume_halved(monkeypatch):
+def test_usdc_min_volume_configurable(monkeypatch):
     async def raise_if_called(*_a, **_k):
         raise AssertionError("_fetch_ticker_async should not be called")
 
@@ -280,10 +280,45 @@ def test_usdc_min_volume_halved(monkeypatch):
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", raise_if_called
     )
 
-    ex = USDCVolumeExchange()
-    result = asyncio.run(filter_symbols(ex, ["LOW/USDC", "LOW/USDT"], CONFIG))
+    class _CCXT:
+        class BadSymbol(Exception):
+            pass
 
-    assert result == [("LOW/USDC", 0.3)]
+        class ExchangeError(Exception):
+            pass
+
+        class NetworkError(Exception):
+            pass
+
+    monkeypatch.setattr(sp, "ccxt", _CCXT)
+
+    async def fake_gecko(*_a, **_k):
+        return [], 20_000_000.0, 0.0
+
+    monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
+
+    from crypto_bot.utils import token_registry
+
+    monkeypatch.setitem(token_registry.TOKEN_MINTS, "LOW", "mint")
+
+    ex = USDCVolumeExchange()
+
+    cfg = {
+        **CONFIG,
+        "symbol_filter": {**CONFIG["symbol_filter"], "min_volume_usd": 200},
+        "onchain_min_volume_usd": 50,
+    }
+    cex, onchain = asyncio.run(filter_symbols(ex, ["LOW/USDC", "LOW/USDT"], cfg))
+    assert cex == []
+    assert [s for s, _ in onchain] == ["LOW/USDC"]
+
+    cfg = {
+        **CONFIG,
+        "symbol_filter": {**CONFIG["symbol_filter"], "min_volume_usd": 200},
+    }
+    cex, onchain = asyncio.run(filter_symbols(ex, ["LOW/USDC", "LOW/USDT"], cfg))
+    assert cex == []
+    assert [s for s, _ in onchain] == ["LOW/USDC"]
 
 
 class InactiveMarketExchange(DummyExchange):
