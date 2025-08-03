@@ -1,6 +1,6 @@
 """Utilities for loading trading symbols and fetching OHLCV data."""
 
-from typing import Iterable, List, Dict, Any, Deque
+from typing import Any, Deque, Dict, Iterable, List
 from dataclasses import dataclass
 import asyncio
 import inspect
