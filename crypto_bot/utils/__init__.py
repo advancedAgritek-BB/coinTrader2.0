@@ -10,6 +10,7 @@ from .market_loader import (
     load_ohlcv_parallel,
     update_ohlcv_cache,
     timeframe_seconds,
+    fetch_geckoterminal_ohlcv,
 )
 from .pair_cache import load_liquid_pairs
 # Symbol filtering utilities import is optional because the module has
