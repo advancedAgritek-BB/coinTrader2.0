@@ -2068,25 +2068,160 @@ async def update_multi_tf_ohlcv_cache(
 
         cex_symbols: list[str] = []
         dex_symbols: list[str] = []
+        gecko_cex_symbols: list[tuple[str, str]] = []
         for s in symbols:
+            orig = s
             sym = s
             base, _, quote = s.partition("/")
             is_solana = quote.upper() == "USDC" and base.upper() not in NON_SOLANA_BASES
             if is_solana:
-                dex_symbols.append(sym)
+                dex_symbols.append(orig)
             else:
+                exch_sym = sym
                 if "coinbase" in getattr(exchange, "id", "") and "/USDC" in sym:
                     mapped = sym.replace("/USDC", "/USD")
                     if mapped not in getattr(exchange, "symbols", []):
                         continue  # skip unsupported pair
-                    sym = mapped
-                cex_symbols.append(sym)
+                    exch_sym = mapped
+                if orig.endswith("/USDC"):
+                    gecko_cex_symbols.append((orig, exch_sym))
+                else:
+                    cex_symbols.append(exch_sym)
 
         tf_sec = timeframe_seconds(exchange, tf)
         tf_limit = limit
         if start_since is not None:
             needed = int((time.time() * 1000 - start_since) // (tf_sec * 1000)) + 1
             tf_limit = max(limit, needed)
+
+        if gecko_cex_symbols:
+            from crypto_bot.main import update_df_cache
+
+            for orig_sym, exch_sym in gecko_cex_symbols:
+                sym_l = min(dynamic_limits.get(orig_sym, tf_limit), tf_limit)
+                if sym_l < tf_limit:
+                    logger.info(
+                        "Adjusting limit for %s on %s to %d", orig_sym, tf, sym_l
+                    )
+                try:
+                    res = await fetch_geckoterminal_ohlcv(
+                        orig_sym, timeframe=tf, limit=sym_l
+                    )
+                except Exception as e:  # pragma: no cover - network
+                    logger.warning(
+                        f"Gecko failed for {orig_sym}: {e} - using exchange data"
+                    )
+                    res = None
+
+                data = res[0] if isinstance(res, tuple) else res
+                if data:
+                    df_new = pd.DataFrame(
+                        data,
+                        columns=[
+                            "timestamp",
+                            "open",
+                            "high",
+                            "low",
+                            "close",
+                            "volume",
+                        ],
+                    )
+                    tf_s = timeframe_seconds(None, tf)
+                    unit = "ms" if df_new["timestamp"].iloc[0] > 1e10 else "s"
+                    df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit)
+                    df_new = (
+                        df_new.set_index("timestamp")
+                        .resample(f"{tf_s}s")
+                        .agg(
+                            {
+                                "open": "first",
+                                "high": "max",
+                                "low": "min",
+                                "close": "last",
+                                "volume": "sum",
+                            }
+                        )
+                        .ffill()
+                        .reset_index()
+                    )
+                    df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
+                    if orig_sym in tf_cache and not tf_cache[orig_sym].empty:
+                        last_ts = tf_cache[orig_sym]["timestamp"].iloc[-1]
+                        df_new = df_new[df_new["timestamp"] > last_ts]
+                        if df_new.empty:
+                            continue
+                        df_new = pd.concat(
+                            [tf_cache[orig_sym], df_new], ignore_index=True
+                        )
+                    update_df_cache(cache, tf, orig_sym, df_new)
+                    tf_cache = cache.get(tf, {})
+                    tf_cache[orig_sym]["return"] = tf_cache[orig_sym]["close"].pct_change()
+                    clear_regime_cache(orig_sym, tf)
+                    continue
+
+                batches: list = []
+                current_since = start_since
+                sym_total = min(tf_limit, dynamic_limits.get(orig_sym, tf_limit))
+                if sym_total < tf_limit:
+                    logger.info(
+                        "Adjusting limit for %s on %s to %d", orig_sym, tf, sym_total
+                    )
+                remaining = sym_total
+                while remaining > 0:
+                    req = min(remaining, 1000)
+                    data = await fetch_ohlcv_async(
+                        exchange,
+                        exch_sym,
+                        timeframe=tf,
+                        limit=req,
+                        since=current_since,
+                        use_websocket=use_websocket,
+                        force_websocket_history=force_websocket_history,
+                    )
+                    if not data or isinstance(data, Exception):
+                        break
+                    batches.extend(data)
+                    remaining -= len(data)
+                    if len(data) < req:
+                        break
+                    current_since = data[-1][0] + 1
+                if not batches:
+                    continue
+                df_new = pd.DataFrame(
+                    batches,
+                    columns=["timestamp", "open", "high", "low", "close", "volume"],
+                )
+                tf_s = timeframe_seconds(None, tf)
+                unit = "ms" if df_new["timestamp"].iloc[0] > 1e10 else "s"
+                df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit)
+                df_new = (
+                    df_new.set_index("timestamp")
+                    .resample(f"{tf_s}s")
+                    .agg(
+                        {
+                            "open": "first",
+                            "high": "max",
+                            "low": "min",
+                            "close": "last",
+                            "volume": "sum",
+                        }
+                    )
+                    .ffill()
+                    .reset_index()
+                )
+                df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
+                if orig_sym in tf_cache and not tf_cache[orig_sym].empty:
+                    last_ts = tf_cache[orig_sym]["timestamp"].iloc[-1]
+                    df_new = df_new[df_new["timestamp"] > last_ts]
+                    if df_new.empty:
+                        continue
+                    df_new = pd.concat(
+                        [tf_cache[orig_sym], df_new], ignore_index=True
+                    )
+                update_df_cache(cache, tf, orig_sym, df_new)
+                tf_cache = cache.get(tf, {})
+                tf_cache[orig_sym]["return"] = tf_cache[orig_sym]["close"].pct_change()
+                clear_regime_cache(orig_sym, tf)
 
         if cex_symbols and start_since is None:
             groups: Dict[int, list[str]] = {}

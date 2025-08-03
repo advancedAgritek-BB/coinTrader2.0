@@ -2219,6 +2219,65 @@ def test_gecko_volume_priority(monkeypatch):
     assert list(q) == ["FOO/USDC"]
 
 
+def test_update_multi_tf_ohlcv_cache_usdc_gecko(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    calls = {"gecko": 0, "fetch": 0}
+
+    async def fake_gecko(*_a, **_k):
+        calls["gecko"] += 1
+        return [[0, 1, 2, 3, 4, 5]]
+
+    async def fake_fetch(*_a, **_k):
+        calls["fetch"] += 1
+        return [[0, 1, 2, 3, 4, 5]]
+
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+
+    ex = DummyMultiTFExchange()
+    cache = {}
+    config = {"timeframes": ["1h"]}
+
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(ex, cache, ["BTC/USDC"], config, limit=1)
+    )
+
+    assert calls["gecko"] == 1
+    assert calls["fetch"] == 0
+    assert "BTC/USDC" in cache["1h"]
+    assert "volume" in cache["1h"]["BTC/USDC"].columns
+
+
+def test_update_multi_tf_ohlcv_cache_usdc_gecko_fallback(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    calls = {"gecko": 0, "fetch": 0}
+
+    async def fail_gecko(*_a, **_k):
+        calls["gecko"] += 1
+        return None
+
+    async def fake_fetch(*_a, **_k):
+        calls["fetch"] += 1
+        return [[0, 1, 2, 3, 4, 5]]
+
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+
+    ex = DummyMultiTFExchange()
+    cache = {}
+    config = {"timeframes": ["1h"]}
+
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(ex, cache, ["BTC/USDC"], config, limit=1)
+    )
+
+    assert calls["gecko"] == 1
+    assert calls["fetch"] == 1
+    assert "BTC/USDC" in cache["1h"]
+
+
 def test_update_multi_tf_ohlcv_cache_start_since(monkeypatch):
     from crypto_bot.utils import market_loader
 
