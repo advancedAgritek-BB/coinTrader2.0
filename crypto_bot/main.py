@@ -1418,6 +1418,11 @@ async def execute_signals(ctx: BotContext) -> None:
 
         amount = size / price if price > 0 else 0.0
         side = direction_to_side(candidate["direction"])
+        entry_price = candidate.get("entry_price")
+        current_price = df["close"].iloc[-1]
+        if entry_price is not None and abs(current_price - entry_price) / entry_price < 0.001:
+            logger.debug("Price movement <0.1%% for %s; skipping", sym)
+            continue
         if side == "sell" and not ctx.config.get("allow_short", False):
             outcome_reason = "short selling disabled"
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
