@@ -98,7 +98,7 @@ exchange: kraken
 exchange_market_types:
 - spot
 - futures
-excluded_symbols: []
+excluded_symbols: ["USTC/EUR", "USTC/USD", "REPV1/USD", "REPV1/EUR"]
 exec:
   allow_market_orders: true
   order_retry_interval: 3
@@ -464,25 +464,6 @@ strategy_router:
   volatile_timeframe: 1m
 symbol: BTC/USDT
 symbol_batch_size: 100
-textsymbol_filter:
-  change_pct_percentile: 10
-  correlation_max_pairs: 200
-  http_timeout: 5
-  initial_history_candles: 10
-  min_history_fraction: 0.2
-  initial_timeframes:
-  - 1h
-  - 1d
-  kraken_batch_size: 20
-  log_ticker_exceptions: true
-  max_concurrent_ohlcv: 10
-  max_correlation: 0.9
-  max_spread_pct: 2.0
-  min_volume_usd: 100
-  ohlcv_batch_size: 10
-  ticker_retry_attempts: 5
-  uncached_volume_multiplier: 1.5
-  volume_percentile: 5
 symbol_refresh_minutes: 1
 symbol_score_weights:
   age: 0.1
@@ -508,6 +489,25 @@ telegram_ctl:
   enabled: true
   update_interval: 30
 testing_mode: true
+textsymbol_filter:
+  change_pct_percentile: 10
+  correlation_max_pairs: 200
+  http_timeout: 5
+  initial_history_candles: 10
+  initial_timeframes:
+  - 1h
+  - 1d
+  kraken_batch_size: 20
+  log_ticker_exceptions: true
+  max_concurrent_ohlcv: 10
+  max_correlation: 0.9
+  max_spread_pct: 2.0
+  min_history_fraction: 0.2
+  min_volume_usd: 100
+  ohlcv_batch_size: 10
+  ticker_retry_attempts: 5
+  uncached_volume_multiplier: 1.5
+  volume_percentile: 5
 ticker_backoff_initial: 2
 ticker_backoff_max: 60
 ticker_rate_limit: null
