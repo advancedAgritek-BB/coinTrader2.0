@@ -476,6 +476,33 @@ def _emit_timing(
         )
 
 
+def replace_placeholders(config_dict: dict, env_var_name: str, placeholder: str) -> dict:
+    """Recursively replace ``placeholder`` in ``config_dict`` with an env value.
+
+    ``env_var_name`` is looked up via :func:`os.getenv` and defaults to an
+    empty string if unset. All nested dictionaries and lists are traversed so
+    any occurrence of ``placeholder`` within string values is substituted.
+    The original ``config_dict`` is modified in place and also returned for
+    convenience.
+    """
+
+    env_value = os.getenv(env_var_name, "")
+
+    def _walk(obj):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                obj[k] = _walk(v)
+            return obj
+        if isinstance(obj, list):
+            return [_walk(v) for v in obj]
+        if isinstance(obj, str):
+            return obj.replace(placeholder, env_value)
+        return obj
+
+    _walk(config_dict)
+    return config_dict
+
+
 def load_config() -> dict:
     """Load YAML configuration for the bot."""
     with open(CONFIG_PATH) as f:
@@ -557,6 +584,7 @@ def maybe_reload_config(state: dict, config: dict) -> None:
     """Reload configuration when ``state['reload']`` is set."""
     if state.get("reload"):
         new_cfg = load_config()
+        replace_placeholders(new_cfg, "HELIUS_KEY", "${HELIUS_KEY}")
         config.clear()
         config.update(new_cfg)
         state.pop("reload", None)
@@ -619,6 +647,7 @@ def reload_config(
 
     new_config = load_config()
     new_config = replace_placeholders(new_config)
+    replace_placeholders(new_config, "HELIUS_KEY", "${HELIUS_KEY}")
     _LAST_CONFIG_MTIME = mtime
 
     config.clear()
@@ -2053,6 +2082,7 @@ async def _main_impl() -> TelegramNotifier:
         else:
             logger.info("Setting %s from .env", key)
     os.environ.update(secrets)
+    replace_placeholders(config, "HELIUS_KEY", "${HELIUS_KEY}")
     helius_key = os.getenv("HELIUS_KEY")
     if not helius_key:
         logger.error("HELIUS_KEY not set in .env – Solana scans disabled")
