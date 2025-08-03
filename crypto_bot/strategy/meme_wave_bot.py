@@ -9,7 +9,7 @@ from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.sentiment_filter import fetch_twitter_sentiment
 from crypto_bot.solana.exit import monitor_price
 from crypto_bot.solana_trading import sniper_trade
-from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.volatility import normalize_score_by_volatility
 
 
 async def trade(symbol: str, amount: float, cfg: Mapping[str, object]) -> dict:

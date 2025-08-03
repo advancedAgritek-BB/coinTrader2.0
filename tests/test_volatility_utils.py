@@ -1,7 +1,7 @@
 
 import pandas as pd
 import pytest
-import crypto_bot.utils.volatility as vol
+import crypto_bot.volatility as vol
 
 
 def _dummy_df():
