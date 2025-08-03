@@ -64,21 +64,14 @@ def predict_regime(tx_data: Dict[str, Any]) -> str:
 
         model = load_model("regime_lgbm")
         features = np.array(
-            [[parse_liquidity(tx_data), tx_data.get("txCount", tx_data.get("tx_count", 0))]]
+            [[parse_liquidity(tx_data), tx_data.get("tx_count", tx_data.get("txCount", 0))]]
         )
-        probs = model.predict(features)
-        idx = int(np.argmax(probs[0]))
-        features = np.array([[parse_liquidity(tx_data), tx_data.get("tx_count", 0)]])
-        labels = ["trending", "volatile", "breakout", "mean-reverting"]
-        try:
-            pred = (
-                model.predict_proba(features)[0]
-                if hasattr(model, "predict_proba")
-                else model.predict(features)[0]
-            )
-        except Exception:
-            pred = model.predict(features)[0]
-        idx = int(np.argmax(pred)) if hasattr(pred, "__len__") else int(pred)
+        probs = (
+            model.predict_proba(features)[0]
+            if hasattr(model, "predict_proba")
+            else model.predict(features)[0]
+        )
+        idx = int(np.argmax(probs)) if hasattr(probs, "__len__") else int(probs)
         return labels[idx]
     except Exception:  # pragma: no cover - missing optional dependency
         logger.exception("predict_regime failed")
