@@ -1,4 +1,3 @@
-
 import pandas as pd
 import pytest
 import crypto_bot.volatility as vol
