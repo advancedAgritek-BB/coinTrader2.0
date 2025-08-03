@@ -2016,6 +2016,21 @@ async def _main_impl() -> TelegramNotifier:
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config = load_config()
+    secrets = dotenv_values(ENV_PATH)
+    flat_cfg = _flatten_config(config)
+    for key, val in secrets.items():
+        if key in flat_cfg:
+            if flat_cfg[key] != val:
+                logger.info(
+                    "Overriding %s from .env (config.yaml value: %s)",
+                    key,
+                    flat_cfg[key],
+                )
+            else:
+                logger.info("Using %s from .env (matches config.yaml)", key)
+        else:
+            logger.info("Setting %s from .env", key)
+    os.environ.update(secrets)
     from crypto_bot.utils.token_registry import (
         TOKEN_MINTS,
         load_token_mints,
@@ -2066,22 +2081,6 @@ async def _main_impl() -> TelegramNotifier:
         max_concurrent=config.get("max_concurrent_ohlcv"),
         gecko_limit=config.get("gecko_limit"),
     )
-    secrets = dotenv_values(ENV_PATH)
-    flat_cfg = _flatten_config(config)
-    for key, val in secrets.items():
-        if key in flat_cfg:
-            if flat_cfg[key] != val:
-                logger.info(
-                    "Overriding %s from .env (config.yaml value: %s)",
-                    key,
-                    flat_cfg[key],
-                )
-            else:
-                logger.info("Using %s from .env (matches config.yaml)", key)
-        else:
-            logger.info("Setting %s from .env", key)
-    os.environ.update(secrets)
-
     user = load_or_create()
 
     status_updates = config.get("telegram", {}).get("status_updates", True)
@@ -2689,6 +2688,8 @@ async def main() -> None:
     """Entry point for running the trading bot with error handling."""
     notifier: TelegramNotifier | None = None
     try:
+        secrets = dotenv_values(ENV_PATH)
+        os.environ.update(secrets)
         from crypto_bot.utils.token_registry import refresh_mints
 
         await refresh_mints()
