@@ -1,8 +1,6 @@
 import asyncio
 import importlib
-
 import pytest
-
 from crypto_bot.solana import token_utils
 
 
