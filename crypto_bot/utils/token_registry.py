@@ -20,7 +20,11 @@ TOKEN_REGISTRY_URL = "https://raw.githubusercontent.com/solana-labs/token-list/m
 JUPITER_TOKEN_URL = "https://token.jup.ag/all"
 
 # Batch metadata endpoint for resolving unknown symbols
-HELIUS_TOKEN_API = "https://api.helius.xyz/v0/token-metadata"
+HELIUS_TOKEN_API = (
+    f"https://api.helius.xyz/v0/token-metadata?api-key={os.getenv('HELIUS_KEY')}"
+    if os.getenv("HELIUS_KEY")
+    else "https://api.helius.xyz/v0/token-metadata"
+)
 
 CACHE_FILE = Path(__file__).resolve().parents[2] / "cache" / "token_mints.json"
 
@@ -238,9 +242,16 @@ async def fetch_from_helius(symbols: Iterable[str]) -> Dict[str, str]:
     params = {"symbol": ",".join(tokens)}
     from urllib.parse import urlencode
 
-    url = (
-        f"{HELIUS_TOKEN_API}?api-key={os.getenv('HELIUS_KEY')}&{urlencode(params)}"
+    helius_key = os.getenv("HELIUS_KEY")
+    if not helius_key:
+        logger.error("Helius lookup failed: HELIUS_KEY not set")
+        return {}
+    base_url = (
+        HELIUS_TOKEN_API
+        if "api-key=" in HELIUS_TOKEN_API
+        else f"{HELIUS_TOKEN_API}?api-key={helius_key}"
     )
+    url = f"{base_url}&{urlencode(params)}"
 
     try:
         async with aiohttp.ClientSession() as session:
