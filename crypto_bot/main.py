@@ -2147,7 +2147,6 @@ async def _main_impl() -> TelegramNotifier:
     user = load_or_create()
 
     status_updates = config.get("telegram", {}).get("status_updates", True)
-    balance_updates = config.get("telegram", {}).get("balance_updates", False)
 
     tg_cfg = {**config.get("telegram", {})}
     if user.get("telegram_token"):
@@ -2157,7 +2156,6 @@ async def _main_impl() -> TelegramNotifier:
     if os.getenv("TELE_CHAT_ADMINS"):
         tg_cfg["chat_admins"] = os.getenv("TELE_CHAT_ADMINS")
     status_updates = tg_cfg.get("status_updates", status_updates)
-    balance_updates = tg_cfg.get("balance_updates", balance_updates)
 
     notifier = TelegramNotifier.from_config(tg_cfg)
     if status_updates:
@@ -2322,6 +2320,7 @@ async def _main_impl() -> TelegramNotifier:
     balance_threshold = config.get("balance_change_threshold", 0.01)
     last_balance = 0.0
     previous_balance = 0.0
+    last_balance = 0.0
     paper_wallet = None
 
     async def check_balance_change(new_balance: float, reason: str) -> None:
@@ -2362,6 +2361,9 @@ async def _main_impl() -> TelegramNotifier:
         last_balance = previous_balance = float(paper_wallet.balance)
     else:
         try:
+            init_bal = await fetch_and_log_balance(exchange, paper_wallet, config)
+            last_balance = previous_balance = float(init_bal)
+        except Exception as exc:
             init_bal = await fetch_and_log_balance(exchange, None, config)
             last_balance = previous_balance = float(init_bal)
         except Exception as exc:  # pragma: no cover - network
@@ -2481,7 +2483,7 @@ async def _main_impl() -> TelegramNotifier:
     ctx.notifier = notifier
     ctx.paper_wallet = paper_wallet
     ctx.position_guard = position_guard
-    ctx.balance = await fetch_and_log_balance(exchange, paper_wallet, config)
+    ctx.balance = last_balance
     last_balance = ctx.balance
     runner = PhaseRunner(
         [
