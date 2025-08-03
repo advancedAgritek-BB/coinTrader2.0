@@ -1,4 +1,5 @@
-"""WebSocket monitor for Solana liquidity pools.
+"""
+WebSocket monitor for Solana liquidity pools.
 
 Run as a module to print pool events from Helius::
 
