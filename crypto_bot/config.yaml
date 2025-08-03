@@ -419,7 +419,7 @@ strategy_router:
     trend_adx_threshold: 20
   flash_crash_timeframe: 1m
   mean_reverting_timeframe: 1h
-  min_confidence: 0.001
+  min_confidence: 0.5
   regimes:
     bounce:
     - bounce_scalper
