@@ -388,7 +388,7 @@ def _closest_wall_distance(book: dict, entry: float, side: str) -> float | None:
     return min(dists)
 
 
-def notify_balance_change(
+async def notify_balance_change(
     notifier: TelegramNotifier | None,
     previous: float | None,
     new_balance: float,
@@ -396,7 +396,7 @@ def notify_balance_change(
 ) -> float:
     """Send a notification if the balance changed."""
     if notifier and enabled and previous is not None and new_balance != previous:
-        notifier.notify(f"Balance changed: {new_balance:.2f} USDT")
+        await notifier.notify_async(f"Balance changed: {new_balance:.2f} USDT")
     return new_balance
 
 
@@ -425,7 +425,7 @@ async def refresh_balance(ctx: BotContext) -> float:
         ctx.paper_wallet,
         ctx.config,
     )
-    ctx.balance = notify_balance_change(
+    ctx.balance = await notify_balance_change(
         ctx.notifier,
         ctx.balance,
         float(latest),
@@ -823,7 +823,7 @@ async def initial_scan(
         pct = processed / total * 100
         logger.info("Initial scan %.1f%% complete", pct)
         if notifier and config.get("telegram", {}).get("status_updates", True):
-            notifier.notify(f"Initial scan {pct:.1f}% complete")
+            await notifier.notify_async(f"Initial scan {pct:.1f}% complete")
 
     return
 
@@ -1199,7 +1199,7 @@ async def update_caches(ctx: BotContext) -> None:
                 msg = f"Volume spike priority for {sym}: z={z_max:.2f}"
                 logger.info(msg)
                 if status_updates and ctx.notifier:
-                    ctx.notifier.notify(msg)
+                    await ctx.notifier.notify_async(msg)
 
     if ctx.config.get("use_websocket", True) and ctx.current_batch:
         timeframe = ctx.config.get("timeframe", "1h")
@@ -1381,7 +1381,7 @@ async def execute_signals(ctx: BotContext) -> None:
     if not results:
         logger.info("All signals filtered out - nothing actionable")
         if ctx.notifier and ctx.config.get("telegram", {}).get("trade_updates", True):
-            ctx.notifier.notify("No symbols qualified for trading")
+            await ctx.notifier.notify_async("No symbols qualified for trading")
         return
 
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
@@ -2035,7 +2035,7 @@ async def _rotation_loop(
                     if isinstance(bal.get("USDT"), dict)
                     else bal.get("USDT", 0)
                 )
-                check_balance_change(float(current_balance), "external change")
+                await check_balance_change(float(current_balance), "external change")
                 holdings = {
                     k: (v.get("total") if isinstance(v, dict) else v)
                     for k, v in bal.items()
@@ -2161,7 +2161,7 @@ async def _main_impl() -> TelegramNotifier:
 
     notifier = TelegramNotifier.from_config(tg_cfg)
     if status_updates:
-        notifier.notify("🤖 CoinTrader2.0 started")
+        await notifier.notify_async("🤖 CoinTrader2.0 started")
 
     mempool_cfg = config.get("mempool_monitor", {})
     mempool_monitor = None
@@ -2169,7 +2169,10 @@ async def _main_impl() -> TelegramNotifier:
         mempool_monitor = SolanaMempoolMonitor()
 
     if notifier.token and notifier.chat_id:
-        if not send_test_message(notifier.token, notifier.chat_id, "Bot started"):
+        ok = await asyncio.to_thread(
+            send_test_message, notifier.token, notifier.chat_id, "Bot started"
+        )
+        if not ok:
             logger.warning("Telegram test message failed; check your token and chat ID")
 
     # allow user-configured exchange to override YAML setting
@@ -2201,7 +2204,7 @@ async def _main_impl() -> TelegramNotifier:
     if not hasattr(exchange, "load_markets"):
         logger.error("The installed ccxt package is missing or a local stub is in use.")
         if status_updates:
-            notifier.notify(
+            await notifier.notify_async(
                 "❌ ccxt library not found or stubbed; check your installation"
             )
         # Continue startup even if ccxt is missing for testing environments
@@ -2231,7 +2234,7 @@ async def _main_impl() -> TelegramNotifier:
                 MAX_SYMBOL_SCAN_ATTEMPTS,
             )
             if status_updates:
-                notifier.notify(
+                await notifier.notify_async(
                     f"Symbol scan failed; retrying in {delay}s (attempt {attempt + 1}/{MAX_SYMBOL_SCAN_ATTEMPTS})"
                 )
             if inspect.iscoroutinefunction(asyncio.sleep):
@@ -2284,7 +2287,7 @@ async def _main_impl() -> TelegramNotifier:
                         MAX_SYMBOL_SCAN_ATTEMPTS,
                     )
                     if status_updates:
-                        notifier.notify(
+                        await notifier.notify_async(
                             f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
                         )
                     return notifier
@@ -2294,7 +2297,7 @@ async def _main_impl() -> TelegramNotifier:
                 MAX_SYMBOL_SCAN_ATTEMPTS,
             )
             if status_updates:
-                notifier.notify(
+                await notifier.notify_async(
                     f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
                 )
             return notifier
@@ -2319,11 +2322,13 @@ async def _main_impl() -> TelegramNotifier:
     balance_threshold = config.get("balance_change_threshold", 0.01)
     previous_balance = 0.0
 
-    def check_balance_change(new_balance: float, reason: str) -> None:
+    async def check_balance_change(new_balance: float, reason: str) -> None:
         nonlocal previous_balance
         delta = new_balance - previous_balance
         if abs(delta) > balance_threshold and notifier:
-            notifier.notify(f"Balance changed by {delta:.4f} USDT due to {reason}")
+            await notifier.notify_async(
+                f"Balance changed by {delta:.4f} USDT due to {reason}"
+            )
         previous_balance = new_balance
 
     try:
@@ -2342,7 +2347,7 @@ async def _main_impl() -> TelegramNotifier:
     except Exception as exc:  # pragma: no cover - network
         logger.error("Exchange API setup failed: %s", exc)
         if status_updates:
-            err = notifier.notify(f"API error: {exc}")
+            err = await notifier.notify_async(f"API error: {exc}")
             if err:
                 logger.error("Failed to notify user: %s", err)
         return notifier
@@ -2362,7 +2367,7 @@ async def _main_impl() -> TelegramNotifier:
             config.get("allow_short", False),
         )
         log_balance(paper_wallet.balance)
-        last_balance = notify_balance_change(
+        last_balance = await notify_balance_change(
             notifier,
             last_balance,
             float(paper_wallet.balance),
@@ -2576,7 +2581,7 @@ async def _main_impl() -> TelegramNotifier:
                     if isinstance(bal.get("USDT"), dict)
                     else bal.get("USDT", 0)
                 )
-                check_balance_change(float(bal_val), "funds converted")
+                await check_balance_change(float(bal_val), "funds converted")
 
             # Refresh OHLCV for open positions if a new candle has formed
             tf = config.get("timeframe", "1h")
@@ -2652,7 +2657,9 @@ async def _main_impl() -> TelegramNotifier:
 
             unknown_rate = UNKNOWN_COUNT / max(TOTAL_ANALYSES, 1)
             if unknown_rate > 0.2 and ctx.notifier:
-                ctx.notifier.notify(f"⚠️ Unknown regime rate {unknown_rate:.1%}")
+                await ctx.notifier.notify_async(
+                    f"⚠️ Unknown regime rate {unknown_rate:.1%}"
+                )
             delay = config.get("loop_interval_minutes", 1) / max(
                 ctx.volatility_factor, 1e-6
             )
@@ -2760,10 +2767,10 @@ async def main() -> None:
     except Exception as exc:  # pragma: no cover - error path
         logger.exception("Unhandled error in main: %s", exc)
         if notifier:
-            notifier.notify(f"❌ Bot stopped: {exc}")
+            await notifier.notify_async(f"❌ Bot stopped: {exc}")
     finally:
         if notifier:
-            notifier.notify("Bot shutting down")
+            await notifier.notify_async("Bot shutting down")
         logger.info("Bot shutting down")
 
 
