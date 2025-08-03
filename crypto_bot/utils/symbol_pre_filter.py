@@ -1102,7 +1102,11 @@ async def filter_symbols(
             spread_pct,
         )
         seen.add(symbol)
-        local_min_volume = min_volume * 0.5 if symbol.endswith("/USDC") else min_volume
+        local_min_volume = (
+            min_volume
+            if not symbol.endswith("/USDC")
+            else cfg.get("onchain_min_volume_usd", min_volume * 0.1)
+        )
         if vol_usd < local_min_volume:
             logger.warning(
                 "Skipping %s due to low ticker volume %.2f < %.2f",
@@ -1139,8 +1143,13 @@ async def filter_symbols(
         vol_usd, spread_pct, _ = cached
         seen.add(norm_sym)
         local_min_volume = (
-            min_volume * 0.5 if norm_sym.endswith("/USDC") else min_volume
+            min_volume
+            if not norm_sym.endswith("/USDC")
+            else cfg.get("onchain_min_volume_usd", min_volume * 0.1)
         )
+        if vol_usd < local_min_volume:
+            skipped += 1
+            continue
         if cache_map and vol_usd < local_min_volume * vol_mult:
             skipped += 1
             continue
