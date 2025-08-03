@@ -1138,153 +1138,70 @@ async def fetch_ohlcv_async(
 
 
 async def fetch_geckoterminal_ohlcv(
-    symbol: str,
-    timeframe: str = "1h",
+    sym: str,
     limit: int = 100,
-    *,
-    min_24h_volume: float = 0.0,
-    return_price: bool = False,
-) -> tuple[list, float] | tuple[list, float, float] | None:
-    """Return OHLCV data and 24h volume for ``symbol`` from GeckoTerminal.
+    timeframe: str = "1h",
+    **_unused: Any,
+) -> pd.DataFrame:
+    """Return GeckoTerminal OHLCV data for ``sym``.
 
-    When ``return_price`` is ``True`` the pool price is returned instead of the
-    reserve liquidity value.
+    Parameters
+    ----------
+    sym:
+        Trading pair in the form ``"BASE/QUOTE"``. Only the base token is
+        used in the query.
+    limit:
+        Maximum number of candles to fetch (default 100).
+    timeframe:
+        Candle timeframe such as ``"1h"`` or ``"1m"``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame indexed by timestamp with columns ``open``, ``high``,
+        ``low``, ``close`` and ``volume``. ``volume`` represents USD volume.
     """
 
-    limit = min(int(limit), 720)
-    from urllib.parse import quote_plus
+    base = sym.split("/", 1)[0]
+    url = (
+        "https://api.geckoterminal.com/api/v2/networks/solana/tokens/"
+        f"{base}/ohlcv/{timeframe}?limit={int(limit)}"
+    )
 
-    async with GECKO_SEMAPHORE:
-        # Validate symbol before making any requests
-        try:
-            token_mint, quote = symbol.split("/", 1)
-        except ValueError:
-            token_mint, quote = symbol, ""
-        if quote != "USDC" or not _is_valid_base_token(token_mint):
-            return None
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                resp.raise_for_status()
+                payload = await resp.json()
+    except Exception:  # pragma: no cover - network errors
+        return pd.DataFrame(
+            columns=["timestamp", "open", "high", "low", "close", "volume"]
+        ).set_index("timestamp")
 
-        if symbol in GECKO_UNAVAILABLE:
-            return None
+    candles = (
+        payload.get("data", {})
+        .get("attributes", {})
+        .get("ohlcv_list")
+        or []
+    )
 
-        cached = GECKO_POOL_CACHE.get(symbol)
-        is_cached = cached is not None and cached[4] == limit
-        if not _is_valid_base_token(token_mint):
-            return None
+    df = pd.DataFrame(
+        candles,
+        columns=[
+            "timestamp",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume_usd",
+        ],
+    )
+    if df.empty:
+        return df.set_index(pd.Index([], name="timestamp"))
 
-        volume = 0.0
-        reserve = 0.0
-        price = 0.0
-        data: dict | None = None
-
-        pool_addr = ""
-        attrs: dict = {}
-        if is_cached:
-            pool_addr, volume, reserve, price, _ = cached
-
-        backoff = 1
-        for attempt in range(3):
-            try:
-                if not is_cached:
-                    query = quote_plus(symbol)
-                    search_url = "https://api.geckoterminal.com/api/v2/search/pools"
-                    params = {"query": query, "network": "solana"}
-                    search_data = await gecko_request(search_url, params=params)
-                    if not search_data:
-                        logger.info("token not available on GeckoTerminal: %s", symbol)
-                        logger.info("pair not available on GeckoTerminal: %s", symbol)
-                        GECKO_UNAVAILABLE.add(symbol)
-                        return None
-
-                    items = search_data.get("data") or []
-                    if not items:
-                        mint = await get_mint_from_gecko(token_mint)
-                        if mint and mint != token_mint:
-                            params["query"] = quote_plus(f"{mint}/USDC")
-                            search_data = await gecko_request(search_url, params=params)
-                            items = search_data.get("data") or [] if search_data else []
-                        if mint:
-                            params = {"query": mint, "network": "solana"}
-                            search_data = await gecko_request(search_url, params=params)
-                            items = search_data.get("data") or [] if search_data else []
-                            token_mint = mint
-                        if not items:
-                            logger.info("pair not available on GeckoTerminal: %s", symbol)
-                            GECKO_UNAVAILABLE.add(symbol)
-                            return None
-
-                    first = items[0]
-                    attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
-                    if not attrs:
-                        helius_map = await fetch_from_helius([token_mint])
-                        helius_mint = helius_map.get(token_mint.upper()) if isinstance(helius_map, dict) else None
-                        if helius_mint:
-                            logger.info("Helius mint resolved for %s: %s", symbol, helius_mint)
-                            params = {"query": helius_mint, "network": "solana"}
-                            search_data = await gecko_request(search_url, params=params)
-                            items = search_data.get("data") or [] if search_data else []
-                            if items:
-                                first = items[0]
-                                attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
-                                token_mint = helius_mint
-                        if not attrs:
-                            return None
-                    
-                    pool_id = str(first.get("id", ""))
-                    pool_addr = pool_id.split("_", 1)[-1]
-                    try:
-                        volume = float(attrs.get("volume_usd", {}).get("h24", 0.0))
-                    except Exception:
-                        volume = 0.0
-                    if volume < float(min_24h_volume):
-                        return None
-                    try:
-                        price = float(attrs.get("base_token_price_quote_token", 0.0))
-                    except Exception:
-                        price = 0.0
-                    try:
-                        reserve = float(attrs.get("reserve_in_usd", 0.0))
-                    except Exception:
-                        reserve = 0.0
-
-                gecko_tf, aggregate = gecko_timeframe_parts(timeframe)
-                ohlcv_url = (
-                    f"https://api.geckoterminal.com/api/v2/networks/solana/pools/{pool_addr}/ohlcv/{gecko_tf}"
-                )
-                params = {"aggregate": aggregate, "limit": limit}
-                data = await gecko_request(ohlcv_url, params=params)
-                if data is None:
-                    raise RuntimeError("request failed")
-                break
-            except Exception as exc:  # pragma: no cover - network
-                if attempt == 2:
-                    logger.error("GeckoTerminal OHLCV error for %s: %s", symbol, exc)
-                    return None
-                await asyncio.sleep(backoff)
-                backoff = min(backoff + 1, 3)
-
-        candles = (data.get("data") or {}).get("attributes", {}).get("ohlcv_list") or []
-
-        result: list = []
-        multiplier = 1000 if is_cached else 1
-        for c in candles[-limit:]:
-            try:
-                result.append(
-                    [
-                        int(c[0]) * multiplier,
-                        float(c[1]),
-                        float(c[2]),
-                        float(c[3]),
-                        float(c[4]),
-                        float(c[5]),
-                    ]
-                )
-            except Exception:
-                reserve = 0.0
-        GECKO_POOL_CACHE[symbol] = (pool_addr, volume, reserve, price, limit)
-
-        if return_price:
-            return result, volume, price
-        return result, volume, reserve
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s")
+    df = df.set_index("timestamp").rename(columns={"volume_usd": "volume"})
+    return df
 
 
 async def fetch_coingecko_ohlc(
@@ -1454,30 +1371,21 @@ async def fetch_ohlcv_for_token(
     """
 
     try:
-        res = await fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
+        df = await fetch_geckoterminal_ohlcv(symbol, limit=limit, timeframe=timeframe)
     except Exception as exc:  # pragma: no cover - network
         logger.error("Token OHLCV fetch error for %s: %s", symbol, exc)
         return None
 
-    if not res:
-        return None
-    data = res[0] if isinstance(res, tuple) else res
-    if not data:
+    if df is None or df.empty:
         return None
 
-    df = pd.DataFrame(
-        data, columns=["timestamp", "open", "high", "low", "close", "volume"]
-    )
     tf_sec = timeframe_seconds(None, timeframe)
-    unit = "ms" if df["timestamp"].iloc[0] > 1e10 else "s"
-    df["timestamp"] = pd.to_datetime(df["timestamp"], unit=unit)
     df = (
-        df.set_index("timestamp")
-        .resample(f"{tf_sec}s")
+        df.resample(f"{tf_sec}s")
         .agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
         .ffill()
-        .reset_index()
     )
+    df = df.reset_index()
     df["timestamp"] = df["timestamp"].astype(int) // 10 ** 9
     return df
 
