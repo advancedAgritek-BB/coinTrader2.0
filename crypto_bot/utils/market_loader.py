@@ -553,9 +553,32 @@ async def load_kraken_symbols(
     for row in df.itertuples():
         if row.reason:
             logger.debug("Skipping symbol %s: %s", row.symbol, row.reason)
-        else:
-            logger.debug("Including symbol %s", row.symbol)
-            symbols.append(row.symbol)
+            continue
+
+        ticker: Dict[str, Any] | None = None
+        try:
+            fetcher = getattr(exchange, "fetch_ticker", None)
+            if fetcher is None:
+                raise AttributeError("exchange lacks fetch_ticker")
+            if asyncio.iscoroutinefunction(fetcher):
+                ticker = await fetcher(row.symbol)
+            else:
+                ticker = await asyncio.to_thread(fetcher, row.symbol)
+        except Exception as exc:  # pragma: no cover - safety
+            logger.debug(
+                "Skipping symbol %s: fetch_ticker failed: %s", row.symbol, exc
+            )
+            continue
+
+        if not isinstance(ticker, dict) or ticker.get("active") is not True:
+            logger.debug(
+                "Skipping symbol %s: ticker inactive or missing active flag",
+                row.symbol,
+            )
+            continue
+
+        logger.debug("Including symbol %s", row.symbol)
+        symbols.append(row.symbol)
 
     if not symbols:
         logger.warning("No active trading pairs were discovered")

@@ -27,7 +27,18 @@ class DummyExchange:
             "ETH/USD": {"active": True, "type": "margin", "info": {"status": "online"}},
             "XBT/USD-PERP": {"active": True, "type": "futures", "info": {"status": "online"}},
             "XRP/USD": {"active": False, "type": "spot", "info": {"status": "delisted"}},
+            "LTC/USD": {"active": True, "type": "spot", "info": {"status": "online"}},
         }
+
+    def fetch_ticker(self, symbol):
+        data = {
+            "BTC/USD": {"active": True},
+            "ETH/USD": {"active": True},
+            "XBT/USD-PERP": {"active": True},
+            "XRP/USD": {"active": False},
+            "LTC/USD": {"active": False},
+        }
+        return data.get(symbol, {"active": False})
 
 
 def test_load_kraken_symbols_returns_active():
@@ -54,6 +65,7 @@ def test_load_kraken_symbols_logs_exclusions(caplog):
     assert any("Skipping symbol XRP/USD" in m for m in messages)
     assert any("Skipping symbol ETH/USD" in m for m in messages)
     assert any("Skipping symbol XBT/USD-PERP" in m for m in messages)
+    assert any("Skipping symbol LTC/USD" in m for m in messages)
     assert any("Including symbol BTC/USD" in m for m in messages)
 
 
@@ -70,6 +82,9 @@ class DummyTypeExchange:
             "BTC/USD": {"active": True, "type": "spot", "info": {"status": "online"}},
             "ETH/USD": {"active": True, "type": "future", "info": {"status": "online"}},
         }
+
+    def fetch_ticker(self, symbol):
+        return {"active": symbol == "ETH/USD"}
 
 
 def test_market_type_filter():
@@ -97,6 +112,9 @@ class DummySliceExchange:
         }
         return data.get(market_type, [])
 
+    def fetch_ticker(self, symbol):
+        return {"active": True}
+
 
 def test_load_kraken_symbols_fetch_markets_by_type():
     ex = DummySliceExchange()
@@ -114,6 +132,9 @@ class DummySymbolFieldExchange:
             "BTC/USD": {"symbol": "BTC/USD", "active": True, "type": "spot", "info": {"status": "online"}},
             "ETH/USD": {"symbol": "ETH/USD", "active": False, "type": "spot", "info": {"status": "delisted"}},
         }
+
+    def fetch_ticker(self, symbol):
+        return {"active": symbol == "BTC/USD"}
 
 
 def test_load_kraken_symbols_handles_symbol_column():
