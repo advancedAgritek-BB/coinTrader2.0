@@ -94,6 +94,7 @@ async def watch_pool(
     backoff = 0
     async with aiohttp.ClientSession() as session:
         while True:
+            reconnect = False
             try:
                 async with session.ws_connect(url) as ws:
                     sub = {
@@ -149,24 +150,6 @@ async def watch_pool(
                 reconnect = True
 
             if reconnect:
-                backoff += 1
-                        if msg.type != aiohttp.WSMsgType.TEXT:
-                            raise ConnectionError
-                        data = (
-                            msg.json()
-                            if hasattr(msg, "json")
-                            else json.loads(msg.data)
-                        )
-                        result = data.get("params", {}).get("result") if isinstance(data, dict) else None
-                        if not result:
-                            continue
-                        if parse_liquidity(result) < min_liquidity:
-                            continue
-                        result["predicted_regime"] = predict_regime(result)
-                        yield result
-                break
-            except Exception:  # pragma: no cover - reconnection path
-                logger.exception("watch_pool reconnecting")
                 backoff = min(backoff + 1, 5)
                 await asyncio.sleep(2 ** backoff)
 
