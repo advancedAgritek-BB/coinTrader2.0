@@ -6,6 +6,7 @@ from .market_loader import (
     load_kraken_symbols,
     fetch_ohlcv_async,
     fetch_order_book_async,
+    fetch_geckoterminal_ohlcv,
     load_ohlcv_parallel,
     update_ohlcv_cache,
     timeframe_seconds,
