@@ -6,7 +6,6 @@ import time
 from typing import Dict, Optional
 
 import aiohttp
-import numpy as np
 from solana.rpc.async_api import AsyncClient
 
 from crypto_bot.execution.solana_executor import (
@@ -65,20 +64,20 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
         return 0.0
 
 
-async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
-    """Return profit when price increase and model predicts breakout regime.
+async def monitor_profit(tx_sig: str, threshold: float = 0.01) -> float:
+    """Return profit when the price increases by ``threshold``.
 
-    The function monitors the swap price for up to 5 minutes. Each new
-    quote is fed into the ``regime_lgbm`` model from ``coinTrader_Trainer``;
-    profit is only returned when the price change is above ``threshold`` and
-    the model identifies a breakout regime.
+    The function monitors the swap price for up to five minutes and returns
+    the profit once the percentage gain over the entry price exceeds the
+    ``threshold``.
 
     Parameters
     ----------
     tx_sig:
         Signature of the entry swap transaction.
     threshold:
-        Percentage gain required to trigger profit taking.
+        Percentage gain required to trigger profit taking. Defaults to ``0.01``
+        (1%).
     """
 
     rpc_url = os.getenv(
@@ -117,45 +116,13 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
         if entry_price is None:
             return 0.0
 
-        try:  # pragma: no cover - optional dependency
-            from coinTrader_Trainer.ml_trainer import load_model
-        except Exception:
-            logger.error("ML model loader not available")
-            return 0.0
-        model = load_model("regime_lgbm")
-
         start = time.time()
         while time.time() - start < 300:
             price = await _fetch_price(out_mint, in_mint, max_retries=3)
             if price:
-                change = (price - entry_price) / entry_price
-                features = [change, out_amount]
-                prediction = model.predict([features])[0]
-                max_prob = float(np.max(prediction))
-                regime = int(np.argmax(prediction))
-                if (
-                    change >= threshold and max_prob >= 0.7 and regime == 2
-                ):
-                    logger.info(
-                        "Profit hit with breakout (prob %s): %s", max_prob, change
-                    )
-                try:
-                    pred = (
-                        model.predict_proba([features])[0]
-                        if hasattr(model, "predict_proba")
-                        else model.predict([features])[0]
-                    )
-                except Exception:  # pragma: no cover - best effort
-                    pred = model.predict([features])[0]
-
-                cls = (
-                    int(np.argmax(pred))
-                    if hasattr(pred, "__len__") and len(pred) > 1
-                    else int(pred)
-                )
-                if change >= threshold and cls == 2:
-                    logger.info("Profit threshold hit with breakout regime: %s", change)
-                    return out_amount * change
+                pnl_pct = (price - entry_price) / entry_price
+                if pnl_pct > threshold:
+                    return out_amount * pnl_pct
             await asyncio.sleep(5)
     finally:
         await client.close()
@@ -171,7 +138,7 @@ async def sniper_trade(
     dry_run: bool = True,
     slippage_bps: int = 50,
     notifier: Optional[object] = None,
-    profit_threshold: float = 0.2,
+    profit_threshold: float = 0.01,
     mempool_monitor: SolanaMempoolMonitor | None = None,
     mempool_cfg: dict | None = None,
     config: dict | None = None,
