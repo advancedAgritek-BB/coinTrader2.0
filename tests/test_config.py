@@ -116,6 +116,11 @@ def test_load_config_returns_dict():
 
     assert "auto_convert_quote" in config
 
+    # strategy_router settings
+    assert "strategy_router" in config
+    router_cfg = config["strategy_router"]
+    assert router_cfg.get("min_confidence") == 0.5
+
 
 def test_exit_config_unified():
     with open(CONFIG_PATH) as f:
