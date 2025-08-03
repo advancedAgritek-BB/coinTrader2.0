@@ -27,7 +27,7 @@ def _setup_ctx():
             "timeframe": "1h",
             "symbols": ["BTC/USD", "ETH/USD"],
             "symbol_batch_size": 1,
-            "symbol_filter": {"min_volume_usd": 1000, "volume_percentile": 10},
+            "symbol_filter": {"min_volume_usd": 100, "volume_percentile": 10},
         },
     )
     ctx.exchange = object()
@@ -51,7 +51,7 @@ def test_fetch_candidates_market_pump(monkeypatch):
     asyncio.run(main.fetch_candidates(ctx))
 
     assert len(ctx.current_batch) == 2
-    assert ctx.config["symbol_filter"]["min_volume_usd"] == 1000
+    assert ctx.config["symbol_filter"]["min_volume_usd"] == 100
     assert ctx.config["symbol_filter"]["volume_percentile"] == 10
 
 
@@ -69,7 +69,7 @@ def test_fetch_candidates_no_pump(monkeypatch):
     asyncio.run(main.fetch_candidates(ctx))
 
     assert len(ctx.current_batch) == 1
-    assert ctx.config["symbol_filter"]["min_volume_usd"] == 1000
+    assert ctx.config["symbol_filter"]["min_volume_usd"] == 100
     assert ctx.config["symbol_filter"]["volume_percentile"] == 10
 
 
@@ -109,6 +109,7 @@ def test_pump_allocates_solana(monkeypatch):
 
 def test_trending_queues_arb(monkeypatch):
     ctx = _setup_ctx()
+    ctx.config["symbol_batch_size"] = 3
 
     async def fake_get_filtered_symbols(ex, cfg):
         return [("BTC/USD", 1.0)], []
@@ -151,11 +152,11 @@ def test_volatile_queues_solana(monkeypatch):
     async def fake_scan(*a, **k):
         return []
 
-    async def fake_tokens(cfg):
+    async def fake_scan_tokens(cfg):
         return ["SOL/USDC"]
 
     monkeypatch.setattr(main, "scan_arbitrage", fake_scan)
-    monkeypatch.setattr(main, "get_solana_new_tokens", fake_tokens)
+    monkeypatch.setattr(main, "scan_and_enqueue_solana_tokens", fake_scan_tokens)
 
     asyncio.run(main.fetch_candidates(ctx))
 
