@@ -257,7 +257,7 @@ ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
 ohlcv_timeout: 60
 onchain_default_quote: USDC
-onchain_min_volume_usd: 1000
+onchain_min_volume_usd: 100
 onchain_symbols: []
 optimization:
   enabled: true
@@ -464,11 +464,12 @@ strategy_router:
   volatile_timeframe: 1m
 symbol: BTC/USDT
 symbol_batch_size: 100
-symbol_filter:
+textsymbol_filter:
   change_pct_percentile: 10
   correlation_max_pairs: 200
   http_timeout: 5
-  initial_history_candles: 50
+  initial_history_candles: 10
+  min_history_fraction: 0.2
   initial_timeframes:
   - 1h
   - 1d
@@ -477,7 +478,7 @@ symbol_filter:
   max_concurrent_ohlcv: 10
   max_correlation: 0.9
   max_spread_pct: 2.0
-  min_volume_usd: 1000
+  min_volume_usd: 100
   ohlcv_batch_size: 10
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
