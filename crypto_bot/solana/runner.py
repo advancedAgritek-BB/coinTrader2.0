@@ -15,17 +15,6 @@ from crypto_bot.utils.logger import setup_logger
 logger = setup_logger(__name__)
 
 
-async def poll_fallback(config: Mapping[str, object]) -> None:
-    """Fallback poll stub used when ``watch`` fails.
-
-    The real implementation lives elsewhere; this placeholder merely
-    satisfies the runner's contract and simplifies testing by allowing the
-    coroutine to be monkeypatched.
-    """
-
-    return None
-
-
 async def run(config: Mapping[str, object]) -> None:
     """Run the meme-wave sniper loop using ``config`` options with optional
     cross-chain arbitrage."""
@@ -104,8 +93,6 @@ async def run(config: Mapping[str, object]) -> None:
         watcher.stop()
         raise
     except Exception as e:  # pragma: no cover - best effort
-        logger.error("Runner error: %s", e)
-        await poll_fallback(config)
         logger.error("Runner error: %s - Falling back to polling", e)
         await poll_fallback(watcher)
 
