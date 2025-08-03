@@ -1,9 +1,8 @@
 import asyncio
+import pytest
+import numpy as np
 import sys
 import types
-
-import numpy as np
-import pytest
 
 from crypto_bot.solana import api_helpers
 
