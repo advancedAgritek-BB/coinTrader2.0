@@ -1,6 +1,6 @@
+import asyncio
 import os
 import sys
-import asyncio
 import contextlib
 import time
 from pathlib import Path
