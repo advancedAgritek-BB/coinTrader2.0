@@ -42,9 +42,7 @@ def normalize_score_by_volatility(
 
     current_atr = calc_atr(df, window=current_window)
     long_term_atr = calc_atr(df, window=long_term_window)
-    if any(
-        math.isnan(x) or x == 0 for x in [current_atr, long_term_atr]
-    ):
+    if math.isnan(current_atr) or math.isnan(long_term_atr) or long_term_atr == 0:
         return raw_score
 
     scale = min(current_atr / long_term_atr, 2.0)
