@@ -112,19 +112,22 @@ def test_get_solana_new_tokens_returns_unique(monkeypatch):
             yield evt
 
     monkeypatch.setattr(scanner.PoolWatcher, "watch", watch_stub)
+    monkeypatch.setattr(scanner.PoolWatcher, "setup_webhook", lambda self, k: None)
+    monkeypatch.setenv("HELIUS_KEY", "k")
 
     cfg = {
-        "url": "http://x",
         "max_tokens_per_scan": 5,
         "timeout_seconds": 1,
         "min_liquidity": 0,
         "min_tx_count": 0,
+        "raydium_program_id": "r",
+        "interval_minutes": 0,
     }
     tokens = asyncio.run(scanner.get_solana_new_tokens(cfg))
     assert tokens == ["A", "B"]
 
 
-def test_get_solana_new_tokens_expands_ws_url(monkeypatch):
+def test_get_solana_new_tokens_builds_urls(monkeypatch):
     captured: dict[str, str] = {}
 
     class DummyWatcher:
@@ -136,6 +139,7 @@ def test_get_solana_new_tokens_expands_ws_url(monkeypatch):
             raydium_program_id,
             min_liquidity=None,
         ):
+            captured["url"] = url
             captured["websocket_url"] = websocket_url
 
         async def watch(self):
@@ -149,16 +153,17 @@ def test_get_solana_new_tokens_expands_ws_url(monkeypatch):
     monkeypatch.setenv("HELIUS_KEY", "abc123")
 
     cfg = {
-        "helius_ws_url": "wss://example.com/${HELIUS_KEY}",
-        "use_ws": True,
-        "url": "http://x",
         "raydium_program_id": "r",
         "interval_minutes": 0,
         "min_liquidity": 0,
     }
 
     asyncio.run(scanner.get_solana_new_tokens(cfg))
-    assert captured["websocket_url"] == "wss://example.com/abc123"
+    assert captured["url"] == "https://api.helius.xyz/v0/?api-key=abc123"
+    assert (
+        captured["websocket_url"]
+        == "wss://mainnet.helius-rpc.com/?api-key=abc123"
+    )
 
 
 async def _scan_once(cfg, queue):
