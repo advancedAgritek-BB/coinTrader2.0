@@ -27,12 +27,16 @@ async def get_solana_new_tokens(config: Mapping[str, object]) -> List[str]:
     if not isinstance(sol_cfg, Mapping):
         return []
 
+    key = os.getenv("HELIUS_KEY")
+    if not key:
+        logger.error("HELIUS_KEY not set")
+        return []
+
     interval_sec = float(sol_cfg.get("interval_minutes", 0)) * 60.0
-    helius_ws_url = os.path.expandvars(str(sol_cfg.get("helius_ws_url", "")))
-    websocket_url = helius_ws_url if sol_cfg.get("use_ws", False) else None
     raydium_program_id = sol_cfg.get("raydium_program_id")
-    url = sol_cfg.get("url")
     min_liquidity = float(sol_cfg.get("min_liquidity", 0.0))
+    url = f"https://api.helius.xyz/v0/?api-key={key}"
+    websocket_url = f"wss://mainnet.helius-rpc.com/?api-key={key}"
     watcher = PoolWatcher(
         url,
         interval_sec or None,
