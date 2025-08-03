@@ -87,8 +87,12 @@ class PoolWatcher:
         self.setup_webhook(key)
 
     def setup_webhook(self, api_key: str):
-        """Set up Helius webhook for real-time notifications (from docs)."""
-        webhook_url = "YOUR_BOT_WEBHOOK_URL"  # e.g., Ngrok or Cloudflare Worker URL
+        """Register a webhook with Helius if configured."""
+        webhook_url = os.getenv("BOT_WEBHOOK_URL", "")
+        if not webhook_url:
+            logger.info("Webhook disabled; BOT_WEBHOOK_URL not set")
+            return
+
         helius_url = f"https://api.helius.xyz/v0/webhooks?api-key={api_key}"
         payload = {
             "webhookURL": webhook_url,
@@ -238,7 +242,12 @@ class PoolWatcher:
                 meta = result.get("meta", {})
                 message = result.get("transaction", {}).get("message", {})
 
-                keys = [k.get("pubkey", "") for k in message.get("accountKeys", [])]
+                keys = []
+                for k in message.get("accountKeys", []):
+                    if isinstance(k, dict):
+                        keys.append(k.get("pubkey", ""))
+                    else:
+                        keys.append(str(k))
                 if len(keys) > 2:
                     event.pool_address = keys[2]
                 if len(keys) > 1:

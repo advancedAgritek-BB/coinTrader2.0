@@ -1,5 +1,6 @@
 import json
 import types
+import logging
 import pytest
 
 from crypto_bot.solana.watcher import PoolWatcher, NewPoolEvent
@@ -73,6 +74,7 @@ async def test_parses_raydium_event(monkeypatch):
         "params": {"result": {"signature": "sig", "transaction": {"init": "initialize"}}}
     })
     ws = DummyWS([msg])
+    monkeypatch.setenv("HELIUS_KEY", "k")
     session = DummySession(ws)
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, e: 1.0)
@@ -107,6 +109,7 @@ async def test_parses_pump_fun(monkeypatch):
         "params": {"result": {"signature": "sig", "transaction": {"init": "InitializeMint2"}}}
     })
     ws = DummyWS([msg])
+    monkeypatch.setenv("HELIUS_KEY", "k")
     session = DummySession(ws)
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, e: 1.0)
@@ -144,6 +147,7 @@ async def test_reconnect_on_close(monkeypatch):
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(PoolWatcher, "_predict_breakout", lambda self, e: 1.0)
     monkeypatch.setattr(PoolWatcher, "setup_webhook", lambda self, k: None)
+    monkeypatch.setenv("HELIUS_KEY", "k")
 
     async def enrich(self, event, sig, sess):
         event.pool_address = "P"
@@ -213,6 +217,7 @@ async def test_enrich_event_decimals(monkeypatch):
 
     session = DummyHTTP(payload)
     monkeypatch.setattr(PoolWatcher, "setup_webhook", lambda self, k: None)
+    monkeypatch.setenv("HELIUS_KEY", "k")
     watcher = PoolWatcher("u", 0)
     event = NewPoolEvent("", "", "", 0.0)
     await watcher._enrich_event(event, "sig", session)
@@ -221,3 +226,41 @@ async def test_enrich_event_decimals(monkeypatch):
     assert event.creator == "C"
     assert event.tx_count == 2
     assert event.liquidity == 12.0
+
+
+def test_setup_webhook_disabled(monkeypatch, caplog):
+    pw = PoolWatcher.__new__(PoolWatcher)
+    pw.raydium_program_id = "PGM"
+
+    called = {}
+
+    def fake_post(url, json=None):  # pragma: no cover - not called
+        called["url"] = url
+        called["json"] = json
+        return types.SimpleNamespace(status_code=200, text="ok")
+
+    monkeypatch.setattr(watcher_mod, "requests", types.SimpleNamespace(post=fake_post))
+    monkeypatch.setenv("BOT_WEBHOOK_URL", "")
+    with caplog.at_level(logging.INFO):
+        PoolWatcher.setup_webhook(pw, "KEY")
+    assert called == {}
+    assert "Webhook disabled" in caplog.text
+
+
+def test_setup_webhook_enabled(monkeypatch):
+    pw = PoolWatcher.__new__(PoolWatcher)
+    pw.raydium_program_id = "PGM"
+
+    called = {}
+
+    def fake_post(url, json=None):
+        called["url"] = url
+        called["json"] = json
+        return types.SimpleNamespace(status_code=200, text="ok")
+
+    monkeypatch.setattr(watcher_mod, "requests", types.SimpleNamespace(post=fake_post))
+    monkeypatch.setenv("BOT_WEBHOOK_URL", "https://example.com/hook")
+    PoolWatcher.setup_webhook(pw, "KEY")
+    assert called["url"] == "https://api.helius.xyz/v0/webhooks?api-key=KEY"
+    assert called["json"]["webhookURL"] == "https://example.com/hook"
+    assert called["json"]["accountAddresses"] == ["PGM"]
