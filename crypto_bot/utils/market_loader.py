@@ -549,6 +549,20 @@ async def load_kraken_symbols(
 
     df.loc[df["reason"].isna() & df["symbol"].isin(exclude_set), "reason"] = "excluded"
 
+    if hasattr(exchange, "fetch_ticker"):
+        fetcher = getattr(exchange, "fetch_ticker")
+        for idx, row in df[df["reason"].isna()].iterrows():
+            try:
+                if asyncio.iscoroutinefunction(fetcher):
+                    ticker = await fetcher(row["symbol"])
+                else:
+                    ticker = await asyncio.to_thread(fetcher, row["symbol"])
+            except Exception as exc:  # pragma: no cover - safety
+                logger.debug("fetch_ticker failed for %s: %s", row["symbol"], exc)
+                continue
+            if isinstance(ticker, dict) and ticker.get("active") is False:
+                df.at[idx, "reason"] = "inactive (ticker)"
+
     symbols: List[str] = []
     for row in df.itertuples():
         if row.reason:
