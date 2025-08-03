@@ -1,4 +1,4 @@
-import math
+import math  # for math.isnan checks
 
 import pandas as pd
 from crypto_bot.volatility_filter import calc_atr
