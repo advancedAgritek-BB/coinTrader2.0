@@ -321,7 +321,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **wallet_address** – destination wallet for DEX trades.
 * **solana_slippage_bps** – slippage tolerance for on-chain conversions.
 * **auto_convert_quote** – token used when converting idle balances (default `USDC`).
-* **onchain_min_volume_usd** – minimum 24h volume for on-chain pairs (default `10_000_000`). This value can be overridden in `config.yaml`.
+* **onchain_min_volume_usd** – minimum 24h volume for on-chain pairs (default `100`). This value can be overridden in `config.yaml`.
 * **symbol**/**symbols** – pairs to trade when not scanning automatically.
 * **scan_markets** – load all exchange pairs when `symbols` is empty (enabled by default).
 * **scan_in_background** – start the initial scan in the background so trading can begin immediately.
@@ -356,7 +356,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   When set, the bot loads candles starting from this time (e.g. `365d` for one year)
   before switching to realtime updates.
 * **min_history_fraction** – minimum portion of candles that must be retrieved
-  for a pair to remain cached. This check is disabled by default.
+  for a pair to remain cached (default `0.2`; set to `0` to disable).
 * **cycle_lookback_limit** – candles fetched each cycle. Defaults to `150`.
 * **adaptive_scan.enabled** – turn on dynamic sizing.
 * **adaptive_scan.atr_baseline** – ATR level corresponding to a 1× factor.
@@ -1102,7 +1102,7 @@ scan_lookback_limit: 700         # max candles per pair during startup
                                  # trimmed using Kraken listing data
 scan_deep_top: 50                # deep load this many ranked symbols
 start_since: 365d                # backfill candles this far in the past
-min_history_fraction: 0          # history check disabled by default
+min_history_fraction: 0.2        # require at least 20% of history
 cycle_lookback_limit: 150        # candles fetched each cycle
 max_spread_pct: 4.0              # skip pairs with wide spreads
 ```
@@ -1151,7 +1151,7 @@ to use the provided list without any filtering:
 
 ```yaml
 symbol_filter:
-  min_volume_usd: 1
+  min_volume_usd: 100
   volume_percentile: 20          # keep pairs above this volume percentile
   change_pct_percentile: 5       # require 24h change in the top movers
   max_spread_pct: 4              # allow spreads up to 4%
@@ -1170,7 +1170,7 @@ max_concurrent_ohlcv: 2          # simultaneous OHLCV requests during startup
   ticker_backoff_max: 60           # cap for exponential backoff
   ws_ticker_batch_size: 100        # symbols per watchTickers call
   initial_timeframes: [1m, 5m, 15m, 1h]  # preloaded intervals (4h unsupported on Coinbase)
-initial_history_candles: 50     # candles fetched per timeframe initially
+initial_history_candles: 10     # candles fetched per timeframe initially
 ```
 
 For thin markets you may want to relax the filters and trading
@@ -1197,7 +1197,7 @@ data is fetched for regime detection and correlation checks before live trading
 starts.
   max_concurrent_ohlcv: 10       # limit OHLCV requests when loading history
   initial_timeframes: [1h, 1d]  # timeframes fetched for new symbols
-  initial_history_candles: 50   # candles per timeframe on first load
+  initial_history_candles: 10   # candles per timeframe on first load
 ```
 
 * **max_concurrent_ohlcv** – cap simultaneous OHLCV requests while scoring new symbols (default `10`).
@@ -1206,7 +1206,7 @@ starts.
 * **ticker_rate_limit** – delay applied after ticker requests in milliseconds.
 * **initial_timeframes** – candle intervals pulled when caching a new market (default `[1h, 1d]`; Coinbase does not provide 4h candles).
 * **initial_history_candles** – number of candles per timeframe loaded on first
-  use (default `300`). The loader observes Kraken listing dates so it never
+  use (default `10`). The loader observes Kraken listing dates so it never
   requests data preceding a pair's debut.
 
 Kraken labels Bitcoin as `XBT` in its market identifiers. The bot
