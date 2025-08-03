@@ -99,6 +99,13 @@ async def load_token_mints(
         except Exception as err:  # pragma: no cover - best effort
             logger.error("Failed to read cache: %s", err)
 
+    if unknown:
+        try:
+            helius_map = await fetch_from_helius(unknown)
+            mapping.update({k.upper(): v for k, v in helius_map.items()})
+        except Exception as exc:  # pragma: no cover - network failures
+            logger.error("Failed to resolve unknown tokens: %s", exc)
+
     if mapping:
         TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
         try:
@@ -224,17 +231,16 @@ async def fetch_from_helius(symbols: Iterable[str]) -> Dict[str, str]:
         Iterable of token symbols to resolve.
     """
 
-    api_key = os.getenv("HELIUS_KEY", "")
     tokens = [str(s) for s in symbols if s]
     if not tokens:
         return {}
 
     params = {"symbol": ",".join(tokens)}
-    if api_key:
-        params["api-key"] = api_key
     from urllib.parse import urlencode
 
-    url = f"{HELIUS_TOKEN_API}?{urlencode(params)}"
+    url = (
+        f"{HELIUS_TOKEN_API}?api-key={os.getenv('HELIUS_KEY')}&{urlencode(params)}"
+    )
 
     try:
         async with aiohttp.ClientSession() as session:

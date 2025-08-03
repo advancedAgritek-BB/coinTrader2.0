@@ -140,7 +140,8 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
     assert mapping == {"AAA": "mmm"}
     assert (
-        session.url == "https://api.helius.xyz/v0/token-metadata?symbol=AAA&api-key=KEY"
+        session.url
+        == "https://api.helius.xyz/v0/token-metadata?api-key=KEY&symbol=AAA"
     )
 
 
