@@ -476,7 +476,7 @@ def _emit_timing(
         )
 
 
-def replace_placeholders(config_dict: dict, env_var_name: str, placeholder: str) -> dict:
+def replace_env_placeholder(config_dict: dict, env_var_name: str, placeholder: str) -> dict:
     """Recursively replace ``placeholder`` in ``config_dict`` with an env value.
 
     ``env_var_name`` is looked up via :func:`os.getenv` and defaults to an
@@ -584,7 +584,7 @@ def maybe_reload_config(state: dict, config: dict) -> None:
     """Reload configuration when ``state['reload']`` is set."""
     if state.get("reload"):
         new_cfg = load_config()
-        replace_placeholders(new_cfg, "HELIUS_KEY", "${HELIUS_KEY}")
+        replace_env_placeholder(new_cfg, "HELIUS_KEY", "${HELIUS_KEY}")
         config.clear()
         config.update(new_cfg)
         state.pop("reload", None)
@@ -647,7 +647,7 @@ def reload_config(
 
     new_config = load_config()
     new_config = replace_placeholders(new_config)
-    replace_placeholders(new_config, "HELIUS_KEY", "${HELIUS_KEY}")
+    replace_env_placeholder(new_config, "HELIUS_KEY", "${HELIUS_KEY}")
     _LAST_CONFIG_MTIME = mtime
 
     config.clear()
@@ -2082,7 +2082,7 @@ async def _main_impl() -> TelegramNotifier:
         else:
             logger.info("Setting %s from .env", key)
     os.environ.update(secrets)
-    replace_placeholders(config, "HELIUS_KEY", "${HELIUS_KEY}")
+    replace_env_placeholder(config, "HELIUS_KEY", "${HELIUS_KEY}")
     helius_key = os.getenv("HELIUS_KEY")
     if not helius_key:
         logger.error("HELIUS_KEY not set in .env – Solana scans disabled")
