@@ -2031,6 +2031,17 @@ async def _main_impl() -> TelegramNotifier:
         else:
             logger.info("Setting %s from .env", key)
     os.environ.update(secrets)
+    helius_key = os.getenv("HELIUS_KEY")
+    if not helius_key:
+        logger.error("HELIUS_KEY not set in .env – Solana scans disabled")
+    else:
+        config.setdefault("solana_scanner", {})
+        config["solana_scanner"]["helius_ws_url"] = (
+            f"wss://mainnet.helius-rpc.com/?api-key={helius_key}"
+        )
+        config["solana_scanner"]["url"] = (
+            f"https://api.helius.xyz/v0/?api-key={helius_key}"
+        )
     from crypto_bot.utils.token_registry import (
         TOKEN_MINTS,
         load_token_mints,
