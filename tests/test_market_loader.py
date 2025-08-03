@@ -1,15 +1,15 @@
 import asyncio
-import pandas as pd
-import pytest
 import logging
 import time
+
 import ccxt
+import pandas as pd
+import pytest
 
 VALID_MINT = "So11111111111111111111111111111111111111112"
 
+from crypto_bot.utils.market_loader import load_kraken_symbols, fetch_ohlcv_async
 from crypto_bot.utils.market_loader import (
-    load_kraken_symbols,
-    fetch_ohlcv_async,
     fetch_order_book_async,
     load_ohlcv_parallel,
     update_ohlcv_cache,
@@ -40,9 +40,6 @@ class DummyExchange:
             "LTC/USD": {"active": False},
         }
         return data.get(symbol, {"active": False})
-        if symbol == "LTC/USD":
-            return {"active": False}
-        return {"active": True}
 
 
 def test_load_kraken_symbols_returns_active():
