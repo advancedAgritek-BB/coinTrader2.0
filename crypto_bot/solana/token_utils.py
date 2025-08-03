@@ -1,4 +1,5 @@
-"""Token account helpers for Solana.
+"""
+Token account helpers for Solana.
 
 This module fetches token accounts for a wallet, enriches them with metadata
 from the Helius API and scores them using a machine learning model. Only
