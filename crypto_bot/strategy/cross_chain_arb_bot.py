@@ -9,7 +9,7 @@ import pandas as pd
 
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.solana import fetch_solana_prices
-from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.volatility import normalize_score_by_volatility
 
 
 def _fetch_prices(symbols: List[str]) -> Dict[str, float]:

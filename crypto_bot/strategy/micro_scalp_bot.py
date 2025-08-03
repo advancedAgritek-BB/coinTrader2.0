@@ -6,7 +6,7 @@ import pandas as pd
 import ta
 from crypto_bot.utils.indicator_cache import cache_series
 
-from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.volatility import normalize_score_by_volatility
 
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model

@@ -22,7 +22,7 @@ from ta.trend import ADXIndicator
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
 
-from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.volatility import normalize_score_by_volatility
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")

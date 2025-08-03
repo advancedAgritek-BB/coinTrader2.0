@@ -26,7 +26,7 @@ except Exception:  # pragma: no cover - fallback when scipy missing
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
 
-from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.volatility import normalize_score_by_volatility
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 try:  # pragma: no cover - optional dependency
