@@ -2320,6 +2320,7 @@ async def _main_impl() -> TelegramNotifier:
             logger.info("Loaded %d onchain symbols via refresh_pairs", len(new_pairs))
 
     balance_threshold = config.get("balance_change_threshold", 0.01)
+    last_balance = 0.0
     previous_balance = 0.0
 
     async def check_balance_change(new_balance: float, reason: str) -> None:
@@ -2330,30 +2331,6 @@ async def _main_impl() -> TelegramNotifier:
                 f"Balance changed by {delta:.4f} USDT due to {reason}"
             )
         previous_balance = new_balance
-
-    try:
-        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
-            bal = await exchange.fetch_balance()
-        else:
-            bal = await asyncio.to_thread(exchange.fetch_balance)
-        init_bal = (
-            bal.get("USDT", {}).get("free", 0)
-            if isinstance(bal.get("USDT"), dict)
-            else bal.get("USDT", 0)
-        )
-        log_balance(float(init_bal))
-        last_balance = float(init_bal)
-        previous_balance = float(init_bal)
-    except Exception as exc:  # pragma: no cover - network
-        logger.error("Exchange API setup failed: %s", exc)
-        if status_updates:
-            err = await notifier.notify_async(f"API error: {exc}")
-            if err:
-                logger.error("Failed to notify user: %s", err)
-        return notifier
-    params = build_risk_params(config, volume_ratio)
-    risk_config = RiskConfig(**params)
-    risk_manager = RiskManager(risk_config)
 
     paper_wallet = None
     if config.get("execution_mode") == "dry_run":
@@ -2367,12 +2344,22 @@ async def _main_impl() -> TelegramNotifier:
             config.get("allow_short", False),
         )
         log_balance(paper_wallet.balance)
-        last_balance = await notify_balance_change(
-            notifier,
-            last_balance,
-            float(paper_wallet.balance),
-            balance_updates,
-        )
+        last_balance = previous_balance = float(paper_wallet.balance)
+    else:
+        try:
+            init_bal = await fetch_and_log_balance(exchange, None, config)
+            last_balance = previous_balance = float(init_bal)
+        except Exception as exc:  # pragma: no cover - network
+            logger.error("Exchange API setup failed: %s", exc)
+            if status_updates:
+                err = await notifier.notify_async(f"API error: {exc}")
+                if err:
+                    logger.error("Failed to notify user: %s", err)
+            return notifier
+
+    params = build_risk_params(config, volume_ratio)
+    risk_config = RiskConfig(**params)
+    risk_manager = RiskManager(risk_config)
 
     monitor_task = asyncio.create_task(
         console_monitor.monitor_loop(
