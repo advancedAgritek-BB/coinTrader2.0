@@ -146,12 +146,15 @@ async def watch_pool(
                         return
             except aiohttp.WSServerHandshakeError:
                 reconnect = True
-            except Exception:
+            except Exception:  # pragma: no cover - reconnection path
+                logger.exception("watch_pool reconnecting")
                 reconnect = True
 
             if reconnect:
                 backoff = min(backoff + 1, 5)
                 await asyncio.sleep(2 ** backoff)
+                continue
+            break
 
 
 async def main(args: list[str] | None = None) -> None:
