@@ -8,6 +8,7 @@ from datetime import datetime
 from collections import deque, OrderedDict
 from dataclasses import dataclass, field
 import inspect
+import re
 
 import aiohttp
 from typing import Mapping
@@ -106,6 +107,21 @@ ENV_PATH = Path(__file__).resolve().parent / ".env"
 _LAST_CONFIG_MTIME = CONFIG_PATH.stat().st_mtime
 
 logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
+
+# Pattern for environment variable placeholders like ${VAR}
+_PLACEHOLDER_RE = re.compile(r"\$\{([^}]+)\}")
+
+
+def replace_placeholders(value):
+    """Recursively replace ${VAR} placeholders in ``value`` using env vars."""
+
+    if isinstance(value, dict):
+        return {k: replace_placeholders(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [replace_placeholders(v) for v in value]
+    if isinstance(value, str):
+        return _PLACEHOLDER_RE.sub(lambda m: os.getenv(m.group(1), m.group(0)), value)
+    return value
 
 # Track WebSocket ping tasks
 WS_PING_TASKS: set[asyncio.Task] = set()
@@ -534,7 +550,7 @@ def load_config() -> dict:
             " section on onchain_symbols."
         )
 
-    return data
+    return replace_placeholders(data)
 
 
 def maybe_reload_config(state: dict, config: dict) -> None:
@@ -602,6 +618,7 @@ def reload_config(
         return
 
     new_config = load_config()
+    new_config = replace_placeholders(new_config)
     _LAST_CONFIG_MTIME = mtime
 
     config.clear()
