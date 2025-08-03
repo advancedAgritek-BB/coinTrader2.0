@@ -38,7 +38,7 @@ async def run(config: Mapping[str, object]) -> None:
             prediction = watcher._predict_breakout(event)
             if score >= 0.7:
                 await executor.snipe(event, score, config.get("execution", {}))
-                if watcher._predict_breakout(event) >= 0.7 and arb_cfg:
+                if prediction >= 0.7 and arb_cfg:
                     # Source trade parameters
                     exchange = arb_cfg.get("exchange")
                     ws_client = arb_cfg.get("ws_client")
