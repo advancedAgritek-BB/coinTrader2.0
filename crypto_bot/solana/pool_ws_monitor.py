@@ -115,32 +115,33 @@ async def watch_pool(
                     await ws.send_json(sub)
                     backoff = 0
                     async for msg in ws:
-                        if msg.type == aiohttp.WSMsgType.TEXT:
-                            try:
-                                data = msg.json()
-                            except Exception:
-                                data = json.loads(msg.data)
-                            result = None
-                            if isinstance(data, dict):
-                                if data.get("method") != "transactionNotification":
-                                    continue
-                                result = data.get("params", {}).get("result")
-                            if result is not None:
-                                liquidity = parse_liquidity(result)
-                                tx_count = result.get("tx_count", 0)
-                                result["tx_count"] = tx_count
-                                if liquidity >= min_liquidity:
-                                    regime = predict_regime(result)
-                                    if regime == "breakout":
-                                        result["predicted_regime"] = regime
-                                        logger.info("Regime predicted: %s", regime)
-                                        yield result
-                        elif msg.type in (
-                            aiohttp.WSMsgType.CLOSED,
-                            aiohttp.WSMsgType.ERROR,
-                        ):
-                            reconnect = True
-                            break
+                        if msg.type != aiohttp.WSMsgType.TEXT:
+                            if msg.type in (
+                                aiohttp.WSMsgType.CLOSED,
+                                aiohttp.WSMsgType.ERROR,
+                            ):
+                                reconnect = True
+                                break
+                            continue
+                        try:
+                            data = msg.json()
+                        except Exception:
+                            data = json.loads(msg.data)
+                        result = None
+                        if isinstance(data, dict):
+                            if data.get("method") != "transactionNotification":
+                                continue
+                            result = data.get("params", {}).get("result")
+                        if result is not None:
+                            liquidity = parse_liquidity(result)
+                            tx_count = result.get("tx_count", 0)
+                            result["tx_count"] = tx_count
+                            if liquidity >= min_liquidity:
+                                regime = predict_regime(result)
+                                if regime == "breakout":
+                                    result["predicted_regime"] = regime
+                                    logger.info("Regime predicted: %s", regime)
+                                    yield result
                     else:
                         # Loop exhausted without break -> no more messages
                         return
