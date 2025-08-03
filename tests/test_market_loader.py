@@ -24,6 +24,7 @@ class DummyExchange:
     def load_markets(self):
         return {
             "BTC/USD": {"active": True, "type": "spot", "info": {"status": "online"}},
+            "LTC/USD": {"active": True, "type": "spot", "info": {"status": "online"}},
             "ETH/USD": {"active": True, "type": "margin", "info": {"status": "online"}},
             "XBT/USD-PERP": {"active": True, "type": "futures", "info": {"status": "online"}},
             "XRP/USD": {"active": False, "type": "spot", "info": {"status": "delisted"}},
@@ -39,11 +40,16 @@ class DummyExchange:
             "LTC/USD": {"active": False},
         }
         return data.get(symbol, {"active": False})
+        if symbol == "LTC/USD":
+            return {"active": False}
+        return {"active": True}
 
 
 def test_load_kraken_symbols_returns_active():
     ex = DummyExchange()
     symbols = asyncio.run(load_kraken_symbols(ex))
+    assert "BTC/USD" in symbols
+    assert "LTC/USD" not in symbols
     assert set(symbols) == {"BTC/USD"}
 
 
@@ -62,6 +68,7 @@ def test_load_kraken_symbols_logs_exclusions(caplog):
         symbols = asyncio.run(load_kraken_symbols(ex, exclude=["ETH/USD"]))
     assert set(symbols) == {"BTC/USD"}
     messages = [r.getMessage() for r in caplog.records]
+    assert any("Skipping symbol LTC/USD" in m for m in messages)
     assert any("Skipping symbol XRP/USD" in m for m in messages)
     assert any("Skipping symbol ETH/USD" in m for m in messages)
     assert any("Skipping symbol XBT/USD-PERP" in m for m in messages)
