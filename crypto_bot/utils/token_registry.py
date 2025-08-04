@@ -149,6 +149,9 @@ async def load_token_mints(
 
     if mapping:
         TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
+        _write_cache()
+
+    _LOADED = True
         try:
             CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(CACHE_FILE, "w") as f:
@@ -190,7 +193,6 @@ TOKEN_MINTS.update(
         # Add more as needed; skip USDQ/USTC/XTZ as non-Solana
     }
 )
-_write_cache()  # Save immediately
 
 
 async def refresh_mints() -> None:
