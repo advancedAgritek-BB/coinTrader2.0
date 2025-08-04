@@ -1,5 +1,8 @@
 from typing import Optional, Tuple
 
+import asyncio
+import importlib
+
 import numpy as np
 
 import pandas as pd
@@ -34,7 +37,9 @@ except Exception:  # pragma: no cover - fallback
     MODEL = None
 
 
-def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
+async def generate_signal(
+    df: pd.DataFrame, config: Optional[dict] = None
+) -> Tuple[float, str]:
     """Score mean reversion opportunities using multiple indicators."""
 
     config = config or {}
@@ -197,6 +202,17 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         direction = "short"
     else:
         return 0.0, "none"
+
+    if ml_enabled:
+        try:  # pragma: no cover - best effort
+            if MODEL is not None:
+                ml_score = await asyncio.to_thread(MODEL.predict, df)
+            else:
+                ml_mod = importlib.import_module("crypto_bot.ml_signal_model")
+                ml_score = ml_mod.predict_signal(df)
+            score = (score + ml_score) / 2
+        except Exception:
+            pass
 
     if config is None or config.get("atr_normalization", True):
         score = normalize_score_by_volatility(df, score)
