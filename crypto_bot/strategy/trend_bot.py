@@ -120,6 +120,11 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df["adx"] = cache_series("adx_trend", df, df["adx"], lookback)
 
     latest = df.iloc[-1]
+    if (
+        pd.isna(latest["ema_fast"]) or pd.isna(latest["ema_slow"]) or pd.isna(latest["rsi"])
+    ):
+        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        return 0.0, "none"
     score = 0.0
     direction = "none"
 
