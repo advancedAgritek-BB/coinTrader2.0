@@ -741,6 +741,17 @@ these settings or the batch size so each cycle completes without hitting the
 cap.
 ## Exchange Setup for U.S. Users
 
+When running the bot in a non-interactive environment (e.g. Docker or a
+scheduled job) the process cannot prompt for missing credentials. Set the
+following environment variables before startup:
+
+- `COINBASE_API_KEY`, `COINBASE_API_SECRET`, `COINBASE_API_PASSPHRASE` –
+  required for Coinbase
+- `KRAKEN_API_KEY`, `KRAKEN_API_SECRET` – required for Kraken
+
+If these are absent and standard input is not a TTY, the bot will exit with an
+error. Optional variables like `TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID` enable
+Telegram notifications.
 
 1. Create API keys on **Coinbase Advanced Trade** or **Kraken**.
 2. Fill out `crypto_bot/.env` with your API keys and optional `FERNET_KEY`.
