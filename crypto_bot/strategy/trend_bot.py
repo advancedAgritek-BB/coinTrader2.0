@@ -60,29 +60,28 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
 
     df["ema_fast"] = ta.trend.ema_indicator(df["close"], window=fast_window)
     df["ema_slow"] = ta.trend.ema_indicator(df["close"], window=slow_window)
-    df["rsi"] = ta.momentum.rsi(df["close"], window=14)
-    df["rsi_z"] = stats.zscore(df["rsi"], lookback_cfg)
-    df["volume_ma"] = df["volume"].rolling(window=volume_window).mean()
-    df["atr"] = ta.volatility.average_true_range(df["high"], df["low"], df["close"], window=atr_period)
+    df["atr"] = ta.volatility.average_true_range(
+        df["high"], df["low"], df["close"], window=atr_period
+    )
+
     lookback = max(50, volume_window)
-    recent = df.iloc[-(lookback + 1) :]
 
-    ema20 = ta.trend.ema_indicator(recent["close"], window=20)
-    ema50 = ta.trend.ema_indicator(recent["close"], window=50)
-    rsi = ta.momentum.rsi(recent["close"], window=14)
-    vol_ma = recent["volume"].rolling(window=volume_window).mean()
+    rsi_full = ta.momentum.rsi(df["close"], window=14)
+    rsi_full = cache_series("rsi", df, rsi_full, lookback)
+    vol_ma_full = df["volume"].rolling(window=volume_window).mean()
+    vol_ma_full = cache_series(f"volume_ma_{volume_window}", df, vol_ma_full, lookback)
+    ema20_full = ta.trend.ema_indicator(df["close"], window=20)
+    ema20_full = cache_series("ema20", df, ema20_full, lookback)
+    ema50_full = ta.trend.ema_indicator(df["close"], window=50)
+    ema50_full = cache_series("ema50", df, ema50_full, lookback)
 
-    ema20 = cache_series("ema20", df, ema20, lookback)
-    ema50 = cache_series("ema50", df, ema50, lookback)
-    rsi = cache_series("rsi", df, rsi, lookback)
-    vol_ma = cache_series(f"volume_ma_{volume_window}", df, vol_ma, lookback)
-
-    df = recent.copy()
-    df["ema20"] = ema20
-    df["ema50"] = ema50
-    df["rsi"] = rsi
-    df["rsi_z"] = stats.zscore(rsi, lookback_cfg)
-    df["volume_ma"] = vol_ma
+    recent = df.iloc[-(lookback + 1) :].copy()
+    recent["rsi"] = rsi_full
+    recent["rsi_z"] = stats.zscore(recent["rsi"], lookback_cfg)
+    recent["volume_ma"] = vol_ma_full
+    recent["ema20"] = ema20_full
+    recent["ema50"] = ema50_full
+    df = recent
 
     df["adx"] = ta.trend.ADXIndicator(
         df["high"], df["low"], df["close"], window=7

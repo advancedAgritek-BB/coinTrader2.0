@@ -52,10 +52,14 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     ml_enabled = bool(params.get("ml_enabled", True))
 
     lookback = 14
-    recent = df.iloc[-(lookback + 1) :]
 
-    rsi = ta.momentum.rsi(recent["close"], window=14)
-    rsi_z = stats.zscore(rsi, lookback_cfg)
+    rsi_full = ta.momentum.rsi(df["close"], window=14)
+    rsi_full = cache_series("rsi", df, rsi_full, lookback)
+    rsi_z_full = stats.zscore(rsi_full, lookback_cfg)
+    rsi_z_full = cache_series("rsi_z", df, rsi_z_full, lookback)
+
+    recent = df.iloc[-(lookback + 1) :].copy()
+
     mean = recent["close"].rolling(14).mean()
     std = recent["close"].rolling(14).std()
     bb_z = (recent["close"] - mean) / std
@@ -85,8 +89,6 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         df["high"], df["low"], df["close"], window=14
     ).adx()
 
-    rsi = cache_series("rsi", df, rsi, lookback)
-    rsi_z = cache_series("rsi_z", df, rsi_z, lookback)
     bb_z = cache_series("bb_z", df, bb_z, lookback)
     bb_width = cache_series("bb_width", df, bb_width, lookback)
     median_bw_20 = cache_series("median_bw_20", df, median_bw_20, lookback)
@@ -97,8 +99,8 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     adx = cache_series("adx", df, adx, lookback)
 
     df = recent.copy()
-    df["rsi"] = rsi
-    df["rsi_z"] = rsi_z
+    df["rsi"] = rsi_full
+    df["rsi_z"] = rsi_z_full
     df["bb_z"] = bb_z
     df["bb_width"] = bb_width
     df["median_bw_20"] = median_bw_20
@@ -180,12 +182,20 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     else:
         return 0.0, "none"
 
-    if ml_enabled and MODEL is not None:
-        try:  # pragma: no cover - best effort
-            ml_score = MODEL.predict(df)
-            score = (score + ml_score) / 2
-        except Exception:
-            pass
+    if ml_enabled:
+        if MODEL is not None:
+            try:  # pragma: no cover - best effort
+                ml_score = MODEL.predict(df)
+                score = (score + ml_score) / 2
+            except Exception:
+                pass
+        else:
+            try:  # pragma: no cover - optional dependency
+                from crypto_bot.ml_signal_model import predict_signal
+                ml_score = predict_signal(df)
+                score = (score + ml_score) / 2
+            except Exception:
+                pass
 
     if config is None or config.get("atr_normalization", True):
         score = normalize_score_by_volatility(df, score)
