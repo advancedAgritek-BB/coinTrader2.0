@@ -153,6 +153,10 @@ async def load_token_mints(
     else:
         logger.debug("Token mint load failed; will retry later")
     _LOADED = True
+        _LOADED = True
+    else:
+        logger.debug("Token mint load failed; will retry later")
+        _LOADED = True
     return mapping
 
 
