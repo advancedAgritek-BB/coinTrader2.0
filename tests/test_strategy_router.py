@@ -27,7 +27,6 @@ if not hasattr(sys.modules["solders.rpc.responses"], "GetTokenAccountBalanceResp
 
     sys.modules["solders.rpc.responses"].GetTokenAccountBalanceResp = DummyResp
     sys.modules["solders.rpc.responses"].GetAccountInfoResp = DummyResp
-sys.modules.setdefault("redis", types.ModuleType("redis"))
 
 from crypto_bot import strategy_router
 from crypto_bot.strategy_router import strategy_for, route, RouterConfig
@@ -166,7 +165,7 @@ def test_route_notifier(monkeypatch):
     assert msgs == ["\U0001F4C8 Signal: AAA \u2192 LONG | Confidence: 0.50"]
 
 
-def test_route_multi_tf_combo(monkeypatch, tmp_path):
+def test_route_multi_tf_combo(monkeypatch):
     def dummy(df, cfg=None):
         return 0.1, "long"
 
@@ -176,9 +175,6 @@ def test_route_multi_tf_combo(monkeypatch, tmp_path):
         lambda n: dummy if n == "dummy" else None,
     )
 
-    monkeypatch.setattr(strategy_router.commit_lock, "LOG_DIR", tmp_path)
-    monkeypatch.setattr(strategy_router, "LAST_REGIME_FILE", tmp_path / "last.json")
-
     cfg = RouterConfig.from_dict({"timeframe": "1m", "strategy_router": {"regimes": {"breakout": ["dummy"]}}})
 
     fn = route({"1m": "breakout", "15m": "trending"}, "cex", cfg)
@@ -186,8 +182,24 @@ def test_route_multi_tf_combo(monkeypatch, tmp_path):
     assert (score, direction) == (0.1, "long")
 
 
-def test_regime_commit_lock(tmp_path, monkeypatch):
-    monkeypatch.setattr(strategy_router.commit_lock, "LOG_DIR", tmp_path)
+def test_regime_commit_lock(monkeypatch):
+    import fakeredis
+    import threading
+
+    class FakeRedisWithLock(fakeredis.FakeRedis):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            self._lock = threading.Lock()
+
+        def lock(self, name, blocking_timeout=None):
+            return self._lock
+
+    fake = FakeRedisWithLock(decode_responses=True)
+    monkeypatch.setattr(
+        strategy_router.commit_lock.redis,
+        "Redis",
+        lambda *a, **k: fake,
+    )
 
     data = {
         "strategy_router": {
@@ -197,13 +209,13 @@ def test_regime_commit_lock(tmp_path, monkeypatch):
     }
     cfg = RouterConfig.from_dict(data)
     route("trending", "cex", cfg)
-    lock = tmp_path / "last_regime.json"
-    ts = lock.stat().st_mtime
+    key = "commit_lock:last_regime"
+    first = fake.get(key)
 
     fn = route("sideways", "cex", cfg)
 
     assert fn.__name__ == trend_bot.generate_signal.__name__
-    assert lock.stat().st_mtime == ts
+    assert fake.get(key) == first
 
 import pandas as pd
 from crypto_bot.strategy_router import route
@@ -362,6 +374,13 @@ def test_flash_crash_timeframe_override(monkeypatch):
         return 0.0, "none"
 
     monkeypatch.setattr(flash_crash_bot, "generate_signal", dummy)
+    import crypto_bot.meta_selector as meta_selector
+
+    monkeypatch.setitem(
+        meta_selector._STRATEGY_FN_MAP,
+        "flash_crash_bot",
+        dummy,
+    )
 
     data = {
         "mean_reverting_timeframe": "1h",
