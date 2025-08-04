@@ -145,19 +145,11 @@ class TestTelegramCtl:
         stub = types.ModuleType("crypto_bot.main")
         load_calls = []
 
-        def fake_load():
+        async def fake_reload(config, *_a, force=False, **_k):
             load_calls.append(True)
-            return {}
+            self.controller.state.pop("reload", None)
 
-        def maybe_reload_config(state, config):
-            if state.get("reload"):
-                cfg = fake_load()
-                config.clear()
-                config.update(cfg)
-                state.pop("reload", None)
-
-        stub.load_config = fake_load
-        stub.maybe_reload_config = maybe_reload_config
+        stub.reload_config = fake_reload
         monkeypatch.setitem(sys.modules, "crypto_bot.main", stub)
         main = stub
 
@@ -166,7 +158,7 @@ class TestTelegramCtl:
         assert "reload_config" in self.controller.calls
 
         config = {}
-        main.maybe_reload_config(self.controller.state, config)
+        await main.reload_config(config, None, None, None, None, force=True)
         assert not self.controller.state.get("reload")
         assert load_calls
 
