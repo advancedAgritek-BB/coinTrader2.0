@@ -73,6 +73,19 @@ async def load_token_mints(
 
     mapping: Dict[str, str] = {}
 
+    if CACHE_FILE.exists():
+        try:
+            with open(CACHE_FILE) as f:
+                cached = json.load(f)
+            if isinstance(cached, dict):
+                mapping.update({str(k).upper(): str(v) for k, v in cached.items()})
+                if not force_refresh:
+                    TOKEN_MINTS.update(mapping)
+                    _LOADED = True
+                    return mapping
+        except Exception as err:  # pragma: no cover - best effort
+            logger.error("Failed to read cache: %s", err)
+
     try:
         mapping.update(await fetch_from_jupiter())
     except Exception as exc:  # pragma: no cover - network failures
@@ -93,15 +106,6 @@ async def load_token_mints(
                     mapping[symbol.upper()] = mint
         except Exception as exc:  # pragma: no cover - network failures
             logger.error("Failed to fetch token registry: %s", exc)
-
-    if not mapping and CACHE_FILE.exists():
-        try:
-            with open(CACHE_FILE) as f:
-                cached = json.load(f)
-            if isinstance(cached, dict):
-                mapping.update({str(k).upper(): str(v) for k, v in cached.items()})
-        except Exception as err:  # pragma: no cover - best effort
-            logger.error("Failed to read cache: %s", err)
 
     if unknown:
         try:
