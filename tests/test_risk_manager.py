@@ -108,6 +108,22 @@ def test_allow_trade_rejects_when_flat():
     assert "volatility too low" in reason.lower()
 
 
+def test_allow_trade_rejects_when_hft_volatility_too_low():
+    prices = [1 + i * 1e-7 for i in range(20)]
+    data = {
+        "open": prices,
+        "high": [p + 1e-7 for p in prices],
+        "low": [p - 1e-7 for p in prices],
+        "close": prices,
+        "volume": [1] * 20,
+    }
+    df = pd.DataFrame(data)
+    cfg = RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
+    assert not allowed
+    assert "volatility too low for hft" in reason.lower()
+
+
 def test_allow_trade_allows_with_valid_data():
     data = {"open": [1] * 20, "high": [1] * 20, "low": [1] * 20, "close": [float(i) for i in range(20)], "volume": [1] * 20}
     df = pd.DataFrame(data)

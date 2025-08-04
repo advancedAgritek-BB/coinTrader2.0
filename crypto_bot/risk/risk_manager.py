@@ -249,13 +249,18 @@ class RiskManager:
             logger.info("[EVAL] %s", reason)
             return False, reason
 
+        if too_flat(df, 0.00001):
+            reason = "Volatility too low for HFT"
+            logger.info("[EVAL] %s", reason)
+            return False, reason
+
         if too_flat(df, 0.00005):
             reason = "Volatility too low"
             logger.info("[EVAL] %s", reason)
             return False, reason
 
         self.boost = 1.0
-        reason = "Trade allowed (relaxed for profitability testing)"
+        reason = "Trade allowed"
         logger.info(
             "Allow %s: vol=%.6f, flat=%s",
             symbol,
