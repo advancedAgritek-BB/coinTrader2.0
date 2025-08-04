@@ -150,6 +150,9 @@ async def load_token_mints(
     if mapping:
         TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
         _write_cache()
+    else:
+        logger.debug("Token mint load failed; will retry later")
+    _LOADED = True
         _LOADED = True
     else:
         logger.debug("Token mint load failed; will retry later")
