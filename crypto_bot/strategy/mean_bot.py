@@ -134,6 +134,8 @@ async def generate_signal(
     df["adx"] = adx
 
     width_series = (df["kc_h"] - df["kc_l"]).dropna()
+    if width_series.empty:
+        return 0.0, "none"
     if len(width_series) >= lookback:
         median_width = width_series.iloc[-lookback:].median()
         if width_series.iloc[-1] > median_width:
@@ -209,6 +211,15 @@ async def generate_signal(
         if MODEL is not None:
             try:  # pragma: no cover - best effort
                 ml_score = MODEL.predict(df)
+                score = (score + ml_score) / 2
+            except Exception:
+                pass
+        else:  # pragma: no cover - fallback
+            try:
+                import importlib
+
+                ml = importlib.import_module("crypto_bot.ml_signal_model")
+                ml_score = ml.predict_signal(df)
                 score = (score + ml_score) / 2
             except Exception:
                 pass
