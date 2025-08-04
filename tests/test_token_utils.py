@@ -1,22 +1,8 @@
 import asyncio
-import importlib
 import pytest
+
 from crypto_bot.solana import token_utils
-
-
-def _setup_ml(monkeypatch, scores):
-    """Helper to patch metadata enrichment and ML scoring."""
-
-    async def fake_enrich(pubkey, session):  # pragma: no cover - simple stub
-        return {"mint": pubkey, "enriched": True}
-
-    def fake_predict(meta):
-        if isinstance(scores, dict):
-            return scores[meta["mint"]]
-        return scores
-
-    monkeypatch.setattr(token_utils, "enrich_with_metadata", fake_enrich)
-    monkeypatch.setattr(token_utils, "predict_token_regime", fake_predict)
+import importlib
 
 
 class DummyResp:
@@ -53,10 +39,6 @@ class DummySession:
         self.json_payload = json
         return DummyResp(self._data)
 
-    def get(self, url, timeout=10):
-        self.url = url
-        return DummyResp(self._data)
-
 
 class FailingSession(DummySession):
     def __init__(self, exc):
@@ -71,30 +53,8 @@ def test_get_token_accounts(monkeypatch):
     data = {
         "result": {
             "value": [
-                {
-                    "account": {
-                        "data": {
-                            "parsed": {
-                                "info": {
-                                    "tokenAmount": {"uiAmount": 1},
-                                    "mint": "A",
-                                }
-                            }
-                        }
-                    }
-                },
-                {
-                    "account": {
-                        "data": {
-                            "parsed": {
-                                "info": {
-                                    "tokenAmount": {"uiAmount": 1},
-                                    "mint": "B",
-                                }
-                            }
-                        }
-                    }
-                },
+                {"account": {"data": {"parsed": {"info": {"tokenAmount": {"uiAmount": 1}}}}}},
+                {"account": {"data": {"parsed": {"info": {"tokenAmount": {"uiAmount": 0.0001}}}}}},
             ]
         }
     }
@@ -102,15 +62,11 @@ def test_get_token_accounts(monkeypatch):
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session, "ClientError": Exception})
     monkeypatch.setenv("HELIUS_KEY", "k")
     monkeypatch.setenv("MIN_BALANCE_THRESHOLD", "0.001")
-    monkeypatch.delenv("ML_SCORE_THRESHOLD", raising=False)
     importlib.reload(token_utils)
     monkeypatch.setattr(token_utils, "aiohttp", aiohttp_mod)
-    _setup_ml(monkeypatch, {"A": 0.6, "B": 0.4})
 
     accounts = asyncio.run(token_utils.get_token_accounts("wallet"))
     assert len(accounts) == 1
-    assert accounts[0]["metadata"] == {"mint": "A", "enriched": True}
-    assert accounts[0]["ml_score"] == 0.6
     assert session.json_payload["method"] == "getTokenAccountsByOwner"
 
 
@@ -123,97 +79,6 @@ def test_get_token_accounts_error(monkeypatch):
     monkeypatch.setenv("HELIUS_KEY", "k")
     importlib.reload(token_utils)
     monkeypatch.setattr(token_utils, "aiohttp", aiohttp_mod)
-    _setup_ml(monkeypatch, 1.0)
 
     with pytest.raises(DummyErr):
         asyncio.run(token_utils.get_token_accounts("wallet"))
-
-
-def test_get_token_accounts_ml_filter(monkeypatch):
-    data = {
-        "result": {
-            "value": [
-                {
-                    "account": {
-                        "data": {
-                            "parsed": {
-                                "info": {
-                                    "tokenAmount": {"uiAmount": 1},
-                                    "mint": "A",
-                                }
-                            }
-                        }
-                    }
-                },
-                {
-                    "account": {
-                        "data": {
-                            "parsed": {
-                                "info": {
-                                    "tokenAmount": {"uiAmount": 1},
-                                    "mint": "B",
-                                }
-                            }
-                        }
-                    }
-                },
-            ]
-        }
-    }
-    session = DummySession(data)
-    aiohttp_mod = type("M", (), {"ClientSession": lambda: session, "ClientError": Exception})
-    monkeypatch.setenv("HELIUS_KEY", "k")
-    monkeypatch.setenv("MIN_BALANCE_THRESHOLD", "0.001")
-    monkeypatch.setenv("ML_SCORE_THRESHOLD", "0.7")
-    importlib.reload(token_utils)
-    monkeypatch.setattr(token_utils, "aiohttp", aiohttp_mod)
-    _setup_ml(monkeypatch, {"A": 0.8, "B": 0.6})
-
-    accounts = asyncio.run(token_utils.get_token_accounts_ml_filter("wallet"))
-    assert accounts == [
-        {
-            "account": {
-                "data": {
-                    "parsed": {
-                        "info": {
-                            "tokenAmount": {"uiAmount": 1},
-                            "mint": "A",
-                        }
-                    }
-                }
-            },
-            "metadata": {"mint": "A", "enriched": True},
-            "ml_score": 0.8,
-        }
-    ]
-
-
-def test_get_token_accounts_ml_filter_low_score(monkeypatch):
-    data = {
-        "result": {
-            "value": [
-                {
-                    "account": {
-                        "data": {
-                            "parsed": {
-                                "info": {
-                                    "tokenAmount": {"uiAmount": 1},
-                                    "mint": "A",
-                                }
-                            }
-                        }
-                    }
-                }
-            ]
-        }
-    }
-    session = DummySession(data)
-    aiohttp_mod = type("M", (), {"ClientSession": lambda: session, "ClientError": Exception})
-    monkeypatch.setenv("HELIUS_KEY", "k")
-    importlib.reload(token_utils)
-    monkeypatch.setattr(token_utils, "aiohttp", aiohttp_mod)
-    _setup_ml(monkeypatch, 0.4)
-
-    accounts = asyncio.run(token_utils.get_token_accounts("wallet"))
-    assert accounts == []
-

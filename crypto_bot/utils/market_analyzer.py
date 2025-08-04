@@ -163,7 +163,7 @@ async def analyze_symbol(
             "direction": "none",
         }
 
-    if len(df) < 10:
+    if len(df) < 50:
         telemetry.inc("analysis.skipped_short_data")
         analysis_logger.info(
             "Skipping %s: insufficient data (%d candles)", symbol, len(df)
@@ -205,6 +205,7 @@ async def analyze_symbol(
 
         base_symbol = symbol.split("/")[0] if isinstance(symbol, str) else None
         bias = boost_factor(
+            bias_cfg.get("bull_fng", 50),
             bias_cfg.get("bull_sentiment", 50),
             base_symbol,
         )
@@ -387,28 +388,6 @@ async def analyze_symbol(
                 name = _fn_name(best_fn)
                 score = raw_score
                 direction = raw_dir if raw_score >= min_conf else "none"
-                if len(ranked) > 1:
-                    second = ranked[1]
-                    analysis_logger.info(
-                        "%s second %s %.4f %s",
-                        symbol,
-                        _fn_name(second[0]),
-                        second[1],
-                        second[2],
-                    )
-            else:
-                name = strategy_name(sub_regime, env)
-                score = 0.0
-                direction = "none"
-        elif eval_mode == "any":
-            candidates = [wrap(s) for s in get_strategies_for_regime(sub_regime, router_cfg)]
-            if not candidates:
-                candidates = [wrap(strategy_for(sub_regime, router_cfg))]
-            ranked = await run_candidates(df, candidates, symbol, cfg, sub_regime)
-            if ranked:
-                best_fn, score, direction = ranked[0]
-                selected_fn = best_fn
-                name = _fn_name(best_fn)
                 if len(ranked) > 1:
                     second = ranked[1]
                     analysis_logger.info(

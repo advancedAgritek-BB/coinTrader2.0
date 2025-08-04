@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, ValidationError, validator
 
 
 class ScannerConfig(BaseModel):
@@ -59,9 +59,6 @@ class SolanaScannerApiKeys(BaseModel):
     lunarcrush_api_key: str = Field(
         default_factory=lambda: os.getenv("LUNARCRUSH_API_KEY", "YOUR_KEY")
     )
-    pump_fun_api_key: str = Field(
-        default_factory=lambda: os.getenv("PUMP_FUN_API_KEY", "YOUR_KEY")
-    )
 
 
 class SolanaScannerConfig(BaseModel):
@@ -76,19 +73,9 @@ class SolanaScannerConfig(BaseModel):
         description="Scan interval in minutes",
     )
     max_tokens_per_scan: int = Field(
-        default=25,
+        default=200,
         ge=1,
         description="Max tokens to process per scan",
-    )
-    timeout_seconds: float = Field(
-        default=30.0,
-        ge=1.0,
-        description="Maximum seconds to watch for new tokens",
-    )
-    max_iterations: int = Field(
-        default=100,
-        ge=1,
-        description="Maximum iterations when scanning",
     )
     min_volume_usd: float = Field(
         default=10.0,
@@ -97,10 +84,6 @@ class SolanaScannerConfig(BaseModel):
     )
     gecko_search: bool = Field(
         default=True, description="Enable GeckoTerminal search fallback"
-    )
-    ml_filter: bool = Field(
-        default=False,
-        description="Skip new pools with low ML breakout probability",
     )
     # WebSocket / polling options
     helius_ws_url: str | None = Field(
@@ -111,18 +94,17 @@ class SolanaScannerConfig(BaseModel):
         ),
     )
     raydium_program_id: str | None = Field(
-        default="EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6oKEWSCPPu",
+        default="EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk",
         description="Raydium program ID for subscription",
     )
     pump_fun_program_id: str | None = Field(
-        default="EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6oKEWSCPPu",
-        description="Pump.fun program ID for subscription",
+        default=None, description="Pump.fun program ID for subscription"
     )
     use_ws: bool = Field(
         default=True, description="Prefer WebSocket over polling"
     )
     min_liquidity: float = Field(
-        default=100.0,
+        default=50.0,
         ge=0.0,
         description="Minimum liquidity for new pools (in SOL)",
     )

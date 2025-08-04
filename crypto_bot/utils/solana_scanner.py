@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from typing import List
 import aiohttp
 import ccxt.async_support as ccxt
@@ -19,12 +18,8 @@ logger = logging.getLogger(__name__)
 # Global min volume filter updated by ``get_solana_new_tokens``
 _MIN_VOLUME_USD = 0.0
 
-# Raydium endpoint proxied by Helius
-RAYDIUM_PROXY = "https://helius-proxy.raydium.io"
+RAYDIUM_URL = "https://api.raydium.io/pairs"
 PUMP_FUN_URL = "https://client-api.prod.pump.fun/v1/launches"
-
-# Optional API key loaded from environment
-PUMP_FUN_API_KEY = os.getenv("PUMP_FUN_API_KEY")
 
 
 async def search_geckoterminal_token(query: str) -> tuple[str, float] | None:
@@ -100,37 +95,6 @@ async def _close_exchange(exchange) -> None:
             pass
 
 
-async def _download_snapshot(mint: str, bucket: str):
-    """Return a snapshot dataframe for ``mint`` from Supabase.
-
-    The function downloads ``f"{mint}.parquet"`` from ``bucket`` using
-    ``SUPABASE_URL`` and ``SUPABASE_KEY`` environment variables.  ``None`` is
-    returned when the download or parsing fails.
-    """
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
-    if not url or not key:
-        logger.error("Missing Supabase credentials")
-        return None
-
-    try:  # pragma: no cover - optional dependency
-        from supabase import create_client
-        import pandas as pd
-    except Exception as exc:  # pragma: no cover - log import failure
-        logger.error("Supabase client unavailable: %s", exc)
-        return None
-
-    try:
-        client = create_client(url, key)
-        data = client.storage.from_(bucket).download(f"{mint}.parquet")
-        from io import BytesIO
-
-        return pd.read_parquet(BytesIO(data))
-    except Exception as exc:
-        logger.error("Failed to download snapshot for %s: %s", mint, exc)
-        return None
-
-
 async def _extract_tokens(data: list | dict) -> List[str]:
     """Return token mints from ``data`` respecting ``_MIN_VOLUME_USD``.
 
@@ -182,13 +146,11 @@ async def _extract_tokens(data: list | dict) -> List[str]:
     return results
 
 
-async def fetch_new_raydium_pools(limit: int) -> List[str]:
+async def fetch_new_raydium_pools(api_key: str, limit: int) -> List[str]:
     """Return new Raydium pool token mints."""
-    key = os.getenv("HELIUS_KEY", "")
-    url = f"{RAYDIUM_PROXY}/v0/tokens/new?api-key={key}&limit={limit}"
+    url = f"{RAYDIUM_URL}?apiKey={api_key}&limit={limit}"
     data = await _fetch_json(url)
-    if data is None:
-        logger.warning("Failed to fetch Raydium pools")
+    if not data:
         return []
     tokens = await _extract_tokens(data)
     return tokens[:limit]
@@ -198,8 +160,7 @@ async def fetch_pump_fun_launches(api_key: str, limit: int) -> List[str]:
     """Return recent Pump.fun launches."""
     url = f"{PUMP_FUN_URL}?api-key={api_key}&limit={limit}"
     data = await _fetch_json(url)
-    if data is None:
-        logger.warning("Failed to fetch Pump.fun launches")
+    if not data:
         return []
     tokens = await _extract_tokens(data)
     return tokens[:limit]
@@ -212,27 +173,18 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
 
     limit = int(config.get("max_tokens_per_scan", 0)) or 20
     _MIN_VOLUME_USD = float(config.get("min_volume_usd", 0.0))
-    keys_cfg = config.get("api_keys", {})
-    pump_key = str(
-        config.get("pump_fun_api_key")
-        or keys_cfg.get("pump_fun_api_key")
-        or PUMP_FUN_API_KEY
-        or ""
-    )
+    raydium_key = str(config.get("raydium_api_key", ""))
+    pump_key = str(config.get("pump_fun_api_key", ""))
     gecko_search = bool(config.get("gecko_search", True))
 
-    if not os.getenv("HELIUS_KEY"):
-        logger.warning("HELIUS_KEY not set")
-    if not pump_key:
-        logger.warning("pump_fun_api_key not set; skipping Pump.fun launches")
-
     tasks = []
-    coro = fetch_new_raydium_pools(limit)
-    if not asyncio.iscoroutine(coro):
-        async def _wrap(res=coro):
-            return res
-        coro = _wrap()
-    tasks.append(coro)
+    if raydium_key:
+        coro = fetch_new_raydium_pools(raydium_key, limit)
+        if not asyncio.iscoroutine(coro):
+            async def _wrap(res=coro):
+                return res
+            coro = _wrap()
+        tasks.append(coro)
     if pump_key:
         coro = fetch_pump_fun_launches(pump_key, limit)
         if not asyncio.iscoroutine(coro):
@@ -240,6 +192,9 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
                 return res
             coro = _wrap()
         tasks.append(coro)
+
+    if not tasks:
+        return []
 
     results = await asyncio.gather(*tasks)
     candidates: list[str] = []
@@ -299,39 +254,4 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
         if score >= min_score
     ]
     scored.sort(key=lambda x: x[1], reverse=True)
-
-    if not scored:
-        return []
-
-    if config.get("ml_filter"):
-        bucket = str(config.get("supabase_bucket", "snapshots"))
-        snapshots = await asyncio.gather(
-            *[
-                _download_snapshot(sym.split("/")[0], bucket)
-                for sym, _ in scored
-            ]
-        )
-
-        try:  # pragma: no cover - optional dependency
-            import regime_lgbm
-        except Exception:
-            probs = [1.0 for _ in snapshots]
-        else:
-            probs = []
-            for snap in snapshots:
-                try:
-                    prob = float(regime_lgbm.predict(snap))
-                except Exception:
-                    prob = 0.0
-                probs.append(prob)
-
-        filtered = [
-            (sym, score, prob)
-            for (sym, score), prob in zip(scored, probs)
-            if prob >= 0.5
-        ]
-
-        filtered.sort(key=lambda x: (x[1], x[2]), reverse=True)
-        return [sym for sym, _, _ in filtered]
-
     return [sym for sym, _ in scored]

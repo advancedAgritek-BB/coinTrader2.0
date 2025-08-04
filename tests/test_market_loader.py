@@ -1,15 +1,15 @@
 import asyncio
-import logging
-import time
-
-import ccxt
 import pandas as pd
 import pytest
+import logging
+import time
+import ccxt
 
 VALID_MINT = "So11111111111111111111111111111111111111112"
 
-from crypto_bot.utils.market_loader import load_kraken_symbols, fetch_ohlcv_async
 from crypto_bot.utils.market_loader import (
+    load_kraken_symbols,
+    fetch_ohlcv_async,
     fetch_order_book_async,
     load_ohlcv_parallel,
     update_ohlcv_cache,
@@ -23,30 +23,16 @@ class DummyExchange:
 
     def load_markets(self):
         return {
-            "BTC/USD": {"active": True, "type": "spot", "info": {"status": "online"}},
-            "LTC/USD": {"active": True, "type": "spot", "info": {"status": "online"}},
-            "ETH/USD": {"active": True, "type": "margin", "info": {"status": "online"}},
-            "XBT/USD-PERP": {"active": True, "type": "futures", "info": {"status": "online"}},
-            "XRP/USD": {"active": False, "type": "spot", "info": {"status": "delisted"}},
-            "LTC/USD": {"active": True, "type": "spot", "info": {"status": "online"}},
+            "BTC/USD": {"active": True, "type": "spot"},
+            "ETH/USD": {"active": True, "type": "margin"},
+            "XBT/USD-PERP": {"active": True, "type": "futures"},
+            "XRP/USD": {"active": False, "type": "spot"},
         }
-
-    def fetch_ticker(self, symbol):
-        data = {
-            "BTC/USD": {"active": True},
-            "ETH/USD": {"active": True},
-            "XBT/USD-PERP": {"active": True},
-            "XRP/USD": {"active": False},
-            "LTC/USD": {"active": False},
-        }
-        return data.get(symbol, {"active": False})
 
 
 def test_load_kraken_symbols_returns_active():
     ex = DummyExchange()
     symbols = asyncio.run(load_kraken_symbols(ex))
-    assert "BTC/USD" in symbols
-    assert "LTC/USD" not in symbols
     assert set(symbols) == {"BTC/USD"}
 
 
@@ -65,11 +51,9 @@ def test_load_kraken_symbols_logs_exclusions(caplog):
         symbols = asyncio.run(load_kraken_symbols(ex, exclude=["ETH/USD"]))
     assert set(symbols) == {"BTC/USD"}
     messages = [r.getMessage() for r in caplog.records]
-    assert any("Skipping symbol LTC/USD" in m for m in messages)
     assert any("Skipping symbol XRP/USD" in m for m in messages)
     assert any("Skipping symbol ETH/USD" in m for m in messages)
     assert any("Skipping symbol XBT/USD-PERP" in m for m in messages)
-    assert any("Skipping symbol LTC/USD" in m for m in messages)
     assert any("Including symbol BTC/USD" in m for m in messages)
 
 
@@ -83,12 +67,9 @@ def test_load_kraken_symbols_market_type_filter():
 class DummyTypeExchange:
     def load_markets(self):
         return {
-            "BTC/USD": {"active": True, "type": "spot", "info": {"status": "online"}},
-            "ETH/USD": {"active": True, "type": "future", "info": {"status": "online"}},
+            "BTC/USD": {"active": True, "type": "spot"},
+            "ETH/USD": {"active": True, "type": "future"},
         }
-
-    def fetch_ticker(self, symbol):
-        return {"active": symbol == "ETH/USD"}
 
 
 def test_market_type_filter():
@@ -108,16 +89,13 @@ class DummySliceExchange:
         self.called.append(market_type)
         data = {
             "spot": [
-                {"symbol": "BTC/USD", "active": True, "type": "spot", "info": {"status": "online"}},
+                {"symbol": "BTC/USD", "active": True, "type": "spot"},
             ],
             "future": [
-                {"symbol": "XBT/USD-PERP", "active": True, "type": "future", "info": {"status": "online"}},
+                {"symbol": "XBT/USD-PERP", "active": True, "type": "future"},
             ],
         }
         return data.get(market_type, [])
-
-    def fetch_ticker(self, symbol):
-        return {"active": True}
 
 
 def test_load_kraken_symbols_fetch_markets_by_type():
@@ -133,12 +111,9 @@ class DummySymbolFieldExchange:
 
     def load_markets(self):
         return {
-            "BTC/USD": {"symbol": "BTC/USD", "active": True, "type": "spot", "info": {"status": "online"}},
-            "ETH/USD": {"symbol": "ETH/USD", "active": False, "type": "spot", "info": {"status": "delisted"}},
+            "BTC/USD": {"symbol": "BTC/USD", "active": True, "type": "spot"},
+            "ETH/USD": {"symbol": "ETH/USD", "active": False, "type": "spot"},
         }
-
-    def fetch_ticker(self, symbol):
-        return {"active": symbol == "BTC/USD"}
 
 
 def test_load_kraken_symbols_handles_symbol_column():
@@ -731,27 +706,27 @@ def test_update_ohlcv_cache_retry_incomplete_ws():
         )
     )
     assert len(res["BTC/USD"]) == 10
-    # Partial histories are padded without additional REST retries
-    assert ex.fetch_calls == 1
+    assert ex.fetch_calls == 2
 
 
-def test_update_ohlcv_cache_accepts_incomplete_history():
+def test_update_ohlcv_cache_skip_after_retry(caplog):
     ex = AlwaysIncompleteExchange()
     cache: dict[str, pd.DataFrame] = {}
+    caplog.set_level(logging.WARNING)
     res = asyncio.run(
         update_ohlcv_cache(
             ex,
             cache,
             ["BTC/USD"],
             limit=10,
-            config={"min_history_fraction": 0.5},
             use_websocket=True,
             max_concurrent=1,
         )
     )
-    # Symbol should be retained with padded data
-    assert "BTC/USD" in res
-    assert len(res["BTC/USD"]) == 10
+    assert "BTC/USD" not in res
+    assert any(
+        "Skipping BTC/USD: only 4/10 candles" in r.getMessage() for r in caplog.records
+    )
 
 
 class PartialHistoryExchange:
@@ -779,8 +754,7 @@ def test_min_history_fraction_allows_partial_history():
             max_concurrent=1,
         )
     )
-    # Missing history is padded up to the requested limit
-    assert len(cache["BTC/USD"]) == 700
+    assert len(cache["BTC/USD"]) == 142
     market_loader._last_snapshot_time = 0
 
 
@@ -2146,34 +2120,6 @@ def test_dex_fetch_fallback_kraken(monkeypatch):
     assert calls["exchange"] == 1
 
 
-def test_fetch_dex_ohlcv_ignores_extra_gecko_data():
-    from crypto_bot.utils import market_loader
-
-    ex = DummyMultiTFExchange()
-    candles = [[1, 2, 3, 4, 5, 6]]
-    gecko_res = (candles, 10.0, 999.0)
-
-    data = asyncio.run(
-        market_loader.fetch_dex_ohlcv(
-            ex,
-            "FOO/USDC",
-            gecko_res=gecko_res,
-            min_volume_usd=1.0,
-        )
-    )
-    assert data == candles
-def test_fetch_dex_ohlcv_handles_three_element_gecko(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    async def fake_gecko(*_a, **_k):
-        return ([[0, 1, 2, 3, 4, 5]], 123.0, 456.0)
-
-    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
-
-    data = asyncio.run(market_loader.fetch_dex_ohlcv(None, "FOO/USDC", limit=1))
-    assert data == [[0, 1, 2, 3, 4, 5]]
-
-
 def test_update_multi_tf_ohlcv_cache_fallback_exchange(monkeypatch):
     from crypto_bot.utils import market_loader
 
@@ -2242,65 +2188,6 @@ def test_gecko_volume_priority(monkeypatch):
     )
     assert "FOO/USDC" in cache["1h"]
     assert list(q) == ["FOO/USDC"]
-
-
-def test_update_multi_tf_ohlcv_cache_usdc_gecko(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    calls = {"gecko": 0, "fetch": 0}
-
-    async def fake_gecko(*_a, **_k):
-        calls["gecko"] += 1
-        return [[0, 1, 2, 3, 4, 5]]
-
-    async def fake_fetch(*_a, **_k):
-        calls["fetch"] += 1
-        return [[0, 1, 2, 3, 4, 5]]
-
-    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
-
-    ex = DummyMultiTFExchange()
-    cache = {}
-    config = {"timeframes": ["1h"]}
-
-    cache = asyncio.run(
-        update_multi_tf_ohlcv_cache(ex, cache, ["BTC/USDC"], config, limit=1)
-    )
-
-    assert calls["gecko"] == 1
-    assert calls["fetch"] == 0
-    assert "BTC/USDC" in cache["1h"]
-    assert "volume" in cache["1h"]["BTC/USDC"].columns
-
-
-def test_update_multi_tf_ohlcv_cache_usdc_gecko_fallback(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    calls = {"gecko": 0, "fetch": 0}
-
-    async def fail_gecko(*_a, **_k):
-        calls["gecko"] += 1
-        return None
-
-    async def fake_fetch(*_a, **_k):
-        calls["fetch"] += 1
-        return [[0, 1, 2, 3, 4, 5]]
-
-    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
-
-    ex = DummyMultiTFExchange()
-    cache = {}
-    config = {"timeframes": ["1h"]}
-
-    cache = asyncio.run(
-        update_multi_tf_ohlcv_cache(ex, cache, ["BTC/USDC"], config, limit=1)
-    )
-
-    assert calls["gecko"] == 1
-    assert calls["fetch"] == 1
-    assert "BTC/USDC" in cache["1h"]
 
 
 def test_update_multi_tf_ohlcv_cache_start_since(monkeypatch):
@@ -2495,13 +2382,13 @@ def test_dynamic_limits_skip_extreme_age(monkeypatch):
         called = True
         return {}
 
-    now = 10_000_000
+    now = 1_000_000
     monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
     monkeypatch.setattr(market_loader.time, "time", lambda: float(now))
 
     async def listing_date(_sym):
-        # 2000 hours ago so hist_candles exceeds default threshold (1000)
-        return int(now * 1000 - 2000 * 3600 * 1000)
+        # 100 years ago
+        return int(now * 1000 - 100 * 365 * 24 * 3600 * 1000)
 
     monkeypatch.setattr(market_loader, "get_kraken_listing_date", listing_date)
 
@@ -2511,7 +2398,7 @@ def test_dynamic_limits_skip_extreme_age(monkeypatch):
             ex,
             {},
             ["BTC/USD"],
-            {"timeframes": ["1h"], "ohlcv_snapshot_limit": 1_000_000},
+            {"timeframes": ["1h"]},
             limit=100,
         )
     )

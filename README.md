@@ -30,13 +30,18 @@ On-chain DEX execution submits real transactions when not running in dry-run mod
 The bot selects a strategy by first classifying the current market regime. The
 `classify_regime` function computes EMA, ADX, RSI and Bollinger Band width to
 label conditions as `trending`, `sideways`, `breakout`, `mean-reverting` or
-`volatile`. At least **200** candles are recommended for reliable indicator
-calculations, though the classifier can operate with less history. When fewer
-than **5** candles are available the system assumes a `breakout` regime to
-avoid missing early momentum. Use `initial_history_candles` or
-`scan_lookback_limit` to control how many bars are fetched during startup.
-Strategies may run on different candle intervals, so the loader maintains a
-multi‑timeframe cache for each pair. The `timeframes` list in
+`volatile`. At least **200** candles are recommended for these indicators to
+be calculated reliably. When fewer than **5** candles are available the
+`volatile`. While **200** candles are recommended for these indicators to
+be calculated reliably, the classifier can operate with less history.
+`initial_history_candles` or `scan_lookback_limit` controls how many bars are
+fetched during startup and may be set below 200 if quicker initialization is
+preferred. When fewer than **5** candles are available the
+system assumes a `breakout` regime to avoid missing early momentum.
+With 5 to 199 candles the classifier still runs but accuracy may be
+reduced. Strategies may
+operate on different candle intervals, so the loader keeps a multi‑timeframe
+cache populated for each pair. The `timeframes` list in
 `crypto_bot/config.yaml` defines which intervals are stored and reused across
 the various bots.
 
@@ -48,14 +53,15 @@ back to a machine learning model whenever the indicator rules return
 directly in `crypto_bot.regime.model_data` as a base64 string and loaded
 automatically.
 `use_ml_regime_classifier` is enabled by default in
-`crypto_bot/regime/regime_config.yaml`, so the router falls back to this small
-model whenever the indicator rules return `"unknown"`. The EMA windows have been
-shortened to **8** and **21** and the ADX threshold lowered to switch regimes
-more quickly. By default the ML model runs once at least **5** candles are
-available (`ml_min_bars` in `crypto_bot/regime/regime_config.yaml`). You can
-replace that module with your own encoded model if desired. When enough history
-is present the ML probabilities are blended with the rule-based result using
-`ml_blend_weight` from `regime_config.yaml`.
+`crypto_bot/regime/regime_config.yaml`, so the router falls back to a small
+machine learning model whenever the indicator rules return `"unknown"`.
+The EMA windows have been shortened to **8** and **21** and the ADX threshold
+lowered to switch regimes more quickly. The fallback model is bundled in
+`crypto_bot.regime.model_data` as a base64 string and loaded automatically.
+By default the ML model runs once at least **5** candles are available (`ml_min_bars` in `crypto_bot/regime/regime_config.yaml`).
+You can replace that module with your own encoded model if desired.
+When enough history is present the ML probabilities are blended with the
+rule-based result using `ml_blend_weight` from `regime_config.yaml`.
 
 The regime configuration exposes additional tuning parameters:
 
@@ -66,7 +72,7 @@ The regime configuration exposes additional tuning parameters:
 * **pattern_min_conf** – minimum pattern confidence required to apply a score
   weight.
 * **ml_blend_weight** – blend ratio for combining ML and indicator scores.
-* **bull_sentiment** – LunarCrush sentiment score considered bullish.
+* **bull_fng** – Fear & Greed index level considered bullish.
 * **atr_baseline** – ATR level corresponding to a 1× score factor.
 
 ## Fast-Path Checks
@@ -95,7 +101,7 @@ needed.
    Install them with `pip install -r requirements.txt` when `rl_selector.enabled`
    is set to `true` in `crypto_bot/config.yaml`. Set `rl_selector.enabled: false`
    if you prefer not to install these extra dependencies.
-2. Create `crypto_bot/.env` and enter your API credentials. The `wallet_manager.py` script simply reads these values from `.env` without prompting when they are present.
+2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:
    ```bash
@@ -140,7 +146,7 @@ needed.
    Save the file and type `reload` in the console or send `/reload` via Telegram
    to apply the changes immediately.
 
-Populate `crypto_bot/.env` with your exchange credentials instead of running `wallet_manager.py` interactively. The wallet manager simply loads values from this file without prompting when they exist. Set `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` to load credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`.
+Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
 
 ## Configuration Files
 
@@ -165,26 +171,22 @@ KRAKEN_WS_TOKEN=your_ws_token          # optional for Kraken
 KRAKEN_API_TOKEN=your_api_token        # optional for Kraken
 TELEGRAM_TOKEN=your_telegram_token
 TELE_CHAT_ADMINS=123456,789012         # optional comma separated admin IDs
+TELE_CHAT_ADMINS=12345,67890          # comma-separated chat IDs
 GOOGLE_CRED_JSON=path_to_google_credentials.json
+TWITTER_SENTIMENT_URL=https://api.example.com/twitter-sentiment
 FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
 SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
 SOLANA_PRIVATE_KEY="[1,2,3,...]"       # required for Solana trades
-# defaults to https://api.helius.xyz/v0/?api-key=${HELIUS_KEY}
+# defaults to https://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
 SOLANA_RPC_URL=https://devnet.solana.com  # optional custom endpoint
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
 # SOLANA_RPC_URL=https://api.devnet.solana.com      # devnet example
 HELIUS_KEY=your_helius_api_key          # required for Jupiter/Helius registry
-# also needed for WebSocket pool monitoring
-MIN_BALANCE_THRESHOLD=0.001             # optional minimum account balance
-ML_SCORE_THRESHOLD=0.5                  # optional minimum ML score for breakout tokens
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
-PUMP_FUN_API_KEY=your_pump_fun_api_key # required for Solana scanner
 SUPABASE_URL=https://xyzcompany.supabase.co
 SUPABASE_KEY=your_service_key
-# optional custom model name stored in Supabase
-SUPABASE_MODEL_FILE=regime_lgbm.pkl
 LUNARCRUSH_API_KEY=your_lunarcrush_api_key  # optional, LunarCrush social metrics
 token_registry.refresh_interval_minutes=720  # optional cache update interval
 ```
@@ -196,18 +198,7 @@ token_registry.refresh_interval_minutes=720  # optional cache update interval
 admin chats. Omit it to restrict control to the single `chat_id` in the
 configuration file.
 
-`SUPABASE_URL` and `SUPABASE_KEY` are required for downloading models used by
-`regime_classifier`.  Use `SUPABASE_MODEL_FILE` to override the default model
-file name if needed.
-
-`HELIUS_KEY` must be defined so `get_token_accounts` can query the Helius DAS
-API. `MIN_BALANCE_THRESHOLD` sets the minimum token balance included in the
-results, while `ML_SCORE_THRESHOLD` controls the minimum `regime_lgbm` score a
-token must achieve to be considered a breakout.
-API. `MIN_BALANCE_THRESHOLD` is optional and sets the minimum token balance
-included in the results. `ML_SCORE_THRESHOLD` (default ``0.5``) filters out
-tokens whose machine-learning breakout probability falls below the
-threshold.
+`SUPABASE_URL` and `SUPABASE_KEY` are required for downloading models used by `regime_classifier`.
 
 ### Solana token registry
 
@@ -230,29 +221,8 @@ SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
 When using [Helius](https://www.helius.xyz/) endpoints, append `?api-key=${HELIUS_KEY}` to the URL:
 
 ```env
-SOLANA_RPC_URL=https://api.helius.xyz/v0/?api-key=${HELIUS_KEY}
+SOLANA_RPC_URL=https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
 ```
-
-New-token detection relies on a few Solana-specific API keys. Add them to
-`crypto_bot/.env` (or your environment) before running the scanner:
-
-```env
-HELIUS_KEY=your_helius_api_key         # used for Raydium data
-PUMP_FUN_API_KEY=your_pump_fun_api_key # required
-```
-
-If any of these keys are missing the scanner will not be able to discover new
-tokens. See the `solana_scanner.api_keys` section in
-[`crypto_bot/config.yaml`](crypto_bot/config.yaml) for how they are referenced
-in the configuration.
-
-### Token account enrichment
-
-`get_token_accounts` now asynchronously enriches SPL token accounts with
-metadata from the Helius DAS API. Each account is evaluated by the
-`regime_lgbm` model and only *breakout* tokens—those scoring at or above
-`ML_SCORE_THRESHOLD` (default `0.5`)—are returned. Use `MIN_BALANCE_THRESHOLD`
-to skip accounts whose balances fall below the desired minimum.
 
 You can generate a key and enable advanced features like **ShredStream** and **LaserStream** from the [Helius dashboard](https://dashboard.helius.xyz/). These streams can be configured directly in the bot's web dashboard.
 Install the `pythclient` package to fetch oracle prices:
@@ -320,29 +290,24 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **wallet_address** – destination wallet for DEX trades.
 * **solana_slippage_bps** – slippage tolerance for on-chain conversions.
 * **auto_convert_quote** – token used when converting idle balances (default `USDC`).
-* **onchain_min_volume_usd** – minimum 24h volume for on-chain pairs (default `100`). This value can be overridden in `config.yaml`.
+* **onchain_min_volume_usd** – minimum 24h volume for on-chain pairs (default `10_000_000`). This value can be overridden in `config.yaml`.
 * **symbol**/**symbols** – pairs to trade when not scanning automatically.
 * **scan_markets** – load all exchange pairs when `symbols` is empty (enabled by default).
 * **scan_in_background** – start the initial scan in the background so trading can begin immediately.
 * **excluded_symbols** – markets to skip during scanning.
-* **onchain_symbols** – optional list of base tokens traded on-chain. When this
-  list is omitted or empty, the Solana scanner automatically discovers
-  tradeable tokens. Providing entries disables automatic token scanning and
-  restricts swaps to those tokens only. Leave the list empty or remove the
-  setting entirely to re-enable scanning.
-  Tickers are automatically resolved to mint addresses using a hybrid
-  Jupiter/Helius registry cached at `cache/token_mints.json`. Each entry is
-  appended with the quote defined by `onchain_default_quote` (defaults to
-  `USDC`). If a ticker isn't found in the registry, the base value must be a
-  valid mint address. If your configuration still contains `solana_symbols`,
-  rename that section to `onchain_symbols`.
+* **onchain_symbols** – base tokens traded on-chain. Tickers are automatically
+  resolved to mint addresses using a hybrid Jupiter/Helius registry cached at
+  `cache/token_mints.json`. Each entry is appended with the quote defined by
+  `onchain_default_quote` (defaults to `USDC`). If a ticker isn't found in the
+  registry, the base value must be a valid mint address. If your configuration
+  still contains `solana_symbols`, rename that section to `onchain_symbols`.
 * **onchain_default_quote** – quote currency used when appending to entries in
   `onchain_symbols`. Defaults to `USDC`.
 * **allow_short** – enable short selling. Set to `true` only when your exchange account supports short selling.
 * Trades and swaps automatically retry transient errors up to three times.
 
 ### Market Scanning
-* **symbol_batch_size** – number of symbols processed each cycle (default `100`).
+* **symbol_batch_size** – number of symbols processed each cycle.
   The same batch size controls the initial market scan at startup where
   progress is logged after each batch.
 * **scan_lookback_limit** – default maximum candles per timeframe fetched during
@@ -355,7 +320,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   When set, the bot loads candles starting from this time (e.g. `365d` for one year)
   before switching to realtime updates.
 * **min_history_fraction** – minimum portion of candles that must be retrieved
-  for a pair to remain cached (default `0.2`; set to `0` to disable).
+  for a pair to remain cached. Defaults to `0.5`.
 * **cycle_lookback_limit** – candles fetched each cycle. Defaults to `150`.
 * **adaptive_scan.enabled** – turn on dynamic sizing.
 * **adaptive_scan.atr_baseline** – ATR level corresponding to a 1× factor.
@@ -378,64 +343,16 @@ symbol_score_weights:
 * If the cache file does not exist and the initial scan yields no symbols, the bot calls `tasks.refresh_pairs.refresh_pairs_async` to fetch a fresh list before aborting.
 * **min_symbol_age_days** – skip newly listed pairs.
 * **min_symbol_score** – minimum score required for trading.
-* **top_n_symbols** – maximum number of active markets (default `100`).
+* **top_n_symbols** – maximum number of active markets.
 * **max_age_days**, **max_change_pct**, **max_spread_pct**, **max_latency_ms**, **max_vol** – additional scanning limits.
 * **use_numba_scoring** – enable numba acceleration for symbol scoring when available.
 * **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle. See
   `scan_cex_arbitrage` in `crypto_bot/main.py` for multi-exchange support.
 * **solana_scanner.gecko_search** – query GeckoTerminal to verify volume for new Solana tokens.
-* **solana_scanner.use_ws** – subscribe to Raydium pools via WebSockets instead of polling.
-* **solana_scanner.helius_ws_url** – custom WebSocket endpoint (defaults to `wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}`).
-* **solana_scanner.raydium_program_id** – Raydium program ID to monitor.
-* **solana_scanner.min_liquidity** – skip pools with less liquidity.
-* **solana_scanner.ml_filter** – skip new pools with low ML breakout probability.
-* **solana_scanner.timeout_seconds** – abort a Solana scan after this many seconds.
-* **solana_scanner.filter_tf** – timeframe used when classifying new tokens.
-* **solana_scanner.filter_regime** – skip tokens that do not match these regimes.
 * **gecko_limit** – maximum simultaneous requests to GeckoTerminal. Reduce this if you encounter HTTP 429 errors.
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
 * **ticker_rate_limit** – delay in milliseconds after each ticker API call.
-* **ws_ticker_batch_size** – number of symbols per WebSocket ticker call.
-* The scanner runs in a dedicated background loop that updates the evaluation queue whenever new pools appear.
 * Solana tokens are filtered using symbol scoring; adjust `min_symbol_score` to control the threshold.
-* Informational logs indicate when a scan begins, how many tokens were found,
-  and when scanning is skipped because the scanner is disabled or tokens are
-  preconfigured. Scanning occurs in a background task so the main loop remains
-  responsive.
-
-Example configuration:
-
-```yaml
-solana_scanner:
-  ml_filter: false
-  filter_tf: 5m
-  filter_regime: [volatile, breakout, new_pool]
-```
-
-#### Breakout Arbitrage
-
-When the Solana runner predicts a breakout it can execute a cross-chain trade
-and hedge it on your exchange. Configure the `arbitrage` section so
-`cross_chain_trade` knows how to perform both legs:
-
-```yaml
-arbitrage:
-  exchange: null           # ccxt exchange instance for the CEX leg
-  ws_client: null          # optional websocket client
-  symbol: SOL/USDC         # market traded on the exchange
-  side: buy                # DEX side; the CEX uses the opposite
-  amount: 0.0              # notional quote amount
-  dry_run: true            # set to false to send real orders
-  slippage_bps: 50         # Raydium swap slippage tolerance
-  use_websocket: false     # confirm CEX order via WebSocket
-  notifier: null           # optional notifier for status messages
-  mempool_monitor: null    # optional Solana mempool monitor
-  mempool_cfg: {}
-```
-
-These fields are passed directly to `cross_chain_trade`, allowing the runner to
-attempt breakout arbitrage by swapping on Raydium and hedging on the CEX when
-probability warrants it.
 
 ### Risk Parameters
 * **risk** – default stop loss, take profit and drawdown limits. `min_volume` is set to `0.0001` to filter thin markets. The stop is 1.5× ATR and the take profit is 3× ATR by default.
@@ -449,10 +366,9 @@ probability warrants it.
   order may consume.
 * **weight_liquidity** – scoring weight for available pool liquidity on Solana pairs.
 * **volatility_filter** - skips trading when ATR is too low or funding exceeds `max_funding_rate`. The minimum ATR percent is `0.0005`.
-* **sentiment_filter** - checks LunarCrush sentiment to avoid bearish markets.
+* **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment to avoid bearish markets.
 * **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
 * **mempool_monitor** – pause or reprice when Solana fees spike.
-* **pool.ml_filter** – skip new pools with low ML breakout probability.
 * **gas_threshold_gwei** – abort scalper trades when priority fees exceed this.
 * **min_cooldown** – minimum minutes between trades.
 * **cycle_bias** – optional on-chain metrics to bias trades.
@@ -469,18 +385,10 @@ probability warrants it.
   taking and trailing stops. The trailing stop follows price by 2% after at
   least 1% gain. `momentum_bot` uses the `trailing_stop_factor` setting for an
   ATR-based stop.
-* **quick_sell_profit_pct**/**quick_sell_hold_timeout** – automatically close a
-  position when profit exceeds the configured percentage and it has been held for
-  at least this many seconds.
-
-Quick sell uses `quick_sell_profit_pct` as the profit target. Once a trade has
-been open longer than `quick_sell_hold_timeout` seconds and the unrealized gain
-exceeds this percentage, the position is closed immediately.
 
 ### Strategy and Signals
 * **strategy_allocation** – capital split across strategies.
-* **strategy_evaluation_mode** – how the router chooses a strategy. Options are
-  `mapped` (default), `best`, `ensemble` or `any`.
+* **strategy_evaluation_mode** – how the router chooses a strategy.
 * **ensemble_min_conf** – minimum confidence required for a strategy to
   participate in ensemble evaluation.
 * **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
@@ -552,7 +460,7 @@ regime_overrides:
   multi-exchange arbitrage strategy.
 * **scoring_weights** - weighting factors for regime confidence, symbol score and volume metrics.
 * **signal_fusion** – enable to combine scores from multiple strategies via a `fusion_method` for improved selection.
-* **strategy_router** - maps market regimes to lists of strategy names. Each regime also accepts a `<regime>_timeframe` key (e.g. `trending_timeframe: 1h`, `volatile_timeframe: 1m`). Use the `min_confidence` field (default `0.5`) to require stronger signal scores before a strategy is selected. The `meme_wave_bot` strategy is included in the default `volatile` regime.
+* **strategy_router** - maps market regimes to lists of strategy names. Each regime also accepts a `<regime>_timeframe` key (e.g. `trending_timeframe: 1h`, `volatile_timeframe: 1m`).
 * **mode_threshold**/**mode_degrade_window** - degrade to manual mode when auto selection underperforms.
 * **meta_selector**/**rl_selector** – experimental strategy routers. Enable these along with `signal_fusion` for improved strategy selection.
   Train the meta selector on your historical trade results with:
@@ -587,9 +495,6 @@ to the current regime are scored concurrently. The helper `run_candidates`
 ranks them by `score × edge` and executes the best result. Details about
 the second‑highest strategy are written to the CSV file defined by
 `second_place_csv`.
-When set to `any`, all strategies listed for the regime are scored in the
-same way but the `ensemble_min_conf` threshold is ignored, so even low
-confidence signals may trigger a trade.
 #### Bounce Scalper
 The bounce scalper looks for short-term reversals when a volume spike confirms multiple down or up candles. Scores are normalized with ATR and trades use ATR-based stop loss and take profit distances. Each signal observes `min_cooldown` before re-entry. Set `pattern_timeframe` (default `1m`) to fetch a separate candle interval for confirming engulfing or hammer patterns. When in cooldown the scalper only signals if the recent win rate falls below 50%, effectively skipping the cooldown during a drawdown. Set `cooldown_enabled` to `false` to disable this behaviour.
 
@@ -695,7 +600,6 @@ flash_crash_scalper:
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options. A separate cache is maintained for each timeframe listed in `timeframes`.
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis. Default `timeframe` is `15m` and `timeframes` include `1m`, `5m`, `15m`, and `1h` (Coinbase lacks a `4h` interval).
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options. The snapshot limit defaults to `500`.
-* **skip_age_threshold_candles** – skip OHLCV history when a market's listing age exceeds this many candles (default `1000`). Only candles older than this threshold are discarded and the pair is still evaluated with the most recent candles. Raising this value may avoid the "Skipping OHLCV history" log.
 * **loop_interval_minutes** – delay between trading cycles (default `0.05`). Shorter delays increase CPU usage as the loop runs more often.
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
 * **ohlcv_batch_size** – number of symbols grouped per OHLCV request.
@@ -732,7 +636,6 @@ within the limit:
 * **ohlcv_batch_size** – number of symbols loaded per OHLCV batch.
 * **ticker_backoff_initial** – seconds to wait after a ticker failure.
 * **ticker_backoff_max** – maximum delay between ticker retries.
-* **ws_ticker_batch_size** – maximum symbols per WebSocket ticker request.
 
 Start with low values (e.g. 2 tickers and 4 OHLCV requests) and raise them only
 if you remain under the limit. If you notice log messages like
@@ -741,23 +644,17 @@ these settings or the batch size so each cycle completes without hitting the
 cap.
 ## Exchange Setup for U.S. Users
 
-When running the bot in a non-interactive environment (e.g. Docker or a
-scheduled job) the process cannot prompt for missing credentials. Set the
-following environment variables before startup:
-
-- `COINBASE_API_KEY`, `COINBASE_API_SECRET`, `COINBASE_API_PASSPHRASE` –
-  required for Coinbase
-- `KRAKEN_API_KEY`, `KRAKEN_API_SECRET` – required for Kraken
-
-If these are absent and standard input is not a TTY, the bot will exit with an
-error. Optional variables like `TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID` enable
-Telegram notifications.
 
 1. Create API keys on **Coinbase Advanced Trade** or **Kraken**.
-2. Fill out `crypto_bot/.env` with your API keys and optional `FERNET_KEY`.
-   Running `python crypto_bot/wallet_manager.py` will simply load these values
-   from `.env` without prompting. Environment variables take precedence over any
-   values stored in `user_config.yaml`.
+2. Run `python crypto_bot/wallet_manager.py` to generate `user_config.yaml`. Any
+   credentials found in the environment will be used automatically.
+3. Place your API keys in `crypto_bot/.env` as shown in the configuration
+   section above. Environment variables take precedence over values stored in
+   `user_config.yaml`.
+3. Fill out `crypto_bot/.env` with your API keys and optional `FERNET_KEY`.
+   Environment variables take precedence over values stored in
+   `user_config.yaml`. If you prefer to enter credentials interactively,
+   leave the entries commented out.
 
    ```env
    # EXCHANGE=coinbase  # or kraken
@@ -772,20 +669,6 @@ Telegram notifications.
    # FERNET_KEY=your_generated_fernet_key
    ```
 
-### Required Environment Variables
-
-When running the bot in a non-interactive environment (such as Docker or CI),
-provide credentials through environment variables.  The wallet manager expects
-the following values to be set:
-
-* `COINBASE_API_KEY`, `COINBASE_API_SECRET`, `COINBASE_API_PASSPHRASE` – Coinbase credentials
-* `KRAKEN_API_KEY`, `KRAKEN_API_SECRET` – Kraken credentials
-* `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` – Telegram notifications
-* `WALLET_ADDRESS` – public wallet address
-
-If these are missing and `user_config.yaml` is not present, the bot will exit
-instead of prompting for input.
-
 ### Telegram Setup
 
 The built-in Telegram interface is provided by the `TelegramBotUI` class in
@@ -798,16 +681,22 @@ The built-in Telegram interface is provided by the `TelegramBotUI` class in
      token: your_telegram_token
      chat_id: your_chat_id
      chat_admins: your_chat_id
-     trade_updates: true  # set to false to disable trade notifications
+     trade_updates: true
      message_interval: 1.0
      max_messages_per_minute: 20
    ```
 
-   The bot reads these values only from `config.yaml` (not `user_config.yaml`).
-   Toggle `trade_updates` to `true` for trade entry and exit messages or to
-   `false` to silence them. Set `chat_admins` to a comma-separated list of
-   Telegram chat IDs allowed to control the bot. You can also provide this list
-   via the `TELE_CHAT_ADMINS` environment variable.
+   The bot reads the chat ID and token from `config.yaml` (not
+   `user_config.yaml`). Set `trade_updates` to `false` to disable trade entry
+   and exit messages.
+     trade_updates: true  # set false to disable trade notifications
+   ```
+
+   The bot reads these values only from `config.yaml`. Disable
+   `trade_updates` if you don't want trade entry and exit messages.
+   Set `chat_admins` to a comma-separated list of Telegram chat IDs allowed to
+   control the bot. You can also provide this list via the `TELE_CHAT_ADMINS`
+   environment variable.
 2. Send `/start` to your bot so it can message you. Use `/menu` at any time to
    open an interactive button menu—**Start**, **Stop**, **Status**, **Log**,
    **Rotate Now**, **Toggle Mode**, **PnL**, **Trades**, **Edit Config**,
@@ -855,6 +744,13 @@ If the call fails or you do not receive a message, check for these common issues
 * **Wrong chat ID** – the bot does not have permission to message that chat.
 * **Bot not started** – you have not sent `/start` to your bot yet.
 * **Network restrictions** – firewalls or proxies are blocking Telegram.
+
+### Twitter Sentiment API
+
+Add `TWITTER_SENTIMENT_URL` to `crypto_bot/.env` to point at the sentiment
+service used by `sentiment_filter.py`. If this variable is not provided, the bot
+defaults to the placeholder `https://api.example.com/twitter-sentiment`, so
+sentiment fetches will fail until a real URL is supplied.
 
 ### Funding Rate API
 
@@ -1114,19 +1010,18 @@ scan_markets: true    # default
 scan_in_background: true
 symbols: []            # automatically populated
 onchain_default_quote: USDT
-onchain_symbols: []                            # add tokens to disable scanning
-                                                # quote appended automatically to
-                                                # mints via Jupiter/Helius
+onchain_symbols: ["SOL", "BONK", "AI16Z"]             # quote appended automatically
+                                                # to mints via Jupiter/Helius
                                                 # base must be mint if unknown
 excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 2           # skip pairs with less history
-symbol_batch_size: 100           # symbols processed per cycle
+symbol_batch_size: 50            # symbols processed per cycle
 scan_lookback_limit: 700         # max candles per pair during startup
                                  # trimmed using Kraken listing data
 scan_deep_top: 50                # deep load this many ranked symbols
 start_since: 365d                # backfill candles this far in the past
-min_history_fraction: 0.2        # require at least 20% of history
+min_history_fraction: 0.5        # minimum portion of history required
 cycle_lookback_limit: 150        # candles fetched each cycle
 max_spread_pct: 4.0              # skip pairs with wide spreads
 ```
@@ -1175,8 +1070,8 @@ to use the provided list without any filtering:
 
 ```yaml
 symbol_filter:
-  min_volume_usd: 100
-  volume_percentile: 20          # keep pairs above this volume percentile
+  min_volume_usd: 500
+  volume_percentile: 5           # keep pairs above this volume percentile
   change_pct_percentile: 5       # require 24h change in the top movers
   max_spread_pct: 4              # allow spreads up to 4%
   uncached_volume_multiplier: 1.5  # extra volume when not cached
@@ -1192,9 +1087,8 @@ max_concurrent_ohlcv: 2          # simultaneous OHLCV requests during startup
   ticker_rate_limit: 0             # ms delay after each ticker request
   ticker_backoff_initial: 2        # seconds after first failure
   ticker_backoff_max: 60           # cap for exponential backoff
-  ws_ticker_batch_size: 100        # symbols per watchTickers call
   initial_timeframes: [1m, 5m, 15m, 1h]  # preloaded intervals (4h unsupported on Coinbase)
-initial_history_candles: 10     # candles fetched per timeframe initially
+initial_history_candles: 700     # candles fetched per timeframe initially
 ```
 
 For thin markets you may want to relax the filters and trading
@@ -1221,7 +1115,7 @@ data is fetched for regime detection and correlation checks before live trading
 starts.
   max_concurrent_ohlcv: 10       # limit OHLCV requests when loading history
   initial_timeframes: [1h, 1d]  # timeframes fetched for new symbols
-  initial_history_candles: 10   # candles per timeframe on first load
+  initial_history_candles: 300   # candles per timeframe on first load
 ```
 
 * **max_concurrent_ohlcv** – cap simultaneous OHLCV requests while scoring new symbols (default `10`).
@@ -1230,7 +1124,7 @@ starts.
 * **ticker_rate_limit** – delay applied after ticker requests in milliseconds.
 * **initial_timeframes** – candle intervals pulled when caching a new market (default `[1h, 1d]`; Coinbase does not provide 4h candles).
 * **initial_history_candles** – number of candles per timeframe loaded on first
-  use (default `10`). The loader observes Kraken listing dates so it never
+  use (default `300`). The loader observes Kraken listing dates so it never
   requests data preceding a pair's debut.
 
 Kraken labels Bitcoin as `XBT` in its market identifiers. The bot
@@ -1457,7 +1351,7 @@ the priority fee exceeds this limit.
 This module watches for new liquidity pools on Solana and attempts to buy
 into meme tokens before the crowd. Events from a Helius endpoint are
 filtered through safety checks, scored, and executed using Jupiter quotes
-bundled via Jito. A LunarCrush sentiment score can boost the ranking when the
+bundled via Jito. A Twitter sentiment score can boost the ranking when the
 tweet volume is high.
 
 ### Configuration
@@ -1471,11 +1365,10 @@ URL should reference this key so Helius can authorize the requests:
 meme_wave_sniper:
   enabled: true
   pool:
-    url: https://api.helius.xyz/v0/?api-key=${HELIUS_KEY}
+    url: https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
     interval: 5
     websocket_url: wss://atlas-mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
-    raydium_program_id: 675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8
-    ml_filter: false
+    raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
   scoring:
     weight_liquidity: 1.0
     weight_tx: 1.0
@@ -1499,19 +1392,11 @@ PoolWatcher -> Safety -> Score -> RiskTracker -> Executor -> Exit
 
 Sniping begins immediately at startup. The initial symbol scan now runs in the
 background so new pools can be acted on without waiting for caches to fill.
-The Solana scanner continues to run in its own loop, queuing tokens as they
-appear. Disable this behaviour by setting `solana_scanner.enabled` to `false`.
 
-Before any token from the scanner is queued for execution its price history is
-fetched and passed through `classify_regime_cached`. Only those labeled with one
-of the regimes in `solana_scanner.filter_regime` at `solana_scanner.filter_tf`
-are enqueued.
-
-API requirements: [Helius](https://www.helius.xyz/) for pool data (also used to
-retrieve Raydium information), [Jupiter](https://jup.ag/) for quotes,
-[Jito](https://www.jito.network/) for bundle submission, and a LunarCrush API
-key for sentiment scores. A Pump.fun API key is required for discovering new
-tokens.
+API requirements: [Helius](https://www.helius.xyz/) for pool data,
+[Jupiter](https://jup.ag/) for quotes, [Jito](https://www.jito.network/) for
+bundle submission, and a [Twitter](https://developer.twitter.com/) token for
+sentiment scores.
 
 ### Monitoring Raydium Pools via WebSockets
 
@@ -1525,20 +1410,15 @@ real time:
    plans; standard tiers should use the mainnet URL shown above.
 3. Run `python -m crypto_bot.solana.pool_ws_monitor`.
 
-`pool_ws_monitor.py` subscribes to the Raydium program and yields only those
-transactions that `predict_regime` classifies as "breakout". Use
-`watch_pool(api_key, program_id)` to get an async generator of breakout events:
+`pool_ws_monitor.py` subscribes to the Raydium program and prints each update:
 
 ```python
-import os
 import asyncio
-from crypto_bot.solana.pool_ws_monitor import watch_pool
+from crypto_bot.solana.pool_ws_monitor import watch_pools
 
 async def main():
-    api_key = os.environ.get("HELIUS_KEY", "")
-    program = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
-    async for event in watch_pool(api_key, program):
-        print("Breakout event:", event)
+    async for event in watch_pools():
+        print(event)
 
 asyncio.run(main())
 ```
@@ -1547,7 +1427,7 @@ asyncio.run(main())
 
 The meme wave bot trades sudden hype cycles discovered on centralized
 exchanges and in Solana mempools. It monitors for sharp volume spikes,
-mempool activity and optional social sentiment before buying. Most
+mempool activity and optional Twitter excitement before buying. Most
 profits will likely arise from Solana where new tokens see the fastest
 hype waves.
 Add a `meme_wave_bot` section to `crypto_bot/config.yaml`:
@@ -1555,13 +1435,16 @@ Add a `meme_wave_bot` section to `crypto_bot/config.yaml`:
 ```yaml
 meme_wave_bot:
   vol_spike_thr: 2.0        # volume spike multiple triggering the bot
-  sentiment_thr: 0.6        # minimum LunarCrush sentiment score
+  sentiment_thr: 0.6        # minimum sentiment score on Twitter
+  twitter_query: null       # optional query for the sentiment API
 ```
 
 - **vol_spike_thr** – ratio of current volume to the recent average required
   to consider entering a trade.
-- **sentiment_thr** – threshold for the normalized LunarCrush sentiment score
+- **sentiment_thr** – threshold for the normalized Twitter sentiment score
   before a meme wave trade is executed.
+- **twitter_query** – search term used when fetching sentiment. If omitted the
+  trading symbol is used.
 
 ### Backtesting
 
@@ -1585,20 +1468,10 @@ The resulting statistics are written automatically to
 `crypto_bot/logs/strategy_stats.json`. The home page indicates whether the bot
 is running so you can quickly see if it has stopped.
 
-You can also replay historical pool creations on Solana. The
-`backtest.historical_pools` module queries QuickNode for past events and runs
-the sniper heuristics on each one:
-
-```bash
-python -m backtest.historical_pools \
-    --start 2024-01-01 --end 2024-01-02 \
-    --rpc-url https://api.helius.xyz/v0/?api-key=YOUR_KEY
-```
-
 ## Meme Wave Rider
 
 This scalper rides trending meme coins by watching mempool volume alongside
-LunarCrush sentiment. A rolling volume window flags spikes in Solana swaps while a
+Twitter sentiment. A rolling volume window flags spikes in Solana swaps while a
 sentiment API call checks for positive chatter. When both metrics exceed your
 thresholds, a trade is executed using `solana_trading.py`.
 
@@ -1658,19 +1531,14 @@ and caps the result between 0 and 1.
 
 The optional `coinTrader_Trainer` package can bootstrap machine learning models
 used by the regime classifier. After generating trade logs, run the trainer to
-upload a LightGBM model to Supabase.  The trainer now supports ingesting
-**new-pool** events captured by the Solana scanner.  These events should be
-labeled `"new_pool"` when preparing the training dataset so the model learns
-to recognize the volatile conditions surrounding freshly created pools.  After
-adding the new data, execute the trainer:
+upload a LightGBM model to Supabase:
 
 ```bash
 python ml_trainer.py train regime --use-gpu --federated
 ```
 
 Ensure `SUPABASE_URL` and `SUPABASE_KEY` are set in `crypto_bot/.env` so the
-upload succeeds. Optionally set `SUPABASE_MODEL_FILE` if you renamed the
-stored model. Set `use_ml_regime_classifier: true` in
+upload succeeds. Set `use_ml_regime_classifier: true` in
 `crypto_bot/regime/regime_config.yaml` to enable downloads of the trained model
 when the bot starts.
 

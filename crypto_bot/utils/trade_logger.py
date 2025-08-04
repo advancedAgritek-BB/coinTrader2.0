@@ -1,7 +1,6 @@
 import pandas as pd
 from typing import Dict
 from datetime import datetime
-import os
 from dotenv import dotenv_values
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -48,38 +47,3 @@ def log_trade(order: Dict, is_stop: bool = False) -> None:
             sheet.append_row([record[k] for k in ["symbol", "side", "amount", "price", "timestamp"]])
     except Exception:
         pass
-
-
-def upload_trade_record(
-    symbol: str,
-    entry_price: float,
-    exit_price: float,
-    side: str,
-    timestamp: str | None = None,
-) -> None:
-    """Upload a trade record to Supabase if credentials are available."""
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
-    if not url or not key:
-        return
-
-    try:  # pragma: no cover - optional dependency
-        from supabase import create_client
-    except Exception as exc:  # pragma: no cover - log import failure
-        logger.error("Supabase client unavailable: %s", exc)
-        return
-
-    record = {
-        "symbol": symbol,
-        "entry_price": entry_price,
-        "exit_price": exit_price,
-        "side": side,
-        "timestamp": timestamp or datetime.utcnow().isoformat(),
-    }
-    try:
-        table = os.getenv("SUPABASE_TRADE_TABLE", "trade_logs")
-        client = create_client(url, key)
-        client.table(table).insert(record).execute()
-        logger.info("Uploaded trade to Supabase: %s", record)
-    except Exception as exc:
-        logger.error("Failed to upload trade record: %s", exc)

@@ -1,6 +1,6 @@
 """Utilities for loading trading symbols and fetching OHLCV data."""
 
-from typing import Any, Deque, Dict, Iterable, List
+from typing import Iterable, List, Dict, Any, Deque
 from dataclasses import dataclass
 import asyncio
 import inspect
@@ -58,8 +58,6 @@ REST_OHLCV_TIMEOUT = 90
 # Number of consecutive failures allowed before disabling a symbol
 MAX_OHLCV_FAILURES = 10
 MAX_WS_LIMIT = 500
-# Skip fetching historical OHLCV if listing age exceeds this many candles
-SKIP_AGE_THRESHOLD_CANDLES = 1000
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 STATUS_UPDATES = True
 SEMA: asyncio.Semaphore | None = None
@@ -525,20 +523,9 @@ async def load_kraken_symbols(
         df.drop(columns=["symbol"], inplace=True)
     df.reset_index(inplace=True)
 
-    # Fill missing active flag with False
-    df["active"] = df["active"].fillna(False)
-
+    df["active"] = df.get("active", True).fillna(True)
     df["reason"] = None
-    df.loc[~df["active"], "reason"] = "inactive (CCXT flag)"
-
-    for idx, row in df.iterrows():
-        info = row.get("info", {})
-        if not isinstance(info, dict):
-            df.at[idx, "reason"] = "missing info dict"
-            continue
-        status = str(info.get("status", "")).lower()
-        if status != "online":
-            df.at[idx, "reason"] = f"status '{status}' (not online)"
+    df.loc[~df["active"], "reason"] = "inactive"
 
     mask_type = df.apply(lambda r: is_symbol_type(r.to_dict(), allowed_types), axis=1)
     df.loc[df["reason"].isna() & ~mask_type, "reason"] = (
@@ -549,50 +536,13 @@ async def load_kraken_symbols(
 
     df.loc[df["reason"].isna() & df["symbol"].isin(exclude_set), "reason"] = "excluded"
 
-    if hasattr(exchange, "fetch_ticker"):
-        fetcher = getattr(exchange, "fetch_ticker")
-        for idx, row in df[df["reason"].isna()].iterrows():
-            try:
-                if asyncio.iscoroutinefunction(fetcher):
-                    ticker = await fetcher(row["symbol"])
-                else:
-                    ticker = await asyncio.to_thread(fetcher, row["symbol"])
-            except Exception as exc:  # pragma: no cover - safety
-                logger.debug("fetch_ticker failed for %s: %s", row["symbol"], exc)
-                continue
-            if isinstance(ticker, dict) and ticker.get("active") is False:
-                df.at[idx, "reason"] = "inactive (ticker)"
-
     symbols: List[str] = []
     for row in df.itertuples():
         if row.reason:
             logger.debug("Skipping symbol %s: %s", row.symbol, row.reason)
-            continue
-
-        ticker: Dict[str, Any] | None = None
-        try:
-            fetcher = getattr(exchange, "fetch_ticker", None)
-            if fetcher is None:
-                raise AttributeError("exchange lacks fetch_ticker")
-            if asyncio.iscoroutinefunction(fetcher):
-                ticker = await fetcher(row.symbol)
-            else:
-                ticker = await asyncio.to_thread(fetcher, row.symbol)
-        except Exception as exc:  # pragma: no cover - safety
-            logger.debug(
-                "Skipping symbol %s: fetch_ticker failed: %s", row.symbol, exc
-            )
-            continue
-
-        if not isinstance(ticker, dict) or ticker.get("active") is not True:
-            logger.debug(
-                "Skipping symbol %s: ticker inactive or missing active flag",
-                row.symbol,
-            )
-            continue
-
-        logger.debug("Including symbol %s", row.symbol)
-        symbols.append(row.symbol)
+        else:
+            logger.debug("Including symbol %s", row.symbol)
+            symbols.append(row.symbol)
 
     if not symbols:
         logger.warning("No active trading pairs were discovered")
@@ -1175,70 +1125,153 @@ async def fetch_ohlcv_async(
 
 
 async def fetch_geckoterminal_ohlcv(
-    sym: str,
-    limit: int = 100,
+    symbol: str,
     timeframe: str = "1h",
-    **_unused: Any,
-) -> pd.DataFrame:
-    """Return GeckoTerminal OHLCV data for ``sym``.
+    limit: int = 100,
+    *,
+    min_24h_volume: float = 0.0,
+    return_price: bool = False,
+) -> tuple[list, float] | tuple[list, float, float] | None:
+    """Return OHLCV data and 24h volume for ``symbol`` from GeckoTerminal.
 
-    Parameters
-    ----------
-    sym:
-        Trading pair in the form ``"BASE/QUOTE"``. Only the base token is
-        used in the query.
-    limit:
-        Maximum number of candles to fetch (default 100).
-    timeframe:
-        Candle timeframe such as ``"1h"`` or ``"1m"``.
-
-    Returns
-    -------
-    pandas.DataFrame
-        DataFrame indexed by timestamp with columns ``open``, ``high``,
-        ``low``, ``close`` and ``volume``. ``volume`` represents USD volume.
+    When ``return_price`` is ``True`` the pool price is returned instead of the
+    reserve liquidity value.
     """
 
-    base = sym.split("/", 1)[0]
-    url = (
-        "https://api.geckoterminal.com/api/v2/networks/solana/tokens/"
-        f"{base}/ohlcv/{timeframe}?limit={int(limit)}"
-    )
+    limit = min(int(limit), 720)
+    from urllib.parse import quote_plus
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                resp.raise_for_status()
-                payload = await resp.json()
-    except Exception:  # pragma: no cover - network errors
-        return pd.DataFrame(
-            columns=["timestamp", "open", "high", "low", "close", "volume"]
-        ).set_index("timestamp")
+    async with GECKO_SEMAPHORE:
+        # Validate symbol before making any requests
+        try:
+            token_mint, quote = symbol.split("/", 1)
+        except ValueError:
+            token_mint, quote = symbol, ""
+        if quote != "USDC" or not _is_valid_base_token(token_mint):
+            return None
 
-    candles = (
-        payload.get("data", {})
-        .get("attributes", {})
-        .get("ohlcv_list")
-        or []
-    )
+        if symbol in GECKO_UNAVAILABLE:
+            return None
 
-    df = pd.DataFrame(
-        candles,
-        columns=[
-            "timestamp",
-            "open",
-            "high",
-            "low",
-            "close",
-            "volume_usd",
-        ],
-    )
-    if df.empty:
-        return df.set_index(pd.Index([], name="timestamp"))
+        cached = GECKO_POOL_CACHE.get(symbol)
+        is_cached = cached is not None and cached[4] == limit
+        if not _is_valid_base_token(token_mint):
+            return None
 
-    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s")
-    df = df.set_index("timestamp").rename(columns={"volume_usd": "volume"})
-    return df
+        volume = 0.0
+        reserve = 0.0
+        price = 0.0
+        data: dict | None = None
+
+        pool_addr = ""
+        attrs: dict = {}
+        if is_cached:
+            pool_addr, volume, reserve, price, _ = cached
+
+        backoff = 1
+        for attempt in range(3):
+            try:
+                if not is_cached:
+                    query = quote_plus(symbol)
+                    search_url = "https://api.geckoterminal.com/api/v2/search/pools"
+                    params = {"query": query, "network": "solana"}
+                    search_data = await gecko_request(search_url, params=params)
+                    if not search_data:
+                        logger.info("token not available on GeckoTerminal: %s", symbol)
+                        logger.info("pair not available on GeckoTerminal: %s", symbol)
+                        GECKO_UNAVAILABLE.add(symbol)
+                        return None
+
+                    items = search_data.get("data") or []
+                    if not items:
+                        mint = await get_mint_from_gecko(token_mint)
+                        if mint and mint != token_mint:
+                            params["query"] = quote_plus(f"{mint}/USDC")
+                            search_data = await gecko_request(search_url, params=params)
+                            items = search_data.get("data") or [] if search_data else []
+                        if mint:
+                            params = {"query": mint, "network": "solana"}
+                            search_data = await gecko_request(search_url, params=params)
+                            items = search_data.get("data") or [] if search_data else []
+                            token_mint = mint
+                        if not items:
+                            logger.info("pair not available on GeckoTerminal: %s", symbol)
+                            GECKO_UNAVAILABLE.add(symbol)
+                            return None
+
+                    first = items[0]
+                    attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
+                    if not attrs:
+                        helius_map = await fetch_from_helius([token_mint])
+                        helius_mint = helius_map.get(token_mint.upper()) if isinstance(helius_map, dict) else None
+                        if helius_mint:
+                            logger.info("Helius mint resolved for %s: %s", symbol, helius_mint)
+                            params = {"query": helius_mint, "network": "solana"}
+                            search_data = await gecko_request(search_url, params=params)
+                            items = search_data.get("data") or [] if search_data else []
+                            if items:
+                                first = items[0]
+                                attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
+                                token_mint = helius_mint
+                        if not attrs:
+                            return None
+                    
+                    pool_id = str(first.get("id", ""))
+                    pool_addr = pool_id.split("_", 1)[-1]
+                    try:
+                        volume = float(attrs.get("volume_usd", {}).get("h24", 0.0))
+                    except Exception:
+                        volume = 0.0
+                    if volume < float(min_24h_volume):
+                        return None
+                    try:
+                        price = float(attrs.get("base_token_price_quote_token", 0.0))
+                    except Exception:
+                        price = 0.0
+                    try:
+                        reserve = float(attrs.get("reserve_in_usd", 0.0))
+                    except Exception:
+                        reserve = 0.0
+
+                gecko_tf, aggregate = gecko_timeframe_parts(timeframe)
+                ohlcv_url = (
+                    f"https://api.geckoterminal.com/api/v2/networks/solana/pools/{pool_addr}/ohlcv/{gecko_tf}"
+                )
+                params = {"aggregate": aggregate, "limit": limit}
+                data = await gecko_request(ohlcv_url, params=params)
+                if data is None:
+                    raise RuntimeError("request failed")
+                break
+            except Exception as exc:  # pragma: no cover - network
+                if attempt == 2:
+                    logger.error("GeckoTerminal OHLCV error for %s: %s", symbol, exc)
+                    return None
+                await asyncio.sleep(backoff)
+                backoff = min(backoff + 1, 3)
+
+        candles = (data.get("data") or {}).get("attributes", {}).get("ohlcv_list") or []
+
+        result: list = []
+        multiplier = 1000 if is_cached else 1
+        for c in candles[-limit:]:
+            try:
+                result.append(
+                    [
+                        int(c[0]) * multiplier,
+                        float(c[1]),
+                        float(c[2]),
+                        float(c[3]),
+                        float(c[4]),
+                        float(c[5]),
+                    ]
+                )
+            except Exception:
+                reserve = 0.0
+        GECKO_POOL_CACHE[symbol] = (pool_addr, volume, reserve, price, limit)
+
+        if return_price:
+            return result, volume, price
+        return result, volume, reserve
 
 
 async def fetch_coingecko_ohlc(
@@ -1316,36 +1349,7 @@ async def fetch_dex_ohlcv(
     gecko_res: list | tuple | None = None,
     use_gecko: bool = True,
 ) -> list | None:
-    """Fetch DEX OHLCV with fallback to CoinGecko, Coinbase then Kraken.
-
-    Parameters
-    ----------
-    exchange
-        Exchange instance used for REST/WebSocket calls.
-    symbol
-        Trading pair symbol.
-    timeframe
-        Candle timeframe (defaults to ``"1h"``).
-    limit
-        Maximum number of candles to retrieve.
-    min_volume_usd
-        Minimum 24h volume required for GeckoTerminal data to be used.
-    gecko_res
-        Optional pre-fetched GeckoTerminal response. Accepted formats are:
-
-        - ``list`` of OHLCV candles.
-        - ``(candles, volume)`` tuple.
-        - ``(candles, volume, reserve_or_price)`` tuple where the third
-          element is ignored.
-
-    Returns
-    -------
-    list | None
-        Only the candle list is returned. Any accompanying volume, reserve
-        or price information is discarded.
-    GeckoTerminal may return a tuple with extra elements; only the first two
-    (data and volume) are used and any additional values are ignored.
-    """
+    """Fetch DEX OHLCV with fallback to CoinGecko, Coinbase then Kraken."""
 
     res = gecko_res
     if res is None and use_gecko:
@@ -1358,15 +1362,12 @@ async def fetch_dex_ohlcv(
     data = None
     if res:
         if isinstance(res, tuple):
-            data = res[0]
-            vol = res[1] if len(res) > 1 else min_volume_usd
-            # GeckoTerminal can return more than two items; ignore extras
-            data, vol, *_ = res
+            data, vol = res
         else:
             data = res
             vol = min_volume_usd
         if data and vol >= min_volume_usd:
-            return data  # Only return the candle list
+            return data
 
     base, _, quote = symbol.partition("/")
     coin_id = COINGECKO_IDS.get(base)
@@ -1396,35 +1397,6 @@ async def fetch_dex_ohlcv(
     if isinstance(data, Exception):
         return None
     return data
-
-
-async def fetch_ohlcv_for_token(
-    symbol: str, timeframe: str = "1m", limit: int = 60
-) -> pd.DataFrame | None:
-    """Return short-term OHLCV DataFrame for ``symbol``.
-
-    Data is retrieved from :func:`fetch_geckoterminal_ohlcv`. ``None`` is
-    returned on failure.
-    """
-
-    try:
-        df = await fetch_geckoterminal_ohlcv(symbol, limit=limit, timeframe=timeframe)
-    except Exception as exc:  # pragma: no cover - network
-        logger.error("Token OHLCV fetch error for %s: %s", symbol, exc)
-        return None
-
-    if df is None or df.empty:
-        return None
-
-    tf_sec = timeframe_seconds(None, timeframe)
-    df = (
-        df.resample(f"{tf_sec}s")
-        .agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
-        .ffill()
-    )
-    df = df.reset_index()
-    df["timestamp"] = df["timestamp"].astype(int) // 10 ** 9
-    return df
 
 
 async def fetch_ohlcv_from_trades(
@@ -1882,16 +1854,40 @@ async def _update_ohlcv_cache_inner(
             .reset_index()
         )
         df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
-        # If we received fewer candles than requested, pad the history so the
-        # resulting DataFrame always has ``limit`` rows.  Missing leading rows
-        # are left as NaN to indicate unavailable data.
-        if 0 < len(df_new) < limit:
-            tf_sec = timeframe_seconds(exchange, timeframe)
-            end = pd.to_datetime(df_new["timestamp"].iloc[-1], unit="s")
-            idx = pd.date_range(end=end, periods=limit, freq=f"{tf_sec}s")
-            df_new = df_new.set_index(pd.to_datetime(df_new["timestamp"], unit="s")).reindex(idx)
-            df_new["timestamp"] = df_new.index.astype(int) // 10 ** 9
-            df_new = df_new.reset_index(drop=True)
+        frac = config.get("min_history_fraction", 0.5)
+        try:
+            frac_val = float(frac)
+        except (TypeError, ValueError):
+            frac_val = 0.5
+        min_candles_required = int(limit * frac_val)
+        if len(df_new) < min_candles_required:
+            since_val = since_map.get(sym)
+            retry = await load_ohlcv_parallel(
+                exchange,
+                [sym],
+                timeframe,
+                limit * 2,
+                {sym: since_val},
+                False,
+                force_websocket_history,
+                max_concurrent,
+                notifier,
+            )
+            retry_data = retry.get(sym)
+            if retry_data and len(retry_data) > len(data):
+                data = retry_data
+                df_new = pd.DataFrame(
+                    data,
+                    columns=["timestamp", "open", "high", "low", "close", "volume"],
+                )
+            if len(df_new) < min_candles_required:
+                logger.warning(
+                    "Skipping %s: only %d/%d candles",
+                    sym,
+                    len(df_new),
+                    limit,
+                )
+                continue
         changed = False
         if sym in cache and not cache[sym].empty:
             last_ts = cache[sym]["timestamp"].iloc[-1]
@@ -2064,9 +2060,6 @@ async def update_multi_tf_ohlcv_cache(
         dynamic_limits: dict[str, int] = {}
         snapshot_cap = int(config.get("ohlcv_snapshot_limit", limit))
         max_cap = min(snapshot_cap, 720)
-        threshold = int(
-            config.get("skip_age_threshold_candles", SKIP_AGE_THRESHOLD_CANDLES)
-        )
 
         concurrency = int(config.get("listing_date_concurrency", 5) or 0)
         semaphore = asyncio.Semaphore(concurrency) if concurrency > 0 else None
@@ -2088,7 +2081,7 @@ async def update_multi_tf_ohlcv_cache(
                 hist_candles = age_ms // (tf_sec * 1000)
                 if hist_candles <= 0:
                     continue
-                if hist_candles > threshold:
+                if hist_candles > snapshot_cap * 1000:
                     logger.info(
                         "Skipping OHLCV history for %s on %s (age %d candles)",
                         sym,
@@ -2105,160 +2098,25 @@ async def update_multi_tf_ohlcv_cache(
 
         cex_symbols: list[str] = []
         dex_symbols: list[str] = []
-        gecko_cex_symbols: list[tuple[str, str]] = []
         for s in symbols:
-            orig = s
             sym = s
             base, _, quote = s.partition("/")
             is_solana = quote.upper() == "USDC" and base.upper() not in NON_SOLANA_BASES
             if is_solana:
-                dex_symbols.append(orig)
+                dex_symbols.append(sym)
             else:
-                exch_sym = sym
                 if "coinbase" in getattr(exchange, "id", "") and "/USDC" in sym:
                     mapped = sym.replace("/USDC", "/USD")
                     if mapped not in getattr(exchange, "symbols", []):
                         continue  # skip unsupported pair
-                    exch_sym = mapped
-                if orig.endswith("/USDC"):
-                    gecko_cex_symbols.append((orig, exch_sym))
-                else:
-                    cex_symbols.append(exch_sym)
+                    sym = mapped
+                cex_symbols.append(sym)
 
         tf_sec = timeframe_seconds(exchange, tf)
         tf_limit = limit
         if start_since is not None:
             needed = int((time.time() * 1000 - start_since) // (tf_sec * 1000)) + 1
             tf_limit = max(limit, needed)
-
-        if gecko_cex_symbols:
-            from crypto_bot.main import update_df_cache
-
-            for orig_sym, exch_sym in gecko_cex_symbols:
-                sym_l = min(dynamic_limits.get(orig_sym, tf_limit), tf_limit)
-                if sym_l < tf_limit:
-                    logger.info(
-                        "Adjusting limit for %s on %s to %d", orig_sym, tf, sym_l
-                    )
-                try:
-                    res = await fetch_geckoterminal_ohlcv(
-                        orig_sym, timeframe=tf, limit=sym_l
-                    )
-                except Exception as e:  # pragma: no cover - network
-                    logger.warning(
-                        f"Gecko failed for {orig_sym}: {e} - using exchange data"
-                    )
-                    res = None
-
-                data = res[0] if isinstance(res, tuple) else res
-                if data:
-                    df_new = pd.DataFrame(
-                        data,
-                        columns=[
-                            "timestamp",
-                            "open",
-                            "high",
-                            "low",
-                            "close",
-                            "volume",
-                        ],
-                    )
-                    tf_s = timeframe_seconds(None, tf)
-                    unit = "ms" if df_new["timestamp"].iloc[0] > 1e10 else "s"
-                    df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit)
-                    df_new = (
-                        df_new.set_index("timestamp")
-                        .resample(f"{tf_s}s")
-                        .agg(
-                            {
-                                "open": "first",
-                                "high": "max",
-                                "low": "min",
-                                "close": "last",
-                                "volume": "sum",
-                            }
-                        )
-                        .ffill()
-                        .reset_index()
-                    )
-                    df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
-                    if orig_sym in tf_cache and not tf_cache[orig_sym].empty:
-                        last_ts = tf_cache[orig_sym]["timestamp"].iloc[-1]
-                        df_new = df_new[df_new["timestamp"] > last_ts]
-                        if df_new.empty:
-                            continue
-                        df_new = pd.concat(
-                            [tf_cache[orig_sym], df_new], ignore_index=True
-                        )
-                    update_df_cache(cache, tf, orig_sym, df_new)
-                    tf_cache = cache.get(tf, {})
-                    tf_cache[orig_sym]["return"] = tf_cache[orig_sym]["close"].pct_change()
-                    clear_regime_cache(orig_sym, tf)
-                    continue
-
-                batches: list = []
-                current_since = start_since
-                sym_total = min(tf_limit, dynamic_limits.get(orig_sym, tf_limit))
-                if sym_total < tf_limit:
-                    logger.info(
-                        "Adjusting limit for %s on %s to %d", orig_sym, tf, sym_total
-                    )
-                remaining = sym_total
-                while remaining > 0:
-                    req = min(remaining, 1000)
-                    data = await fetch_ohlcv_async(
-                        exchange,
-                        exch_sym,
-                        timeframe=tf,
-                        limit=req,
-                        since=current_since,
-                        use_websocket=use_websocket,
-                        force_websocket_history=force_websocket_history,
-                    )
-                    if not data or isinstance(data, Exception):
-                        break
-                    batches.extend(data)
-                    remaining -= len(data)
-                    if len(data) < req:
-                        break
-                    current_since = data[-1][0] + 1
-                if not batches:
-                    continue
-                df_new = pd.DataFrame(
-                    batches,
-                    columns=["timestamp", "open", "high", "low", "close", "volume"],
-                )
-                tf_s = timeframe_seconds(None, tf)
-                unit = "ms" if df_new["timestamp"].iloc[0] > 1e10 else "s"
-                df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit)
-                df_new = (
-                    df_new.set_index("timestamp")
-                    .resample(f"{tf_s}s")
-                    .agg(
-                        {
-                            "open": "first",
-                            "high": "max",
-                            "low": "min",
-                            "close": "last",
-                            "volume": "sum",
-                        }
-                    )
-                    .ffill()
-                    .reset_index()
-                )
-                df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
-                if orig_sym in tf_cache and not tf_cache[orig_sym].empty:
-                    last_ts = tf_cache[orig_sym]["timestamp"].iloc[-1]
-                    df_new = df_new[df_new["timestamp"] > last_ts]
-                    if df_new.empty:
-                        continue
-                    df_new = pd.concat(
-                        [tf_cache[orig_sym], df_new], ignore_index=True
-                    )
-                update_df_cache(cache, tf, orig_sym, df_new)
-                tf_cache = cache.get(tf, {})
-                tf_cache[orig_sym]["return"] = tf_cache[orig_sym]["close"].pct_change()
-                clear_regime_cache(orig_sym, tf)
 
         if cex_symbols and start_since is None:
             groups: Dict[int, list[str]] = {}

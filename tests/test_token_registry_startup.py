@@ -38,7 +38,7 @@ def test_load_token_mints_once(monkeypatch, tmp_path):
         return {"AAA": "mint"}
 
     monkeypatch.setattr(registry, "load_token_mints", fake_load_token_mints)
-    monkeypatch.setattr(main, "get_exchanges", lambda cfg: (_raise_stop()))
+    monkeypatch.setattr(main, "get_exchange", lambda cfg: (_raise_stop()))
 
     with pytest.raises(StopLoop):
         asyncio.run(main._main_impl())
@@ -59,12 +59,9 @@ def test_registry_update_loop_refreshes(monkeypatch):
         calls["load"] += 1
         return {}
 
-    import types, sys, importlib
-    registry = types.ModuleType("crypto_bot.utils.token_registry")
-    registry.load_token_mints = fake_load
-    registry.set_token_mints = lambda *_a, **_k: None
-    monkeypatch.setitem(sys.modules, "crypto_bot.utils.token_registry", registry)
-    monkeypatch.setattr(importlib.import_module("crypto_bot.utils"), "token_registry", registry)
+    registry = importlib.import_module("crypto_bot.utils.token_registry")
+    monkeypatch.setattr(registry, "load_token_mints", fake_load)
+    monkeypatch.setattr(registry, "set_token_mints", lambda *_a, **_k: None)
 
     async def fake_sleep(_):
         calls["sleep"] += 1

@@ -25,7 +25,7 @@ except Exception:  # pragma: no cover - fallback
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
 
-from crypto_bot.volatility import normalize_score_by_volatility
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.cooldown_manager import in_cooldown, mark_cooldown
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 

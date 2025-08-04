@@ -3,7 +3,7 @@ import pandas as pd
 from typing import Tuple, Optional
 import requests
 import ta
-from crypto_bot.volatility import normalize_score_by_volatility
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.utils.gas_estimator import fetch_priority_fee_gwei

@@ -1,52 +1,109 @@
 from __future__ import annotations
 
-"""Utilities for scanning new Solana tokens using :class:`PoolWatcher`."""
+"""Utilities for scanning new Solana tokens."""
 
+import asyncio
 import logging
 import os
 from typing import Mapping, List
 
-from .watcher import PoolWatcher
+import aiohttp
+import ccxt.async_support as ccxt
+
+from crypto_bot.utils.solana_scanner import search_geckoterminal_token
+from crypto_bot.utils import symbol_scoring
 
 logger = logging.getLogger(__name__)
 
 
-async def get_solana_new_tokens(config: Mapping[str, object]) -> List[str]:
-    """Return new Solana token mints using ``config`` options.
+async def get_solana_new_tokens(cfg: Mapping[str, object]) -> List[str]:
+    """Return a list of new token mint addresses using ``cfg`` options."""
 
-    Parameters
-    ----------
-    config:
-        Configuration mapping. ``config["solana_scanner"]`` is used when
-        available to retrieve the watcher settings.
-    """
-
-    sol_cfg = (
-        config.get("solana_scanner") if "solana_scanner" in config else config
-    )
-    if not isinstance(sol_cfg, Mapping):
+    url = str(cfg.get("url", ""))
+    if not url:
         return []
 
-    key = os.getenv("HELIUS_KEY")
-    if not key:
-        logger.error("HELIUS_KEY not set")
+    key = os.getenv("HELIUS_KEY", "")
+    if "${HELIUS_KEY}" in url:
+        url = url.replace("${HELIUS_KEY}", key)
+    if "YOUR_KEY" in url:
+        url = url.replace("YOUR_KEY", key)
+
+    limit = int(cfg.get("limit", 0))
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
+        logger.error("Solana scanner error: %s", exc)
         return []
 
-    interval_sec = float(sol_cfg.get("interval_minutes", 0)) * 60.0
-    raydium_program_id = sol_cfg.get("raydium_program_id")
-    min_liquidity = float(sol_cfg.get("min_liquidity", 0.0))
-    url = f"https://api.helius.xyz/v0/?api-key={key}"
-    websocket_url = f"wss://mainnet.helius-rpc.com/?api-key={key}"
-    watcher = PoolWatcher(
-        url,
-        interval_sec or None,
-        websocket_url,
-        raydium_program_id,
-        min_liquidity=min_liquidity,
+    tokens = data.get("tokens") or data.get("mints") or data
+    results: List[str] = []
+    if isinstance(tokens, list):
+        for item in tokens:
+            if isinstance(item, str):
+                results.append(item)
+            elif isinstance(item, Mapping):
+                mint = item.get("mint") or item.get("tokenMint") or item.get("token_mint")
+                if mint:
+                    results.append(str(mint))
+    elif isinstance(tokens, Mapping):
+        for mint in tokens.values():
+            if isinstance(mint, str):
+                results.append(mint)
+    if limit:
+        results = results[:limit]
+
+    if not results:
+        return []
+
+    search_results = await asyncio.gather(
+        *[search_geckoterminal_token(m) for m in results]
     )
 
-    tokens: List[str] = []
-    async for event in watcher.watch():
-        tokens.append(event.token_mint)
-    watcher.stop()
-    return tokens
+    resolved: list[tuple[str, float]] = []
+    seen: set[str] = set()
+    for res in search_results:
+        if not res:
+            continue
+        mint, vol = res
+        sym = f"{mint}/USDC"
+        if sym not in seen:
+            seen.add(sym)
+            resolved.append((sym, vol))
+
+    if not resolved:
+        return []
+
+    min_score = float(cfg.get("min_symbol_score", 0.0))
+    ex_name = str(cfg.get("exchange", "kraken")).lower()
+    exchange_cls = getattr(ccxt, ex_name)
+    exchange = exchange_cls({"enableRateLimit": True})
+
+    try:
+        scores = await asyncio.gather(
+            *[
+                symbol_scoring.score_symbol(
+                    exchange, sym, vol, 0.0, 0.0, 1.0, cfg
+                )
+                for sym, vol in resolved
+            ]
+        )
+    finally:
+        close = getattr(exchange, "close", None)
+        if close:
+            try:
+                if asyncio.iscoroutinefunction(close):
+                    await close()
+                else:
+                    close()
+            except Exception:  # pragma: no cover - best effort
+                pass
+
+    scored = [
+        (sym, score) for (sym, _), score in zip(resolved, scores) if score >= min_score
+    ]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [sym for sym, _ in scored]

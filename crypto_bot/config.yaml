@@ -4,18 +4,6 @@ adaptive_scan:
   max_factor: 10.0
 adx_threshold: 15
 allow_short: true
-arbitrage:
-  amount: 0.0
-  dry_run: true
-  exchange: null
-  mempool_cfg: {}
-  mempool_monitor: null
-  notifier: null
-  side: buy
-  slippage_bps: 50
-  symbol: SOL/USDC
-  use_websocket: false
-  ws_client: null
 arbitrage_enabled: true
 arbitrage_threshold: 0.005
 atr_normalization: true
@@ -64,18 +52,14 @@ breakout:
   squeeze_threshold: 0.01
   vol_multiplier: 0.5
   volume_window: 15
-cross_chain_arb_bot:
-  fee_threshold: 30
-  pair: SOL/USDC
-  spread_threshold: 0.05
 cycle_bias:
-  enabled: false
+  enabled: true
   mvrv_url: https://api.example.com/mvrv
   nupl_url: https://api.example.com/nupl
   sopr_url: https://api.example.com/sopr
 cycle_lookback_limit: 150
 dca:
-  enabled: true
+  enabled: false
   max_entries: 3
   size_multiplier: 1.0
 dip_hunter:
@@ -92,13 +76,18 @@ dip_hunter:
   rsi_window: 14
   vol_mult: 1.5
   vol_window: 20
+stat_arb_bot:
+  pairs:
+    - SOL/USDC,ETH/USDC
+  z_threshold: 2.0
+  window: 50
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.05
 exchange: kraken
 exchange_market_types:
 - spot
 - futures
-excluded_symbols: ["USTC/EUR", "USTC/USD", "REPV1/USD", "REPV1/EUR"]
+excluded_symbols: []
 exec:
   allow_market_orders: true
   order_retry_interval: 3
@@ -113,15 +102,9 @@ exit_strategy:
   - 50
   - 75
   - 100
-  quick_sell_hold_timeout: 300
-  quick_sell_profit_pct: 0.05
   scale_out: true
   trailing_stop_factor: 1.2
   trailing_stop_pct: 0.005
-flash_crash_bot:
-  drop_thr: -0.1
-  tp_thr: 0.05
-  vol_thr: 5.0
 force_websocket_history: false
 gas_threshold_gwei: 50
 gecko_limit: 10
@@ -148,24 +131,20 @@ grid_bot:
   volume_ma_window: 15
   volume_multiple: 1.0
 hidden_limit: true
-indicator_lookback: 10
+indicator_lookback: 14
 liquidity_check: true
 liquidity_depth: 5
+max_liquidity_usage: 0.8
 listing_date_concurrency: 5
 log_to_google: true
 loop_interval_minutes: 0.05
-lstm_bot:
-  model_path: crypto_bot/models/lstm_model.pth
-  sequence_length: 60
-  threshold_pct: 0.01
 max_age_days: 90
 max_change_pct: 20
 max_concurrent_ohlcv: 10
 max_concurrent_tickers: 20
 max_latency_ms: 500
-max_liquidity_usage: 0.8
 max_ohlcv_failures: 2
-max_open_trades: 10
+max_open_trades: 5
 max_parallel: 50
 max_slippage_pct: 0.2
 max_spread_pct: 10
@@ -173,20 +152,20 @@ max_vol: 50000000
 max_ws_limit: 200
 meme_wave_bot:
   sentiment_thr: 0.6
+  twitter_query: null
   vol_spike_thr: 2.0
 meme_wave_sniper:
   enabled: true
   execution:
     dry_run: true
   pool:
-    interval: 0.5
-    ml_filter: false
+    interval: 3
     raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
-    url: https://api.helius.xyz/v0/?api-key=${HELIUS_KEY}
+    url: https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY
     websocket_url: wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
   risk:
     daily_loss_cap: 2.0
-    max_concurrent: 5
+    max_concurrent: 15
   risk_file: crypto_bot/logs/sniper_risk.json
   safety:
     min_liquidity: 50
@@ -224,10 +203,10 @@ micro_scalp:
   volume_window: 15
   wick_pct: 0.1
 min_agreeing_votes: 1
-min_confidence_score: 0.001
+min_confidence_score: 0.00001
 min_consistent_agreement: 1
 min_cooldown: 0
-min_history_fraction: 0
+min_history_fraction: 0.1
 min_symbol_age_days: 0
 min_symbol_score: 0
 ml_enabled: false
@@ -256,9 +235,25 @@ ohlcv_batch_size: 10
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
 ohlcv_timeout: 60
+redis_url: null
 onchain_default_quote: USDC
-onchain_min_volume_usd: 100
-onchain_symbols: []
+onchain_min_volume_usd: 5000
+onchain_symbols:
+- SOL/USDC
+- BONK/USDC
+- AI16Z/USDC
+- BERA/USDC
+- EUROP/USDC
+- FARTCOIN/USDC
+- RLUSD/USDC
+- USDG/USDC
+- VIRTUAL/USDC
+- XMR/USDC
+- MELANIA/USDC
+- PENGU/USDC
+- USDR/USDC
+- USTC/USDC
+- TRUMP/USDC
 optimization:
   enabled: true
   interval_days: 0.1
@@ -283,16 +278,13 @@ pyth:
   solana_ws_endpoint: wss://api.mainnet-beta.solana.com
 pyth_quotes:
 - USDC
-quick_sell_profit_pct: 10
-quick_sell_timeout_sec: 120
 quiet_mode: false
-redis_url: null
 refresh_pairs:
   allowed_quote_currencies: []
   blacklist_assets: []
   min_quote_volume_usd: 1000
   refresh_interval: 30m
-  top_k: 200
+  top_k: 100
 regime_return_period: 3
 regime_timeframes:
 - 30s
@@ -313,8 +305,8 @@ risk:
   take_profit_atr_mult: 3.0
   take_profit_pct: 0.1
   volume_threshold_ratio: 0.01
-  win_rate_boost_factor: 1.5
   win_rate_threshold: 0.7
+  win_rate_boost_factor: 1.5
 rl_selector:
   enabled: true
 rsi_overbought_pct: 80
@@ -340,7 +332,9 @@ scoring_weights:
   volume_score: 0.05
 secondary_exchange: coinbase
 sentiment_filter:
+  bull_fng: 50
   bull_sentiment: 45
+  min_fng: -100
   min_sentiment: -100
 signal_fusion:
   enabled: true
@@ -370,6 +364,33 @@ sniper_bot:
   price_fallback: true
   volume_multiple: 1.2
   volume_window: 3
+momentum_bot:
+  donchian_period: 20
+  vol_multiplier: 1.0
+  atr_period: 14
+  setup_window: 10
+  trigger_window: 3
+  fast_length: 20
+  slow_length: 50
+  adx_threshold: 25
+  risk:
+    stop_loss_pct: 0.01
+    take_profit_pct: 0.03
+    trailing_stop_factor: 1.5  # ATR multiple for trailing stop
+    risk_pct: 0.01
+    max_drawdown: 0.4
+flash_crash_bot:
+  drop_thr: -0.10   # 10% 1m drop
+  vol_thr: 5.0      # volume spike multiplier
+  tp_thr: 0.05      # take‑profit reversion threshold
+cross_chain_arb_bot:
+  pair: SOL/USDC
+  spread_threshold: 0.05
+  fee_threshold: 30
+lstm_bot:
+  model_path: crypto_bot/models/lstm_model.pth
+  sequence_length: 60
+  threshold_pct: 0.01
 solana_scalping:
   macd_fast: 10
   macd_signal: 8
@@ -380,21 +401,13 @@ solana_scalping:
 solana_scanner:
   api_keys:
     bitquery: YOUR_KEY
-    lunarcrush_api_key: YOUR_KEY
     moralis: YOUR_KEY
+    lunarcrush_api_key: YOUR_KEY
   enabled: true
   gecko_search: true
-  helius_ws_url: wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
   interval_minutes: 0.1
-  max_iterations: 100
-  max_tokens_per_scan: 20
-  min_liquidity: 1000
+  max_tokens_per_scan: 200
   min_volume_usd: 10
-  ml_filter: true
-  pump_fun_program_id: 6EF8rrecthR5Dkzon8NQiDSKX6EYxsCPt6oKEWSCPPu
-  raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6oKEWSCPPu
-  timeout_seconds: 30
-  use_ws: true
 solana_slippage_bps: 10
 stat_arb_bot:
   pairs:
@@ -405,21 +418,21 @@ strategy_allocation:
   grid: 0.2
   sniper_solana: 0.6
   trend: 0.2
-strategy_evaluation_mode: any
+strategy_evaluation_mode: ensemble
 strategy_router:
   bandit_enabled: true
   bounce_timeframe: 5m
   breakout_timeframe: 15m
   fast_path:
-    breakdown_volume_multiplier: 3
-    breakdown_window: 20
     breakout_max_bandwidth: 0.03
     breakout_squeeze_window: 10
     breakout_volume_multiplier: 3
     trend_adx_threshold: 20
-  flash_crash_timeframe: 1m
+    breakdown_window: 20
+    breakdown_volume_multiplier: 3
   mean_reverting_timeframe: 1h
-  min_confidence: 0.5
+  flash_crash_timeframe: 1m
+  min_confidence: 0.001
   regimes:
     bounce:
     - bounce_scalper
@@ -436,8 +449,6 @@ strategy_router:
     - stat_arb_bot
     - flash_crash_bot
     - lstm_bot
-    new_pool:
-    - sniper_solana
     scalp:
     - micro_scalp
     - lstm_bot
@@ -452,7 +463,6 @@ strategy_router:
     volatile:
     - sniper_bot
     - sniper_solana
-    - trend
     - momentum_bot
     - meme_wave_bot
     - cross_chain_arb_bot
@@ -463,7 +473,25 @@ strategy_router:
   trending_timeframe: 1h
   volatile_timeframe: 1m
 symbol: BTC/USDT
-symbol_batch_size: 100
+symbol_batch_size: 50
+symbol_filter:
+  change_pct_percentile: 10
+  correlation_max_pairs: 200
+  http_timeout: 5
+  initial_history_candles: 50
+  initial_timeframes:
+  - 1h
+  - 1d
+  kraken_batch_size: 200
+  log_ticker_exceptions: true
+  max_concurrent_ohlcv: 10
+  max_correlation: 0.9
+  max_spread_pct: 8
+  min_volume_usd: 5
+  ohlcv_batch_size: 10
+  ticker_retry_attempts: 5
+  uncached_volume_multiplier: 1.5
+  volume_percentile: 5
 symbol_refresh_minutes: 1
 symbol_score_weights:
   age: 0.1
@@ -489,25 +517,6 @@ telegram_ctl:
   enabled: true
   update_interval: 30
 testing_mode: true
-textsymbol_filter:
-  change_pct_percentile: 10
-  correlation_max_pairs: 200
-  http_timeout: 5
-  initial_history_candles: 10
-  initial_timeframes:
-  - 1h
-  - 1d
-  kraken_batch_size: 20
-  log_ticker_exceptions: true
-  max_concurrent_ohlcv: 10
-  max_correlation: 0.9
-  max_spread_pct: 2.0
-  min_history_fraction: 0.2
-  min_volume_usd: 100
-  ohlcv_batch_size: 10
-  ticker_retry_attempts: 5
-  uncached_volume_multiplier: 1.5
-  volume_percentile: 5
 ticker_backoff_initial: 2
 ticker_backoff_max: 60
 ticker_rate_limit: null
@@ -520,10 +529,10 @@ timeframes:
 - 1h
 token_registry:
   refresh_interval_minutes: 15
-top_n_symbols: 100
+top_n_symbols: 50
 tp_mult: 2.0
 tp_pct: 0.1
-trade_size_pct: 0.01
+trade_size_pct: 0.3
 trend:
   atr_period: 10
   k: 0.8
@@ -545,4 +554,3 @@ voting_strategies:
 wallet_address: your_wallet
 ws_failures_before_disable: 1
 ws_ping_interval: 5
-ws_ticker_batch_size: 100

@@ -28,9 +28,6 @@ class DummyRM:
 
 
 class DummyPG:
-    def __init__(self, max_open_trades: int = 2) -> None:
-        self.max_open_trades = max_open_trades
-
     def can_open(self, positions):
         return True
 

@@ -20,7 +20,7 @@ except Exception:  # pragma: no cover - numba missing
 
         return wrap
 import pandas as pd
-from crypto_bot.volatility import normalize_score_by_volatility
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 # Cache of computed symbol ages
 _age_cache: Dict[Tuple[str, str], Tuple[float, float]] = {}
@@ -288,7 +288,8 @@ async def score_symbol(
     )
 
     score /= total
-    score = normalize_score_by_volatility(df, score) if df is not None else score
+    if df is not None:
+        score = normalize_score_by_volatility(df, score)
     return score
 
 

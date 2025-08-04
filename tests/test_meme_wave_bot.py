@@ -18,7 +18,6 @@ sol_pkg = types.ModuleType("crypto_bot.solana")
 sol_pkg.__path__ = []
 exit_mod = types.ModuleType("crypto_bot.solana.exit")
 exit_mod.monitor_price = lambda *a, **k: {}
-exit_mod.quick_exit = lambda *a, **k: {}
 trading_mod = types.ModuleType("crypto_bot.solana_trading")
 trading_mod.sniper_trade = lambda *a, **k: {}
 sol_pkg.exit = exit_mod
@@ -137,8 +136,7 @@ def test_high_volume_positive_sentiment(meme_df, high_monitor, monkeypatch):
     score, direction = meme_wave_bot.generate_signal(
         df, cfg, mempool_monitor=high_monitor
     )
-    assert direction == "long"
-    assert score > 0
+    assert (score, direction) == (1.0, "long")
 
 
 def test_high_volume_negative_sentiment(meme_df, high_monitor, monkeypatch):

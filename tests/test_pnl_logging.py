@@ -54,10 +54,7 @@ def load_handle_exits_exit():
         calls["pnl"] = a
 
     def _log_trade(*a, **k):
-        calls.setdefault("trade", a)
-
-    def _upload(*a, **k):
-        calls["upload"] = a
+        calls["trade"] = a
 
     ns = {
         "asyncio": asyncio,
@@ -71,7 +68,6 @@ def load_handle_exits_exit():
         "refresh_balance": _refresh,
         "pnl_logger": types.SimpleNamespace(log_pnl=_log_pnl),
         "regime_pnl_tracker": types.SimpleNamespace(log_trade=_log_trade),
-        "trade_logger": types.SimpleNamespace(upload_trade_record=_upload),
     }
 
     exec(funcs["opposite_side"], ns)
@@ -102,10 +98,7 @@ def load_monitor_exit():
         calls["pnl"] = a
 
     def _log_trade(*a, **k):
-        calls.setdefault("trade", a)
-
-    def _upload(*a, **k):
-        calls["upload"] = a
+        calls["trade"] = a
 
     async def _monitor(feed, *a, **k):
         return {"exit_price": feed()}
@@ -119,7 +112,6 @@ def load_monitor_exit():
         "refresh_balance": _refresh,
         "pnl_logger": types.SimpleNamespace(log_pnl=_log_pnl),
         "regime_pnl_tracker": types.SimpleNamespace(log_trade=_log_trade),
-        "trade_logger": types.SimpleNamespace(upload_trade_record=_upload),
     }
 
     exec(funcs["opposite_side"], ns)

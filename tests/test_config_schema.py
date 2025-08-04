@@ -30,13 +30,9 @@ def test_solana_scanner_defaults():
     cfg = SolanaScannerConfig()
     assert cfg.enabled is False
     assert cfg.interval_minutes == 0.1
-    assert cfg.max_tokens_per_scan == 25
-    assert cfg.timeout_seconds == 30.0
-    assert cfg.max_iterations == 100
+    assert cfg.max_tokens_per_scan == 200
     assert cfg.min_volume_usd == 10.0
     assert cfg.gecko_search is True
-    assert cfg.ml_filter is False
-    assert cfg.timeout_seconds == 30.0
     assert cfg.api_keys is None
 
 
@@ -51,11 +47,6 @@ def test_solana_scanner_env_override(monkeypatch):
     cfg = SolanaScannerConfig(api_keys=SolanaScannerApiKeys())
     assert cfg.api_keys.moralis == "env_key"
     assert cfg.api_keys.lunarcrush_api_key == "env_lunar"
-
-
-def test_solana_scanner_allows_ml_filter():
-    cfg = SolanaScannerConfig(ml_filter=True)
-    assert cfg.ml_filter is True
 
 
 def test_pyth_defaults():

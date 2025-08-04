@@ -22,7 +22,7 @@ from ta.trend import ADXIndicator
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
 
-from crypto_bot.volatility import normalize_score_by_volatility
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
@@ -43,7 +43,7 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         return 0.0, "none"
 
     params = config or {}
-    lookback_cfg = int(params.get("indicator_lookback", 10))
+    lookback_cfg = int(params.get("indicator_lookback", 14))
     rsi_overbought_pct = float(params.get("rsi_overbought_pct", 70))
     rsi_oversold_pct = float(params.get("rsi_oversold_pct", 30))
     adx_threshold = float(params.get("adx_threshold", 25))

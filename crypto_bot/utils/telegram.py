@@ -10,20 +10,15 @@ and asynchronous (:meth:`notify_async`) interfaces are provided.
 from dataclasses import dataclass
 from typing import Optional, Iterable, Any
 import asyncio
+import inspect
 import threading
 import os
 import time
 
-import aiohttp
-import requests
-
-try:  # pragma: no cover - optional dependency for tests
-    from telegram import Bot  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    class Bot:  # type: ignore
-        pass
+from telegram import Bot
 
 from .logger import LOG_DIR, setup_logger
+from pathlib import Path
 
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
@@ -56,40 +51,29 @@ def is_admin(chat_id: str) -> bool:
 set_admin_ids(None)
 
 
-async def send_message_async(
-    token: str, chat_id: str, text: str, timeout: float = 10
-) -> Optional[str]:
-    """Asynchronously send ``text`` to ``chat_id`` using ``token``."""
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    data = {"chat_id": chat_id, "text": text}
-    try:
-        timeout_cfg = aiohttp.ClientTimeout(total=timeout)
-        async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
-            async with session.post(url, data=data) as resp:
-                if resp.status != 200:
-                    err_text = await resp.text()
-                    logger.error("Failed to send message: %s", err_text)
-                    return err_text
-        return None
-    except Exception as exc:  # pragma: no cover - network
-        logger.error("Failed to send message: %s", exc)
-        return str(exc)
+def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
+    """Send ``text`` to ``chat_id`` using ``token``.
 
-
-def send_message(
-    token: str, chat_id: str, text: str, timeout: float = 10
-) -> Optional[str]:
-    """Synchronously send ``text`` to ``chat_id`` using ``token``."""
+    Returns ``None`` on success or an error string on failure.
+    """
     try:
         bot = Bot(token)
-        if asyncio.iscoroutinefunction(getattr(bot, "send_message", None)):
+
+        async def _send() -> None:
+            try:
+                await bot.send_message(chat_id=chat_id, text=text)
+            except Exception as exc:  # pragma: no cover - network
+                logger.error(
+                    "Failed to send message: %s. Verify your Telegram token "
+                    "and chat ID and ensure the bot has started a chat.",
+                    exc,
+                )
+
+        if inspect.iscoroutinefunction(bot.send_message):
             try:
                 loop = asyncio.get_running_loop()
             except RuntimeError:
                 loop = None
-
-            async def _send() -> None:
-                await bot.send_message(chat_id=chat_id, text=text)
 
             if loop and loop.is_running():
                 loop.create_task(_send())
@@ -98,19 +82,9 @@ def send_message(
         else:
             bot.send_message(chat_id=chat_id, text=text)
         return None
-    except Exception:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        try:
-            resp = requests.post(
-                url, data={"chat_id": chat_id, "text": text}, timeout=timeout
-            )
-            if resp.status_code != 200:
-                logger.error("Failed to send message: %s", resp.text)
-                return resp.text
-            return None
-        except Exception as exc:  # pragma: no cover - network
-            logger.error("Failed to send message: %s", exc)
-            return str(exc)
+    except Exception as e:  # pragma: no cover - network
+        logger.error("Failed to send message: %s", e)
+        return str(e)
 
 
 @dataclass
@@ -167,11 +141,7 @@ class TelegramNotifier:
                 await asyncio.sleep(delay)
                 now = time.time()
 
-            err = await send_message_async(self.token, self.chat_id, text)
-            if err is not None:
-                err = await asyncio.to_thread(
-                    send_message, self.token, self.chat_id, text
-                )
+            err = await asyncio.to_thread(send_message, self.token, self.chat_id, text)
             if err is not None:
                 self._disabled = True
                 logger.error(

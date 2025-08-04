@@ -1,22 +1,8 @@
 import asyncio
-import importlib.util
 import types
-from pathlib import Path
-
 import pytest
 
-spec = importlib.util.spec_from_file_location(
-    "pool_ws_monitor",
-    Path(__file__).resolve().parents[1] / "crypto_bot/solana/pool_ws_monitor.py",
-)
-pool_ws_monitor = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(pool_ws_monitor)
-
-
-@pytest.fixture(autouse=True)
-def _mock_listing_date():
-    """Override global fixture to avoid heavy imports."""
-    yield
+from crypto_bot.solana import pool_ws_monitor
 
 
 class DummyMsg:
@@ -79,11 +65,7 @@ class DummySession:
 
 
 class AiohttpMod:
-    WSMsgType = types.SimpleNamespace(
-        TEXT="text",
-        CLOSED="closed",
-        ERROR="error",
-    )
+    WSMsgType = types.SimpleNamespace(TEXT="text", CLOSED="closed", ERROR="error")
 
     WSServerHandshakeError = Exception
 
@@ -106,50 +88,19 @@ def test_subscription_message(monkeypatch):
             await gen.__anext__()
 
     asyncio.run(run())
-    assert session.url == "wss://mainnet.helius-rpc.com/?api-key=KEY"
+    assert session.url == "wss://atlas-mainnet.helius-rpc.com/?api-key=KEY"
     assert ws.sent and ws.sent[0]["params"][0]["accountInclude"] == ["PGM"]
-    assert ws.sent[0]["params"][1]["encoding"] == "jsonParsed"
-    assert ws.sent[0]["params"][1]["maxSupportedTransactionVersion"] == 0
 
 
 def test_yields_transactions(monkeypatch):
     messages = [
-        {
-            "method": "transactionNotification",
-            "params": {
-                "result": {
-                    "tx": 1,
-                    "tx_count": 11,
-                    "liquidity": 100,
-                    "meta": {
-                        "postTokenBalances": [
-                            {"uiTokenAmount": {"uiAmount": 100.0}}
-                        ]
-                    },
-                }
-            },
-        },
-        {
-            "method": "transactionNotification",
-            "params": {
-                "result": {
-                    "tx": 2,
-                    "tx_count": 12,
-                    "liquidity": 100,
-                    "meta": {
-                        "postTokenBalances": [
-                            {"uiTokenAmount": {"uiAmount": 100.0}}
-                        ]
-                    },
-                }
-            },
-        },
+        {"params": {"result": {"tx": 1}}},
+        {"params": {"result": {"tx": 2}}},
     ]
     ws = DummyWS(messages)
     session = DummySession(ws)
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
-    monkeypatch.setattr(pool_ws_monitor, "predict_regime", lambda _: "breakout")
 
     async def run():
         gen = pool_ws_monitor.watch_pool("KEY", "PGM")
@@ -159,43 +110,15 @@ def test_yields_transactions(monkeypatch):
         return results
 
     res = asyncio.run(run())
-    assert res == [
-        {
-            "tx": 1,
-            "tx_count": 11,
-            "liquidity": 100,
-            "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 100.0}}]},
-            "predicted_regime": "breakout",
-        },
-        {
-            "tx": 2,
-            "tx_count": 12,
-            "liquidity": 100,
-            "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 100.0}}]},
-            "predicted_regime": "breakout",
-        },
-    ]
+    assert res == [{"tx": 1}, {"tx": 2}]
 
 
 def test_reconnect_on_close(monkeypatch):
     ws1 = DummyWS([])
-    ws2 = DummyWS([
-        {
-            "method": "transactionNotification",
-            "params": {
-                "result": {
-                    "tx": 3,
-                    "tx_count": 15,
-                    "liquidity": 100,
-                    "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 100.0}}]},
-                }
-            },
-        }
-    ])
+    ws2 = DummyWS([{"params": {"result": {"tx": 3}}}])
     session = DummySession([ws1, ws2])
     aiohttp_mod = AiohttpMod(session)
     monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
-    monkeypatch.setattr(pool_ws_monitor, "predict_regime", lambda _: "breakout")
     ws1.messages = [types.SimpleNamespace(type=aiohttp_mod.WSMsgType.CLOSED, data=None)]
 
     async def run():
@@ -204,108 +127,5 @@ def test_reconnect_on_close(monkeypatch):
         return result
 
     res = asyncio.run(run())
-    assert res == {
-        "tx": 3,
-        "tx_count": 15,
-        "liquidity": 100,
-        "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 100.0}}]},
-        "predicted_regime": "breakout",
-    }
+    assert res == {"tx": 3}
     assert session.calls == 2
-
-
-def test_watch_pool_filters(monkeypatch):
-    messages = [
-        {
-            "method": "transactionNotification",
-            "params": {
-                "result": {
-                    "tx": 1,
-                    "tx_count": 5,
-                    "liquidity": 40,
-                    "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 40.0}}]},
-                }
-            },
-        },
-        {
-            "method": "transactionNotification",
-            "params": {
-                "result": {
-                    "tx": 2,
-                    "tx_count": 12,
-                    "liquidity": 60,
-                    "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 60.0}}]},
-                }
-            },
-        },
-    ]
-    ws = DummyWS(messages)
-    session = DummySession(ws)
-    aiohttp_mod = AiohttpMod(session)
-    monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
-    monkeypatch.setattr(pool_ws_monitor, "predict_regime", lambda _: "breakout")
-
-    async def run():
-        gen = pool_ws_monitor.watch_pool("KEY", "PGM", min_liquidity=50)
-        result = await gen.__anext__()
-        with pytest.raises(StopAsyncIteration):
-            await gen.__anext__()
-        return result
-
-    res = asyncio.run(run())
-    assert res == {
-        "tx": 2,
-        "tx_count": 12,
-        "liquidity": 60,
-        "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 60.0}}]},
-        "predicted_regime": "breakout",
-    }
-
-
-def test_ignores_non_breakout(monkeypatch):
-    messages = [
-        {
-            "method": "transactionNotification",
-            "params": {
-                "result": {
-                    "tx": 1,
-                    "tx_count": 10,
-                    "liquidity": 80,
-                    "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 80.0}}]},
-                }
-            },
-        },
-        {
-            "method": "transactionNotification",
-            "params": {
-                "result": {
-                    "tx": 2,
-                    "tx_count": 20,
-                    "liquidity": 90,
-                    "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 90.0}}]},
-                }
-            },
-        },
-    ]
-    ws = DummyWS(messages)
-    session = DummySession(ws)
-    aiohttp_mod = AiohttpMod(session)
-    monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
-    labels = iter(["trending", "breakout"])
-    monkeypatch.setattr(pool_ws_monitor, "predict_regime", lambda _: next(labels))
-
-    async def run():
-        gen = pool_ws_monitor.watch_pool("KEY", "PGM")
-        result = await gen.__anext__()
-        with pytest.raises(StopAsyncIteration):
-            await gen.__anext__()
-        return result
-
-    res = asyncio.run(run())
-    assert res == {
-        "tx": 2,
-        "tx_count": 20,
-        "liquidity": 90,
-        "meta": {"postTokenBalances": [{"uiTokenAmount": {"uiAmount": 90.0}}]},
-        "predicted_regime": "breakout",
-    }

@@ -9,10 +9,8 @@ from collections import deque
 pkg_root = types.ModuleType("crypto_bot")
 sol_pkg = types.ModuleType("crypto_bot.solana")
 utils_pkg = types.ModuleType("crypto_bot.utils")
-regime_pkg = types.ModuleType("crypto_bot.regime")
 pkg_root.solana = sol_pkg
 pkg_root.utils = utils_pkg
-pkg_root.regime = regime_pkg
 import importlib.machinery
 pkg_root.__spec__ = importlib.machinery.ModuleSpec(
     "crypto_bot", None, is_package=True
@@ -29,19 +27,10 @@ utils_pkg.__spec__ = importlib.machinery.ModuleSpec(
 )
 utils_pkg.__spec__.submodule_search_locations = [str(pathlib.Path("crypto_bot/utils"))]
 utils_pkg.__path__ = [str(pathlib.Path("crypto_bot/utils"))]
-regime_pkg.__spec__ = importlib.machinery.ModuleSpec(
-    "crypto_bot.regime", None, is_package=True
-)
-regime_pkg.__spec__.submodule_search_locations = [str(pathlib.Path("crypto_bot/regime"))]
-regime_pkg.__path__ = [str(pathlib.Path("crypto_bot/regime"))]
 
 sys.modules.setdefault("crypto_bot", pkg_root)
 sys.modules.setdefault("crypto_bot.solana", sol_pkg)
 sys.modules.setdefault("crypto_bot.utils", utils_pkg)
-pkg_root.volatility_filter = types.ModuleType("crypto_bot.volatility_filter")
-pkg_root.volatility_filter.calc_atr = lambda *_a, **_k: 0.0
-sys.modules.setdefault("crypto_bot.volatility_filter", pkg_root.volatility_filter)
-sys.modules.setdefault("crypto_bot.regime", regime_pkg)
 
 # Ensure the real solana_scanner module is loaded even if another test
 # inserted a stub under this name.
@@ -99,118 +88,53 @@ class DummySession:
         return DummyResp(self._data)
 
 
-def test_get_solana_new_tokens_returns_unique(monkeypatch):
-    from crypto_bot.solana.watcher import NewPoolEvent
+def test_get_solana_new_tokens_filters_by_score(monkeypatch):
+    data = {"tokens": [{"mint": "A"}, {"mint": "B"}]}
+    session = DummySession(data)
+    monkeypatch.setattr(scanner, "aiohttp", type("M", (), {"ClientSession": lambda: session}))
 
-    events = [
-        NewPoolEvent("P1", "A", "C1", 50.0, 3),
-        NewPoolEvent("P2", "B", "C1", 60.0, 4),
-    ]
+    async def fake_search(mint):
+        if mint == "A":
+            return ("A", 100.0)
+        if mint == "B":
+            return ("B", 200.0)
+        return None
 
-    async def watch_stub(self):
-        for evt in events:
-            yield evt
+    monkeypatch.setattr(scanner, "search_geckoterminal_token", fake_search)
 
-    monkeypatch.setattr(scanner.PoolWatcher, "watch", watch_stub)
-    monkeypatch.setattr(scanner.PoolWatcher, "setup_webhook", lambda self, k: None)
-    monkeypatch.setenv("HELIUS_KEY", "k")
-
-    cfg = {
-        "max_tokens_per_scan": 5,
-        "timeout_seconds": 1,
-        "min_liquidity": 0,
-        "min_tx_count": 0,
-        "raydium_program_id": "r",
-        "interval_minutes": 0,
-    }
-    tokens = asyncio.run(scanner.get_solana_new_tokens(cfg))
-    assert tokens == ["A", "B"]
-
-
-def test_get_solana_new_tokens_builds_urls(monkeypatch):
-    captured: dict[str, str] = {}
-
-    class DummyWatcher:
-        def __init__(
-            self,
-            url,
-            interval,
-            websocket_url,
-            raydium_program_id,
-            min_liquidity=None,
-        ):
-            captured["url"] = url
-            captured["websocket_url"] = websocket_url
-
-        async def watch(self):
-            if False:
-                yield None
-
-        def stop(self):
+    class DummyEx:
+        async def close(self):
             pass
 
-    monkeypatch.setattr(scanner, "PoolWatcher", DummyWatcher)
-    monkeypatch.setenv("HELIUS_KEY", "abc123")
+    async def fake_score(_ex, sym, vol, *_a, **_k):
+        return {"A/USDC": 0.6, "B/USDC": 0.4}[sym]
+
+    monkeypatch.setattr(scanner.symbol_scoring, "score_symbol", fake_score)
+    monkeypatch.setattr(scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
 
     cfg = {
-        "raydium_program_id": "r",
-        "interval_minutes": 0,
-        "min_liquidity": 0,
+        "url": "http://x", 
+        "limit": 5, 
+        "min_symbol_score": 0.5,
+        "exchange": "kraken",
     }
-
-    asyncio.run(scanner.get_solana_new_tokens(cfg))
-    assert captured["url"] == "https://api.helius.xyz/v0/?api-key=abc123"
-    assert (
-        captured["websocket_url"]
-        == "wss://mainnet.helius-rpc.com/?api-key=abc123"
-    )
+    tokens = asyncio.run(scanner.get_solana_new_tokens(cfg))
+    assert tokens == ["A/USDC"]
 
 
 async def _scan_once(cfg, queue):
-    from crypto_bot.utils import market_loader
-    from crypto_bot.regime import regime_classifier
-
     tokens = await scanner.get_solana_new_tokens(cfg)
-    allowed: list[str] = []
     if tokens:
-        for sym in tokens:
-            try:
-                df = await market_loader.fetch_ohlcv_for_token(sym)
-                if df is None:
-                    continue
-                regime, _ = await regime_classifier.classify_regime_cached(
-                    sym, "1m", df
-                )
-                regime = regime.split("_")[-1]
-                if regime in {"volatile", "breakout"}:
-                    allowed.append(sym)
-            except Exception:
-                continue
         async with scanner.asyncio.Lock():
-            for sym in reversed(allowed):
+            for sym in reversed(tokens):
                 queue.appendleft(sym)
 
 
 def test_solana_scan_loop_enqueues_filtered(monkeypatch):
     async def fake_get(cfg):
-        return ["A/USDC", "B/USDC"]
-
-    async def fake_fetch(sym, *a, **k):
-        import pandas as pd
-
-        return pd.DataFrame(
-            {"timestamp": [0], "open": [1], "high": [1], "low": [1], "close": [1], "volume": [1]}
-        )
-
-    async def fake_classify(sym, tf, df):
-        return ({"A/USDC": "volatile", "B/USDC": "bear"}[sym], {})
+        return ["A/USDC"]
 
     monkeypatch.setattr(scanner, "get_solana_new_tokens", fake_get)
-    from crypto_bot.utils import market_loader
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_for_token", fake_fetch)
-    from crypto_bot.regime import regime_classifier
-    monkeypatch.setattr(regime_classifier, "classify_regime_cached", fake_classify)
-
     queue = deque()
     asyncio.run(_scan_once({}, queue))
     assert list(queue) == ["A/USDC"]
