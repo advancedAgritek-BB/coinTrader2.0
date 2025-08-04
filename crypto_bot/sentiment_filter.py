@@ -43,7 +43,7 @@ def fetch_fng_index() -> int:
 
 
 
-def fetch_twitter_sentiment(query: str = "bitcoin", symbol: str | None = None) -> int:
+async def fetch_twitter_sentiment(query: str = "bitcoin", symbol: str | None = None) -> int:
     """Return sentiment score for ``query`` between 0-100.
 
     When ``symbol`` is provided and ``LUNARCRUSH_API_KEY`` is set this will
@@ -78,24 +78,28 @@ def fetch_lunarcrush_sentiment(symbol: str) -> int:
         return 50
 
 
-def too_bearish(min_fng: int, min_sentiment: int, *, symbol: str | None = None) -> bool:
+async def too_bearish(
+    min_fng: int, min_sentiment: int, *, symbol: str | None = None
+) -> bool:
     """Return ``True`` when sentiment is below thresholds."""
     fng = fetch_fng_index()
     if symbol:
         sentiment = fetch_lunarcrush_sentiment(symbol)
     else:
-        sentiment = fetch_twitter_sentiment()
+        sentiment = await fetch_twitter_sentiment()
     logger.info("FNG %s, sentiment %s", fng, sentiment)
     return fng < min_fng or sentiment < min_sentiment
 
 
-def boost_factor(bull_fng: int, bull_sentiment: int, *, symbol: str | None = None) -> float:
+async def boost_factor(
+    bull_fng: int, bull_sentiment: int, *, symbol: str | None = None
+) -> float:
     """Return a trade size boost factor based on strong sentiment."""
     fng = fetch_fng_index()
     if symbol:
         sentiment = fetch_lunarcrush_sentiment(symbol)
     else:
-        sentiment = fetch_twitter_sentiment()
+        sentiment = await fetch_twitter_sentiment()
     if fng > bull_fng and sentiment > bull_sentiment:
         factor = 1 + ((fng - bull_fng) + (sentiment - bull_sentiment)) / 200
         logger.info("Applying boost factor %.2f", factor)

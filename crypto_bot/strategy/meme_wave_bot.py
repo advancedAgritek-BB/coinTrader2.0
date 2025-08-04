@@ -57,6 +57,12 @@ def generate_signal(
     vol_mult = float(params.get("volume_mult", 3.0))
     vol_spike_thr = params.get("vol_spike_thr")
 
+    price_change = df["close"].iloc[-1] - df["close"].iloc[-2]
+    vol = float(df["volume"].iloc[-1])
+    atr = ta.volatility.average_true_range(
+        df["high"], df["low"], df["close"], window=atr_window
+    )
+
     recent_vol = mempool_monitor.get_recent_volume()
     avg_vol = mempool_monitor.get_average_volume()
 
@@ -71,7 +77,7 @@ def generate_signal(
     except Exception:
         pass
 
-    sentiment = fetch_twitter_sentiment(query) / 100.0
+    sentiment = asyncio.run(fetch_twitter_sentiment(query)) / 100.0
 
     if avg_vol and recent_vol >= avg_vol * vol_threshold and sentiment >= sentiment_thr:
         return 1.0, "long"
@@ -106,12 +112,10 @@ def generate_signal(
     sentiment_ok = True
     if sentiment_thr is not None:
         try:
-            from crypto_bot.sentiment_filter import fetch_twitter_sentiment
-
             q = query
             if not q:
                 q = config.get("symbol") if isinstance(config, dict) else None
-            sentiment = fetch_twitter_sentiment(q or "") / 100.0
+            sentiment = asyncio.run(fetch_twitter_sentiment(q or "")) / 100.0
             if sentiment < float(sentiment_thr):
                 sentiment_ok = False
         except Exception:
