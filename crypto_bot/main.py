@@ -1913,7 +1913,7 @@ async def _main_impl() -> TelegramNotifier:
                 break
             except Exception as exc:  # pragma: no cover - best effort
                 logger.error("Solana scan error: %s", exc)
-            await asyncio.sleep(interval)
+            await wait_or_event(interval)
 
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
     cooldown_configure(config.get("min_cooldown", 0))
@@ -1966,6 +1966,22 @@ async def _main_impl() -> TelegramNotifier:
     if mempool_cfg.get("enabled"):
         mempool_monitor = SolanaMempoolMonitor()
 
+    wake_event = asyncio.Event()
+
+    async def wait_or_event(timeout: float) -> None:
+        """Wait for an external event or until ``timeout`` elapses."""
+        end = asyncio.get_running_loop().time() + timeout
+        while True:
+            wake_event.clear()
+            remaining = end - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                break
+            try:
+                await asyncio.wait_for(wake_event.wait(), timeout=min(1.0, remaining))
+                break
+            except asyncio.TimeoutError:
+                continue
+
     if notifier.token and notifier.chat_id:
         if not send_test_message(notifier.token, notifier.chat_id, "Bot started"):
             logger.warning("Telegram test message failed; check your token and chat ID")
@@ -1974,18 +1990,22 @@ async def _main_impl() -> TelegramNotifier:
     if user.get("exchange"):
         config["primary_exchange"] = user["exchange"]
 
-    exchanges = get_exchanges(config)
-    primary = (
-        config.get("primary_exchange")
-        or config.get("exchange")
-        or next(iter(exchanges))
-    )
-    exchange, ws_client = exchanges[primary]
-    secondary_exchange = None
-    for name, pair in exchanges.items():
-        if name != primary:
-            secondary_exchange = pair[0]
-            break
+    if config.get("exchanges"):
+        exchanges = get_exchanges(config)
+        primary = (
+            config.get("primary_exchange")
+            or config.get("exchange")
+            or next(iter(exchanges))
+        )
+        exchange, ws_client = exchanges[primary]
+        secondary_exchange = None
+        for name, pair in exchanges.items():
+            if name != primary:
+                secondary_exchange = pair[0]
+                break
+    else:
+        exchange, ws_client = get_exchange(config)
+        secondary_exchange = None
     if hasattr(exchange, "options"):
         opts = getattr(exchange, "options", {})
         opts["ws"] = {"ping_interval": 10, "ping_timeout": 45}
@@ -2032,10 +2052,7 @@ async def _main_impl() -> TelegramNotifier:
                 notifier.notify(
                     f"Symbol scan failed; retrying in {delay}s (attempt {attempt + 1}/{MAX_SYMBOL_SCAN_ATTEMPTS})"
                 )
-            if inspect.iscoroutinefunction(asyncio.sleep):
-                await asyncio.sleep(delay)
-            else:  # pragma: no cover - compatibility with patched sleep
-                asyncio.sleep(delay)
+            await wait_or_event(delay)
             delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
 
         if discovered:
@@ -2283,6 +2300,44 @@ async def _main_impl() -> TelegramNotifier:
         ]
     )
 
+    async def _ws_price_feed_listener() -> None:
+        if not ws_client:
+            return
+        while True:
+            try:
+                msg = await ws_client._next_message(timeout=5.0)
+                if msg is not None:
+                    wake_event.set()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                await asyncio.sleep(1)
+
+    async def _mempool_event_listener() -> None:
+        if not mempool_monitor:
+            return
+        interval = float(mempool_cfg.get("poll_interval", 5))
+        while True:
+            try:
+                await asyncio.wait_for(
+                    asyncio.to_thread(mempool_monitor.fetch_priority_fee),
+                    timeout=interval,
+                )
+                wake_event.set()
+            except asyncio.TimeoutError:
+                pass
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+            await asyncio.sleep(interval)
+
+    listener_tasks: list[asyncio.Task] = []
+    if ws_client:
+        listener_tasks.append(asyncio.create_task(_ws_price_feed_listener()))
+    if mempool_monitor:
+        listener_tasks.append(asyncio.create_task(_mempool_event_listener()))
+
     loop_count = 0
     last_weight_update = last_optimize = 0.0
 
@@ -2339,7 +2394,7 @@ async def _main_impl() -> TelegramNotifier:
                     last_optimize = time.time()
 
             if not state.get("running"):
-                await asyncio.sleep(1)
+                await wait_or_event(1)
                 continue
 
             balances = await asyncio.to_thread(
@@ -2452,9 +2507,13 @@ async def _main_impl() -> TelegramNotifier:
                 ctx.volatility_factor, 1e-6
             )
             logger.info("Sleeping for %.2f minutes", delay)
-            await asyncio.sleep(delay * 60)
+            await wait_or_event(delay * 60)
 
     finally:
+        for task in listener_tasks:
+            task.cancel()
+            with contextlib.suppress(Exception):
+                await task
         if hasattr(exchange, "close"):
             if asyncio.iscoroutinefunction(getattr(exchange, "close")):
                 with contextlib.suppress(Exception):
