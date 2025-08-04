@@ -1,11 +1,10 @@
 from typing import Optional, Tuple
 
-from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
-
+import asyncio
 import pandas as pd
 import ta
+from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.utils.indicator_cache import cache_series
-
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 try:  # pragma: no cover - optional dependency
@@ -86,7 +85,10 @@ def generate_signal(
         When ``false`` the higher timeframe EMA confirmation is ignored.
     """
     if tick_data is not None and not tick_data.empty:
-        df = pd.concat([df, tick_data], ignore_index=True)
+        df = pd.concat(
+            [df.reset_index(drop=True), tick_data.reset_index(drop=True)],
+            ignore_index=True,
+        )
 
     if df.empty:
         return 0.0, "none"
@@ -103,7 +105,10 @@ def generate_signal(
                 "volume": vol,
             }
         )
-        df = pd.concat([df, tick_df], ignore_index=True)
+        df = pd.concat(
+            [df.reset_index(drop=True), tick_df.reset_index(drop=True)],
+            ignore_index=True,
+        )
 
     params = config.get("micro_scalp", {}) if config else {}
 
@@ -227,23 +232,28 @@ def generate_signal(
         return 0.0, "none"
 
     book_data = book or params.get("order_book")
-    if isinstance(book_data, dict):
-        bids_list = book_data.get("bids")
-        asks_list = book_data.get("asks")
-        if bids_list and asks_list:
-            best_bid = bids_list[0][0]
-            best_ask = asks_list[0][0]
-            mid_price = (best_bid + best_ask) / 2
-            if mid_price > 0 and (best_ask - best_bid) / mid_price > 0.003:
-                return 0.0, "none"
+    if (
+        isinstance(book_data, dict)
+        and book_data.get("bids")
+        and book_data.get("asks")
+    ):
+        bids_list = book_data["bids"]
+        asks_list = book_data["asks"]
+        best_bid = bids_list[0][0]
+        best_ask = asks_list[0][0]
+        mid_price = (best_bid + best_ask) / 2
+        if mid_price > 0 and (best_ask - best_bid) / mid_price > 0.003:
+            return 0.0, "none"
 
     if (
         imbalance_filter
         and imbalance_ratio
         and isinstance(book_data, dict)
+        and book_data.get("bids")
+        and book_data.get("asks")
     ):
-        bids = sum(v for _, v in book_data.get("bids", []))
-        asks = sum(v for _, v in book_data.get("asks", []))
+        bids = sum(v for _, v in book_data["bids"])
+        asks = sum(v for _, v in book_data["asks"])
         if bids and asks:
             imbalance = bids / asks
             if direction == "long" and imbalance < imbalance_ratio:
@@ -265,7 +275,12 @@ def generate_signal(
 
     if mempool_monitor is not None:
         try:
-            fee = mempool_monitor.fetch_priority_fee()
+            fee = asyncio.run(asyncio.to_thread(mempool_monitor.fetch_priority_fee))
+        except RuntimeError:
+            try:
+                fee = mempool_monitor.fetch_priority_fee()
+            except Exception:
+                fee = None
         except Exception:
             fee = None
         if fee is not None and fee < 5:
