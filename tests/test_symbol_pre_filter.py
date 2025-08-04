@@ -3,7 +3,6 @@ import json
 import pandas as pd
 import pytest
 import ccxt
-import sys
 import logging
 import time
 import crypto_bot.utils.symbol_scoring as sc
@@ -39,12 +38,6 @@ def patch_multi_tf(monkeypatch):
     yield
 
 
-@pytest.fixture(autouse=True)
-def clear_unsupported():
-    sp.unsupported_pairs.clear()
-    yield
-
-
 @pytest.fixture
 def track_multi_tf(monkeypatch):
     calls: list[list[str]] = []
@@ -73,6 +66,7 @@ CONFIG = {
         "age": 0,
         "latency": 0,
     },
+    "max_vol": 100000,
     "min_symbol_score": 0.0,
 }
 
@@ -260,19 +254,19 @@ class USDCVolumeExchange:
         }
 
     async def fetch_tickers(self, symbols):
-        assert symbols == ["LOW/USDT"]
+        assert symbols == ["LOW/USDC", "LOW/USDT"]
         ticker = {
             "a": ["101", "1", "1"],
             "b": ["100", "1", "1"],
             "c": ["101", "1"],
-            "v": ["1", "1"],
+            "v": ["300", "300"],
             "p": ["100", "100"],
             "o": "99",
         }
-        return {"LOW/USDT": ticker}
+        return {"LOW/USDC": ticker, "LOW/USDT": ticker}
 
 
-def test_usdc_min_volume_configurable(monkeypatch):
+def test_usdc_min_volume_halved(monkeypatch):
     async def raise_if_called(*_a, **_k):
         raise AssertionError("_fetch_ticker_async should not be called")
 
@@ -280,80 +274,12 @@ def test_usdc_min_volume_configurable(monkeypatch):
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", raise_if_called
     )
 
-    class _CCXT:
-        class BadSymbol(Exception):
-            pass
-
-        class ExchangeError(Exception):
-            pass
-
-        class NetworkError(Exception):
-            pass
-
-    monkeypatch.setattr(sp, "ccxt", _CCXT)
-
-    async def fake_gecko(*_a, **_k):
-        return [], 20_000_000.0, 0.0
-
-    monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
-
-    from crypto_bot.utils import token_registry
-
-    monkeypatch.setitem(token_registry.TOKEN_MINTS, "LOW", "mint")
-
     ex = USDCVolumeExchange()
-
-    cfg = {
-        **CONFIG,
-        "symbol_filter": {**CONFIG["symbol_filter"], "min_volume_usd": 200},
-        "onchain_min_volume_usd": 50,
-    }
-    cex, onchain = asyncio.run(filter_symbols(ex, ["LOW/USDC", "LOW/USDT"], cfg))
-    assert cex == []
-    assert [s for s, _ in onchain] == ["LOW/USDC"]
-
-    cfg = {
-        **CONFIG,
-        "symbol_filter": {**CONFIG["symbol_filter"], "min_volume_usd": 200},
-    }
-    cex, onchain = asyncio.run(filter_symbols(ex, ["LOW/USDC", "LOW/USDT"], cfg))
-    assert cex == []
-    assert [s for s, _ in onchain] == ["LOW/USDC"]
-
-
-class InactiveMarketExchange(DummyExchange):
-    def __init__(self):
-        self.has = {"fetchTickers": True}
-        self.markets_by_id = DummyExchange.markets_by_id
-        self.markets = {"ETH/USD": {"active": False}, "BTC/USD": {"active": True}}
-
-    async def fetch_tickers(self, symbols):
-        assert symbols == ["BTC/USD"]
-        data = (await fake_fetch(None))["result"]
-        ticker = {
-            "a": ["51", "1", "1"],
-            "b": ["50", "1", "1"],
-            "c": ["51", "1"],
-            "v": ["600", "600"],
-            "p": ["100", "100"],
-            "o": "49",
-        }
-        return {"BTC/USD": ticker}
-
-
-def test_filter_symbols_skips_inactive(monkeypatch):
-    async def raise_if_called(*_a, **_k):
-        raise AssertionError("_fetch_ticker_async should not be called")
-
-    monkeypatch.setattr(
-        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async",
-        raise_if_called,
+    result = asyncio.run(
+        filter_symbols(ex, ["LOW/USDC", "LOW/USDT"], CONFIG)
     )
 
-    ex = InactiveMarketExchange()
-    result = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
-
-    assert [s for s, _ in result[0]] == ["BTC/USD"]
+    assert result == [("LOW/USDC", 0.3)]
 
 
 class DummyOnchainEx:
@@ -365,21 +291,17 @@ class DummyOnchainEx:
 def test_onchain_volume_below_threshold(monkeypatch):
     async def no_fetch(*_a, **_k):
         return {}
-
     monkeypatch.setattr(sp, "_refresh_tickers", no_fetch)
 
     async def fake_gecko(*_a, **_k):
         return [], 500_000.0, 0.0
 
     from crypto_bot.utils import token_registry
-
     monkeypatch.setitem(token_registry.TOKEN_MINTS, "AAA", "mint")
     monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
 
     res = asyncio.run(
-        sp.filter_symbols(
-            DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000}
-        )
+        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000})
     )
 
     assert res == ([], [])
@@ -388,21 +310,17 @@ def test_onchain_volume_below_threshold(monkeypatch):
 def test_onchain_volume_above_threshold(monkeypatch):
     async def no_fetch(*_a, **_k):
         return {}
-
     monkeypatch.setattr(sp, "_refresh_tickers", no_fetch)
 
     async def fake_gecko(*_a, **_k):
         return [], 2_000_000.0, 0.0
 
     from crypto_bot.utils import token_registry
-
     monkeypatch.setitem(token_registry.TOKEN_MINTS, "AAA", "mint")
     monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
 
     res = asyncio.run(
-        sp.filter_symbols(
-            DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000}
-        )
+        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000})
     )
 
     assert res == ([], [("AAA/USDC", 2.0)])
@@ -418,12 +336,9 @@ def test_onchain_lookup_via_helius(monkeypatch):
         return [], 1_500_000.0, 0.0
 
     from crypto_bot.utils import token_registry
-
     token_registry.TOKEN_MINTS.clear()
-
     async def none_gecko(*_a):
         return None
-
     monkeypatch.setattr(token_registry, "get_mint_from_gecko", none_gecko)
 
     async def fake_helius(symbols):
@@ -434,15 +349,11 @@ def test_onchain_lookup_via_helius(monkeypatch):
     monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
 
     res = asyncio.run(
-        sp.filter_symbols(
-            DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000}
-        )
+        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000})
     )
 
     assert res == ([], [("AAA/USDC", 1.5)])
     assert token_registry.TOKEN_MINTS["AAA"] == "mint"
-
-
 def test_blacklisted_base_omitted(monkeypatch, caplog):
     caplog.set_level("WARNING")
     import crypto_bot.utils.token_registry as tr
@@ -459,7 +370,9 @@ def test_blacklisted_base_omitted(monkeypatch, caplog):
         has = {}
         markets_by_id = {}
 
-    result = asyncio.run(sp.filter_symbols(DummyEx(), ["SOL/USDC", "BNB/USDC"], CONFIG))
+    result = asyncio.run(
+        sp.filter_symbols(DummyEx(), ["SOL/USDC", "BNB/USDC"], CONFIG)
+    )
 
     assert result == ([], [("SOL/USDC", 1.0)])
     assert not any("No mint" in r.getMessage() for r in caplog.records)
@@ -559,139 +472,6 @@ def test_watch_tickers_fallback(monkeypatch, caplog, tmp_path):
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
     assert ex.watch_calls >= 1
     assert ex.fetch_calls == 1
-
-
-class UnsupportedWatchExchange(DummyExchange):
-    def __init__(self):
-        self.has = {"watchTickers": True, "fetchTickers": True}
-        self.watch_calls = 0
-        self.fetch_calls = 0
-
-    async def watch_tickers(self, symbols):
-        self.watch_calls += 1
-        raise ccxt.ExchangeError("Currency pair not supported BAD/USD")
-
-    async def fetch_tickers(self, symbols):
-        self.fetch_calls += 1
-        assert symbols == ["ETH/USD"]
-        data = (await fake_fetch(None))["result"]
-        return {"ETH/USD": data["XETHZUSD"]}
-
-
-def test_watch_tickers_unsupported_pair(monkeypatch, caplog):
-    caplog.set_level("WARNING")
-
-    async def raise_if_called(*_a, **_k):
-        raise AssertionError("_fetch_ticker_async should not be called")
-
-    monkeypatch.setattr(sp, "_fetch_ticker_async", raise_if_called)
-
-    class _CCXT:
-        class ExchangeError(Exception):
-            pass
-
-    monkeypatch.setattr(sp, "ccxt", _CCXT)
-    monkeypatch.setitem(sys.modules, "ccxt", _CCXT)
-    monkeypatch.setattr(sys.modules[__name__], "ccxt", _CCXT)
-
-    sp.ticker_cache.clear()
-    sp.ticker_ts.clear()
-    ex = UnsupportedWatchExchange()
-
-    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BAD/USD"]))
-
-    assert ex.watch_calls >= 1
-    assert ex.fetch_calls == 1
-    assert set(result) == {"ETH/USD"}
-    assert "BAD/USD" in sp.unsupported_pairs
-    assert any("BAD/USD" in r.getMessage() for r in caplog.records)
-
-
-class RetryUnsupportedExchange(DummyExchange):
-    def __init__(self):
-        self.has = {"watchTickers": True}
-        self.watch_calls = 0
-
-    async def watch_tickers(self, symbols):
-        self.watch_calls += 1
-        if any(s == "BAD/USD" for s in symbols):
-            raise sp.ccxt.ExchangeError("Currency pair not supported BAD/USD")
-        data = (await fake_fetch(None))["result"]
-        return {"ETH/USD": data["XETHZUSD"]}
-
-
-def test_watch_tickers_retry_remaining(monkeypatch):
-    import importlib
-    sys.modules.pop("ccxt", None)
-    real_ccxt = importlib.import_module("ccxt")
-    monkeypatch.setitem(sys.modules, "ccxt", real_ccxt)
-    monkeypatch.setattr(sp, "ccxt", real_ccxt)
-def test_watch_tickers_unsupported_pair_no_failures(monkeypatch, caplog):
-    caplog.set_level("WARNING")
-
-    async def raise_if_called(*_a, **_k):
-        raise AssertionError("_fetch_ticker_async should not be called")
-
-    monkeypatch.setattr(sp, "_fetch_ticker_async", raise_if_called)
-
-    class _CCXT:
-        class ExchangeError(Exception):
-            pass
-
-    monkeypatch.setattr(sp, "ccxt", _CCXT)
-    monkeypatch.setitem(sys.modules, "ccxt", _CCXT)
-    monkeypatch.setattr(sys.modules[__name__], "ccxt", _CCXT)
-
-    sp.ticker_cache.clear()
-    sp.ticker_ts.clear()
-    sp.ticker_failures.clear()
-    ex = RetryUnsupportedExchange()
-
-    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BAD/USD"]))
-
-    assert ex.watch_calls >= 2
-    assert set(result) == {"ETH/USD"}
-    assert "BAD/USD" in sp.unsupported_pairs
-    assert "ETH/USD" not in sp.ticker_failures
-    ex = UnsupportedWatchExchange()
-
-    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BAD/USD"]))
-
-    assert ex.watch_calls >= 1
-    assert ex.fetch_calls == 1
-    assert set(result) == {"ETH/USD"}
-    assert "ETH/USD" not in sp.ticker_failures
-    assert "BAD/USD" not in sp.ticker_failures
-    assert "BAD/USD" in sp.unsupported_pairs
-    assert any("BAD/USD" in r.getMessage() for r in caplog.records)
-
-
-def test_filter_symbols_no_warning_for_unsupported(monkeypatch, caplog):
-    caplog.set_level("WARNING")
-
-    class FetchOnlyExchange(DummyExchange):
-        has = {"fetchTickers": True}
-
-        async def fetch_tickers(self, symbols):
-            assert symbols == ["ETH/USD"]
-            data = (await fake_fetch(None))["result"]
-            return {"ETH/USD": data["XETHZUSD"]}
-
-    async def never_call(*_a, **_k):
-        raise AssertionError("_fetch_ticker_async should not be called")
-
-    monkeypatch.setattr(sp, "_fetch_ticker_async", never_call)
-    sp.unsupported_pairs.add("BAD/USD")
-
-    symbols = asyncio.run(
-        filter_symbols(FetchOnlyExchange(), ["ETH/USD", "BAD/USD"], CONFIG)
-    )
-
-    assert [s for s, _ in symbols[0]] == ["ETH/USD"]
-    assert not any(
-        "No ticker data returned" in r.getMessage() and "BAD/USD" in r.getMessage()
-        for r in caplog.records
-    )
 
 
 class DummyExchangeList:
@@ -1267,24 +1047,11 @@ def test_refresh_tickers_bad_symbol(monkeypatch, caplog):
         async def fetch_tickers(self, symbols):
             raise ccxt.BadSymbol("bad symbol")
 
-    monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch)
-    class _CCXT:
-        class BadSymbol(Exception):
-            pass
-        class ExchangeError(Exception):
-            pass
-        class NetworkError(Exception):
-            pass
-
-    monkeypatch.setattr(sp, "ccxt", _CCXT)
-    monkeypatch.setitem(sys.modules, "ccxt", _CCXT)
-    monkeypatch.setattr(sys.modules[__name__], "ccxt", _CCXT)
-
     result = asyncio.run(
         sp._refresh_tickers(BadSymbolExchange(), ["ETH/USD", "BTC/USD"])
     )
 
-    assert set(result) == {"ETH/USD", "BTC/USD"}
+    assert result == {}
     assert any("BadSymbol" in r.getMessage() for r in caplog.records)
     assert any("BTC/USD" in r.getMessage() for r in caplog.records)
 
@@ -1312,40 +1079,6 @@ def test_refresh_tickers_filters_missing(monkeypatch, caplog):
 
     assert calls == [["ETH/USD"]]
     assert not any("BadSymbol" in r.getMessage() for r in caplog.records)
-
-
-def test_refresh_tickers_filters_inactive(monkeypatch, caplog):
-    caplog.set_level("WARNING")
-
-    calls = []
-
-    class DummyExchange:
-        has = {"fetchTickers": True}
-        markets = {"ETH/USD": {"active": False}, "BTC/USD": {"active": True}}
-
-        async def fetch_tickers(self, symbols):
-            calls.append(list(symbols))
-            ticker = {
-                "a": ["51", "1", "1"],
-                "b": ["50", "1", "1"],
-                "c": ["51", "1"],
-                "v": ["600", "600"],
-                "p": ["100", "100"],
-                "o": "49",
-            }
-            return {s: ticker for s in symbols}
-
-    async def never_call(*_a, **_k):
-        raise AssertionError("_fetch_ticker_async should not be called")
-
-    monkeypatch.setattr(sp, "_fetch_ticker_async", never_call)
-
-    ex = DummyExchange()
-    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"]))
-
-    assert calls == [["BTC/USD"]]
-    assert set(result) == {"BTC/USD"}
-    assert any("inactive" in r.getMessage().lower() for r in caplog.records)
 
 
 def test_refresh_tickers_retry_520(monkeypatch):
@@ -1474,25 +1207,6 @@ def test_refresh_tickers_public_api_fallback(monkeypatch):
     assert set(result) == {"ETH/USD", "BTC/USD"}
 
 
-def test_refresh_tickers_unsorted_response(monkeypatch):
-    class RestExchange(DummyExchange):
-        def __init__(self):
-            self.has = {}
-            self.markets = {"ETH/USD": {}, "BTC/USD": {}}
-
-    async def fake_unsorted(pairs, *_, **__):
-        data = (await fake_fetch(None))["result"]
-        return {"result": {"XXBTZUSD": data["XXBTZUSD"], "XETHZUSD": data["XETHZUSD"]}}
-
-    monkeypatch.setattr(sp, "_fetch_ticker_async", fake_unsorted)
-
-    ex = RestExchange()
-    result = asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"]))
-
-    assert result["ETH/USD"]["o"] == "99"
-    assert result["BTC/USD"]["o"] == "49"
-
-
 def test_refresh_tickers_batches(monkeypatch):
     class BatchExchange(DummyExchange):
         def __init__(self):
@@ -1505,47 +1219,12 @@ def test_refresh_tickers_batches(monkeypatch):
             return {s: {} for s in symbols}
 
     ex = BatchExchange()
-    monkeypatch.setattr(
-        sp, "cfg", {"symbol_filter": {"kraken_batch_size": 2, "http_timeout": 10}}
-    )
+    monkeypatch.setattr(sp, "cfg", {"symbol_filter": {"kraken_batch_size": 2, "http_timeout": 10}})
 
     result = asyncio.run(sp._refresh_tickers(ex, list(ex.markets)))
 
-    assert ex.calls == [
-        ["PAIR0/USD", "PAIR1/USD"],
-        ["PAIR2/USD", "PAIR3/USD"],
-        ["PAIR4/USD"],
-    ]
+    assert ex.calls == [["PAIR0/USD", "PAIR1/USD"], ["PAIR2/USD", "PAIR3/USD"], ["PAIR4/USD"]]
     assert result == {}
-
-
-def test_watch_tickers_batches(monkeypatch):
-    class BatchExchange(DummyExchange):
-        def __init__(self):
-            self.has = {"watchTickers": True}
-            self.options = {}
-            self.markets = {f"PAIR{i}/USD": {} for i in range(5)}
-
-    calls: list[list[str]] = []
-
-    async def fake_watch(_ex, symbols):
-        calls.append(list(symbols))
-        return {s: {} for s in symbols}
-
-    monkeypatch.setattr(sp, "_watch_tickers_with_retry", fake_watch)
-    monkeypatch.setattr(sp, "cfg", {**sp.cfg, "ws_ticker_batch_size": 2})
-
-    ex = BatchExchange()
-    sp.ticker_cache.clear()
-    sp.ticker_ts.clear()
-
-    asyncio.run(sp._refresh_tickers(ex, list(ex.markets)))
-
-    assert calls == [
-        ["PAIR0/USD", "PAIR1/USD"],
-        ["PAIR2/USD", "PAIR3/USD"],
-        ["PAIR4/USD"],
-    ]
 
 
 def test_fetch_ticker_async_timeout(monkeypatch):
@@ -1574,49 +1253,6 @@ def test_fetch_ticker_async_timeout(monkeypatch):
     asyncio.run(sp._fetch_ticker_async(["XBTUSD"], timeout=5))
 
     assert calls == [5]
-
-
-def test_fetch_ticker_async_chunk_error_recovery(monkeypatch):
-    urls: list[str] = []
-
-    class FakeResp:
-        def __init__(self, data):
-            self.data = data
-
-        def raise_for_status(self):
-            pass
-
-        async def json(self):
-            return self.data
-
-    class FakeSession:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *exc):
-            pass
-
-        async def get(self, url, timeout=None):
-            urls.append(url)
-            query = url.split("pair=")[1]
-            if "," in query:
-                return FakeResp({"error": ["boom"], "result": {}})
-            if query == "XBTUSD":
-                return FakeResp({"result": {"XBTUSD": {"a": ["1", "1", "1"]}}})
-            return FakeResp({"error": ["EQuery:Unknown asset pair"], "result": {}})
-
-    monkeypatch.setattr(sp.aiohttp, "ClientSession", lambda: FakeSession())
-
-    res = asyncio.run(sp._fetch_ticker_async(["XBTUSD", "BAD"], timeout=5))
-
-    assert res["result"] == {"XBTUSD": {"a": ["1", "1", "1"]}}
-    assert urls == [
-        f"{sp.API_URL}/Ticker?pair=XBTUSD,BAD",
-        f"{sp.API_URL}/Ticker?pair=XBTUSD",
-        f"{sp.API_URL}/Ticker?pair=BAD",
-    ]
-
-
 def test_ticker_retry_attempts(monkeypatch):
     class RetryExchange(DummyExchange):
         def __init__(self):
@@ -1666,11 +1302,7 @@ def test_ticker_failure_backoff(monkeypatch):
     t = {"now": 0}
     monkeypatch.setattr(sp.time, "time", lambda: t["now"])
 
-    cfg = {
-        "ticker_backoff_initial": 2,
-        "ticker_backoff_max": 8,
-        "symbol_filter": {"ticker_retry_attempts": 1},
-    }
+    cfg = {"ticker_backoff_initial": 2, "ticker_backoff_max": 8, "symbol_filter": {"ticker_retry_attempts": 1}}
 
     asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
     assert sp.ticker_failures["ETH/USD"]["delay"] == 2
@@ -1714,11 +1346,7 @@ def test_ticker_backoff_resets_on_success(monkeypatch):
     t = {"now": 0}
     monkeypatch.setattr(sp.time, "time", lambda: t["now"])
 
-    cfg = {
-        "ticker_backoff_initial": 2,
-        "ticker_backoff_max": 8,
-        "symbol_filter": {"ticker_retry_attempts": 1},
-    }
+    cfg = {"ticker_backoff_initial": 2, "ticker_backoff_max": 8, "symbol_filter": {"ticker_retry_attempts": 1}}
 
     asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
     assert sp.ticker_failures["ETH/USD"]["delay"] == 2
@@ -1858,29 +1486,6 @@ def test_unknown_pair_not_cached(monkeypatch):
     result = asyncio.run(sp.filter_symbols(MarketIDExchange(), ["BTC/USDT"], CONFIG))
     assert result == []
     assert "BTC/USDT" not in sp.liq_cache
-
-
-class MissingMarketsExchange:
-    id = "kraken"
-    has = {}
-    markets_by_id = {}
-
-    def market_id(self, _symbol):
-        raise RuntimeError("markets not loaded")
-
-
-async def fake_fetch_raw_id(pairs):
-    assert list(pairs) == ["BTCUSDT"]
-    data = (await fake_fetch(None))["result"]
-    return {"result": {"XBTUSDT": data["XXBTZUSD"]}}
-
-
-def test_symbol_mapping_without_markets(monkeypatch):
-    monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch_raw_id)
-    symbols = asyncio.run(sp.filter_symbols(MissingMarketsExchange(), ["BTC/USDT"], CONFIG))
-    assert symbols == [("BTC/USDT", 0.6)]
-
-
 def test_refresh_tickers_empty_result(monkeypatch, caplog):
     caplog.set_level("WARNING")
 
@@ -1930,18 +1535,13 @@ def test_filter_symbols_missing_mint_logs_debug(monkeypatch, caplog):
 
     async def no_refresh(*_a, **_k):
         return {}
-
     monkeypatch.setattr(sp, "_refresh_tickers", no_refresh)
     from crypto_bot.utils import token_registry
-
     async def none_gecko(*_a):
         return None
-
     monkeypatch.setattr(token_registry, "get_mint_from_gecko", none_gecko)
-
     async def helius_empty(*_a):
         return {}
-
     monkeypatch.setattr(token_registry, "fetch_from_helius", helius_empty)
 
     result = asyncio.run(sp.filter_symbols(DummyExchange(), ["AAA/USDC"], CONFIG))
@@ -1962,17 +1562,14 @@ def test_refresh_tickers_semaphore(monkeypatch):
 
         async def fetch_tickers(self, symbols):
             self.times.append(time.time())
-            return {
-                s: {
-                    "a": ["1", "1", "1"],
-                    "b": ["1", "1", "1"],
-                    "c": ["1", "1"],
-                    "v": ["1", "1"],
-                    "p": ["1", "1"],
-                    "o": "1",
-                }
-                for s in symbols
-            }
+            return {s: {
+                "a": ["1", "1", "1"],
+                "b": ["1", "1", "1"],
+                "c": ["1", "1"],
+                "v": ["1", "1"],
+                "p": ["1", "1"],
+                "o": "1",
+            } for s in symbols}
 
     sleeps: list[float] = []
 
@@ -2038,56 +1635,3 @@ def test_quote_volume_converted(monkeypatch):
     result = asyncio.run(filter_symbols(BTCQuoteExchange(), ["ETH/BTC"], cfg))
 
     assert [s for s, _ in result[0]] == ["ETH/BTC"]
-
-
-class ZeroVolumeExchange:
-    def __init__(self):
-        self.has = {"fetchTicker": True}
-        self.called = 0
-
-    async def fetch_ticker(self, symbol):
-        assert symbol == "ETH/USD"
-        self.called += 1
-        return {
-            "last": 101,
-            "open": 100,
-            "ask": 101,
-            "bid": 100,
-            "vwap": 100,
-            "baseVolume": 2,
-        }
-
-
-def test_parse_metrics_zero_volume_triggers_fetch(monkeypatch):
-    ex = ZeroVolumeExchange()
-    ticker = {
-        "last": 1,
-        "open": 1,
-        "ask": 1,
-        "bid": 1,
-        "vwap": 1,
-        "baseVolume": 0,
-    }
-    vol, change, spread = asyncio.run(sp._parse_metrics(ex, "ETH/USD", ticker))
-    assert ex.called == 1
-    assert vol == 200
-
-
-class NaNVolumeExchange(ZeroVolumeExchange):
-    async def fetch_ticker(self, symbol):
-        return await super().fetch_ticker(symbol)
-
-
-def test_parse_metrics_nan_volume_triggers_fetch():
-    ex = NaNVolumeExchange()
-    ticker = {
-        "last": 1,
-        "open": 1,
-        "ask": 1,
-        "bid": 1,
-        "vwap": float("nan"),
-        "baseVolume": 1,
-    }
-    vol, change, spread = asyncio.run(sp._parse_metrics(ex, "ETH/USD", ticker))
-    assert ex.called == 1
-    assert vol == 200

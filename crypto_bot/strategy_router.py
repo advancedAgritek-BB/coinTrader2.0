@@ -503,7 +503,6 @@ def _bandit_context(
         "mean-reverting",
         "breakout",
         "volatile",
-        "new_pool",
         "unknown",
     ]:
         context[f"regime_{r}"] = 1.0 if regime == r else 0.0
@@ -545,12 +544,12 @@ def strategy_name(regime: str, mode: str) -> str:
     if mode == "cex":
         return "trend" if regime == "trending" else "grid"
     if mode == "onchain":
-        return "sniper" if regime in {"breakout", "volatile", "new_pool"} else "dex_scalper"
+        return "sniper" if regime in {"breakout", "volatile"} else "dex_scalper"
     if regime == "trending":
         return "trend"
     if regime == "scalp":
         return "micro_scalp"
-    if regime in {"breakout", "volatile", "new_pool"}:
+    if regime in {"breakout", "volatile"}:
         return "sniper"
     return "grid"
 
@@ -812,7 +811,7 @@ def route(
             logger.info("Routing USDC breakout to Solana sniper bot")
             return _wrap(sniper_solana.generate_signal)
 
-    if chain.lower().startswith("sol") and mode in {"auto", "onchain"} and regime in {"breakout", "volatile", "new_pool"}:
+    if chain.lower().startswith("sol") and mode in {"auto", "onchain"} and regime in {"breakout", "volatile"}:
         base = symbol.split("/")[0] if symbol else ""
         if not symbol or base.upper() in TOKEN_MINTS:
             logger.info("Routing %s regime to Solana sniper bot (%s mode)", regime, mode)
@@ -854,13 +853,13 @@ def route(
 
     if mode == "onchain":
         if chain.lower().startswith("sol"):
-            if regime in {"breakout", "volatile", "new_pool"}:
+            if regime in {"breakout", "volatile"}:
                 logger.info("Routing to Solana sniper bot (onchain)")
                 return _wrap(sniper_solana.generate_signal)
             logger.info("Routing to DEX scalper (onchain)")
             return _wrap(dex_scalper.generate_signal)
 
-        if regime in {"breakout", "volatile", "new_pool"}:
+        if regime in {"breakout", "volatile"}:
             logger.info("Routing to sniper bot (onchain)")
             return _wrap(sniper_bot.generate_signal)
         logger.info("Routing to DEX scalper (onchain)")

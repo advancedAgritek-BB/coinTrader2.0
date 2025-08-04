@@ -2,7 +2,7 @@ from typing import Optional, Tuple
 
 import pandas as pd
 import ta
-from crypto_bot.volatility import normalize_score_by_volatility
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 
 
 def generate_signal(

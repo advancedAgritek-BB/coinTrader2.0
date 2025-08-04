@@ -6,7 +6,6 @@ import asyncio
 import json
 import os
 import time
-import re
 from pathlib import Path
 from typing import Iterable, List, Dict
 
@@ -128,9 +127,6 @@ TICKER_BACKOFF_MAX = 60
 # Cache of recent liquidity metrics per symbol
 liq_cache = TTLCache(maxsize=2000, ttl=900)
 
-# Track pairs that returned an unsupported pair error when requesting tickers
-unsupported_pairs: set[str] = set()
-
 
 # tenacity wrapped helper for WebSocket ticker requests
 @retry(
@@ -147,11 +143,7 @@ async def _watch_tickers_with_retry(exchange, symbols):
 
 
 async def has_enough_history(
-    exchange,
-    symbol: str,
-    days: int = 30,
-    timeframe: str = "1d",
-    min_fraction: float = 0.5,
+    exchange, symbol: str, days: int = 30, timeframe: str = "1d", min_fraction: float = 0.5
 ) -> bool:
     """Return ``True`` when ``symbol`` has at least ``days`` days of history.
 
@@ -222,7 +214,6 @@ async def _fetch_ticker_async(
     delay = rate_ms / 1000 if rate_ms else 0
     combined: dict = {"result": {}, "error": []}
     async with aiohttp.ClientSession() as session:
-
         async def fetch(url: str):
             async with TICKER_SEMA:
                 resp = await session.get(url, timeout=timeout)
@@ -231,36 +222,17 @@ async def _fetch_ticker_async(
                 return resp
 
         tasks = []
-        chunks: list[list[str]] = []
         for i in range(0, len(pairs_list), 20):
             chunk = pairs_list[i : i + 20]
-            chunks.append(chunk)
             url = f"{API_URL}/Ticker?pair={','.join(chunk)}"
             tasks.append(asyncio.create_task(fetch(url)))
 
         responses = await asyncio.gather(*tasks)
-        for chunk, resp in zip(chunks, responses):
+        for resp in responses:
             resp.raise_for_status()
             data = await resp.json()
-            errors = data.get("error", [])
-            result = data.get("result")
-            if errors and not result:
-                for pair in chunk:
-                    url = f"{API_URL}/Ticker?pair={pair}"
-                    single = await fetch(url)
-                    single.raise_for_status()
-                    sdata = await single.json()
-                    serrors = sdata.get("error", [])
-                    sresult = sdata.get("result")
-                    if sresult:
-                        combined["result"].update(sresult)
-                        combined["error"] += serrors
-                    elif not any("Unknown asset pair" in e for e in serrors):
-                        combined["error"] += serrors
-                continue
-            combined["error"] += errors
-            if result:
-                combined["result"].update(result)
+            combined["error"] += data.get("error", [])
+            combined["result"].update(data.get("result", {}))
 
     return combined
 
@@ -273,23 +245,16 @@ def _id_for_symbol(exchange, symbol: str) -> str:
             return market_id(symbol)
     except Exception:  # pragma: no cover - best effort
         pass
-    pair = symbol.replace("/", "")
-    if getattr(exchange, "id", "").lower() == "kraken" and pair.upper().startswith("BTC"):
-        pair = "XBT" + pair[3:]
-    return pair
+    return symbol.replace("/", "")
 
 
 USD_STABLES = {"USD", "USDT", "USDC"}
 
 
 async def _parse_metrics(
-    exchange, symbol: str, ticker: dict, allow_retry: bool = True
+    exchange, symbol: str, ticker: dict
 ) -> tuple[float, float, float]:
-    """Return volume USD, percent change and spread percentage using cache.
-
-    ``allow_retry`` controls whether a zero or NaN volume triggers an
-    additional ``fetch_ticker`` call to refresh the data.
-    """
+    """Return volume USD, percent change and spread percentage using cache."""
 
     if "c" in ticker and isinstance(ticker["c"], (list, tuple)):
         # Raw Kraken format
@@ -299,7 +264,6 @@ async def _parse_metrics(
         bid = float(ticker.get("b", [0])[0])
         vwap = float(ticker.get("p", [last, last])[1])
         volume = float(ticker.get("v", [0, 0])[1])
-        logger.debug("%s volume calc from vol=%s vwap=%s", symbol, volume, vwap)
         volume_usd = volume * vwap
     else:
         # CCXT normalized ticker
@@ -309,14 +273,9 @@ async def _parse_metrics(
         bid = float(ticker.get("bid", 0.0))
         vwap = float(ticker.get("vwap", last))
         if ticker.get("quoteVolume") is not None:
-            quote_vol = float(ticker.get("quoteVolume"))
-            logger.debug("%s volume calc from quoteVolume=%s", symbol, quote_vol)
-            volume_usd = quote_vol
+            volume_usd = float(ticker.get("quoteVolume"))
         else:
             base_vol = float(ticker.get("baseVolume", 0.0))
-            logger.debug(
-                "%s volume calc from baseVolume=%s vwap=%s", symbol, base_vol, vwap
-            )
             volume_usd = base_vol * vwap
 
     base, _, quote = symbol.partition("/")
@@ -351,22 +310,7 @@ async def _parse_metrics(
                 except Exception:
                     continue
         if price:
-            logger.debug("%s quote conversion price=%s", symbol, price)
             volume_usd *= price
-
-    if (not volume_usd) or np.isnan(volume_usd):
-        logger.debug("%s zero/NaN volume from ticker %s", symbol, ticker)
-        if allow_retry and hasattr(exchange, "fetch_ticker"):
-            fetch = exchange.fetch_ticker
-            try:
-                if asyncio.iscoroutinefunction(fetch):
-                    t = await fetch(symbol)
-                else:
-                    t = await asyncio.to_thread(fetch, symbol)
-                logger.debug("%s fallback ticker %s", symbol, t)
-                return await _parse_metrics(exchange, symbol, t.get("info", t), False)
-            except Exception as exc:  # pragma: no cover - network
-                logger.warning("fallback fetch_ticker failed for %s: %s", symbol, exc)
 
     change_pct = ((last - open_price) / open_price) * 100 if open_price else 0.0
 
@@ -374,13 +318,7 @@ async def _parse_metrics(
     liq_cache[symbol] = (volume_usd, spread_pct, 1.0)
 
     cached_vol, cached_spread, _ = liq_cache[symbol]
-    logger.info(
-        "%s: vol=%.2f chg=%.2f%% spr=%.2f%%",
-        symbol,
-        cached_vol,
-        change_pct,
-        cached_spread,
-    )
+    logger.info("%s: vol=%.2f chg=%.2f%% spr=%.2f%%", symbol, cached_vol, change_pct, cached_spread)
     return cached_vol, change_pct, cached_spread
 
 
@@ -388,27 +326,12 @@ async def _refresh_tickers(
     exchange,
     symbols: Iterable[str],
     config: dict | None = None,
-    *,
-    return_attempted: bool = False,
-) -> dict | tuple[dict, set[str]]:
-    """Return ticker data using WS/HTTP and fall back to per-symbol fetch.
-
-    When ``return_attempted`` is ``True`` the function returns a 2-tuple of the
-    ticker data and the set of symbols that were actually requested.
-    """
+) -> dict:
+    """Return ticker data using WS/HTTP and fall back to per-symbol fetch."""
 
     start_time = time.perf_counter()
 
-    ws_result: dict[str, dict] = {}
-
     symbols = list(symbols)
-    removed = [s for s in symbols if _norm_symbol(s) in unsupported_pairs]
-    if removed:
-        logger.warning(
-            "Skipping unsupported symbols: %s",
-            ", ".join(removed),
-        )
-    symbols = [s for s in symbols if _norm_symbol(s) not in unsupported_pairs]
     cfg = config if config is not None else globals().get("cfg", {})
     sf = cfg.get("symbol_filter", {})
     init_ticker_semaphore(
@@ -430,16 +353,11 @@ async def _refresh_tickers(
     now = time.time()
     batch = cfg.get("symbol_filter", {}).get("kraken_batch_size", 100)
     timeout = cfg.get("symbol_filter", {}).get("http_timeout", 10)
+    symbols = list(symbols)
     filtered: list[str] = []
     for s in symbols:
         info = ticker_failures.get(s)
         if info and now - info["time"] < info["delay"]:
-            remaining = max(info["delay"] - (now - info["time"]), 0)
-            logger.debug(
-                "Skipping %s due to previous ticker failure; %.2fs remaining",
-                s,
-                remaining,
-            )
             continue
         filtered.append(s)
     symbols = filtered
@@ -463,21 +381,6 @@ async def _refresh_tickers(
                 ", ".join(missing),
             )
         symbols = [s for s in symbols if s in markets]
-        inactive = [
-            s
-            for s in symbols
-            if isinstance(markets.get(s), dict) and markets[s].get("active") is not True
-        ]
-        if inactive:
-            logger.warning(
-                "Skipping inactive symbols: %s",
-                ", ".join(inactive),
-            )
-        symbols = [
-            s
-            for s in symbols
-            if not isinstance(markets.get(s), dict) or markets[s].get("active") is True
-        ]
 
     attempted_syms: set[str] = set()
 
@@ -494,9 +397,10 @@ async def _refresh_tickers(
                     count = info.get("count", 0) + 1
                 ticker_failures[sym] = {"time": now, "delay": delay, "count": count}
 
-    try_ws = getattr(getattr(exchange, "has", {}), "get", lambda _k: False)(
-        "watchTickers"
-    ) and getattr(exchange, "options", {}).get("ws_scan", True)
+    try_ws = (
+        getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
+        and getattr(exchange, "options", {}).get("ws_scan", True)
+    )
     ws_failures = int(getattr(exchange, "options", {}).get("ws_failures", 0))
     ws_limit = int(cfg.get("ws_failures_before_disable", 3))
     try_http = True
@@ -510,34 +414,11 @@ async def _refresh_tickers(
             attempted_syms.update(to_fetch)
             if ws_failures:
                 await asyncio.sleep(min(2 ** (ws_failures - 1), 30))
-            ws_batch = int(cfg.get("ws_ticker_batch_size", 100) or 100)
             try:
-                data = {}
-                i = 0
-                while i < len(to_fetch):
-                    chunk = to_fetch[i : i + ws_batch]
-                    try:
-                        async with TICKER_SEMA:
-                            chunk_data = await _watch_tickers_with_retry(exchange, chunk)
-                            if delay:
-                                await asyncio.sleep(delay)
-                        data.update(chunk_data)
-                        i += ws_batch
-                    except Exception as exc:  # pragma: no cover - network
-                        if isinstance(exc, ccxt.ExchangeError):
-                            m = re.search(r"Currency pair not supported[:\s]*([^\s]+)", str(exc))
-                            if m:
-                                bad = _norm_symbol(m.group(1))
-                                if any(_norm_symbol(s) == bad for s in chunk):
-                                    unsupported_pairs.add(bad)
-                                    attempted_syms.discard(bad)
-                                    symbols = [s for s in symbols if _norm_symbol(s) != bad]
-                                    to_fetch = [s for s in to_fetch if _norm_symbol(s) != bad]
-                                    logger.warning("Dropping unsupported pair %s", bad)
-                                    continue  # retry this chunk without the bad pair
-                                else:
-                                    raise
-                        raise
+                async with TICKER_SEMA:
+                    data = await _watch_tickers_with_retry(exchange, to_fetch)
+                    if delay:
+                        await asyncio.sleep(delay)
                 opts = getattr(exchange, "options", None)
                 if opts is not None:
                     opts["ws_failures"] = 0
@@ -547,16 +428,6 @@ async def _refresh_tickers(
                     exc,
                     exc_info=log_exc,
                 )
-                if isinstance(exc, ccxt.ExchangeError):
-                    m = re.search(
-                        r"Currency pair not supported[:\s]*([^\s]+)", str(exc)
-                    )
-                    if m:
-                        bad = _norm_symbol(m.group(1))
-                        unsupported_pairs.add(bad)
-                        symbols = [s for s in symbols if _norm_symbol(s) != bad]
-                        to_fetch = [s for s in to_fetch if _norm_symbol(s) != bad]
-                        logger.warning("Dropping unsupported pair %s", bad)
                 telemetry.inc("scan.api_errors")
                 opts = getattr(exchange, "options", None)
                 if opts is not None:
@@ -581,20 +452,7 @@ async def _refresh_tickers(
         result = {s: ticker_cache[s] for s in symbols if s in ticker_cache}
         if result:
             record_results(result)
-            missing = [s for s in symbols if s not in result]
-            if not missing:
-                if return_attempted:
-                    return (
-                        {s: t.get("info", t) for s, t in result.items()},
-                        set(attempted_syms),
-                    )
-                return {s: t.get("info", t) for s, t in result.items()}
-            else:
-                # continue with HTTP for symbols missing from WebSocket data
-                symbols = missing
-                ws_result = {s: t.get("info", t) for s, t in result.items()}
-        else:
-            ws_result = {}
+            return {s: t.get("info", t) for s, t in result.items()}
 
     if try_http:
         if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)(
@@ -628,49 +486,10 @@ async def _refresh_tickers(
                             exc,
                         )
                         telemetry.inc("scan.api_errors")
-                        chunk_pairs = [_id_for_symbol(exchange, s) for s in chunk]
-                        try:
-                            async with TICKER_SEMA:
-                                resp = await _fetch_ticker_async(
-                                    chunk_pairs, timeout=timeout, exchange=exchange
-                                )
-                                if delay:
-                                    await asyncio.sleep(delay)
-                        except TypeError:
-                            async with TICKER_SEMA:
-                                resp = await _fetch_ticker_async(
-                                    chunk_pairs, exchange=exchange
-                                )
-                                if delay:
-                                    await asyncio.sleep(delay)
-                        raw = resp.get("result", {})
-                        chunk_data = {}
-                        for sym, pair in zip(chunk, chunk_pairs):
-                            ticker = raw.get(pair) or raw.get(pair.upper())
-                            if ticker is None:
-                                pu = pair.upper()
-                                for k, v in raw.items():
-                                    if pu in k.upper():
-                                        ticker = v
-                                        break
-                            if ticker:
-                                chunk_data[sym] = ticker
-                            else:
-                                logger.warning(
-                                    "No matching ticker found for %s (pair %s)",
-                                    sym,
-                                    pair,
-                                )
-                        break
-                    except (
-                        ccxt.ExchangeError,
-                        ccxt.NetworkError,
-                    ) as exc:  # pragma: no cover - network
-                        if (
-                            getattr(exc, "http_status", None) in (520, 522)
-                            and attempt < 2
-                        ):
-                            await asyncio.sleep(2**attempt)
+                        return {}
+                    except (ccxt.ExchangeError, ccxt.NetworkError) as exc:  # pragma: no cover - network
+                        if getattr(exc, "http_status", None) in (520, 522) and attempt < 2:
+                            await asyncio.sleep(2 ** attempt)
                             continue
                         logger.warning(
                             "fetch_tickers failed: %s \u2013 falling back to Kraken REST /Ticker",
@@ -700,9 +519,7 @@ async def _refresh_tickers(
                                         await asyncio.sleep(delay)
                             else:
                                 async with TICKER_SEMA:
-                                    fetched = await asyncio.to_thread(
-                                        fetcher, list(symbols)
-                                    )
+                                    fetched = await asyncio.to_thread(fetcher, list(symbols))
                                     if delay:
                                         await asyncio.sleep(delay)
                             data = {s: t.get("info", t) for s, t in fetched.items()}
@@ -714,26 +531,16 @@ async def _refresh_tickers(
                                 exc,
                             )
                             telemetry.inc("scan.api_errors")
-                            data = None
-                            break
+                            return {}
                         except (
                             ccxt.ExchangeError,
                             ccxt.NetworkError,
                         ) as exc:  # pragma: no cover - network
-                            if (
-                                getattr(exc, "http_status", None) in (520, 522)
-                                and attempt < 2
-                            ):
+                            if getattr(exc, "http_status", None) in (520, 522) and attempt < 2:
                                 await asyncio.sleep(2**attempt)
-                        except (
-                            ccxt.ExchangeError,
-                            ccxt.NetworkError,
-                        ) as exc:  # pragma: no cover - network
-                            if (
-                                getattr(exc, "http_status", None) in (520, 522)
-                                and attempt < attempts - 1
-                            ):
-                                await asyncio.sleep(2**attempt)
+                        except (ccxt.ExchangeError, ccxt.NetworkError) as exc:  # pragma: no cover - network
+                            if getattr(exc, "http_status", None) in (520, 522) and attempt < attempts - 1:
+                                await asyncio.sleep(2 ** attempt)
                                 continue
                             logger.warning(
                                 "fetch_tickers failed: %s \u2013 falling back to Kraken REST /Ticker",
@@ -781,38 +588,40 @@ async def _refresh_tickers(
                         try:
                             async with TICKER_SEMA:
                                 raw = (
-                                    await _fetch_ticker_async(
-                                        symbols, timeout=timeout, exchange=exchange
-                                    )
+                                    await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
                                 ).get("result", {})
                                 if delay:
                                     await asyncio.sleep(delay)
                         except TypeError:
                             async with TICKER_SEMA:
                                 raw = (
-                                    await _fetch_ticker_async(
-                                        symbols, exchange=exchange
-                                    )
+                                    await _fetch_ticker_async(symbols, exchange=exchange)
                                 ).get("result", {})
                                 if delay:
                                     await asyncio.sleep(delay)
                     data = {}
-                    for sym, pair in zip(symbols, pairs):
-                        ticker = raw.get(pair) or raw.get(pair.upper())
-                        if ticker is None:
-                            pu = pair.upper()
-                            for k, v in raw.items():
-                                if pu in k.upper():
-                                    ticker = v
-                                    break
-                        if ticker:
-                            data[sym] = ticker
-                        else:
-                            logger.warning(
-                                "No matching ticker found for %s (pair %s)",
-                                sym,
-                                pair,
-                            )
+                    if len(raw) == len(symbols):
+                        for sym, (_, ticker) in zip(symbols, raw.items()):
+                            if ticker:
+                                data[sym] = ticker
+                            else:
+                                logger.warning("Empty ticker result for %s", sym)
+                    else:
+                        extra = iter(raw.values())
+                        for sym, pair in zip(symbols, pairs):
+                            ticker = raw.get(pair) or raw.get(pair.upper())
+                            if ticker is None:
+                                pu = pair.upper()
+                                for k, v in raw.items():
+                                    if pu in k.upper():
+                                        ticker = v
+                                        break
+                            if ticker is None:
+                                ticker = next(extra, None)
+                            if ticker:
+                                data[sym] = ticker
+                            else:
+                                logger.warning("Empty ticker result for %s", sym)
                 except Exception:  # pragma: no cover - network
                     telemetry.inc("scan.api_errors")
                     data = {}
@@ -840,9 +649,7 @@ async def _refresh_tickers(
                     try:
                         async with TICKER_SEMA:
                             raw = (
-                                await _fetch_ticker_async(
-                                    symbols, timeout=timeout, exchange=exchange
-                                )
+                                await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
                             ).get("result", {})
                             if delay:
                                 await asyncio.sleep(delay)
@@ -854,20 +661,28 @@ async def _refresh_tickers(
                             if delay:
                                 await asyncio.sleep(delay)
                 data = {}
-                for sym, pair in zip(symbols, pairs):
-                    ticker = raw.get(pair) or raw.get(pair.upper())
-                    if ticker is None:
-                        pu = pair.upper()
-                        for k, v in raw.items():
-                            if pu in k.upper():
-                                ticker = v
-                                break
-                    if ticker:
-                        data[sym] = ticker
-                    else:
-                        logger.warning(
-                            "No matching ticker found for %s (pair %s)", sym, pair
-                        )
+                if len(raw) == len(symbols):
+                    for sym, (_, ticker) in zip(symbols, raw.items()):
+                        if ticker:
+                            data[sym] = ticker
+                        else:
+                            logger.warning("Empty ticker result for %s", sym)
+                else:
+                    extra = iter(raw.values())
+                    for sym, pair in zip(symbols, pairs):
+                        ticker = raw.get(pair) or raw.get(pair.upper())
+                        if ticker is None:
+                            pu = pair.upper()
+                            for k, v in raw.items():
+                                if pu in k.upper():
+                                    ticker = v
+                                    break
+                        if ticker is None:
+                            ticker = next(extra, None)
+                        if ticker:
+                            data[sym] = ticker
+                        else:
+                            logger.warning("Empty ticker result for %s", sym)
             except Exception:  # pragma: no cover - network
                 telemetry.inc("scan.api_errors")
                 data = {}
@@ -882,12 +697,11 @@ async def _refresh_tickers(
                 ticker_cache[sym] = ticker.get("info", ticker)
                 ticker_ts[sym] = now
             record_results({s: t for s, t in data.items() if s in symbols})
-            if return_attempted:
-                return (
-                    {s: t.get("info", t) for s, t in data.items() if s in symbols and t},
-                    set(attempted_syms),
-                )
-            return {s: t.get("info", t) for s, t in data.items() if s in symbols and t}
+            return {
+                s: t.get("info", t)
+                for s, t in data.items()
+                if s in symbols and t
+            }
 
     result: dict[str, dict] = {}
     if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("fetchTicker"):
@@ -916,9 +730,7 @@ async def _refresh_tickers(
                 logger.warning(
                     "fetch_ticker failed for %s: %s", sym, exc, exc_info=True
                 )
-                logger.warning(
-                    "fetch_ticker failed for %s: %s", sym, exc, exc_info=log_exc
-                )
+                logger.warning("fetch_ticker failed for %s: %s", sym, exc, exc_info=log_exc)
                 telemetry.inc("scan.api_errors")
     if result:
         for sym, ticker in result.items():
@@ -930,16 +742,15 @@ async def _refresh_tickers(
             ticker_cache[sym] = ticker
             ticker_ts[sym] = now
     record_results(result)
-    final_result = {**ws_result, **result}
     elapsed = time.perf_counter() - start_time
     logger.debug(
         "_refresh_tickers fetched %d tickers in %.2fs",
         len(symbols),
         elapsed,
     )
-    if return_attempted:
-        return final_result, set(attempted_syms)
-    return final_result
+    return result
+
+
 
 
 def _history_in_cache(df: pd.DataFrame | None, days: int, seconds: int) -> bool:
@@ -1021,10 +832,10 @@ async def filter_symbols(
         if sym in liq_cache:
             cached_data[sym] = liq_cache[sym]
 
-    data, attempted = await _refresh_tickers(
-        exchange, cex_syms, cfg, return_attempted=True
-    )
-    attempted = {_norm_symbol(s) for s in attempted}
+    try:
+        data = await _refresh_tickers(exchange, cex_syms, cfg)
+    except Exception:
+        raise
 
     # map of ids returned by Kraken to human readable symbols
     id_map: dict[str, str] = {}
@@ -1080,7 +891,7 @@ async def filter_symbols(
             norm = norm.replace("ZUSD", "USD").replace("ZUSDT", "USDT")
             norm = _norm_symbol(norm)
             symbol = id_map.get(norm)
-        if not symbol:
+        if not symbol and "/" in pair_id:
             symbol = _norm_symbol(pair_id)
         if not symbol:
             symbol = request_map.get(norm)
@@ -1102,11 +913,7 @@ async def filter_symbols(
             spread_pct,
         )
         seen.add(symbol)
-        local_min_volume = (
-            min_volume
-            if not symbol.endswith("/USDC")
-            else cfg.get("onchain_min_volume_usd", min_volume * 0.1)
-        )
+        local_min_volume = min_volume * 0.5 if symbol.endswith("/USDC") else min_volume
         if vol_usd < local_min_volume:
             logger.warning(
                 "Skipping %s due to low ticker volume %.2f < %.2f",
@@ -1130,7 +937,7 @@ async def filter_symbols(
 
     for sym in cex_syms:
         norm_sym = _norm_symbol(sym)
-        if norm_sym in seen or norm_sym not in attempted:
+        if norm_sym in seen:
             continue
         cached = cached_data.get(sym) or cached_data.get(norm_sym)
         if cached is None:
@@ -1142,14 +949,7 @@ async def filter_symbols(
             continue
         vol_usd, spread_pct, _ = cached
         seen.add(norm_sym)
-        local_min_volume = (
-            min_volume
-            if not norm_sym.endswith("/USDC")
-            else cfg.get("onchain_min_volume_usd", min_volume * 0.1)
-        )
-        if vol_usd < local_min_volume:
-            skipped += 1
-            continue
+        local_min_volume = min_volume * 0.5 if norm_sym.endswith("/USDC") else min_volume
         if cache_map and vol_usd < local_min_volume * vol_mult:
             skipped += 1
             continue
@@ -1180,11 +980,7 @@ async def filter_symbols(
             ohlcv_bs = sf.get("ohlcv_batch_size")
         df_cache = await update_multi_tf_ohlcv_cache(
             exchange,
-            (
-                {"1h": df_cache}
-                if isinstance(df_cache, dict) and "1h" not in df_cache
-                else df_cache
-            ),
+            {"1h": df_cache} if isinstance(df_cache, dict) and "1h" not in df_cache else df_cache,
             candidates,
             {
                 "timeframes": ["1h", "4h", "1d"],

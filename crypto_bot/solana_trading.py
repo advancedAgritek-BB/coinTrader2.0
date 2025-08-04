@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-# Standard library imports
 import asyncio
 import os
 import time
@@ -30,14 +29,11 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
     max_retries:
         Maximum attempts when the price request fails. Defaults to ``3``.
     """
-    proxy_url = "https://helius-proxy.raydium.io/api/v1/"
-    request_url = proxy_url + JUPITER_QUOTE_URL.lstrip("/")
-
-    for attempt in range(max_retries):
-        try:
-            async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession() as session:
+        for attempt in range(max_retries):
+            try:
                 async with session.get(
-                    request_url,
+                    JUPITER_QUOTE_URL,
                     params={
                         "inputMint": token_in,
                         "outputMint": token_out,
@@ -46,18 +42,14 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
                     },
                     timeout=10,
                 ) as resp:
-                    if resp.status == 401:
-                        logger.error("401 in price fetch: Invalid Helius key")
-                        return 0.0
                     resp.raise_for_status()
                     data = await resp.json()
-            break
-        except Exception as e:
-            logger.error(f"Price fetch error (attempt {attempt+1}): {e}")
-            if attempt < max_retries - 1:
-                await asyncio.sleep(1)
-                continue
-            return 0.0
+                break
+            except Exception:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)
+                    continue
+                return 0.0
     route = (data.get("data") or [{}])[0]
     try:
         return float(route["outAmount"]) / float(route["inAmount"])
@@ -65,25 +57,20 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
         return 0.0
 
 
-async def monitor_profit(tx_sig: str, threshold: float = 0.01) -> float:
-    """Return profit when the price increases by ``threshold``.
-
-    The function monitors the swap price for up to five minutes and returns
-    the profit once the percentage gain over the entry price exceeds the
-    ``threshold``.
+async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
+    """Return profit when price change exceeds ``threshold``.
 
     Parameters
     ----------
     tx_sig:
         Signature of the entry swap transaction.
     threshold:
-        Percentage gain required to trigger profit taking. Defaults to ``0.01``
-        (1%).
+        Percentage gain required to trigger profit taking.
     """
 
     rpc_url = os.getenv(
         "SOLANA_RPC_URL",
-        f"https://api.helius.xyz/v0/?api-key={os.getenv('HELIUS_KEY', '')}",
+        f"https://mainnet.helius-rpc.com/?api-key={os.getenv('HELIUS_KEY', '')}",
     )
     client = AsyncClient(rpc_url)
     try:
@@ -121,9 +108,9 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.01) -> float:
         while time.time() - start < 300:
             price = await _fetch_price(out_mint, in_mint, max_retries=3)
             if price:
-                pnl_pct = (price - entry_price) / entry_price
-                if pnl_pct > threshold:
-                    return out_amount * pnl_pct
+                change = (price - entry_price) / entry_price
+                if change >= threshold:
+                    return out_amount * change
             await asyncio.sleep(5)
     finally:
         await client.close()
@@ -139,15 +126,11 @@ async def sniper_trade(
     dry_run: bool = True,
     slippage_bps: int = 50,
     notifier: Optional[object] = None,
-    profit_threshold: float = 0.01,
+    profit_threshold: float = 0.2,
     mempool_monitor: SolanaMempoolMonitor | None = None,
     mempool_cfg: dict | None = None,
-    config: dict | None = None,
 ) -> Dict:
     """Buy ``target_token`` then convert profits when threshold reached."""
-
-    if mempool_monitor is None and (mempool_cfg or {}).get("enabled"):
-        mempool_monitor = SolanaMempoolMonitor()
 
     trade = await execute_swap(
         base_token,
@@ -163,18 +146,8 @@ async def sniper_trade(
     if not tx_sig or tx_sig == "DRYRUN":
         return trade
 
-    if config:
-        from crypto_bot.solana.exit import quick_exit
-
-        async def price_feed():
-            return await _fetch_price(target_token, base_token, max_retries=3)
-
-        entry_price = await price_feed()
-        await quick_exit(price_feed, entry_price, config)
-
     profit = await monitor_profit(tx_sig, profit_threshold)
     if profit > 0:
-        logger.info("Auto-converting %s %s profit to %s", profit, target_token, base_token)
         await auto_convert_funds(
             wallet,
             target_token,
@@ -226,9 +199,6 @@ async def cross_chain_trade(
         token_in = base_mint
         token_out = quote_mint
         cex_side = "buy"
-
-    if mempool_monitor is None and (mempool_cfg or {}).get("enabled"):
-        mempool_monitor = SolanaMempoolMonitor()
 
     dex_trade = await execute_swap(
         token_in,

@@ -1,11 +1,9 @@
+import os
 import base64
 import json
-import os
-import sys
+import yaml
 from pathlib import Path
 from typing import Dict
-
-import yaml
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
@@ -20,13 +18,7 @@ logger = setup_logger(__name__, LOG_DIR / "wallet.log")
 CONFIG_FILE = Path(__file__).resolve().parent / 'user_config.yaml'
 
 FERNET_KEY = os.getenv("FERNET_KEY")
-_fernet = None
-if FERNET_KEY and Fernet:
-    try:
-        _fernet = Fernet(FERNET_KEY)
-    except Exception:
-        logger.error("Invalid FERNET_KEY, disabling encryption")
-        _fernet = None
+_fernet = Fernet(FERNET_KEY) if FERNET_KEY and Fernet else None
 
 SENSITIVE_FIELDS = {
     "coinbase_api_key",
@@ -67,14 +59,8 @@ def _sanitize_secret(secret: str) -> str:
 
 
 def _env_or_prompt(name: str, prompt: str) -> str:
-    """Return the value of ``name`` from the environment or prompt the user."""
-    val = os.getenv(name)
-    if val:
-        return val
-    try:
-        return input(prompt)
-    except EOFError:
-        return ""
+    """Return environment variable value or prompt the user."""
+    return os.getenv(name) or input(prompt)
 
 
 def load_external_secrets(provider: str, path: str) -> Dict[str, str]:
@@ -144,10 +130,6 @@ def prompt_user() -> dict:
     return data
 
 
-# reference to original prompt function for monkeypatch detection
-_DEFAULT_PROMPT_USER = prompt_user
-
-
 def load_or_create() -> dict:
     """Load credentials prioritizing environment variables."""
     creds: Dict[str, str] = {}
@@ -155,51 +137,13 @@ def load_or_create() -> dict:
     if CONFIG_FILE.exists():
         logger.info("Loading user configuration from %s", CONFIG_FILE)
         with open(CONFIG_FILE) as f:
-            file_creds = yaml.safe_load(f) or {}
-        for field in SENSITIVE_FIELDS:
-            if field in file_creds and file_creds[field] is not None:
-                file_creds[field] = _decrypt(str(file_creds[field]))
-        creds.update(file_creds)
+            creds.update(yaml.safe_load(f))
     else:
-        env_creds = {
-            "coinbase_api_key": os.getenv("COINBASE_API_KEY"),
-            "coinbase_api_secret": os.getenv("COINBASE_API_SECRET"),
-            "coinbase_passphrase": os.getenv("COINBASE_API_PASSPHRASE"),
-            "kraken_api_key": os.getenv("KRAKEN_API_KEY"),
-            "kraken_api_secret": os.getenv("KRAKEN_API_SECRET"),
-        }
-        if any(env_creds.values()):
-            logger.info("user_config.yaml not found; using environment credentials")
-            creds.update({k: v for k, v in env_creds.items() if v is not None})
-            if os.getenv("EXCHANGE"):
-                creds.setdefault("exchange", os.getenv("EXCHANGE"))
-            should_write = False
-        else:
-            logger.info(
-                "user_config.yaml not found; prompting for credentials. "
-                "Set COINBASE_API_KEY/COINBASE_API_SECRET/COINBASE_API_PASSPHRASE or "
-                "KRAKEN_API_KEY/KRAKEN_API_SECRET for non-interactive use."
-            )
-            if not sys.stdin.isatty() and prompt_user is _DEFAULT_PROMPT_USER:
-                msg = (
-                    "Missing environment credentials and input is non-interactive. "
-                    "Set COINBASE_API_KEY/COINBASE_API_SECRET/COINBASE_API_PASSPHRASE or "
-                    "KRAKEN_API_KEY/KRAKEN_API_SECRET."
-                )
-                logger.error(msg)
-                raise RuntimeError(msg)
-            logger.info("user_config.yaml not found; prompting for credentials")
-            creds.update(prompt_user())
-            should_write = True
-
-        if should_write:
-            logger.info("Creating new user configuration at %s", CONFIG_FILE)
-            with open(CONFIG_FILE, "w") as f:
-                dump = {
-                    k: _encrypt(str(v)) if k in SENSITIVE_FIELDS and v is not None else v
-                    for k, v in creds.items()
-                }
-                yaml.safe_dump(dump, f)
+        logger.info("user_config.yaml not found; prompting for credentials")
+        creds.update(prompt_user())
+        logger.info("Creating new user configuration at %s", CONFIG_FILE)
+        with open(CONFIG_FILE, "w") as f:
+            yaml.safe_dump(creds, f)
 
     provider = os.getenv("SECRETS_PROVIDER")
     if provider:
@@ -218,8 +162,6 @@ def load_or_create() -> dict:
     env_mapping.setdefault("coinbase_passphrase", []).append("API_PASSPHRASE")
     env_mapping.setdefault("kraken_api_key", []).append("API_KEY")
     env_mapping.setdefault("kraken_api_secret", []).append("API_SECRET")
-    env_mapping.setdefault("telegram_token", []).append("TELEGRAM_TOKEN")
-    env_mapping.setdefault("telegram_chat_id", []).append("TELEGRAM_CHAT_ID")
 
     for key, env_keys in env_mapping.items():
         for env_key in env_keys:
@@ -238,8 +180,6 @@ def load_or_create() -> dict:
     os.environ["COINBASE_API_PASSPHRASE"] = creds.get("coinbase_passphrase", "")
     os.environ["KRAKEN_API_KEY"] = creds.get("kraken_api_key", "")
     os.environ["KRAKEN_API_SECRET"] = creds.get("kraken_api_secret", "")
-    os.environ["TELEGRAM_TOKEN"] = creds.get("telegram_token", "")
-    os.environ["TELEGRAM_CHAT_ID"] = creds.get("telegram_chat_id", "")
 
     # expose selected exchange credentials via generic env vars for ccxt
     exch = creds.get("primary_exchange") or creds.get("exchange")

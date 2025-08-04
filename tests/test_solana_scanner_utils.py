@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import importlib.util
 import pathlib
 import sys
@@ -8,12 +7,9 @@ import types
 pkg_root = types.ModuleType("crypto_bot")
 utils_pkg = types.ModuleType("crypto_bot.utils")
 pkg_root.utils = utils_pkg
-pkg_root.volatility_filter = types.ModuleType("crypto_bot.volatility_filter")
 utils_pkg.__path__ = [str(pathlib.Path("crypto_bot/utils"))]
 sys.modules.setdefault("crypto_bot", pkg_root)
 sys.modules.setdefault("crypto_bot.utils", utils_pkg)
-sys.modules.setdefault("crypto_bot.volatility_filter", pkg_root.volatility_filter)
-pkg_root.volatility_filter.calc_atr = lambda *_a, **_k: 0.0
 sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
 sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
 
@@ -76,9 +72,8 @@ def test_fetch_new_raydium_pools(monkeypatch):
     monkeypatch.setattr(solana_scanner, "get_mint_from_gecko", fake_gecko)
     monkeypatch.setattr(solana_scanner, "TOKEN_MINTS", {})
 
-    monkeypatch.setenv("HELIUS_KEY", "k")
     solana_scanner._MIN_VOLUME_USD = 100
-    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools(5))
+    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools("k", 5))
     assert tokens == ["A"]
     assert "k" in session.url
 
@@ -100,9 +95,8 @@ def test_fetch_new_raydium_pools_helius(monkeypatch):
     monkeypatch.setattr(solana_scanner, "fetch_from_helius", fake_helius)
     monkeypatch.setattr(solana_scanner, "TOKEN_MINTS", {})
 
-    monkeypatch.setenv("HELIUS_KEY", "k")
     solana_scanner._MIN_VOLUME_USD = 100
-    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools(5))
+    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools("k", 5))
     assert tokens == ["A"]
     assert solana_scanner.TOKEN_MINTS["A"] == "mint"
 
@@ -111,7 +105,7 @@ def test_get_solana_new_tokens(monkeypatch):
     monkeypatch.setattr(
         solana_scanner,
         "fetch_new_raydium_pools",
-        lambda limit: ["X", "Y"],
+        lambda key, limit: ["X", "Y"],
     )
     monkeypatch.setattr(
         solana_scanner,
@@ -129,6 +123,7 @@ def test_get_solana_new_tokens(monkeypatch):
     monkeypatch.setattr(solana_scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
 
     cfg = {
+        "raydium_api_key": "r",
         "pump_fun_api_key": "p",
         "max_tokens_per_scan": 2,
         "min_volume_usd": 0,
@@ -169,7 +164,7 @@ def test_get_solana_new_tokens_gecko_filter(monkeypatch):
     monkeypatch.setattr(
         solana_scanner,
         "fetch_new_raydium_pools",
-        lambda limit: ["A", "B"],
+        lambda *_a, **_k: ["A", "B"],
     )
     monkeypatch.setattr(
         solana_scanner,
@@ -193,6 +188,7 @@ def test_get_solana_new_tokens_gecko_filter(monkeypatch):
     monkeypatch.setattr(solana_scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
 
     cfg = {
+        "raydium_api_key": "r",
         "max_tokens_per_scan": 10,
         "min_volume_usd": 100,
         "gecko_search": True,
@@ -206,7 +202,7 @@ def test_get_solana_new_tokens_scoring(monkeypatch):
     monkeypatch.setattr(
         solana_scanner,
         "fetch_new_raydium_pools",
-        lambda limit: ["A", "B"],
+        lambda *_a, **_k: ["A", "B"],
     )
     monkeypatch.setattr(
         solana_scanner,
@@ -234,6 +230,7 @@ def test_get_solana_new_tokens_scoring(monkeypatch):
     monkeypatch.setattr(solana_scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
 
     cfg = {
+        "raydium_api_key": "r",
         "max_tokens_per_scan": 10,
         "min_volume_usd": 0,
         "gecko_search": True,
@@ -241,149 +238,3 @@ def test_get_solana_new_tokens_scoring(monkeypatch):
     }
     tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
     assert tokens == ["B/USDC", "A/USDC"]
-
-
-def test_get_solana_new_tokens_ml_filter(monkeypatch):
-    monkeypatch.setattr(
-        solana_scanner,
-        "fetch_new_raydium_pools",
-        lambda limit: ["A", "B"],
-    )
-    monkeypatch.setattr(
-        solana_scanner,
-        "fetch_pump_fun_launches",
-        lambda *_a, **_k: [],
-    )
-
-    async def search(q):
-        return (q, 100.0)
-
-    monkeypatch.setattr(solana_scanner, "search_geckoterminal_token", search)
-
-    class DummyEx:
-        async def close(self):
-            pass
-
-    async def fake_score(_ex, sym, vol, *_a, **_k):
-        return {"A/USDC": 0.6, "B/USDC": 0.7}[sym]
-
-    monkeypatch.setattr(solana_scanner.symbol_scoring, "score_symbol", fake_score)
-    monkeypatch.setattr(solana_scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
-
-    async def fake_snap(mint, bucket):
-        assert bucket == "buck"
-        return {
-            "A": "snapA",
-            "B": "snapB",
-        }[mint]
-
-    monkeypatch.setattr(solana_scanner, "_download_snapshot", fake_snap)
-    monkeypatch.setitem(sys.modules, "regime_lgbm", types.SimpleNamespace(predict=lambda x: {"snapA": 0.4, "snapB": 0.8}[x]))
-
-    cfg = {
-        "max_tokens_per_scan": 10,
-        "min_volume_usd": 0,
-        "gecko_search": True,
-        "min_symbol_score": 0.0,
-        "ml_filter": True,
-        "supabase_bucket": "buck",
-    }
-    tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
-    assert tokens == ["B/USDC"]
-
-
-def test_get_solana_new_tokens_ml_filter_sort(monkeypatch):
-    monkeypatch.setattr(
-        solana_scanner,
-        "fetch_new_raydium_pools",
-        lambda limit: ["A", "B"],
-    )
-    monkeypatch.setattr(
-        solana_scanner,
-        "fetch_pump_fun_launches",
-        lambda *_a, **_k: [],
-    )
-
-    async def search(q):
-        return (q, 100.0)
-
-    monkeypatch.setattr(solana_scanner, "search_geckoterminal_token", search)
-
-    class DummyEx:
-        async def close(self):
-            pass
-
-    async def fake_score(_ex, sym, vol, *_a, **_k):
-        return 0.6
-
-    monkeypatch.setattr(solana_scanner.symbol_scoring, "score_symbol", fake_score)
-    monkeypatch.setattr(solana_scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
-
-    async def fake_snap(mint, bucket):
-        return {"A": "snapA", "B": "snapB"}[mint]
-
-    monkeypatch.setattr(solana_scanner, "_download_snapshot", fake_snap)
-    monkeypatch.setitem(sys.modules, "regime_lgbm", types.SimpleNamespace(predict=lambda x: {"snapA": 0.9, "snapB": 0.8}[x]))
-
-    cfg = {
-        "max_tokens_per_scan": 10,
-        "min_volume_usd": 0,
-        "gecko_search": True,
-        "min_symbol_score": 0.0,
-        "ml_filter": True,
-    }
-    tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
-    assert tokens == ["A/USDC", "B/USDC"]
-
-
-def test_get_solana_new_tokens_missing_keys(monkeypatch, caplog):
-    caplog.set_level(logging.WARNING)
-    monkeypatch.setattr(solana_scanner, "fetch_new_raydium_pools", lambda limit: [])
-    monkeypatch.setattr(solana_scanner, "fetch_pump_fun_launches", lambda *_a, **_k: [])
-
-    cfg = {"max_tokens_per_scan": 5}
-    tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
-    assert tokens == []
-    assert any("HELIUS_KEY" in r.getMessage() for r in caplog.records)
-    assert any("pump_fun_api_key" in r.getMessage() for r in caplog.records)
-
-
-def test_get_solana_new_tokens_fetch_failure(monkeypatch, caplog):
-    caplog.set_level(logging.WARNING)
-
-    async def fake_fetch_json(url):
-        return None
-
-    monkeypatch.setattr(solana_scanner, "_fetch_json", fake_fetch_json)
-    # use real fetch_new_raydium_pools which will log when _fetch_json returns None
-    monkeypatch.setattr(solana_scanner, "fetch_pump_fun_launches", lambda *_a, **_k: [])
-
-    cfg = {"gecko_search": False}
-    tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
-    assert tokens == []
-    assert any("Failed to fetch Raydium" in r.getMessage() for r in caplog.records)
-
-
-def test_get_solana_new_tokens_nested_api_keys(monkeypatch):
-    seen: dict[str, str] = {}
-
-    def fake_raydium(limit):
-        seen["raydium"] = True
-        return ["A"]
-
-    def fake_pump(key, limit):
-        seen["pump"] = key
-        return []
-
-    monkeypatch.setattr(solana_scanner, "fetch_new_raydium_pools", fake_raydium)
-    monkeypatch.setattr(solana_scanner, "fetch_pump_fun_launches", fake_pump)
-
-    cfg = {
-        "api_keys": {"pump_fun_api_key": "p"},
-        "max_tokens_per_scan": 5,
-        "gecko_search": False,
-        "min_volume_usd": 0,
-    }
-    tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
-    assert tokens == ["A/USDC"]
-    assert seen == {"raydium": True, "pump": "p"}

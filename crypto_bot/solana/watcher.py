@@ -1,21 +1,23 @@
+"""Pool watcher utilities for Solana."""
+
 from __future__ import annotations
 
 import asyncio
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 import os
-import time
 
 import aiohttp
 import logging
 import yaml
-import requests  # For webhook setup
 
 
 @dataclass
 class NewPoolEvent:
+    """Event emitted when a new liquidity pool is detected."""
+
     pool_address: str
     token_mint: str
     creator: str
@@ -28,25 +30,28 @@ class NewPoolEvent:
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 
+
 logger = logging.getLogger(__name__)
 
 
 class PoolWatcher:
+    """Async engine that polls for new pools and yields :class:`NewPoolEvent`."""
+
     def __init__(
         self,
         url: str | None = None,
         interval: float | None = None,
         websocket_url: str | None = None,
         raydium_program_id: str | None = None,
+        max_failures: int = 3,
         min_liquidity: float | None = None,
-        ml_filter: bool | None = None,
     ) -> None:
         if (
             url is None
             or interval is None
             or websocket_url is None
             or raydium_program_id is None
-            or ml_filter is None
+            or min_liquidity is None
         ):
             with open(CONFIG_PATH) as f:
                 cfg = yaml.safe_load(f) or {}
@@ -60,101 +65,117 @@ class PoolWatcher:
             if websocket_url is None:
                 websocket_url = pool_cfg.get("websocket_url", "")
             if raydium_program_id is None:
-                raydium_program_id = pool_cfg.get(
-                    "raydium_program_id",
-                    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
-                )  # Updated to v4
-            if ml_filter is None:
-                ml_filter = bool(pool_cfg.get("ml_filter", False))
-        if min_liquidity is None:
-            min_liquidity = 0.0
+                raydium_program_id = pool_cfg.get("raydium_program_id", "")
+            if min_liquidity is None:
+                min_liquidity = float(safety_cfg.get("min_liquidity", 0))
         key = os.getenv("HELIUS_KEY")
-        if not key:
-            raise ValueError("HELIUS_KEY not set")
-        if not url:
-            url = f"https://api.helius.xyz/v0/?api-key={key}"
+        if not url or "YOUR_KEY" in url or url.endswith("api-key="):
+            if not key:
+                raise ValueError(
+                    "Helius API key missing. Set HELIUS_KEY or update pool.url"
+                )
+            if not url:
+                url = f"https://mainnet.helius-rpc.com/v1/?api-key={key}"
+            else:
+                url = url.replace("YOUR_KEY", key)
+                if url.endswith("api-key="):
+                    url += key
+        if websocket_url:
+            if "${HELIUS_KEY}" in websocket_url:
+                websocket_url = websocket_url.replace("${HELIUS_KEY}", key or "")
+            if "YOUR_KEY" in websocket_url:
+                websocket_url = websocket_url.replace("YOUR_KEY", key or "")
         self.url = url
         self.interval = interval
-        self.websocket_url = websocket_url or f"wss://mainnet.helius-rpc.com/?api-key={key}"
+        self.websocket_url = websocket_url
         self.raydium_program_id = raydium_program_id
-        self.program_ids = [self.raydium_program_id]
         self.min_liquidity = float(min_liquidity or 0)
-        self.ml_filter = bool(ml_filter)
         self._running = False
         self._seen: set[str] = set()
-
-        # One-time webhook setup
-        self.setup_webhook(key)
-
-    def setup_webhook(self, api_key: str):
-        """Register a webhook with Helius if configured."""
-        webhook_url = os.getenv("BOT_WEBHOOK_URL", "")
-        if not webhook_url:
-            logger.info("Webhook disabled; BOT_WEBHOOK_URL not set")
-            return
-
-        helius_url = f"https://api.helius.xyz/v0/webhooks?api-key={api_key}"
-        payload = {
-            "webhookURL": webhook_url,
-            "transactionTypes": ["CREATE_POOL", "ADD_LIQUIDITY", "TOKEN_MINT"],
-            "accountAddresses": [self.raydium_program_id],
-            "webhookType": "enhanced",
-        }
-        try:
-            response = requests.post(helius_url, json=payload)
-            if response.status_code == 200:
-                logger.info("Webhook setup successful")
-            else:
-                logger.error(f"Webhook setup failed: {response.text}")
-        except Exception as e:  # pragma: no cover - best effort
-            logger.error(f"Webhook error: {e}")
-
-    def _predict_breakout(self, event: NewPoolEvent) -> float:
-        """Predict breakout using regime_lgbm (from coinTrader_Trainer via Supabase)."""
-        if not self.ml_filter or not event.token_mint:
-            return 1.0
-        supabase_url = os.getenv("SUPABASE_URL")
-        supabase_key = os.getenv("SUPABASE_KEY")
-        if not supabase_url or not supabase_key:
-            logger.warning("Supabase creds missing; skipping ML")
-            return 1.0
-        try:  # pragma: no cover - optional dependency
-            from supabase import create_client
-            from coinTrader_Trainer.ml_trainer import load_model
-
-            client = create_client(supabase_url, supabase_key)
-            data = (
-                client.table("snapshots")
-                .select("*")
-                .eq("token_mint", event.token_mint)
-                .execute()
-            )
-            snapshot = data.data[0] if data.data else None
-            if snapshot:
-                model = load_model("regime_lgbm")
-                features = [
-                    snapshot.get("liquidity", 0),
-                    snapshot.get("volume", 0),
-                    event.tx_count,
-                ]
-                try:
-                    pred = (
-                        model.predict_proba([features])[0]
-                        if hasattr(model, "predict_proba")
-                        else model.predict([features])[0]
-                    )
-                except Exception:  # pragma: no cover - best effort
-                    pred = model.predict([features])[0]
-
-                if hasattr(pred, "__iter__"):
-                    return float(pred[1])
-                return float(pred == 1)
-            return 0.0
-        except Exception as exc:  # pragma: no cover - best effort
-            logger.error(f"ML prediction failed: {exc}")
-            return 0.0
+        self._max_failures = max_failures
+        self._failures = 0
 
     async def watch(self) -> AsyncGenerator[NewPoolEvent, None]:
+        """Yield :class:`NewPoolEvent` objects as they are discovered."""
+        if self.websocket_url and self.raydium_program_id:
+            async for evt in self._watch_ws():
+                yield evt
+            return
+
+        self._running = True
+        async with aiohttp.ClientSession() as session:
+            while self._running:
+                try:
+                    async with session.post(
+                        self.url,
+                        json={
+                            "jsonrpc": "2.0",
+                            "id": 1,
+                            "method": "dex.getNewPools",
+                            "params": {"protocols": ["raydium"], "limit": 50},
+                        },
+                        timeout=10,
+                    ) as resp:
+                        resp.raise_for_status()
+                        data = await resp.json()
+                        self._failures = 0
+                except aiohttp.ClientResponseError as e:
+                    if e.status == 404:
+                        self._failures += 1
+                        logger.error(
+                            "PoolWatcher error: 404 from %s - the configured URL is invalid or no longer supported. "
+                            "Try https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY",
+                            self.url,
+                        )
+                        if self._failures >= self._max_failures:
+                            self._running = False
+                            raise RuntimeError(f"Pools endpoint not found: {self.url}") from e
+                        await asyncio.sleep(self.interval)
+                        continue
+                    logger.error("PoolWatcher error: %s", e)
+                    await asyncio.sleep(self.interval)
+                    continue
+                except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
+                    logger.error("PoolWatcher error: %s", e)
+                    await asyncio.sleep(self.interval)
+                    continue
+
+                result = data.get("result", data)
+                pools = result.get("pools") or result.get("data") or result
+                for item in pools:
+                    addr = (
+                        item.get("address")
+                        or item.get("poolAddress")
+                        or item.get("pool_address")
+                        or ""
+                    )
+                    if not addr or addr in self._seen:
+                        continue
+                    liquidity = float(item.get("liquidity", 0.0))
+                    if liquidity < self.min_liquidity:
+                        continue
+                    self._seen.add(addr)
+                    yield NewPoolEvent(
+                        pool_address=addr,
+                        token_mint=item.get("tokenMint")
+                        or item.get("token_mint")
+                        or "",
+                        creator=item.get("creator", ""),
+                        liquidity=liquidity,
+                        tx_count=int(item.get("txCount", item.get("tx_count", 0))),
+                        freeze_authority=item.get("freezeAuthority")
+                        or item.get("freeze_authority")
+                        or "",
+                        mint_authority=item.get("mintAuthority")
+                        or item.get("mint_authority")
+                        or "",
+                        timestamp=float(item.get("timestamp", 0.0)),
+                    )
+
+                await asyncio.sleep(self.interval)
+
+    async def _watch_ws(self) -> AsyncGenerator[NewPoolEvent, None]:
+        """Yield events from a websocket subscription."""
         self._running = True
         backoff = 0
         async with aiohttp.ClientSession() as session:
@@ -162,121 +183,62 @@ class PoolWatcher:
                 reconnect = False
                 try:
                     async with session.ws_connect(self.websocket_url) as ws:
-                        for i, prog_id in enumerate(self.program_ids):
-                            req = {
+                        await ws.send_json(
+                            {
                                 "jsonrpc": "2.0",
-                                "id": i,
-                                "method": "transactionSubscribe",
-                                "params": [
-                                    {"failed": False, "accountInclude": [prog_id]},
-                                    {
-                                        "commitment": "processed",
-                                        "encoding": "jsonParsed",
-                                        "transactionDetails": "full",
-                                        "showRewards": True,
-                                        "maxSupportedTransactionVersion": 0,
-                                    },
-                                ],
+                                "id": 1,
+                                "method": "programSubscribe",
+                                "params": [self.raydium_program_id, {"encoding": "jsonParsed"}],
                             }
-                            await ws.send_json(req)
+                        )
                         backoff = 0
                         async for msg in ws:
                             if not self._running:
                                 break
-                            if msg.type in (
-                                aiohttp.WSMsgType.CLOSED,
-                                aiohttp.WSMsgType.ERROR,
-                            ):
+                            if msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
                                 reconnect = True
                                 break
                             if msg.type != aiohttp.WSMsgType.TEXT:
                                 continue
                             try:
                                 data = json.loads(msg.data)
-                                if data.get("method") != "transactionNotification":
-                                    continue
-                                result = data.get("params", {}).get("result", {})
-                                signature = result.get("signature", "")
-                                if not signature or signature in self._seen:
-                                    continue
-                                self._seen.add(signature)
-                                tx = result.get("transaction", {})
-                                if tx and "initialize" in json.dumps(tx).lower():
-                                    event = NewPoolEvent("", "", "", 0.0)
-                                    await self._enrich_event(event, signature, session)
-                                    if event.liquidity >= self.min_liquidity and self._predict_breakout(event) >= 0.5:
-                                        yield event
-                                        logger.info(f"New pool event yielded: {event}")
-                            except Exception as exc:  # pragma: no cover - best effort
-                                logger.error(f"Event parsing error: {exc}")
-                except Exception as exc:  # pragma: no cover - best effort
+                            except ValueError:
+                                continue
+                            if data.get("method") != "programNotification":
+                                continue
+                            value = (
+                                data.get("params", {})
+                                .get("result", {})
+                                .get("value", {})
+                            )
+                            addr = value.get("pubkey") or ""
+                            if not addr or addr in self._seen:
+                                continue
+                            self._seen.add(addr)
+                            yield NewPoolEvent(
+                                pool_address=addr,
+                                token_mint="",
+                                creator="",
+                                liquidity=0.0,
+                            )
+                except aiohttp.WSServerHandshakeError as e:
                     reconnect = True
-                    logger.error(f"WS connection error: {exc}")
+                    if e.status == 401:
+                        logger.error(
+                            "Unauthorized WebSocket connection – check HELIUS_KEY or subscription tier"
+                        )
+                        self._running = False
+                        return
+                    logger.error("WebSocket handshake failed with status %s", e.status)
+                except Exception as e:  # pragma: no cover - generic catch for stability
+                    reconnect = True
+                    logger.error("WS error: %s", e)
 
                 if self._running and reconnect:
-                    backoff = min(backoff + 1, 5)
+                    backoff += 1
                     await asyncio.sleep(2 ** backoff)
 
-    async def _enrich_event(
-        self,
-        event: NewPoolEvent,
-        signature: str,
-        session: aiohttp.ClientSession,
-    ) -> None:
-        """Enrich event with full tx details (from Helius docs)."""
-        try:
-            async with session.post(
-                self.url,
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "getTransaction",
-                    "params": [
-                        signature,
-                        {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0},
-                    ],
-                },
-            ) as resp:
-                data = await resp.json()
-                result = data.get("result", {})
-                meta = result.get("meta", {})
-                message = result.get("transaction", {}).get("message", {})
-
-                keys = []
-                for k in message.get("accountKeys", []):
-                    if isinstance(k, dict):
-                        keys.append(k.get("pubkey", ""))
-                    else:
-                        keys.append(str(k))
-                if len(keys) > 2:
-                    event.pool_address = keys[2]
-                if len(keys) > 1:
-                    event.token_mint = keys[1]
-                if keys:
-                    event.creator = keys[0]
-
-                pre = meta.get("preTokenBalances", [])
-                post = meta.get("postTokenBalances", [])
-                liquidity = 0.0
-                tx_count = 0
-                for p, q in zip(pre, post):
-                    try:
-                        pre_amt = float(q.get("uiTokenAmount", {}).get("uiAmount", 0))
-                        post_amt = float(p.get("uiTokenAmount", {}).get("uiAmount", 0))
-                        diff = abs(post_amt - pre_amt)
-                        if diff > 0:
-                            liquidity += diff
-                            tx_count += 1
-                    except Exception:
-                        continue
-                event.liquidity = liquidity
-                event.tx_count = tx_count
-                event.timestamp = float(result.get("blockTime") or time.time())
-                logger.debug(
-                    f"Enriched event: liquidity={liquidity}, tx_count={tx_count}"
-                )
-        except Exception as exc:  # pragma: no cover - best effort
-            logger.error(f"Enrich error: {exc}")
 
     def stop(self) -> None:
+        """Stop the watcher loop."""
         self._running = False

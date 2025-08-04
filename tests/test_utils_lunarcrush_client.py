@@ -1,28 +1,44 @@
-from crypto_bot.lunarcrush_client import LunarCrushClient
+import asyncio
+import pytest
 
+from crypto_bot.utils.lunarcrush_client import LunarCrushClient
 
-class DummyResponse:
-    def json(self):
-        return {"data": [{"sentiment": 0}]}
+class DummyResp:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        pass
+
+    async def json(self):
+        return {}
 
     def raise_for_status(self):
         pass
 
-
 class DummySession:
     def __init__(self):
         self.last_params = None
-
-    def get(self, url, params=None, timeout=5):
+        self.closed = False
+    def get(self, url, params=None, timeout=10):
         self.last_params = params
-        return DummyResponse()
+        return DummyResp()
 
+    async def close(self):
+        self.closed = True
 
 def test_env_key_used(monkeypatch):
     session = DummySession()
     monkeypatch.setenv("LUNARCRUSH_API_KEY", "envkey")
-    client = LunarCrushClient(session=session)
+    async def fake_get_session(self):
+        return session
+    monkeypatch.setattr(LunarCrushClient, "_get_session", fake_get_session)
 
-    client.get_sentiment("BTC")
+    client = LunarCrushClient()
+
+    async def _run():
+        await client.request("assets", {"symbol": "BTC"})
+
+    asyncio.run(_run())
 
     assert session.last_params["key"] == "envkey"

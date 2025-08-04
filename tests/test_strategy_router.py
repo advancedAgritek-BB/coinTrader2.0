@@ -122,22 +122,6 @@ def test_strategy_for_cross_chain_arb_bot():
     )
 
 
-def test_strategy_for_new_pool():
-    data = {"strategy_router": {"regimes": {"new_pool": ["sniper_solana"]}}}
-    cfg = RouterConfig.from_dict(data)
-
-    assert (
-        strategy_for("new_pool", cfg).__name__
-        == sniper_solana.generate_signal.__name__
-    )
-
-
-def test_route_new_pool():
-    cfg = {"strategy_router": {"regimes": {"new_pool": ["sniper_solana"]}}}
-    fn = route("new_pool", "cex", cfg)
-    assert fn.__name__ == sniper_solana.generate_signal.__name__
-
-
 def test_route_returns_meme_wave_bot():
     from crypto_bot.strategy import meme_wave_bot
 

@@ -1,5 +1,6 @@
-import asyncio
 import os
+import sys
+import asyncio
 import contextlib
 import time
 from pathlib import Path
@@ -7,10 +8,8 @@ from datetime import datetime
 from collections import deque, OrderedDict
 from dataclasses import dataclass, field
 import inspect
-import re
 
 import aiohttp
-from typing import Mapping
 
 try:
     import ccxt  # type: ignore
@@ -48,6 +47,7 @@ from crypto_bot.risk.exit_manager import (
 )
 from crypto_bot.execution.cex_executor import (
     execute_trade_async as cex_trade_async,
+    get_exchange,
     get_exchanges,
 )
 from crypto_bot.open_position_guard import OpenPositionGuard
@@ -58,7 +58,6 @@ from crypto_bot.utils.market_loader import (
     update_ohlcv_cache,
     update_multi_tf_ohlcv_cache,
     update_regime_tf_cache,
-    fetch_ohlcv_for_token,
     timeframe_seconds,
     configure as market_loader_configure,
     fetch_order_book_async,
@@ -78,7 +77,9 @@ from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import write_cycle_metrics
-from crypto_bot.utils import pnl_logger, regime_pnl_tracker, trade_logger
+from crypto_bot.utils.token_registry import TOKEN_MINTS
+from crypto_bot.utils import regime_pnl_tracker
+from crypto_bot.utils import pnl_logger, regime_pnl_tracker
 
 from crypto_bot.monitoring import record_sol_scanner_metrics
 from crypto_bot.fund_manager import (
@@ -105,31 +106,15 @@ _LAST_CONFIG_MTIME = CONFIG_PATH.stat().st_mtime
 
 logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 
-# Pattern for environment variable placeholders like ${VAR}
-_PLACEHOLDER_RE = re.compile(r"\$\{([^}]+)\}")
-
-
-def replace_placeholders(value):
-    """Recursively replace ${VAR} placeholders in ``value`` using env vars."""
-
-    if isinstance(value, dict):
-        return {k: replace_placeholders(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [replace_placeholders(v) for v in value]
-    if isinstance(value, str):
-        return _PLACEHOLDER_RE.sub(lambda m: os.getenv(m.group(1), m.group(0)), value)
-    return value
-
 # Track WebSocket ping tasks
 WS_PING_TASKS: set[asyncio.Task] = set()
+# Track async sniper trade tasks
 # Track async sniper trade tasks
 SNIPER_TASKS: set[asyncio.Task] = set()
 # Track newly scanned Solana tokens pending evaluation
 NEW_SOLANA_TOKENS: set[str] = set()
 # Track async cross-chain arb tasks
 CROSS_ARB_TASKS: set[asyncio.Task] = set()
-# Background task for one-off Solana scans
-SOLANA_SCAN_TASK: asyncio.Task | None = None
 
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
@@ -168,6 +153,24 @@ class SessionState:
     scan_task: asyncio.Task | None = None
 
 
+def update_df_cache(
+    cache: dict[str, dict[str, pd.DataFrame]],
+    timeframe: str,
+    symbol: str,
+    df: pd.DataFrame,
+    max_size: int = DF_CACHE_MAX_SIZE,
+) -> None:
+    """Update an OHLCV cache with LRU eviction."""
+    tf_cache = cache.setdefault(timeframe, OrderedDict())
+    if not isinstance(tf_cache, OrderedDict):
+        tf_cache = OrderedDict(tf_cache)
+        cache[timeframe] = tf_cache
+    tf_cache[symbol] = df
+    tf_cache.move_to_end(symbol)
+    if len(tf_cache) > max_size:
+        tf_cache.popitem(last=False)
+
+
 def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> float:
     """Return the average ATR for symbols present in ``df_cache``."""
     atr_values: list[float] = []
@@ -180,13 +183,8 @@ def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> f
     return sum(atr_values) / len(atr_values) if atr_values else 0.0
 
 
-def enqueue_solana_tokens(tokens: list[str], mark_new: bool = False) -> None:
-    """Add Solana ``tokens`` to the priority queue.
-
-    ``mark_new`` controls whether the tokens are flagged in
-    :data:`NEW_SOLANA_TOKENS` for special handling by the sniper logic.
-    Duplicate entries are ignored using :data:`recent_solana_set`.
-    """
+def enqueue_solana_tokens(tokens: list[str]) -> None:
+    """Add Solana ``tokens`` to the priority queue skipping recently queued ones."""
 
     global recent_solana_tokens, recent_solana_set
 
@@ -194,8 +192,6 @@ def enqueue_solana_tokens(tokens: list[str], mark_new: bool = False) -> None:
         if sym in recent_solana_set:
             continue
         symbol_priority_queue.appendleft(sym)
-        if mark_new:
-            NEW_SOLANA_TOKENS.add(sym)
         recent_solana_tokens.append(sym)
         recent_solana_set.add(sym)
         if len(recent_solana_tokens) > SOLANA_CACHE_SIZE:
@@ -234,79 +230,6 @@ def is_market_pumping(
 
     avg_change = sum(changes) / len(changes) if changes else 0.0
     return avg_change >= 0.05
-
-
-async def scan_and_enqueue_solana_tokens(cfg: Mapping[str, object]) -> list[str]:
-    """Fetch and queue new Solana tokens using ``cfg`` settings."""
-
-    tokens = await get_solana_new_tokens(cfg)
-    if not tokens:
-        logger.info("Solana scan found no new tokens")
-        return []
-
-    filtered: list[str] = []
-    for sym in tokens:
-        try:
-            df = await fetch_ohlcv_for_token(sym)
-            if df is None:
-                continue
-            regime, _ = await classify_regime_cached(sym, "1m", df)
-            regime = regime.split("_")[-1]
-            if regime in {"volatile", "breakout"}:
-                filtered.append(sym)
-        except Exception as exc:
-            logger.error("Solana token %s processing error: %s", sym, exc)
-
-    if filtered:
-        async with QUEUE_LOCK:
-            enqueue_solana_tokens(filtered, mark_new=True)
-        logger.info("Discovered %d new Solana tokens", len(filtered))
-    else:
-        logger.info("Solana scan found no tradable tokens")
-    return filtered
-
-async def maybe_scan_solana_tokens(config: dict, last_scan: float) -> float:
-    """Start a background scan for new Solana tokens if needed."""
-    global SOLANA_SCAN_TASK
-    sol_cfg = config.get("solana_scanner", {})
-    if not sol_cfg.get("enabled"):
-        logger.info("Solana scan skipped: scanner disabled")
-        return last_scan
-    if config.get("solana_symbols") or config.get("onchain_symbols"):
-        logger.info("Solana scan skipped: tokens already configured")
-        return last_scan
-
-    if SOLANA_SCAN_TASK and SOLANA_SCAN_TASK.done():
-        try:
-            await SOLANA_SCAN_TASK
-        except Exception as exc:  # pragma: no cover - best effort
-            logger.error("Solana scan error: %s", exc)
-        SOLANA_SCAN_TASK = None
-
-    interval = sol_cfg.get("interval_minutes", 5) * 60
-    now = time.time()
-    if now - last_scan < interval or (SOLANA_SCAN_TASK and not SOLANA_SCAN_TASK.done()):
-        return last_scan
-
-    async def _worker() -> None:
-        try:
-            tokens = await get_solana_new_tokens(sol_cfg)
-            if tokens:
-                logger.info("Discovered %d new Solana tokens", len(tokens))
-                async with QUEUE_LOCK:
-                    enqueue_solana_tokens(tokens, mark_new=True)
-            else:
-                logger.info("Solana scan found no new tokens")
-        except Exception as exc:  # pragma: no cover - best effort
-            logger.error("Solana scan error: %s", exc)
-
-    logger.info("Scanning Solana tokens")
-    try:
-        await scan_and_enqueue_solana_tokens(sol_cfg)
-    except Exception as exc:  # pragma: no cover - best effort
-        logger.error("Solana scan error: %s", exc)
-    SOLANA_SCAN_TASK = asyncio.create_task(_worker())
-    return now
 
 
 async def get_market_regime(ctx: BotContext) -> str:
@@ -367,7 +290,7 @@ def _closest_wall_distance(book: dict, entry: float, side: str) -> float | None:
     return min(dists)
 
 
-async def notify_balance_change(
+def notify_balance_change(
     notifier: TelegramNotifier | None,
     previous: float | None,
     new_balance: float,
@@ -375,7 +298,7 @@ async def notify_balance_change(
 ) -> float:
     """Send a notification if the balance changed."""
     if notifier and enabled and previous is not None and new_balance != previous:
-        await notifier.notify_async(f"Balance changed: {new_balance:.2f} USDT")
+        notifier.notify(f"Balance changed: {new_balance:.2f} USDT")
     return new_balance
 
 
@@ -404,7 +327,7 @@ async def refresh_balance(ctx: BotContext) -> float:
         ctx.paper_wallet,
         ctx.config,
     )
-    ctx.balance = await notify_balance_change(
+    ctx.balance = notify_balance_change(
         ctx.notifier,
         ctx.balance,
         float(latest),
@@ -453,33 +376,6 @@ def _emit_timing(
             execution_latency,
             metrics_path,
         )
-
-
-def replace_env_placeholder(config_dict: dict, env_var_name: str, placeholder: str) -> dict:
-    """Recursively replace ``placeholder`` in ``config_dict`` with an env value.
-
-    ``env_var_name`` is looked up via :func:`os.getenv` and defaults to an
-    empty string if unset. All nested dictionaries and lists are traversed so
-    any occurrence of ``placeholder`` within string values is substituted.
-    The original ``config_dict`` is modified in place and also returned for
-    convenience.
-    """
-
-    env_value = os.getenv(env_var_name, "")
-
-    def _walk(obj):
-        if isinstance(obj, dict):
-            for k, v in obj.items():
-                obj[k] = _walk(v)
-            return obj
-        if isinstance(obj, list):
-            return [_walk(v) for v in obj]
-        if isinstance(obj, str):
-            return obj.replace(placeholder, env_value)
-        return obj
-
-    _walk(config_dict)
-    return config_dict
 
 
 def load_config() -> dict:
@@ -546,24 +442,13 @@ def load_config() -> dict:
         print("Invalid configuration (pyth):\n", exc)
         raise SystemExit(1)
 
-    if (
-        data.get("solana_scanner", {}).get("enabled")
-        and data.get("onchain_symbols")
-    ):
-        logger.warning(
-            "solana_scanner.enabled is true but onchain_symbols are provided; the"
-            " scanner only runs when onchain_symbols is empty. See README.md"
-            " section on onchain_symbols."
-        )
-
-    return replace_placeholders(data)
+    return data
 
 
 def maybe_reload_config(state: dict, config: dict) -> None:
     """Reload configuration when ``state['reload']`` is set."""
     if state.get("reload"):
         new_cfg = load_config()
-        replace_env_placeholder(new_cfg, "HELIUS_KEY", "${HELIUS_KEY}")
         config.clear()
         config.update(new_cfg)
         state.pop("reload", None)
@@ -579,29 +464,6 @@ def _flatten_config(data: dict, parent: str = "") -> dict:
         else:
             flat[new_key.upper()] = value
     return flat
-
-
-def build_risk_params(config: dict, volume_ratio: float) -> dict:
-    """Return risk configuration parameters derived from ``config``."""
-
-    params = {**config.get("risk", {})}
-    params.update(config.get("sentiment_filter", {}))
-    params.update(config.get("volatility_filter", {}))
-    params["symbol"] = config.get("symbol", "")
-    params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
-    params["strategy_allocation"] = config.get("strategy_allocation", {})
-    params["volume_threshold_ratio"] = config.get("risk", {}).get(
-        "volume_threshold_ratio", 0.05
-    )
-    params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
-    params["stop_loss_atr_mult"] = config.get("risk", {}).get(
-        "stop_loss_atr_mult", 2.0
-    )
-    params["take_profit_atr_mult"] = config.get("risk", {}).get(
-        "take_profit_atr_mult", 4.0
-    )
-    params["volume_ratio"] = volume_ratio
-    return params
 
 
 def reload_config(
@@ -625,8 +487,6 @@ def reload_config(
         return
 
     new_config = load_config()
-    new_config = replace_placeholders(new_config)
-    replace_env_placeholder(new_config, "HELIUS_KEY", "${HELIUS_KEY}")
     _LAST_CONFIG_MTIME = mtime
 
     config.clear()
@@ -658,8 +518,24 @@ def reload_config(
     )
 
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
-    params = build_risk_params(config, volume_ratio)
-    risk_manager.config = RiskConfig(**params)
+    risk_params = {**config.get("risk", {})}
+    risk_params.update(config.get("sentiment_filter", {}))
+    risk_params.update(config.get("volatility_filter", {}))
+    risk_params["symbol"] = config.get("symbol", "")
+    risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
+    risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
+    risk_params["volume_threshold_ratio"] = config.get("risk", {}).get(
+        "volume_threshold_ratio", 0.05
+    )
+    risk_params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
+    risk_params["stop_loss_atr_mult"] = config.get("risk", {}).get(
+        "stop_loss_atr_mult", 2.0
+    )
+    risk_params["take_profit_atr_mult"] = config.get("risk", {}).get(
+        "take_profit_atr_mult", 4.0
+    )
+    risk_params["volume_ratio"] = volume_ratio
+    risk_manager.config = RiskConfig(**risk_params)
 
 
 async def _ws_ping_loop(exchange: object, interval: float) -> None:
@@ -802,7 +678,7 @@ async def initial_scan(
         pct = processed / total * 100
         logger.info("Initial scan %.1f%% complete", pct)
         if notifier and config.get("telegram", {}).get("status_updates", True):
-            await notifier.notify_async(f"Initial scan {pct:.1f}% complete")
+            notifier.notify(f"Initial scan {pct:.1f}% complete")
 
     return
 
@@ -826,7 +702,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     pump = is_market_pumping(
         (ctx.config.get("symbols") or [ctx.config.get("symbol")])
-        + (ctx.config.get("onchain_symbols") or []),
+        + ctx.config.get("onchain_symbols", []),
         ctx.df_cache,
         ctx.config.get("timeframe", "1h"),
     )
@@ -878,7 +754,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     if regime == "volatile" and sol_cfg.get("enabled"):
         try:
-            new_tokens = await scan_and_enqueue_solana_tokens(sol_cfg)
+            new_tokens = await get_solana_new_tokens(sol_cfg)
             solana_tokens.extend(new_tokens)
             symbols.extend((m, 0.0) for m in new_tokens)
         except Exception as exc:  # pragma: no cover - best effort
@@ -899,7 +775,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     total_available = len(
         (ctx.config.get("symbols") or [ctx.config.get("symbol")])
-        + (ctx.config.get("onchain_symbols") or [])
+        + ctx.config.get("onchain_symbols", [])
     )
     ctx.timing["symbol_filter_ratio"] = (
         len(symbols) / total_available if total_available else 1.0
@@ -908,40 +784,22 @@ async def fetch_candidates(ctx: BotContext) -> None:
     base_size = ctx.config.get("symbol_batch_size", 10)
     batch_size = int(base_size * volatility_factor)
     async with QUEUE_LOCK:
-        existing = list(symbol_priority_queue)
-        combined: OrderedDict[str, float] = OrderedDict((s, 0.0) for s in existing)
-        for sym, score in symbols:
-            if sym not in combined or score > combined[sym]:
-                combined[sym] = score
-        for sym in onchain_syms:
-            combined.setdefault(sym, 0.0)
-        symbol_priority_queue = build_priority_queue(list(combined.items()))
-
-        for sym in reversed(solana_tokens):
-            try:
-                symbol_priority_queue.remove(sym)
-            except ValueError:
-                pass
-            symbol_priority_queue.appendleft(sym)
-
+        if not symbol_priority_queue:
+            all_scores = symbols + [(s, 0.0) for s in onchain_syms]
+            symbol_priority_queue = build_priority_queue(all_scores)
+        if onchain_syms:
+            for sym in reversed(onchain_syms):
+                symbol_priority_queue.appendleft(sym)
         if solana_tokens:
             enqueue_solana_tokens(solana_tokens)
-
-        seen: set[str] = set()
-        deduped: deque[str] = deque()
-        for sym in symbol_priority_queue:
-            if sym not in seen:
-                deduped.append(sym)
-                seen.add(sym)
-        symbol_priority_queue = deduped
-
+        if len(symbol_priority_queue) < batch_size:
+            symbol_priority_queue.extend(
+                build_priority_queue(symbols + [(s, 0.0) for s in onchain_syms])
+            )
         ctx.current_batch = [
             symbol_priority_queue.popleft()
             for _ in range(min(batch_size, len(symbol_priority_queue)))
         ]
-        ctx.current_batch = list(dict.fromkeys(ctx.current_batch))
-        if ctx.current_batch:
-            logger.debug("Current batch: %s", ctx.current_batch)
 
         for sym in ctx.current_batch:
             if sym in recent_solana_set:
@@ -1142,19 +1000,14 @@ async def update_caches(ctx: BotContext) -> None:
         )
 
     filtered_batch: list[str] = []
-    dropped: list[str] = []
     for sym in batch:
         df = ctx.df_cache.get(timeframe, {}).get(sym)
         count = len(df) if isinstance(df, pd.DataFrame) else 0
         logger.info("%s OHLCV: %d candles", sym, count)
         if count == 0:
             logger.warning("No OHLCV data for %s; skipping analysis", sym)
-            dropped.append(sym)
             continue
         filtered_batch.append(sym)
-
-    if dropped:
-        logger.info("Dropped symbols due to missing OHLCV: %s", dropped)
 
     ctx.current_batch = filtered_batch
 
@@ -1178,7 +1031,7 @@ async def update_caches(ctx: BotContext) -> None:
                 msg = f"Volume spike priority for {sym}: z={z_max:.2f}"
                 logger.info(msg)
                 if status_updates and ctx.notifier:
-                    await ctx.notifier.notify_async(msg)
+                    ctx.notifier.notify(msg)
 
     if ctx.config.get("use_websocket", True) and ctx.current_batch:
         timeframe = ctx.config.get("timeframe", "1h")
@@ -1360,7 +1213,7 @@ async def execute_signals(ctx: BotContext) -> None:
     if not results:
         logger.info("All signals filtered out - nothing actionable")
         if ctx.notifier and ctx.config.get("telegram", {}).get("trade_updates", True):
-            await ctx.notifier.notify_async("No symbols qualified for trading")
+            ctx.notifier.notify("No symbols qualified for trading")
         return
 
     results.sort(key=lambda x: x.get("score", 0), reverse=True)
@@ -1443,11 +1296,6 @@ async def execute_signals(ctx: BotContext) -> None:
 
         amount = size / price if price > 0 else 0.0
         side = direction_to_side(candidate["direction"])
-        entry_price = candidate.get("entry_price")
-        current_price = df["close"].iloc[-1]
-        if entry_price is not None and abs(current_price - entry_price) / entry_price < 0.001:
-            logger.debug("Price movement <0.1%% for %s; skipping", sym)
-            continue
         if side == "sell" and not ctx.config.get("allow_short", False):
             outcome_reason = "short selling disabled"
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
@@ -1503,8 +1351,6 @@ async def execute_signals(ctx: BotContext) -> None:
                         dry_run=ctx.config.get("execution_mode") == "dry_run",
                         slippage_bps=ctx.config.get("solana_slippage_bps", 50),
                         notifier=ctx.notifier,
-                        mempool_monitor=ctx.mempool_monitor,
-                        mempool_cfg=ctx.mempool_cfg,
                     )
                 )
                 SNIPER_TASKS.add(task)
@@ -1914,13 +1760,7 @@ async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
             return pos["entry_price"]
         return float(df["close"].iloc[-1])
 
-    res = await monitor_price(
-        feed,
-        pos["entry_price"],
-        {},
-        mempool_monitor=ctx.mempool_monitor,
-        mempool_cfg=ctx.mempool_cfg,
-    )
+    res = await monitor_price(feed, pos["entry_price"], {})
     exit_price = res.get("exit_price", feed())
 
     await cex_trade_async(
@@ -1955,12 +1795,6 @@ async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
         pos.get("confidence", 0.0),
         pos["side"],
     )
-    trade_logger.upload_trade_record(
-        sym,
-        pos["entry_price"],
-        exit_price,
-        pos["side"],
-    )
     regime_pnl_tracker.log_trade(
         pos.get("regime", ""), pos.get("strategy", ""), realized_pnl
     )
@@ -1993,9 +1827,6 @@ async def _rotation_loop(
     state: dict,
     notifier: TelegramNotifier | None,
     check_balance_change: callable,
-    *,
-    mempool_monitor: SolanaMempoolMonitor | None = None,
-    mempool_cfg: dict | None = None,
 ) -> None:
     """Periodically rotate portfolio holdings."""
 
@@ -2014,19 +1845,12 @@ async def _rotation_loop(
                     if isinstance(bal.get("USDT"), dict)
                     else bal.get("USDT", 0)
                 )
-                await check_balance_change(float(current_balance), "external change")
+                check_balance_change(float(current_balance), "external change")
                 holdings = {
                     k: (v.get("total") if isinstance(v, dict) else v)
                     for k, v in bal.items()
                 }
-                await rotator.rotate(
-                    exchange,
-                    wallet,
-                    holdings,
-                    notifier,
-                    mempool_monitor=mempool_monitor,
-                    mempool_cfg=mempool_cfg,
-                )
+                await rotator.rotate(exchange, wallet, holdings, notifier)
         except asyncio.CancelledError:
             break
         except Exception as exc:  # pragma: no cover - rotation errors
@@ -2046,33 +1870,6 @@ async def _main_impl() -> TelegramNotifier:
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config = load_config()
-    secrets = dotenv_values(ENV_PATH)
-    flat_cfg = _flatten_config(config)
-    for key, val in secrets.items():
-        if key in flat_cfg:
-            if flat_cfg[key] != val:
-                logger.info(
-                    "Overriding %s from .env (config.yaml value: %s)",
-                    key,
-                    flat_cfg[key],
-                )
-            else:
-                logger.info("Using %s from .env (matches config.yaml)", key)
-        else:
-            logger.info("Setting %s from .env", key)
-    os.environ.update(secrets)
-    replace_env_placeholder(config, "HELIUS_KEY", "${HELIUS_KEY}")
-    helius_key = os.getenv("HELIUS_KEY")
-    if not helius_key:
-        logger.error("HELIUS_KEY not set in .env – Solana scans disabled")
-    else:
-        config.setdefault("solana_scanner", {})
-        config["solana_scanner"]["helius_ws_url"] = (
-            f"wss://mainnet.helius-rpc.com/?api-key={helius_key}"
-        )
-        config["solana_scanner"]["url"] = (
-            f"https://api.helius.xyz/v0/?api-key={helius_key}"
-        )
     from crypto_bot.utils.token_registry import (
         TOKEN_MINTS,
         load_token_mints,
@@ -2082,7 +1879,7 @@ async def _main_impl() -> TelegramNotifier:
     mapping = await load_token_mints()
     if mapping:
         set_token_mints({**TOKEN_MINTS, **mapping})
-    onchain_syms = [fix_symbol(s) for s in (config.get("onchain_symbols") or [])]
+    onchain_syms = [fix_symbol(s) for s in config.get("onchain_symbols", [])]
     onchain_syms = [f"{s}/USDC" if "/" not in s else s for s in onchain_syms]
     if onchain_syms:
         config["onchain_symbols"] = onchain_syms
@@ -2105,7 +1902,13 @@ async def _main_impl() -> TelegramNotifier:
         interval = cfg.get("interval_minutes", 5) * 60
         while True:
             try:
-                await scan_and_enqueue_solana_tokens(cfg)
+                tokens = await get_solana_new_tokens(cfg)
+                if tokens:
+                    async with QUEUE_LOCK:
+                        enqueue_solana_tokens(tokens)
+                        for sym in reversed(tokens):
+                            symbol_priority_queue.appendleft(sym)
+                            NEW_SOLANA_TOKENS.add(sym)
             except asyncio.CancelledError:
                 break
             except Exception as exc:  # pragma: no cover - best effort
@@ -2123,9 +1926,26 @@ async def _main_impl() -> TelegramNotifier:
         max_concurrent=config.get("max_concurrent_ohlcv"),
         gecko_limit=config.get("gecko_limit"),
     )
+    secrets = dotenv_values(ENV_PATH)
+    flat_cfg = _flatten_config(config)
+    for key, val in secrets.items():
+        if key in flat_cfg:
+            if flat_cfg[key] != val:
+                logger.info(
+                    "Overriding %s from .env (config.yaml value: %s)",
+                    key,
+                    flat_cfg[key],
+                )
+            else:
+                logger.info("Using %s from .env (matches config.yaml)", key)
+        else:
+            logger.info("Setting %s from .env", key)
+    os.environ.update(secrets)
+
     user = load_or_create()
 
     status_updates = config.get("telegram", {}).get("status_updates", True)
+    balance_updates = config.get("telegram", {}).get("balance_updates", False)
 
     tg_cfg = {**config.get("telegram", {})}
     if user.get("telegram_token"):
@@ -2135,10 +1955,11 @@ async def _main_impl() -> TelegramNotifier:
     if os.getenv("TELE_CHAT_ADMINS"):
         tg_cfg["chat_admins"] = os.getenv("TELE_CHAT_ADMINS")
     status_updates = tg_cfg.get("status_updates", status_updates)
+    balance_updates = tg_cfg.get("balance_updates", balance_updates)
 
     notifier = TelegramNotifier.from_config(tg_cfg)
     if status_updates:
-        await notifier.notify_async("🤖 CoinTrader2.0 started")
+        notifier.notify("🤖 CoinTrader2.0 started")
 
     mempool_cfg = config.get("mempool_monitor", {})
     mempool_monitor = None
@@ -2146,10 +1967,7 @@ async def _main_impl() -> TelegramNotifier:
         mempool_monitor = SolanaMempoolMonitor()
 
     if notifier.token and notifier.chat_id:
-        ok = await asyncio.to_thread(
-            send_test_message, notifier.token, notifier.chat_id, "Bot started"
-        )
-        if not ok:
+        if not send_test_message(notifier.token, notifier.chat_id, "Bot started"):
             logger.warning("Telegram test message failed; check your token and chat ID")
 
     # allow user-configured exchange to override YAML setting
@@ -2181,7 +1999,7 @@ async def _main_impl() -> TelegramNotifier:
     if not hasattr(exchange, "load_markets"):
         logger.error("The installed ccxt package is missing or a local stub is in use.")
         if status_updates:
-            await notifier.notify_async(
+            notifier.notify(
                 "❌ ccxt library not found or stubbed; check your installation"
             )
         # Continue startup even if ccxt is missing for testing environments
@@ -2211,7 +2029,7 @@ async def _main_impl() -> TelegramNotifier:
                 MAX_SYMBOL_SCAN_ATTEMPTS,
             )
             if status_updates:
-                await notifier.notify_async(
+                notifier.notify(
                     f"Symbol scan failed; retrying in {delay}s (attempt {attempt + 1}/{MAX_SYMBOL_SCAN_ATTEMPTS})"
                 )
             if inspect.iscoroutinefunction(asyncio.sleep):
@@ -2221,8 +2039,8 @@ async def _main_impl() -> TelegramNotifier:
             delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
 
         if discovered:
-            config["symbols"] = discovered + (config.get("onchain_symbols") or [])
-            onchain_syms = config.get("onchain_symbols") or []
+            config["symbols"] = discovered + config.get("onchain_symbols", [])
+            onchain_syms = config.get("onchain_symbols", [])
             cex_count = len([s for s in config["symbols"] if s not in onchain_syms])
             logger.info(
                 "Loaded %d CEX symbols and %d onchain symbols",
@@ -2232,9 +2050,9 @@ async def _main_impl() -> TelegramNotifier:
         elif discovered is None:
             cached = load_liquid_pairs()
             if isinstance(cached, list):
-                config["symbols"] = cached + (config.get("onchain_symbols") or [])
+                config["symbols"] = cached + config.get("onchain_symbols", [])
                 logger.warning("Using cached pairs due to symbol scan failure")
-                onchain_syms = config.get("onchain_symbols") or []
+                onchain_syms = config.get("onchain_symbols", [])
                 cex_count = len([s for s in config["symbols"] if s not in onchain_syms])
                 logger.info(
                     "Loaded %d CEX symbols and %d onchain symbols",
@@ -2256,7 +2074,7 @@ async def _main_impl() -> TelegramNotifier:
                     except Exception as exc:  # pragma: no cover - network errors
                         logger.error("refresh_pairs_async failed: %s", exc)
                 if fallback:
-                    config["symbols"] = fallback + (config.get("onchain_symbols") or [])
+                    config["symbols"] = fallback + config.get("onchain_symbols", [])
                     logger.warning("Loaded fresh pairs after scan failure")
                 else:
                     logger.error(
@@ -2264,7 +2082,7 @@ async def _main_impl() -> TelegramNotifier:
                         MAX_SYMBOL_SCAN_ATTEMPTS,
                     )
                     if status_updates:
-                        await notifier.notify_async(
+                        notifier.notify(
                             f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
                         )
                     return notifier
@@ -2274,42 +2092,62 @@ async def _main_impl() -> TelegramNotifier:
                 MAX_SYMBOL_SCAN_ATTEMPTS,
             )
             if status_updates:
-                await notifier.notify_async(
+                notifier.notify(
                     f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
                 )
             return notifier
 
-    # Load onchain pairs if none configured and Solana scanner is enabled
-    if not config.get("onchain_symbols") and config.get("solana_scanner", {}).get("enabled"):
-        rp_cfg = config.get("refresh_pairs", {})
-        min_vol = float(rp_cfg.get("min_quote_volume_usd", DEFAULT_MIN_VOLUME_USD))
-        top_k = int(rp_cfg.get("top_k", DEFAULT_TOP_K))
-        try:
-            sol_pairs = await refresh_pairs_async(min_vol, top_k, config, force_refresh=True)
-        except Exception as exc:  # pragma: no cover - network errors
-            logger.error("refresh_pairs_async failed: %s", exc)
-            sol_pairs = []
-        if sol_pairs:
-            config.setdefault("symbols", [])
-            existing = set(config["symbols"])
-            new_pairs = [s for s in sol_pairs if s not in existing]
-            config["symbols"].extend(new_pairs)
-            logger.info("Loaded %d onchain symbols via refresh_pairs", len(new_pairs))
-
     balance_threshold = config.get("balance_change_threshold", 0.01)
-    last_balance = 0.0
     previous_balance = 0.0
-    paper_wallet = None
 
-    async def check_balance_change(new_balance: float, reason: str) -> None:
+    def check_balance_change(new_balance: float, reason: str) -> None:
         nonlocal previous_balance
         delta = new_balance - previous_balance
         if abs(delta) > balance_threshold and notifier:
-            await notifier.notify_async(
-                f"Balance changed by {delta:.4f} USDT due to {reason}"
-            )
+            notifier.notify(f"Balance changed by {delta:.4f} USDT due to {reason}")
         previous_balance = new_balance
 
+    try:
+        if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
+            bal = await exchange.fetch_balance()
+        else:
+            bal = await asyncio.to_thread(exchange.fetch_balance)
+        init_bal = (
+            bal.get("USDT", {}).get("free", 0)
+            if isinstance(bal.get("USDT"), dict)
+            else bal.get("USDT", 0)
+        )
+        log_balance(float(init_bal))
+        last_balance = float(init_bal)
+        previous_balance = float(init_bal)
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("Exchange API setup failed: %s", exc)
+        if status_updates:
+            err = notifier.notify(f"API error: {exc}")
+            if err:
+                logger.error("Failed to notify user: %s", err)
+        return notifier
+    risk_params = {**config.get("risk", {})}
+    risk_params.update(config.get("sentiment_filter", {}))
+    risk_params.update(config.get("volatility_filter", {}))
+    risk_params["symbol"] = config.get("symbol", "")
+    risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
+    risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
+    risk_params["volume_threshold_ratio"] = config.get("risk", {}).get(
+        "volume_threshold_ratio", 0.05
+    )
+    risk_params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
+    risk_params["stop_loss_atr_mult"] = config.get("risk", {}).get(
+        "stop_loss_atr_mult", 2.0
+    )
+    risk_params["take_profit_atr_mult"] = config.get("risk", {}).get(
+        "take_profit_atr_mult", 4.0
+    )
+    risk_params["volume_ratio"] = volume_ratio
+    risk_config = RiskConfig(**risk_params)
+    risk_manager = RiskManager(risk_config)
+
+    paper_wallet = None
     if config.get("execution_mode") == "dry_run":
         try:
             start_bal = float(input("Enter paper trading balance in USDT: "))
@@ -2321,23 +2159,12 @@ async def _main_impl() -> TelegramNotifier:
             config.get("allow_short", False),
         )
         log_balance(paper_wallet.balance)
-        init_bal = paper_wallet.balance
-    else:
-        try:
-            init_bal = await fetch_and_log_balance(exchange, None, config)
-        except Exception as exc:  # pragma: no cover - network
-            logger.error("Exchange API setup failed: %s", exc)
-            if status_updates:
-                err = await notifier.notify_async(f"API error: {exc}")
-                if err:
-                    logger.error("Failed to notify user: %s", err)
-            return notifier
-
-    last_balance = previous_balance = float(init_bal)
-
-    params = build_risk_params(config, volume_ratio)
-    risk_config = RiskConfig(**params)
-    risk_manager = RiskManager(risk_config)
+        last_balance = notify_balance_change(
+            notifier,
+            last_balance,
+            float(paper_wallet.balance),
+            balance_updates,
+        )
 
     monitor_task = asyncio.create_task(
         console_monitor.monitor_loop(
@@ -2367,13 +2194,11 @@ async def _main_impl() -> TelegramNotifier:
             state,
             notifier,
             check_balance_change,
-            mempool_monitor=mempool_monitor,
-            mempool_cfg=mempool_cfg,
         )
     )
-    global SOLANA_SCAN_TASK
+    solana_scan_task: asyncio.Task | None = None
     if config.get("solana_scanner", {}).get("enabled"):
-        SOLANA_SCAN_TASK = asyncio.create_task(solana_scan_loop())
+        solana_scan_task = asyncio.create_task(solana_scan_loop())
     registry_task = asyncio.create_task(
         registry_update_loop(
             config.get("token_registry", {}).get("refresh_interval_minutes", 15)
@@ -2444,7 +2269,7 @@ async def _main_impl() -> TelegramNotifier:
     ctx.notifier = notifier
     ctx.paper_wallet = paper_wallet
     ctx.position_guard = position_guard
-    ctx.balance = last_balance
+    ctx.balance = await fetch_and_log_balance(exchange, paper_wallet, config)
     last_balance = ctx.balance
     runner = PhaseRunner(
         [
@@ -2546,7 +2371,7 @@ async def _main_impl() -> TelegramNotifier:
                     if isinstance(bal.get("USDT"), dict)
                     else bal.get("USDT", 0)
                 )
-                await check_balance_change(float(bal_val), "funds converted")
+                check_balance_change(float(bal_val), "funds converted")
 
             # Refresh OHLCV for open positions if a new candle has formed
             tf = config.get("timeframe", "1h")
@@ -2622,9 +2447,7 @@ async def _main_impl() -> TelegramNotifier:
 
             unknown_rate = UNKNOWN_COUNT / max(TOTAL_ANALYSES, 1)
             if unknown_rate > 0.2 and ctx.notifier:
-                await ctx.notifier.notify_async(
-                    f"⚠️ Unknown regime rate {unknown_rate:.1%}"
-                )
+                ctx.notifier.notify(f"⚠️ Unknown regime rate {unknown_rate:.1%}")
             delay = config.get("loop_interval_minutes", 1) / max(
                 ctx.volatility_factor, 1e-6
             )
@@ -2639,6 +2462,12 @@ async def _main_impl() -> TelegramNotifier:
             else:
                 with contextlib.suppress(Exception):
                     await asyncio.to_thread(exchange.close)
+        if solana_scan_task:
+            solana_scan_task.cancel()
+            try:
+                await solana_scan_task
+            except asyncio.CancelledError:
+                pass
         if registry_task:
             registry_task.cancel()
             try:
@@ -2707,13 +2536,6 @@ async def _main_impl() -> TelegramNotifier:
             except asyncio.CancelledError:
                 pass
         CROSS_ARB_TASKS.clear()
-        if SOLANA_SCAN_TASK:
-            SOLANA_SCAN_TASK.cancel()
-            try:
-                await SOLANA_SCAN_TASK
-            except asyncio.CancelledError:
-                pass
-            SOLANA_SCAN_TASK = None
         NEW_SOLANA_TOKENS.clear()
 
     return notifier
@@ -2723,8 +2545,6 @@ async def main() -> None:
     """Entry point for running the trading bot with error handling."""
     notifier: TelegramNotifier | None = None
     try:
-        secrets = dotenv_values(ENV_PATH)
-        os.environ.update(secrets)
         from crypto_bot.utils.token_registry import refresh_mints
 
         await refresh_mints()
@@ -2732,10 +2552,10 @@ async def main() -> None:
     except Exception as exc:  # pragma: no cover - error path
         logger.exception("Unhandled error in main: %s", exc)
         if notifier:
-            await notifier.notify_async(f"❌ Bot stopped: {exc}")
+            notifier.notify(f"❌ Bot stopped: {exc}")
     finally:
         if notifier:
-            await notifier.notify_async("Bot shutting down")
+            notifier.notify("Bot shutting down")
         logger.info("Bot shutting down")
 
 

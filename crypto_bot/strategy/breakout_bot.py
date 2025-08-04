@@ -21,7 +21,7 @@ except Exception:  # pragma: no cover - fallback
 
     scipy_stats = _FakeStats()
 
-from crypto_bot.volatility import normalize_score_by_volatility
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
 

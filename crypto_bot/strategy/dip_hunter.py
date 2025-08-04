@@ -5,7 +5,7 @@ import ta
 from ta.trend import ADXIndicator
 
 from crypto_bot.utils.indicator_cache import cache_series
-from crypto_bot.volatility import normalize_score_by_volatility
+from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils import stats
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.cooldown_manager import in_cooldown, mark_cooldown

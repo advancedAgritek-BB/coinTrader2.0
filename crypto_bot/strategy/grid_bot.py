@@ -13,7 +13,7 @@ import ta
 
 from crypto_bot import grid_state
 from crypto_bot.utils.indicator_cache import cache_series
-from crypto_bot.volatility import normalize_score_by_volatility, atr_percent
+from crypto_bot.utils.volatility import normalize_score_by_volatility, atr_percent
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.volatility_filter import calc_atr
 
