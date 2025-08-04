@@ -232,6 +232,7 @@ def test_position_size_uses_trade_size_pct_when_no_stop():
             stop_loss_pct=0.01,
             take_profit_pct=0.01,
             trade_size_pct=0.2,
+            slippage_factor=0.0,
         )
     )
     size = manager.position_size(0.5, 1000)
@@ -259,7 +260,12 @@ def make_vol_df(long_diff: float, short_diff: float) -> pd.DataFrame:
 
 
 def test_position_size_scales_with_volatility_and_drawdown():
-    cfg = RiskConfig(max_drawdown=0.5, stop_loss_pct=0.01, take_profit_pct=0.01)
+    cfg = RiskConfig(
+        max_drawdown=0.5,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        slippage_factor=0.0,
+    )
     manager = RiskManager(cfg)
     df = make_vol_df(1.0, 2.0)
     manager.peak_equity = 1.0
@@ -275,7 +281,12 @@ def test_position_size_scales_with_volatility_and_drawdown():
 
 
 def test_position_size_reduces_when_drawdown_high():
-    cfg = RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        slippage_factor=0.0,
+    )
     manager = RiskManager(cfg)
     manager.peak_equity = 1.0
     manager.equity = 0.5
@@ -289,6 +300,7 @@ def test_position_size_risk_based():
             stop_loss_pct=0.01,
             take_profit_pct=0.01,
             risk_pct=0.02,
+            slippage_factor=0.0,
         )
     )
     size = manager.position_size(0.5, 1000, stop_distance=10)
@@ -303,6 +315,7 @@ def test_position_size_risk_based_capped():
             take_profit_pct=0.01,
             risk_pct=1.0,
             trade_size_pct=0.1,
+            slippage_factor=0.0,
         )
     )
     size = manager.position_size(1.0, 1000, stop_distance=0.01, price=1)
@@ -316,6 +329,7 @@ def test_position_size_uses_atr():
             stop_loss_pct=0.01,
             take_profit_pct=0.01,
             risk_pct=0.02,
+            slippage_factor=0.0,
         )
     )
     size = manager.position_size(1.0, 1000, stop_distance=5, atr=8)
@@ -329,10 +343,23 @@ def test_position_size_low_price_risk_based():
             stop_loss_pct=0.01,
             take_profit_pct=0.01,
             risk_pct=0.02,
+            slippage_factor=0.0,
         )
     )
     size = manager.position_size(0.5, 1000, stop_distance=0.02, price=0.1)
     assert abs(size - 50.0) < 1e-6
+
+
+def test_position_size_applies_slippage():
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        slippage_factor=0.1,
+    )
+    manager = RiskManager(cfg)
+    size = manager.position_size(1.0, 1000)
+    assert abs(size - 90.0) < 1e-6
 
 
 def test_position_size_logs_when_zero(caplog):
