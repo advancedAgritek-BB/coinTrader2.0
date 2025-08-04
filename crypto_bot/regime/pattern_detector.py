@@ -5,50 +5,38 @@ try:  # pragma: no cover - optional scipy dependency
     from scipy.signal import find_peaks  # type: ignore
 except Exception:  # pragma: no cover - fallback when scipy missing
 
-    def find_peaks(data, distance=1, *a, **k):
+    def find_peaks(data, distance=1, *args, **kwargs):
         arr = np.asarray(data)
-        idx = []
-        for i in range(1, len(arr) - 1):
-            if arr[i] > arr[i - 1] and arr[i] > arr[i + 1]:
-                idx.append(i)
+        idx = np.where((arr[1:-1] > arr[:-2]) & (arr[1:-1] > arr[2:]))[0] + 1
         return np.array(idx), {}
 
 
 def detect_patterns(
     df: pd.DataFrame, *, min_conf: float = 0.0, lookback: int | None = None
+    df: pd.DataFrame, *, min_conf: float = 0.0, lookback: int = 20
 ) -> dict[str, float]:
     """Return confidence scores for simple chart patterns detected in ``df``.
 
-    The latest candle and recent history are inspected for a small
-    selection of candlestick formations and breakout signals. Only
-    patterns that are detected with a confidence between 0 and 1 are
-    returned.
+    The latest candles are scanned for classic candlestick formations and
+    breakout signals.  Each pattern receives a confidence value between
+    ``0`` and ``1`` and only those meeting ``min_conf`` are returned.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        OHLCV data to analyse.
+    min_conf : float, optional
+        Minimum confidence threshold for returned patterns. Defaults to
+        ``0.0``.
+    lookback : int, optional
+        Number of recent bars used for moving averages and pattern
+        detection windows. Defaults to ``20``.
     """
-
-    """Return a mapping of detected chart patterns to their strength.
-
-    The latest candles are scanned for classic candlestick formations
-    and simple breakout signals.  Each pattern is assigned a confidence
-    value between ``0`` and ``1`` and only those with non–zero confidence
-    are returned.
-
-    ``"breakout"``         -- last close at a new high with volume spike
-    ``"breakdown"``        -- last close at a new low with volume spike
-    ``"hammer"``           -- small body with long lower shadow
-    ``"shooting_star"``    -- small body with long upper shadow
-    ``"doji"``             -- open and close nearly equal
-    ``"bullish_engulfing"``  -- last candle engulfs previous bearish body
-    ``"bearish_engulfing"`` -- last candle engulfs previous bullish body
-    ``"inside_bar"``       -- current range is inside previous bar
-    ``"three_bar_reversal"`` -- two bars one way then strong reversal
-    ``"volume_spike"``     -- volume significantly above average
-    """
-    scores: dict[str, float] = {}
     patterns: dict[str, float] = {}
     if df is None or len(df) < 2:
         return patterns
 
-    ema = df["close"].ewm(span=20, adjust=False).mean()
+    ema = df["close"].ewm(span=lookback, adjust=False).mean()
     ema_slope = float(ema.diff().iloc[-1]) if len(ema) > 1 else 0.0
 
     prev = df.iloc[-2]
@@ -57,7 +45,7 @@ def detect_patterns(
     body = abs(last["close"] - last["open"])
     candle_range = last["high"] - last["low"]
     if candle_range == 0:
-        return patterns
+        return patterns  # Avoid division by zero
 
     upper = last["high"] - max(last["close"], last["open"])
     lower = min(last["close"], last["open"]) - last["low"]
@@ -84,6 +72,7 @@ def detect_patterns(
         patterns["doji"] = min(doji_score, 1.0)
 
     lb = min(len(df), 20 if lookback is None else lookback)
+    lb = min(len(df), lookback)
     high_max = df["high"].rolling(lb).max().iloc[-2]
     low_min = df["low"].rolling(lb).min().iloc[-2]
     vol_mean = df["volume"].rolling(lb).mean().iloc[-2]
@@ -144,8 +133,8 @@ def detect_patterns(
         brkdn_score = min(1.0, last["volume"] / (vol_mean * 1.5))
         patterns["breakdown"] = brkdn_score
 
-    lookback = min(len(df), 5)
-    recent = df.iloc[-lookback:]
+    tri_lb = min(len(df), max(2, lookback // 4))
+    recent = df.iloc[-tri_lb:]
     highs = recent["high"]
     lows = recent["low"]
     if (
@@ -153,10 +142,11 @@ def detect_patterns(
         and lows.diff().dropna().gt(0).all()
     ):
         patterns["ascending_triangle"] = 1.0
+        patterns["ascending_triangle"] = 1.0  # confidence capped at 1.0
 
     # Head and shoulders pattern using peak detection
-    hs_lookback = min(len(df), 25)
-    series = df["close"].iloc[-hs_lookback:]
+    hs_lb = min(len(df), max(3, int(lookback * 1.25)))
+    series = df["close"].iloc[-hs_lb:]
     peaks, _ = find_peaks(series, distance=2)
     if len(peaks) >= 3:
         p1, p2, p3 = peaks[-3:]
@@ -164,7 +154,7 @@ def detect_patterns(
         if h2 > h1 and h2 > h3:
             tol = series.iloc[-1] * 0.02
             if abs(h1 - h3) <= tol and h2 - max(h1, h3) >= tol:
-                if hs_lookback - 1 - p3 <= 3:
+                if hs_lb - 1 - p3 <= 3:
                     patterns["head_and_shoulders"] = 1.0
 
     troughs, _ = find_peaks(-series, distance=2)
@@ -174,7 +164,7 @@ def detect_patterns(
         if l2 < l1 and l2 < l3:
             tol = series.iloc[-1] * 0.02
             if abs(l1 - l3) <= tol and min(l1, l3) - l2 >= tol:
-                if hs_lookback - 1 - t3 <= 3:
+                if hs_lb - 1 - t3 <= 3:
                     patterns["inverse_head_and_shoulders"] = 1.0
 
-    return {k: v for k, v in patterns.items() if v >= min_conf}
+    return {k: min(1.0, v) for k, v in patterns.items() if v >= min_conf}
