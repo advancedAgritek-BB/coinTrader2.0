@@ -202,13 +202,78 @@ def test_load_config_normalizes_symbol(tmp_path, monkeypatch):
     path.write_text("scan_markets: true\nsymbol: XBT/USDT\n")
     import types
     main = _import_main(monkeypatch)
+    path.write_text("scan_markets: true\nsymbol: XBT/USDT\nml_enabled: false\n")
+    import types, sys
+
+    # Ensure stub modules are available before importing main
+    sys.modules.setdefault("yaml", yaml)
+    sys.modules.setdefault("redis", types.SimpleNamespace())
+    sys.modules.setdefault(
+        "crypto_bot.solana",
+        types.SimpleNamespace(get_solana_new_tokens=lambda *_a, **_k: []),
+    )
+    sys.modules.setdefault("crypto_bot.solana.scalping", types.SimpleNamespace())
+    sys.modules.setdefault(
+        "crypto_bot.solana.exit",
+        types.SimpleNamespace(monitor_price=lambda *_a, **_k: None),
+    )
+    sys.modules.setdefault(
+        "crypto_bot.execution.solana_mempool",
+        types.SimpleNamespace(SolanaMempoolMonitor=object),
+    )
+    sys.modules.setdefault(
+        "crypto_bot.auto_optimizer", types.SimpleNamespace(optimize_strategies=lambda *_a, **_k: None)
+    )
+    sys.modules.setdefault(
+        "crypto_bot.regime.regime_classifier",
+        types.SimpleNamespace(
+            classify_regime_async=lambda *_a, **_k: None,
+            classify_regime_cached=lambda *_a, **_k: None,
+        ),
+    )
+    sys.modules.setdefault(
+        "crypto_bot.utils.market_analyzer",
+        types.SimpleNamespace(analyze_symbol=lambda *_a, **_k: None),
+    )
+    sys.modules.setdefault(
+        "crypto_bot.strategy_router",
+        types.SimpleNamespace(strategy_for=lambda *_a, **_k: None),
+    )
+    sys.modules.setdefault("websocket", types.SimpleNamespace(WebSocketApp=object))
+    sys.modules.setdefault("gspread", types.SimpleNamespace(authorize=lambda *a, **k: None))
+    sys.modules.setdefault(
+        "oauth2client.service_account",
+        types.SimpleNamespace(
+            ServiceAccountCredentials=types.SimpleNamespace(
+                from_json_keyfile_name=lambda *a, **k: None
+            )
+        ),
+    )
+    sys.modules.setdefault("rich.console", types.SimpleNamespace(Console=object))
+    sys.modules.setdefault("rich.table", types.SimpleNamespace(Table=object))
+    sys.modules.setdefault(
+        "crypto_bot.utils.symbol_pre_filter",
+        types.SimpleNamespace(filter_symbols=lambda *_a, **_k: ([], [])),
+    )
+    class _FakeGen:
+        pass
+    sys.modules.setdefault(
+        "numpy.random",
+        types.SimpleNamespace(default_rng=lambda *_a, **_k: _FakeGen(), Generator=_FakeGen),
+    )
+
+    import crypto_bot.main as main
 
     def _simple_yaml(f):
         data = {}
         for line in f.read().splitlines():
             if ":" in line:
                 k, v = line.split(":", 1)
-                data[k.strip()] = v.strip()
+                val = v.strip()
+                if val.lower() in {"true", "false"}:
+                    data[k.strip()] = val.lower() == "true"
+                else:
+                    data[k.strip()] = val
         return data
 
     monkeypatch.setattr(main, "CONFIG_PATH", path)
