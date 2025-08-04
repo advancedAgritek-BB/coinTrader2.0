@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -16,8 +17,8 @@ TOKEN_REGISTRY_URL = "https://raw.githubusercontent.com/solana-labs/token-list/m
 
 # Primary token list from Jupiter API
 # ``station.jup.ag`` now redirects to ``dev.jup.ag`` which returns ``404``.
-# The latest stable token list is hosted at ``https://token.jup.ag/all``.
-JUPITER_TOKEN_URL = "https://token.jup.ag/all"
+# The latest stable token list is hosted at ``https://tokens.jup.ag/tokens``.
+JUPITER_TOKEN_URL = "https://tokens.jup.ag/tokens"
 
 # Batch metadata endpoint for resolving unknown symbols
 HELIUS_TOKEN_API = (
@@ -38,12 +39,43 @@ _LOADED = False
 async def fetch_from_jupiter() -> Dict[str, str]:
     """Return mapping of symbols to mints using Jupiter token list."""
     async with aiohttp.ClientSession() as session:
-        async with session.get(JUPITER_TOKEN_URL, timeout=10) as resp:
+        try:
+            async with session.get(JUPITER_TOKEN_URL, timeout=5) as resp:
+                logger.info(
+                    f"Fetching from {JUPITER_TOKEN_URL} - Status: {resp.status}"
+                )
+                resp.raise_for_status()
+                data = await resp.json(content_type=None)
+        except aiohttp.ClientTimeout as e:
+            logger.error(f"Timeout fetching Jupiter tokens: {e}")
+            return {}
+        except Exception as e:  # pragma: no cover - network failures
+            logger.error(f"Error fetching Jupiter tokens: {e}")
+            return {}
+
+    result: Dict[str, str] = {}
+    tokens = data if isinstance(data, list) else data.get("tokens") or []
+    for item in tokens:
+        symbol = item.get("symbol") or item.get("ticker")
+        mint = item.get("address") or item.get("mint") or item.get("tokenMint")
+        if isinstance(symbol, str) and isinstance(mint, str):
+            result[symbol.upper()] = mint
+    return result
+
+
+async def fetch_from_github(url: str) -> Dict[str, str]:
+    """Return mapping of symbols to mints using GitHub token registry."""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, timeout=10) as resp:
             resp.raise_for_status()
             data = await resp.json(content_type=None)
 
     result: Dict[str, str] = {}
-    tokens = data if isinstance(data, list) else data.get("tokens") or []
+    tokens = (
+        data
+        if isinstance(data, list)
+        else data.get("tokens") or data.get("data", {}).get("tokens") or []
+    )
     for item in tokens:
         symbol = item.get("symbol") or item.get("ticker")
         mint = item.get("address") or item.get("mint") or item.get("tokenMint")
@@ -63,9 +95,10 @@ async def load_token_mints(
     The list is fetched from ``url`` or ``TOKEN_MINTS_URL`` environment variable.
     Results are cached on disk and subsequent calls return an empty dict unless
     ``force_refresh`` is ``True``.
-    The Solana list is fetched from Jupiter first then GitHub as a fallback.
-    Cached results are reused unless ``force_refresh`` is ``True``.
-    Unknown ``symbols`` can be resolved via the Helius API.
+    Jupiter and GitHub token lists are requested concurrently and the first
+    successful result is used. Cached results are reused unless
+    ``force_refresh`` is ``True``. Unknown ``symbols`` can be resolved via the
+    Helius API.
     """
     global _LOADED
     if _LOADED and not force_refresh:
@@ -73,35 +106,39 @@ async def load_token_mints(
 
     mapping: Dict[str, str] = {}
 
-    try:
-        mapping.update(await fetch_from_jupiter())
-    except Exception as exc:  # pragma: no cover - network failures
-        logger.error("Failed to fetch Jupiter tokens: %s", exc)
-
-    if not mapping:
-        fetch_url = url or os.getenv("TOKEN_MINTS_URL", TOKEN_REGISTRY_URL)
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(fetch_url, timeout=10) as resp:
-                    resp.raise_for_status()
-                    data = await resp.json(content_type=None)
-            tokens = data.get("tokens") or data.get("data", {}).get("tokens") or []
-            for item in tokens:
-                symbol = item.get("symbol") or item.get("ticker")
-                mint = item.get("address") or item.get("mint") or item.get("tokenMint")
-                if isinstance(symbol, str) and isinstance(mint, str):
-                    mapping[symbol.upper()] = mint
-        except Exception as exc:  # pragma: no cover - network failures
-            logger.error("Failed to fetch token registry: %s", exc)
-
-    if not mapping and CACHE_FILE.exists():
+    fetch_url = url or os.getenv("TOKEN_MINTS_URL", TOKEN_REGISTRY_URL)
+    jup_task = fetch_from_jupiter()
+    gh_task = fetch_from_github(fetch_url)
+    if CACHE_FILE.exists():
         try:
             with open(CACHE_FILE) as f:
                 cached = json.load(f)
             if isinstance(cached, dict):
                 mapping.update({str(k).upper(): str(v) for k, v in cached.items()})
+                if not force_refresh:
+                    TOKEN_MINTS.update(mapping)
+                    _LOADED = True
+                    return mapping
         except Exception as err:  # pragma: no cover - best effort
             logger.error("Failed to read cache: %s", err)
+
+    try:
+        mapping.update(await fetch_from_jupiter())
+    except Exception as exc:  # pragma: no cover - network failures
+        logger.error("Failed to fetch Jupiter tokens: %s", exc)
+
+    jup_result, gh_result = await asyncio.gather(
+        jup_task, gh_task, return_exceptions=True
+    )
+
+    for name, result in (("Jupiter", jup_result), ("GitHub", gh_result)):
+        if isinstance(result, Exception):
+            logger.error("Failed to fetch %s tokens: %s", name.lower(), result)
+            continue
+        if result:
+            mapping.update(result)
+            logger.info("Loaded token list from %s", name)
+            break
 
     if unknown:
         try:
@@ -115,6 +152,15 @@ async def load_token_mints(
         _write_cache()
 
     _LOADED = True
+        try:
+            CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(CACHE_FILE, "w") as f:
+                json.dump(TOKEN_MINTS, f, indent=2)
+        except Exception as exc:  # pragma: no cover - optional cache
+            logger.error("Failed to write %s: %s", CACHE_FILE, exc)
+        _LOADED = True
+    else:
+        logger.debug("Token mint load failed; will retry later")
     return mapping
 
 
