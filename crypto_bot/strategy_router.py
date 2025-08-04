@@ -20,12 +20,11 @@ from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telemetry import telemetry
-import threading
-from collections import defaultdict
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.cache_helpers import cache_by_id
 from crypto_bot.utils.token_registry import TOKEN_MINTS
 from crypto_bot.selector import bandit
+from contextlib import asynccontextmanager
 
 from crypto_bot.strategy import (
     trend_bot,
@@ -43,7 +42,6 @@ from crypto_bot.strategy import (
 )
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
-_SYMBOL_LOCKS: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 with open(CONFIG_PATH) as f:
@@ -52,24 +50,12 @@ with open(CONFIG_PATH) as f:
 # Map symbols to asyncio locks guarding order placement
 symbol_locks: Dict[str, asyncio.Lock] = {}
 
-# Event loop captured when locks are first acquired
-_LOCK_LOOP: asyncio.AbstractEventLoop | None = None
-
-
-async def acquire_symbol_lock(symbol: str) -> None:
-    """Acquire the asyncio lock associated with ``symbol``."""
-    global _LOCK_LOOP
-    if _LOCK_LOOP is None:
-        _LOCK_LOOP = asyncio.get_running_loop()
+@asynccontextmanager
+async def symbol_lock(symbol: str):
+    """Async context manager for symbol-based locks."""
     lock = symbol_locks.setdefault(symbol, asyncio.Lock())
-    await lock.acquire()
-
-
-async def release_symbol_lock(symbol: str) -> None:
-    """Release the lock for ``symbol`` if held."""
-    lock = symbol_locks.get(symbol)
-    if lock and lock.locked():
-        lock.release()
+    async with lock:
+        yield
 
 
 @dataclass
@@ -611,7 +597,12 @@ def route(
             if isinstance(cfg, dict):
                 symbol = cfg.get("symbol", "")
             if direction != "none" and symbol:
-                await acquire_symbol_lock(symbol)
+                async with symbol_lock(symbol):
+                    if notifier is not None:
+                        notifier.notify(
+                            f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
+                        )
+                    return score, direction
             if notifier is not None:
                 notifier.notify(
                     f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
