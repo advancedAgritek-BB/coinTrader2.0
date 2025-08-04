@@ -83,9 +83,9 @@ def test_subscription_message(monkeypatch):
     monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
 
     async def run():
-        gen = pool_ws_monitor.watch_pool("KEY", "PGM")
-        with pytest.raises(StopAsyncIteration):
-            await gen.__anext__()
+        gen = pool_ws_monitor.watch_pool("PGM", api_key="KEY")
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(gen.__anext__(), 0.01)
 
     asyncio.run(run())
     assert session.url == "wss://atlas-mainnet.helius-rpc.com/?api-key=KEY"
@@ -103,10 +103,8 @@ def test_yields_transactions(monkeypatch):
     monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
 
     async def run():
-        gen = pool_ws_monitor.watch_pool("KEY", "PGM")
+        gen = pool_ws_monitor.watch_pool("PGM", api_key="KEY")
         results = [await gen.__anext__(), await gen.__anext__()]
-        with pytest.raises(StopAsyncIteration):
-            await gen.__anext__()
         return results
 
     res = asyncio.run(run())
@@ -122,10 +120,37 @@ def test_reconnect_on_close(monkeypatch):
     ws1.messages = [types.SimpleNamespace(type=aiohttp_mod.WSMsgType.CLOSED, data=None)]
 
     async def run():
-        gen = pool_ws_monitor.watch_pool("KEY", "PGM")
+        gen = pool_ws_monitor.watch_pool("PGM", api_key="KEY")
         result = await gen.__anext__()
         return result
 
     res = asyncio.run(run())
     assert res == {"tx": 3}
     assert session.calls == 2
+
+
+def test_watch_pool_env(monkeypatch):
+    ws = DummyWS([])
+    session = DummySession(ws)
+    aiohttp_mod = AiohttpMod(session)
+    monkeypatch.setattr(pool_ws_monitor, "aiohttp", aiohttp_mod)
+    monkeypatch.setenv("HELIUS_KEY", "ENVK")
+
+    async def run():
+        gen = pool_ws_monitor.watch_pool("PGM")
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(gen.__anext__(), 0.01)
+
+    asyncio.run(run())
+    assert session.url == "wss://atlas-mainnet.helius-rpc.com/?api-key=ENVK"
+
+
+def test_watch_pool_missing_key(monkeypatch):
+    monkeypatch.delenv("HELIUS_KEY", raising=False)
+
+    async def run():
+        gen = pool_ws_monitor.watch_pool("PGM")
+        await gen.__anext__()
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(run())

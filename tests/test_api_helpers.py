@@ -1,5 +1,4 @@
 import asyncio
-
 import pytest
 
 from crypto_bot.solana import api_helpers
@@ -45,7 +44,7 @@ class DummySession:
         self.closed = True
 
 
-def test_helius_ws(monkeypatch):
+def test_helius_ws_explicit(monkeypatch):
     session = DummySession()
     monkeypatch.setattr(
         api_helpers, "aiohttp", type("M", (), {"ClientSession": lambda: session})
@@ -58,6 +57,33 @@ def test_helius_ws(monkeypatch):
     asyncio.run(_run())
     assert session.ws_url.endswith("k")
     assert session.closed
+
+
+def test_helius_ws_env(monkeypatch):
+    session = DummySession()
+    monkeypatch.setattr(
+        api_helpers, "aiohttp", type("M", (), {"ClientSession": lambda: session})
+    )
+    monkeypatch.setenv("HELIUS_KEY", "envk")
+
+    async def _run():
+        async with api_helpers.helius_ws() as ws:
+            assert isinstance(ws, DummyWS)
+
+    asyncio.run(_run())
+    assert session.ws_url.endswith("envk")
+    assert session.closed
+
+
+def test_helius_ws_missing_key(monkeypatch):
+    monkeypatch.delenv("HELIUS_KEY", raising=False)
+
+    async def _run():
+        async with api_helpers.helius_ws():
+            pass
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(_run())
 
 
 def test_fetch_jito_bundle(monkeypatch):
