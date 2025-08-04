@@ -38,9 +38,19 @@ _LOADED = False
 async def fetch_from_jupiter() -> Dict[str, str]:
     """Return mapping of symbols to mints using Jupiter token list."""
     async with aiohttp.ClientSession() as session:
-        async with session.get(JUPITER_TOKEN_URL, timeout=10) as resp:
-            resp.raise_for_status()
-            data = await resp.json(content_type=None)
+        try:
+            async with session.get(JUPITER_TOKEN_URL, timeout=5) as resp:
+                logger.info(
+                    f"Fetching from {JUPITER_TOKEN_URL} - Status: {resp.status}"
+                )
+                resp.raise_for_status()
+                data = await resp.json(content_type=None)
+        except aiohttp.ClientTimeout as e:
+            logger.error(f"Timeout fetching Jupiter tokens: {e}")
+            return {}
+        except Exception as e:  # pragma: no cover - network failures
+            logger.error(f"Error fetching Jupiter tokens: {e}")
+            return {}
 
     result: Dict[str, str] = {}
     tokens = data if isinstance(data, list) else data.get("tokens") or []
