@@ -134,6 +134,7 @@ class RiskManager:
         atr: float | None = None,
         price: float | None = None,
         name: str | None = None,
+        direction: str = "long",
     ) -> float:
         """Return the trade value for a signal.
 
@@ -142,7 +143,8 @@ class RiskManager:
         ``trade_size_pct`` is scaled by volatility and current drawdown.
         When ``name`` is supplied the recent win rate for that strategy is
         fetched and the size is boosted by ``win_rate_boost_factor`` when the
-        rate exceeds ``win_rate_threshold``.
+        rate exceeds ``win_rate_threshold``.  If ``direction`` is ``"short"`` the
+        returned size will be negative.
         """
 
         volatility_factor = 1.0
@@ -193,7 +195,10 @@ class RiskManager:
             if win_rate > self.config.win_rate_threshold:
                 size *= self.config.win_rate_boost_factor
 
-        if size <= 0:
+        if direction == "short":
+            size = -abs(size)
+
+        if size == 0:
             logger.info(
                 "Position size zero - balance=%.2f trade_size_pct=%.2f",
                 balance,
