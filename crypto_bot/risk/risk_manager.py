@@ -33,6 +33,7 @@ class RiskConfig:
     symbol: str = ""
     trade_size_pct: float = 0.1
     risk_pct: float = 0.01
+    slippage_factor: float = 0.001
     min_volume: float = 0.0
     volume_threshold_ratio: float = 0.05
     strategy_allocation: dict | None = None
@@ -50,6 +51,7 @@ class RiskConfig:
     min_history_bars: int = 20
     win_rate_threshold: float = 0.7
     win_rate_boost_factor: float = 1.5
+    win_rate_half_life: float = 5.0
 
 
 class RiskManager:
@@ -134,15 +136,23 @@ class RiskManager:
         atr: float | None = None,
         price: float | None = None,
         name: str | None = None,
+        direction: str = "long",
     ) -> float:
         """Return the trade value for a signal.
 
         When ``stop_distance`` or ``atr`` is provided the size is calculated
+        using ``risk_pct`` relative to that distance. Otherwise the fixed
+        ``trade_size_pct`` is scaled by volatility and current drawdown. When
+        ``name`` is supplied the recent win rate for that strategy is fetched
+        using an exponentially decayed weighting of past trades controlled by
+        ``win_rate_half_life``. The size is boosted by
+        ``win_rate_boost_factor`` when the rate exceeds ``win_rate_threshold``.
         using ``risk_pct`` relative to that distance.  Otherwise the fixed
         ``trade_size_pct`` is scaled by volatility and current drawdown.
         When ``name`` is supplied the recent win rate for that strategy is
         fetched and the size is boosted by ``win_rate_boost_factor`` when the
-        rate exceeds ``win_rate_threshold``.
+        rate exceeds ``win_rate_threshold``.  If ``direction`` is ``"short"`` the
+        returned size will be negative.
         """
 
         volatility_factor = 1.0
@@ -187,11 +197,19 @@ class RiskManager:
 
         if name:
             try:
-                win_rate = get_recent_win_rate(strategy=name)
+                win_rate = get_recent_win_rate(
+                    strategy=name, half_life=self.config.win_rate_half_life
+                )
             except Exception:
                 win_rate = 0.0
             if win_rate > self.config.win_rate_threshold:
                 size *= self.config.win_rate_boost_factor
+
+        if direction == "short":
+            size = -abs(size)
+
+        if size == 0:
+        size *= (1 - self.config.slippage_factor)
 
         if size <= 0:
             logger.info(
@@ -249,13 +267,18 @@ class RiskManager:
             logger.info("[EVAL] %s", reason)
             return False, reason
 
+        if too_flat(df, 0.00001):
+            reason = "Volatility too low for HFT"
+            logger.info("[EVAL] %s", reason)
+            return False, reason
+
         if too_flat(df, 0.00005):
             reason = "Volatility too low"
             logger.info("[EVAL] %s", reason)
             return False, reason
 
         self.boost = 1.0
-        reason = "Trade allowed (relaxed for profitability testing)"
+        reason = "Trade allowed"
         logger.info(
             "Allow %s: vol=%.6f, flat=%s",
             symbol,

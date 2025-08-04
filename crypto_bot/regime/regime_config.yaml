@@ -26,6 +26,12 @@ score_weights:
   volatile: 1.0
 pattern_min_conf: 0.2
 ml_blend_weight: 0.7    # Heavier weight on ML for profitability
+hft_adx_trending_min: 10
+hft_rsi_mean_rev_min: 45
+hft_rsi_mean_rev_max: 55
+hft_normalized_range_volatility_min: 1.0
+hft_indicator_window: 7
+hft_ml_blend_weight: 0.5
 bull_fng: 50
 atr_baseline: 0.01
 # HFT adjustments
