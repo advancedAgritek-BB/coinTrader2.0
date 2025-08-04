@@ -16,8 +16,8 @@ TOKEN_REGISTRY_URL = "https://raw.githubusercontent.com/solana-labs/token-list/m
 
 # Primary token list from Jupiter API
 # ``station.jup.ag`` now redirects to ``dev.jup.ag`` which returns ``404``.
-# The latest stable token list is hosted at ``https://token.jup.ag/all``.
-JUPITER_TOKEN_URL = "https://token.jup.ag/all"
+# The latest stable token list is hosted at ``https://tokens.jup.ag/tokens``.
+JUPITER_TOKEN_URL = "https://tokens.jup.ag/tokens"
 
 # Batch metadata endpoint for resolving unknown symbols
 HELIUS_TOKEN_API = (
