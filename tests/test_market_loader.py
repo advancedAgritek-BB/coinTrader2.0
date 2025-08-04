@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 import logging
 import time
+import threading
 import ccxt
 
 VALID_MINT = "So11111111111111111111111111111111111111112"
@@ -134,18 +135,28 @@ class DummyWSExchange:
 
     def __init__(self):
         self.fetch_called = False
+        self.fetch_thread = None
 
     async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
         return [[0] * 6]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         self.fetch_called = True
+        self.fetch_thread = threading.get_ident()
         return [[1] * 6 for _ in range(limit)]
 
 
 class DummyWSExchangeEnough(DummyWSExchange):
     async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
         return [[2] * 6 for _ in range(limit)]
+
+
+class DummyWSSyncExchange(DummyWSExchange):
+    def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.fetch_called = True
+        self.fetch_thread = threading.get_ident()
+        time.sleep(0.01)
+        return [[1] * 6 for _ in range(limit)]
 
 
 def test_fetch_ohlcv_async():
@@ -156,10 +167,12 @@ def test_fetch_ohlcv_async():
 
 def test_watch_ohlcv_fallback_to_fetch():
     ex = DummyWSExchange()
+    main_thread = threading.get_ident()
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
     assert ex.fetch_called is True
     assert len(data) == 2
     assert data[0][0] == 1
+    assert ex.fetch_thread == main_thread
 
 
 def test_watch_ohlcv_no_fallback_when_enough():
@@ -168,6 +181,16 @@ def test_watch_ohlcv_no_fallback_when_enough():
     assert ex.fetch_called is False
     assert len(data) == 2
     assert data[0][0] == 2
+
+
+def test_watch_ohlcv_sync_fallback_runs_in_thread():
+    ex = DummyWSSyncExchange()
+    main_thread = threading.get_ident()
+    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
+    assert ex.fetch_called is True
+    assert len(data) == 2
+    assert data[0][0] == 1
+    assert ex.fetch_thread != main_thread
 
 
 class IncompleteExchange:
