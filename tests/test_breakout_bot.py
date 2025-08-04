@@ -4,6 +4,7 @@ import pytest
 import types
 
 from crypto_bot.strategy import breakout_bot
+from crypto_bot.utils import indicator_cache, volatility
 
 
 def _make_df(prices, volumes):
@@ -49,6 +50,24 @@ def no_squeeze_df():
     prices = list(range(80, 106))
     volumes = [100] * 26
     return _make_df(prices, volumes)
+
+
+def test_handles_insufficient_history():
+    indicator_cache.CACHE.clear()
+    cfg = {
+        "breakout": {
+            "bb_length": 20,
+            "kc_length": 20,
+            "dc_length": 5,
+            "volume_window": 5,
+        }
+    }
+    prices = [100] * 20
+    volumes = [100] * 20
+    df = _make_df(prices, volumes)
+    score, direction, atr = breakout_bot.generate_signal(df, cfg)
+    assert direction == "none" and score == 0.0
+    indicator_cache.CACHE.clear()
 
 
 def test_long_breakout_signal():
@@ -148,9 +167,14 @@ def test_trainer_model_influence(monkeypatch):
         "volume": volumes,
     })
     monkeypatch.setattr(breakout_bot, "MODEL", None)
-    base, direction, _ = breakout_bot.generate_signal(df)
+    raw_base, direction, _ = breakout_bot.generate_signal(
+        df, {"atr_normalization": False}
+    )
     dummy = types.SimpleNamespace(predict=lambda _df: 0.5)
     monkeypatch.setattr(breakout_bot, "MODEL", dummy)
     score, direction2, _ = breakout_bot.generate_signal(df)
+    expected = volatility.normalize_score_by_volatility(
+        df, (raw_base + 0.5) / 2
+    )
     assert direction2 == direction
-    assert score == pytest.approx((base + 0.5) / 2)
+    assert score == pytest.approx(expected)
