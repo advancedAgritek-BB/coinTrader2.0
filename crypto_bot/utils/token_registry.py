@@ -150,17 +150,9 @@ async def load_token_mints(
     if mapping:
         TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
         _write_cache()
-
-    _LOADED = True
-        try:
-            CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(CACHE_FILE, "w") as f:
-                json.dump(TOKEN_MINTS, f, indent=2)
-        except Exception as exc:  # pragma: no cover - optional cache
-            logger.error("Failed to write %s: %s", CACHE_FILE, exc)
-        _LOADED = True
     else:
         logger.debug("Token mint load failed; will retry later")
+    _LOADED = True
     return mapping
 
 

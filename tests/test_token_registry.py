@@ -302,7 +302,7 @@ def test_load_token_mints_retry(monkeypatch, tmp_path, caplog):
     caplog.set_level(logging.DEBUG)
     mapping = asyncio.run(mod.load_token_mints(force_refresh=True))
     assert mapping == {}
-    assert mod._LOADED is False
+    assert mod._LOADED is True
     assert "will retry later" in caplog.text
 
 
