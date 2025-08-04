@@ -5,12 +5,9 @@ try:  # pragma: no cover - optional scipy dependency
     from scipy.signal import find_peaks  # type: ignore
 except Exception:  # pragma: no cover - fallback when scipy missing
 
-    def find_peaks(data, distance=1, *a, **k):
+    def find_peaks(data, distance=1, *args, **kwargs):
         arr = np.asarray(data)
-        idx = []
-        for i in range(1, len(arr) - 1):
-            if arr[i] > arr[i - 1] and arr[i] > arr[i + 1]:
-                idx.append(i)
+        idx = np.where((arr[1:-1] > arr[:-2]) & (arr[1:-1] > arr[2:]))[0] + 1
         return np.array(idx), {}
 
 
