@@ -237,7 +237,7 @@ momentum_bot:
 ohlcv_batch_size: 10
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
-ohlcv_timeout: 60
+ohlcv_timeout: 5
 redis_url: null
 onchain_default_quote: USDC
 onchain_min_volume_usd: 5000
