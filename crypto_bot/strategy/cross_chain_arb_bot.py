@@ -33,19 +33,26 @@ def generate_signal(
     if df is None or df.empty:
         return 0.0, "none"
 
-    params = config.get("cross_chain_arb_bot", {}) if config else {}
+    config = config or {}
+    params = config.get("cross_chain_arb_bot", {})
     pair = str(params.get("pair", ""))
-    threshold = float(params.get("spread_threshold", 0.0))
+    try:
+        threshold = float(params.get("spread_threshold", 0.0))
+    except (TypeError, ValueError):
+        threshold = 0.0
 
-    symbol = config.get("symbol") if config else None
+    symbol = config.get("symbol", "")
     if symbol and not pair:
         pair = str(symbol)
     if not pair:
         return 0.0, "none"
 
-    cfg = mempool_cfg or (config.get("mempool_monitor", {}) if config else {})
+    cfg = mempool_cfg or config.get("mempool_monitor", {})
     if mempool_monitor and cfg.get("enabled"):
-        fee_thr = float(cfg.get("suspicious_fee_threshold", 0.0))
+        try:
+            fee_thr = float(cfg.get("suspicious_fee_threshold", 0.0))
+        except (TypeError, ValueError):
+            fee_thr = 0.0
         if mempool_monitor.is_suspicious(fee_thr):
             return 0.0, "none"
 
