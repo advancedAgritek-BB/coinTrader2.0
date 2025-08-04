@@ -132,8 +132,9 @@ async def load_token_mints(
                 json.dump(TOKEN_MINTS, f, indent=2)
         except Exception as exc:  # pragma: no cover - optional cache
             logger.error("Failed to write %s: %s", CACHE_FILE, exc)
-
-    _LOADED = True
+        _LOADED = True
+    else:
+        logger.debug("Token mint load failed; will retry later")
     return mapping
 
 
