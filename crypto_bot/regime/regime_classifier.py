@@ -89,7 +89,7 @@ def adaptive_thresholds(cfg: dict, df: pd.DataFrame | None, symbol: str | None) 
                 window=cfg.get("indicator_window", 14),
             )
             avg_atr = float(atr.mean())
-            factor = avg_atr / float(baseline) if baseline else 1.0
+            factor = min(2.0, avg_atr / float(baseline)) if baseline else 1.0
             out["adx_trending_min"] = cfg["adx_trending_min"] * factor
             out["normalized_range_volatility_min"] = (
                 cfg["normalized_range_volatility_min"] * factor
