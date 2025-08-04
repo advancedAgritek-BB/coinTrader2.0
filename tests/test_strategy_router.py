@@ -142,6 +142,15 @@ def test_route_returns_lstm_bot():
     assert fn.__name__ == lstm_bot.generate_signal.__name__
 
 
+def test_route_handles_none_df_map():
+    cfg = {"strategy_router": {"regimes": {"trending": ["trend"]}}}
+    fn = route("trending", "cex", cfg, df_map=None)
+    assert fn.__name__ == trend_bot.generate_signal.__name__
+    score, direction = fn(None)
+    assert isinstance(score, float)
+    assert isinstance(direction, str)
+
+
 def test_route_notifier(monkeypatch):
     msgs = []
 
