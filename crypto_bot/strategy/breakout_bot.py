@@ -63,6 +63,8 @@ def _squeeze(
 ) -> Tuple[pd.Series, pd.Series]:
     """Return squeeze boolean series and ATR values."""
     hist = max(bb_len, kc_len)
+    if len(df) < hist + 1:
+        return pd.Series(dtype=bool), pd.Series(dtype=float)
     recent = df.iloc[-(hist + 1):]
 
     close = recent["close"]
@@ -163,6 +165,8 @@ def generate_signal(
         lookback_cfg,
         squeeze_pct,
     )
+    if squeeze.empty or atr.empty:
+        return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
     if pd.isna(squeeze.iloc[-1]) or not squeeze.iloc[-1]:
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
