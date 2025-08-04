@@ -1,5 +1,22 @@
 from __future__ import annotations
 
+"""Breakout strategy using Bollinger/Keltner squeeze and trend filters.
+
+Configuration
+-------------
+The ``breakout`` section of the config may include:
+
+``ema_window`` (int)
+    Window length for the EMA trend filter (default ``200``).
+``adx_window`` (int)
+    Lookback window for the ADX calculation (default ``14``).
+``adx_threshold`` (float)
+    Minimum ADX value required to qualify a breakout (default ``20``).
+
+Existing options such as ``bb_length`` or ``donchian_window`` remain
+unchanged.
+"""
+
 from typing import Optional, Tuple
 
 import logging
@@ -46,6 +63,8 @@ def _squeeze(
 ) -> Tuple[pd.Series, pd.Series]:
     """Return squeeze boolean series and ATR values."""
     hist = max(bb_len, kc_len)
+    if len(df) < hist + 1:
+        return pd.Series(dtype=bool), pd.Series(dtype=float)
     recent = df.iloc[-(hist + 1):]
 
     close = recent["close"]
@@ -82,6 +101,13 @@ def generate_signal(
 ) -> Tuple[float, str] | Tuple[float, str, float]:
     """Breakout strategy using Bollinger/Keltner squeeze confirmation.
 
+    The ``config`` may contain a ``breakout`` section supporting additional
+    options:
+
+    - ``ema_window`` – window for the EMA trend filter (default ``200``)
+    - ``adx_window`` – lookback window for ADX (default ``14``)
+    - ``adx_threshold`` – minimum ADX value required (default ``20``)
+
     Returns
     -------
     Tuple[float, str] or Tuple[float, str, float]
@@ -101,6 +127,9 @@ def generate_signal(
     donchian_window = int(cfg.get("donchian_window", cfg.get("dc_length", 30)))
     atr_buffer_mult = float(cfg.get("atr_buffer_mult", 0.05))
     vol_window = int(cfg.get("volume_window", 20))
+    ema_window = int(cfg.get("ema_window", 200))
+    adx_window = int(cfg.get("adx_window", 14))
+    adx_threshold = float(cfg.get("adx_threshold", 20))
     # Volume confirmation is now optional by default to allow breakouts without
     # a prior volume spike. Users can enable the old behaviour by explicitly
     # setting ``vol_confirmation: true`` in the strategy config.
@@ -109,15 +138,24 @@ def generate_signal(
         cfg.get("vol_multiplier", cfg.get("volume_mult", 1.2))
     )
     threshold = float(cfg.get("squeeze_threshold", 0.03))
-    _ = float(cfg.get("adx_threshold", 20))  # placeholder for future use
     lookback_cfg = int(cfg_all.get("indicator_lookback", 250))
     squeeze_pct = float(cfg_all.get("bb_squeeze_pct", 20))
 
-    lookback = max(bb_len, kc_len, donchian_window, vol_window, 14)
+    lookback = max(
+        bb_len,
+        kc_len,
+        donchian_window,
+        vol_window,
+        ema_window,
+        adx_window,
+        14,
+    )
     if len(df) < lookback:
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
     recent = df.iloc[-(lookback + 1):]
+    if len(recent) < lookback:
+        return (0.0, "none", 0.0) if higher_df is None else (0.0, "none")
 
     squeeze, atr = _squeeze(
         recent,
@@ -129,12 +167,17 @@ def generate_signal(
         lookback_cfg,
         squeeze_pct,
     )
+    if squeeze.empty or atr.empty:
+        return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
     if pd.isna(squeeze.iloc[-1]) or not squeeze.iloc[-1]:
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
     if higher_df is not None and not higher_df.empty:
+        higher_recent = higher_df.iloc[-(lookback + 1):]
+        if len(higher_recent) < lookback:
+            return (0.0, "none")
         _squeeze(
-            higher_df.iloc[-(lookback + 1):],
+            higher_recent,
             bb_len,
             bb_std,
             kc_len,
@@ -156,12 +199,16 @@ def generate_signal(
 
     rsi = ta.momentum.rsi(close, window=14)
     macd_hist = ta.trend.macd_diff(close)
+    ema = ta.trend.ema_indicator(close, window=ema_window)
+    adx = ta.trend.ADXIndicator(high, low, close, window=adx_window).adx()
 
     dc_high = cache_series("dc_high", df, dc_high, lookback)
     dc_low = cache_series("dc_low", df, dc_low, lookback)
     vol_ma = cache_series("vol_ma_breakout", df, vol_ma, lookback)
     rsi = cache_series("rsi_breakout", df, rsi, lookback)
     macd_hist = cache_series("macd_hist", df, macd_hist, lookback)
+    ema = cache_series("ema_breakout", df, ema, lookback)
+    adx = cache_series("adx_breakout", df, adx, lookback)
 
     recent = recent.copy()
     recent["dc_high"] = dc_high
@@ -169,16 +216,40 @@ def generate_signal(
     recent["vol_ma"] = vol_ma
     recent["rsi"] = rsi
     recent["macd_hist"] = macd_hist
+    recent["ema"] = ema
+    recent["adx"] = adx
 
-    vol_ok = True if not vol_confirmation else (
-        vol_ma.iloc[-1] > 0 and volume.iloc[-1] > vol_ma.iloc[-1] * vol_multiplier
-    )
+    latest = recent.iloc[-1]
+
+    vol_ma_last = vol_ma.iloc[-1] if not vol_ma.empty else float("nan")
+    vol_last = volume.iloc[-1] if not volume.empty else float("nan")
+
+    if vol_confirmation:
+        vol_ok = vol_ma_last > 0 and vol_last > vol_ma_last * vol_multiplier
+    else:
+        vol_ok = True
+
+    if (
+        pd.isna(vol_ma_last)
+        or pd.isna(vol_last)
+        or vol_ma_last == 0
+        or vol_last == 0
+    ):
+        vol_ok = False
     atr_last = atr.iloc[-1]
     upper_break = dc_high.iloc[-1] + atr_last * atr_buffer_mult
     lower_break = dc_low.iloc[-1] - atr_last * atr_buffer_mult
 
-    long_cond = close.iloc[-1] > upper_break
-    short_cond = close.iloc[-1] < lower_break
+    long_cond = (
+        latest["close"] > upper_break
+        and latest["close"] > latest["ema"]
+        and latest["adx"] > adx_threshold
+    )
+    short_cond = (
+        latest["close"] < lower_break
+        and latest["close"] < latest["ema"]
+        and latest["adx"] > adx_threshold
+    )
 
     logger.info(
         f"{df.index[-1]} Squeeze: {squeeze.iloc[-1]}, long_cond: {long_cond}, vol_ok: {vol_ok}"

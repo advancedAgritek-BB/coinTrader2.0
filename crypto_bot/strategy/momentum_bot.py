@@ -25,10 +25,10 @@ def generate_signal(
     vol_window = int(params.get("volume_window", 20))
     vol_mult = float(params.get("volume_mult", 1.5))
 
-    lookback = max(window, vol_window)
-    if len(df) < lookback:
+    if len(df) < vol_window:
         return 0.0, "none"
 
+    lookback = min(len(df), max(window, vol_window))
     recent = df.iloc[-(lookback + 1) :]
 
     dc_high = recent["high"].rolling(window).max().shift(1)
@@ -44,12 +44,15 @@ def generate_signal(
     recent["dc_low"] = dc_low
     recent["vol_ma"] = vol_ma
 
-    close = recent["close"].iloc[-1]
-    volume = recent["volume"].iloc[-1]
+    latest = recent.iloc[-1]
 
-    long_cond = close > dc_high.iloc[-1]
-    short_cond = close < dc_low.iloc[-1]
-    vol_ok = vol_ma.iloc[-1] > 0 and volume > vol_ma.iloc[-1] * vol_mult
+    long_cond = latest["close"] > dc_high.iloc[-1]
+    short_cond = latest["close"] < dc_low.iloc[-1]
+    vol_ok = (
+        pd.notna(latest["vol_ma"])
+        and latest["vol_ma"] > 0
+        and latest["volume"] > latest["vol_ma"] * vol_mult
+    )
 
     score = 0.0
     direction = "none"
