@@ -61,19 +61,12 @@ def test_reload_command(monkeypatch, tmp_path):
     stub = types.ModuleType("crypto_bot.main")
     load_calls = []
 
-    def fake_load():
+    async def fake_reload(config, *_a, force=False, **_k):
         load_calls.append(True)
-        return {}
+        config["reloaded"] = True
+        state.pop("reload", None)
 
-    def maybe_reload_config(state, config):
-        if state.get("reload"):
-            cfg = fake_load()
-            config.clear()
-            config.update(cfg)
-            state.pop("reload", None)
-
-    stub.load_config = fake_load
-    stub.maybe_reload_config = maybe_reload_config
+    stub.reload_config = fake_reload
     monkeypatch.setitem(sys.modules, "crypto_bot.main", stub)
     main = stub
 
@@ -84,10 +77,10 @@ def test_reload_command(monkeypatch, tmp_path):
     assert state["reload"] is True
 
     config = {}
-    main.maybe_reload_config(state, config)
+    asyncio.run(main.reload_config(config, None, None, None, None, force=True))
 
     assert state.get("reload") is None
-    assert load_calls
+    assert load_calls and config.get("reloaded")
 
 
 def test_panic_sell_command(monkeypatch):

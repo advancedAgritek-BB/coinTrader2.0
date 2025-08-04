@@ -1,6 +1,9 @@
 import yaml
 import importlib.util
 from pathlib import Path
+import asyncio
+import types
+import os
 
 if not hasattr(yaml, "__file__"):
     import sys
@@ -14,6 +17,65 @@ if not hasattr(yaml, "__file__"):
     sys.modules.setdefault("yaml", yaml)
 
 CONFIG_PATH = Path("crypto_bot/config.yaml")
+
+
+def _import_main(monkeypatch):
+    import sys
+
+    sys.modules.setdefault("yaml", yaml)
+    sys.modules.setdefault("redis", types.SimpleNamespace())
+    sys.modules.setdefault(
+        "crypto_bot.solana",
+        types.SimpleNamespace(get_solana_new_tokens=lambda *_a, **_k: []),
+    )
+    sys.modules.setdefault("crypto_bot.solana.scalping", types.SimpleNamespace())
+    sys.modules.setdefault(
+        "crypto_bot.solana.exit",
+        types.SimpleNamespace(monitor_price=lambda *_a, **_k: None),
+    )
+    sys.modules.setdefault(
+        "crypto_bot.execution.solana_mempool",
+        types.SimpleNamespace(SolanaMempoolMonitor=object),
+    )
+    sys.modules.setdefault(
+        "crypto_bot.regime.pattern_detector",
+        types.SimpleNamespace(detect_patterns=lambda *_a, **_k: {}),
+    )
+    sys.modules.setdefault(
+        "crypto_bot.utils.market_analyzer",
+        types.SimpleNamespace(analyze_symbol=lambda *_a, **_k: None),
+    )
+    sys.modules.setdefault(
+        "crypto_bot.strategy_router",
+        types.SimpleNamespace(strategy_for=lambda *_a, **_k: None),
+    )
+    sys.modules.setdefault("websocket", types.SimpleNamespace(WebSocketApp=object))
+    sys.modules.setdefault("gspread", types.SimpleNamespace(authorize=lambda *a, **k: None))
+    sys.modules.setdefault(
+        "oauth2client.service_account",
+        types.SimpleNamespace(
+            ServiceAccountCredentials=types.SimpleNamespace(
+                from_json_keyfile_name=lambda *a, **k: None
+            )
+        ),
+    )
+    sys.modules.setdefault("rich.console", types.SimpleNamespace(Console=object))
+    sys.modules.setdefault("rich.table", types.SimpleNamespace(Table=object))
+    sys.modules.setdefault(
+        "crypto_bot.utils.symbol_pre_filter",
+        types.SimpleNamespace(filter_symbols=lambda *_a, **_k: ([], [])),
+    )
+    class _FakeGen:
+        pass
+
+    sys.modules.setdefault(
+        "numpy.random",
+        types.SimpleNamespace(default_rng=lambda *_a, **_k: _FakeGen(), Generator=_FakeGen),
+    )
+
+    import crypto_bot.main as main
+
+    return main
 
 
 def test_load_config_returns_dict():
@@ -138,7 +200,8 @@ def test_exit_config_unified():
 def test_load_config_normalizes_symbol(tmp_path, monkeypatch):
     path = tmp_path / "config.yaml"
     path.write_text("scan_markets: true\nsymbol: XBT/USDT\n")
-    import types, crypto_bot.main as main
+    import types
+    main = _import_main(monkeypatch)
 
     def _simple_yaml(f):
         data = {}
@@ -155,43 +218,7 @@ def test_load_config_normalizes_symbol(tmp_path, monkeypatch):
 
 
 def test_reload_config_clears_symbol_cache(monkeypatch):
-    import types
-    import sys
-
-    # Ensure stub modules are available before importing main
-    sys.modules.setdefault("yaml", yaml)
-    sys.modules.setdefault("redis", types.SimpleNamespace())
-    sys.modules.setdefault("crypto_bot.solana", types.SimpleNamespace(get_solana_new_tokens=lambda *_a, **_k: []))
-    sys.modules.setdefault("crypto_bot.solana.scalping", types.SimpleNamespace())
-    sys.modules.setdefault("crypto_bot.solana.exit", types.SimpleNamespace(monitor_price=lambda *_a, **_k: None))
-    sys.modules.setdefault(
-        "crypto_bot.execution.solana_mempool",
-        types.SimpleNamespace(SolanaMempoolMonitor=object),
-    )
-    sys.modules.setdefault("crypto_bot.utils.market_analyzer", types.SimpleNamespace(analyze_symbol=lambda *_a, **_k: None))
-    sys.modules.setdefault(
-        "crypto_bot.strategy_router", types.SimpleNamespace(strategy_for=lambda *_a, **_k: None)
-    )
-    sys.modules.setdefault("websocket", types.SimpleNamespace(WebSocketApp=object))
-    sys.modules.setdefault("gspread", types.SimpleNamespace(authorize=lambda *a, **k: None))
-    sys.modules.setdefault(
-        "oauth2client.service_account",
-        types.SimpleNamespace(ServiceAccountCredentials=types.SimpleNamespace(from_json_keyfile_name=lambda *a, **k: None)),
-    )
-    sys.modules.setdefault("rich.console", types.SimpleNamespace(Console=object))
-    sys.modules.setdefault("rich.table", types.SimpleNamespace(Table=object))
-    sys.modules.setdefault(
-        "crypto_bot.utils.symbol_pre_filter",
-        types.SimpleNamespace(filter_symbols=lambda *_a, **_k: ([], [])),
-    )
-    class _FakeGen:
-        pass
-    sys.modules.setdefault(
-        "numpy.random",
-        types.SimpleNamespace(default_rng=lambda *_a, **_k: _FakeGen(), Generator=_FakeGen),
-    )
-
-    import crypto_bot.main as main
+    main = _import_main(monkeypatch)
     from crypto_bot.utils import symbol_utils
 
     # Pre-populate symbol cache
@@ -216,7 +243,71 @@ def test_reload_config_clears_symbol_cache(monkeypatch):
     rotator = types.SimpleNamespace(config={})
     guard = main.OpenPositionGuard(1)
 
-    main.reload_config(config, ctx, risk_manager, rotator, guard, force=True)
+    asyncio.run(
+        main.reload_config(config, ctx, risk_manager, rotator, guard, force=True)
+    )
 
     assert symbol_utils._cached_symbols is None
     assert symbol_utils._last_refresh == 0.0
+
+
+def test_load_config_async_detects_section_changes(tmp_path, monkeypatch):
+    main = _import_main(monkeypatch)
+
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("ml_enabled: true\nrisk:\n  max_drawdown: 1\n")
+    monkeypatch.setattr(main, "CONFIG_PATH", cfg_path)
+    main._CONFIG_CACHE.clear()
+    main._CONFIG_MTIMES.clear()
+    main._LAST_ML_CFG = None
+
+    dummy = types.SimpleNamespace(dict=lambda: {})
+    monkeypatch.setattr(main, "ScannerConfig", types.SimpleNamespace(model_validate=lambda d: None))
+    monkeypatch.setattr(main, "SolanaScannerConfig", types.SimpleNamespace(model_validate=lambda d: dummy))
+    monkeypatch.setattr(main, "PythConfig", types.SimpleNamespace(model_validate=lambda d: dummy))
+
+    cfg, changed = asyncio.run(main.load_config_async())
+    assert "risk" in changed and "ml_enabled" in changed
+
+    _, changed2 = asyncio.run(main.load_config_async())
+    assert changed2 == set()
+
+    cfg_path.write_text("ml_enabled: true\nrisk:\n  max_drawdown: 2\n")
+    os.utime(cfg_path, None)
+    _, changed3 = asyncio.run(main.load_config_async())
+    assert "risk" in changed3
+
+
+def test_ensure_ml_only_on_change(tmp_path, monkeypatch):
+    main = _import_main(monkeypatch)
+
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text("ml_enabled: false\n")
+    monkeypatch.setattr(main, "CONFIG_PATH", cfg_path)
+    main._CONFIG_CACHE.clear()
+    main._CONFIG_MTIMES.clear()
+    main._LAST_ML_CFG = None
+
+    dummy = types.SimpleNamespace(dict=lambda: {})
+    monkeypatch.setattr(main, "ScannerConfig", types.SimpleNamespace(model_validate=lambda d: None))
+    monkeypatch.setattr(main, "SolanaScannerConfig", types.SimpleNamespace(model_validate=lambda d: dummy))
+    monkeypatch.setattr(main, "PythConfig", types.SimpleNamespace(model_validate=lambda d: dummy))
+
+    calls: list[bool] = []
+
+    def fake_ensure(cfg):
+        calls.append(True)
+
+    monkeypatch.setattr(main, "_ensure_ml", fake_ensure)
+
+    asyncio.run(main.load_config_async())
+    assert calls == [True]
+
+    calls.clear()
+    asyncio.run(main.load_config_async())
+    assert calls == []
+
+    cfg_path.write_text("ml_enabled: true\n")
+    os.utime(cfg_path, None)
+    asyncio.run(main.load_config_async())
+    assert calls == [True]
