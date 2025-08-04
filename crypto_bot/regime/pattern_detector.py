@@ -52,7 +52,7 @@ def detect_patterns(df: pd.DataFrame, *, min_conf: float = 0.0) -> dict[str, flo
     body = abs(last["close"] - last["open"])
     candle_range = last["high"] - last["low"]
     if candle_range == 0:
-        return patterns
+        return patterns  # Avoid division by zero
 
     upper = last["high"] - max(last["close"], last["open"])
     lower = min(last["close"], last["open"]) - last["low"]
