@@ -4,10 +4,28 @@ import asyncio
 import aiohttp
 from typing import AsyncGenerator, Any, Dict
 import json
+import os
 
 
-async def watch_pool(api_key: str, pool_program: str) -> AsyncGenerator[Dict[str, Any], None]:
-    """Connect to Helius enhanced websocket and yield transaction data."""
+async def watch_pool(
+    pool_program: str, api_key: str | None = None
+) -> AsyncGenerator[Dict[str, Any], None]:
+    """Connect to Helius enhanced websocket and yield transaction data.
+
+    If ``api_key`` is not provided, the ``HELIUS_KEY`` environment variable
+    is used.
+
+    Raises
+    ------
+    RuntimeError
+        If no API key is available.
+    """
+
+    if api_key is None:
+        api_key = os.getenv("HELIUS_KEY")
+    if not api_key:
+        raise RuntimeError("HELIUS API key is required; set api_key or HELIUS_KEY env var")
+
     url = f"wss://atlas-mainnet.helius-rpc.com/?api-key={api_key}"
     async with aiohttp.ClientSession() as session:
         backoff = 0

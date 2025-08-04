@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import aiohttp
 from contextlib import asynccontextmanager
+import os
 
 # Base endpoints from the blueprint
 # Helius WebSocket: wss://mainnet.helius-rpc.com
@@ -13,8 +14,22 @@ from contextlib import asynccontextmanager
 
 
 @asynccontextmanager
-async def helius_ws(api_key: str):
-    """Yield a websocket connection to Helius RPC and close the session."""
+async def helius_ws(api_key: str | None = None):
+    """Yield a websocket connection to Helius RPC and close the session.
+
+    If ``api_key`` is not provided, the value of the ``HELIUS_KEY``
+    environment variable will be used.
+
+    Raises
+    ------
+    RuntimeError
+        If no API key is available.
+    """
+
+    if api_key is None:
+        api_key = os.getenv("HELIUS_KEY")
+    if not api_key:
+        raise RuntimeError("HELIUS API key is required; set api_key or HELIUS_KEY env var")
 
     url = f"wss://mainnet.helius-rpc.com/?api-key={api_key}"
     session = aiohttp.ClientSession()
