@@ -36,3 +36,8 @@ async def monitor_price(
         if trailing and price <= peak * (1 - trailing / 100):
             return {"exit_price": price, "reason": "trailing"}
     return {"exit_price": price, "reason": "timeout"}
+
+
+async def quick_exit(*_a, **_k) -> Dict:
+    """Minimal placeholder used in tests."""
+    return {}

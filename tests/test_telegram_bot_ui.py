@@ -512,15 +512,13 @@ def test_pnl_stats(monkeypatch, tmp_path):
         load_calls.append(True)
         return {"risk": {"trade_size_pct": 1.5}}
 
-    def maybe_reload_config(state, config):
-        if state.get("reload"):
-            cfg = fake_load()
-            config.clear()
-            config.update(cfg)
-            state.pop("reload", None)
+    async def fake_reload(config, *_a, force=False, **_k):
+        cfg = fake_load()
+        config.clear()
+        config.update(cfg)
+        state.pop("reload", None)
 
-    stub.load_config = fake_load
-    stub.maybe_reload_config = maybe_reload_config
+    stub.reload_config = fake_reload
     monkeypatch.setitem(sys.modules, "crypto_bot.main", stub)
     main = stub
 
@@ -529,7 +527,7 @@ def test_pnl_stats(monkeypatch, tmp_path):
     assert state["reload"] is True
 
     config = {}
-    main.maybe_reload_config(state, config)
+    asyncio.run(main.reload_config(config, None, None, None, None, force=True))
     assert state.get("reload") is None
     assert config.get("risk", {}).get("trade_size_pct") == 1.5
 

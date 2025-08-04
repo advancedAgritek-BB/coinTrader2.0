@@ -1,6 +1,7 @@
 import sys
 import types
 import yaml
+import asyncio
 
 
 def _import_main():
@@ -18,6 +19,10 @@ def _import_main():
     sys.modules.setdefault(
         "crypto_bot.execution.solana_mempool",
         types.SimpleNamespace(SolanaMempoolMonitor=object),
+    )
+    sys.modules.setdefault(
+        "crypto_bot.regime.pattern_detector",
+        types.SimpleNamespace(detect_patterns=lambda *_a, **_k: {}),
     )
     sys.modules.setdefault(
         "crypto_bot.utils.market_analyzer", types.SimpleNamespace(analyze_symbol=lambda *_a, **_k: None)
@@ -76,8 +81,8 @@ def test_reload_config_replaces_placeholders(monkeypatch):
 
     monkeypatch.setenv("HELIUS_KEY", "mock_key")
 
-    def fake_load_config():
-        return {
+    async def fake_load_async():
+        cfg = {
             "solana_scanner": {
                 "helius_ws_url": "wss://mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}",
                 "api_keys": {"bitquery": "${HELIUS_KEY}"},
@@ -88,8 +93,9 @@ def test_reload_config_replaces_placeholders(monkeypatch):
                 "take_profit_pct": 0.0,
             },
         }
+        return main.replace_placeholders(cfg), {"solana_scanner", "risk"}
 
-    monkeypatch.setattr(main, "load_config", fake_load_config)
+    monkeypatch.setattr(main, "load_config_async", fake_load_async)
 
     config = {}
     ctx = main.BotContext({}, {}, {}, config)
@@ -97,7 +103,9 @@ def test_reload_config_replaces_placeholders(monkeypatch):
     rotator = types.SimpleNamespace(config={})
     guard = main.OpenPositionGuard(1)
 
-    main.reload_config(config, ctx, risk_manager, rotator, guard, force=True)
+    asyncio.run(
+        main.reload_config(config, ctx, risk_manager, rotator, guard, force=True)
+    )
 
     assert (
         config["solana_scanner"]["helius_ws_url"]
