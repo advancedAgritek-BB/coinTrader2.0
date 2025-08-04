@@ -83,13 +83,15 @@ def generate_signal(
     vol_spike = latest["volume"] > latest["vol_ma"] * vol_mult if latest["vol_ma"] > 0 else False
 
     range_bound = latest["adx"] < adx_threshold
-    in_trend = False
     if higher_df is not None and not higher_df.empty:
         h_lookback = max(ema_trend, 1)
         h_recent = higher_df.iloc[-(h_lookback + 1) :]
         ema_h = ta.trend.ema_indicator(h_recent["close"], window=ema_trend)
         ema_h = cache_series("ema_trend_h", higher_df, ema_h, h_lookback)
         in_trend = higher_df["close"].iloc[-1] > ema_h.iloc[-1]
+    else:
+        # Default to a neutral stance when higher timeframe data is unavailable
+        in_trend = True
 
     favorable_regime = range_bound or in_trend
 
