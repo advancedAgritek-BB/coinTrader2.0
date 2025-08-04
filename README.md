@@ -772,6 +772,20 @@ Telegram notifications.
    # FERNET_KEY=your_generated_fernet_key
    ```
 
+### Required Environment Variables
+
+When running the bot in a non-interactive environment (such as Docker or CI),
+provide credentials through environment variables.  The wallet manager expects
+the following values to be set:
+
+* `COINBASE_API_KEY`, `COINBASE_API_SECRET`, `COINBASE_API_PASSPHRASE` – Coinbase credentials
+* `KRAKEN_API_KEY`, `KRAKEN_API_SECRET` – Kraken credentials
+* `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID` – Telegram notifications
+* `WALLET_ADDRESS` – public wallet address
+
+If these are missing and `user_config.yaml` is not present, the bot will exit
+instead of prompting for input.
+
 ### Telegram Setup
 
 The built-in Telegram interface is provided by the `TelegramBotUI` class in

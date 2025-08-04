@@ -2,6 +2,7 @@ import os
 import sys
 import base64
 import json
+import sys
 import yaml
 from pathlib import Path
 from typing import Dict
@@ -183,6 +184,16 @@ def load_or_create() -> dict:
                 )
                 logger.error(msg)
                 raise RuntimeError(msg)
+            if not sys.stdin.isatty():
+                logger.error(
+                    "user_config.yaml not found and no credentials in environment. "
+                    "Set COINBASE_API_KEY, COINBASE_API_SECRET, COINBASE_API_PASSPHRASE or "
+                    "KRAKEN_API_KEY, KRAKEN_API_SECRET, plus TELEGRAM_TOKEN, TELEGRAM_CHAT_ID and WALLET_ADDRESS."
+                )
+                raise RuntimeError(
+                    "Missing credentials and cannot prompt in non-interactive mode"
+                )
+            logger.info("user_config.yaml not found; prompting for credentials")
             creds.update(prompt_user())
             should_write = True
 
