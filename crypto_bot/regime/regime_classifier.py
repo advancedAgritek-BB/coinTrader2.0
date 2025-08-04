@@ -39,6 +39,7 @@ def _configure_logger(cfg: dict) -> None:
 _configure_logger(CONFIG)
 
 _supabase_model = None
+_supabase_model_lock = asyncio.Lock()
 _model_lock = asyncio.Lock()
 
 _ALL_REGIMES = [
@@ -152,32 +153,34 @@ def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
         return "unknown", 0.0
 
 
-def _download_supabase_model():
+async def _download_supabase_model():
     """Download LightGBM model from Supabase and return a Booster."""
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
-    if not url or not key:
-        logger.error("Missing Supabase credentials")
-        return None
-    try:  # pragma: no cover - optional dependency
-        from supabase import create_client
-    except Exception as exc:  # pragma: no cover - log import failure
-        logger.error("Supabase client unavailable: %s", exc)
-        return None
+    async with _supabase_model_lock:
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_KEY")
+        if not url or not key:
+            logger.error("Missing Supabase credentials")
+            return None
+        try:  # pragma: no cover - optional dependency
+            from supabase import create_client
+        except Exception as exc:  # pragma: no cover - log import failure
+            logger.error("Supabase client unavailable: %s", exc)
+            return None
 
-    try:
-        client = create_client(url, key)
-        file_name = os.getenv("SUPABASE_MODEL_FILE", "regime_lgbm.pkl")
-        data = client.storage.from_("models").download(file_name)
-        path = Path(__file__).with_name(file_name)
-        path.write_bytes(data)
-        import lightgbm as lgb  # pragma: no cover - optional dependency
-        model = lgb.Booster(model_file=str(path))
-        logger.info("Downloaded %s from Supabase", file_name)
-        return model
-    except Exception as exc:
-        logger.error("Failed to download Supabase model: %s", exc)
-        return None
+        try:
+            client = await asyncio.to_thread(create_client, url, key)
+            file_name = os.getenv("SUPABASE_MODEL_FILE", "regime_lgbm.pkl")
+            bucket = client.storage.from_("models")
+            data = await asyncio.to_thread(bucket.download, file_name)
+            path = Path(__file__).with_name(file_name)
+            await asyncio.to_thread(path.write_bytes, data)
+            import lightgbm as lgb  # pragma: no cover - optional dependency
+            model = await asyncio.to_thread(lgb.Booster, model_file=str(path))
+            logger.info("Downloaded %s from Supabase", file_name)
+            return model
+        except Exception as exc:
+            logger.error("Failed to download Supabase model: %s", exc)
+            return None
 
 
 async def _get_supabase_model() -> object | None:
@@ -199,6 +202,12 @@ def _classify_ml(df: pd.DataFrame) -> Tuple[str, float]:
         )
         return _ml_fallback(df)
 
+    if _supabase_model is None:
+        # Running the async download in a blocking manner; callers should
+        # prefer :func:`classify_regime_async` to avoid blocking the event loop.
+        _supabase_model = asyncio.run(_download_supabase_model())
+
+    model = _supabase_model
     model = asyncio.run(_get_supabase_model())
     if model is None:
         return _ml_fallback(df)
