@@ -2299,7 +2299,6 @@ async def _main_impl() -> TelegramNotifier:
     balance_threshold = config.get("balance_change_threshold", 0.01)
     last_balance = 0.0
     previous_balance = 0.0
-    last_balance = 0.0
     paper_wallet = None
 
     async def check_balance_change(new_balance: float, reason: str) -> None:
@@ -2311,21 +2310,6 @@ async def _main_impl() -> TelegramNotifier:
             )
         previous_balance = new_balance
 
-    paper_wallet = None
-    try:
-        init_bal = await fetch_and_log_balance(exchange, paper_wallet, config)
-        last_balance = float(init_bal)
-        previous_balance = float(init_bal)
-    except Exception as exc:  # pragma: no cover - network
-        logger.error("Exchange API setup failed: %s", exc)
-        if status_updates:
-            err = await notifier.notify_async(f"API error: {exc}")
-            if err:
-                logger.error("Failed to notify user: %s", err)
-        return notifier
-    params = build_risk_params(config, volume_ratio)
-    risk_config = RiskConfig(**params)
-    risk_manager = RiskManager(risk_config)
     if config.get("execution_mode") == "dry_run":
         try:
             start_bal = float(input("Enter paper trading balance in USDT: "))
@@ -2337,14 +2321,19 @@ async def _main_impl() -> TelegramNotifier:
             config.get("allow_short", False),
         )
         log_balance(paper_wallet.balance)
-        last_balance = previous_balance = float(paper_wallet.balance)
+        init_bal = paper_wallet.balance
     else:
         try:
-            init_bal = await fetch_and_log_balance(exchange, paper_wallet, config)
+            init_bal = await fetch_and_log_balance(exchange, None, config)
         except Exception as exc:  # pragma: no cover - network
             logger.error("Exchange API setup failed: %s", exc)
-            init_bal = await fetch_and_log_balance(exchange, None, config)
-        last_balance = previous_balance = float(init_bal)
+            if status_updates:
+                err = await notifier.notify_async(f"API error: {exc}")
+                if err:
+                    logger.error("Failed to notify user: %s", err)
+            return notifier
+
+    last_balance = previous_balance = float(init_bal)
 
     params = build_risk_params(config, volume_ratio)
     risk_config = RiskConfig(**params)
