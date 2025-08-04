@@ -12,7 +12,6 @@ except Exception:  # pragma: no cover - fallback when scipy missing
 
 
 def detect_patterns(
-    df: pd.DataFrame, *, min_conf: float = 0.0, lookback: int | None = None
     df: pd.DataFrame, *, min_conf: float = 0.0, lookback: int = 20
 ) -> dict[str, float]:
     """Return confidence scores for simple chart patterns detected in ``df``.
@@ -71,7 +70,6 @@ def detect_patterns(
     if doji_score > 0:
         patterns["doji"] = min(doji_score, 1.0)
 
-    lb = min(len(df), 20 if lookback is None else lookback)
     lb = min(len(df), lookback)
     high_max = df["high"].rolling(lb).max().iloc[-2]
     low_min = df["low"].rolling(lb).min().iloc[-2]
