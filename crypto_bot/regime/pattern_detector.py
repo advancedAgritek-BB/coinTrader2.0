@@ -12,7 +12,6 @@ except Exception:  # pragma: no cover - fallback when scipy missing
 
 
 def detect_patterns(
-    df: pd.DataFrame, *, min_conf: float = 0.0, lookback: int | None = None
     df: pd.DataFrame, *, min_conf: float = 0.0, lookback: int = 20
 ) -> dict[str, float]:
     """Return confidence scores for simple chart patterns detected in ``df``.
