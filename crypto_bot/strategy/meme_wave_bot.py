@@ -1,16 +1,41 @@
 from __future__ import annotations
 
-import asyncio
+import os
+import inspect
 from typing import Mapping, Optional, Tuple
 
+import httpx
 import pandas as pd
 import ta
 
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
-from crypto_bot.sentiment_filter import fetch_twitter_sentiment
 from crypto_bot.solana.exit import monitor_price
 from crypto_bot.solana_trading import sniper_trade
 from crypto_bot.utils.volatility import normalize_score_by_volatility
+
+
+SENTIMENT_URL = os.getenv(
+    "TWITTER_SENTIMENT_URL", "https://api.example.com/twitter-sentiment"
+)
+
+
+async def fetch_twitter_sentiment_async(query: str = "bitcoin") -> int:
+    """Return sentiment score for ``query`` (0-100).
+
+    The request is performed using :class:`httpx.AsyncClient`. Any network
+    errors result in a neutral ``0`` score.
+    """
+
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"{SENTIMENT_URL}?q={query}")
+            resp.raise_for_status()
+            data = resp.json()
+            if isinstance(data, dict):
+                return int(data.get("score", 0))
+    except Exception:
+        pass
+    return 0
 
 
 async def trade(symbol: str, amount: float, cfg: Mapping[str, object]) -> dict:
@@ -35,7 +60,7 @@ async def exit_trade(price_feed, entry_price: float, cfg: Mapping[str, float]) -
     return await monitor_price(price_feed, entry_price, cfg)
 
 
-def generate_signal(
+async def generate_signal(
     df: pd.DataFrame,
     config: Optional[dict] = None,
     *,
@@ -57,6 +82,14 @@ def generate_signal(
     vol_mult = float(params.get("volume_mult", 3.0))
     vol_spike_thr = params.get("vol_spike_thr")
 
+    recent_vol_val = mempool_monitor.get_recent_volume()
+    avg_vol_val = mempool_monitor.get_average_volume()
+    recent_vol = (
+        await recent_vol_val if inspect.isawaitable(recent_vol_val) else recent_vol_val
+    )
+    avg_vol = (
+        await avg_vol_val if inspect.isawaitable(avg_vol_val) else avg_vol_val
+    )
     price_change = df["close"].iloc[-1] - df["close"].iloc[-2]
     vol = float(df["volume"].iloc[-1])
     atr = ta.volatility.average_true_range(
@@ -66,15 +99,16 @@ def generate_signal(
     recent_vol = mempool_monitor.get_recent_volume()
     avg_vol = mempool_monitor.get_average_volume()
 
-    try:
-        import asyncio
-        import inspect
+    vol = float(df["volume"].iloc[-1])
+    price_change = float(df["close"].iloc[-1] - df["close"].iloc[-2]) if len(df) > 1 else 0.0
+    atr = ta.volatility.AverageTrueRange(
+        df["high"], df["low"], df["close"], window=atr_window
+    ).average_true_range()
 
-        if inspect.iscoroutine(recent_vol):
-            recent_vol = asyncio.run(recent_vol)
-        if inspect.iscoroutine(avg_vol):
-            avg_vol = asyncio.run(avg_vol)
+    try:
+        sentiment = await fetch_twitter_sentiment_async(query) / 100.0
     except Exception:
+        sentiment = 0.0
         pass
 
     sentiment = asyncio.run(fetch_twitter_sentiment(query)) / 100.0
@@ -94,14 +128,18 @@ def generate_signal(
     mempool_ok = True
     if mempool_monitor is not None and vol_spike_thr is not None:
         try:
-            import asyncio
-
-            try:
-                recent_vol = asyncio.run(mempool_monitor.get_recent_volume())
-                avg_mempool = asyncio.run(mempool_monitor.get_average_volume())
-            except RuntimeError:
-                recent_vol = 0.0
-                avg_mempool = 0.0
+            recent_vol_val = mempool_monitor.get_recent_volume()
+            avg_mempool_val = mempool_monitor.get_average_volume()
+            recent_vol = (
+                await recent_vol_val
+                if inspect.isawaitable(recent_vol_val)
+                else recent_vol_val
+            )
+            avg_mempool = (
+                await avg_mempool_val
+                if inspect.isawaitable(avg_mempool_val)
+                else avg_mempool_val
+            )
         except Exception:
             recent_vol = 0.0
             avg_mempool = 0.0
@@ -115,6 +153,7 @@ def generate_signal(
             q = query
             if not q:
                 q = config.get("symbol") if isinstance(config, dict) else None
+            sentiment = await fetch_twitter_sentiment_async(q or "") / 100.0
             sentiment = asyncio.run(fetch_twitter_sentiment(q or "")) / 100.0
             if sentiment < float(sentiment_thr):
                 sentiment_ok = False
