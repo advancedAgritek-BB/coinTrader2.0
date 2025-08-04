@@ -796,7 +796,10 @@ ma_window: 20
     )
     cfg = rc._load_config(cfg_file)
     adapted = rc.adaptive_thresholds(cfg, df, "AAA")
-    assert adapted["adx_trending_min"] > cfg["adx_trending_min"]
+    expected = 2 * cfg["adx_trending_min"]
+    assert adapted["adx_trending_min"] == pytest.approx(expected)
+    expected_vol = 2 * cfg["normalized_range_volatility_min"]
+    assert adapted["normalized_range_volatility_min"] == pytest.approx(expected_vol)
     assert adapted["rsi_mean_rev_max"] >= cfg["rsi_mean_rev_max"]
 
 

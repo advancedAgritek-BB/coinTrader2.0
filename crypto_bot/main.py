@@ -106,6 +106,15 @@ _LAST_CONFIG_MTIME = CONFIG_PATH.stat().st_mtime
 
 logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 
+
+class MLUnavailableError(RuntimeError):
+    """Raised when required ML components are missing or fail to load."""
+
+    def __init__(self, message: str, cfg: dict | None = None) -> None:
+        super().__init__(message)
+        self.cfg = cfg
+
+
 # Track WebSocket ping tasks
 WS_PING_TASKS: set[asyncio.Task] = set()
 # Track async sniper trade tasks
@@ -115,6 +124,15 @@ SNIPER_TASKS: set[asyncio.Task] = set()
 NEW_SOLANA_TOKENS: set[str] = set()
 # Track async cross-chain arb tasks
 CROSS_ARB_TASKS: set[asyncio.Task] = set()
+# Track all spawned background tasks for coordinated shutdown
+BACKGROUND_TASKS: list[asyncio.Task] = []
+
+
+def register_task(task: asyncio.Task | None) -> asyncio.Task | None:
+    """Add a task to the background task registry."""
+    if task:
+        BACKGROUND_TASKS.append(task)
+    return task
 
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
@@ -337,7 +355,13 @@ async def refresh_balance(ctx: BotContext) -> float:
 
 
 def _ensure_ml(cfg: dict) -> None:
-    """Attempt to load the mean_bot ML model or disable ML."""
+    """Attempt to load the mean_bot ML model.
+
+    Raises
+    ------
+    MLUnavailableError
+        If the trainer package or model cannot be loaded.
+    """
     if not cfg.get("ml_enabled", True):
         return
     try:  # pragma: no cover - best effort
@@ -345,8 +369,10 @@ def _ensure_ml(cfg: dict) -> None:
 
         load_model("mean_bot")
     except Exception as exc:  # pragma: no cover - missing trainer or model
-        cfg["ml_enabled"] = False
-        logger.warning("Machine learning unavailable, disabling ml_enabled: %s", exc)
+        logger.error("Machine learning initialization failed: %s", exc)
+        raise MLUnavailableError(
+            "coinTrader_Trainer or model load failure", cfg
+        ) from exc
 
 
 def _emit_timing(
@@ -1306,7 +1332,7 @@ async def execute_signals(ctx: BotContext) -> None:
         if strategy == "cross_chain_arb_bot":
             from crypto_bot.solana_trading import cross_chain_trade
 
-            task = asyncio.create_task(
+            task = register_task(asyncio.create_task(
                 cross_chain_trade(
                     ctx.exchange,
                     ctx.ws_client,
@@ -1321,7 +1347,7 @@ async def execute_signals(ctx: BotContext) -> None:
                     mempool_cfg=ctx.mempool_cfg,
                     config=ctx.config,
                 )
-            )
+            ))
             CROSS_ARB_TASKS.add(task)
             task.add_done_callback(CROSS_ARB_TASKS.discard)
             executed_via_cross = True
@@ -1342,7 +1368,7 @@ async def execute_signals(ctx: BotContext) -> None:
                 from crypto_bot.solana_trading import sniper_trade
 
                 base, quote = sym.split("/")
-                task = asyncio.create_task(
+                task = register_task(asyncio.create_task(
                     sniper_trade(
                         ctx.config.get("wallet_address", ""),
                         quote,
@@ -1352,7 +1378,7 @@ async def execute_signals(ctx: BotContext) -> None:
                         slippage_bps=ctx.config.get("solana_slippage_bps", 50),
                         notifier=ctx.notifier,
                     )
-                )
+                ))
                 SNIPER_TASKS.add(task)
                 task.add_done_callback(SNIPER_TASKS.discard)
                 executed_via_sniper = True
@@ -1436,7 +1462,7 @@ async def execute_signals(ctx: BotContext) -> None:
         await refresh_balance(ctx)
 
         if strategy == "micro_scalp":
-            asyncio.create_task(_monitor_micro_scalp_exit(ctx, sym))
+            register_task(asyncio.create_task(_monitor_micro_scalp_exit(ctx, sym)))
 
     if executed == 0:
         logger.info(
@@ -1993,7 +2019,7 @@ async def _main_impl() -> TelegramNotifier:
 
     ping_interval = int(config.get("ws_ping_interval", 0) or 0)
     if ping_interval > 0 and hasattr(exchange, "ping"):
-        task = asyncio.create_task(_ws_ping_loop(exchange, ping_interval))
+        task = register_task(asyncio.create_task(_ws_ping_loop(exchange, ping_interval)))
         WS_PING_TASKS.add(task)
 
     if not hasattr(exchange, "load_markets"):
@@ -2166,14 +2192,14 @@ async def _main_impl() -> TelegramNotifier:
             balance_updates,
         )
 
-    monitor_task = asyncio.create_task(
+    monitor_task = register_task(asyncio.create_task(
         console_monitor.monitor_loop(
             exchange,
             paper_wallet,
             LOG_DIR / "bot.log",
             quiet_mode=config.get("quiet_mode", False),
         )
-    )
+    ))
 
     max_open_trades = config.get("max_open_trades", 1)
     position_guard = OpenPositionGuard(max_open_trades)
@@ -2185,8 +2211,8 @@ async def _main_impl() -> TelegramNotifier:
     session_state = SessionState(last_balance=last_balance)
     last_candle_ts: dict[str, int] = {}
 
-    control_task = asyncio.create_task(console_control.control_loop(state))
-    rotation_task = asyncio.create_task(
+    control_task = register_task(asyncio.create_task(console_control.control_loop(state)))
+    rotation_task = register_task(asyncio.create_task(
         _rotation_loop(
             rotator,
             exchange,
@@ -2195,15 +2221,15 @@ async def _main_impl() -> TelegramNotifier:
             notifier,
             check_balance_change,
         )
-    )
+    ))
     solana_scan_task: asyncio.Task | None = None
     if config.get("solana_scanner", {}).get("enabled"):
-        solana_scan_task = asyncio.create_task(solana_scan_loop())
-    registry_task = asyncio.create_task(
+        solana_scan_task = register_task(asyncio.create_task(solana_scan_loop()))
+    registry_task = register_task(asyncio.create_task(
         registry_update_loop(
             config.get("token_registry", {}).get("refresh_interval_minutes", 15)
         )
-    )
+    ))
     print("Bot running. Type 'stop' to pause, 'start' to resume, 'quit' to exit.")
 
     from crypto_bot.telegram_bot_ui import TelegramBotUI
@@ -2229,23 +2255,23 @@ async def _main_impl() -> TelegramNotifier:
     if config.get("meme_wave_sniper", {}).get("enabled"):
         from crypto_bot.solana import start_runner
 
-        meme_wave_task = start_runner(config.get("meme_wave_sniper", {}))
+        meme_wave_task = register_task(start_runner(config.get("meme_wave_sniper", {})))
     sniper_cfg = config.get("meme_wave_sniper", {})
     sniper_task = None
     if sniper_cfg.get("enabled"):
         from crypto_bot.solana.runner import run as sniper_run
 
-        sniper_task = asyncio.create_task(sniper_run(sniper_cfg))
+        sniper_task = register_task(asyncio.create_task(sniper_run(sniper_cfg)))
 
     if config.get("scan_in_background", True):
-        session_state.scan_task = asyncio.create_task(
+        session_state.scan_task = register_task(asyncio.create_task(
             initial_scan(
                 exchange,
                 config,
                 session_state,
                 notifier if status_updates else None,
             )
-        )
+        ))
     else:
         await initial_scan(
             exchange,
@@ -2462,79 +2488,14 @@ async def _main_impl() -> TelegramNotifier:
             else:
                 with contextlib.suppress(Exception):
                     await asyncio.to_thread(exchange.close)
-        if solana_scan_task:
-            solana_scan_task.cancel()
-            try:
-                await solana_scan_task
-            except asyncio.CancelledError:
-                pass
-        if registry_task:
-            registry_task.cancel()
-            try:
-                await registry_task
-            except asyncio.CancelledError:
-                pass
-        if session_state.scan_task:
-            session_state.scan_task.cancel()
-            try:
-                await session_state.scan_task
-            except asyncio.CancelledError:
-                pass
-        monitor_task.cancel()
-        if control_task:
-            control_task.cancel()
-        rotation_task.cancel()
-        if sniper_task:
-            sniper_task.cancel()
-        if meme_wave_task:
-            meme_wave_task.cancel()
-            try:
-                await meme_wave_task
-            except asyncio.CancelledError:
-                pass
         if telegram_bot:
             telegram_bot.stop()
-        try:
-            await monitor_task
-        except asyncio.CancelledError:
-            pass
-        try:
-            await rotation_task
-        except asyncio.CancelledError:
-            pass
-        if sniper_task:
-            try:
-                await sniper_task
-            except asyncio.CancelledError:
-                pass
-        if control_task:
-            try:
-                await control_task
-            except asyncio.CancelledError:
-                pass
-        for task in list(WS_PING_TASKS):
+        for task in list(BACKGROUND_TASKS):
             task.cancel()
-        for task in list(WS_PING_TASKS):
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+        await asyncio.gather(*BACKGROUND_TASKS, return_exceptions=True)
+        BACKGROUND_TASKS.clear()
         WS_PING_TASKS.clear()
-        for task in list(SNIPER_TASKS):
-            task.cancel()
-        for task in list(SNIPER_TASKS):
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
         SNIPER_TASKS.clear()
-        for task in list(CROSS_ARB_TASKS):
-            task.cancel()
-        for task in list(CROSS_ARB_TASKS):
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
         CROSS_ARB_TASKS.clear()
         NEW_SOLANA_TOKENS.clear()
 

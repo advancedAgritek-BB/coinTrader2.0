@@ -39,6 +39,7 @@ def _configure_logger(cfg: dict) -> None:
 _configure_logger(CONFIG)
 
 _supabase_model = None
+_model_lock = asyncio.Lock()
 
 _ALL_REGIMES = [
     "trending",
@@ -89,7 +90,7 @@ def adaptive_thresholds(cfg: dict, df: pd.DataFrame | None, symbol: str | None) 
                 window=cfg.get("indicator_window", 14),
             )
             avg_atr = float(atr.mean())
-            factor = avg_atr / float(baseline) if baseline else 1.0
+            factor = min(2.0, avg_atr / float(baseline)) if baseline else 1.0
             out["adx_trending_min"] = cfg["adx_trending_min"] * factor
             out["normalized_range_volatility_min"] = (
                 cfg["normalized_range_volatility_min"] * factor
@@ -100,18 +101,25 @@ def adaptive_thresholds(cfg: dict, df: pd.DataFrame | None, symbol: str | None) 
     try:  # pragma: no cover - optional dependency
         from statsmodels.tsa.stattools import adfuller
         from statsmodels.tsa.ar_model import AutoReg
-
-        close = df["close"].dropna()
-        if len(close) >= 20:
-            pval = adfuller(close, regression="ct")[1]
-            ar_res = AutoReg(close, lags=1, old_names=False).fit()
-            slope = float(ar_res.params.get("close.L1", 0.0))
-            if pval > 0.1 or abs(slope) > 0.9:
-                adj = 5
-                out["rsi_mean_rev_min"] = max(0, cfg["rsi_mean_rev_min"] - adj)
-                out["rsi_mean_rev_max"] = min(100, cfg["rsi_mean_rev_max"] + adj)
-    except Exception:
-        pass
+    except ImportError as exc:
+        logger.warning(
+            "statsmodels unavailable; drift detection disabled: %s", exc
+        )
+    else:
+        try:
+            close = df["close"].dropna()
+            if len(close) >= 20:
+                pval = adfuller(close, regression="ct")[1]
+                ar_res = AutoReg(close, lags=1, old_names=False).fit()
+                slope = float(ar_res.params.get("close.L1", 0.0))
+                if pval > 0.1 or abs(slope) > 0.9:
+                    adj = 5
+                    out["rsi_mean_rev_min"] = max(0, cfg["rsi_mean_rev_min"] - adj)
+                    out["rsi_mean_rev_max"] = min(
+                        100, cfg["rsi_mean_rev_max"] + adj
+                    )
+        except Exception:
+            pass
 
     return out
 
@@ -172,18 +180,26 @@ def _download_supabase_model():
         return None
 
 
+async def _get_supabase_model() -> object | None:
+    """Return the cached Supabase model, downloading it if needed."""
+    global _supabase_model
+    async with _model_lock:
+        if _supabase_model is None:
+            _supabase_model = await asyncio.to_thread(_download_supabase_model)
+        return _supabase_model
+
+
 def _classify_ml(df: pd.DataFrame) -> Tuple[str, float]:
     """Predict regime using the Supabase model with fallback."""
-    global _supabase_model
     try:  # pragma: no cover - optional dependency
         import lightgbm as lgb
-    except Exception:
+    except ImportError as exc:
+        logger.warning(
+            "lightgbm unavailable; ML-based classification disabled: %s", exc
+        )
         return _ml_fallback(df)
 
-    if _supabase_model is None:
-        _supabase_model = _download_supabase_model()
-
-    model = _supabase_model
+    model = asyncio.run(_get_supabase_model())
     if model is None:
         return _ml_fallback(df)
 
@@ -613,6 +629,7 @@ async def classify_regime_with_patterns_async(
 
 regime_cache: Dict[tuple[str, str], str] = {}
 _regime_cache_ts: Dict[tuple[str, str], int] = {}
+_regime_cache_lock = asyncio.Lock()
 
 
 async def classify_regime_cached(
@@ -631,10 +648,11 @@ async def classify_regime_cached(
 
     ts = int(df["timestamp"].iloc[-1]) if "timestamp" in df.columns else len(df)
     key = (symbol, timeframe)
-    if key in regime_cache and _regime_cache_ts.get(key) == ts:
-        label = regime_cache[key]
-        # Info is not cached; recompute minimal patterns for compatibility
-        return label, set()
+    async with _regime_cache_lock:
+        if key in regime_cache and _regime_cache_ts.get(key) == ts:
+            label = regime_cache[key]
+            # Info is not cached; recompute minimal patterns for compatibility
+            return label, set()
 
     start = time.perf_counter() if profile else 0.0
     label, info = await classify_regime_async(
@@ -644,8 +662,9 @@ async def classify_regime_cached(
         symbol=symbol,
         cache_key=key,
     )
-    regime_cache[key] = label
-    _regime_cache_ts[key] = ts
+    async with _regime_cache_lock:
+        regime_cache[key] = label
+        _regime_cache_ts[key] = ts
     if profile:
         logger.info(
             "Regime classification for %s %s took %.4fs",
@@ -654,6 +673,12 @@ async def classify_regime_cached(
             time.perf_counter() - start,
         )
     return label, info
+
+
+async def _clear_regime_cache(symbol: str, timeframe: str) -> None:
+    async with _regime_cache_lock:
+        regime_cache.pop((symbol, timeframe), None)
+        _regime_cache_ts.pop((symbol, timeframe), None)
 
 
 def clear_regime_cache(symbol: str, timeframe: str) -> None:
@@ -665,3 +690,4 @@ def clear_regime_cache(symbol: str, timeframe: str) -> None:
 def clear_indicator_cache(symbol: str, timeframe: str) -> None:
     """Remove cached indicator entry for ``symbol`` and ``timeframe``."""
     _indicator_cache.pop((symbol, timeframe), None)
+    asyncio.run(_clear_regime_cache(symbol, timeframe))
