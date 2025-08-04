@@ -206,6 +206,26 @@ def test_load_token_mints(monkeypatch, tmp_path):
     assert mod.TOKEN_MINTS["SOL"] == "So111"
 
 
+def test_load_token_mints_uses_cache(monkeypatch, tmp_path):
+    mod = _load_module(monkeypatch, tmp_path)
+
+    cache = {"AAA": "mint"}
+    mod.CACHE_FILE.write_text(json.dumps(cache))
+
+    calls = {"jup": 0}
+
+    async def fake_jup():
+        calls["jup"] += 1
+        return {"SOL": "So111"}
+
+    monkeypatch.setattr(mod, "fetch_from_jupiter", fake_jup)
+
+    mapping = asyncio.run(mod.load_token_mints())
+    assert mapping == {"AAA": "mint"}
+    assert calls["jup"] == 0
+    assert mod.TOKEN_MINTS["AAA"] == "mint"
+
+
 def test_load_token_mints_error(monkeypatch, tmp_path):
     mod = _load_module(monkeypatch, tmp_path)
 
