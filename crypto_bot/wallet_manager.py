@@ -27,6 +27,7 @@ SENSITIVE_FIELDS = {
     "kraken_api_key",
     "kraken_api_secret",
     "telegram_token",
+    "helius_api_key",
 }
 
 
@@ -123,6 +124,7 @@ def prompt_user() -> dict:
     data["telegram_token"] = _env_or_prompt("TELEGRAM_TOKEN", "Enter Telegram bot token: ")
     data["telegram_chat_id"] = _env_or_prompt("TELEGRAM_CHAT_ID", "Enter Telegram chat id: ")
     data["wallet_address"] = _env_or_prompt("WALLET_ADDRESS", "Enter public wallet address: ")
+    data["helius_api_key"] = _env_or_prompt("HELIUS_KEY", "Enter Helius API key: ")
 
     mode = os.getenv("MODE") or input("Preferred trading mode (cex/onchain/auto): ")
     data["mode"] = mode if mode in {"cex", "onchain", "auto"} else "auto"
@@ -162,6 +164,7 @@ def load_or_create() -> dict:
     env_mapping.setdefault("coinbase_passphrase", []).append("API_PASSPHRASE")
     env_mapping.setdefault("kraken_api_key", []).append("API_KEY")
     env_mapping.setdefault("kraken_api_secret", []).append("API_SECRET")
+    env_mapping.setdefault("helius_api_key", []).append("HELIUS_KEY")
 
     for key, env_keys in env_mapping.items():
         for env_key in env_keys:
@@ -180,6 +183,7 @@ def load_or_create() -> dict:
     os.environ["COINBASE_API_PASSPHRASE"] = creds.get("coinbase_passphrase", "")
     os.environ["KRAKEN_API_KEY"] = creds.get("kraken_api_key", "")
     os.environ["KRAKEN_API_SECRET"] = creds.get("kraken_api_secret", "")
+    os.environ["HELIUS_KEY"] = creds.get("helius_api_key", "")
 
     # expose selected exchange credentials via generic env vars for ccxt
     exch = creds.get("primary_exchange") or creds.get("exchange")
