@@ -255,6 +255,19 @@ def test_position_size_uses_trade_size_pct_when_no_stop():
     assert size == 1000 * 0.2 * 0.5
 
 
+def test_position_size_returns_negative_for_short():
+    manager = RiskManager(
+        RiskConfig(
+            max_drawdown=1,
+            stop_loss_pct=0.01,
+            take_profit_pct=0.01,
+            trade_size_pct=0.2,
+        )
+    )
+    size = manager.position_size(0.5, 1000, direction="short")
+    assert size == -1000 * 0.2 * 0.5
+
+
 def make_vol_df(long_diff: float, short_diff: float) -> pd.DataFrame:
     length = 60
     short_len = 14

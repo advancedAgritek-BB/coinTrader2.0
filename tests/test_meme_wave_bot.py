@@ -137,6 +137,10 @@ def test_high_volume_positive_sentiment(meme_df, high_monitor, monkeypatch):
     monkeypatch.setattr(
         meme_wave_bot, "fetch_twitter_sentiment_async", fake_sentiment
     )
+    async def good_sentiment(*a, **k):
+        return 80
+
+    monkeypatch.setattr(meme_wave_bot, "fetch_twitter_sentiment", good_sentiment)
     cfg = {"meme_wave_bot": {"volume_threshold": 3, "sentiment_threshold": 0.6}}
     score, direction = asyncio.run(
         meme_wave_bot.generate_signal(df, cfg, mempool_monitor=high_monitor)
@@ -151,6 +155,10 @@ def test_high_volume_negative_sentiment(meme_df, high_monitor, monkeypatch):
     monkeypatch.setattr(
         meme_wave_bot, "fetch_twitter_sentiment_async", fake_sentiment
     )
+    async def bad_sentiment(*a, **k):
+        return 20
+
+    monkeypatch.setattr(meme_wave_bot, "fetch_twitter_sentiment", bad_sentiment)
     cfg = {"meme_wave_bot": {"volume_threshold": 3, "sentiment_threshold": 0.6}}
     score, direction = asyncio.run(
         meme_wave_bot.generate_signal(df, cfg, mempool_monitor=high_monitor)
@@ -165,6 +173,10 @@ def test_low_volume_any_sentiment(meme_df, low_monitor, monkeypatch):
     monkeypatch.setattr(
         meme_wave_bot, "fetch_twitter_sentiment_async", fake_sentiment
     )
+    async def good_sentiment(*a, **k):
+        return 80
+
+    monkeypatch.setattr(meme_wave_bot, "fetch_twitter_sentiment", good_sentiment)
     cfg = {"meme_wave_bot": {"volume_threshold": 3, "sentiment_threshold": 0.6}}
     score, direction = asyncio.run(
         meme_wave_bot.generate_signal(df, cfg, mempool_monitor=low_monitor)

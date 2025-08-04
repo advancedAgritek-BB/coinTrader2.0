@@ -90,6 +90,14 @@ async def generate_signal(
     avg_vol = (
         await avg_vol_val if inspect.isawaitable(avg_vol_val) else avg_vol_val
     )
+    price_change = df["close"].iloc[-1] - df["close"].iloc[-2]
+    vol = float(df["volume"].iloc[-1])
+    atr = ta.volatility.average_true_range(
+        df["high"], df["low"], df["close"], window=atr_window
+    )
+
+    recent_vol = mempool_monitor.get_recent_volume()
+    avg_vol = mempool_monitor.get_average_volume()
 
     vol = float(df["volume"].iloc[-1])
     price_change = float(df["close"].iloc[-1] - df["close"].iloc[-2]) if len(df) > 1 else 0.0
@@ -101,6 +109,9 @@ async def generate_signal(
         sentiment = await fetch_twitter_sentiment_async(query) / 100.0
     except Exception:
         sentiment = 0.0
+        pass
+
+    sentiment = asyncio.run(fetch_twitter_sentiment(query)) / 100.0
 
     if avg_vol and recent_vol >= avg_vol * vol_threshold and sentiment >= sentiment_thr:
         return 1.0, "long"
@@ -143,6 +154,7 @@ async def generate_signal(
             if not q:
                 q = config.get("symbol") if isinstance(config, dict) else None
             sentiment = await fetch_twitter_sentiment_async(q or "") / 100.0
+            sentiment = asyncio.run(fetch_twitter_sentiment(q or "")) / 100.0
             if sentiment < float(sentiment_thr):
                 sentiment_ok = False
         except Exception:
