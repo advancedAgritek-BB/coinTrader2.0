@@ -170,9 +170,21 @@ def generate_signal(
     recent["rsi"] = rsi
     recent["macd_hist"] = macd_hist
 
-    vol_ok = True if not vol_confirmation else (
-        vol_ma.iloc[-1] > 0 and volume.iloc[-1] > vol_ma.iloc[-1] * vol_multiplier
-    )
+    vol_ma_last = vol_ma.iloc[-1] if not vol_ma.empty else float("nan")
+    vol_last = volume.iloc[-1] if not volume.empty else float("nan")
+
+    if vol_confirmation:
+        vol_ok = vol_ma_last > 0 and vol_last > vol_ma_last * vol_multiplier
+    else:
+        vol_ok = True
+
+    if (
+        pd.isna(vol_ma_last)
+        or pd.isna(vol_last)
+        or vol_ma_last == 0
+        or vol_last == 0
+    ):
+        vol_ok = False
     atr_last = atr.iloc[-1]
     upper_break = dc_high.iloc[-1] + atr_last * atr_buffer_mult
     lower_break = dc_low.iloc[-1] - atr_last * atr_buffer_mult
