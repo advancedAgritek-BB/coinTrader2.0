@@ -2362,17 +2362,10 @@ async def _main_impl() -> TelegramNotifier:
     else:
         try:
             init_bal = await fetch_and_log_balance(exchange, paper_wallet, config)
-            last_balance = previous_balance = float(init_bal)
-        except Exception as exc:
-            init_bal = await fetch_and_log_balance(exchange, None, config)
-            last_balance = previous_balance = float(init_bal)
         except Exception as exc:  # pragma: no cover - network
             logger.error("Exchange API setup failed: %s", exc)
-            if status_updates:
-                err = await notifier.notify_async(f"API error: {exc}")
-                if err:
-                    logger.error("Failed to notify user: %s", err)
-            return notifier
+            init_bal = await fetch_and_log_balance(exchange, None, config)
+        last_balance = previous_balance = float(init_bal)
 
     params = build_risk_params(config, volume_ratio)
     risk_config = RiskConfig(**params)
