@@ -97,17 +97,16 @@ def generate_signal(
         return 0.0, "none"
 
     lookback = slow_window
-    recent = df.iloc[-(lookback + 1) :]
 
-    ema_fast = ta.trend.ema_indicator(recent["close"], window=fast_window)
-    ema_slow = ta.trend.ema_indicator(recent["close"], window=slow_window)
+    ema_fast_full = ta.trend.ema_indicator(df["close"], window=fast_window)
+    ema_slow_full = ta.trend.ema_indicator(df["close"], window=slow_window)
+    ema_fast = cache_series("ema_fast", df, ema_fast_full, lookback)
+    ema_slow = cache_series("ema_slow", df, ema_slow_full, lookback)
 
-    ema_fast = cache_series("ema_fast", df, ema_fast, lookback)
-    ema_slow = cache_series("ema_slow", df, ema_slow, lookback)
-
-    df = recent.copy()
-    df["ema_fast"] = ema_fast
-    df["ema_slow"] = ema_slow
+    recent = df.iloc[-(lookback + 1) :].copy()
+    recent["ema_fast"] = ema_fast
+    recent["ema_slow"] = ema_slow
+    df = recent
 
     latest = df.iloc[-1]
     if (

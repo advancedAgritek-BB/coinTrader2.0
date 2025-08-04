@@ -11,21 +11,18 @@ import numpy as np
 from pathlib import Path
 import yaml
 import json
-import time
 from functools import lru_cache
-from datetime import datetime
 
 from crypto_bot.utils import timeframe_seconds, commit_lock
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telemetry import telemetry
-import threading
-from collections import defaultdict
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.cache_helpers import cache_by_id
 from crypto_bot.utils.token_registry import TOKEN_MINTS
 from crypto_bot.selector import bandit
+from contextlib import asynccontextmanager
 
 from crypto_bot.strategy import (
     trend_bot,
@@ -43,7 +40,6 @@ from crypto_bot.strategy import (
 )
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
-_SYMBOL_LOCKS: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 with open(CONFIG_PATH) as f:
@@ -52,24 +48,12 @@ with open(CONFIG_PATH) as f:
 # Map symbols to asyncio locks guarding order placement
 symbol_locks: Dict[str, asyncio.Lock] = {}
 
-# Event loop captured when locks are first acquired
-_LOCK_LOOP: asyncio.AbstractEventLoop | None = None
-
-
-async def acquire_symbol_lock(symbol: str) -> None:
-    """Acquire the asyncio lock associated with ``symbol``."""
-    global _LOCK_LOOP
-    if _LOCK_LOOP is None:
-        _LOCK_LOOP = asyncio.get_running_loop()
+@asynccontextmanager
+async def symbol_lock(symbol: str):
+    """Async context manager for symbol-based locks."""
     lock = symbol_locks.setdefault(symbol, asyncio.Lock())
-    await lock.acquire()
-
-
-async def release_symbol_lock(symbol: str) -> None:
-    """Release the lock for ``symbol`` if held."""
-    lock = symbol_locks.get(symbol)
-    if lock and lock.locked():
-        lock.release()
+    async with lock:
+        yield
 
 
 @dataclass
@@ -236,10 +220,6 @@ def wrap_with_tf(fn: Callable[[pd.DataFrame], Tuple[float, str]], tf: str):
 
     wrapped.__name__ = getattr(fn, "__name__", "wrapped")
     return wrapped
-
-
-# Path storing the last selected regime and timestamp
-LAST_REGIME_FILE = LOG_DIR / "last_regime.json"
 
 
 class Selector:
@@ -590,19 +570,20 @@ def route(
     """
 
     def _wrap(fn: Callable[[pd.DataFrame], Tuple[float, str]]):
-        async def inner(df: pd.DataFrame, cfg=None):
+        async def inner(df: pd.DataFrame | None, cfg=None):
+            data = df if df is not None else pd.DataFrame()
             try:
                 res = fn(
-                    df,
+                    data,
                     cfg,
                     mempool_monitor=mempool_monitor,
                     mempool_cfg=mempool_cfg,
                 )
             except TypeError:
                 try:
-                    res = fn(df, cfg)
+                    res = fn(data, cfg)
                 except TypeError:
-                    res = fn(df)
+                    res = fn(data)
             if isinstance(res, tuple):
                 score, direction = res[0], res[1]
             else:
@@ -611,14 +592,19 @@ def route(
             if isinstance(cfg, dict):
                 symbol = cfg.get("symbol", "")
             if direction != "none" and symbol:
-                await acquire_symbol_lock(symbol)
+                async with symbol_lock(symbol):
+                    if notifier is not None:
+                        notifier.notify(
+                            f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
+                        )
+                    return score, direction
             if notifier is not None:
                 notifier.notify(
                     f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
                 )
             return score, direction
 
-        def wrapped(df: pd.DataFrame, cfg=None):
+        def wrapped(df: pd.DataFrame | None, cfg=None):
             coro = inner(df, cfg)
             try:
                 loop = asyncio.get_running_loop()
@@ -636,82 +622,6 @@ def route(
         df = df_map
     elif isinstance(df_map, Mapping):
         df = next(iter(df_map.values()), None)
-
-    # === FAST-PATH FOR STRONG SIGNALS ===
-    fp = (
-        cfg.raw.get("strategy_router", {}).get("fast_path", {})
-        if hasattr(cfg, "raw")
-        else cfg.get("strategy_router", {}).get("fast_path", {})
-    )
-    if df is not None:
-        try:
-            # 1) breakout squeeze detected by Bollinger band z-score and
-            #    concurrent volume spike
-            from ta.volatility import BollingerBands
-
-            window = int(fp.get("breakout_squeeze_window", 15))
-            bw_z_thr = float(fp.get("breakout_bandwidth_zscore", -0.84))
-            vol_mult = float(fp.get("breakout_volume_multiplier", 4))
-            max_bw = float(fp.get("breakout_max_bandwidth", 0.04))
-
-            bb = BollingerBands(df["close"], window=window)
-            wband_series = bb.bollinger_wband()
-            wband = wband_series.iloc[-1]
-            w_mean = wband_series.rolling(window).mean().iloc[-1]
-            w_std = wband_series.rolling(window).std().iloc[-1]
-            z = (wband - w_mean) / w_std if w_std > 0 else float("inf")
-            vol_mean = df["volume"].rolling(window).mean().iloc[-1]
-            if z < bw_z_thr and df["volume"].iloc[-1] > vol_mean * vol_mult:
-                logger.info(
-                    "FAST-PATH: breakout_bot via bandwidth z-score and volume spike"
-                )
-                return _wrap(breakout_bot.generate_signal)
-            z_series = (
-                wband_series - wband_series.rolling(window).mean()
-            ) / wband_series.rolling(window).std()
-            vol_ma = df["volume"].rolling(window).mean()
-
-            if (
-                z_series.iloc[-1] < -0.84
-                and wband < max_bw
-                and df["volume"].iloc[-1] > vol_ma.iloc[-1] * vol_mult
-            ):
-                logger.info(
-                    "FAST-PATH: breakout_bot via BB squeeze z-score + volume spike"
-                )
-                return _wrap(breakout_bot.generate_signal)
-
-            # 2) ultra-strong trend by ADX
-            from ta.trend import ADXIndicator
-
-            adx_thr = float(fp.get("trend_adx_threshold", 25))
-            adx_val = (
-                ADXIndicator(df["high"], df["low"], df["close"], window=window)
-                .adx()
-                .iloc[-1]
-            )
-            if adx_val > adx_thr:
-                logger.info("FAST-PATH: trend_bot via ADX > %.1f", adx_thr)
-                return _wrap(trend_bot.generate_signal)
-
-            # 3) breakdown pattern with heavy volume
-            from crypto_bot.regime.pattern_detector import detect_patterns
-
-            bd_win = int(fp.get("breakdown_window", 20))
-            bd_mult = float(fp.get("breakdown_volume_multiplier", 4))
-            patterns = detect_patterns(df)
-            if patterns.get("breakdown", 0) >= 1.0:
-                vol_avg = df["volume"].rolling(bd_win).mean().iloc[-1]
-                if vol_avg > 0 and df["volume"].iloc[-1] > vol_avg * bd_mult:
-                    logger.info(
-                        "FAST-PATH: sniper bot via breakdown pattern + volume spike"
-                    )
-                    if mode == "onchain":
-                        return _wrap(sniper_solana.generate_signal)
-                    return _wrap(sniper_bot.generate_signal)
-        except Exception:  # pragma: no cover - safety
-            pass
-    # === end fast-path ===
 
     if isinstance(regime, dict):
         if regime.get("1m") == "breakout" and regime.get("15m") == "trending":
@@ -732,139 +642,167 @@ def route(
         cfg_get(cfg, "commit_lock_intervals", 0),
     )
 
-
-
-    # commit lock logic
-    intervals = int(cfg_get(cfg, "commit_lock_intervals", 0))
-    if intervals:
-        lock_file = Path("last_regime.json")
-        last_reg = None
-        last_ts = 0.0
-        if lock_file.exists():
-            try:
-                data = json.loads(lock_file.read_text())
-                last_reg = data.get("regime")
-                last_ts = float(data.get("timestamp", 0))
-            except Exception:
-                pass
-
-        tf = cfg_get(cfg, "timeframe", "1h")
-        interval = timeframe_seconds(None, tf)
-        now = time.time()
-        if last_reg and regime != last_reg and now - last_ts < interval * intervals:
-            regime = last_reg
-        else:
-            lock_file.parent.mkdir(parents=True, exist_ok=True)
-            lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
-
-    tf = cfg_get(cfg, "timeframe", "1h")
-    tf_minutes = (
-        cfg.timeframe_minutes
-        if isinstance(cfg, RouterConfig)
-        else getattr(cfg, "timeframe_minutes", int(pd.Timedelta(tf).total_seconds() // 60))
-    )
-
-    LAST_REGIME_FILE.parent.mkdir(parents=True, exist_ok=True)
-    last_data = {}
-    if LAST_REGIME_FILE.exists():
-        try:
-            last_data = json.loads(LAST_REGIME_FILE.read_text())
-        except Exception:
-            last_data = {}
-    last_ts = last_data.get("timestamp")
-    last_regime = last_data.get("regime")
-    if last_ts and last_regime:
-        try:
-            ts = datetime.fromisoformat(last_ts)
-            if (datetime.utcnow() - ts).total_seconds() < tf_minutes * 60 * 3:
-                regime = last_regime
-        except Exception:
-            pass
-    LAST_REGIME_FILE.write_text(
-        json.dumps({"timestamp": datetime.utcnow().isoformat(), "regime": regime})
-    )
-
-    symbol = ""
-    chain = ""
-    if isinstance(cfg, RouterConfig):
-        symbol = str(cfg.raw.get("symbol", ""))
-        chain = str(cfg.raw.get("chain") or cfg.raw.get("preferred_chain", ""))
-        grid_cfg = cfg.raw.get("grid_bot", {})
-    elif isinstance(cfg, Mapping):
-        symbol = str(cfg.get("symbol", ""))
-        chain = str(cfg.get("chain") or cfg.get("preferred_chain", ""))
-        grid_cfg = cfg.get("grid_bot", {})
-    else:
-        grid_cfg = {}
-    if symbol and _symbol_has_onchain_quote(symbol, cfg) and mode == "auto":
-        base = symbol.split("/")[0]
-        if base.upper() in TOKEN_MINTS:
-            logger.info("Routing %s pair to Solana sniper bot (auto)", symbol)
-            return _wrap(sniper_solana.generate_signal)
-        logger.info("Mint for %s not found; falling back to CEX", base.upper())
-        select_df = df if df is not None else pd.DataFrame()
-        strategy_fn = Selector(cfg).select(select_df, regime, "cex", notifier)
-        return _wrap(strategy_fn)
-    if symbol and _symbol_has_onchain_quote(symbol, cfg) and regime == "breakout":
-        base = symbol.split("/")[0]
-        if base.upper() in TOKEN_MINTS:
-            logger.info("Routing USDC breakout to Solana sniper bot")
-            return _wrap(sniper_solana.generate_signal)
-
-    if chain.lower().startswith("sol") and mode in {"auto", "onchain"} and regime in {"breakout", "volatile"}:
-        base = symbol.split("/")[0] if symbol else ""
-        if not symbol or base.upper() in TOKEN_MINTS:
-            logger.info("Routing %s regime to Solana sniper bot (%s mode)", regime, mode)
-            return _wrap(sniper_solana.generate_signal)
-
-    if regime == "sideways" and grid_cfg.get("dynamic_grid") and symbol:
-        logger.info("Routing dynamic grid signal to micro scalp bot")
-        return _wrap(micro_scalp_bot.generate_signal)
-
-    # Thompson sampling router
-    bandit_active = (
-        cfg.bandit_enabled
-        if isinstance(cfg, RouterConfig)
-        else bool(cfg.get("bandit", {}).get("enabled"))
-    )
-    if bandit_active:
-        strategies = get_strategies_for_regime(regime, cfg)
-        if isinstance(cfg, RouterConfig):
-            arms = list(cfg.regimes.get(regime, []))
-        else:
-            arms = list(
-                cfg.get("strategy_router", {}).get("regimes", {}).get(regime, [])
-            )
-        arms = [a for a in arms if get_strategy_by_name(a)]
-        if not arms:
-            arms = [fn.__name__ for fn in strategies]
+    def _post_fastpath():
         symbol = ""
+        chain = ""
         if isinstance(cfg, RouterConfig):
             symbol = str(cfg.raw.get("symbol", ""))
+            chain = str(cfg.raw.get("chain") or cfg.raw.get("preferred_chain", ""))
+            grid_cfg = cfg.raw.get("grid_bot", {})
         elif isinstance(cfg, Mapping):
             symbol = str(cfg.get("symbol", ""))
-        context_df = df if df is not None else pd.DataFrame()
-        context = _bandit_context(context_df, regime, symbol)
-        choice = bandit.select(context, arms, symbol)
-        fn = get_strategy_by_name(choice)
-        if fn:
-            logger.info("Bandit selected %s for %s", choice, regime)
-            return _wrap(fn)
-
-    if mode == "onchain":
-        if chain.lower().startswith("sol"):
-            if regime in {"breakout", "volatile"}:
-                logger.info("Routing to Solana sniper bot (onchain)")
+            chain = str(cfg.get("chain") or cfg.get("preferred_chain", ""))
+            grid_cfg = cfg.get("grid_bot", {})
+        else:
+            grid_cfg = {}
+        if symbol and _symbol_has_onchain_quote(symbol, cfg) and mode == "auto":
+            base = symbol.split("/")[0]
+            if base.upper() in TOKEN_MINTS:
+                logger.info("Routing %s pair to Solana sniper bot (auto)", symbol)
                 return _wrap(sniper_solana.generate_signal)
+            logger.info("Mint for %s not found; falling back to CEX", base.upper())
+            select_df = df if df is not None else pd.DataFrame()
+            strategy_fn = Selector(cfg).select(select_df, regime, "cex", notifier)
+            return _wrap(strategy_fn)
+        if symbol and _symbol_has_onchain_quote(symbol, cfg) and regime == "breakout":
+            base = symbol.split("/")[0]
+            if base.upper() in TOKEN_MINTS:
+                logger.info("Routing USDC breakout to Solana sniper bot")
+                return _wrap(sniper_solana.generate_signal)
+
+        if chain.lower().startswith("sol") and mode in {"auto", "onchain"} and regime in {"breakout", "volatile"}:
+            base = symbol.split("/")[0] if symbol else ""
+            if not symbol or base.upper() in TOKEN_MINTS:
+                logger.info("Routing %s regime to Solana sniper bot (%s mode)", regime, mode)
+                return _wrap(sniper_solana.generate_signal)
+
+        if regime == "sideways" and grid_cfg.get("dynamic_grid") and symbol:
+            logger.info("Routing dynamic grid signal to micro scalp bot")
+            return _wrap(micro_scalp_bot.generate_signal)
+
+        bandit_active = (
+            cfg.bandit_enabled
+            if isinstance(cfg, RouterConfig)
+            else bool(cfg.get("bandit", {}).get("enabled"))
+        )
+        if bandit_active:
+            strategies = get_strategies_for_regime(regime, cfg)
+            if isinstance(cfg, RouterConfig):
+                arms = list(cfg.regimes.get(regime, []))
+            else:
+                arms = list(
+                    cfg.get("strategy_router", {}).get("regimes", {}).get(regime, [])
+                )
+            arms = [a for a in arms if get_strategy_by_name(a)]
+            if not arms:
+                arms = [fn.__name__ for fn in strategies]
+            sym = ""
+            if isinstance(cfg, RouterConfig):
+                sym = str(cfg.raw.get("symbol", ""))
+            elif isinstance(cfg, Mapping):
+                sym = str(cfg.get("symbol", ""))
+            context_df = df if df is not None else pd.DataFrame()
+            context = _bandit_context(context_df, regime, sym)
+            choice = bandit.select(context, arms, sym)
+            fn = get_strategy_by_name(choice)
+            if fn:
+                logger.info("Bandit selected %s for %s", choice, regime)
+                return _wrap(fn)
+
+        if mode == "onchain":
+            if chain.lower().startswith("sol"):
+                if regime in {"breakout", "volatile"}:
+                    logger.info("Routing to Solana sniper bot (onchain)")
+                    return _wrap(sniper_solana.generate_signal)
+                logger.info("Routing to DEX scalper (onchain)")
+                return _wrap(dex_scalper.generate_signal)
+
+            if regime in {"breakout", "volatile"}:
+                logger.info("Routing to sniper bot (onchain)")
+                return _wrap(sniper_bot.generate_signal)
             logger.info("Routing to DEX scalper (onchain)")
             return _wrap(dex_scalper.generate_signal)
 
-        if regime in {"breakout", "volatile"}:
-            logger.info("Routing to sniper bot (onchain)")
-            return _wrap(sniper_bot.generate_signal)
-        logger.info("Routing to DEX scalper (onchain)")
-        return _wrap(dex_scalper.generate_signal)
+        select_df = df if df is not None else pd.DataFrame()
+        strategy_fn = Selector(cfg).select(select_df, regime, mode, notifier)
+        return _wrap(strategy_fn)
 
-    select_df = df if df is not None else pd.DataFrame()
-    strategy_fn = Selector(cfg).select(select_df, regime, mode, notifier)
-    return _wrap(strategy_fn)
+    if df is None:
+        return _post_fastpath()
+
+    # === FAST-PATH FOR STRONG SIGNALS ===
+    fp = (
+        cfg.raw.get('strategy_router', {}).get('fast_path', {})
+        if hasattr(cfg, 'raw')
+        else cfg.get('strategy_router', {}).get('fast_path', {})
+    )
+    try:
+        # 1) breakout squeeze detected by Bollinger band z-score and
+        #    concurrent volume spike
+        from ta.volatility import BollingerBands
+
+        window = int(fp.get('breakout_squeeze_window', 15))
+        bw_z_thr = float(fp.get('breakout_bandwidth_zscore', -0.84))
+        vol_mult = float(fp.get('breakout_volume_multiplier', 4))
+        max_bw = float(fp.get('breakout_max_bandwidth', 0.04))
+
+        bb = BollingerBands(df['close'], window=window)
+        wband_series = bb.bollinger_wband()
+        wband = wband_series.iloc[-1]
+        w_mean = wband_series.rolling(window).mean().iloc[-1]
+        w_std = wband_series.rolling(window).std().iloc[-1]
+        z = (wband - w_mean) / w_std if w_std > 0 else float('inf')
+        vol_mean = df['volume'].rolling(window).mean().iloc[-1]
+        if z < bw_z_thr and df['volume'].iloc[-1] > vol_mean * vol_mult:
+            logger.info(
+                'FAST-PATH: breakout_bot via bandwidth z-score and volume spike',
+            )
+            return _wrap(breakout_bot.generate_signal)
+        z_series = (
+            wband_series - wband_series.rolling(window).mean()
+        ) / wband_series.rolling(window).std()
+        vol_ma = df['volume'].rolling(window).mean()
+
+        if (
+            z_series.iloc[-1] < -0.84
+            and wband < max_bw
+            and df['volume'].iloc[-1] > vol_ma.iloc[-1] * vol_mult
+        ):
+            logger.info(
+                'FAST-PATH: breakout_bot via BB squeeze z-score + volume spike',
+            )
+            return _wrap(breakout_bot.generate_signal)
+
+        # 2) ultra-strong trend by ADX
+        from ta.trend import ADXIndicator
+
+        adx_thr = float(fp.get('trend_adx_threshold', 25))
+        adx_val = (
+            ADXIndicator(df['high'], df['low'], df['close'], window=window)
+            .adx()
+            .iloc[-1]
+        )
+        if adx_val > adx_thr:
+            logger.info('FAST-PATH: trend_bot via ADX > %.1f', adx_thr)
+            return _wrap(trend_bot.generate_signal)
+
+        # 3) breakdown pattern with heavy volume
+        from crypto_bot.regime.pattern_detector import detect_patterns
+
+        bd_win = int(fp.get('breakdown_window', 20))
+        bd_mult = float(fp.get('breakdown_volume_multiplier', 4))
+        patterns = detect_patterns(df)
+        if patterns.get('breakdown', 0) >= 1.0:
+            vol_avg = df['volume'].rolling(bd_win).mean().iloc[-1]
+            if vol_avg > 0 and df['volume'].iloc[-1] > vol_avg * bd_mult:
+                logger.info(
+                    'FAST-PATH: sniper bot via breakdown pattern + volume spike',
+                )
+                if mode == 'onchain':
+                    return _wrap(sniper_solana.generate_signal)
+                return _wrap(sniper_bot.generate_signal)
+    except Exception:  # pragma: no cover - safety
+        pass
+    # === end fast-path ===
+
+    return _post_fastpath()
