@@ -154,6 +154,8 @@ def generate_signal(
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
     recent = df.iloc[-(lookback + 1):]
+    if len(recent) < lookback:
+        return (0.0, "none", 0.0) if higher_df is None else (0.0, "none")
 
     squeeze, atr = _squeeze(
         recent,
@@ -171,8 +173,11 @@ def generate_signal(
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
     if higher_df is not None and not higher_df.empty:
+        higher_recent = higher_df.iloc[-(lookback + 1):]
+        if len(higher_recent) < lookback:
+            return (0.0, "none")
         _squeeze(
-            higher_df.iloc[-(lookback + 1):],
+            higher_recent,
             bb_len,
             bb_std,
             kc_len,
