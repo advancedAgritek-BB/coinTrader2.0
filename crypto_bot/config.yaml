@@ -140,7 +140,7 @@ log_to_google: true
 loop_interval_minutes: 0.05
 max_age_days: 90
 max_change_pct: 20
-max_concurrent_ohlcv: 10
+max_concurrent_ohlcv: 50
 max_concurrent_tickers: 20
 max_latency_ms: 500
 max_ohlcv_failures: 2
@@ -485,7 +485,7 @@ symbol_filter:
   - 1d
   kraken_batch_size: 200
   log_ticker_exceptions: true
-  max_concurrent_ohlcv: 10
+  max_concurrent_ohlcv: 50
   max_correlation: 0.9
   max_spread_pct: 8
   min_volume_usd: 5
