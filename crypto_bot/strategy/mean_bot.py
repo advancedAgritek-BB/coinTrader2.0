@@ -108,6 +108,10 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df["atr"] = atr
     df["adx"] = adx
 
+    df = df.dropna()
+    if df.empty:
+        return 0.0, "none"
+
     width_series = (df["kc_h"] - df["kc_l"]).dropna()
     if len(width_series) >= lookback:
         median_width = width_series.iloc[-lookback:].median()
@@ -181,6 +185,8 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         return 0.0, "none"
 
     if ml_enabled and MODEL is not None:
+        if df.isna().any().any():
+            return score, direction
         try:  # pragma: no cover - best effort
             ml_score = MODEL.predict(df)
             score = (score + ml_score) / 2
