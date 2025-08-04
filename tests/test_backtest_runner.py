@@ -115,3 +115,36 @@ def test_skip_sniper_solana(caplog):
     )
     assert df.empty
     assert "Sniper Solana not backtestable" in caplog.text
+
+
+def test_hft_threshold_env(monkeypatch):
+    cfg = BacktestConfig(
+        symbol="XBT/USDT",
+        timeframe="30s",
+        since=0,
+        limit=1,
+    )
+
+    df_prepared = pd.DataFrame(
+        {
+            "adx": [20],
+            "ema_fast": [101],
+            "ema_slow": [100],
+            "bb_width": [0.05],
+            "volume": [100],
+            "volume_ma": [100],
+            "rsi": [80],
+            "close": [100],
+            "normalized_range": [1.0],
+        }
+    )
+
+    monkeypatch.setattr(BacktestRunner, "_prepare_data", lambda self, df: df)
+    runner = BacktestRunner(cfg, df=df_prepared)
+
+    regimes = runner._precompute_regimes(df_prepared)
+    assert regimes[-1] == "trending"
+
+    monkeypatch.setenv("HFT_ADX_TRENDING_MIN", "50")
+    regimes = runner._precompute_regimes(df_prepared)
+    assert regimes[-1] == "sideways"

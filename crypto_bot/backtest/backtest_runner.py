@@ -9,7 +9,8 @@ import asyncio
 from typing import Dict, Iterable, List, Optional
 
 import logging
-from crypto_bot.utils.market_loader import fetch_geckoterminal_ohlcv
+import os
+from crypto_bot.utils.market_loader import fetch_geckoterminal_ohlcv, timeframe_seconds
 
 try:
     import ccxt  # type: ignore
@@ -45,7 +46,7 @@ _DEFAULT_CFG = {
     "indicator_window": 14,
     "bb_window": 20,
     "ma_window": 20,
-    "adx_trending_min": 25,
+    "adx_trending_min": 10,
     "adx_sideways_max": 18,
     "bb_width_sideways_max": 0.025,
     "bb_width_breakout_max": 4,
@@ -54,6 +55,9 @@ _DEFAULT_CFG = {
     "rsi_mean_rev_max": 70,
     "ema_distance_mean_rev_max": 0.02,
     "normalized_range_volatility_min": 1.5,
+    "hft_adx_trending_min": 10,
+    "hft_rsi_mean_rev_min": 30,
+    "hft_rsi_mean_rev_max": 70,
 }
 
 
@@ -103,6 +107,25 @@ class BacktestRunner:
             if not df_raw.empty:
                 df_raw["timestamp"] = pd.to_datetime(df_raw["timestamp"], unit="ms")
         self.df_prepared = self._prepare_data(df_raw)
+
+    @staticmethod
+    def _build_cfg() -> Dict[str, float]:
+        cfg = {**_DEFAULT_CFG, **CONFIG}
+        for key in (
+            "adx_trending_min",
+            "rsi_mean_rev_min",
+            "rsi_mean_rev_max",
+            "hft_adx_trending_min",
+            "hft_rsi_mean_rev_min",
+            "hft_rsi_mean_rev_max",
+        ):
+            env_val = os.getenv(key.upper())
+            if env_val is not None:
+                try:
+                    cfg[key] = float(env_val)
+                except ValueError:
+                    pass
+        return cfg
 
     @staticmethod
     @lru_cache(maxsize=None)
@@ -160,7 +183,7 @@ class BacktestRunner:
         return df
 
     def _prepare_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        cfg = {**_DEFAULT_CFG, **CONFIG}
+        cfg = self._build_cfg()
         df = df.copy()
         df["ema_fast"] = ta.trend.ema_indicator(df["close"], window=cfg["ema_fast"])
         df["ema_slow"] = ta.trend.ema_indicator(df["close"], window=cfg["ema_slow"])
@@ -179,9 +202,17 @@ class BacktestRunner:
     def _precompute_regimes(self, df_prepared: pd.DataFrame) -> List[str]:
         if classify_regime.__module__ != "crypto_bot.regime.regime_classifier":
             return [classify_regime(df_prepared.iloc[: i + 1])[0] for i in range(len(df_prepared))]
+        cfg = self._build_cfg()
+        tf_sec = timeframe_seconds(None, self.config.timeframe)
+        adx_min = cfg["adx_trending_min"]
+        rsi_min = cfg["rsi_mean_rev_min"]
+        rsi_max = cfg["rsi_mean_rev_max"]
+        if tf_sec < 60:
+            adx_min = cfg.get("hft_adx_trending_min", adx_min)
+            rsi_min = cfg.get("hft_rsi_mean_rev_min", rsi_min)
+            rsi_max = cfg.get("hft_rsi_mean_rev_max", rsi_max)
 
-        cfg = {**_DEFAULT_CFG, **CONFIG}
-        trending = (df_prepared["adx"] > cfg["adx_trending_min"]) & (
+        trending = (df_prepared["adx"] > adx_min) & (
             df_prepared["ema_fast"] > df_prepared["ema_slow"]
         )
         sideways = (df_prepared["adx"] < cfg["adx_sideways_max"]) & (
@@ -191,9 +222,12 @@ class BacktestRunner:
             df_prepared["volume"] > df_prepared["volume_ma"] * cfg["breakout_volume_mult"]
         )
         mean_rev = (
-            df_prepared["rsi"].between(cfg["rsi_mean_rev_min"], cfg["rsi_mean_rev_max"])
-            & ((df_prepared["close"] - df_prepared["ema_fast"]).abs() / df_prepared["close"]
-               < cfg["ema_distance_mean_rev_max"])
+            df_prepared["rsi"].between(rsi_min, rsi_max)
+            & (
+                (df_prepared["close"] - df_prepared["ema_fast"]).abs()
+                / df_prepared["close"]
+                < cfg["ema_distance_mean_rev_max"]
+            )
         )
         volatile = df_prepared["normalized_range"] > cfg["normalized_range_volatility_min"]
 

@@ -129,6 +129,7 @@ class _OhlcvBatchRequest:
     config: Dict
     max_concurrent: int | None
     notifier: TelegramNotifier | None
+    priority_symbols: List[str] | None
     future: asyncio.Future
 
 
@@ -166,11 +167,18 @@ async def _ohlcv_batch_worker(
                     break
 
             union_symbols: List[str] = []
+            union_priority: List[str] = []
             for r in reqs:
                 union_symbols.extend(r.symbols)
+                if r.priority_symbols:
+                    union_priority.extend(r.priority_symbols)
             # Deduplicate while preserving order
             seen = set()
             union_symbols = [s for s in union_symbols if not (s in seen or seen.add(s))]
+            seen_p = set()
+            union_priority = [
+                s for s in union_priority if s in union_symbols and not (s in seen_p or seen_p.add(s))
+            ]
 
             base = reqs[0]
             cache = await _update_ohlcv_cache_inner(
@@ -185,6 +193,7 @@ async def _ohlcv_batch_worker(
                 config=base.config,
                 max_concurrent=base.max_concurrent,
                 notifier=base.notifier,
+                priority_symbols=union_priority,
             )
 
             for r in reqs:
@@ -601,6 +610,7 @@ async def _fetch_ohlcv_async_inner(
 
         if not use_websocket and limit > 0:
             data_all: list = []
+            orig_limit = limit
             while limit > 0:
                 req_limit = min(limit, 720)
                 params = {"symbol": symbol, "timeframe": timeframe, "limit": req_limit}
@@ -624,6 +634,36 @@ async def _fetch_ohlcv_async_inner(
                 if len(batch) < req_limit:
                     break
                 since = batch[-1][0] + timeframe_seconds(exchange, timeframe) * 1000
+            if (
+                since is not None
+                and len(data_all) < orig_limit
+                and hasattr(exchange, "fetch_ohlcv")
+            ):
+                logger.info(
+                    "Incomplete OHLCV for %s: got %d of %d",
+                    symbol,
+                    len(data_all),
+                    orig_limit,
+                )
+                kwargs_r = {"symbol": symbol, "timeframe": timeframe, "limit": orig_limit}
+                try:
+                    if asyncio.iscoroutinefunction(exchange.fetch_ohlcv):
+                        data_r = await _call_with_retry(
+                            exchange.fetch_ohlcv,
+                            timeout=REST_OHLCV_TIMEOUT,
+                            **kwargs_r,
+                        )
+                    else:
+                        data_r = await _call_with_retry(
+                            asyncio.to_thread,
+                            exchange.fetch_ohlcv,
+                            timeout=REST_OHLCV_TIMEOUT,
+                            **kwargs_r,
+                        )
+                except asyncio.CancelledError:
+                    raise
+                if len(data_r) > len(data_all):
+                    data_all = data_r
             return data_all
         if (
             use_websocket
@@ -708,52 +748,24 @@ async def _fetch_ohlcv_async_inner(
                 and not force_websocket_history
                 and hasattr(exchange, "fetch_ohlcv")
             ):
-                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-                    params_f = inspect.signature(exchange.fetch_ohlcv).parameters
-                    kwargs_f = {
-                        "symbol": symbol,
-                        "timeframe": timeframe,
-                        "limit": limit,
-                    }
-                    if since is not None and "since" in params_f:
-                        kwargs_f["since"] = since
-                    try:
-                        data = await _call_with_retry(
-                            exchange.fetch_ohlcv,
-                            timeout=REST_OHLCV_TIMEOUT,
-                            **kwargs_f,
-                        )
-                    except asyncio.CancelledError:
-                        raise
-                    expected = limit
-                    if since is not None:
-                        try:
-                            tf_sec = timeframe_seconds(exchange, timeframe)
-                            now_ms = int(time.time() * 1000)
-                            expected = min(
-                                limit, int((now_ms - since) // (tf_sec * 1000)) + 1
-                            )
-                        except Exception:
-                            pass
-                    if len(data) < expected:
-                        logger.info(
-                            "Incomplete OHLCV for %s: got %d of %d",
-                            symbol,
-                            len(data),
-                            expected,
-                        )
-                    return data
                 params_f = inspect.signature(exchange.fetch_ohlcv).parameters
                 kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                 if since is not None and "since" in params_f:
                     kwargs_f["since"] = since
                 try:
-                    data = await _call_with_retry(
-                        asyncio.to_thread,
-                        exchange.fetch_ohlcv,
-                        **kwargs_f,
-                        timeout=REST_OHLCV_TIMEOUT,
-                    )
+                    if asyncio.iscoroutinefunction(exchange.fetch_ohlcv):
+                        data = await _call_with_retry(
+                            exchange.fetch_ohlcv,
+                            timeout=REST_OHLCV_TIMEOUT,
+                            **kwargs_f,
+                        )
+                    else:
+                        data = await _call_with_retry(
+                            asyncio.to_thread,
+                            exchange.fetch_ohlcv,
+                            timeout=REST_OHLCV_TIMEOUT,
+                            **kwargs_f,
+                        )
                 except asyncio.CancelledError:
                     raise
                 expected = limit
@@ -796,27 +808,22 @@ async def _fetch_ohlcv_async_inner(
                             "timeframe": timeframe,
                             "limit": limit,
                         }
-                        if asyncio.iscoroutinefunction(
-                            getattr(exchange, "fetch_ohlcv", None)
-                        ):
-                            try:
+                        try:
+                            if asyncio.iscoroutinefunction(exchange.fetch_ohlcv):
                                 data_r = await _call_with_retry(
                                     exchange.fetch_ohlcv,
                                     timeout=REST_OHLCV_TIMEOUT,
                                     **kwargs_r,
                                 )
-                            except asyncio.CancelledError:
-                                raise
-                        else:
-                            try:
+                            else:
                                 data_r = await _call_with_retry(
                                     asyncio.to_thread,
                                     exchange.fetch_ohlcv,
-                                    **kwargs_r,
                                     timeout=REST_OHLCV_TIMEOUT,
+                                    **kwargs_r,
                                 )
-                            except asyncio.CancelledError:
-                                raise
+                        except asyncio.CancelledError:
+                            raise
                         if len(data_r) > len(data):
                             data = data_r
                     except Exception:
@@ -1002,34 +1009,24 @@ async def _fetch_ohlcv_async_inner(
                 limit,
             )
             try:
-                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-                    params_f = inspect.signature(exchange.fetch_ohlcv).parameters
-                    kwargs_f = {
-                        "symbol": symbol,
-                        "timeframe": timeframe,
-                        "limit": limit,
-                    }
-                    if since is not None and "since" in params_f:
-                        kwargs_f["since"] = since
-                    try:
-                        return await _call_with_retry(
-                            exchange.fetch_ohlcv,
-                            timeout=REST_OHLCV_TIMEOUT,
-                            **kwargs_f,
-                        )
-                    except asyncio.CancelledError:
-                        raise
                 params_f = inspect.signature(exchange.fetch_ohlcv).parameters
                 kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                 if since is not None and "since" in params_f:
                     kwargs_f["since"] = since
                 try:
-                    return await _call_with_retry(
-                        asyncio.to_thread,
-                        exchange.fetch_ohlcv,
-                        **kwargs_f,
-                        timeout=REST_OHLCV_TIMEOUT,
-                    )
+                    if asyncio.iscoroutinefunction(exchange.fetch_ohlcv):
+                        return await _call_with_retry(
+                            exchange.fetch_ohlcv,
+                            timeout=REST_OHLCV_TIMEOUT,
+                            **kwargs_f,
+                        )
+                    else:
+                        return await _call_with_retry(
+                            asyncio.to_thread,
+                            exchange.fetch_ohlcv,
+                            timeout=REST_OHLCV_TIMEOUT,
+                            **kwargs_f,
+                        )
                 except asyncio.CancelledError:
                     raise
             except Exception as exc2:  # pragma: no cover - fallback
@@ -1054,34 +1051,24 @@ async def _fetch_ohlcv_async_inner(
             and not force_websocket_history
         ):
             try:
-                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
-                    params_f = inspect.signature(exchange.fetch_ohlcv).parameters
-                    kwargs_f = {
-                        "symbol": symbol,
-                        "timeframe": timeframe,
-                        "limit": limit,
-                    }
-                    if since is not None and "since" in params_f:
-                        kwargs_f["since"] = since
-                    try:
-                        return await _call_with_retry(
-                            exchange.fetch_ohlcv,
-                            timeout=REST_OHLCV_TIMEOUT,
-                            **kwargs_f,
-                        )
-                    except asyncio.CancelledError:
-                        raise
                 params_f = inspect.signature(exchange.fetch_ohlcv).parameters
                 kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
                 if since is not None and "since" in params_f:
                     kwargs_f["since"] = since
                 try:
-                    return await _call_with_retry(
-                        asyncio.to_thread,
-                        exchange.fetch_ohlcv,
-                        **kwargs_f,
-                        timeout=REST_OHLCV_TIMEOUT,
-                    )
+                    if asyncio.iscoroutinefunction(exchange.fetch_ohlcv):
+                        return await _call_with_retry(
+                            exchange.fetch_ohlcv,
+                            timeout=REST_OHLCV_TIMEOUT,
+                            **kwargs_f,
+                        )
+                    else:
+                        return await _call_with_retry(
+                            asyncio.to_thread,
+                            exchange.fetch_ohlcv,
+                            timeout=REST_OHLCV_TIMEOUT,
+                            **kwargs_f,
+                        )
                 except asyncio.CancelledError:
                     raise
             except Exception:
@@ -1168,86 +1155,78 @@ async def fetch_geckoterminal_ohlcv(
         if is_cached:
             pool_addr, volume, reserve, price, _ = cached
 
-        backoff = 1
-        for attempt in range(3):
-            try:
-                if not is_cached:
-                    query = quote_plus(symbol)
-                    search_url = "https://api.geckoterminal.com/api/v2/search/pools"
-                    params = {"query": query, "network": "solana"}
-                    search_data = await gecko_request(search_url, params=params)
-                    if not search_data:
-                        logger.info("token not available on GeckoTerminal: %s", symbol)
+        try:
+            if not is_cached:
+                query = quote_plus(symbol)
+                search_url = "https://api.geckoterminal.com/api/v2/search/pools"
+                params = {"query": query, "network": "solana"}
+                search_data = await gecko_request(search_url, params=params)
+                if not search_data:
+                    logger.info("token not available on GeckoTerminal: %s", symbol)
+                    logger.info("pair not available on GeckoTerminal: %s", symbol)
+                    GECKO_UNAVAILABLE.add(symbol)
+                    return None
+
+                items = search_data.get("data") or []
+                if not items:
+                    mint = await get_mint_from_gecko(token_mint)
+                    if mint and mint != token_mint:
+                        params["query"] = quote_plus(f"{mint}/USDC")
+                        search_data = await gecko_request(search_url, params=params)
+                        items = search_data.get("data") or [] if search_data else []
+                    if mint:
+                        params = {"query": mint, "network": "solana"}
+                        search_data = await gecko_request(search_url, params=params)
+                        items = search_data.get("data") or [] if search_data else []
+                        token_mint = mint
+                    if not items:
                         logger.info("pair not available on GeckoTerminal: %s", symbol)
                         GECKO_UNAVAILABLE.add(symbol)
                         return None
 
-                    items = search_data.get("data") or []
-                    if not items:
-                        mint = await get_mint_from_gecko(token_mint)
-                        if mint and mint != token_mint:
-                            params["query"] = quote_plus(f"{mint}/USDC")
-                            search_data = await gecko_request(search_url, params=params)
-                            items = search_data.get("data") or [] if search_data else []
-                        if mint:
-                            params = {"query": mint, "network": "solana"}
-                            search_data = await gecko_request(search_url, params=params)
-                            items = search_data.get("data") or [] if search_data else []
-                            token_mint = mint
-                        if not items:
-                            logger.info("pair not available on GeckoTerminal: %s", symbol)
-                            GECKO_UNAVAILABLE.add(symbol)
-                            return None
-
-                    first = items[0]
-                    attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
+                first = items[0]
+                attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
+                if not attrs:
+                    helius_map = await fetch_from_helius([token_mint])
+                    helius_mint = helius_map.get(token_mint.upper()) if isinstance(helius_map, dict) else None
+                    if helius_mint:
+                        logger.info("Helius mint resolved for %s: %s", symbol, helius_mint)
+                        params = {"query": helius_mint, "network": "solana"}
+                        search_data = await gecko_request(search_url, params=params)
+                        items = search_data.get("data") or [] if search_data else []
+                        if items:
+                            first = items[0]
+                            attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
+                            token_mint = helius_mint
                     if not attrs:
-                        helius_map = await fetch_from_helius([token_mint])
-                        helius_mint = helius_map.get(token_mint.upper()) if isinstance(helius_map, dict) else None
-                        if helius_mint:
-                            logger.info("Helius mint resolved for %s: %s", symbol, helius_mint)
-                            params = {"query": helius_mint, "network": "solana"}
-                            search_data = await gecko_request(search_url, params=params)
-                            items = search_data.get("data") or [] if search_data else []
-                            if items:
-                                first = items[0]
-                                attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
-                                token_mint = helius_mint
-                        if not attrs:
-                            return None
-                    
-                    pool_id = str(first.get("id", ""))
-                    pool_addr = pool_id.split("_", 1)[-1]
-                    try:
-                        volume = float(attrs.get("volume_usd", {}).get("h24", 0.0))
-                    except Exception:
-                        volume = 0.0
-                    if volume < float(min_24h_volume):
                         return None
-                    try:
-                        price = float(attrs.get("base_token_price_quote_token", 0.0))
-                    except Exception:
-                        price = 0.0
-                    try:
-                        reserve = float(attrs.get("reserve_in_usd", 0.0))
-                    except Exception:
-                        reserve = 0.0
 
-                gecko_tf, aggregate = gecko_timeframe_parts(timeframe)
-                ohlcv_url = (
-                    f"https://api.geckoterminal.com/api/v2/networks/solana/pools/{pool_addr}/ohlcv/{gecko_tf}"
-                )
-                params = {"aggregate": aggregate, "limit": limit}
-                data = await gecko_request(ohlcv_url, params=params)
-                if data is None:
-                    raise RuntimeError("request failed")
-                break
-            except Exception as exc:  # pragma: no cover - network
-                if attempt == 2:
-                    logger.error("GeckoTerminal OHLCV error for %s: %s", symbol, exc)
+                pool_id = str(first.get("id", ""))
+                pool_addr = pool_id.split("_", 1)[-1]
+                try:
+                    volume = float(attrs.get("volume_usd", {}).get("h24", 0.0))
+                except Exception:
+                    volume = 0.0
+                if volume < float(min_24h_volume):
                     return None
-                await asyncio.sleep(backoff)
-                backoff = min(backoff + 1, 3)
+                try:
+                    price = float(attrs.get("base_token_price_quote_token", 0.0))
+                except Exception:
+                    price = 0.0
+                try:
+                    reserve = float(attrs.get("reserve_in_usd", 0.0))
+                except Exception:
+                    reserve = 0.0
+
+            gecko_tf, aggregate = gecko_timeframe_parts(timeframe)
+            ohlcv_url = (
+                f"https://api.geckoterminal.com/api/v2/networks/solana/pools/{pool_addr}/ohlcv/{gecko_tf}"
+            )
+            params = {"aggregate": aggregate, "limit": limit}
+            data = await gecko_request(ohlcv_url, params=params)
+        except Exception as exc:  # pragma: no cover - network
+            logger.error("GeckoTerminal OHLCV error for %s: %s", symbol, exc)
+            return None
 
         candles = (data.get("data") or {}).get("attributes", {}).get("ohlcv_list") or []
 
@@ -1505,6 +1484,7 @@ async def load_ohlcv_parallel(
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
+    priority_symbols: Iterable[str] | None = None,
 ) -> Dict[str, list]:
     """Fetch OHLCV data for multiple symbols concurrently.
 
@@ -1528,6 +1508,15 @@ async def load_ohlcv_parallel(
         if now - info["time"] >= info["delay"]:
             filtered_symbols.append(s)
     symbols = filtered_symbols
+
+    if priority_symbols:
+        prio_list: List[str] = []
+        seen: set[str] = set()
+        for s in priority_symbols:
+            if s in symbols and s not in seen:
+                prio_list.append(s)
+                seen.add(s)
+        symbols = prio_list + [s for s in symbols if s not in seen]
 
     if not symbols:
         return {}
@@ -1694,6 +1683,7 @@ async def _update_ohlcv_cache_inner(
     config: Dict | None = None,
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
+    priority_symbols: Iterable[str] | None = None,
 ) -> Dict[str, pd.DataFrame]:
     """Update cached OHLCV DataFrames with new candles.
 
@@ -1791,10 +1781,11 @@ async def _update_ohlcv_cache_inner(
             timeframe,
             req_limit,
             curr_since,
-            use_websocket,
-            force_websocket_history,
-            max_concurrent,
-            notifier,
+            use_websocket=use_websocket,
+            force_websocket_history=force_websocket_history,
+            max_concurrent=max_concurrent,
+            notifier=notifier,
+            priority_symbols=priority_symbols,
         )
         for sym, rows in batch.items():
             if rows:
@@ -1830,10 +1821,11 @@ async def _update_ohlcv_cache_inner(
                 timeframe,
                 limit,
                 None,
-                use_websocket,
-                force_websocket_history,
-                max_concurrent,
-                notifier,
+                use_websocket=use_websocket,
+                force_websocket_history=force_websocket_history,
+                max_concurrent=max_concurrent,
+                notifier=notifier,
+                priority_symbols=priority_symbols,
             )
             data = full.get(sym)
             if data:
@@ -1868,10 +1860,11 @@ async def _update_ohlcv_cache_inner(
                 timeframe,
                 limit * 2,
                 {sym: since_val},
-                False,
-                force_websocket_history,
-                max_concurrent,
-                notifier,
+                use_websocket=False,
+                force_websocket_history=force_websocket_history,
+                max_concurrent=max_concurrent,
+                notifier=notifier,
+                priority_symbols=priority_symbols,
             )
             retry_data = retry.get(sym)
             if retry_data and len(retry_data) > len(data):
@@ -1929,6 +1922,7 @@ async def update_ohlcv_cache(
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
     batch_size: int | None = None,
+    priority_symbols: Iterable[str] | None = None,
 ) -> Dict[str, pd.DataFrame]:
     """Batch OHLCV updates for multiple calls."""
 
@@ -1975,6 +1969,7 @@ async def update_ohlcv_cache(
         config,
         max_concurrent,
         notifier,
+        list(priority_symbols) if priority_symbols else None,
         asyncio.get_running_loop().create_future(),
     )
 
@@ -2052,6 +2047,16 @@ async def update_multi_tf_ohlcv_cache(
     min_volume_usd = float(config.get("min_volume_usd", 0) or 0)
     vol_thresh = config.get("bounce_scalper", {}).get("vol_zscore_threshold")
 
+    symbols = list(symbols)
+    priority_syms: list[str] = []
+    if priority_queue is not None:
+        seen: set[str] = set()
+        while priority_queue:
+            sym = priority_queue.popleft()
+            if sym in symbols and sym not in seen:
+                priority_syms.append(sym)
+                seen.add(sym)
+
     for tf in tfs:
         logger.info("Starting update for timeframe %s", tf)
         tf_cache = cache.get(tf, {})
@@ -2112,6 +2117,11 @@ async def update_multi_tf_ohlcv_cache(
                     sym = mapped
                 cex_symbols.append(sym)
 
+        if priority_syms:
+            prio_set = set(priority_syms)
+            cex_symbols = [s for s in priority_syms if s in cex_symbols] + [s for s in cex_symbols if s not in prio_set]
+            dex_symbols = [s for s in priority_syms if s in dex_symbols] + [s for s in dex_symbols if s not in prio_set]
+
         tf_sec = timeframe_seconds(exchange, tf)
         tf_limit = limit
         if start_since is not None:
@@ -2124,27 +2134,30 @@ async def update_multi_tf_ohlcv_cache(
                 sym_limit = dynamic_limits.get(sym, tf_limit)
                 groups.setdefault(int(sym_limit), []).append(sym)
             for lim, syms in groups.items():
+                curr_limit = tf_limit
                 if lim < tf_limit:
                     for s in syms:
                         logger.info(
                             "Adjusting limit for %s on %s to %d", s, tf, lim
                         )
-                    tf_cache = await update_ohlcv_cache(
-                        exchange,
-                        tf_cache,
-                        syms,
-                        timeframe=tf,
-                        limit=lim,
-                        config={
-                            "min_history_fraction": 0,
-                            "ohlcv_batch_size": config.get("ohlcv_batch_size"),
-                        },
-                        batch_size=batch_size,
-                        start_since=start_since,
-                        use_websocket=use_websocket,
-                        force_websocket_history=force_websocket_history,
-                        max_concurrent=max_concurrent,
-                        notifier=notifier,
+                    curr_limit = lim
+                tf_cache = await update_ohlcv_cache(
+                    exchange,
+                    tf_cache,
+                    syms,
+                    timeframe=tf,
+                    limit=curr_limit,
+                    config={
+                        "min_history_fraction": 0,
+                        "ohlcv_batch_size": config.get("ohlcv_batch_size"),
+                    },
+                    batch_size=batch_size,
+                    start_since=start_since,
+                    use_websocket=use_websocket,
+                    force_websocket_history=force_websocket_history,
+                    max_concurrent=max_concurrent,
+                    notifier=notifier,
+                    priority_symbols=priority_syms,
                 )
         elif cex_symbols:
             from crypto_bot.main import update_df_cache
