@@ -68,6 +68,19 @@ PATTERN_WEIGHTS = {
 }
 
 
+def _apply_hft_overrides(cfg: dict, timeframe: Optional[str]) -> dict:
+    """Return a copy of ``cfg`` with HFT overrides applied for ``timeframe``."""
+
+    if not timeframe or timeframe.lower() != "30s":
+        return cfg
+
+    out = cfg.copy()
+    for key, value in cfg.items():
+        if key.startswith("hft_"):
+            out[key[4:]] = value
+    return out
+
+
 def adaptive_thresholds(cfg: dict, df: pd.DataFrame | None, symbol: str | None) -> dict:
     """Return a copy of ``cfg`` with thresholds scaled based on volatility.
 
@@ -264,6 +277,17 @@ def _compute_indicators(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
         df["ema50"] = ta.trend.ema_indicator(df["close"], window=cfg["ema_slow"])
 
     if len(df) >= cfg["indicator_window"]:
+        try:
+            df["adx"] = ta.trend.adx(
+                df["high"], df["low"], df["close"], window=cfg["indicator_window"]
+            )
+            df["rsi"] = ta.momentum.rsi(df["close"], window=cfg["indicator_window"])
+            df["atr"] = ta.volatility.average_true_range(
+                df["high"], df["low"], df["close"], window=cfg["indicator_window"]
+            )
+            df["normalized_range"] = (df["high"] - df["low"]) / df["atr"]
+        except IndexError:
+            return "trending"
         df["adx"] = ta.trend.adx(
             df["high"], df["low"], df["close"], window=cfg["indicator_window"]
         )
@@ -389,7 +413,7 @@ def _classify_core(
             ) != "trending":
                 trending = False
 
-    regime = "trending"
+    regime = "unknown"
 
     squeeze = (
         latest["bb_width"] < 0.05
@@ -566,8 +590,11 @@ def classify_regime(
         is produced.
     """
 
-    cfg = CONFIG if config_path is None else _load_config(Path(config_path))
+    cfg = CONFIG.copy()
+    if config_path is not None:
+        cfg.update(_load_config(Path(config_path)))
     _configure_logger(cfg)
+    cfg = _apply_hft_overrides(cfg, timeframe)
     cfg = adaptive_thresholds(cfg, df, symbol)
 
     if timeframe and timeframe_seconds(None, timeframe) < 60:
@@ -603,7 +630,7 @@ def classify_regime(
     ml_min_bars = cfg.get("ml_min_bars", 10)
 
     if df_map is None and df is None:
-        return "unknown", set()
+        return "unknown", {"unknown": 0.0}
 
     result = _classify_all(df, higher_df, cfg, df_map=df_map, cache_key=cache_key)
 
@@ -620,11 +647,15 @@ def classify_regime_with_patterns(
     *,
     config_path: Optional[str] = None,
     symbol: Optional[str] = None,
+    timeframe: Optional[str] = None,
 ) -> Tuple[str, Dict[str, float]]:
     """Return the regime label and detected pattern scores."""
 
-    cfg = CONFIG if config_path is None else _load_config(Path(config_path))
+    cfg = CONFIG.copy()
+    if config_path is not None:
+        cfg.update(_load_config(Path(config_path)))
     _configure_logger(cfg)
+    cfg = _apply_hft_overrides(cfg, timeframe)
     cfg = adaptive_thresholds(cfg, df, symbol)
     label, _, patterns = _classify_all(df, higher_df, cfg)
     return label, patterns
@@ -659,6 +690,7 @@ async def classify_regime_with_patterns_async(
     *,
     config_path: Optional[str] = None,
     symbol: Optional[str] = None,
+    timeframe: Optional[str] = None,
 ) -> Tuple[str, Dict[str, float]]:
     """Async wrapper around :func:`classify_regime_with_patterns`."""
     return await asyncio.to_thread(
@@ -667,6 +699,7 @@ async def classify_regime_with_patterns_async(
         higher_df,
         config_path=config_path,
         symbol=symbol,
+        timeframe=timeframe,
     )
 
 
