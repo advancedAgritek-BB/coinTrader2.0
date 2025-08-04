@@ -100,18 +100,25 @@ def adaptive_thresholds(cfg: dict, df: pd.DataFrame | None, symbol: str | None) 
     try:  # pragma: no cover - optional dependency
         from statsmodels.tsa.stattools import adfuller
         from statsmodels.tsa.ar_model import AutoReg
-
-        close = df["close"].dropna()
-        if len(close) >= 20:
-            pval = adfuller(close, regression="ct")[1]
-            ar_res = AutoReg(close, lags=1, old_names=False).fit()
-            slope = float(ar_res.params.get("close.L1", 0.0))
-            if pval > 0.1 or abs(slope) > 0.9:
-                adj = 5
-                out["rsi_mean_rev_min"] = max(0, cfg["rsi_mean_rev_min"] - adj)
-                out["rsi_mean_rev_max"] = min(100, cfg["rsi_mean_rev_max"] + adj)
-    except Exception:
-        pass
+    except ImportError as exc:
+        logger.warning(
+            "statsmodels unavailable; drift detection disabled: %s", exc
+        )
+    else:
+        try:
+            close = df["close"].dropna()
+            if len(close) >= 20:
+                pval = adfuller(close, regression="ct")[1]
+                ar_res = AutoReg(close, lags=1, old_names=False).fit()
+                slope = float(ar_res.params.get("close.L1", 0.0))
+                if pval > 0.1 or abs(slope) > 0.9:
+                    adj = 5
+                    out["rsi_mean_rev_min"] = max(0, cfg["rsi_mean_rev_min"] - adj)
+                    out["rsi_mean_rev_max"] = min(
+                        100, cfg["rsi_mean_rev_max"] + adj
+                    )
+        except Exception:
+            pass
 
     return out
 
@@ -177,7 +184,10 @@ def _classify_ml(df: pd.DataFrame) -> Tuple[str, float]:
     global _supabase_model
     try:  # pragma: no cover - optional dependency
         import lightgbm as lgb
-    except Exception:
+    except ImportError as exc:
+        logger.warning(
+            "lightgbm unavailable; ML-based classification disabled: %s", exc
+        )
         return _ml_fallback(df)
 
     if _supabase_model is None:
