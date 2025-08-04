@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
@@ -104,8 +105,9 @@ def get_recent_win_rate(
     window: int = 20,
     path: str | Path = LOG_FILE,
     strategy: str | None = None,
+    half_life: float | None = 5.0,
 ) -> float:
-    """Return the fraction of profitable trades.
+    """Return the fraction of profitable trades with optional decay weighting.
 
     Parameters
     ----------
@@ -115,11 +117,15 @@ def get_recent_win_rate(
         CSV log file location (defaults to :data:`LOG_FILE`).
     strategy : str, optional
         If given, filter trades for the specified strategy.
+    half_life : float, optional
+        Number of trades after which the contribution of a trade is halved.
+        ``None`` disables weighting.
 
     Returns
     -------
     float
-        Win rate as ``wins / total`` over the evaluated trades.
+        Win rate over the evaluated trades. Newer trades count more when
+        ``half_life`` is provided.
     """
     file = Path(path)
     if not file.exists():
@@ -134,9 +140,19 @@ def get_recent_win_rate(
     if strategy is not None and "strategy" in recent.columns:
         recent = recent[recent["strategy"] == strategy]
 
-    wins = (recent["pnl"] > 0).sum()
-    total = len(recent)
-    return float(wins / total) if total else 0.0
+    outcomes = (recent["pnl"] > 0).astype(float)
+    total = len(outcomes)
+    if not total:
+        return 0.0
+
+    if half_life and half_life > 0:
+        ages = np.arange(total - 1, -1, -1)
+        weights = 0.5 ** (ages / half_life)
+        weights /= weights.sum()
+        return float((outcomes * weights).sum())
+
+    wins = outcomes.sum()
+    return float(wins / total)
 
 
 # Seed the PnL log with fake trades when empty to bootstrap weights
