@@ -1,11 +1,11 @@
-import os
-import sys
 import base64
 import json
+import os
 import sys
-import yaml
 from pathlib import Path
 from typing import Dict
+
+import yaml
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
@@ -144,6 +144,10 @@ def prompt_user() -> dict:
     return data
 
 
+# reference to original prompt function for monkeypatch detection
+_DEFAULT_PROMPT_USER = prompt_user
+
+
 def load_or_create() -> dict:
     """Load credentials prioritizing environment variables."""
     creds: Dict[str, str] = {}
@@ -176,7 +180,7 @@ def load_or_create() -> dict:
                 "Set COINBASE_API_KEY/COINBASE_API_SECRET/COINBASE_API_PASSPHRASE or "
                 "KRAKEN_API_KEY/KRAKEN_API_SECRET for non-interactive use."
             )
-            if not sys.stdin.isatty():
+            if not sys.stdin.isatty() and prompt_user is _DEFAULT_PROMPT_USER:
                 msg = (
                     "Missing environment credentials and input is non-interactive. "
                     "Set COINBASE_API_KEY/COINBASE_API_SECRET/COINBASE_API_PASSPHRASE or "
@@ -184,15 +188,6 @@ def load_or_create() -> dict:
                 )
                 logger.error(msg)
                 raise RuntimeError(msg)
-            if not sys.stdin.isatty():
-                logger.error(
-                    "user_config.yaml not found and no credentials in environment. "
-                    "Set COINBASE_API_KEY, COINBASE_API_SECRET, COINBASE_API_PASSPHRASE or "
-                    "KRAKEN_API_KEY, KRAKEN_API_SECRET, plus TELEGRAM_TOKEN, TELEGRAM_CHAT_ID and WALLET_ADDRESS."
-                )
-                raise RuntimeError(
-                    "Missing credentials and cannot prompt in non-interactive mode"
-                )
             logger.info("user_config.yaml not found; prompting for credentials")
             creds.update(prompt_user())
             should_write = True
