@@ -219,13 +219,15 @@ def _normalize(probs: Dict[str, float], eps: float = 1e-8) -> Dict[str, float]:
     return {k: v / total for k, v in probs.items()}
 
 
-def _classify_core(
-    data: pd.DataFrame, cfg: dict, higher_df: Optional[pd.DataFrame] = None
-) -> str:
-    if data is None or data.empty or len(data) < 20:
-        return "trending"
+# Cache for indicator computations keyed by ``(symbol, timeframe)``
+# storing ``(last_timestamp, dataframe_with_indicators)``. This avoids
+# recomputing expensive TA indicators when the input data has not changed.
+_indicator_cache: Dict[Tuple[str, str], Tuple[int, pd.DataFrame]] = {}
 
-    df = data.copy()
+
+def _compute_indicators(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+    """Return ``df`` with required technical indicators computed."""
+    df = df.copy()
     for col in ("ema20", "ema50", "adx", "rsi", "atr", "bb_width"):
         df[col] = np.nan
 
@@ -236,17 +238,14 @@ def _classify_core(
         df["ema50"] = ta.trend.ema_indicator(df["close"], window=cfg["ema_slow"])
 
     if len(df) >= cfg["indicator_window"]:
-        try:
-            df["adx"] = ta.trend.adx(
-                df["high"], df["low"], df["close"], window=cfg["indicator_window"]
-            )
-            df["rsi"] = ta.momentum.rsi(df["close"], window=cfg["indicator_window"])
-            df["atr"] = ta.volatility.average_true_range(
-                df["high"], df["low"], df["close"], window=cfg["indicator_window"]
-            )
-            df["normalized_range"] = (df["high"] - df["low"]) / df["atr"]
-        except IndexError:
-            return "unknown"
+        df["adx"] = ta.trend.adx(
+            df["high"], df["low"], df["close"], window=cfg["indicator_window"]
+        )
+        df["rsi"] = ta.momentum.rsi(df["close"], window=cfg["indicator_window"])
+        df["atr"] = ta.volatility.average_true_range(
+            df["high"], df["low"], df["close"], window=cfg["indicator_window"]
+        )
+        df["normalized_range"] = (df["high"] - df["low"]) / df["atr"]
     else:
         df["adx"] = np.nan
         df["rsi"] = np.nan
@@ -278,6 +277,36 @@ def _classify_core(
     ):
         if col in df:
             df[col] = df[col].fillna(df[col].mean())
+
+    return df
+
+
+def _classify_core(
+    data: pd.DataFrame,
+    cfg: dict,
+    higher_df: Optional[pd.DataFrame] = None,
+    cache_key: Optional[Tuple[str, str]] = None,
+) -> str:
+    if data is None or data.empty or len(data) < 20:
+        return "trending"
+
+    ts = int(data["timestamp"].iloc[-1]) if "timestamp" in data.columns else len(data)
+
+    if cache_key is not None:
+        cached = _indicator_cache.get(cache_key)
+        if cached and cached[0] == ts:
+            df = cached[1].copy()
+        else:
+            try:
+                df = _compute_indicators(data, cfg)
+            except IndexError:
+                return "unknown"
+            _indicator_cache[cache_key] = (ts, df.copy())
+    else:
+        try:
+            df = _compute_indicators(data, cfg)
+        except IndexError:
+            return "unknown"
 
     volume_ma20 = (
         df["volume"].rolling(cfg["ma_window"]).mean()
@@ -326,7 +355,12 @@ def _classify_core(
         else:
             confirm_cfg = cfg.copy()
             confirm_cfg["confirm_trend_with_higher_tf"] = False
-            if _classify_core(higher_df, confirm_cfg, None) != "trending":
+            confirm_key = None
+            if cache_key is not None and cfg.get("higher_timeframe"):
+                confirm_key = (cache_key[0], str(cfg.get("higher_timeframe")))
+            if _classify_core(
+                higher_df, confirm_cfg, None, cache_key=confirm_key
+            ) != "trending":
                 trending = False
 
     regime = "trending"
@@ -371,6 +405,7 @@ def _classify_all(
     cfg: dict,
     *,
     df_map: Optional[Dict[str, pd.DataFrame]] = None,
+    cache_key: Optional[Tuple[str, str]] = None,
 ) -> Tuple[str, Dict[str, float], Dict[str, float]] | Dict[str, str] | Tuple[str, str]:
     """Return regime label, probability mapping and patterns or labels for ``df_map``."""
 
@@ -382,7 +417,7 @@ def _classify_all(
             h_df = None
             if tf != cfg.get("higher_timeframe"):
                 h_df = df_map.get(cfg.get("higher_timeframe"))
-            label, _, _ = _classify_all(frame, h_df, cfg)
+            label, _, _ = _classify_all(frame, h_df, cfg, cache_key=None)
             labels[tf] = label
         if len(df_map) == 2:
             return tuple(labels[tf] for tf in df_map.keys())  # type: ignore
@@ -401,7 +436,7 @@ def _classify_all(
     pattern_min = float(cfg.get("pattern_min_conf", 0.0))
     patterns = detect_patterns(df, min_conf=pattern_min)
 
-    regime = _classify_core(df, cfg, higher_df)
+    regime = _classify_core(df, cfg, higher_df, cache_key=cache_key)
 
     # Score regimes based on indicator result and detected patterns
     scores: Dict[str, float] = {}
@@ -469,6 +504,7 @@ def classify_regime(
     df_map: Optional[Dict[str, pd.DataFrame]] = None,
     config_path: Optional[str] = None,
     symbol: Optional[str] = None,
+    cache_key: Optional[Tuple[str, str]] = None,
 ) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Classify market regime.
 
@@ -510,7 +546,7 @@ def classify_regime(
     if df_map is None and df is None:
         return "unknown", set()
 
-    result = _classify_all(df, higher_df, cfg, df_map=df_map)
+    result = _classify_all(df, higher_df, cfg, df_map=df_map, cache_key=cache_key)
 
     if df_map is not None:
         return result
@@ -542,6 +578,7 @@ async def classify_regime_async(
     df_map: Optional[Dict[str, pd.DataFrame]] = None,
     config_path: Optional[str] = None,
     symbol: Optional[str] = None,
+    cache_key: Optional[Tuple[str, str]] = None,
 ) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Asynchronous wrapper around :func:`classify_regime`."""
     return await asyncio.to_thread(
@@ -551,6 +588,7 @@ async def classify_regime_async(
         df_map=df_map,
         config_path=config_path,
         symbol=symbol,
+        cache_key=cache_key,
     )
 
 
@@ -600,7 +638,11 @@ async def classify_regime_cached(
 
     start = time.perf_counter() if profile else 0.0
     label, info = await classify_regime_async(
-        df, higher_df, config_path=config_path, symbol=symbol
+        df,
+        higher_df,
+        config_path=config_path,
+        symbol=symbol,
+        cache_key=key,
     )
     regime_cache[key] = label
     _regime_cache_ts[key] = ts
@@ -618,3 +660,8 @@ def clear_regime_cache(symbol: str, timeframe: str) -> None:
     """Remove cached regime entry for ``symbol`` and ``timeframe``."""
     regime_cache.pop((symbol, timeframe), None)
     _regime_cache_ts.pop((symbol, timeframe), None)
+
+
+def clear_indicator_cache(symbol: str, timeframe: str) -> None:
+    """Remove cached indicator entry for ``symbol`` and ``timeframe``."""
+    _indicator_cache.pop((symbol, timeframe), None)
