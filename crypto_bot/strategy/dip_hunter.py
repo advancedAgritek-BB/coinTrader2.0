@@ -31,7 +31,7 @@ def generate_signal(
     strategy = "dip_hunter"
 
     if cooldown_enabled and symbol and in_cooldown(symbol, strategy):
-        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        logger.info("Signal for %s: %s, %s", symbol, 0.0, "cooldown")
         return 0.0, "none"
 
     if len(df) < 50:
