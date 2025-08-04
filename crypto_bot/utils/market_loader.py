@@ -1168,86 +1168,78 @@ async def fetch_geckoterminal_ohlcv(
         if is_cached:
             pool_addr, volume, reserve, price, _ = cached
 
-        backoff = 1
-        for attempt in range(3):
-            try:
-                if not is_cached:
-                    query = quote_plus(symbol)
-                    search_url = "https://api.geckoterminal.com/api/v2/search/pools"
-                    params = {"query": query, "network": "solana"}
-                    search_data = await gecko_request(search_url, params=params)
-                    if not search_data:
-                        logger.info("token not available on GeckoTerminal: %s", symbol)
+        try:
+            if not is_cached:
+                query = quote_plus(symbol)
+                search_url = "https://api.geckoterminal.com/api/v2/search/pools"
+                params = {"query": query, "network": "solana"}
+                search_data = await gecko_request(search_url, params=params)
+                if not search_data:
+                    logger.info("token not available on GeckoTerminal: %s", symbol)
+                    logger.info("pair not available on GeckoTerminal: %s", symbol)
+                    GECKO_UNAVAILABLE.add(symbol)
+                    return None
+
+                items = search_data.get("data") or []
+                if not items:
+                    mint = await get_mint_from_gecko(token_mint)
+                    if mint and mint != token_mint:
+                        params["query"] = quote_plus(f"{mint}/USDC")
+                        search_data = await gecko_request(search_url, params=params)
+                        items = search_data.get("data") or [] if search_data else []
+                    if mint:
+                        params = {"query": mint, "network": "solana"}
+                        search_data = await gecko_request(search_url, params=params)
+                        items = search_data.get("data") or [] if search_data else []
+                        token_mint = mint
+                    if not items:
                         logger.info("pair not available on GeckoTerminal: %s", symbol)
                         GECKO_UNAVAILABLE.add(symbol)
                         return None
 
-                    items = search_data.get("data") or []
-                    if not items:
-                        mint = await get_mint_from_gecko(token_mint)
-                        if mint and mint != token_mint:
-                            params["query"] = quote_plus(f"{mint}/USDC")
-                            search_data = await gecko_request(search_url, params=params)
-                            items = search_data.get("data") or [] if search_data else []
-                        if mint:
-                            params = {"query": mint, "network": "solana"}
-                            search_data = await gecko_request(search_url, params=params)
-                            items = search_data.get("data") or [] if search_data else []
-                            token_mint = mint
-                        if not items:
-                            logger.info("pair not available on GeckoTerminal: %s", symbol)
-                            GECKO_UNAVAILABLE.add(symbol)
-                            return None
-
-                    first = items[0]
-                    attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
+                first = items[0]
+                attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
+                if not attrs:
+                    helius_map = await fetch_from_helius([token_mint])
+                    helius_mint = helius_map.get(token_mint.upper()) if isinstance(helius_map, dict) else None
+                    if helius_mint:
+                        logger.info("Helius mint resolved for %s: %s", symbol, helius_mint)
+                        params = {"query": helius_mint, "network": "solana"}
+                        search_data = await gecko_request(search_url, params=params)
+                        items = search_data.get("data") or [] if search_data else []
+                        if items:
+                            first = items[0]
+                            attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
+                            token_mint = helius_mint
                     if not attrs:
-                        helius_map = await fetch_from_helius([token_mint])
-                        helius_mint = helius_map.get(token_mint.upper()) if isinstance(helius_map, dict) else None
-                        if helius_mint:
-                            logger.info("Helius mint resolved for %s: %s", symbol, helius_mint)
-                            params = {"query": helius_mint, "network": "solana"}
-                            search_data = await gecko_request(search_url, params=params)
-                            items = search_data.get("data") or [] if search_data else []
-                            if items:
-                                first = items[0]
-                                attrs = first.get("attributes", {}) if isinstance(first, dict) else {}
-                                token_mint = helius_mint
-                        if not attrs:
-                            return None
-                    
-                    pool_id = str(first.get("id", ""))
-                    pool_addr = pool_id.split("_", 1)[-1]
-                    try:
-                        volume = float(attrs.get("volume_usd", {}).get("h24", 0.0))
-                    except Exception:
-                        volume = 0.0
-                    if volume < float(min_24h_volume):
                         return None
-                    try:
-                        price = float(attrs.get("base_token_price_quote_token", 0.0))
-                    except Exception:
-                        price = 0.0
-                    try:
-                        reserve = float(attrs.get("reserve_in_usd", 0.0))
-                    except Exception:
-                        reserve = 0.0
 
-                gecko_tf, aggregate = gecko_timeframe_parts(timeframe)
-                ohlcv_url = (
-                    f"https://api.geckoterminal.com/api/v2/networks/solana/pools/{pool_addr}/ohlcv/{gecko_tf}"
-                )
-                params = {"aggregate": aggregate, "limit": limit}
-                data = await gecko_request(ohlcv_url, params=params)
-                if data is None:
-                    raise RuntimeError("request failed")
-                break
-            except Exception as exc:  # pragma: no cover - network
-                if attempt == 2:
-                    logger.error("GeckoTerminal OHLCV error for %s: %s", symbol, exc)
+                pool_id = str(first.get("id", ""))
+                pool_addr = pool_id.split("_", 1)[-1]
+                try:
+                    volume = float(attrs.get("volume_usd", {}).get("h24", 0.0))
+                except Exception:
+                    volume = 0.0
+                if volume < float(min_24h_volume):
                     return None
-                await asyncio.sleep(backoff)
-                backoff = min(backoff + 1, 3)
+                try:
+                    price = float(attrs.get("base_token_price_quote_token", 0.0))
+                except Exception:
+                    price = 0.0
+                try:
+                    reserve = float(attrs.get("reserve_in_usd", 0.0))
+                except Exception:
+                    reserve = 0.0
+
+            gecko_tf, aggregate = gecko_timeframe_parts(timeframe)
+            ohlcv_url = (
+                f"https://api.geckoterminal.com/api/v2/networks/solana/pools/{pool_addr}/ohlcv/{gecko_tf}"
+            )
+            params = {"aggregate": aggregate, "limit": limit}
+            data = await gecko_request(ohlcv_url, params=params)
+        except Exception as exc:  # pragma: no cover - network
+            logger.error("GeckoTerminal OHLCV error for %s: %s", symbol, exc)
+            return None
 
         candles = (data.get("data") or {}).get("attributes", {}).get("ohlcv_list") or []
 
