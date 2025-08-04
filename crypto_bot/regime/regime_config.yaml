@@ -1,10 +1,10 @@
-adx_trending_min: 15  # Lower from 20 for more "trending" on Solana volatility
+adx_trending_min: 10  # Lower from 20 for more "trending" on Solana volatility
 adx_sideways_max: 25   # Increase for fewer "unknown"
 bb_width_breakout_max: 0.08  # Higher for Solana breakouts
 bb_width_sideways_max: 0.1
 breakout_volume_mult: 1.2
-rsi_mean_rev_min: 40   # Widen for fewer false mean-reversion
-rsi_mean_rev_max: 60
+rsi_mean_rev_min: 30   # Widen for fewer false mean-reversion
+rsi_mean_rev_max: 70
 ema_distance_mean_rev_max: 0.02
 atr_volatility_mult: 1.5
 normalized_range_volatility_min: 1.5
@@ -28,3 +28,10 @@ pattern_min_conf: 0.2
 ml_blend_weight: 0.7    # Heavier weight on ML for profitability
 bull_fng: 50
 atr_baseline: 0.01
+# HFT adjustments
+hft_adx_trending_min: 10
+hft_rsi_mean_rev_min: 30
+hft_rsi_mean_rev_max: 70
+hft_normalized_range_volatility_min: 0.8
+hft_indicator_window: 5
+ml_blend_weight: 0.8
