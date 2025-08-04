@@ -3,11 +3,17 @@ from __future__ import annotations
 import json
 import time
 
-from .logger import LOG_DIR
+import redis
 
 
-def check_and_update(regime: str, tf_seconds: int, intervals: int) -> str:
-    """Return commit-locked regime and update lock file.
+def check_and_update(
+    regime: str,
+    tf_seconds: int,
+    intervals: int,
+    *,
+    redis_client: redis.Redis | None = None,
+) -> str:
+    """Return commit-locked regime using Redis for coordination.
 
     Parameters
     ----------
@@ -17,19 +23,36 @@ def check_and_update(regime: str, tf_seconds: int, intervals: int) -> str:
         Base timeframe in seconds.
     intervals : int
         Number of intervals to lock the regime for.
+    redis_client : redis.Redis | None
+        Optional Redis client. If not provided, a new client is created.
     """
-    file = LOG_DIR / "last_regime.json"
-    file.parent.mkdir(parents=True, exist_ok=True)
 
-    if intervals > 0 and file.exists():
-        try:
-            data = json.loads(file.read_text())
-            last_reg = data.get("regime")
-            last_ts = float(data.get("timestamp", 0))
-            if last_reg and time.time() - last_ts < tf_seconds * intervals and regime != last_reg:
+    if intervals <= 0:
+        return regime
+
+    client = redis_client or redis.Redis(decode_responses=True)
+    data_key = "commit_lock:last_regime"
+    lock_key = f"{data_key}:lock"
+    ttl = tf_seconds * intervals
+
+    with client.lock(lock_key, blocking_timeout=1):
+        raw = client.get(data_key)
+        if raw:
+            try:
+                payload = json.loads(raw)
+                last_reg = payload.get("regime")
+                last_ts = float(payload.get("timestamp", 0))
+            except Exception:
+                last_reg = None
+                last_ts = 0.0
+            if last_reg and regime != last_reg and time.time() - last_ts < ttl:
                 return last_reg
-        except Exception:
-            pass
 
-    file.write_text(json.dumps({"regime": regime, "timestamp": time.time()}))
+        client.set(
+            data_key,
+            json.dumps({"regime": regime, "timestamp": time.time()}),
+            ex=ttl,
+        )
+
     return regime
+

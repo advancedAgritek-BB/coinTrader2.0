@@ -11,9 +11,7 @@ import numpy as np
 from pathlib import Path
 import yaml
 import json
-import time
 from functools import lru_cache
-from datetime import datetime
 
 from crypto_bot.utils import timeframe_seconds, commit_lock
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
@@ -236,10 +234,6 @@ def wrap_with_tf(fn: Callable[[pd.DataFrame], Tuple[float, str]], tf: str):
 
     wrapped.__name__ = getattr(fn, "__name__", "wrapped")
     return wrapped
-
-
-# Path storing the last selected regime and timestamp
-LAST_REGIME_FILE = LOG_DIR / "last_regime.json"
 
 
 class Selector:
@@ -730,58 +724,6 @@ def route(
         regime,
         tf_sec,
         cfg_get(cfg, "commit_lock_intervals", 0),
-    )
-
-
-
-    # commit lock logic
-    intervals = int(cfg_get(cfg, "commit_lock_intervals", 0))
-    if intervals:
-        lock_file = Path("last_regime.json")
-        last_reg = None
-        last_ts = 0.0
-        if lock_file.exists():
-            try:
-                data = json.loads(lock_file.read_text())
-                last_reg = data.get("regime")
-                last_ts = float(data.get("timestamp", 0))
-            except Exception:
-                pass
-
-        tf = cfg_get(cfg, "timeframe", "1h")
-        interval = timeframe_seconds(None, tf)
-        now = time.time()
-        if last_reg and regime != last_reg and now - last_ts < interval * intervals:
-            regime = last_reg
-        else:
-            lock_file.parent.mkdir(parents=True, exist_ok=True)
-            lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
-
-    tf = cfg_get(cfg, "timeframe", "1h")
-    tf_minutes = (
-        cfg.timeframe_minutes
-        if isinstance(cfg, RouterConfig)
-        else getattr(cfg, "timeframe_minutes", int(pd.Timedelta(tf).total_seconds() // 60))
-    )
-
-    LAST_REGIME_FILE.parent.mkdir(parents=True, exist_ok=True)
-    last_data = {}
-    if LAST_REGIME_FILE.exists():
-        try:
-            last_data = json.loads(LAST_REGIME_FILE.read_text())
-        except Exception:
-            last_data = {}
-    last_ts = last_data.get("timestamp")
-    last_regime = last_data.get("regime")
-    if last_ts and last_regime:
-        try:
-            ts = datetime.fromisoformat(last_ts)
-            if (datetime.utcnow() - ts).total_seconds() < tf_minutes * 60 * 3:
-                regime = last_regime
-        except Exception:
-            pass
-    LAST_REGIME_FILE.write_text(
-        json.dumps({"timestamp": datetime.utcnow().isoformat(), "regime": regime})
     )
 
     symbol = ""
