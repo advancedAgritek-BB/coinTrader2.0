@@ -65,6 +65,15 @@ def test_long_signal(monkeypatch):
     assert score > 0
 
 
+def test_generate_signal_without_higher_df(monkeypatch):
+    df = _df_dip()
+    _patch_indicators(monkeypatch, len(df))
+    result = dip_hunter.generate_signal(df, higher_df=None, config={"symbol": "BTC/USD"})
+    assert isinstance(result, tuple)
+    score, direction = result
+    assert direction == "long"
+
+
 def test_cooldown_blocks(monkeypatch):
     df = _df_dip()
     _patch_indicators(monkeypatch, len(df))
