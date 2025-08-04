@@ -14,23 +14,8 @@ except Exception:  # pragma: no cover - fallback when scipy missing
 def detect_patterns(
     df: pd.DataFrame, *, min_conf: float = 0.0, lookback: int = 20
 ) -> dict[str, float]:
-    """Return confidence scores for simple chart patterns detected in ``df``.
+    """Return confidence scores for simple chart patterns detected in ``df``."""
 
-    The latest candles are scanned for classic candlestick formations and
-    breakout signals.  Each pattern receives a confidence value between
-    ``0`` and ``1`` and only those meeting ``min_conf`` are returned.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        OHLCV data to analyse.
-    min_conf : float, optional
-        Minimum confidence threshold for returned patterns. Defaults to
-        ``0.0``.
-    lookback : int, optional
-        Number of recent bars used for moving averages and pattern
-        detection windows. Defaults to ``20``.
-    """
     patterns: dict[str, float] = {}
     if df is None or len(df) < 2:
         return patterns
@@ -139,7 +124,6 @@ def detect_patterns(
         highs.max() - highs.min() <= highs.mean() * 0.005
         and lows.diff().dropna().gt(0).all()
     ):
-        patterns["ascending_triangle"] = 1.0
         patterns["ascending_triangle"] = 1.0  # confidence capped at 1.0
 
     # Head and shoulders pattern using peak detection
@@ -166,3 +150,4 @@ def detect_patterns(
                     patterns["inverse_head_and_shoulders"] = 1.0
 
     return {k: min(1.0, v) for k, v in patterns.items() if v >= min_conf}
+
