@@ -1,4 +1,5 @@
 import os
+import sys
 import base64
 import json
 import yaml
@@ -169,7 +170,19 @@ def load_or_create() -> dict:
                 creds.setdefault("exchange", os.getenv("EXCHANGE"))
             should_write = False
         else:
-            logger.info("user_config.yaml not found; prompting for credentials")
+            logger.info(
+                "user_config.yaml not found; prompting for credentials. "
+                "Set COINBASE_API_KEY/COINBASE_API_SECRET/COINBASE_API_PASSPHRASE or "
+                "KRAKEN_API_KEY/KRAKEN_API_SECRET for non-interactive use."
+            )
+            if not sys.stdin.isatty():
+                msg = (
+                    "Missing environment credentials and input is non-interactive. "
+                    "Set COINBASE_API_KEY/COINBASE_API_SECRET/COINBASE_API_PASSPHRASE or "
+                    "KRAKEN_API_KEY/KRAKEN_API_SECRET."
+                )
+                logger.error(msg)
+                raise RuntimeError(msg)
             creds.update(prompt_user())
             should_write = True
 
