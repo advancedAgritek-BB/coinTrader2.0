@@ -254,6 +254,34 @@ def test_load_token_mints_error(monkeypatch, tmp_path):
     assert mod.TOKEN_MINTS["OLD"] == "M"
 
 
+def test_load_token_mints_retry(monkeypatch, tmp_path, caplog):
+    mod = _load_module(monkeypatch, tmp_path)
+
+    async def fail_jup():
+        raise Exception("boom")
+
+    monkeypatch.setattr(mod, "fetch_from_jupiter", fail_jup)
+
+    class FailingSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=10):
+            raise Exception("boom")
+
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: FailingSession()})
+    monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+
+    caplog.set_level(logging.DEBUG)
+    mapping = asyncio.run(mod.load_token_mints(force_refresh=True))
+    assert mapping == {}
+    assert mod._LOADED is False
+    assert "will retry later" in caplog.text
+
+
 def test_load_token_mints_force_refresh_creates_dir(monkeypatch, tmp_path):
     data = {"tokens": [{"symbol": "Z", "address": "ZZZ"}]}
 
