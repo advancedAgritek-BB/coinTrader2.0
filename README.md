@@ -517,9 +517,11 @@ learning prediction. Enable the weighting in `crypto_bot/config.yaml`:
 mean_bot:
   ml_enabled: true
 ```
-The bot only opens positions when the current 20-bar Bollinger bandwidth is
-below its 20-bar median, reducing trades during ranging periods and improving
-the win rate.
+This requires the optional `coinTrader_Trainer` package and a trained model.
+If either is missing, loading the configuration with `ml_enabled: true` will
+raise `MLUnavailableError`. The bot only opens positions when the current
+20-bar Bollinger bandwidth is below its 20-bar median, reducing trades during
+ranging periods and improving the win rate.
 
 #### DCA Bot
 Dollar-cost averaging gradually accumulates a position by buying when the price
