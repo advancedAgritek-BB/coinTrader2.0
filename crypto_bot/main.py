@@ -1,6 +1,5 @@
 import asyncio
 import os
-import sys
 import contextlib
 import time
 from pathlib import Path
@@ -49,7 +48,6 @@ from crypto_bot.risk.exit_manager import (
 )
 from crypto_bot.execution.cex_executor import (
     execute_trade_async as cex_trade_async,
-    get_exchange,
     get_exchanges,
 )
 from crypto_bot.open_position_guard import OpenPositionGuard
@@ -80,7 +78,6 @@ from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import write_cycle_metrics
-from crypto_bot.utils.token_registry import TOKEN_MINTS
 from crypto_bot.utils import pnl_logger, regime_pnl_tracker, trade_logger
 
 from crypto_bot.monitoring import record_sol_scanner_metrics
