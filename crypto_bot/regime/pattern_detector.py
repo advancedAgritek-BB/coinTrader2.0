@@ -14,7 +14,9 @@ except Exception:  # pragma: no cover - fallback when scipy missing
         return np.array(idx), {}
 
 
-def detect_patterns(df: pd.DataFrame, *, min_conf: float = 0.0) -> dict[str, float]:
+def detect_patterns(
+    df: pd.DataFrame, *, min_conf: float = 0.0, lookback: int | None = None
+) -> dict[str, float]:
     """Return confidence scores for simple chart patterns detected in ``df``.
 
     The latest candle and recent history are inspected for a small
@@ -81,10 +83,10 @@ def detect_patterns(df: pd.DataFrame, *, min_conf: float = 0.0) -> dict[str, flo
     if doji_score > 0:
         patterns["doji"] = min(doji_score, 1.0)
 
-    lookback = min(len(df), 20)
-    high_max = df["high"].rolling(lookback).max().iloc[-2]
-    low_min = df["low"].rolling(lookback).min().iloc[-2]
-    vol_mean = df["volume"].rolling(lookback).mean().iloc[-2]
+    lb = min(len(df), 20 if lookback is None else lookback)
+    high_max = df["high"].rolling(lb).max().iloc[-2]
+    low_min = df["low"].rolling(lb).min().iloc[-2]
+    vol_mean = df["volume"].rolling(lb).mean().iloc[-2]
 
     body_prev = abs(prev["close"] - prev["open"])
     body_last = abs(last["close"] - last["open"])
@@ -150,7 +152,7 @@ def detect_patterns(df: pd.DataFrame, *, min_conf: float = 0.0) -> dict[str, flo
         highs.max() - highs.min() <= highs.mean() * 0.005
         and lows.diff().dropna().gt(0).all()
     ):
-        patterns["ascending_triangle"] = 1.5
+        patterns["ascending_triangle"] = 1.0
 
     # Head and shoulders pattern using peak detection
     hs_lookback = min(len(df), 25)
