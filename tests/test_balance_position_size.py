@@ -112,6 +112,15 @@ def test_high_win_rate_boosts_position_size(monkeypatch):
     assert size == pytest.approx(150.0)
 
 
+def test_high_win_rate_boosts_position_size_short(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.risk.risk_manager.get_recent_win_rate", lambda *a, **k: 0.8
+    )
+    rm = RiskManager(_simple_cfg())
+    size = rm.position_size(1.0, 1000, name="trend_bot", direction="short")
+    assert size == pytest.approx(-150.0)
+
+
 def test_low_win_rate_no_boost(monkeypatch):
     monkeypatch.setattr(
         "crypto_bot.risk.risk_manager.get_recent_win_rate", lambda *a, **k: 0.6

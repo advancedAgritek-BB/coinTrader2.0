@@ -1286,6 +1286,7 @@ async def execute_signals(ctx: BotContext) -> None:
 
         probs = candidate.get("probabilities", {})
         reg_prob = float(probs.get(candidate.get("regime"), 0.0))
+        direction = candidate.get("direction", "long")
         size = ctx.risk_manager.position_size(
             reg_prob,
             ctx.balance,
@@ -1293,8 +1294,9 @@ async def execute_signals(ctx: BotContext) -> None:
             atr=candidate.get("atr"),
             price=price,
             name=strategy,
+            direction=direction,
         )
-        if size <= 0:
+        if size == 0:
             await refresh_balance(ctx)
             size = ctx.risk_manager.position_size(
                 reg_prob,
@@ -1303,13 +1305,14 @@ async def execute_signals(ctx: BotContext) -> None:
                 atr=candidate.get("atr"),
                 price=price,
                 name=strategy,
+                direction=direction,
             )
-            if size <= 0:
+            if size == 0:
                 outcome_reason = f"size {size:.4f}"
                 logger.info("[EVAL] %s -> %s", sym, outcome_reason)
                 continue
 
-        if not ctx.risk_manager.can_allocate(strategy, size, ctx.balance):
+        if not ctx.risk_manager.can_allocate(strategy, abs(size), ctx.balance):
             logger.info(
                 "Insufficient capital to allocate %.4f for %s via %s",
                 size,
@@ -1320,8 +1323,8 @@ async def execute_signals(ctx: BotContext) -> None:
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             continue
 
-        amount = size / price if price > 0 else 0.0
-        side = direction_to_side(candidate["direction"])
+        amount = abs(size) / price if price > 0 else 0.0
+        side = direction_to_side(direction)
         if side == "sell" and not ctx.config.get("allow_short", False):
             outcome_reason = "short selling disabled"
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
@@ -1426,7 +1429,7 @@ async def execute_signals(ctx: BotContext) -> None:
         if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
             ctx.paper_wallet.open(sym, side, amount, price)
             ctx.balance = ctx.paper_wallet.balance
-        ctx.risk_manager.allocate_capital(strategy, size)
+        ctx.risk_manager.allocate_capital(strategy, abs(size))
         if ctx.config.get("execution_mode") == "dry_run":
             ctx.positions[sym] = {
                 "side": side,

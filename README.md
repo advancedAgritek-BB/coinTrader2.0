@@ -439,6 +439,7 @@ size = risk_manager.position_size(
 * Passing a ``name`` parameter causes ``position_size`` to check
   ``get_recent_win_rate``. When the win rate exceeds ``win_rate_threshold``
   the calculated size is multiplied by ``win_rate_boost_factor``.
+* Specify ``direction="short"`` to return a negative size for short trades.
 * **ml_signal_model**/**signal_weight_optimizer** – blend strategy scores with machine-learning predictions.
 * **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade. `min_confidence_score` and `signal_fusion.min_confidence` default to `0.0001`.
 * **regime_timeframes**/**regime_return_period** – windows used for regime detection.
