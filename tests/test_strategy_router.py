@@ -2,6 +2,9 @@ import pytest
 import asyncio
 import sys
 import types
+import json
+
+import fakeredis
 
 sys.modules.setdefault("solana.rpc.async_api", types.ModuleType("solana.rpc.async_api"))
 if not hasattr(sys.modules["solana.rpc.async_api"], "AsyncClient"):
@@ -175,6 +178,10 @@ def test_route_multi_tf_combo(monkeypatch):
         lambda n: dummy if n == "dummy" else None,
     )
 
+    fake_r = fakeredis.FakeRedis()
+    monkeypatch.setattr(strategy_router.commit_lock, "REDIS_CLIENT", fake_r)
+    monkeypatch.setattr(strategy_router, "LAST_REGIME_FILE", tmp_path / "last.json")
+
     cfg = RouterConfig.from_dict({"timeframe": "1m", "strategy_router": {"regimes": {"breakout": ["dummy"]}}})
 
     fn = route({"1m": "breakout", "15m": "trending"}, "cex", cfg)
@@ -183,6 +190,8 @@ def test_route_multi_tf_combo(monkeypatch):
 
 
 def test_regime_commit_lock(monkeypatch):
+    fake_r = fakeredis.FakeRedis()
+    monkeypatch.setattr(strategy_router.commit_lock, "REDIS_CLIENT", fake_r)
     import fakeredis
     import threading
 
@@ -209,12 +218,16 @@ def test_regime_commit_lock(monkeypatch):
     }
     cfg = RouterConfig.from_dict(data)
     route("trending", "cex", cfg)
+    stored = json.loads(fake_r.get(strategy_router.commit_lock.REDIS_KEY))
+    ts = stored["timestamp"]
     key = "commit_lock:last_regime"
     first = fake.get(key)
 
     fn = route("sideways", "cex", cfg)
 
     assert fn.__name__ == trend_bot.generate_signal.__name__
+    new = json.loads(fake_r.get(strategy_router.commit_lock.REDIS_KEY))
+    assert new == stored
     assert fake.get(key) == first
 
 import pandas as pd
