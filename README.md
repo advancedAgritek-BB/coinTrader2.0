@@ -426,7 +426,7 @@ symbol_score_weights:
   `imbalance_filter` to `false` to bypass the trend or order book checks.
 * **pattern_timeframe** – optional candle interval used by the bounce scalper to
   confirm engulfing or hammer patterns. Defaults to `1m`.
-* **trigger_once** – bypass the cooldown and win-rate filter for one bounce scalper cycle.
+* **force** – pass `force=True` to `bounce_scalper.generate_signal` to bypass the cooldown and win-rate filter for one bounce scalper cycle.
 * **cooldown_enabled** – disable to ignore the cooldown and win-rate check.
 * **breakout** – Bollinger/Keltner squeeze with `donchian_window`,
   `vol_confirmation`/`vol_multiplier`, `setup_window`, `trigger_window` and a
@@ -533,7 +533,7 @@ bounce_scalper:
 min_cooldown: 2          # minutes between entries
 ```
 
-Calling `bounce_scalper.trigger_once()` bypasses the filter for a single cycle.
+Passing `force=True` to `bounce_scalper.generate_signal()` bypasses the filter for a single cycle.
 
 #### Mean Bot
 The mean reversion bot now incorporates an ADX trend filter to avoid

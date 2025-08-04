@@ -35,15 +35,6 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # pragma: no cover - fallback
     MODEL = None
 
-# Flag to bypass cooldown and win-rate filtering once
-FORCE_SIGNAL = False
-
-
-def trigger_once() -> None:
-    """Force the next call to :func:`generate_signal` to emit a signal."""
-    global FORCE_SIGNAL
-    FORCE_SIGNAL = True
-
 
 @dataclass
 class BounceScalperConfig:
@@ -193,8 +184,13 @@ def generate_signal(
     lower_df: Optional[pd.DataFrame] = None,
     fetcher: Optional[Callable[[str], pd.DataFrame]] = None,
     book: Optional[dict] = None,
+    force: bool = False,
 ) -> Tuple[float, str]:
-    """Identify short-term bounces with volume confirmation."""
+    """Identify short-term bounces with volume confirmation.
+
+    Setting ``force=True`` bypasses the cooldown and recent win-rate filters
+    for a single invocation.
+    """
     if df.empty:
         return 0.0, "none"
 
@@ -206,10 +202,6 @@ def generate_signal(
         return 0.0, "none"
 
     strategy = cfg.strategy
-    global FORCE_SIGNAL
-    force = FORCE_SIGNAL
-    if FORCE_SIGNAL:
-        FORCE_SIGNAL = False
 
     if (
         cfg.cooldown_enabled
