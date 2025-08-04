@@ -133,6 +133,10 @@ async def generate_signal(
     df["atr"] = atr
     df["adx"] = adx
 
+    df = df.dropna()
+    if df.empty:
+        return 0.0, "none"
+
     width_series = (df["kc_h"] - df["kc_l"]).dropna()
     if width_series.empty:
         return 0.0, "none"
@@ -207,6 +211,9 @@ async def generate_signal(
     else:
         return 0.0, "none"
 
+    if ml_enabled and MODEL is not None:
+        if df.isna().any().any():
+            return score, direction
     if ml_enabled:
         if MODEL is not None:
             try:  # pragma: no cover - best effort
