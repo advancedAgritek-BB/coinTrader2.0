@@ -288,14 +288,12 @@ def generate_signal(
     )
     volume_spike = vol_z > zscore_threshold
 
-    pattern_df = lower_df
-    if pattern_df is None and fetcher and cfg.pattern_timeframe:
+    pattern_df = lower_df or df
+    if lower_df is None and fetcher and cfg.pattern_timeframe:
         try:
             pattern_df = fetcher(cfg.pattern_timeframe)
         except Exception:  # pragma: no cover - safety
-            pattern_df = None
-    if pattern_df is None:
-        pattern_df = df
+            pass
 
     eng_type = is_engulfing(pattern_df, body_pct)
     hammer_type = is_hammer(pattern_df, body_pct)
