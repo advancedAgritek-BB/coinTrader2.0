@@ -107,8 +107,6 @@ async def load_token_mints(
     mapping: Dict[str, str] = {}
 
     fetch_url = url or os.getenv("TOKEN_MINTS_URL", TOKEN_REGISTRY_URL)
-    jup_task = fetch_from_jupiter()
-    gh_task = fetch_from_github(fetch_url)
     if CACHE_FILE.exists():
         try:
             with open(CACHE_FILE) as f:
@@ -122,11 +120,8 @@ async def load_token_mints(
         except Exception as err:  # pragma: no cover - best effort
             logger.error("Failed to read cache: %s", err)
 
-    try:
-        mapping.update(await fetch_from_jupiter())
-    except Exception as exc:  # pragma: no cover - network failures
-        logger.error("Failed to fetch Jupiter tokens: %s", exc)
-
+    jup_task = fetch_from_jupiter()
+    gh_task = fetch_from_github(fetch_url)
     jup_result, gh_result = await asyncio.gather(
         jup_task, gh_task, return_exceptions=True
     )
@@ -153,10 +148,6 @@ async def load_token_mints(
     else:
         logger.debug("Token mint load failed; will retry later")
     _LOADED = True
-        _LOADED = True
-    else:
-        logger.debug("Token mint load failed; will retry later")
-        _LOADED = True
     return mapping
 
 
