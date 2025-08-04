@@ -65,15 +65,43 @@ rule-based result using `ml_blend_weight` from `regime_config.yaml`.
 
 The regime configuration exposes additional tuning parameters:
 
-* **adx_trending_min** – ADX threshold for the trending regime.
+* **adx_trending_min** – ADX threshold for the trending regime. Defaults to `10`.
+* **rsi_mean_rev_min** / **rsi_mean_rev_max** – RSI range for mean-reversion. Defaults to `30`‑`70`.
+* **ml_blend_weight** – blend ratio for combining ML and indicator scores. Defaults to `0.8`.
 * **breakout_volume_mult** – volume multiplier for breakout detection.
 * **score_weights** – weighting factors for regime probabilities when patterns
   are detected.
 * **pattern_min_conf** – minimum pattern confidence required to apply a score
   weight.
-* **ml_blend_weight** – blend ratio for combining ML and indicator scores.
 * **bull_fng** – Fear & Greed index level considered bullish.
 * **atr_baseline** – ATR level corresponding to a 1× score factor.
+
+When the configured `timeframe` or `scalp_timeframe` is **sub‑minute**, the router
+switches to high‑frequency values prefixed with `hft_`:
+
+```yaml
+hft_adx_trending_min: 10
+hft_rsi_mean_rev_min: 30
+hft_rsi_mean_rev_max: 70
+hft_ml_blend_weight: 0.8
+```
+
+Example:
+
+```yaml
+timeframe: 30s
+scalp_timeframe: 15s
+```
+
+With the above settings, the HFT defaults are applied automatically. Override
+any of them via environment variables:
+
+```bash
+export HFT_ADX_TRENDING_MIN=12
+export HFT_RSI_MEAN_REV_MIN=25
+export HFT_RSI_MEAN_REV_MAX=75
+export HFT_ML_BLEND_WEIGHT=0.9
+```
 
 ## Fast-Path Checks
 
@@ -439,6 +467,7 @@ size = risk_manager.position_size(
 * Passing a ``name`` parameter causes ``position_size`` to check
   ``get_recent_win_rate``. When the win rate exceeds ``win_rate_threshold``
   the calculated size is multiplied by ``win_rate_boost_factor``.
+* Specify ``direction="short"`` to return a negative size for short trades.
 * **ml_signal_model**/**signal_weight_optimizer** – blend strategy scores with machine-learning predictions.
 * **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade. `min_confidence_score` and `signal_fusion.min_confidence` default to `0.0001`.
 * **regime_timeframes**/**regime_return_period** – windows used for regime detection.

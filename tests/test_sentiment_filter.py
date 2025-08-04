@@ -2,6 +2,10 @@ import os
 
 import pytest
 
+from crypto_bot.sentiment_filter import too_bearish, boost_factor
+
+import pytest
+
 from crypto_bot.sentiment_filter import boost_factor, too_bearish
 
 

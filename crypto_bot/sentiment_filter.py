@@ -45,6 +45,9 @@ async def fetch_fng_index() -> int:
 async def fetch_twitter_sentiment(
     query: str = "bitcoin", symbol: str | None = None
 ) -> int:
+
+
+async def fetch_twitter_sentiment(query: str = "bitcoin", symbol: str | None = None) -> int:
     """Return sentiment score for ``query`` between 0-100.
 
     When ``symbol`` is provided and ``LUNARCRUSH_API_KEY`` is set this will
