@@ -13,6 +13,7 @@ import yaml
 from .pattern_detector import detect_patterns
 from crypto_bot.utils.pattern_logger import log_patterns
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils import timeframe_seconds
 
 
 # Thresholds and ML blend settings are defined in ``regime_config.yaml``
@@ -485,6 +486,7 @@ def classify_regime(
     df_map: Optional[Dict[str, pd.DataFrame]] = None,
     config_path: Optional[str] = None,
     symbol: Optional[str] = None,
+    timeframe: Optional[str] = None,
 ) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Classify market regime.
 
@@ -501,6 +503,8 @@ def classify_regime(
         testing.
     symbol : Optional[str], default None
         Symbol name used for adaptive threshold calculations.
+    timeframe : Optional[str], default None
+        Timeframe string used to adjust thresholds for sub-minute data.
 
     Returns
     -------
@@ -520,6 +524,36 @@ def classify_regime(
     cfg = CONFIG if config_path is None else _load_config(Path(config_path))
     _configure_logger(cfg)
     cfg = adaptive_thresholds(cfg, df, symbol)
+
+    if timeframe and timeframe_seconds(None, timeframe) < 60:
+        cfg = cfg.copy()
+        cfg["adx_trending_min"] = float(
+            os.getenv("HFT_ADX_MIN")
+            or cfg.get("hft_adx_trending_min", cfg["adx_trending_min"])
+        )
+        cfg["rsi_mean_rev_min"] = float(
+            os.getenv("HFT_RSI_MIN")
+            or cfg.get("hft_rsi_mean_rev_min", cfg["rsi_mean_rev_min"])
+        )
+        cfg["rsi_mean_rev_max"] = float(
+            os.getenv("HFT_RSI_MAX")
+            or cfg.get("hft_rsi_mean_rev_max", cfg["rsi_mean_rev_max"])
+        )
+        cfg["normalized_range_volatility_min"] = float(
+            os.getenv("HFT_NR_VOL_MIN")
+            or cfg.get(
+                "hft_normalized_range_volatility_min",
+                cfg["normalized_range_volatility_min"],
+            )
+        )
+        cfg["indicator_window"] = int(
+            os.getenv("HFT_INDICATOR_WINDOW")
+            or cfg.get("hft_indicator_window", cfg["indicator_window"])
+        )
+        cfg["ml_blend_weight"] = float(
+            os.getenv("HFT_ML_BLEND_WEIGHT")
+            or cfg.get("hft_ml_blend_weight", cfg.get("ml_blend_weight", 0.7))
+        )
 
     ml_min_bars = cfg.get("ml_min_bars", 10)
 
@@ -558,6 +592,7 @@ async def classify_regime_async(
     df_map: Optional[Dict[str, pd.DataFrame]] = None,
     config_path: Optional[str] = None,
     symbol: Optional[str] = None,
+    timeframe: Optional[str] = None,
 ) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Asynchronous wrapper around :func:`classify_regime`."""
     return await asyncio.to_thread(
@@ -567,6 +602,7 @@ async def classify_regime_async(
         df_map=df_map,
         config_path=config_path,
         symbol=symbol,
+        timeframe=timeframe,
     )
 
 
@@ -596,8 +632,8 @@ _regime_cache_lock = asyncio.Lock()
 
 async def classify_regime_cached(
     symbol: str,
-    timeframe: str,
-    df: pd.DataFrame,
+    timeframe: Optional[str] = None,
+    df: Optional[pd.DataFrame] = None,
     higher_df: Optional[pd.DataFrame] = None,
     profile: bool = False,
     *,
@@ -609,7 +645,7 @@ async def classify_regime_cached(
         return "unknown", 0.0
 
     ts = int(df["timestamp"].iloc[-1]) if "timestamp" in df.columns else len(df)
-    key = (symbol, timeframe)
+    key = (symbol, timeframe or "")
     async with _regime_cache_lock:
         if key in regime_cache and _regime_cache_ts.get(key) == ts:
             label = regime_cache[key]
@@ -618,7 +654,11 @@ async def classify_regime_cached(
 
     start = time.perf_counter() if profile else 0.0
     label, info = await classify_regime_async(
-        df, higher_df, config_path=config_path, symbol=symbol
+        df,
+        higher_df,
+        config_path=config_path,
+        symbol=symbol,
+        timeframe=timeframe,
     )
     async with _regime_cache_lock:
         regime_cache[key] = label
