@@ -670,6 +670,32 @@ def test_load_ohlcv_parallel_invalid_max_concurrent():
         )
 
 
+def test_load_ohlcv_parallel_priority_symbols(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    call_order: list[str] = []
+
+    async def fake_fetch(exchange, sym, **_):
+        call_order.append(sym)
+        return [[0, 0, 0, 0, 0, 0]]
+
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+
+    ex = object()
+    symbols = ["AAA/USD", "BBB/USD", "CCC/USD"]
+    asyncio.run(
+        market_loader.load_ohlcv_parallel(
+            ex,
+            symbols,
+            max_concurrent=1,
+            priority_symbols=["BBB/USD"],
+        )
+    )
+
+    assert call_order[0] == "BBB/USD"
+    assert call_order[1:] == ["AAA/USD", "CCC/USD"]
+
+
 class RetryIncompleteExchange:
     has = {"fetchOHLCV": True}
 
@@ -826,6 +852,52 @@ def test_update_multi_tf_ohlcv_cache():
     for tf in config["timeframes"]:
         assert "BTC/USD" in cache[tf]
     assert set(ex.calls) == {"1h", "4h", "1d"}
+
+
+def test_update_multi_tf_ohlcv_cache_priority_queue(monkeypatch):
+    from collections import deque
+    from crypto_bot.utils import market_loader
+
+    captured: dict[str, list[str]] = {}
+
+    async def fake_update_ohlcv_cache(exchange, tf_cache, symbols, **kwargs):
+        captured["symbols"] = list(symbols)
+        captured["priority"] = kwargs.get("priority_symbols")
+        for s in symbols:
+            tf_cache[s] = pd.DataFrame(
+                [[0, 0, 0, 0, 0, 0]],
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
+        return tf_cache
+
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update_ohlcv_cache)
+
+    async def _listing(_sym):
+        return 0
+
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", _listing)
+
+    class Ex(DummyMultiTFExchange):
+        timeframes = {"1h": "1h"}
+        symbols = ["BTC/USD", "ETH/USD"]
+        id = "dummy"
+
+    pq = deque(["ETH/USD"])
+    cache: dict[str, dict[str, pd.DataFrame]] = {}
+    asyncio.run(
+        market_loader.update_multi_tf_ohlcv_cache(
+            Ex(),
+            cache,
+            ["BTC/USD", "ETH/USD"],
+            {"timeframes": ["1h"]},
+            limit=1,
+            priority_queue=pq,
+        )
+    )
+
+    assert captured.get("priority") == ["ETH/USD"]
+    assert captured.get("symbols", [])[0] == "ETH/USD"
+    assert not pq
 
 
 def test_update_multi_tf_ohlcv_cache_skips_unsupported_tf(caplog):
