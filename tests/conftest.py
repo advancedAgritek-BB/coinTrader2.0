@@ -4,6 +4,11 @@ import types
 from pathlib import Path
 import pytest
 
+try:  # Ensure real redis module is loaded for tests using fakeredis
+    import redis  # type: ignore
+except Exception:  # pragma: no cover - redis optional
+    redis = None
+
 try:  # pragma: no cover - optional dependency
     import numpy as np  # type: ignore
 except Exception:  # pragma: no cover - numpy not installed

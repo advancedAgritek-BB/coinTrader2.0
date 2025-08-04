@@ -121,6 +121,32 @@ def test_classify_regime_handles_index_error(monkeypatch):
 
 
 
+def test_hft_thresholds_override(tmp_path, monkeypatch):
+    df = _make_trending_df()
+    cfg = rc.CONFIG.copy()
+    cfg["indicator_window"] = 14
+    cfg["adx_trending_min"] = 15
+    cfg["hft_indicator_window"] = 7
+    cfg["hft_adx_trending_min"] = 30
+    cfg["atr_baseline"] = None
+    path = tmp_path / "hft.yaml"
+    path.write_text(yaml.safe_dump(cfg))
+
+    captured: dict[str, int] = {}
+
+    def fake_classify_all(df, higher_df, cfg_local, *, df_map=None):
+        captured["indicator_window"] = cfg_local.get("indicator_window")
+        captured["adx_trending_min"] = cfg_local.get("adx_trending_min")
+        return "trending", {}, {}
+
+    monkeypatch.setattr(rc, "_classify_all", fake_classify_all)
+
+    classify_regime(df, config_path=str(path), timeframe="30s")
+
+    assert captured["indicator_window"] == cfg["hft_indicator_window"]
+    assert captured["adx_trending_min"] == cfg["hft_adx_trending_min"]
+
+
 
 def _make_trending_df(rows: int = 50) -> pd.DataFrame:
     close = np.linspace(1, 2, rows)
