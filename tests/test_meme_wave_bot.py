@@ -2,6 +2,7 @@ import importlib.util
 import pathlib
 import sys
 import types
+import asyncio
 import pandas as pd
 import pytest
 
@@ -117,7 +118,7 @@ def test_generate_signal_returns_tuple():
         "close": [1, 2],
         "volume": [1, 10],
     })
-    score, direction = meme_wave_bot.generate_signal(df)
+    score, direction = asyncio.run(meme_wave_bot.generate_signal(df))
     assert isinstance(score, float)
     assert isinstance(direction, str)
 
@@ -131,30 +132,42 @@ def test_get_strategy_by_name():
 
 def test_high_volume_positive_sentiment(meme_df, high_monitor, monkeypatch):
     df = meme_df(spike=True)
-    monkeypatch.setattr(meme_wave_bot, "fetch_twitter_sentiment", lambda *a, **k: 80)
+    async def fake_sentiment(*a, **k):
+        return 80
+    monkeypatch.setattr(
+        meme_wave_bot, "fetch_twitter_sentiment_async", fake_sentiment
+    )
     cfg = {"meme_wave_bot": {"volume_threshold": 3, "sentiment_threshold": 0.6}}
-    score, direction = meme_wave_bot.generate_signal(
-        df, cfg, mempool_monitor=high_monitor
+    score, direction = asyncio.run(
+        meme_wave_bot.generate_signal(df, cfg, mempool_monitor=high_monitor)
     )
     assert (score, direction) == (1.0, "long")
 
 
 def test_high_volume_negative_sentiment(meme_df, high_monitor, monkeypatch):
     df = meme_df(spike=True)
-    monkeypatch.setattr(meme_wave_bot, "fetch_twitter_sentiment", lambda *a, **k: 20)
+    async def fake_sentiment(*a, **k):
+        return 20
+    monkeypatch.setattr(
+        meme_wave_bot, "fetch_twitter_sentiment_async", fake_sentiment
+    )
     cfg = {"meme_wave_bot": {"volume_threshold": 3, "sentiment_threshold": 0.6}}
-    score, direction = meme_wave_bot.generate_signal(
-        df, cfg, mempool_monitor=high_monitor
+    score, direction = asyncio.run(
+        meme_wave_bot.generate_signal(df, cfg, mempool_monitor=high_monitor)
     )
     assert (score, direction) == (0.0, "none")
 
 
 def test_low_volume_any_sentiment(meme_df, low_monitor, monkeypatch):
     df = meme_df(spike=False)
-    monkeypatch.setattr(meme_wave_bot, "fetch_twitter_sentiment", lambda *a, **k: 80)
+    async def fake_sentiment(*a, **k):
+        return 80
+    monkeypatch.setattr(
+        meme_wave_bot, "fetch_twitter_sentiment_async", fake_sentiment
+    )
     cfg = {"meme_wave_bot": {"volume_threshold": 3, "sentiment_threshold": 0.6}}
-    score, direction = meme_wave_bot.generate_signal(
-        df, cfg, mempool_monitor=low_monitor
+    score, direction = asyncio.run(
+        meme_wave_bot.generate_signal(df, cfg, mempool_monitor=low_monitor)
     )
     assert (score, direction) == (0.0, "none")
 
