@@ -106,6 +106,15 @@ _LAST_CONFIG_MTIME = CONFIG_PATH.stat().st_mtime
 
 logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 
+
+class MLUnavailableError(RuntimeError):
+    """Raised when required ML components are missing or fail to load."""
+
+    def __init__(self, message: str, cfg: dict | None = None) -> None:
+        super().__init__(message)
+        self.cfg = cfg
+
+
 # Track WebSocket ping tasks
 WS_PING_TASKS: set[asyncio.Task] = set()
 # Track async sniper trade tasks
@@ -337,7 +346,13 @@ async def refresh_balance(ctx: BotContext) -> float:
 
 
 def _ensure_ml(cfg: dict) -> None:
-    """Attempt to load the mean_bot ML model or disable ML."""
+    """Attempt to load the mean_bot ML model.
+
+    Raises
+    ------
+    MLUnavailableError
+        If the trainer package or model cannot be loaded.
+    """
     if not cfg.get("ml_enabled", True):
         return
     try:  # pragma: no cover - best effort
@@ -345,8 +360,10 @@ def _ensure_ml(cfg: dict) -> None:
 
         load_model("mean_bot")
     except Exception as exc:  # pragma: no cover - missing trainer or model
-        cfg["ml_enabled"] = False
-        logger.warning("Machine learning unavailable, disabling ml_enabled: %s", exc)
+        logger.error("Machine learning initialization failed: %s", exc)
+        raise MLUnavailableError(
+            "coinTrader_Trainer or model load failure", cfg
+        ) from exc
 
 
 def _emit_timing(
