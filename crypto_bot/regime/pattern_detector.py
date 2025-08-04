@@ -150,7 +150,7 @@ def detect_patterns(df: pd.DataFrame, *, min_conf: float = 0.0) -> dict[str, flo
         highs.max() - highs.min() <= highs.mean() * 0.005
         and lows.diff().dropna().gt(0).all()
     ):
-        patterns["ascending_triangle"] = 1.5
+        patterns["ascending_triangle"] = 1.0  # confidence capped at 1.0
 
     # Head and shoulders pattern using peak detection
     hs_lookback = min(len(df), 25)
@@ -175,4 +175,4 @@ def detect_patterns(df: pd.DataFrame, *, min_conf: float = 0.0) -> dict[str, flo
                 if hs_lookback - 1 - t3 <= 3:
                     patterns["inverse_head_and_shoulders"] = 1.0
 
-    return {k: v for k, v in patterns.items() if v >= min_conf}
+    return {k: min(1.0, v) for k, v in patterns.items() if v >= min_conf}
