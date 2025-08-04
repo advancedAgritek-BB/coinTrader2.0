@@ -198,7 +198,11 @@ def test_load_token_mints(monkeypatch, tmp_path):
     async def fake_jup():
         return {"SOL": "So111"}
 
+    async def fake_gh(*_a, **_k):
+        return {}
+
     monkeypatch.setattr(mod, "fetch_from_jupiter", fake_jup)
+    monkeypatch.setattr(mod, "fetch_from_github", fake_gh)
 
     mapping = asyncio.run(mod.load_token_mints(force_refresh=True))
     assert mapping == {"SOL": "So111"}
