@@ -209,6 +209,7 @@ min_cooldown: 0
 min_history_fraction: 0.1
 min_symbol_age_days: 0
 min_symbol_score: 0
+# Set to true only if coinTrader_Trainer and models are installed
 ml_enabled: false
 ml_signal_model:
   enabled: true
