@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 import requests
-
+from cachetools import TTLCache
 from crypto_bot.lunarcrush_client import LunarCrushClient
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
@@ -14,6 +14,9 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 logger = setup_logger(__name__, LOG_DIR / "sentiment.log")
 
 lunar_client = LunarCrushClient()
+
+# Cache for sentiment lookups
+_CACHE = TTLCache(maxsize=128, ttl=300)
 
 
 FNG_URL = "https://api.alternative.me/fng/?limit=1"
@@ -30,12 +33,17 @@ def fetch_fng_index() -> int:
             return int(mock)
         except ValueError:
             return 50
+    key = "fng"
+    if key in _CACHE:
+        return _CACHE[key]
     try:
         resp = requests.get(FNG_URL, timeout=5)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, dict):
-            return int(data.get("data", [{}])[0].get("value", 50))
+            value = int(data.get("data", [{}])[0].get("value", 50))
+            _CACHE[key] = value
+            return value
     except Exception as exc:
         logger.error("Failed to fetch FNG index: %s", exc)
     return 50
@@ -58,12 +66,17 @@ def fetch_twitter_sentiment(query: str = "bitcoin", symbol: str | None = None) -
             return 50
     if symbol and os.getenv("LUNARCRUSH_API_KEY"):
         return fetch_lunarcrush_sentiment(symbol)
+    key = f"twitter:{query}"
+    if key in _CACHE:
+        return _CACHE[key]
     try:
         resp = requests.get(f"{SENTIMENT_URL}?q={query}", timeout=5)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, dict):
-            return int(data.get("score", 50))
+            value = int(data.get("score", 50))
+            _CACHE[key] = value
+            return value
     except Exception as exc:
         logger.error("Failed to fetch Twitter sentiment: %s", exc)
     return 50
@@ -71,8 +84,13 @@ def fetch_twitter_sentiment(query: str = "bitcoin", symbol: str | None = None) -
 
 def fetch_lunarcrush_sentiment(symbol: str) -> int:
     """Return sentiment score for ``symbol`` using LunarCrush."""
+    key = f"lunar:{symbol}"
+    if key in _CACHE:
+        return _CACHE[key]
     try:
-        return int(lunar_client.get_sentiment(symbol))
+        value = int(lunar_client.get_sentiment(symbol))
+        _CACHE[key] = value
+        return value
     except Exception as exc:  # pragma: no cover - network failure
         logger.error("Failed to fetch LunarCrush sentiment: %s", exc)
         return 50
