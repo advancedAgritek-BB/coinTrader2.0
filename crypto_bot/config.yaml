@@ -72,7 +72,7 @@ dip_hunter:
   dip_pct: 0.03
   ema_trend: 200
   ml_weight: 0.5
-  rsi_oversold: 30
+  rsi_oversold: 25
   rsi_window: 14
   vol_mult: 1.5
   vol_window: 20
