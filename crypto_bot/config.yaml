@@ -138,6 +138,8 @@ max_liquidity_usage: 0.8
 listing_date_concurrency: 5
 log_to_google: true
 loop_interval_minutes: 0.05
+loop_interval_seconds: 0.1
+hft_mode: true
 max_age_days: 90
 max_change_pct: 20
 max_concurrent_ohlcv: 10
