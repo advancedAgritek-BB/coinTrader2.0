@@ -1,15 +1,26 @@
 import asyncio
 import time
+from contextlib import asynccontextmanager
 
 import pytest
 
 from crypto_bot import strategy_router
 
+
 def dummy_signal(df, cfg=None):
     return 0.5, "long"
 
+
 @pytest.mark.asyncio
 async def test_symbol_lock_single_active(monkeypatch):
+    @asynccontextmanager
+    async def slow_lock(symbol):
+        lock = strategy_router.symbol_locks.setdefault(symbol, asyncio.Lock())
+        async with lock:
+            yield
+            await asyncio.sleep(0.05)
+
+    monkeypatch.setattr(strategy_router, "symbol_lock", slow_lock)
     monkeypatch.setattr(
         strategy_router,
         "get_strategy_by_name",
@@ -25,8 +36,6 @@ async def test_symbol_lock_single_active(monkeypatch):
         await fn(None, {"symbol": "BTC/USD"})
         acquired = time.perf_counter()
         times[name] = (start, acquired)
-        await asyncio.sleep(0.05)
-        await strategy_router.release_symbol_lock("BTC/USD")
 
     t1 = asyncio.create_task(caller("a"))
     await asyncio.sleep(0.01)
@@ -34,6 +43,17 @@ async def test_symbol_lock_single_active(monkeypatch):
     await asyncio.gather(t1, t2)
 
     assert times["a"][1] < times["b"][1]
+
+
+@pytest.mark.asyncio
+async def test_symbol_lock_reacquire_no_deadlock():
+    async def acquire_twice():
+        async with strategy_router.symbol_lock("BTC/USD"):
+            pass
+        async with strategy_router.symbol_lock("BTC/USD"):
+            pass
+
+    await asyncio.wait_for(acquire_twice(), timeout=1)
 import pandas as pd
 import logging
 
