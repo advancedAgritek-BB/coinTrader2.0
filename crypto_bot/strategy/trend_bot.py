@@ -47,16 +47,30 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
 
     df = df.copy()
     params = config or {}
-    lookback_cfg = int(params.get("indicator_lookback", 250))
-    rsi_overbought_pct = float(params.get("rsi_overbought_pct", 90))
-    rsi_oversold_pct = float(params.get("rsi_oversold_pct", 10))
-    fast_window = int(params.get("trend_ema_fast", 3))
-    slow_window = int(params.get("trend_ema_slow", 10))
-    atr_period = int(params.get("atr_period", 14))
-    k = float(params.get("k", 1.0))
-    volume_window = int(params.get("volume_window", 20))
-    volume_mult = float(params.get("volume_mult", 1.0))
-    adx_threshold = float(params.get("adx_threshold", 25))
+
+    def _num(name, default, cast=float, min_value=None, max_value=None):
+        """Safely read and clamp numeric parameters from the config."""
+        raw = params.get(name, default)
+        try:
+            value = cast(raw)
+        except (TypeError, ValueError):
+            value = default
+        if min_value is not None:
+            value = max(min_value, value)
+        if max_value is not None:
+            value = min(max_value, value)
+        return value
+
+    lookback_cfg = _num("indicator_lookback", 250, int, 1)
+    rsi_overbought_pct = _num("rsi_overbought_pct", 90.0, float, 0.0, 100.0)
+    rsi_oversold_pct = _num("rsi_oversold_pct", 10.0, float, 0.0, 100.0)
+    fast_window = _num("trend_ema_fast", 3, int, 1)
+    slow_window = _num("trend_ema_slow", 10, int, 1)
+    atr_period = _num("atr_period", 14, int, 1)
+    k = _num("k", 1.0, float, 0.0)
+    volume_window = _num("volume_window", 20, int, 1)
+    volume_mult = _num("volume_mult", 1.0, float, 0.0)
+    adx_threshold = _num("adx_threshold", 25.0, float, 0.0)
 
     df["ema_fast"] = ta.trend.ema_indicator(df["close"], window=fast_window)
     df["ema_slow"] = ta.trend.ema_indicator(df["close"], window=slow_window)
