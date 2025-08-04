@@ -37,7 +37,7 @@ bounce_scalper:
   trend_ema_slow: 18
   up_candles: 2
   vol_window: 15
-  vol_zscore_threshold: 1.2
+  vol_zscore_threshold: 0.8
   volume_multiple: 1.5
   zscore_threshold: 1.0
 breakout:
