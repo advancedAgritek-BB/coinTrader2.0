@@ -171,24 +171,6 @@ class SessionState:
     scan_task: asyncio.Task | None = None
 
 
-def update_df_cache(
-    cache: dict[str, dict[str, pd.DataFrame]],
-    timeframe: str,
-    symbol: str,
-    df: pd.DataFrame,
-    max_size: int = DF_CACHE_MAX_SIZE,
-) -> None:
-    """Update an OHLCV cache with LRU eviction."""
-    tf_cache = cache.setdefault(timeframe, OrderedDict())
-    if not isinstance(tf_cache, OrderedDict):
-        tf_cache = OrderedDict(tf_cache)
-        cache[timeframe] = tf_cache
-    tf_cache[symbol] = df
-    tf_cache.move_to_end(symbol)
-    if len(tf_cache) > max_size:
-        tf_cache.popitem(last=False)
-
-
 def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> float:
     """Return the average ATR for symbols present in ``df_cache``."""
     atr_values: list[float] = []
