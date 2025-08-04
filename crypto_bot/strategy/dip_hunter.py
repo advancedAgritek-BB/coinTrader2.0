@@ -30,6 +30,54 @@ def generate_signal(
     cooldown_enabled = bool(params.get("cooldown_enabled", False))
     strategy = "dip_hunter"
 
+    if cooldown_enabled and symbol and in_cooldown(symbol, strategy):
+        logger.info("Signal for %s: %s, %s", symbol, 0.0, "cooldown")
+        return 0.0, "none"
+
+    if len(df) < 50:
+        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        return 0.0, "none"
+
+    rsi_window = int(params.get("rsi_window", 14))
+    rsi_oversold = float(params.get("rsi_oversold", 30.0))
+    dip_pct = float(params.get("dip_pct", 0.03))
+    dip_bars = int(params.get("dip_bars", 3))
+    vol_window = int(params.get("vol_window", 20))
+    vol_mult = float(params.get("vol_mult", 1.5))
+    adx_window = int(params.get("adx_window", 14))
+    adx_threshold = float(params.get("adx_threshold", 25.0))
+    bb_window = int(params.get("bb_window", 20))
+    ema_trend = int(params.get("ema_trend", 200))
+    ml_weight = float(params.get("ml_weight", 0.5))
+    atr_normalization = bool(params.get("atr_normalization", True))
+
+    lookback = max(rsi_window, vol_window, adx_window, bb_window, dip_bars)
+    recent = df.iloc[-(lookback + 1) :]
+
+    rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
+    adx = ADXIndicator(recent["high"], recent["low"], recent["close"], window=adx_window).adx()
+    bb = ta.volatility.BollingerBands(recent["close"], window=bb_window)
+    bb_pct = bb.bollinger_pband()
+    vol_ma = recent["volume"].rolling(vol_window).mean()
+
+    rsi = cache_series("rsi_dip", df, rsi, lookback)
+    adx = cache_series("adx_dip", df, adx, lookback)
+    bb_pct = cache_series("bb_pct_dip", df, bb_pct, lookback)
+    vol_ma = cache_series("vol_ma_dip", df, vol_ma, lookback)
+
+    recent = recent.copy()
+    recent["rsi"] = rsi
+    recent["adx"] = adx
+    recent["bb_pct"] = bb_pct
+    recent["vol_ma"] = vol_ma
+
+    latest = recent.iloc[-1]
+
+    if len(recent) < dip_bars + 1:
+        return 0.0, "none"
+    recent_returns = recent["close"].pct_change().iloc[-dip_bars:]
+    dip_size = recent_returns.sum()
+    is_dip = dip_size <= -dip_pct
     with cooldown(symbol, strategy) as cd:
         if cooldown_enabled and symbol and not cd.allowed:
             logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
