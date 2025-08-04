@@ -129,6 +129,7 @@ class _OhlcvBatchRequest:
     config: Dict
     max_concurrent: int | None
     notifier: TelegramNotifier | None
+    priority_symbols: List[str] | None
     future: asyncio.Future
 
 
@@ -166,11 +167,18 @@ async def _ohlcv_batch_worker(
                     break
 
             union_symbols: List[str] = []
+            union_priority: List[str] = []
             for r in reqs:
                 union_symbols.extend(r.symbols)
+                if r.priority_symbols:
+                    union_priority.extend(r.priority_symbols)
             # Deduplicate while preserving order
             seen = set()
             union_symbols = [s for s in union_symbols if not (s in seen or seen.add(s))]
+            seen_p = set()
+            union_priority = [
+                s for s in union_priority if s in union_symbols and not (s in seen_p or seen_p.add(s))
+            ]
 
             base = reqs[0]
             cache = await _update_ohlcv_cache_inner(
@@ -185,6 +193,7 @@ async def _ohlcv_batch_worker(
                 config=base.config,
                 max_concurrent=base.max_concurrent,
                 notifier=base.notifier,
+                priority_symbols=union_priority,
             )
 
             for r in reqs:
@@ -1475,6 +1484,7 @@ async def load_ohlcv_parallel(
     force_websocket_history: bool = False,
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
+    priority_symbols: Iterable[str] | None = None,
 ) -> Dict[str, list]:
     """Fetch OHLCV data for multiple symbols concurrently.
 
@@ -1498,6 +1508,15 @@ async def load_ohlcv_parallel(
         if now - info["time"] >= info["delay"]:
             filtered_symbols.append(s)
     symbols = filtered_symbols
+
+    if priority_symbols:
+        prio_list: List[str] = []
+        seen: set[str] = set()
+        for s in priority_symbols:
+            if s in symbols and s not in seen:
+                prio_list.append(s)
+                seen.add(s)
+        symbols = prio_list + [s for s in symbols if s not in seen]
 
     if not symbols:
         return {}
@@ -1664,6 +1683,7 @@ async def _update_ohlcv_cache_inner(
     config: Dict | None = None,
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
+    priority_symbols: Iterable[str] | None = None,
 ) -> Dict[str, pd.DataFrame]:
     """Update cached OHLCV DataFrames with new candles.
 
@@ -1761,10 +1781,11 @@ async def _update_ohlcv_cache_inner(
             timeframe,
             req_limit,
             curr_since,
-            use_websocket,
-            force_websocket_history,
-            max_concurrent,
-            notifier,
+            use_websocket=use_websocket,
+            force_websocket_history=force_websocket_history,
+            max_concurrent=max_concurrent,
+            notifier=notifier,
+            priority_symbols=priority_symbols,
         )
         for sym, rows in batch.items():
             if rows:
@@ -1800,10 +1821,11 @@ async def _update_ohlcv_cache_inner(
                 timeframe,
                 limit,
                 None,
-                use_websocket,
-                force_websocket_history,
-                max_concurrent,
-                notifier,
+                use_websocket=use_websocket,
+                force_websocket_history=force_websocket_history,
+                max_concurrent=max_concurrent,
+                notifier=notifier,
+                priority_symbols=priority_symbols,
             )
             data = full.get(sym)
             if data:
@@ -1838,10 +1860,11 @@ async def _update_ohlcv_cache_inner(
                 timeframe,
                 limit * 2,
                 {sym: since_val},
-                False,
-                force_websocket_history,
-                max_concurrent,
-                notifier,
+                use_websocket=False,
+                force_websocket_history=force_websocket_history,
+                max_concurrent=max_concurrent,
+                notifier=notifier,
+                priority_symbols=priority_symbols,
             )
             retry_data = retry.get(sym)
             if retry_data and len(retry_data) > len(data):
@@ -1899,6 +1922,7 @@ async def update_ohlcv_cache(
     max_concurrent: int | None = None,
     notifier: TelegramNotifier | None = None,
     batch_size: int | None = None,
+    priority_symbols: Iterable[str] | None = None,
 ) -> Dict[str, pd.DataFrame]:
     """Batch OHLCV updates for multiple calls."""
 
@@ -1945,6 +1969,7 @@ async def update_ohlcv_cache(
         config,
         max_concurrent,
         notifier,
+        list(priority_symbols) if priority_symbols else None,
         asyncio.get_running_loop().create_future(),
     )
 
@@ -2022,6 +2047,16 @@ async def update_multi_tf_ohlcv_cache(
     min_volume_usd = float(config.get("min_volume_usd", 0) or 0)
     vol_thresh = config.get("bounce_scalper", {}).get("vol_zscore_threshold")
 
+    symbols = list(symbols)
+    priority_syms: list[str] = []
+    if priority_queue is not None:
+        seen: set[str] = set()
+        while priority_queue:
+            sym = priority_queue.popleft()
+            if sym in symbols and sym not in seen:
+                priority_syms.append(sym)
+                seen.add(sym)
+
     for tf in tfs:
         logger.info("Starting update for timeframe %s", tf)
         tf_cache = cache.get(tf, {})
@@ -2082,6 +2117,11 @@ async def update_multi_tf_ohlcv_cache(
                     sym = mapped
                 cex_symbols.append(sym)
 
+        if priority_syms:
+            prio_set = set(priority_syms)
+            cex_symbols = [s for s in priority_syms if s in cex_symbols] + [s for s in cex_symbols if s not in prio_set]
+            dex_symbols = [s for s in priority_syms if s in dex_symbols] + [s for s in dex_symbols if s not in prio_set]
+
         tf_sec = timeframe_seconds(exchange, tf)
         tf_limit = limit
         if start_since is not None:
@@ -2094,27 +2134,30 @@ async def update_multi_tf_ohlcv_cache(
                 sym_limit = dynamic_limits.get(sym, tf_limit)
                 groups.setdefault(int(sym_limit), []).append(sym)
             for lim, syms in groups.items():
+                curr_limit = tf_limit
                 if lim < tf_limit:
                     for s in syms:
                         logger.info(
                             "Adjusting limit for %s on %s to %d", s, tf, lim
                         )
-                    tf_cache = await update_ohlcv_cache(
-                        exchange,
-                        tf_cache,
-                        syms,
-                        timeframe=tf,
-                        limit=lim,
-                        config={
-                            "min_history_fraction": 0,
-                            "ohlcv_batch_size": config.get("ohlcv_batch_size"),
-                        },
-                        batch_size=batch_size,
-                        start_since=start_since,
-                        use_websocket=use_websocket,
-                        force_websocket_history=force_websocket_history,
-                        max_concurrent=max_concurrent,
-                        notifier=notifier,
+                    curr_limit = lim
+                tf_cache = await update_ohlcv_cache(
+                    exchange,
+                    tf_cache,
+                    syms,
+                    timeframe=tf,
+                    limit=curr_limit,
+                    config={
+                        "min_history_fraction": 0,
+                        "ohlcv_batch_size": config.get("ohlcv_batch_size"),
+                    },
+                    batch_size=batch_size,
+                    start_since=start_since,
+                    use_websocket=use_websocket,
+                    force_websocket_history=force_websocket_history,
+                    max_concurrent=max_concurrent,
+                    notifier=notifier,
+                    priority_symbols=priority_syms,
                 )
         elif cex_symbols:
             from crypto_bot.main import update_df_cache
