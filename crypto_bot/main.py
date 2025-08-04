@@ -8,6 +8,7 @@ from datetime import datetime
 from collections import deque, OrderedDict
 from dataclasses import dataclass, field
 import inspect
+import re
 
 import aiohttp
 
@@ -101,8 +102,11 @@ _fix_symbol = fix_symbol
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENV_PATH = Path(__file__).resolve().parent / ".env"
 
-# Track the modification time of the loaded configuration
-_LAST_CONFIG_MTIME = CONFIG_PATH.stat().st_mtime
+# In-memory cache of configuration and file mtimes
+_CONFIG_CACHE: dict[str, object] = {}
+_CONFIG_MTIMES: dict[Path, float] = {}
+# Track ML-related settings to avoid re-loading the model unnecessarily
+_LAST_ML_CFG: dict[str, object] | None = None
 
 logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 
@@ -375,6 +379,15 @@ def _ensure_ml(cfg: dict) -> None:
         ) from exc
 
 
+def _ensure_ml_if_needed(cfg: dict) -> None:
+    """Invoke :func:`_ensure_ml` only when ML settings change."""
+    global _LAST_ML_CFG
+    ml_cfg = {"ml_enabled": cfg.get("ml_enabled", True)}
+    if ml_cfg != _LAST_ML_CFG:
+        _ensure_ml(cfg)
+        _LAST_ML_CFG = ml_cfg
+
+
 def _emit_timing(
     symbol_t: float,
     ohlcv_t: float,
@@ -404,13 +417,13 @@ def _emit_timing(
         )
 
 
-def load_config() -> dict:
-    """Load YAML configuration for the bot."""
+def _load_config_file() -> dict:
+    """Read and validate configuration from disk."""
     with open(CONFIG_PATH) as f:
         logger.info("Loading config from %s", CONFIG_PATH)
         data = yaml.safe_load(f) or {}
 
-    _ensure_ml(data)
+    data = replace_placeholders(data)
 
     strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
     trend_file = strat_dir / "trend_bot.yaml"
@@ -471,13 +484,82 @@ def load_config() -> dict:
     return data
 
 
+def _load_config_internal() -> tuple[dict, set[str]]:
+    """Load config if underlying files changed and track updates."""
+    global _CONFIG_CACHE, _CONFIG_MTIMES
+
+    main_mtime = CONFIG_PATH.stat().st_mtime if CONFIG_PATH.exists() else 0.0
+    strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
+    trend_file = strat_dir / "trend_bot.yaml"
+    trend_mtime = trend_file.stat().st_mtime if trend_file.exists() else None
+
+    if (
+        _CONFIG_CACHE
+        and _CONFIG_MTIMES.get(CONFIG_PATH) == main_mtime
+        and _CONFIG_MTIMES.get(trend_file) == trend_mtime
+    ):
+        return _CONFIG_CACHE, set()
+
+    new_data = _load_config_file()
+    changed = _diff_keys(_CONFIG_CACHE, new_data)
+    _CONFIG_CACHE = new_data
+    _CONFIG_MTIMES[CONFIG_PATH] = main_mtime
+    if trend_mtime is not None:
+        _CONFIG_MTIMES[trend_file] = trend_mtime
+    else:
+        _CONFIG_MTIMES.pop(trend_file, None)
+
+    _ensure_ml_if_needed(_CONFIG_CACHE)
+    return _CONFIG_CACHE, changed
+
+
+def load_config() -> dict:
+    """Load YAML configuration for the bot synchronously."""
+    cfg, _ = _load_config_internal()
+    return cfg
+
+
+async def load_config_async() -> tuple[dict, set[str]]:
+    """Asynchronously load configuration returning changed sections."""
+    return await asyncio.to_thread(_load_config_internal)
+
+
 def maybe_reload_config(state: dict, config: dict) -> None:
-    """Reload configuration when ``state['reload']`` is set."""
-    if state.get("reload"):
-        new_cfg = load_config()
-        config.clear()
-        config.update(new_cfg)
-        state.pop("reload", None)
+    """Deprecated reload helper kept for backwards compatibility."""
+    # Reloading now handled by :func:`reload_config` directly.
+    return
+
+
+def _diff_keys(old: dict, new: dict) -> set[str]:
+    """Return top-level keys whose values differ between ``old`` and ``new``."""
+    keys = set(old.keys()) | set(new.keys())
+    return {k for k in keys if old.get(k) != new.get(k)}
+
+
+def _merge_dict(dest: dict, src: dict) -> None:
+    """Recursively merge ``src`` into ``dest`` in-place."""
+    for key in list(dest.keys()):
+        if key not in src:
+            del dest[key]
+    for key, value in src.items():
+        if isinstance(value, dict) and isinstance(dest.get(key), dict):
+            _merge_dict(dest[key], value)
+        else:
+            dest[key] = value
+
+
+_ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
+
+
+def replace_placeholders(cfg):
+    """Recursively replace ``${VAR}`` values with environment variables."""
+    if isinstance(cfg, dict):
+        return {k: replace_placeholders(v) for k, v in cfg.items()}
+    if isinstance(cfg, list):
+        return [replace_placeholders(v) for v in cfg]
+    if isinstance(cfg, str):
+        return _ENV_PATTERN.sub(lambda m: os.getenv(m.group(1), m.group(0)), cfg)
+    return cfg
 
 
 def _flatten_config(data: dict, parent: str = "") -> dict:
@@ -492,7 +574,7 @@ def _flatten_config(data: dict, parent: str = "") -> dict:
     return flat
 
 
-def reload_config(
+async def reload_config(
     config: dict,
     ctx: BotContext,
     risk_manager: RiskManager,
@@ -501,22 +583,12 @@ def reload_config(
     *,
     force: bool = False,
 ) -> None:
-    """Reload the YAML config and update dependent objects."""
-    global _LAST_CONFIG_MTIME
-
-    try:
-        mtime = CONFIG_PATH.stat().st_mtime
-    except OSError:
-        mtime = _LAST_CONFIG_MTIME
-
-    if not force and mtime == _LAST_CONFIG_MTIME:
+    """Reload configuration and update dependent components."""
+    new_config, changed = await load_config_async()
+    if not force and not changed:
         return
 
-    new_config = load_config()
-    _LAST_CONFIG_MTIME = mtime
-
-    config.clear()
-    config.update(new_config)
+    _merge_dict(config, new_config)
     ctx.config = config
 
     # Reset cached symbols when configuration changes to ensure
@@ -1942,7 +2014,7 @@ async def _main_impl() -> TelegramNotifier:
                 break
             except Exception as exc:  # pragma: no cover - best effort
                 logger.error("Solana scan error: %s", exc)
-            await asyncio.sleep(interval)
+            await wait_or_event(interval)
 
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
     cooldown_configure(config.get("min_cooldown", 0))
@@ -1995,6 +2067,22 @@ async def _main_impl() -> TelegramNotifier:
     if mempool_cfg.get("enabled"):
         mempool_monitor = SolanaMempoolMonitor()
 
+    wake_event = asyncio.Event()
+
+    async def wait_or_event(timeout: float) -> None:
+        """Wait for an external event or until ``timeout`` elapses."""
+        end = asyncio.get_running_loop().time() + timeout
+        while True:
+            wake_event.clear()
+            remaining = end - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                break
+            try:
+                await asyncio.wait_for(wake_event.wait(), timeout=min(1.0, remaining))
+                break
+            except asyncio.TimeoutError:
+                continue
+
     if notifier.token and notifier.chat_id:
         if not send_test_message(notifier.token, notifier.chat_id, "Bot started"):
             logger.warning("Telegram test message failed; check your token and chat ID")
@@ -2003,18 +2091,22 @@ async def _main_impl() -> TelegramNotifier:
     if user.get("exchange"):
         config["primary_exchange"] = user["exchange"]
 
-    exchanges = get_exchanges(config)
-    primary = (
-        config.get("primary_exchange")
-        or config.get("exchange")
-        or next(iter(exchanges))
-    )
-    exchange, ws_client = exchanges[primary]
-    secondary_exchange = None
-    for name, pair in exchanges.items():
-        if name != primary:
-            secondary_exchange = pair[0]
-            break
+    if config.get("exchanges"):
+        exchanges = get_exchanges(config)
+        primary = (
+            config.get("primary_exchange")
+            or config.get("exchange")
+            or next(iter(exchanges))
+        )
+        exchange, ws_client = exchanges[primary]
+        secondary_exchange = None
+        for name, pair in exchanges.items():
+            if name != primary:
+                secondary_exchange = pair[0]
+                break
+    else:
+        exchange, ws_client = get_exchange(config)
+        secondary_exchange = None
     if hasattr(exchange, "options"):
         opts = getattr(exchange, "options", {})
         opts["ws"] = {"ping_interval": 10, "ping_timeout": 45}
@@ -2061,10 +2153,7 @@ async def _main_impl() -> TelegramNotifier:
                 notifier.notify(
                     f"Symbol scan failed; retrying in {delay}s (attempt {attempt + 1}/{MAX_SYMBOL_SCAN_ATTEMPTS})"
                 )
-            if inspect.iscoroutinefunction(asyncio.sleep):
-                await asyncio.sleep(delay)
-            else:  # pragma: no cover - compatibility with patched sleep
-                asyncio.sleep(delay)
+            await wait_or_event(delay)
             delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
 
         if discovered:
@@ -2312,13 +2401,51 @@ async def _main_impl() -> TelegramNotifier:
         ]
     )
 
+    async def _ws_price_feed_listener() -> None:
+        if not ws_client:
+            return
+        while True:
+            try:
+                msg = await ws_client._next_message(timeout=5.0)
+                if msg is not None:
+                    wake_event.set()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                await asyncio.sleep(1)
+
+    async def _mempool_event_listener() -> None:
+        if not mempool_monitor:
+            return
+        interval = float(mempool_cfg.get("poll_interval", 5))
+        while True:
+            try:
+                await asyncio.wait_for(
+                    asyncio.to_thread(mempool_monitor.fetch_priority_fee),
+                    timeout=interval,
+                )
+                wake_event.set()
+            except asyncio.TimeoutError:
+                pass
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+            await asyncio.sleep(interval)
+
+    listener_tasks: list[asyncio.Task] = []
+    if ws_client:
+        listener_tasks.append(asyncio.create_task(_ws_price_feed_listener()))
+    if mempool_monitor:
+        listener_tasks.append(asyncio.create_task(_mempool_event_listener()))
+
     loop_count = 0
     last_weight_update = last_optimize = 0.0
 
     try:
         while True:
             maybe_reload_config(state, config)
-            reload_config(
+            await reload_config(
                 config,
                 ctx,
                 risk_manager,
@@ -2368,7 +2495,7 @@ async def _main_impl() -> TelegramNotifier:
                     last_optimize = time.time()
 
             if not state.get("running"):
-                await asyncio.sleep(1)
+                await wait_or_event(1)
                 continue
 
             balances = await asyncio.to_thread(
@@ -2481,9 +2608,13 @@ async def _main_impl() -> TelegramNotifier:
                 ctx.volatility_factor, 1e-6
             )
             logger.info("Sleeping for %.2f minutes", delay)
-            await asyncio.sleep(delay * 60)
+            await wait_or_event(delay * 60)
 
     finally:
+        for task in listener_tasks:
+            task.cancel()
+            with contextlib.suppress(Exception):
+                await task
         if hasattr(exchange, "close"):
             if asyncio.iscoroutinefunction(getattr(exchange, "close")):
                 with contextlib.suppress(Exception):
