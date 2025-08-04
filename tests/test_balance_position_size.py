@@ -28,6 +28,7 @@ class DummyRM:
 
 
 class DummyPG:
+    max_open_trades = 10
     def can_open(self, positions):
         return True
 
@@ -100,7 +101,12 @@ async def test_positive_balance_generates_position():
 
 
 def _simple_cfg():
-    return RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
+    return RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        slippage_factor=0.0,
+    )
 
 
 def test_high_win_rate_boosts_position_size(monkeypatch):
@@ -110,6 +116,15 @@ def test_high_win_rate_boosts_position_size(monkeypatch):
     rm = RiskManager(_simple_cfg())
     size = rm.position_size(1.0, 1000, name="trend_bot")
     assert size == pytest.approx(150.0)
+
+
+def test_high_win_rate_boosts_position_size_short(monkeypatch):
+    monkeypatch.setattr(
+        "crypto_bot.risk.risk_manager.get_recent_win_rate", lambda *a, **k: 0.8
+    )
+    rm = RiskManager(_simple_cfg())
+    size = rm.position_size(1.0, 1000, name="trend_bot", direction="short")
+    assert size == pytest.approx(-150.0)
 
 
 def test_low_win_rate_no_boost(monkeypatch):
@@ -131,6 +146,7 @@ def test_custom_win_rate_settings(monkeypatch):
         take_profit_pct=0.01,
         win_rate_threshold=0.6,
         win_rate_boost_factor=2.0,
+        slippage_factor=0.0,
     )
     rm = RiskManager(cfg)
     size = rm.position_size(1.0, 1000, name="trend_bot")

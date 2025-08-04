@@ -5,6 +5,7 @@ import pytest
 import yaml
 import sys
 import types
+import os
 
 from crypto_bot.regime.regime_classifier import (
     classify_regime,
@@ -846,5 +847,37 @@ def test_supabase_download_failure(monkeypatch):
     label, conf = rc._classify_ml(df)
     assert label == "sideways"
     assert conf == 0.5
+
+
+def test_hft_env_overrides(monkeypatch):
+    df = _make_trending_df()
+
+    captured = {}
+
+    def fake_classify_all(df, higher_df, cfg, *, df_map=None):
+        captured.update(cfg)
+        return "trending", {}, {}
+
+    monkeypatch.setattr(rc, "_classify_all", fake_classify_all)
+
+    envs = {
+        "HFT_ADX_MIN": "99",
+        "HFT_RSI_MIN": "1",
+        "HFT_RSI_MAX": "2",
+        "HFT_NR_VOL_MIN": "3",
+        "HFT_INDICATOR_WINDOW": "4",
+        "HFT_ML_BLEND_WEIGHT": "0.5",
+    }
+    for k, v in envs.items():
+        monkeypatch.setenv(k, v)
+
+    classify_regime(df, timeframe="30s")
+
+    assert captured["adx_trending_min"] == 99.0
+    assert captured["rsi_mean_rev_min"] == 1.0
+    assert captured["rsi_mean_rev_max"] == 2.0
+    assert captured["normalized_range_volatility_min"] == 3.0
+    assert captured["indicator_window"] == 4
+    assert captured["ml_blend_weight"] == 0.5
 
 
