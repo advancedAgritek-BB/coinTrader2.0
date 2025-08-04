@@ -14,6 +14,12 @@ sys.modules.setdefault(
 
 mean_bot = importlib.import_module("crypto_bot.strategy.mean_bot")
 
+import asyncio
+
+
+def _run(df, cfg=None):
+    return asyncio.run(mean_bot.generate_signal(df, cfg))
+
 
 def _df_with_drop(price: float, last_width: float = 5.0) -> pd.DataFrame:
     """Return a dataframe with a final candle width of ``last_width``.
@@ -61,7 +67,7 @@ def _df_low_bw_drop() -> pd.DataFrame:
 def test_long_signal_on_big_drop():
     """High bandwidth should block the signal."""
     df = _df_with_drop(80.0)
-    score, direction = mean_bot.generate_signal(df)
+    score, direction = _run(df)
     assert direction == "none"
     assert score == 0.0
 
@@ -69,7 +75,7 @@ def test_long_signal_on_big_drop():
 def test_short_signal_on_big_spike():
     """High bandwidth should block the signal."""
     df = _df_with_drop(120.0)
-    score, direction = mean_bot.generate_signal(df)
+    score, direction = _run(df)
     assert direction == "none"
     assert score == 0.0
 
@@ -78,11 +84,11 @@ def test_short_signal_on_big_spike():
 def test_signal_during_squeeze(price: float, expected: str):
     """A drop or spike during a squeeze should still generate a signal."""
     df = _df_with_drop(price, last_width=1.0)
-    score, direction = mean_bot.generate_signal(df)
+    score, direction = _run(df)
     assert direction == expected
 def test_long_signal_when_bandwidth_low():
     df = _df_low_bw_drop()
-    score, direction = mean_bot.generate_signal(df)
+    score, direction = _run(df)
     assert direction == "long"
     assert score > 0
 
@@ -96,7 +102,7 @@ def test_no_signal_when_trending():
         "close": close,
         "volume": [100] * len(close),
     })
-    score, direction = mean_bot.generate_signal(df)
+    score, direction = _run(df)
     assert direction == "none"
     assert score == 0.0
 
@@ -110,18 +116,18 @@ def test_indicator_lookback_default(monkeypatch):
 
     monkeypatch.setattr(mean_bot.stats, "zscore", fake_zscore)
     df = _df_with_drop(80.0, last_width=1.0)
-    score, direction = mean_bot.generate_signal(df)
+    score, direction = _run(df)
     assert calls["lookback"] == 14
 
 
 def test_ml_enabled_by_default(monkeypatch):
     df = _df_low_bw_drop()
-    base_score, direction = mean_bot.generate_signal(df, {"ml_enabled": False})
+    base_score, direction = _run(df, {"ml_enabled": False})
 
     ml_mod = types.SimpleNamespace(predict_signal=lambda _df: 0.2)
     monkeypatch.setitem(sys.modules, "crypto_bot.ml_signal_model", ml_mod)
 
-    score, direction2 = mean_bot.generate_signal(df)
+    score, direction2 = _run(df)
     assert direction2 == direction
     assert score == pytest.approx((base_score + 0.2) / 2)
 
@@ -130,10 +136,10 @@ def test_trainer_model_influence(monkeypatch):
     df = _df_low_bw_drop()
     cfg = {"atr_normalization": False}
     monkeypatch.setattr(mean_bot, "MODEL", None)
-    base, direction = mean_bot.generate_signal(df, cfg)
+    base, direction = _run(df, cfg)
     dummy = types.SimpleNamespace(predict=lambda _df: 0.25)
     monkeypatch.setattr(mean_bot, "MODEL", dummy)
-    score, direction2 = mean_bot.generate_signal(df, cfg)
+    score, direction2 = _run(df, cfg)
     assert direction2 == direction
     assert score == pytest.approx((base + 0.25) / 2)
 

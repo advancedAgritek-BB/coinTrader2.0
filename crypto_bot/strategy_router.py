@@ -11,21 +11,18 @@ import numpy as np
 from pathlib import Path
 import yaml
 import json
-import time
 from functools import lru_cache
-from datetime import datetime
 
 from crypto_bot.utils import timeframe_seconds, commit_lock
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telemetry import telemetry
-import threading
-from collections import defaultdict
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.cache_helpers import cache_by_id
 from crypto_bot.utils.token_registry import TOKEN_MINTS
 from crypto_bot.selector import bandit
+from contextlib import asynccontextmanager
 
 from crypto_bot.strategy import (
     trend_bot,
@@ -43,7 +40,6 @@ from crypto_bot.strategy import (
 )
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
-_SYMBOL_LOCKS: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 with open(CONFIG_PATH) as f:
@@ -52,24 +48,12 @@ with open(CONFIG_PATH) as f:
 # Map symbols to asyncio locks guarding order placement
 symbol_locks: Dict[str, asyncio.Lock] = {}
 
-# Event loop captured when locks are first acquired
-_LOCK_LOOP: asyncio.AbstractEventLoop | None = None
-
-
-async def acquire_symbol_lock(symbol: str) -> None:
-    """Acquire the asyncio lock associated with ``symbol``."""
-    global _LOCK_LOOP
-    if _LOCK_LOOP is None:
-        _LOCK_LOOP = asyncio.get_running_loop()
+@asynccontextmanager
+async def symbol_lock(symbol: str):
+    """Async context manager for symbol-based locks."""
     lock = symbol_locks.setdefault(symbol, asyncio.Lock())
-    await lock.acquire()
-
-
-async def release_symbol_lock(symbol: str) -> None:
-    """Release the lock for ``symbol`` if held."""
-    lock = symbol_locks.get(symbol)
-    if lock and lock.locked():
-        lock.release()
+    async with lock:
+        yield
 
 
 @dataclass
@@ -236,10 +220,6 @@ def wrap_with_tf(fn: Callable[[pd.DataFrame], Tuple[float, str]], tf: str):
 
     wrapped.__name__ = getattr(fn, "__name__", "wrapped")
     return wrapped
-
-
-# Path storing the last selected regime and timestamp
-LAST_REGIME_FILE = LOG_DIR / "last_regime.json"
 
 
 class Selector:
@@ -611,7 +591,12 @@ def route(
             if isinstance(cfg, dict):
                 symbol = cfg.get("symbol", "")
             if direction != "none" and symbol:
-                await acquire_symbol_lock(symbol)
+                async with symbol_lock(symbol):
+                    if notifier is not None:
+                        notifier.notify(
+                            f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
+                        )
+                    return score, direction
             if notifier is not None:
                 notifier.notify(
                     f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
@@ -730,58 +715,6 @@ def route(
         regime,
         tf_sec,
         cfg_get(cfg, "commit_lock_intervals", 0),
-    )
-
-
-
-    # commit lock logic
-    intervals = int(cfg_get(cfg, "commit_lock_intervals", 0))
-    if intervals:
-        lock_file = Path("last_regime.json")
-        last_reg = None
-        last_ts = 0.0
-        if lock_file.exists():
-            try:
-                data = json.loads(lock_file.read_text())
-                last_reg = data.get("regime")
-                last_ts = float(data.get("timestamp", 0))
-            except Exception:
-                pass
-
-        tf = cfg_get(cfg, "timeframe", "1h")
-        interval = timeframe_seconds(None, tf)
-        now = time.time()
-        if last_reg and regime != last_reg and now - last_ts < interval * intervals:
-            regime = last_reg
-        else:
-            lock_file.parent.mkdir(parents=True, exist_ok=True)
-            lock_file.write_text(json.dumps({"regime": regime, "timestamp": now}))
-
-    tf = cfg_get(cfg, "timeframe", "1h")
-    tf_minutes = (
-        cfg.timeframe_minutes
-        if isinstance(cfg, RouterConfig)
-        else getattr(cfg, "timeframe_minutes", int(pd.Timedelta(tf).total_seconds() // 60))
-    )
-
-    LAST_REGIME_FILE.parent.mkdir(parents=True, exist_ok=True)
-    last_data = {}
-    if LAST_REGIME_FILE.exists():
-        try:
-            last_data = json.loads(LAST_REGIME_FILE.read_text())
-        except Exception:
-            last_data = {}
-    last_ts = last_data.get("timestamp")
-    last_regime = last_data.get("regime")
-    if last_ts and last_regime:
-        try:
-            ts = datetime.fromisoformat(last_ts)
-            if (datetime.utcnow() - ts).total_seconds() < tf_minutes * 60 * 3:
-                regime = last_regime
-        except Exception:
-            pass
-    LAST_REGIME_FILE.write_text(
-        json.dumps({"timestamp": datetime.utcnow().isoformat(), "regime": regime})
     )
 
     symbol = ""
