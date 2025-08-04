@@ -25,10 +25,10 @@ def generate_signal(
     vol_window = int(params.get("volume_window", 20))
     vol_mult = float(params.get("volume_mult", 1.5))
 
-    lookback = max(window, vol_window)
-    if len(df) < lookback:
+    if len(df) < vol_window:
         return 0.0, "none"
 
+    lookback = min(len(df), max(window, vol_window))
     recent = df.iloc[-(lookback + 1) :]
 
     dc_high = recent["high"].rolling(window).max().shift(1)
