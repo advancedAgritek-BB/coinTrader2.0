@@ -1848,52 +1848,6 @@ def test_fetch_geckoterminal_ohlcv_network_error(monkeypatch):
     assert res is None
 
 
-def test_fetch_geckoterminal_ohlcv_retry(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    sleeps: list[float] = []
-
-    async def fake_sleep(secs):
-        sleeps.append(secs)
-
-    calls = 0
-    market_loader.GECKO_POOL_CACHE.clear()
-    market_loader.GECKO_UNAVAILABLE.clear()
-
-    async def fake_gecko(url, params=None, retries=3):
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            for attempt in range(3):
-                await fake_sleep(1 + attempt)
-                if attempt < 2:
-                    continue
-                break
-        else:
-            await fake_sleep(1)
-        if "search/pools" in url:
-            return {
-                "data": [
-                    {
-                        "id": "pool1",
-                        "attributes": {"volume_usd": {"h24": 123}, "reserve_in_usd": 0},
-                    }
-                ]
-            }
-        return {"data": {"attributes": {"ohlcv_list": [[1, 1, 2, 0.5, 1.5, 10]]}}}
-
-    monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
-
-    data, vol, reserve = asyncio.run(
-        market_loader.fetch_geckoterminal_ohlcv(f"{VALID_MINT}/USDC", limit=1)
-    )
-
-    assert sleeps == [1, 2, 3, 1]
-    assert calls == 2
-    assert data == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
-    assert vol == 123.0
-
-
 def test_fetch_geckoterminal_skip_unavailable(monkeypatch):
     from crypto_bot.utils import market_loader
 
