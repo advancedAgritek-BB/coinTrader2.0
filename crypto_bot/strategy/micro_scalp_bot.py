@@ -141,24 +141,24 @@ def generate_signal(
         return 0.0, "none"
 
     lookback = max(slow_window, vol_window, atr_period)
-    recent = df.iloc[-(lookback + 1) :]
 
-    ema_fast = ta.trend.ema_indicator(recent["close"], window=fast_window)
-    ema_slow = ta.trend.ema_indicator(recent["close"], window=slow_window)
+    ema_fast_full = ta.trend.ema_indicator(df["close"], window=fast_window)
+    ema_slow_full = ta.trend.ema_indicator(df["close"], window=slow_window)
+    ema_fast = cache_series("ema_fast", df, ema_fast_full, lookback)
+    ema_slow = cache_series("ema_slow", df, ema_slow_full, lookback)
 
-    ema_fast = cache_series("ema_fast", df, ema_fast, lookback)
-    ema_slow = cache_series("ema_slow", df, ema_slow, lookback)
-    atr_window = min(atr_period, len(recent))
-    atr_series = ta.volatility.average_true_range(
-        recent["high"], recent["low"], recent["close"], window=atr_window
+    atr_window = min(atr_period, len(df))
+    atr_series_full = ta.volatility.average_true_range(
+        df["high"], df["low"], df["close"], window=atr_window
     )
-    atr_series = cache_series(f"atr_{atr_period}", df, atr_series, lookback)
+    atr_series = cache_series(f"atr_{atr_period}", df, atr_series_full, lookback)
 
-    df = recent.copy()
-    df["ema_fast"] = ema_fast
-    df["ema_slow"] = ema_slow
-    df["atr"] = atr_series
-    df["momentum"] = df["ema_fast"] - df["ema_slow"]
+    recent = df.iloc[-(lookback + 1) :].copy()
+    recent["ema_fast"] = ema_fast
+    recent["ema_slow"] = ema_slow
+    recent["atr"] = atr_series
+    recent["momentum"] = recent["ema_fast"] - recent["ema_slow"]
+    df = recent
 
     latest = df.iloc[-1]
     lower_wick_ratio, upper_wick_ratio = _wick_ratios(latest)
