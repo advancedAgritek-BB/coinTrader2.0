@@ -364,24 +364,33 @@ def test_adaptive_rsi_threshold(monkeypatch):
 def test_trigger_once(monkeypatch):
     configure(60)
     cooldowns.clear()
-    prices = list(range(100, 80, -1)) + [82]
-    volumes = [100 + i for i in range(20)] + [200]
+    prices = list(range(100, 40, -1)) + [42]
+    volumes = [100 + i for i in range(60)] + [500]
     df = _df(prices, volumes)
 
     monkeypatch.setattr(
-        bounce_scalper.ta.trend, "ema_indicator", lambda s, window=50: pd.Series([80] * len(s))
+        bounce_scalper.ta.trend, "ema_indicator", lambda s, window=50: pd.Series([0] * len(s))
     )
-    cfg = BounceScalperConfig(
-        symbol="XBT/USDT",
-        cooldown_enabled=True,
-        oversold=30,
-        overbought=70,
-        volume_multiple=2.0,
+    monkeypatch.setattr(
+        bounce_scalper.ta.momentum, "rsi", lambda s, window=14: pd.Series([10] * len(s))
     )
+    monkeypatch.setattr(
+        bounce_scalper.stats, "zscore", lambda s, lookback: pd.Series([float("nan")] * len(s))
+    )
+    monkeypatch.setattr(
+        bounce_scalper.ta.volatility,
+        "average_true_range",
+        lambda h, l, c, window: pd.Series([1] * len(h)),
+    )
+    monkeypatch.setattr(bounce_scalper, "is_engulfing", lambda df, body_pct: "bullish")
+    monkeypatch.setattr(bounce_scalper, "confirm_higher_lows", lambda df, bars: True)
+    monkeypatch.setattr(
+        bounce_scalper, "normalize_score_by_volatility", lambda df, score: score
+    )
+    cfg = BounceScalperConfig(symbol="XBT/USDT", cooldown_enabled=True)
     first = bounce_scalper.generate_signal(df, cfg)
     second = bounce_scalper.generate_signal(df, cfg)
-    bounce_scalper.trigger_once()
-    third = bounce_scalper.generate_signal(df, cfg)
+    third = bounce_scalper.generate_signal(df, cfg, force=True)
     fourth = bounce_scalper.generate_signal(df, cfg)
 
     assert first[1] != "none"
