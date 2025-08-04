@@ -42,19 +42,37 @@ async def generate_signal(
 ) -> Tuple[float, str]:
     """Score mean reversion opportunities using multiple indicators."""
 
-    symbol = config.get("symbol") if config else ""
+    config = config or {}
+    symbol = config.get("symbol", "")
     if len(df) < 50:
         logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none"
 
-    params = config or {}
-    lookback_cfg = int(params.get("indicator_lookback", 14))
-    rsi_overbought_pct = float(params.get("rsi_overbought_pct", 70))
-    rsi_oversold_pct = float(params.get("rsi_oversold_pct", 30))
-    adx_threshold = float(params.get("adx_threshold", 25))
-    sl_mult = float(params.get("sl_mult", 1.5))
-    tp_mult = float(params.get("tp_mult", 2.0))
-    ml_enabled = bool(params.get("ml_enabled", True))
+    try:
+        lookback_cfg = int(config.get("indicator_lookback", 14))
+    except (TypeError, ValueError):
+        lookback_cfg = 14
+    try:
+        rsi_overbought_pct = float(config.get("rsi_overbought_pct", 70))
+    except (TypeError, ValueError):
+        rsi_overbought_pct = 70.0
+    try:
+        rsi_oversold_pct = float(config.get("rsi_oversold_pct", 30))
+    except (TypeError, ValueError):
+        rsi_oversold_pct = 30.0
+    try:
+        adx_threshold = float(config.get("adx_threshold", 25))
+    except (TypeError, ValueError):
+        adx_threshold = 25.0
+    try:
+        sl_mult = float(config.get("sl_mult", 1.5))
+    except (TypeError, ValueError):
+        sl_mult = 1.5
+    try:
+        tp_mult = float(config.get("tp_mult", 2.0))
+    except (TypeError, ValueError):
+        tp_mult = 2.0
+    ml_enabled = bool(config.get("ml_enabled", True))
 
     lookback = 14
     recent = df.iloc[-(lookback + 1) :]
@@ -198,6 +216,24 @@ async def generate_signal(
 
     if config is None or config.get("atr_normalization", True):
         score = normalize_score_by_volatility(df, score)
+
+    if ml_enabled:
+        ml_score = None
+        if MODEL is not None:
+            try:  # pragma: no cover - best effort
+                ml_score = MODEL.predict(df)
+            except Exception:
+                ml_score = None
+        if ml_score is None:
+            try:  # pragma: no cover - optional dependency
+                import importlib
+
+                ml = importlib.import_module("crypto_bot.ml_signal_model")
+                ml_score = ml.predict_signal(df)
+            except Exception:
+                ml_score = None
+        if ml_score is not None:
+            score = (score + ml_score) / 2
 
     score = float(max(0.0, min(score, 1.0)))
     logger.info("Signal for %s: %s, %s", symbol, score, direction)

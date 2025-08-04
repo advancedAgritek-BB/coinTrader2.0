@@ -1,7 +1,10 @@
+"""Async client for the LunarCrush API."""
+
 from __future__ import annotations
 
 import os
-import requests
+
+import aiohttp
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
@@ -14,18 +17,31 @@ class LunarCrushClient:
 
     BASE_URL = "https://api.lunarcrush.com/v2"
 
-    def __init__(self, api_key: str | None = None, session: requests.Session | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        session: aiohttp.ClientSession | None = None,
+    ) -> None:
         self.api_key = api_key or os.getenv("LUNARCRUSH_API_KEY")
-        self.session = session or requests.Session()
+        self.session = session
 
-    def get_sentiment(self, symbol: str) -> float:
+    async def get_sentiment(self, symbol: str) -> float:
         """Return sentiment score for ``symbol`` normalised to 0-100."""
         params = {"data": "assets", "symbol": symbol}
         if self.api_key:
             params["key"] = self.api_key
-        resp = self.session.get(self.BASE_URL, params=params, timeout=5)
-        resp.raise_for_status()
-        data = resp.json()
+
+        if self.session is None:
+            async with aiohttp.ClientSession() as session:
+                return await self._fetch(session, params)
+        return await self._fetch(self.session, params)
+
+    async def _fetch(
+        self, session: aiohttp.ClientSession, params: dict[str, str]
+    ) -> float:
+        async with session.get(self.BASE_URL, params=params, timeout=5) as resp:
+            resp.raise_for_status()
+            data = await resp.json()
         value = 0.0
         try:
             value = float(data.get("data", [{}])[0].get("sentiment", 0.0))

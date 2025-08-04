@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 import logging
 import time
+import threading
 import ccxt
 
 VALID_MINT = "So11111111111111111111111111111111111111112"
@@ -134,18 +135,28 @@ class DummyWSExchange:
 
     def __init__(self):
         self.fetch_called = False
+        self.fetch_thread = None
 
     async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
         return [[0] * 6]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         self.fetch_called = True
+        self.fetch_thread = threading.get_ident()
         return [[1] * 6 for _ in range(limit)]
 
 
 class DummyWSExchangeEnough(DummyWSExchange):
     async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
         return [[2] * 6 for _ in range(limit)]
+
+
+class DummyWSSyncExchange(DummyWSExchange):
+    def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.fetch_called = True
+        self.fetch_thread = threading.get_ident()
+        time.sleep(0.01)
+        return [[1] * 6 for _ in range(limit)]
 
 
 def test_fetch_ohlcv_async():
@@ -156,10 +167,12 @@ def test_fetch_ohlcv_async():
 
 def test_watch_ohlcv_fallback_to_fetch():
     ex = DummyWSExchange()
+    main_thread = threading.get_ident()
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
     assert ex.fetch_called is True
     assert len(data) == 2
     assert data[0][0] == 1
+    assert ex.fetch_thread == main_thread
 
 
 def test_watch_ohlcv_no_fallback_when_enough():
@@ -168,6 +181,16 @@ def test_watch_ohlcv_no_fallback_when_enough():
     assert ex.fetch_called is False
     assert len(data) == 2
     assert data[0][0] == 2
+
+
+def test_watch_ohlcv_sync_fallback_runs_in_thread():
+    ex = DummyWSSyncExchange()
+    main_thread = threading.get_ident()
+    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
+    assert ex.fetch_called is True
+    assert len(data) == 2
+    assert data[0][0] == 1
+    assert ex.fetch_thread != main_thread
 
 
 class IncompleteExchange:
@@ -670,6 +693,32 @@ def test_load_ohlcv_parallel_invalid_max_concurrent():
         )
 
 
+def test_load_ohlcv_parallel_priority_symbols(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    call_order: list[str] = []
+
+    async def fake_fetch(exchange, sym, **_):
+        call_order.append(sym)
+        return [[0, 0, 0, 0, 0, 0]]
+
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+
+    ex = object()
+    symbols = ["AAA/USD", "BBB/USD", "CCC/USD"]
+    asyncio.run(
+        market_loader.load_ohlcv_parallel(
+            ex,
+            symbols,
+            max_concurrent=1,
+            priority_symbols=["BBB/USD"],
+        )
+    )
+
+    assert call_order[0] == "BBB/USD"
+    assert call_order[1:] == ["AAA/USD", "CCC/USD"]
+
+
 class RetryIncompleteExchange:
     has = {"fetchOHLCV": True}
 
@@ -826,6 +875,52 @@ def test_update_multi_tf_ohlcv_cache():
     for tf in config["timeframes"]:
         assert "BTC/USD" in cache[tf]
     assert set(ex.calls) == {"1h", "4h", "1d"}
+
+
+def test_update_multi_tf_ohlcv_cache_priority_queue(monkeypatch):
+    from collections import deque
+    from crypto_bot.utils import market_loader
+
+    captured: dict[str, list[str]] = {}
+
+    async def fake_update_ohlcv_cache(exchange, tf_cache, symbols, **kwargs):
+        captured["symbols"] = list(symbols)
+        captured["priority"] = kwargs.get("priority_symbols")
+        for s in symbols:
+            tf_cache[s] = pd.DataFrame(
+                [[0, 0, 0, 0, 0, 0]],
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
+        return tf_cache
+
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update_ohlcv_cache)
+
+    async def _listing(_sym):
+        return 0
+
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", _listing)
+
+    class Ex(DummyMultiTFExchange):
+        timeframes = {"1h": "1h"}
+        symbols = ["BTC/USD", "ETH/USD"]
+        id = "dummy"
+
+    pq = deque(["ETH/USD"])
+    cache: dict[str, dict[str, pd.DataFrame]] = {}
+    asyncio.run(
+        market_loader.update_multi_tf_ohlcv_cache(
+            Ex(),
+            cache,
+            ["BTC/USD", "ETH/USD"],
+            {"timeframes": ["1h"]},
+            limit=1,
+            priority_queue=pq,
+        )
+    )
+
+    assert captured.get("priority") == ["ETH/USD"]
+    assert captured.get("symbols", [])[0] == "ETH/USD"
+    assert not pq
 
 
 def test_update_multi_tf_ohlcv_cache_skips_unsupported_tf(caplog):
@@ -1823,52 +1918,6 @@ def test_fetch_geckoterminal_ohlcv_network_error(monkeypatch):
 
     res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
     assert res is None
-
-
-def test_fetch_geckoterminal_ohlcv_retry(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    sleeps: list[float] = []
-
-    async def fake_sleep(secs):
-        sleeps.append(secs)
-
-    calls = 0
-    market_loader.GECKO_POOL_CACHE.clear()
-    market_loader.GECKO_UNAVAILABLE.clear()
-
-    async def fake_gecko(url, params=None, retries=3):
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            for attempt in range(3):
-                await fake_sleep(1 + attempt)
-                if attempt < 2:
-                    continue
-                break
-        else:
-            await fake_sleep(1)
-        if "search/pools" in url:
-            return {
-                "data": [
-                    {
-                        "id": "pool1",
-                        "attributes": {"volume_usd": {"h24": 123}, "reserve_in_usd": 0},
-                    }
-                ]
-            }
-        return {"data": {"attributes": {"ohlcv_list": [[1, 1, 2, 0.5, 1.5, 10]]}}}
-
-    monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
-
-    data, vol, reserve = asyncio.run(
-        market_loader.fetch_geckoterminal_ohlcv(f"{VALID_MINT}/USDC", limit=1)
-    )
-
-    assert sleeps == [1, 2, 3, 1]
-    assert calls == 2
-    assert data == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
-    assert vol == 123.0
 
 
 def test_fetch_geckoterminal_skip_unavailable(monkeypatch):

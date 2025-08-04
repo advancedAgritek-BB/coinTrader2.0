@@ -40,23 +40,53 @@ logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
     """Trend following signal with ADX, volume and optional Donchian filters."""
-    symbol = config.get("symbol") if config else ""
+    config = config or {}
+    symbol = config.get("symbol", "")
     if df.empty or len(df) < 50:
         logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none"
 
     df = df.copy()
-    params = config or {}
-    lookback_cfg = int(params.get("indicator_lookback", 250))
-    rsi_overbought_pct = float(params.get("rsi_overbought_pct", 90))
-    rsi_oversold_pct = float(params.get("rsi_oversold_pct", 10))
-    fast_window = int(params.get("trend_ema_fast", 3))
-    slow_window = int(params.get("trend_ema_slow", 10))
-    atr_period = int(params.get("atr_period", 14))
-    k = float(params.get("k", 1.0))
-    volume_window = int(params.get("volume_window", 20))
-    volume_mult = float(params.get("volume_mult", 1.0))
-    adx_threshold = float(params.get("adx_threshold", 25))
+    try:
+        lookback_cfg = int(config.get("indicator_lookback", 250))
+    except (TypeError, ValueError):
+        lookback_cfg = 250
+    try:
+        rsi_overbought_pct = float(config.get("rsi_overbought_pct", 90))
+    except (TypeError, ValueError):
+        rsi_overbought_pct = 90.0
+    try:
+        rsi_oversold_pct = float(config.get("rsi_oversold_pct", 10))
+    except (TypeError, ValueError):
+        rsi_oversold_pct = 10.0
+    try:
+        fast_window = int(config.get("trend_ema_fast", 3))
+    except (TypeError, ValueError):
+        fast_window = 3
+    try:
+        slow_window = int(config.get("trend_ema_slow", 10))
+    except (TypeError, ValueError):
+        slow_window = 10
+    try:
+        atr_period = int(config.get("atr_period", 14))
+    except (TypeError, ValueError):
+        atr_period = 14
+    try:
+        k = float(config.get("k", 1.0))
+    except (TypeError, ValueError):
+        k = 1.0
+    try:
+        volume_window = int(config.get("volume_window", 20))
+    except (TypeError, ValueError):
+        volume_window = 20
+    try:
+        volume_mult = float(config.get("volume_mult", 1.0))
+    except (TypeError, ValueError):
+        volume_mult = 1.0
+    try:
+        adx_threshold = float(config.get("adx_threshold", 25))
+    except (TypeError, ValueError):
+        adx_threshold = 25.0
 
     df["ema_fast"] = ta.trend.ema_indicator(df["close"], window=fast_window)
     df["ema_slow"] = ta.trend.ema_indicator(df["close"], window=slow_window)
@@ -90,6 +120,11 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     df["adx"] = cache_series("adx_trend", df, df["adx"], lookback)
 
     latest = df.iloc[-1]
+    if (
+        pd.isna(latest["ema_fast"]) or pd.isna(latest["ema_slow"]) or pd.isna(latest["rsi"])
+    ):
+        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        return 0.0, "none"
     score = 0.0
     direction = "none"
 
@@ -150,8 +185,11 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
         and latest["volume"] > latest["volume_ma"]
     )
 
-    if params.get("donchian_confirmation", False):
-        window = params.get("donchian_window", 20)
+    if config.get("donchian_confirmation", False):
+        try:
+            window = int(config.get("donchian_window", 20))
+        except (TypeError, ValueError):
+            window = 20
         upper = df["high"].rolling(window=window).max().iloc[-1]
         lower = df["low"].rolling(window=window).min().iloc[-1]
         long_cond = long_cond and latest["close"] >= upper
@@ -194,7 +232,10 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     if config:
         torch_cfg = config.get("torch_signal_model", {})
         if torch_cfg.get("enabled") and score > 0:
-            weight = float(torch_cfg.get("weight", 0.7))
+            try:
+                weight = float(torch_cfg.get("weight", 0.7))
+            except (TypeError, ValueError):
+                weight = 0.7
             try:  # pragma: no cover - best effort
                 from crypto_bot.torch_signal_model import predict_signal as _pred
                 ml_score = _pred(df)
