@@ -108,10 +108,6 @@ async def generate_signal(
     atr = atr_full.iloc[-(lookback + 1) :]
     adx = adx_full.iloc[-(lookback + 1) :]
 
-    adx = ta.trend.ADXIndicator(
-        df["high"], df["low"], df["close"], window=14
-    ).adx()
-
     bb_z = cache_series("bb_z", df, bb_z, lookback)
     bb_width = cache_series("bb_width", df, bb_width, lookback)
     median_bw_20 = cache_series("median_bw_20", df, median_bw_20, lookback)
@@ -211,62 +207,28 @@ async def generate_signal(
     else:
         return 0.0, "none"
 
-    if ml_enabled and MODEL is not None:
+    if ml_enabled:
         if df.isna().any().any():
             return score, direction
-    if ml_enabled:
-        if MODEL is not None:
-            try:  # pragma: no cover - best effort
-                ml_score = MODEL.predict(df)
-                score = (score + ml_score) / 2
-            except Exception:
-                pass
-        else:  # pragma: no cover - fallback
-            try:
-                import importlib
 
-                ml = importlib.import_module("crypto_bot.ml_signal_model")
-                ml_score = ml.predict_signal(df)
-                score = (score + ml_score) / 2
-            except Exception:
-                pass
-        else:
-            try:  # pragma: no cover - optional dependency
-                from crypto_bot.ml_signal_model import predict_signal
-                ml_score = predict_signal(df)
-                score = (score + ml_score) / 2
-            except Exception:
-                pass
-        try:  # pragma: no cover - best effort
-            if MODEL is not None:
-                ml_score = await asyncio.to_thread(MODEL.predict, df)
-            else:
-                ml_mod = importlib.import_module("crypto_bot.ml_signal_model")
-                ml_score = ml_mod.predict_signal(df)
-            score = (score + ml_score) / 2
-        except Exception:
-            pass
-
-    if config is None or config.get("atr_normalization", True):
-        score = normalize_score_by_volatility(df, score)
-
-    if ml_enabled:
         ml_score = None
         if MODEL is not None:
             try:  # pragma: no cover - best effort
-                ml_score = MODEL.predict(df)
+                ml_score = await asyncio.to_thread(MODEL.predict, df)
             except Exception:
                 ml_score = None
-        if ml_score is None:
-            try:  # pragma: no cover - optional dependency
-                import importlib
+        else:  # pragma: no cover - fallback
+            try:
+                ml_mod = importlib.import_module("crypto_bot.ml_signal_model")
+                ml_score = ml_mod.predict_signal(df)
+            except Exception:
+                return score, direction
 
-                ml = importlib.import_module("crypto_bot.ml_signal_model")
-                ml_score = ml.predict_signal(df)
-            except Exception:
-                ml_score = None
         if ml_score is not None:
             score = (score + ml_score) / 2
+
+    if config is None or config.get("atr_normalization", True):
+        score = normalize_score_by_volatility(df, score)
 
     score = float(max(0.0, min(score, 1.0)))
     logger.info("Signal for %s: %s, %s", symbol, score, direction)
