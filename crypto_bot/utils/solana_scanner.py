@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Global min volume filter updated by ``get_solana_new_tokens``
 _MIN_VOLUME_USD = 0.0
 
-RAYDIUM_URL = "https://api.raydium.io/pairs"
+RAYDIUM_URL = "https://api.raydium.io/v2/pairs/new"
 PUMP_FUN_URL = "https://client-api.prod.pump.fun/v1/launches"
 
 
@@ -148,11 +148,40 @@ async def _extract_tokens(data: list | dict) -> List[str]:
 
 async def fetch_new_raydium_pools(api_key: str, limit: int) -> List[str]:
     """Return new Raydium pool token mints."""
-    url = f"{RAYDIUM_URL}?apiKey={api_key}&limit={limit}"
+    url = f"{RAYDIUM_URL}?limit={limit}"
     data = await _fetch_json(url)
     if not data:
         return []
-    tokens = await _extract_tokens(data)
+
+    items = data.get("data") if isinstance(data, dict) else data
+    if isinstance(items, dict):
+        items = list(items.values())
+    if not isinstance(items, list):
+        return []
+
+    filtered: list[dict] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        mint = item.get("base", {}).get("address")
+        if not isinstance(mint, str):
+            continue
+        liquidity = item.get("liquidity") or 0.0
+        try:
+            liquidity = float(liquidity)
+        except Exception:
+            liquidity = 0.0
+        creation = item.get("creation_timestamp") or 0.0
+        try:
+            creation = float(creation)
+        except Exception:
+            creation = 0.0
+        if not item.get("liquidity_locked") or liquidity < _MIN_VOLUME_USD or creation <= 0:
+            continue
+        vol = item.get("volume24h") or 0.0
+        filtered.append({"tokenMint": mint, "volumeUsd": vol})
+
+    tokens = await _extract_tokens({"data": filtered})
     return tokens[:limit]
 
 

@@ -127,7 +127,12 @@ async def get_solana_liquid_pairs(min_volume: float, quote: str = "USDC") -> lis
             continue
         name = item.get("name")
         if not isinstance(name, str):
-            continue
+            base_sym = item.get("base", {}).get("symbol")
+            quote_sym = item.get("quote", {}).get("symbol")
+            if isinstance(base_sym, str) and isinstance(quote_sym, str):
+                name = f"{base_sym}/{quote_sym}"
+            else:
+                continue
         base, _, q = name.partition("/")
         if q.upper() != quote or not base:
             continue
@@ -139,6 +144,7 @@ async def get_solana_liquid_pairs(min_volume: float, quote: str = "USDC") -> lis
             or item.get("volumeUsd")
             or item.get("volume_usd")
             or item.get("volume24hQuote")
+            or item.get("volume24h")
             or 0.0
         )
         try:
