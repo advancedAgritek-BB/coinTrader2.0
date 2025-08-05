@@ -1143,7 +1143,11 @@ async def update_caches(ctx: BotContext) -> None:
 
         async def subscribe(sym: str) -> None:
             try:
-                await ctx.exchange.watch_ohlcv(sym, timeframe, timeout=WS_OHLCV_TIMEOUT)
+                params = inspect.signature(ctx.exchange.watch_ohlcv).parameters
+                kwargs = {"symbol": sym, "timeframe": timeframe}
+                if "timeout" in params:
+                    kwargs["timeout"] = WS_OHLCV_TIMEOUT
+                await ctx.exchange.watch_ohlcv(**kwargs)
             except Exception as exc:  # pragma: no cover - network
                 logger.warning("WS subscribe failed for %s: %s", sym, exc)
 
