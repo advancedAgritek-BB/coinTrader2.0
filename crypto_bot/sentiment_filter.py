@@ -52,6 +52,8 @@ def fetch_fng_index() -> int:
     return 50
 
 
+async def _get_lunar_sentiment(symbol: str) -> int:
+    """Return LunarCrush sentiment for ``symbol`` handling caching."""
 async def _get_lunarcrush_sentiment(symbol: str) -> int:
     """Internal helper to retrieve LunarCrush sentiment for ``symbol``."""
     key = f"lunar:{symbol}"
@@ -60,6 +62,10 @@ async def _get_lunarcrush_sentiment(symbol: str) -> int:
 
     try:
         result = lunar_client.get_sentiment(symbol)
+        value = int(await result) if asyncio.iscoroutine(result) else int(result)
+    except Exception as exc:  # pragma: no cover - network failure
+        logger.error("Failed to fetch LunarCrush sentiment: %s", exc)
+        value = 50
         if asyncio.iscoroutine(result):
             value = int(await result)
         else:
@@ -92,7 +98,28 @@ def fetch_lunarcrush_sentiment(symbol: str) -> int:
             raise error[0]
         return result[0]
 
+    _CACHE[key] = value
+    return value
 
+
+def fetch_lunarcrush_sentiment(symbol: str) -> int:
+    """Synchronously return LunarCrush sentiment score for ``symbol``."""
+    coro = _get_lunar_sentiment(symbol)
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    else:
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+
+async def fetch_lunarcrush_sentiment_async(symbol: str) -> int:
+    """Asynchronously return LunarCrush sentiment score for ``symbol``."""
+    return await _get_lunar_sentiment(symbol)
 async def fetch_lunarcrush_sentiment_async(symbol: str) -> int:
     """Asynchronously return LunarCrush sentiment score for ``symbol``."""
     return await _get_lunarcrush_sentiment(symbol)
@@ -100,6 +127,11 @@ async def fetch_lunarcrush_sentiment_async(symbol: str) -> int:
 
 def fetch_twitter_sentiment(
     query: str = "bitcoin", symbol: Optional[str] = None
+) -> int:
+    """Return sentiment score using LunarCrush.
+
+    ``symbol`` takes precedence over ``query``. For asynchronous usage see
+    :func:`fetch_twitter_sentiment_async`.
 ) -> int | Awaitable[int]:
     """Return sentiment score using LunarCrush.
 
@@ -121,22 +153,6 @@ def fetch_twitter_sentiment(
     target = symbol or query
     if not target:
         return 50
-
-    if symbol is not None:
-        if not os.getenv("LUNARCRUSH_API_KEY"):
-            logger.error(
-                "LUNARCRUSH_API_KEY missing; returning neutral sentiment"
-            )
-
-            async def _neutral() -> int:
-                return 50
-
-            return _neutral()
-
-        async def _fetch() -> int:
-            return await fetch_lunarcrush_sentiment_async(target)
-
-        return _fetch()
 
     if not os.getenv("LUNARCRUSH_API_KEY"):
         logger.error("LUNARCRUSH_API_KEY missing; returning neutral sentiment")
