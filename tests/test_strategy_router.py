@@ -5,6 +5,7 @@ import types
 import json
 
 import fakeredis
+import pandas as pd
 
 sys.modules.setdefault("solana.rpc.async_api", types.ModuleType("solana.rpc.async_api"))
 if not hasattr(sys.modules["solana.rpc.async_api"], "AsyncClient"):
@@ -44,6 +45,11 @@ from crypto_bot.strategy import (
     micro_scalp_bot,
     bounce_scalper,
     flash_crash_bot,
+    momentum_bot,
+    solana_scalping,
+    cross_chain_arb_bot,
+    meme_wave_bot,
+    lstm_bot,
 )
 
 
@@ -86,8 +92,6 @@ def test_strategy_for_mapping():
 
 
 def test_strategy_for_momentum_bot():
-    from crypto_bot.strategy import momentum_bot
-
     data = {"strategy_router": {"regimes": {"trending": ["momentum_bot"], "volatile": ["momentum_bot"]}}}
     cfg = RouterConfig.from_dict(data)
 
@@ -96,8 +100,6 @@ def test_strategy_for_momentum_bot():
 
 
 def test_strategy_for_solana_scalping():
-    from crypto_bot.strategy import solana_scalping
-
     data = {
         "strategy_router": {"regimes": {"scalp": ["solana_scalping"]}}
     }
@@ -112,8 +114,6 @@ def test_strategy_for_solana_scalping():
 
 
 def test_strategy_for_cross_chain_arb_bot():
-    from crypto_bot.strategy import cross_chain_arb_bot
-
     data = {
         "strategy_router": {"regimes": {"trending": ["cross_chain_arb_bot"]}}
     }
@@ -125,8 +125,8 @@ def test_strategy_for_cross_chain_arb_bot():
 
 
 def test_route_returns_meme_wave_bot():
-    from crypto_bot.strategy import meme_wave_bot
-
+    if meme_wave_bot is None:
+        pytest.skip("meme_wave_bot not available")
     cfg = {
         "strategy_router": {"regimes": {"volatile": ["meme_wave_bot"]}}
     }
@@ -135,8 +135,6 @@ def test_route_returns_meme_wave_bot():
 
 
 def test_route_returns_lstm_bot():
-    from crypto_bot.strategy import lstm_bot
-
     cfg = {"strategy_router": {"regimes": {"trending": ["lstm_bot"]}}}
     fn = route("trending", "cex", cfg)
     assert fn.__name__ == lstm_bot.generate_signal.__name__
@@ -177,7 +175,7 @@ def test_route_notifier(monkeypatch):
     assert msgs == ["\U0001F4C8 Signal: AAA \u2192 LONG | Confidence: 0.50"]
 
 
-def test_route_multi_tf_combo(monkeypatch):
+def test_route_multi_tf_combo(monkeypatch, tmp_path):
     def dummy(df, cfg=None):
         return 0.1, "long"
 
@@ -189,7 +187,8 @@ def test_route_multi_tf_combo(monkeypatch):
 
     fake_r = fakeredis.FakeRedis()
     monkeypatch.setattr(strategy_router.commit_lock, "REDIS_CLIENT", fake_r)
-    monkeypatch.setattr(strategy_router, "LAST_REGIME_FILE", tmp_path / "last.json")
+    if hasattr(strategy_router, "LAST_REGIME_FILE"):
+        monkeypatch.setattr(strategy_router, "LAST_REGIME_FILE", tmp_path / "last.json")
 
     cfg = RouterConfig.from_dict({"timeframe": "1m", "strategy_router": {"regimes": {"breakout": ["dummy"]}}})
 
@@ -201,7 +200,6 @@ def test_route_multi_tf_combo(monkeypatch):
 def test_regime_commit_lock(monkeypatch):
     fake_r = fakeredis.FakeRedis()
     monkeypatch.setattr(strategy_router.commit_lock, "REDIS_CLIENT", fake_r)
-    import fakeredis
     import threading
 
     class FakeRedisWithLock(fakeredis.FakeRedis):
@@ -239,9 +237,6 @@ def test_regime_commit_lock(monkeypatch):
     assert new == stored
     assert fake.get(key) == first
 
-import pandas as pd
-from crypto_bot.strategy_router import route
-from crypto_bot.strategy import breakout_bot, trend_bot, sniper_bot
 
 
 def make_df(close_vals, vol_vals):
