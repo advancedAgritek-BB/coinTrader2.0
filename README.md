@@ -174,6 +174,17 @@ needed.
    Save the file and type `reload` in the console or send `/reload` via Telegram
    to apply the changes immediately.
 
+## Examples
+
+`examples/wallet_demo.py` demonstrates the paper trading wallet. It opens a
+trade, closes it and prints the final balance and realized PnL.
+
+Run it with:
+
+```bash
+python examples/wallet_demo.py
+```
+
 Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials and Helius API key. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
 
 ## Configuration Files
