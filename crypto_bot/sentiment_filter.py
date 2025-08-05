@@ -9,6 +9,7 @@ import requests
 from cachetools import TTLCache
 
 from crypto_bot.lunarcrush_client import LunarCrushClient
+from crypto_bot.utils.env import env_or_prompt
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 logger = setup_logger(__name__, LOG_DIR / "sentiment.log")
@@ -56,6 +57,14 @@ async def _get_lunarcrush_sentiment(symbol: str) -> int:
     if key in _CACHE:
         return _CACHE[key]
 
+    api_key = env_or_prompt("LUNARCRUSH_API_KEY", "Enter LunarCrush API key: ")
+    if not api_key:
+        logger.error("LUNARCRUSH_API_KEY missing; returning neutral sentiment")
+        value = 50
+        _CACHE[key] = value
+        return value
+
+    lunar_client.api_key = api_key
     try:
         result = lunar_client.get_sentiment(symbol)
         value = int(await result) if asyncio.iscoroutine(result) else int(result)
@@ -115,10 +124,6 @@ def fetch_twitter_sentiment(
     if not target:
         return 50
 
-    if not os.getenv("LUNARCRUSH_API_KEY"):
-        logger.error("LUNARCRUSH_API_KEY missing; returning neutral sentiment")
-        return 50
-
     return fetch_lunarcrush_sentiment(target)
 
 
@@ -136,10 +141,6 @@ async def fetch_twitter_sentiment_async(
 
     target = symbol or query
     if not target:
-        return 50
-
-    if not os.getenv("LUNARCRUSH_API_KEY"):
-        logger.error("LUNARCRUSH_API_KEY missing; returning neutral sentiment")
         return 50
 
     return await fetch_lunarcrush_sentiment_async(target)

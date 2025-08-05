@@ -24,6 +24,7 @@ import crypto_bot.sentiment_filter as sf
 async def test_too_bearish(monkeypatch):
     sf._CACHE.clear()
     monkeypatch.setenv("MOCK_FNG_VALUE", "50")
+    monkeypatch.setenv("LUNARCRUSH_API_KEY", "key")
     monkeypatch.setattr(sf.lunar_client, "get_sentiment", lambda s: 30)
     assert await sf.too_bearish(20, 40, symbol="BTC") is True
     monkeypatch.setenv("MOCK_TWITTER_SENTIMENT", "90")
@@ -39,19 +40,20 @@ async def test_too_bearish(monkeypatch):
 def test_too_bearish_sync(monkeypatch):
     sf._CACHE.clear()
     monkeypatch.setenv("MOCK_FNG_VALUE", "50")
+    monkeypatch.setenv("LUNARCRUSH_API_KEY", "key")
     async def fake_get_sentiment(symbol):
         return 30
     monkeypatch.setattr(
         "crypto_bot.sentiment_filter.lunar_client.get_sentiment", fake_get_sentiment
     )
     assert asyncio.run(sf.too_bearish(20, 40, symbol="BTC")) is True
-    assert await sf.too_bearish(20, 40, symbol="BTC") is True
 
 
 @pytest.mark.asyncio
 async def test_boost_factor(monkeypatch):
     sf._CACHE.clear()
     monkeypatch.setenv("MOCK_FNG_VALUE", "90")
+    monkeypatch.setenv("LUNARCRUSH_API_KEY", "key")
     monkeypatch.setattr(sf.lunar_client, "get_sentiment", lambda s: 80)
     assert await sf.boost_factor(70, 60, symbol="BTC") > 1.0
     monkeypatch.setenv("MOCK_TWITTER_SENTIMENT", "10")
@@ -67,11 +69,11 @@ async def test_boost_factor(monkeypatch):
 def test_boost_factor_sync(monkeypatch):
     sf._CACHE.clear()
     monkeypatch.setenv("MOCK_FNG_VALUE", "90")
+    monkeypatch.setenv("LUNARCRUSH_API_KEY", "key")
     async def fake_get_sentiment(symbol):
         return 80
     monkeypatch.setattr(sf.lunar_client, "get_sentiment", fake_get_sentiment)
     assert asyncio.run(sf.boost_factor(70, 60, symbol="BTC")) > 1.0
-    assert await sf.boost_factor(70, 60, symbol="BTC") > 1.0
 
 
 def test_fetch_twitter_sentiment_no_api_key(monkeypatch, caplog):
@@ -143,8 +145,9 @@ def test_fetch_lunarcrush_sentiment_cached(monkeypatch):
         calls["n"] += 1
         return 70
 
+    monkeypatch.setenv("LUNARCRUSH_API_KEY", "key")
     monkeypatch.setattr(sf.lunar_client, "get_sentiment", fake_get_sentiment)
-    assert await sf.fetch_lunarcrush_sentiment_async("BTC") == 70
-    assert await sf.fetch_lunarcrush_sentiment_async("BTC") == 70
+    assert asyncio.run(sf.fetch_lunarcrush_sentiment_async("BTC")) == 70
+    assert asyncio.run(sf.fetch_lunarcrush_sentiment_async("BTC")) == 70
     assert calls["n"] == 1
 

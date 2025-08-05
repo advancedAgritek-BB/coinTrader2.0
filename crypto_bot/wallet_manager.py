@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils.env import env_or_prompt
 
 
 try:
@@ -60,11 +61,6 @@ def _sanitize_secret(secret: str) -> str:
     return secret
 
 
-def _env_or_prompt(name: str, prompt: str) -> str:
-    """Return environment variable value or prompt the user."""
-    return os.getenv(name) or input(prompt)
-
-
 def load_external_secrets(provider: str, path: str) -> Dict[str, str]:
     """Load secrets from an external provider."""
     try:
@@ -100,33 +96,33 @@ def prompt_user() -> dict:
     data["exchange"] = exchange
 
     if exchange == "coinbase":
-        data["coinbase_api_key"] = _env_or_prompt(
+        data["coinbase_api_key"] = env_or_prompt(
             "COINBASE_API_KEY", "Enter Coinbase API key: "
         )
-        data["coinbase_api_secret"] = _env_or_prompt(
+        data["coinbase_api_secret"] = env_or_prompt(
             "COINBASE_API_SECRET", "Enter Coinbase API secret: "
         )
-        data["coinbase_passphrase"] = _env_or_prompt(
+        data["coinbase_passphrase"] = env_or_prompt(
             "API_PASSPHRASE", "Enter Coinbase API passphrase: "
         )
         data["kraken_api_key"] = os.getenv("KRAKEN_API_KEY", "")
         data["kraken_api_secret"] = os.getenv("KRAKEN_API_SECRET", "")
     else:
-        data["kraken_api_key"] = _env_or_prompt(
+        data["kraken_api_key"] = env_or_prompt(
             "KRAKEN_API_KEY", "Enter Kraken API key: "
         )
-        data["kraken_api_secret"] = _env_or_prompt(
+        data["kraken_api_secret"] = env_or_prompt(
             "KRAKEN_API_SECRET", "Enter Kraken API secret: "
         )
         data["coinbase_api_key"] = os.getenv("COINBASE_API_KEY", "")
         data["coinbase_api_secret"] = os.getenv("COINBASE_API_SECRET", "")
         data["coinbase_passphrase"] = os.getenv("API_PASSPHRASE", "")
 
-    data["telegram_token"] = _env_or_prompt("TELEGRAM_TOKEN", "Enter Telegram bot token: ")
-    data["telegram_chat_id"] = _env_or_prompt("TELEGRAM_CHAT_ID", "Enter Telegram chat id: ")
-    data["wallet_address"] = _env_or_prompt("WALLET_ADDRESS", "Enter public wallet address: ")
-    data["helius_api_key"] = _env_or_prompt("HELIUS_KEY", "Enter Helius API key: ")
-    data["lunarcrush_api_key"] = _env_or_prompt(
+    data["telegram_token"] = env_or_prompt("TELEGRAM_TOKEN", "Enter Telegram bot token: ")
+    data["telegram_chat_id"] = env_or_prompt("TELEGRAM_CHAT_ID", "Enter Telegram chat id: ")
+    data["wallet_address"] = env_or_prompt("WALLET_ADDRESS", "Enter public wallet address: ")
+    data["helius_api_key"] = env_or_prompt("HELIUS_KEY", "Enter Helius API key: ")
+    data["lunarcrush_api_key"] = env_or_prompt(
         "LUNARCRUSH_API_KEY", "Enter LunarCrush API key: "
     )
 
