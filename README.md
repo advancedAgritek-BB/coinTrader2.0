@@ -1171,7 +1171,10 @@ WebSocket streaming is enabled by default when scanning. Set
 `use_websocket: false` to force REST polling instead. You can disable
 WebSocket just for ticker scanning by adding
 `exchange.options.ws_scan: false` to your configuration while leaving
-`use_websocket: true` for trading. When using the REST fallback the bot
+`use_websocket: true` for trading. If the WebSocket connection closes with
+code `1006` the bot will automatically disable `ws_scan` and fall back to
+HTTP. To re-enable WebSocket scanning set `exchange.options.ws_scan: true`
+again in your configuration. When using the REST fallback the bot
 requests tickers in batches controlled by
 `symbol_filter.kraken_batch_size` to avoid Kraken's occasional `520`
 errors. The public `/Ticker` calls also obey

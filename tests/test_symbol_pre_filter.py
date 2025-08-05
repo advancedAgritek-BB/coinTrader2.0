@@ -1442,6 +1442,40 @@ def test_ws_failures_disable_scan(monkeypatch, caplog):
     assert sleeps == [1]
 
 
+class WS1006Exchange(DummyExchange):
+    def __init__(self):
+        self.has = {"watchTickers": True, "fetchTickers": True}
+        self.watch_calls = 0
+        self.fetch_calls = 0
+        self.options = {"ws_scan": True}
+
+    async def watch_tickers(self, symbols):
+        self.watch_calls += 1
+        err = getattr(ccxt, "NetworkError", Exception)("closed")
+        err.code = 1006
+        raise err
+
+    async def fetch_tickers(self, symbols):
+        self.fetch_calls += 1
+        data = (await fake_fetch(None))["result"]
+        return {"ETH/USD": data["XETHZUSD"]}
+
+
+def test_ws_1006_disables_ws_scan(monkeypatch):
+    monkeypatch.setattr(sp, "_fetch_ticker_async", lambda _p, **_k: {"result": {}})
+
+    sp.ticker_cache.clear()
+    sp.ticker_ts.clear()
+    ex = WS1006Exchange()
+
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], CONFIG))
+
+    assert ex.watch_calls == 1
+    assert ex.fetch_calls == 1
+    assert ex.options.get("ws_failures") == 1
+    assert ex.options.get("ws_scan") is False
+
+
 class MarketIDExchange:
     has = {}
     markets_by_id = {"XXBTZUSD": {"symbol": "BTC/USDT"}}

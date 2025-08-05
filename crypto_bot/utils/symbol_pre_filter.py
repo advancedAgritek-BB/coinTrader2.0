@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Iterable, List, Dict
 
 import ccxt
+try:  # pragma: no cover - import fallback
+    from ccxt.base.errors import NetworkError as CCXTNetworkError
+except Exception:  # pragma: no cover - import fallback
+    CCXTNetworkError = getattr(ccxt, "NetworkError", Exception)
 
 import aiohttp
 import numpy as np
@@ -22,6 +26,7 @@ from tenacity import (
     wait_exponential,
     before_log,
     before_sleep_log,
+    retry_if_exception,
 )
 import logging
 
@@ -129,12 +134,21 @@ liq_cache = TTLCache(maxsize=2000, ttl=900)
 
 
 # tenacity wrapped helper for WebSocket ticker requests
+def _ws_retry_filter(exc: Exception) -> bool:
+    """Return ``True`` to retry unless a WebSocket closed with code 1006."""
+
+    return not (
+        isinstance(exc, CCXTNetworkError) and getattr(exc, "code", None) == 1006
+    )
+
+
 @retry(
     wait=wait_exponential(multiplier=1, min=1, max=30),
     stop=stop_after_attempt(3),
     reraise=True,
     before=before_log(logger, logging.DEBUG),
     before_sleep=before_sleep_log(logger, logging.WARNING),
+    retry=retry_if_exception(_ws_retry_filter),
 )
 async def _watch_tickers_with_retry(exchange, symbols):
     """Call ``exchange.watch_tickers`` with retries."""
@@ -423,24 +437,36 @@ async def _refresh_tickers(
                 if opts is not None:
                     opts["ws_failures"] = 0
             except Exception as exc:  # pragma: no cover - network
-                logger.warning(
-                    "watch_tickers failed: %s \u2013 falling back to HTTP. Consider setting exchange.options.ws_scan to False if this continues.",
-                    exc,
-                    exc_info=log_exc,
-                )
-                telemetry.inc("scan.api_errors")
-                opts = getattr(exchange, "options", None)
-                if opts is not None:
-                    failures = opts.get("ws_failures", 0) + 1
-                    opts["ws_failures"] = failures
-                    if failures >= ws_limit:
-                        if opts.get("ws_scan", True):
-                            logger.warning(
-                                "Disabling WebSocket scanning after %d errors",
-                                failures,
-                            )
+                if isinstance(exc, CCXTNetworkError) and getattr(exc, "code", None) == 1006:
+                    logger.warning(
+                        "WebSocket closed (1006) \u2013 falling back to HTTP",
+                    )
+                    telemetry.inc("scan.api_errors")
+                    opts = getattr(exchange, "options", None)
+                    if opts is not None:
+                        failures = opts.get("ws_failures", 0) + 1
+                        opts["ws_failures"] = failures
                         opts["ws_scan"] = False
-                telemetry.inc("scan.ws_errors")
+                    telemetry.inc("scan.ws_errors")
+                else:
+                    logger.warning(
+                        "watch_tickers failed: %s \u2013 falling back to HTTP. Consider setting exchange.options.ws_scan to False if this continues.",
+                        exc,
+                        exc_info=log_exc,
+                    )
+                    telemetry.inc("scan.api_errors")
+                    opts = getattr(exchange, "options", None)
+                    if opts is not None:
+                        failures = opts.get("ws_failures", 0) + 1
+                        opts["ws_failures"] = failures
+                        if failures >= ws_limit:
+                            if opts.get("ws_scan", True):
+                                logger.warning(
+                                    "Disabling WebSocket scanning after %d errors",
+                                    failures,
+                                )
+                            opts["ws_scan"] = False
+                    telemetry.inc("scan.ws_errors")
                 attempted_syms.clear()
                 try_ws = False
                 try_http = True
@@ -487,7 +513,7 @@ async def _refresh_tickers(
                         )
                         telemetry.inc("scan.api_errors")
                         return {}
-                    except (ccxt.ExchangeError, ccxt.NetworkError) as exc:  # pragma: no cover - network
+                    except (ccxt.ExchangeError, CCXTNetworkError) as exc:  # pragma: no cover - network
                         if getattr(exc, "http_status", None) in (520, 522) and attempt < 2:
                             await asyncio.sleep(2 ** attempt)
                             continue
@@ -534,11 +560,11 @@ async def _refresh_tickers(
                             return {}
                         except (
                             ccxt.ExchangeError,
-                            ccxt.NetworkError,
+                            CCXTNetworkError,
                         ) as exc:  # pragma: no cover - network
                             if getattr(exc, "http_status", None) in (520, 522) and attempt < 2:
                                 await asyncio.sleep(2**attempt)
-                        except (ccxt.ExchangeError, ccxt.NetworkError) as exc:  # pragma: no cover - network
+                        except (ccxt.ExchangeError, CCXTNetworkError) as exc:  # pragma: no cover - network
                             if getattr(exc, "http_status", None) in (520, 522) and attempt < attempts - 1:
                                 await asyncio.sleep(2 ** attempt)
                                 continue
