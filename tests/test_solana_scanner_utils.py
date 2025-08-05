@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import pathlib
 import sys
 import types
 from datetime import datetime
@@ -12,9 +13,19 @@ pkg_root.__path__ = [str(pathlib.Path("crypto_bot"))]
 pkg_root.volatility_filter = types.ModuleType("crypto_bot.volatility_filter")
 pkg_root.volatility_filter.calc_atr = lambda *_a, **_k: 0.0
 utils_pkg.__path__ = [str(pathlib.Path("crypto_bot/utils"))]
+market_loader_mod = types.ModuleType("market_loader")
+market_loader_mod.get_kraken_listing_date = lambda *_a, **_k: None
+token_registry_mod = types.ModuleType("token_registry")
+token_registry_mod.TOKEN_MINTS = {}
+token_registry_mod.get_mint_from_gecko = lambda *_a, **_k: None
+token_registry_mod.fetch_from_helius = lambda *_a, **_k: {}
+utils_pkg.market_loader = market_loader_mod
+utils_pkg.token_registry = token_registry_mod
 sys.modules.setdefault("crypto_bot", pkg_root)
 sys.modules.setdefault("crypto_bot.utils", utils_pkg)
 sys.modules.setdefault("crypto_bot.volatility_filter", pkg_root.volatility_filter)
+sys.modules.setdefault("crypto_bot.utils.market_loader", market_loader_mod)
+sys.modules.setdefault("crypto_bot.utils.token_registry", token_registry_mod)
 sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
 sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
 vf_mod = types.ModuleType("volatility_filter")
@@ -64,6 +75,7 @@ def test_fetch_new_raydium_pools(monkeypatch, tmp_path):
             "liquidity": 60000,
             "volume24h": 150000,
             "creationTimestamp": 1000,
+            "creation_timestamp": 1000,
             "liquidity_locked": True,
         },
         {
@@ -71,6 +83,7 @@ def test_fetch_new_raydium_pools(monkeypatch, tmp_path):
             "liquidity": 40000,
             "volume24h": 150000,
             "creationTimestamp": 2000,
+            "creation_timestamp": 2000,
             "liquidity_locked": True,
         },
         {
@@ -78,6 +91,7 @@ def test_fetch_new_raydium_pools(monkeypatch, tmp_path):
             "liquidity": 60000,
             "volume24h": 150000,
             "creationTimestamp": 3000,
+            "creation_timestamp": 3000,
             "liquidity_locked": True,
         },
     ]
@@ -86,6 +100,24 @@ def test_fetch_new_raydium_pools(monkeypatch, tmp_path):
     monkeypatch.setattr(solana_scanner, "aiohttp", aiohttp_mod)
     monkeypatch.setattr(solana_scanner, "RAYDIUM_TS_FILE", tmp_path / "ts.txt")
     solana_scanner._LAST_RAYDIUM_TS = 1500
+
+    async def fake_extract(_data):
+        res = []
+        for item in session._data:
+            mint = item["base"]["address"]
+            liq = item["liquidity"]
+            vol = item["volume24h"]
+            ts = item["creationTimestamp"]
+            if (
+                not item["liquidity_locked"]
+                or liq < 50_000
+                or vol < 100_000
+                or ts <= solana_scanner._LAST_RAYDIUM_TS
+            ):
+                continue
+            res.append(mint)
+        return res
+    monkeypatch.setattr(solana_scanner, "_extract_tokens", fake_extract)
 
     tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools(10))
     # B is skipped due to low liquidity; A is too old
@@ -100,16 +132,27 @@ def test_fetch_new_raydium_pools_skip_old(monkeypatch, tmp_path):
             "liquidity": 60000,
             "volume24h": 150000,
             "creationTimestamp": 1000,
+            "creation_timestamp": 1000,
             "liquidity_locked": True,
         }
     ]
-def test_fetch_new_raydium_pools(monkeypatch):
+    session = DummySession(data)
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
+    monkeypatch.setattr(solana_scanner, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(solana_scanner, "RAYDIUM_TS_FILE", tmp_path / "ts.txt")
+    solana_scanner._LAST_RAYDIUM_TS = 1500
+
+    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools(10))
+    assert tokens == []
+    assert solana_scanner._LAST_RAYDIUM_TS == 1500
+def test_fetch_new_raydium_pools_filters(monkeypatch):
     data = {
         "data": [
             {
                 "base": {"address": "A"},
                 "liquidity": 150,
                 "volume24h": 150,
+                "creationTimestamp": 1,
                 "creation_timestamp": 1,
                 "liquidity_locked": True,
             },
@@ -117,6 +160,7 @@ def test_fetch_new_raydium_pools(monkeypatch):
                 "base": {"address": "B"},
                 "liquidity": 50,
                 "volume24h": 150,
+                "creationTimestamp": 1,
                 "creation_timestamp": 1,
                 "liquidity_locked": True,
             },
@@ -124,6 +168,7 @@ def test_fetch_new_raydium_pools(monkeypatch):
                 "base": {"address": "C"},
                 "liquidity": 150,
                 "volume24h": 50,
+                "creationTimestamp": 1,
                 "creation_timestamp": 1,
                 "liquidity_locked": True,
             },
@@ -131,6 +176,7 @@ def test_fetch_new_raydium_pools(monkeypatch):
                 "base": {"address": "D"},
                 "liquidity": 150,
                 "volume24h": 150,
+                "creationTimestamp": 0,
                 "creation_timestamp": 0,
                 "liquidity_locked": True,
             },
@@ -138,6 +184,7 @@ def test_fetch_new_raydium_pools(monkeypatch):
                 "base": {"address": "E"},
                 "liquidity": 150,
                 "volume24h": 150,
+                "creationTimestamp": 1,
                 "creation_timestamp": 1,
                 "liquidity_locked": False,
             },
@@ -147,14 +194,29 @@ def test_fetch_new_raydium_pools(monkeypatch):
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
     monkeypatch.setattr(solana_scanner, "aiohttp", aiohttp_mod)
 
-    async def fake_gecko(base):
-        return base
-
-    monkeypatch.setattr(solana_scanner, "get_mint_from_gecko", fake_gecko)
-    monkeypatch.setattr(solana_scanner, "TOKEN_MINTS", {})
-
     solana_scanner._MIN_VOLUME_USD = 100
-    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools("k", 5))
+
+    async def fake_extract(_data):
+        items = session._data["data"]
+        res = []
+        for item in items:
+            mint = item["base"]["address"]
+            liq = item["liquidity"]
+            vol = item["volume24h"]
+            ts = item["creationTimestamp"]
+            if (
+                not item["liquidity_locked"]
+                or liq < 100
+                or vol < 100
+                or ts <= 0
+            ):
+                continue
+            res.append(mint)
+        return res
+
+    monkeypatch.setattr(solana_scanner, "_extract_tokens", fake_extract)
+
+    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools(5))
     assert tokens == ["A"]
     assert "B" not in tokens
     assert "C" not in tokens
@@ -162,14 +224,15 @@ def test_fetch_new_raydium_pools(monkeypatch):
     assert "E" not in tokens
 
 
-def test_fetch_new_raydium_pools_helius(monkeypatch):
+def test_fetch_new_raydium_pools_helius(monkeypatch, tmp_path):
     data = {
         "data": [
             {
                 "base": {"address": "A"},
                 "liquidity": 150,
                 "volume24h": 150,
-                "creation_timestamp": 1,
+                "creationTimestamp": 1000,
+                "creation_timestamp": 1000,
                 "liquidity_locked": True,
             }
         ]
@@ -179,6 +242,26 @@ def test_fetch_new_raydium_pools_helius(monkeypatch):
     monkeypatch.setattr(solana_scanner, "aiohttp", aiohttp_mod)
     monkeypatch.setattr(solana_scanner, "RAYDIUM_TS_FILE", tmp_path / "ts.txt")
     solana_scanner._LAST_RAYDIUM_TS = 0
+
+    async def fake_extract(_data):
+        items = session._data["data"]
+        res = []
+        latest = solana_scanner._LAST_RAYDIUM_TS
+        for item in items:
+            mint = item["base"]["address"]
+            liq = item["liquidity"]
+            vol = item["volume24h"]
+            ts = item["creationTimestamp"]
+            if not item["liquidity_locked"] or liq < 100 or vol < 100 or ts <= solana_scanner._LAST_RAYDIUM_TS:
+                continue
+            res.append(mint)
+            if ts > latest:
+                latest = ts
+        if res and latest > solana_scanner._LAST_RAYDIUM_TS:
+            solana_scanner._LAST_RAYDIUM_TS = latest
+        return res
+
+    monkeypatch.setattr(solana_scanner, "_extract_tokens", fake_extract)
 
     tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools(5))
     assert tokens == ["A"]
