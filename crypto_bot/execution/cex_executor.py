@@ -23,6 +23,7 @@ from crypto_bot.execution.kraken_ws import KrakenWSClient
 from crypto_bot.utils.trade_logger import log_trade
 from crypto_bot import tax_logger
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils.env import env_or_prompt
 
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
@@ -41,10 +42,10 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
     use_ws = config.get("use_websocket", False)
 
     ws_client: Optional[KrakenWSClient] = None
-    api_key = os.getenv("API_KEY")
-    api_secret = os.getenv("API_SECRET")
-    ws_token = os.getenv("KRAKEN_WS_TOKEN")
-    api_token = os.getenv("KRAKEN_API_TOKEN")
+    api_key = env_or_prompt("API_KEY", "Enter API key: ")
+    api_secret = env_or_prompt("API_SECRET", "Enter API secret: ")
+    ws_token = env_or_prompt("KRAKEN_WS_TOKEN", "Enter Kraken WebSocket token: ")
+    api_token = env_or_prompt("KRAKEN_API_TOKEN", "Enter Kraken API token: ")
 
     if use_ws and ccxtpro:
         ccxt_mod = ccxtpro
@@ -54,8 +55,8 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
     if exchange_name == "coinbase":
         exchange = ccxt_mod.coinbase(
             {
-                "apiKey": os.getenv("API_KEY"),
-                "secret": os.getenv("API_SECRET"),
+                "apiKey": api_key,
+                "secret": api_secret,
                 "password": os.getenv("API_PASSPHRASE"),
                 "enableRateLimit": True,
             }
