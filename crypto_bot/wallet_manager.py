@@ -3,7 +3,7 @@ import base64
 import json
 import yaml
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.env import env_or_prompt
@@ -153,19 +153,22 @@ def load_or_create() -> dict:
         if path:
             creds.update(load_external_secrets(provider, path))
 
-    env_mapping = {key: [key.upper()] for key in creds.keys()}
-    env_mapping.setdefault("coinbase_api_key", []).append("COINBASE_API_KEY")
-    env_mapping.setdefault("coinbase_api_secret", []).append("COINBASE_API_SECRET")
-    env_mapping.setdefault("coinbase_passphrase", []).append("COINBASE_API_PASSPHRASE")
-    env_mapping.setdefault("kraken_api_key", []).append("KRAKEN_API_KEY")
-    env_mapping.setdefault("kraken_api_secret", []).append("KRAKEN_API_SECRET")
-    env_mapping.setdefault("coinbase_api_key", []).append("API_KEY")
-    env_mapping.setdefault("coinbase_api_secret", []).append("API_SECRET")
-    env_mapping.setdefault("coinbase_passphrase", []).append("API_PASSPHRASE")
-    env_mapping.setdefault("kraken_api_key", []).append("API_KEY")
-    env_mapping.setdefault("kraken_api_secret", []).append("API_SECRET")
-    env_mapping.setdefault("helius_api_key", []).append("HELIUS_KEY")
-    env_mapping.setdefault("lunarcrush_api_key", []).append("LUNARCRUSH_API_KEY")
+    env_mapping: Dict[str, List[str]] = {key: [key.upper()] for key in creds.keys()}
+
+    aliases = {
+        "coinbase_api_key": ["API_KEY"],
+        "coinbase_api_secret": ["API_SECRET"],
+        "coinbase_passphrase": ["COINBASE_API_PASSPHRASE", "API_PASSPHRASE"],
+        "kraken_api_key": ["API_KEY"],
+        "kraken_api_secret": ["API_SECRET"],
+        "helius_api_key": ["HELIUS_KEY"],
+    }
+
+    for key, env_keys in aliases.items():
+        env_mapping.setdefault(key, [])
+        for env_key in env_keys:
+            if env_key not in env_mapping[key]:
+                env_mapping[key].append(env_key)
 
     for key, env_keys in env_mapping.items():
         for env_key in env_keys:
