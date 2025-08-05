@@ -233,6 +233,8 @@ FERNET_KEY=your_generated_fernet_key
 KRAKEN_WS_TOKEN=your_ws_token          # optional for Kraken
 KRAKEN_API_TOKEN=your_api_token        # optional for Kraken
 TELEGRAM_TOKEN=your_telegram_token
+TELEGRAM_CHAT_ID=your_chat_id          # chat to receive Telegram notifications
+WALLET_ADDRESS=your_wallet_address     # default on-chain wallet for trades
 TELE_CHAT_ADMINS=123456,789012         # optional comma separated admin IDs
 TELE_CHAT_ADMINS=12345,67890          # comma-separated chat IDs
 GOOGLE_CRED_JSON=path_to_google_credentials.json
@@ -256,6 +258,7 @@ token_registry.refresh_interval_minutes=720  # optional cache update interval
 
 `FERNET_KEY` holds the encryption key used by wallet_manager.py when saving credentials. Generate it with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` and set in `crypto_bot/.env`.
 
+Each credential can be supplied in `.env`, or if missing, will be requested interactively by the setup scripts.
 
 `TELE_CHAT_ADMINS` lets the Telegram bot accept commands from multiple
 admin chats. Omit it to restrict control to the single `chat_id` in the
