@@ -1,5 +1,6 @@
 import pytest
 from crypto_bot.paper_wallet import PaperWallet
+from crypto_bot.wallet import Wallet
 
 
 def test_buy_then_sell_realizes_pnl_and_restores_balance():
@@ -30,7 +31,7 @@ def test_partial_sells_retain_remaining_position():
 
 def test_unrealized_pnl_update():
     wallet = PaperWallet(1000.0)
-    tid = wallet.open("buy", 2.0, 100.0, "long")
+    _ = wallet.open("buy", 2.0, 100.0, "long")
     unreal = wallet.unrealized({"long": 110.0})
     assert unreal == 20.0
 
@@ -49,9 +50,6 @@ def test_total_balance_with_cash_and_positions():
             total += pos["reserved"]
     total += wallet.unrealized(prices)
     assert total == pytest.approx(1020.0)
-
-from crypto_bot.wallet import Wallet
-
 
 def test_buy_sell_and_pnl():
     wallet = Wallet(initial_balance=1000)
