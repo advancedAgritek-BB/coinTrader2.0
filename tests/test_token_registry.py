@@ -2,6 +2,7 @@ import asyncio
 import json
 import sys
 import logging
+import pytest
 
 
 class DummyErr(Exception):
@@ -226,6 +227,11 @@ def test_load_token_mints_error(monkeypatch, tmp_path):
     aiohttp_mod = type("M", (), {"ClientSession": lambda: FailingSession()})
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
 
+    async def fast_sleep(_):
+        pass
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fast_sleep)
+
     aiohttp_mod = type(
         "M", (), {"ClientSession": lambda: FailingSession(), "ClientError": DummyErr}
     )
@@ -251,6 +257,42 @@ def test_load_token_mints_error(monkeypatch, tmp_path):
     mapping = asyncio.run(mod.load_token_mints(force_refresh=True))
     assert mapping == {"OLD": "M"}
     assert mod.TOKEN_MINTS["OLD"] == "M"
+
+
+def test_load_token_mints_empty(monkeypatch, tmp_path, caplog):
+    mod = _load_module(monkeypatch, tmp_path)
+
+    async def fail_jup():
+        raise Exception("boom")
+
+    monkeypatch.setattr(mod, "fetch_from_jupiter", fail_jup)
+
+    class FailingSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=10):
+            raise Exception("boom")
+
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: FailingSession()})
+    monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+
+    async def fast_sleep(_):
+        pass
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fast_sleep)
+
+    mod._LOADED = False
+    caplog.set_level(logging.WARNING)
+
+    mapping = asyncio.run(mod.load_token_mints(force_refresh=True))
+    assert mapping == {}
+    assert mod._LOADED is False
+    assert not mod.CACHE_FILE.exists()
+    assert "Token mint mapping is empty" in caplog.text
 
 
 def test_load_token_mints_force_refresh_creates_dir(monkeypatch, tmp_path):
@@ -508,3 +550,16 @@ def test_refresh_mints(monkeypatch, tmp_path):
     assert calls["load"] == 1
     assert calls["cache"] == 1
     assert "SOL" in mod.TOKEN_MINTS
+
+
+def test_refresh_mints_propagates_failure(monkeypatch, tmp_path):
+    mod = _load_module(monkeypatch, tmp_path)
+
+    async def fake_load(*, force_refresh=False):
+        assert force_refresh is True
+        return {}
+
+    monkeypatch.setattr(mod, "load_token_mints", fake_load)
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(mod.refresh_mints())
