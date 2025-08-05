@@ -2,7 +2,7 @@ import asyncio
 import importlib
 import functools
 import pandas as pd
-from typing import Dict, Iterable, Tuple, List
+from typing import Dict, Iterable, Tuple, List, Callable
 
 from .logger import LOG_DIR, setup_logger
 from . import perf
@@ -37,7 +37,7 @@ from crypto_bot.utils.telemetry import telemetry
 from .ml_utils import ML_AVAILABLE
 
 
-def _fn_name(fn: callable) -> str:
+def _fn_name(fn: Callable) -> str:
     """Return the underlying function name even for functools.partial."""
     if isinstance(fn, functools.partial):
         return getattr(fn.func, "__name__", str(fn))
@@ -102,7 +102,7 @@ async def run_candidates(
     symbol: str,
     cfg: Dict,
     regime: str | None = None,
-) -> List[Tuple[callable, float, str]]:
+) -> List[Tuple[Callable, float, str]]:
     """Evaluate ``strategies`` and rank them by score times edge."""
 
     strategy_list = list(strategies)
@@ -118,7 +118,7 @@ async def run_candidates(
         analysis_logger.warning("Batch evaluation failed: %s", exc)
         return []
 
-    results: List[Tuple[float, callable, float, str]] = []
+    results: List[Tuple[float, Callable, float, str]] = []
     for strat, (score, direction, _atr) in zip(strategy_list, evals):
         name = _fn_name(strat)
         try:
