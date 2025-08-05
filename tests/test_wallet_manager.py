@@ -4,6 +4,12 @@ import types
 import yaml
 import pytest
 
+
+# Stub out commit_lock to avoid syntax errors during import
+sys.modules.setdefault(
+    "crypto_bot.utils.commit_lock", types.SimpleNamespace(check_and_update=lambda *a, **k: None)
+)
+
 from crypto_bot import wallet_manager
 
 
@@ -62,6 +68,17 @@ def test_load_exports_helius_key(tmp_path, monkeypatch):
     monkeypatch.delenv("HELIUS_KEY", raising=False)
     wallet_manager.load_or_create()
     assert os.environ["HELIUS_KEY"] == "hk"
+
+
+def test_load_exports_lunarcrush_key(tmp_path, monkeypatch):
+    cfg = tmp_path / "user_config.yaml"
+    data = {"lunarcrush_api_key": "lk"}
+    cfg.write_text(yaml.safe_dump(data))
+    monkeypatch.setattr(wallet_manager, "CONFIG_FILE", cfg)
+    monkeypatch.delenv("LUNARCRUSH_API_KEY", raising=False)
+    creds = wallet_manager.load_or_create()
+    assert os.environ["LUNARCRUSH_API_KEY"] == "lk"
+    assert creds["lunarcrush_api_key"] == "lk"
 
 
 def test_sanitize_secret_adds_padding():
