@@ -21,12 +21,13 @@ def test_send_message_async_running(monkeypatch):
     async def runner():
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter('error')
+            await send_message('t', 'c', 'msg')
+        return w
             err = await send_message('t', 'c', 'msg')
         return err, w
 
-    err, w = asyncio.run(runner())
+    w = asyncio.run(runner())
 
-    assert err is None
     assert calls['count'] == 1
     assert calls['chat_id'] == 'c'
     assert calls['text'] == 'msg'

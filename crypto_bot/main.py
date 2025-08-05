@@ -2122,8 +2122,12 @@ async def _main_impl() -> TelegramNotifier:
                 continue
 
     if notifier.token and notifier.chat_id:
-        if not send_test_message(notifier.token, notifier.chat_id, "Bot started"):
-            logger.warning("Telegram test message failed; check your token and chat ID")
+        try:
+            await send_test_message(notifier.token, notifier.chat_id, "Bot started")
+        except Exception:
+            logger.warning(
+                "Telegram test message failed; check your token and chat ID"
+            )
 
     # allow user-configured exchange to override YAML setting
     if user.get("exchange"):

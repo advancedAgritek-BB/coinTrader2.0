@@ -10,7 +10,7 @@ class StopLoop(Exception):
 def test_main_sends_telegram_check(monkeypatch):
     calls = {}
 
-    def fake_send_test(token, chat_id, text="Bot started"):
+    async def fake_send_test(token, chat_id, text="Bot started"):
         calls["args"] = (token, chat_id, text)
         return True
 
@@ -33,7 +33,9 @@ def _raise_stop():
 def test_trade_updates_disabled(monkeypatch):
     calls = {"entry": 0, "exit": 0}
 
-    monkeypatch.setattr(main, "send_test_message", lambda *a, **k: True)
+    async def fake_send(*a, **k):
+        return True
+    monkeypatch.setattr(main, "send_test_message", fake_send)
     monkeypatch.setattr(main, "load_config", lambda: {"telegram": {"trade_updates": False}})
     monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
     monkeypatch.setattr(main, "dotenv_values", lambda path: {})
@@ -65,7 +67,9 @@ def test_status_updates_disabled(monkeypatch):
 
     monkeypatch.setattr(main, "update_multi_tf_ohlcv_cache", fake_update)
     monkeypatch.setattr(main, "update_regime_tf_cache", fake_update)
-    monkeypatch.setattr(main, "send_test_message", lambda *a, **k: True)
+    async def fake_send2(*a, **k):
+        return True
+    monkeypatch.setattr(main, "send_test_message", fake_send2)
     monkeypatch.setattr(main, "load_config", lambda: {"telegram": {"status_updates": False}})
     monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
     monkeypatch.setattr(main, "dotenv_values", lambda path: {})

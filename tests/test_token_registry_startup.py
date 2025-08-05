@@ -18,7 +18,9 @@ def test_load_token_mints_once(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
     monkeypatch.setattr(main, "dotenv_values", lambda path: {})
     monkeypatch.setattr(main, "load_or_create", lambda: {})
-    monkeypatch.setattr(main, "send_test_message", lambda *_a, **_k: True)
+    async def fake_send_test(*_a, **_k):
+        return True
+    monkeypatch.setattr(main, "send_test_message", fake_send_test)
     monkeypatch.setattr(main, "log_balance", lambda *_a, **_k: None)
     monkeypatch.setattr(main, "RiskConfig", lambda *_a, **_k: None)
     monkeypatch.setattr(main, "RiskManager", lambda *_a, **_k: None)
