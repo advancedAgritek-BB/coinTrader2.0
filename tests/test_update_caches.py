@@ -219,7 +219,7 @@ def test_update_caches_ws_subscribes_each(monkeypatch):
     calls: list[str] = []
 
     class DummyExchange:
-        async def watch_ohlcv(self, symbol, timeframe="1h"):
+        async def watch_ohlcv(self, symbol, timeframe="1h", **kwargs):
             calls.append(symbol)
             return []
 

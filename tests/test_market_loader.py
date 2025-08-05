@@ -137,7 +137,7 @@ class DummyWSExchange:
         self.fetch_called = False
         self.fetch_thread = None
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
         return [[0] * 6]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
@@ -147,7 +147,7 @@ class DummyWSExchange:
 
 
 class DummyWSExchangeEnough(DummyWSExchange):
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
         return [[2] * 6 for _ in range(limit)]
 
 
@@ -301,7 +301,7 @@ def test_load_ohlcv_parallel():
 class DummyWSEchange:
     has = {"fetchOHLCV": True}
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
         return [[0, 1, 2, 3, 4, 5]]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
@@ -314,7 +314,7 @@ class DummyWSExceptionExchange:
     def __init__(self):
         self.fetch_called = False
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
         raise RuntimeError("ws failed")
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
@@ -370,7 +370,7 @@ class LimitCaptureExchange:
         self.watch_limit = None
         self.fetch_called = False
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
+    async def watch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100, **kwargs):
         self.watch_limit = limit
         return [[0] * 6 for _ in range(limit)]
 
@@ -402,7 +402,7 @@ class SkipLargeLimitExchange:
         self.ws_called = False
         self.fetch_called = False
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
         self.ws_called = True
         return [[0] * 6 for _ in range(limit)]
 
@@ -725,7 +725,7 @@ class RetryIncompleteExchange:
     def __init__(self):
         self.fetch_calls = 0
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
         return [[0] * 6 for _ in range(2)]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
@@ -1368,7 +1368,7 @@ class SlowWSExchange:
     def __init__(self):
         self.fetch_called = False
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
         await asyncio.sleep(0.05)
         return [[0] * 6]
 
@@ -1451,7 +1451,7 @@ class LimitCaptureWS:
     def __init__(self):
         self.limit = None
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, since=None):
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, since=None, **kwargs):
         self.limit = limit
         return [[0] * 6]
 
@@ -1636,7 +1636,7 @@ class CancelWSExchange:
         self.fetch_called = False
         self.closed = False
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
         raise asyncio.CancelledError
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
@@ -1711,7 +1711,7 @@ class PendingWSExchange:
         self.closed = False
         self.calls: list[str] = []
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
         self.calls.append("watch")
         try:
             await asyncio.sleep(1)
