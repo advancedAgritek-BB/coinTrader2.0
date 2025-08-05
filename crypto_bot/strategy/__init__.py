@@ -30,6 +30,7 @@ dip_hunter = _optional_import("dip_hunter")
 meme_wave_bot = _optional_import("meme_wave_bot")
 cross_chain_arb_bot = _optional_import("cross_chain_arb_bot")
 flash_crash_bot = _optional_import("flash_crash_bot")
+range_arb_bot = _optional_import("range_arb_bot")
 
 # Export Solana sniper strategy module under a unified name
 sniper_solana = importlib.import_module("crypto_bot.strategies.sniper_solana")
@@ -52,6 +53,7 @@ __all__ = [
         "meme_wave_bot",
         "cross_chain_arb_bot",
         "flash_crash_bot",
+        "range_arb_bot",
         "sniper_bot",
         "trend_bot",
         "sniper_solana",

@@ -1,0 +1,132 @@
+"""Range arbitrage strategy for low volatility markets using kernel regression."""
+
+from typing import Optional, Tuple
+
+import logging
+import numpy as np
+import pandas as pd
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, ConstantKernel
+
+import ta
+from crypto_bot.utils.indicator_cache import cache_series
+from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.utils import stats
+
+logger = logging.getLogger(__name__)
+
+try:  # pragma: no cover - optional dependency
+    from coinTrader_Trainer.ml_trainer import load_model
+    ML_AVAILABLE = True
+except Exception:  # pragma: no cover - trainer missing
+    ML_AVAILABLE = False
+    logger.warning(
+        "Skipping range_arb_bot: machine learning support is unavailable",
+    )
+
+if ML_AVAILABLE:
+    MODEL = load_model("range_arb_bot")
+else:  # pragma: no cover - fallback
+    MODEL = None
+
+
+def kernel_regression(df: pd.DataFrame, window: int) -> float:
+    """Predict next price using Gaussian Process with RBF kernel."""
+    if len(df) < window:
+        return np.nan
+    recent = df.iloc[-window:]
+    X = np.arange(len(recent)).reshape(-1, 1)
+    y = recent["close"].values
+    kernel = ConstantKernel(1.0) * RBF(1.0)
+    gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10)
+    gp.fit(X, y)
+    pred, _ = gp.predict([[len(recent)]], return_std=True)
+    return float(pred)
+
+
+def generate_signal(
+    df: pd.DataFrame,
+    config: Optional[dict] = None,
+) -> Tuple[float, str]:
+    """Generate arb signal in low vol ranges using kernel prediction."""
+    if df.empty:
+        return 0.0, "none"
+
+    params = config.get("range_arb_bot", {}) if config else {}
+    atr_window = int(params.get("atr_window", 14))
+    kr_window = int(params.get("kr_window", 20))
+    z_threshold = float(params.get("z_threshold", 1.5))
+    vol_z_threshold = float(params.get("vol_z_threshold", 1.0))  # Low vol confirm
+    volume_mult = float(params.get("volume_mult", 1.5))
+    atr_normalization = bool(params.get("atr_normalization", True))
+
+    lookback = max(atr_window, kr_window)
+    if len(df) < lookback:
+        return 0.0, "none"
+
+    recent = df.iloc[-lookback:].copy()
+
+    atr = ta.volatility.average_true_range(
+        recent["high"], recent["low"], recent["close"], window=atr_window
+    )
+    vol_ma = recent["volume"].rolling(kr_window).mean()
+    atr_z = stats.zscore(atr, lookback)
+    vol_z = stats.zscore(recent["volume"], lookback)
+
+    atr = cache_series("atr_range", df, atr, lookback)
+    atr_z = cache_series("atr_z_range", df, atr_z, lookback)
+    vol_ma = cache_series("vol_ma_range", df, vol_ma, lookback)
+    vol_z = cache_series("vol_z_range", df, vol_z, lookback)
+
+    recent["atr"] = atr
+    recent["atr_z"] = atr_z
+    recent["vol_ma"] = vol_ma
+    recent["vol_z"] = vol_z
+
+    latest = recent.iloc[-1]
+
+    # Ignore if not low vol
+    if latest["atr_z"] >= vol_z_threshold or latest["vol_z"] >= vol_z_threshold:
+        return 0.0, "none"
+
+    # Avoid volume spikes
+    if latest["volume"] > latest["vol_ma"] * volume_mult:
+        return 0.0, "none"
+
+    pred_price = kernel_regression(recent, kr_window)
+    if np.isnan(pred_price):
+        return 0.0, "none"
+
+    deviation = (latest["close"] - pred_price) / pred_price
+    z_dev = stats.zscore(recent["close"], lookback).iloc[-1]
+
+    score = 0.0
+    direction = "none"
+
+    if z_dev < -z_threshold:  # Undervalued, buy
+        score = min(-z_dev / z_threshold, 1.0)
+        direction = "long"
+    elif z_dev > z_threshold:  # Overvalued, sell
+        score = min(z_dev / z_threshold, 1.0)
+        direction = "short"
+
+    if score > 0:
+        if MODEL is not None:
+            try:  # pragma: no cover - best effort
+                ml_score = MODEL.predict(df)
+                score = (score + ml_score) / 2
+            except Exception:
+                pass
+        if atr_normalization:
+            score = normalize_score_by_volatility(df, score)
+
+    return score, direction
+
+
+class regime_filter:
+    """Match low volatility or sideways regimes."""
+
+    @staticmethod
+    def matches(regime: str) -> bool:
+        return regime in {"sideways", "low_vol", "mean-reverting"}
+
