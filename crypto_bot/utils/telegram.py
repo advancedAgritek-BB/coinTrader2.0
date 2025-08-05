@@ -165,14 +165,12 @@ class TelegramNotifier:
             try:
                 await send_message(self.token, self.chat_id, text)
             except Exception as exc:  # pragma: no cover - network
-            except Exception as err:  # pragma: no cover - network
                 self._disabled = True
                 logger.error(
                     "Disabling Telegram notifications due to send failure: %s",
                     exc,
                 )
                 return str(exc)
-                return str(err)
             else:
                 self._last_sent = now
                 self._recent_sends.append(now)
@@ -204,20 +202,6 @@ class TelegramNotifier:
                 time.sleep(delay)
                 now = time.time()
 
-            async def _send() -> None:
-                try:
-                    await send_message(self.token, self.chat_id, text)
-                except Exception as exc:  # pragma: no cover - network
-                    self._disabled = True
-                    logger.error(
-                        "Disabling Telegram notifications due to send failure: %s",
-                        exc,
-                    )
-
-            loop.create_task(_send())
-            self._last_sent = now
-            self._recent_sends.append(now)
-        return None
             try:
                 send_message_sync(self.token, self.chat_id, text)
             except Exception as err:  # pragma: no cover - network
@@ -297,9 +281,12 @@ async def send_test_message(
             logger.error("Failed to send test message: %s", exc)
             return False
     return False
-        return False
+
+
+def send_test_message_sync(token: str, chat_id: str, text: str) -> bool:
+    """Synchronously send a test message."""
     try:
         send_message_sync(token, chat_id, text)
         return True
-    except Exception:
+    except Exception:  # pragma: no cover - network
         return False

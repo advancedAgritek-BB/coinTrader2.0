@@ -32,9 +32,20 @@ cross_chain_arb_bot = _optional_import("cross_chain_arb_bot")
 flash_crash_bot = _optional_import("flash_crash_bot")
 range_arb_bot = _optional_import("range_arb_bot")
 
-# Export Solana sniper strategy module under a unified name
-sniper_solana = importlib.import_module("crypto_bot.strategies.sniper_solana")
-solana_scalping = importlib.import_module("crypto_bot.solana.scalping")
+# Export Solana sniper strategy modules under a unified name
+try:  # pragma: no cover - optional dependency
+    sniper_solana = importlib.import_module("crypto_bot.strategies.sniper_solana")
+except Exception:  # pragma: no cover
+    class _Stub:
+        @staticmethod
+        def generate_signal(*_a, **_k):
+            return 0.0, "none"
+
+    sniper_solana = _Stub()
+try:  # pragma: no cover - optional dependency
+    solana_scalping = importlib.import_module("crypto_bot.solana.scalping")
+except Exception:  # pragma: no cover
+    solana_scalping = None
 
 __all__ = [
     name
