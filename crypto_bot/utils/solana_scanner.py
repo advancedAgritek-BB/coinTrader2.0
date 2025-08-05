@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import List
 import aiohttp
 import ccxt.async_support as ccxt
@@ -176,6 +177,33 @@ async def fetch_pump_fun_launches(limit: int) -> List[str]:
     if not isinstance(data, list):
         return []
 
+    # Filter results based on basic Pump.fun launch criteria.  Only tokens
+    # which provide a ``created_at`` timestamp, have an ``initial_buy`` flag,
+    # include a positive ``market_cap`` value and expose a ``twitter`` handle
+    # are considered valid.  This mirrors the behaviour of the production
+    # scanner which ignores incomplete listings.
+    items = data.get("data") if isinstance(data, dict) else data
+    filtered: list[dict] = []
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            created = item.get("created_at") or item.get("createdAt")
+            initial_buy = item.get("initial_buy") or item.get("initialBuy")
+            market_cap = item.get("market_cap") or item.get("marketCap")
+            twitter = item.get("twitter") or item.get("twitter_profile")
+            if not (created and initial_buy and market_cap and twitter):
+                continue
+            try:
+                datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+                if float(market_cap) <= 0:
+                    continue
+            except Exception:
+                continue
+            filtered.append(item)
+
+    tokens = await _extract_tokens(filtered)
+    return tokens[:limit]
     results: List[str] = []
     max_ts = last_pump_ts
 
