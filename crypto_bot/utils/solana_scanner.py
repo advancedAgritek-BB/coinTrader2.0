@@ -19,9 +19,6 @@ logger = logging.getLogger(__name__)
 # Global min volume filter updated by ``get_solana_new_tokens``
 _MIN_VOLUME_USD = 0.0
 
-RAYDIUM_URL = "https://api.raydium.io/v2/main/pairs"
-RAYDIUM_URL = "https://api.raydium.io/v2/pairs/new"
-PUMP_FUN_URL = "https://client-api.prod.pump.fun/v1/launches"
 RAYDIUM_URL = "https://api.raydium.io/pairs"
 PUMP_FUN_URL = "https://api.pump.fun/tokens"
 
