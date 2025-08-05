@@ -33,6 +33,12 @@ sniper_mod.generate_signal = lambda *a, **k: (0.0, "none")
 sys.modules.setdefault("crypto_bot.strategies.sniper_solana", sniper_mod)
 sys.modules.setdefault("redis", types.ModuleType("redis"))
 
+# Stub out ml_utils to bypass optional dependency issues
+ml_utils_stub = types.ModuleType("ml_utils")
+ml_utils_stub.is_ml_available = lambda: False
+ml_utils_stub.ML_AVAILABLE = False
+sys.modules.setdefault("crypto_bot.utils.ml_utils", ml_utils_stub)
+
 # The meme-wave strategy imports Solana helpers which depend on the optional
 # ``solana`` package. Tests should run even when that dependency isn't
 # installed, so we provide minimal stub modules mirroring the pattern used in
