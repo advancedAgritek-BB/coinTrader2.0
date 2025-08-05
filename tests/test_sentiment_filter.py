@@ -1,9 +1,9 @@
 import asyncio
 import logging
-
-import pytest
 import sys
 import types
+
+import pytest
 
 # Stub out commit_lock to avoid import errors in tests
 commit_lock_stub = types.ModuleType("commit_lock")
