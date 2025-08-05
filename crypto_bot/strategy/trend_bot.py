@@ -29,13 +29,21 @@ from crypto_bot.utils import stats
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
+
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model
-    MODEL = load_model("trend_bot")
-except Exception:  # pragma: no cover - fallback
-    MODEL = None
+    ML_AVAILABLE = True
+except Exception:  # pragma: no cover - trainer missing
+    ML_AVAILABLE = False
+    logger.warning(
+        "Skipping trend_bot: machine learning support is unavailable",
+    )
 
-logger = setup_logger(__name__, LOG_DIR / "bot.log")
+if ML_AVAILABLE:
+    MODEL = load_model("trend_bot")
+else:  # pragma: no cover - fallback
+    MODEL = None
 
 
 def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:

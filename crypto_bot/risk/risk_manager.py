@@ -208,7 +208,6 @@ class RiskManager:
         if direction == "short":
             size = -abs(size)
 
-        if size == 0:
         size *= (1 - self.config.slippage_factor)
 
         if size <= 0:

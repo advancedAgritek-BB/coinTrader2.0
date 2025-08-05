@@ -5,6 +5,7 @@ from typing import Callable, Optional, Tuple, Union
 
 from crypto_bot import cooldown_manager
 
+import logging
 import pandas as pd
 import numpy as np
 import ta
@@ -29,10 +30,20 @@ from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.cooldown_manager import in_cooldown, mark_cooldown
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 
+logger = logging.getLogger(__name__)
+
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model
+    ML_AVAILABLE = True
+except Exception:  # pragma: no cover - trainer missing
+    ML_AVAILABLE = False
+    logger.warning(
+        "Skipping bounce_scalper: machine learning support is unavailable",
+    )
+
+if ML_AVAILABLE:
     MODEL = load_model("bounce_scalper")
-except Exception:  # pragma: no cover - fallback
+else:  # pragma: no cover - fallback
     MODEL = None
 
 
