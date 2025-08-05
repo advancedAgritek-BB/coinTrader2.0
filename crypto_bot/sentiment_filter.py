@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from typing import Awaitable, Optional
 import threading
 from typing import Optional
 import asyncio
@@ -99,11 +100,11 @@ async def fetch_lunarcrush_sentiment_async(symbol: str) -> int:
 
 def fetch_twitter_sentiment(
     query: str = "bitcoin", symbol: Optional[str] = None
-) -> int | asyncio.Future:
+) -> int | Awaitable[int]:
     """Return sentiment score using LunarCrush.
 
-    ``symbol`` takes precedence over ``query``. When ``symbol`` is provided a
-    coroutine is returned so callers may ``await`` it or run it via
+    ``symbol`` takes precedence over ``query``. When ``symbol`` is provided an
+    awaitable is returned so callers may ``await`` it or run it via
     :func:`asyncio.run`. A mock value can be supplied via the
     ``MOCK_TWITTER_SENTIMENT`` environment variable which is useful for tests.
     When no LunarCrush API key is available a neutral score of 50 is returned
