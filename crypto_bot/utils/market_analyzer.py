@@ -195,7 +195,7 @@ async def analyze_symbol(
     min_conf_adaptive = baseline * (1 + bb_z / 3)
     min_conf_adaptive = min(min_conf_adaptive, 0.3)
     higher_df = df_map.get("1d")
-    regime, probs = await classify_regime_async(df, higher_df)
+    regime, probs = await classify_regime_async(df, higher_df, notifier=notifier)
     sub_regime = regime.split("_")[-1]
     patterns = detect_patterns(df)
     base_conf = float(probs.get(regime, 0.0))
@@ -225,16 +225,19 @@ async def analyze_symbol(
         df,
         higher_df,
         profile,
+        notifier=notifier,
     )
     sub_regime = regime.split("_")[-1]
     higher_df = df_map.get(higher_tf)
 
     if df is not None:
-        regime_tmp, patterns = await classify_regime_with_patterns_async(df, higher_df)
+        regime_tmp, patterns = await classify_regime_with_patterns_async(
+            df, higher_df, notifier=notifier
+        )
         regime = regime_tmp
         sub_regime = regime_tmp.split("_")[-1]
         # Refresh probabilities based on the final regime determination
-        _label, info = await classify_regime_async(df, higher_df)
+        _label, info = await classify_regime_async(df, higher_df, notifier=notifier)
         if isinstance(info, dict):
             probs = info
             base_conf = float(info.get(regime, 0.0))
@@ -260,6 +263,7 @@ async def analyze_symbol(
             tf_df,
             higher_df,
             profile,
+            notifier=notifier,
         )
         r = r.split("_")[-1]
         regime_counts[r] = regime_counts.get(r, 0) + 1
@@ -269,7 +273,7 @@ async def analyze_symbol(
         vote_map.setdefault(higher_tf, df_map[higher_tf])
 
     if vote_map:
-        labels = await classify_regime_async(df_map=vote_map)
+        labels = await classify_regime_async(df_map=vote_map, notifier=notifier)
         if isinstance(labels, tuple):
             label_map = dict(zip(vote_map.keys(), labels))
         else:
@@ -285,7 +289,11 @@ async def analyze_symbol(
     else:
         sub_regime, votes = "unknown", 0
 
-    if adx_val < 25 and patterns.get("breakout", 0) <= 0 and sub_regime in {"sideways", "mean-reverting"}:
+    if (
+        adx_val < 25
+        and patterns.get("breakout", 0) <= 0
+        and sub_regime in {"sideways", "mean-reverting"}
+    ):
         regime = sub_regime = "dip_hunter"
 
     denom = len(regime_tfs)
@@ -415,9 +423,9 @@ async def analyze_symbol(
             )
             selected_fn = strategy_fn
             name = strategy_name(sub_regime, env)
-            score, direction, atr = (
-                await evaluate_async([strategy_fn], df_map, cfg)
-            )[0]
+            score, direction, atr = (await evaluate_async([strategy_fn], df_map, cfg))[
+                0
+            ]
 
         atr_period = int(config.get("risk", {}).get("atr_period", 14))
         if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
@@ -434,7 +442,11 @@ async def analyze_symbol(
                 except Exception:  # pragma: no cover - safety
                     reg_filter = None
             try:
-                if reg_filter and hasattr(reg_filter, "matches") and reg_filter.matches(sub_regime):
+                if (
+                    reg_filter
+                    and hasattr(reg_filter, "matches")
+                    and reg_filter.matches(sub_regime)
+                ):
                     reg_strength = 1.0
             except Exception:  # pragma: no cover - safety
                 pass

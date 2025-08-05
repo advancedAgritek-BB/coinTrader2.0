@@ -138,6 +138,7 @@ def register_task(task: asyncio.Task | None) -> asyncio.Task | None:
         BACKGROUND_TASKS.append(task)
     return task
 
+
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
 
@@ -265,7 +266,9 @@ async def get_market_regime(ctx: BotContext) -> str:
     sym, df = next(iter(tf_cache.items()))
     higher_tf = ctx.config.get("higher_timeframe", "1d")
     higher_df = ctx.df_cache.get(higher_tf, {}).get(sym)
-    label, info = await classify_regime_cached(sym, base_tf, df, higher_df)
+    label, info = await classify_regime_cached(
+        sym, base_tf, df, higher_df, notifier=ctx.notifier
+    )
     regime = label.split("_")[-1]
     logger.info(
         "Regime for %s [%s/%s]: %s",
@@ -1407,22 +1410,24 @@ async def execute_signals(ctx: BotContext) -> None:
         if strategy == "cross_chain_arb_bot":
             from crypto_bot.solana_trading import cross_chain_trade
 
-            task = register_task(asyncio.create_task(
-                cross_chain_trade(
-                    ctx.exchange,
-                    ctx.ws_client,
-                    sym,
-                    side,
-                    amount,
-                    dry_run=ctx.config.get("execution_mode") == "dry_run",
-                    slippage_bps=ctx.config.get("solana_slippage_bps", 50),
-                    use_websocket=ctx.config.get("use_websocket", False),
-                    notifier=ctx.notifier,
-                    mempool_monitor=ctx.mempool_monitor,
-                    mempool_cfg=ctx.mempool_cfg,
-                    config=ctx.config,
+            task = register_task(
+                asyncio.create_task(
+                    cross_chain_trade(
+                        ctx.exchange,
+                        ctx.ws_client,
+                        sym,
+                        side,
+                        amount,
+                        dry_run=ctx.config.get("execution_mode") == "dry_run",
+                        slippage_bps=ctx.config.get("solana_slippage_bps", 50),
+                        use_websocket=ctx.config.get("use_websocket", False),
+                        notifier=ctx.notifier,
+                        mempool_monitor=ctx.mempool_monitor,
+                        mempool_cfg=ctx.mempool_cfg,
+                        config=ctx.config,
+                    )
                 )
-            ))
+            )
             CROSS_ARB_TASKS.add(task)
             task.add_done_callback(CROSS_ARB_TASKS.discard)
             executed_via_cross = True
@@ -1443,17 +1448,19 @@ async def execute_signals(ctx: BotContext) -> None:
                 from crypto_bot.solana_trading import sniper_trade
 
                 base, quote = sym.split("/")
-                task = register_task(asyncio.create_task(
-                    sniper_trade(
-                        ctx.config.get("wallet_address", ""),
-                        quote,
-                        base,
-                        size,
-                        dry_run=ctx.config.get("execution_mode") == "dry_run",
-                        slippage_bps=ctx.config.get("solana_slippage_bps", 50),
-                        notifier=ctx.notifier,
+                task = register_task(
+                    asyncio.create_task(
+                        sniper_trade(
+                            ctx.config.get("wallet_address", ""),
+                            quote,
+                            base,
+                            size,
+                            dry_run=ctx.config.get("execution_mode") == "dry_run",
+                            slippage_bps=ctx.config.get("solana_slippage_bps", 50),
+                            notifier=ctx.notifier,
+                        )
                     )
-                ))
+                )
                 SNIPER_TASKS.add(task)
                 task.add_done_callback(SNIPER_TASKS.discard)
                 executed_via_sniper = True
@@ -2114,7 +2121,9 @@ async def _main_impl() -> TelegramNotifier:
 
     ping_interval = int(config.get("ws_ping_interval", 0) or 0)
     if ping_interval > 0 and hasattr(exchange, "ping"):
-        task = register_task(asyncio.create_task(_ws_ping_loop(exchange, ping_interval)))
+        task = register_task(
+            asyncio.create_task(_ws_ping_loop(exchange, ping_interval))
+        )
         WS_PING_TASKS.add(task)
 
     if not hasattr(exchange, "load_markets"):
@@ -2284,14 +2293,16 @@ async def _main_impl() -> TelegramNotifier:
             balance_updates,
         )
 
-    monitor_task = register_task(asyncio.create_task(
-        console_monitor.monitor_loop(
-            exchange,
-            paper_wallet,
-            LOG_DIR / "bot.log",
-            quiet_mode=config.get("quiet_mode", False),
+    monitor_task = register_task(
+        asyncio.create_task(
+            console_monitor.monitor_loop(
+                exchange,
+                paper_wallet,
+                LOG_DIR / "bot.log",
+                quiet_mode=config.get("quiet_mode", False),
+            )
         )
-    ))
+    )
 
     max_open_trades = config.get("max_open_trades", 1)
     position_guard = OpenPositionGuard(max_open_trades)
@@ -2303,25 +2314,31 @@ async def _main_impl() -> TelegramNotifier:
     session_state = SessionState(last_balance=last_balance)
     last_candle_ts: dict[str, int] = {}
 
-    control_task = register_task(asyncio.create_task(console_control.control_loop(state)))
-    rotation_task = register_task(asyncio.create_task(
-        _rotation_loop(
-            rotator,
-            exchange,
-            user.get("wallet_address", ""),
-            state,
-            notifier,
-            check_balance_change,
+    control_task = register_task(
+        asyncio.create_task(console_control.control_loop(state))
+    )
+    rotation_task = register_task(
+        asyncio.create_task(
+            _rotation_loop(
+                rotator,
+                exchange,
+                user.get("wallet_address", ""),
+                state,
+                notifier,
+                check_balance_change,
+            )
         )
-    ))
+    )
     solana_scan_task: asyncio.Task | None = None
     if config.get("solana_scanner", {}).get("enabled"):
         solana_scan_task = register_task(asyncio.create_task(solana_scan_loop()))
-    registry_task = register_task(asyncio.create_task(
-        registry_update_loop(
-            config.get("token_registry", {}).get("refresh_interval_minutes", 15)
+    registry_task = register_task(
+        asyncio.create_task(
+            registry_update_loop(
+                config.get("token_registry", {}).get("refresh_interval_minutes", 15)
+            )
         )
-    ))
+    )
     print("Bot running. Type 'stop' to pause, 'start' to resume, 'quit' to exit.")
 
     from crypto_bot.telegram_bot_ui import TelegramBotUI
@@ -2356,14 +2373,16 @@ async def _main_impl() -> TelegramNotifier:
         sniper_task = register_task(asyncio.create_task(sniper_run(sniper_cfg)))
 
     if config.get("scan_in_background", True):
-        session_state.scan_task = register_task(asyncio.create_task(
-            initial_scan(
-                exchange,
-                config,
-                session_state,
-                notifier if status_updates else None,
+        session_state.scan_task = register_task(
+            asyncio.create_task(
+                initial_scan(
+                    exchange,
+                    config,
+                    session_state,
+                    notifier if status_updates else None,
+                )
             )
-        ))
+        )
     else:
         await initial_scan(
             exchange,
@@ -2568,7 +2587,9 @@ async def _main_impl() -> TelegramNotifier:
                         higher_df = ctx.df_cache.get(
                             config.get("higher_timeframe", "1d"), {}
                         ).get(sym)
-                        regime, _ = await classify_regime_async(df, higher_df)
+                        regime, _ = await classify_regime_async(
+                            df, higher_df, notifier=ctx.notifier
+                        )
                         ctx.positions[sym]["regime"] = regime
                         TOTAL_ANALYSES += 1
                         if regime == "unknown":
