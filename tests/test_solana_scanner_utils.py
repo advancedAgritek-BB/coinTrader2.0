@@ -12,6 +12,9 @@ sys.modules.setdefault("crypto_bot", pkg_root)
 sys.modules.setdefault("crypto_bot.utils", utils_pkg)
 sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
 sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
+vf_mod = types.ModuleType("volatility_filter")
+vf_mod.calc_atr = lambda *a, **k: 0
+sys.modules.setdefault("crypto_bot.volatility_filter", vf_mod)
 
 spec = importlib.util.spec_from_file_location(
     "crypto_bot.utils.solana_scanner",
@@ -55,57 +58,70 @@ class DummySession:
         return DummyResp(self._data)
 
 
-def test_fetch_new_raydium_pools(monkeypatch):
-    data = {
-        "data": [
-            {"tokenMint": "A", "volumeUsd": 150},
-            {"tokenMint": "B", "volumeUsd": 50},
-        ]
-    }
+def test_fetch_new_raydium_pools(monkeypatch, tmp_path):
+    data = [
+        {
+            "base": {"address": "A"},
+            "liquidity": 60000,
+            "volume24h": 150000,
+            "creationTimestamp": 1000,
+            "liquidity_locked": True,
+        },
+        {
+            "base": {"address": "B"},
+            "liquidity": 40000,
+            "volume24h": 150000,
+            "creationTimestamp": 2000,
+            "liquidity_locked": True,
+        },
+        {
+            "base": {"address": "C"},
+            "liquidity": 60000,
+            "volume24h": 150000,
+            "creationTimestamp": 3000,
+            "liquidity_locked": True,
+        },
+    ]
     session = DummySession(data)
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
     monkeypatch.setattr(solana_scanner, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(solana_scanner, "RAYDIUM_TS_FILE", tmp_path / "ts.txt")
+    solana_scanner._LAST_RAYDIUM_TS = 1500
 
-    async def fake_gecko(base):
-        return base
-
-    monkeypatch.setattr(solana_scanner, "get_mint_from_gecko", fake_gecko)
-    monkeypatch.setattr(solana_scanner, "TOKEN_MINTS", {})
-
-    solana_scanner._MIN_VOLUME_USD = 100
-    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools("k", 5))
-    assert tokens == ["A"]
-    assert "k" in session.url
+    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools(10))
+    # B is skipped due to low liquidity; A is too old
+    assert tokens == ["C"]
+    assert session.url == f"{solana_scanner.RAYDIUM_URL}?limit=10"
 
 
-def test_fetch_new_raydium_pools_helius(monkeypatch):
-    data = {"data": [{"tokenMint": "A", "volumeUsd": 150}]}
+def test_fetch_new_raydium_pools_skip_old(monkeypatch, tmp_path):
+    data = [
+        {
+            "base": {"address": "A"},
+            "liquidity": 60000,
+            "volume24h": 150000,
+            "creationTimestamp": 1000,
+            "liquidity_locked": True,
+        }
+    ]
     session = DummySession(data)
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
     monkeypatch.setattr(solana_scanner, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(solana_scanner, "RAYDIUM_TS_FILE", tmp_path / "ts.txt")
+    solana_scanner._LAST_RAYDIUM_TS = 0
 
-    async def fake_gecko(_base):
-        return None
-
-    async def fake_helius(symbols):
-        assert symbols == ["A"]
-        return {"A": "mint"}
-
-    monkeypatch.setattr(solana_scanner, "get_mint_from_gecko", fake_gecko)
-    monkeypatch.setattr(solana_scanner, "fetch_from_helius", fake_helius)
-    monkeypatch.setattr(solana_scanner, "TOKEN_MINTS", {})
-
-    solana_scanner._MIN_VOLUME_USD = 100
-    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools("k", 5))
+    tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools(5))
     assert tokens == ["A"]
-    assert solana_scanner.TOKEN_MINTS["A"] == "mint"
+    assert solana_scanner._LAST_RAYDIUM_TS == 1000
+    tokens2 = asyncio.run(solana_scanner.fetch_new_raydium_pools(5))
+    assert tokens2 == []
 
 
 def test_get_solana_new_tokens(monkeypatch):
     monkeypatch.setattr(
         solana_scanner,
         "fetch_new_raydium_pools",
-        lambda key, limit: ["X", "Y"],
+        lambda limit: ["X", "Y"],
     )
     monkeypatch.setattr(
         solana_scanner,
@@ -123,7 +139,6 @@ def test_get_solana_new_tokens(monkeypatch):
     monkeypatch.setattr(solana_scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
 
     cfg = {
-        "raydium_api_key": "r",
         "pump_fun_api_key": "p",
         "max_tokens_per_scan": 2,
         "min_volume_usd": 0,
@@ -188,7 +203,6 @@ def test_get_solana_new_tokens_gecko_filter(monkeypatch):
     monkeypatch.setattr(solana_scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
 
     cfg = {
-        "raydium_api_key": "r",
         "max_tokens_per_scan": 10,
         "min_volume_usd": 100,
         "gecko_search": True,
@@ -230,7 +244,6 @@ def test_get_solana_new_tokens_scoring(monkeypatch):
     monkeypatch.setattr(solana_scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
 
     cfg = {
-        "raydium_api_key": "r",
         "max_tokens_per_scan": 10,
         "min_volume_usd": 0,
         "gecko_search": True,
