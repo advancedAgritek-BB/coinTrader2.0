@@ -21,17 +21,6 @@ CONFIG_FILE = Path(__file__).resolve().parent / 'user_config.yaml'
 FERNET_KEY = os.getenv("FERNET_KEY")
 _fernet = Fernet(FERNET_KEY) if FERNET_KEY and Fernet else None
 
-SENSITIVE_FIELDS = {
-    "coinbase_api_key",
-    "coinbase_api_secret",
-    "coinbase_passphrase",
-    "kraken_api_key",
-    "kraken_api_secret",
-    "telegram_token",
-    "helius_api_key",
-    "lunarcrush_api_key",
-}
-
 
 def _encrypt(value: str) -> str:
     if _fernet:
