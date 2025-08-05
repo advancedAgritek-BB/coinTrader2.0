@@ -30,4 +30,9 @@ from .pyth import get_pyth_price
 from .pyth_utils import async_get_pyth_price, get_pyth_price as sync_get_pyth_price
 from .token_registry import load_token_mints, TOKEN_MINTS
 from .constants import NON_SOLANA_BASES
+from .ml_utils import is_ml_available, ML_AVAILABLE
 from .lunarcrush_client import LunarCrushClient
+try:  # optional ML utilities
+    from .ml_utils import ML_AVAILABLE
+except Exception:  # pragma: no cover - optional dependency
+    ML_AVAILABLE = False

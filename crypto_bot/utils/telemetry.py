@@ -27,6 +27,10 @@ PROM_COUNTERS: Dict[str, Counter] = {
         "scan_ws_errors",
         "Number of WebSocket errors encountered while scanning",
     ),
+    "ml_fallbacks": Counter(
+        "ml_fallbacks",
+        "Number of times ML fallback triggered",
+    ),
 }
 
 
@@ -87,5 +91,3 @@ def dump() -> str:
     msg = ", ".join(f"{k}: {v}" for k, v in sorted(snap.items()))
     logger.info("Telemetry snapshot - %s", msg)
     return msg
-
-

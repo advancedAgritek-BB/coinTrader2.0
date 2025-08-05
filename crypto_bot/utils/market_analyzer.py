@@ -254,6 +254,7 @@ async def analyze_symbol(
     else:
         analysis_logger.error("ML unavailable; using heuristic regime")
         regime, info = _heuristic_regime(df)
+    regime, probs = await classify_regime_async(df, higher_df, notifier=notifier)
     sub_regime = regime.split("_")[-1]
     patterns = {}
     if isinstance(info, dict) and regime not in info:
@@ -266,6 +267,35 @@ async def analyze_symbol(
     max_prob = max(probs.values()) if probs else 0.0
     if max_prob > 0:
         base_conf /= max_prob
+    try:
+        regime, probs = await classify_regime_async(df, higher_df)
+        sub_regime = regime.split("_")[-1]
+        patterns = detect_patterns(df)
+        base_conf = float(probs.get(regime, 0.0))
+    except Exception as exc:  # pragma: no cover - triggered in tests
+        analysis_logger.warning(
+            "classify_regime failed: %s - falling back to heuristics", exc
+        )
+        change = float(df["close"].iloc[-1] - df["close"].iloc[0])
+        if change > 0:
+            regime = sub_regime = "trending"
+        elif change < 0:
+            regime = sub_regime = "mean-reverting"
+        else:
+            regime = sub_regime = "sideways"
+        probs = {regime: 1.0}
+        patterns = {}
+        return {
+            "symbol": symbol,
+            "df": df,
+            "regime": regime,
+            "sub_regime": sub_regime,
+            "patterns": patterns,
+            "future_return": 0.0,
+            "confidence": 1.0,
+            "min_confidence": min_conf_adaptive,
+            "probabilities": probs,
+        }
     bias_cfg = config.get("sentiment_filter", {})
     try:
         from crypto_bot.sentiment_filter import boost_factor
@@ -335,6 +365,25 @@ async def analyze_symbol(
         else:
             analysis_logger.error("ML unavailable; using heuristic regime")
             _label, info = _heuristic_regime(df)
+    regime, _ = await classify_regime_cached(
+        symbol,
+        base_tf,
+        df,
+        higher_df,
+        profile,
+        notifier=notifier,
+    )
+    sub_regime = regime.split("_")[-1]
+    higher_df = df_map.get(higher_tf)
+
+    if df is not None:
+        regime_tmp, patterns = await classify_regime_with_patterns_async(
+            df, higher_df, notifier=notifier
+        )
+        regime = regime_tmp
+        sub_regime = regime_tmp.split("_")[-1]
+        # Refresh probabilities based on the final regime determination
+        _label, info = await classify_regime_async(df, higher_df, notifier=notifier)
         if isinstance(info, dict):
             probs = info
             base_conf = float(info.get(regime, 0.0))
@@ -379,6 +428,14 @@ async def analyze_symbol(
         else:
             analysis_logger.error("ML unavailable; using heuristic regime")
             r, _ = _heuristic_regime(tf_df)
+        r, _ = await classify_regime_cached(
+            symbol,
+            tf,
+            tf_df,
+            higher_df,
+            profile,
+            notifier=notifier,
+        )
         r = r.split("_")[-1]
         regime_counts[r] = regime_counts.get(r, 0) + 1
         if tf_df is not None:
@@ -398,6 +455,9 @@ async def analyze_symbol(
                     label_map = dict(zip(vote_map.keys(), labels))
                 else:
                     label_map = labels
+        labels = await classify_regime_async(df_map=vote_map, notifier=notifier)
+        if isinstance(labels, tuple):
+            label_map = dict(zip(vote_map.keys(), labels))
         else:
             analysis_logger.error("ML unavailable; using heuristic regime")
             label_map = {tf: _heuristic_regime(df)[0] for tf, df in vote_map.items()}
@@ -412,7 +472,11 @@ async def analyze_symbol(
     else:
         sub_regime, votes = "unknown", 0
 
-    if adx_val < 25 and patterns.get("breakout", 0) <= 0 and sub_regime in {"sideways", "mean-reverting"}:
+    if (
+        adx_val < 25
+        and patterns.get("breakout", 0) <= 0
+        and sub_regime in {"sideways", "mean-reverting"}
+    ):
         regime = sub_regime = "dip_hunter"
 
     denom = len(regime_tfs)
@@ -548,6 +612,9 @@ async def analyze_symbol(
             score, direction, atr = (
                 await evaluate_async([strategy_fn], df, cfg)
             )[0]
+            score, direction, atr = (await evaluate_async([strategy_fn], df_map, cfg))[
+                0
+            ]
 
         atr_period = int(config.get("risk", {}).get("atr_period", 14))
         if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
@@ -564,7 +631,11 @@ async def analyze_symbol(
                 except Exception:  # pragma: no cover - safety
                     reg_filter = None
             try:
-                if reg_filter and hasattr(reg_filter, "matches") and reg_filter.matches(sub_regime):
+                if (
+                    reg_filter
+                    and hasattr(reg_filter, "matches")
+                    and reg_filter.matches(sub_regime)
+                ):
                     reg_strength = 1.0
             except Exception:  # pragma: no cover - safety
                 pass

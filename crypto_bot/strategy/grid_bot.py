@@ -18,16 +18,25 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.volatility_filter import calc_atr
 
 DYNAMIC_THRESHOLD = 1.5
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
+
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model
-    MODEL = load_model("grid_bot")
-except Exception:  # pragma: no cover - fallback
-    MODEL = None
+    ML_AVAILABLE = True
+except Exception:  # pragma: no cover - trainer missing
+    ML_AVAILABLE = False
+
 from . import breakout_bot, micro_scalp_bot
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 
-logger = setup_logger(__name__, LOG_DIR / "bot.log")
+if ML_AVAILABLE:
+    MODEL = load_model("grid_bot")
+else:  # pragma: no cover - fallback
+    MODEL = None
+    logger.warning(
+        "Skipping grid_bot: machine learning support is unavailable",
+    )
 
 
 @dataclass

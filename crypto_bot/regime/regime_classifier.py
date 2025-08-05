@@ -10,10 +10,14 @@ import numpy as np
 import ta
 import yaml
 
+from crypto_bot.utils.telegram import TelegramNotifier
+
 from .pattern_detector import detect_patterns
 from crypto_bot.utils.pattern_logger import log_patterns
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils import timeframe_seconds
+from crypto_bot.utils.telemetry import telemetry
+from crypto_bot.utils.telegram import TelegramNotifier
 
 
 # Thresholds and ML blend settings are defined in ``regime_config.yaml``
@@ -42,6 +46,7 @@ _configure_logger(CONFIG)
 _supabase_model = None
 _supabase_model_lock = asyncio.Lock()
 _model_lock = asyncio.Lock()
+_ml_recovery_task: asyncio.Task | None = None
 
 _ALL_REGIMES = [
     "trending",
@@ -66,6 +71,18 @@ PATTERN_WEIGHTS = {
     "bullish_engulfing": ("mean-reverting", 1.2),
     "ascending_triangle": ("breakout", 2.0),
 }
+
+
+def is_ml_available() -> bool:
+    """Return ``True`` if ML dependencies and credentials are available."""
+    if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_KEY"):
+        return False
+    try:  # pragma: no cover - optional dependency
+        import lightgbm  # noqa: F401
+        from supabase import create_client  # noqa: F401
+    except Exception:
+        return False
+    return True
 
 
 def _apply_hft_overrides(cfg: dict, timeframe: Optional[str]) -> dict:
@@ -117,9 +134,7 @@ def adaptive_thresholds(cfg: dict, df: pd.DataFrame | None, symbol: str | None) 
         from statsmodels.tsa.stattools import adfuller
         from statsmodels.tsa.ar_model import AutoReg
     except ImportError as exc:
-        logger.warning(
-            "statsmodels unavailable; drift detection disabled: %s", exc
-        )
+        logger.warning("statsmodels unavailable; drift detection disabled: %s", exc)
     else:
         try:
             close = df["close"].dropna()
@@ -130,16 +145,16 @@ def adaptive_thresholds(cfg: dict, df: pd.DataFrame | None, symbol: str | None) 
                 if pval > 0.1 or abs(slope) > 0.9:
                     adj = 5
                     out["rsi_mean_rev_min"] = max(0, cfg["rsi_mean_rev_min"] - adj)
-                    out["rsi_mean_rev_max"] = min(
-                        100, cfg["rsi_mean_rev_max"] + adj
-                    )
+                    out["rsi_mean_rev_max"] = min(100, cfg["rsi_mean_rev_max"] + adj)
         except Exception:
             pass
 
     return out
 
 
-def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
+def _ml_fallback(
+    df: pd.DataFrame, notifier: TelegramNotifier | None = None
+) -> Tuple[str, float]:
     """Return regime label and confidence using a Supabase model with fallback."""
     try:  # pragma: no cover - Supabase model is optional
         from .ml_regime_model import predict_regime as sb_predict
@@ -154,7 +169,24 @@ def _ml_fallback(df: pd.DataFrame) -> Tuple[str, float]:
         return label, float(conf)
     except Exception as exc:  # pragma: no cover - log and fallback
         logger.error("%s", exc)
+        telemetry.inc("ml_fallbacks")
+        logger.warning("ML model unavailable; using fallback")
+        if notifier is not None:
+            try:
+                notifier.notify("⚠️ ML model unavailable; using fallback")
+            except Exception:
+                pass
         logger.info("Falling back to embedded model")
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            global _ml_recovery_task
+            if _ml_recovery_task is None or _ml_recovery_task.done():
+                _ml_recovery_task = loop.create_task(
+                    _ml_recovery_loop(notifier)
+                )
 
     try:  # pragma: no cover - optional dependency
         from .ml_fallback import predict_regime
@@ -189,6 +221,7 @@ async def _download_supabase_model():
             path = Path(__file__).with_name(file_name)
             await asyncio.to_thread(path.write_bytes, data)
             import lightgbm as lgb  # pragma: no cover - optional dependency
+
             model = await asyncio.to_thread(lgb.Booster, model_file=str(path))
             logger.info("Downloaded %s from Supabase", file_name)
             return model
@@ -206,7 +239,30 @@ async def _get_supabase_model() -> object | None:
         return _supabase_model
 
 
-def _classify_ml(df: pd.DataFrame) -> Tuple[str, float]:
+async def _ml_recovery_loop(notifier: TelegramNotifier | None) -> None:
+    """Periodically attempt to restore the Supabase ML model."""
+    global _supabase_model, _ml_recovery_task
+    while True:
+        await asyncio.sleep(3600)
+        if not is_ml_available():
+            continue
+        model = await _download_supabase_model()
+        if model is None:
+            continue
+        _supabase_model = model
+        logger.info("Supabase ML model reloaded")
+        if notifier is not None:
+            try:
+                await notifier.notify_async("Supabase ML model reloaded")
+            except Exception:  # pragma: no cover - notifier errors aren't critical
+                logger.exception("Failed to send Telegram notification")
+        _ml_recovery_task = None
+        return
+
+
+def _classify_ml(
+    df: pd.DataFrame, notifier: TelegramNotifier | None = None
+) -> Tuple[str, float]:
     """Predict regime using the Supabase model with fallback."""
     try:  # pragma: no cover - optional dependency
         import lightgbm as lgb
@@ -214,7 +270,11 @@ def _classify_ml(df: pd.DataFrame) -> Tuple[str, float]:
         logger.warning(
             "lightgbm unavailable; ML-based classification disabled: %s", exc
         )
-        return _ml_fallback(df)
+        try:
+            return _ml_fallback(df, notifier)
+        except TypeError:
+            return _ml_fallback(df)
+        return _ml_fallback(df, notifier)
 
     if _supabase_model is None:
         # Running the async download in a blocking manner; callers should
@@ -224,7 +284,11 @@ def _classify_ml(df: pd.DataFrame) -> Tuple[str, float]:
     model = _supabase_model
     model = asyncio.run(_get_supabase_model())
     if model is None:
-        return _ml_fallback(df)
+        try:
+            return _ml_fallback(df, notifier)
+        except TypeError:
+            return _ml_fallback(df)
+        return _ml_fallback(df, notifier)
 
     try:
         change = df["close"].iloc[-1] - df["close"].iloc[0]
@@ -238,7 +302,11 @@ def _classify_ml(df: pd.DataFrame) -> Tuple[str, float]:
             label = "sideways"
         return label, abs(prob - 0.5) * 2
     except Exception:
-        return _ml_fallback(df)
+        try:
+            return _ml_fallback(df, notifier)
+        except TypeError:
+            return _ml_fallback(df)
+        return _ml_fallback(df, notifier)
 
 
 def _probabilities(label: str, confidence: float | None = None) -> Dict[str, float]:
@@ -408,9 +476,10 @@ def _classify_core(
             confirm_key = None
             if cache_key is not None and cfg.get("higher_timeframe"):
                 confirm_key = (cache_key[0], str(cfg.get("higher_timeframe")))
-            if _classify_core(
-                higher_df, confirm_cfg, None, cache_key=confirm_key
-            ) != "trending":
+            if (
+                _classify_core(higher_df, confirm_cfg, None, cache_key=confirm_key)
+                != "trending"
+            ):
                 trending = False
 
     regime = "unknown"
@@ -456,6 +525,7 @@ def _classify_all(
     *,
     df_map: Optional[Dict[str, pd.DataFrame]] = None,
     cache_key: Optional[Tuple[str, str]] = None,
+    notifier: TelegramNotifier | None = None,
 ) -> Tuple[str, Dict[str, float], Dict[str, float]] | Dict[str, str] | Tuple[str, str]:
     """Return regime label, probability mapping and patterns or labels for ``df_map``."""
 
@@ -467,7 +537,9 @@ def _classify_all(
             h_df = None
             if tf != cfg.get("higher_timeframe"):
                 h_df = df_map.get(cfg.get("higher_timeframe"))
-            label, _, _ = _classify_all(frame, h_df, cfg, cache_key=None)
+            label, _, _ = _classify_all(
+                frame, h_df, cfg, cache_key=None, notifier=notifier
+            )
             labels[tf] = label
         if len(df_map) == 2:
             return tuple(labels[tf] for tf in df_map.keys())  # type: ignore
@@ -487,6 +559,19 @@ def _classify_all(
     patterns = detect_patterns(df, min_conf=pattern_min)
 
     regime = _classify_core(df, cfg, higher_df, cache_key=cache_key)
+    if regime == "unknown":
+        use_ml = cfg.get("use_ml_regime_classifier", False)
+        if use_ml and len(df) >= ml_min_bars:
+            label, conf = _classify_ml(df, notifier)
+            log_patterns(label, patterns)
+            return label, _probabilities(label, conf), patterns
+        if len(df) >= ml_min_bars:
+            logger.info("Skipping ML fallback \u2014 ML disabled")
+        else:
+            logger.info(
+                "Skipping ML fallback \u2014 insufficient data (%d rows)", len(df)
+            )
+        return regime, _probabilities(regime, 0.0), patterns
 
     # Score regimes based on indicator result and detected patterns
     scores: Dict[str, float] = {}
@@ -498,15 +583,11 @@ def _classify_all(
             continue
         scores[target] = scores.get(target, 0.0) + weight * float(strength)
 
-    if regime != "unknown":
-        scores[regime] = scores.get(regime, 0.0) + 1.0
+    scores[regime] = scores.get(regime, 0.0) + 1.0
 
-    if scores:
-        total = sum(scores.values())
-        probabilities = {r: scores.get(r, 0.0) / total for r in _ALL_REGIMES}
-        regime = max(scores, key=scores.get)
-        log_patterns(regime, patterns)
-        return regime, probabilities, patterns
+    total = sum(scores.values())
+    probabilities = {r: scores.get(r, 0.0) / total for r in _ALL_REGIMES}
+    regime = max(scores, key=scores.get)
 
     rule_probs = _probabilities(regime)
 
@@ -514,7 +595,7 @@ def _classify_all(
     ml_probs = {r: 0.0 for r in _ALL_REGIMES}
     use_ml = cfg.get("use_ml_regime_classifier", False)
     if use_ml and len(df) >= ml_min_bars:
-        ml_label, conf = _classify_ml(df)
+        ml_label, conf = _classify_ml(df, notifier)
         ml_probs = _probabilities(ml_label, conf)
         if regime == "unknown" and ml_label != "unknown":
             log_patterns(ml_label, patterns)
@@ -522,7 +603,7 @@ def _classify_all(
 
     if regime == "unknown":
         if cfg.get("use_ml_regime_classifier", False) and len(df) >= ml_min_bars:
-            label, conf = _classify_ml(df)
+            label, conf = _classify_ml(df, notifier)
             log_patterns(label, patterns)
             return label, _normalize(_probabilities(label, conf)), patterns
         if len(df) >= ml_min_bars:
@@ -556,6 +637,7 @@ def classify_regime(
     symbol: Optional[str] = None,
     timeframe: Optional[str] = None,
     cache_key: Optional[Tuple[str, str]] = None,
+    notifier: TelegramNotifier | None = None,
 ) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Classify market regime.
 
@@ -632,7 +714,15 @@ def classify_regime(
     if df_map is None and df is None:
         return "unknown", {"unknown": 0.0}
 
-    result = _classify_all(df, higher_df, cfg, df_map=df_map, cache_key=cache_key)
+    kwargs = dict(df_map=df_map)
+    if cache_key is not None:
+        kwargs["cache_key"] = cache_key
+    if notifier is not None:
+        kwargs["notifier"] = notifier
+    result = _classify_all(df, higher_df, cfg, **kwargs)
+    result = _classify_all(
+        df, higher_df, cfg, df_map=df_map, cache_key=cache_key, notifier=notifier
+    )
 
     if df_map is not None:
         return result
@@ -648,6 +738,7 @@ def classify_regime_with_patterns(
     config_path: Optional[str] = None,
     symbol: Optional[str] = None,
     timeframe: Optional[str] = None,
+    notifier: TelegramNotifier | None = None,
 ) -> Tuple[str, Dict[str, float]]:
     """Return the regime label and detected pattern scores."""
 
@@ -657,7 +748,11 @@ def classify_regime_with_patterns(
     _configure_logger(cfg)
     cfg = _apply_hft_overrides(cfg, timeframe)
     cfg = adaptive_thresholds(cfg, df, symbol)
-    label, _, patterns = _classify_all(df, higher_df, cfg)
+    kwargs = {}
+    if notifier is not None:
+        kwargs["notifier"] = notifier
+    label, _, patterns = _classify_all(df, higher_df, cfg, **kwargs)
+    label, _, patterns = _classify_all(df, higher_df, cfg, notifier=notifier)
     return label, patterns
 
 
@@ -670,6 +765,7 @@ async def classify_regime_async(
     symbol: Optional[str] = None,
     timeframe: Optional[str] = None,
     cache_key: Optional[Tuple[str, str]] = None,
+    notifier: TelegramNotifier | None = None,
 ) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Asynchronous wrapper around :func:`classify_regime`."""
     return await asyncio.to_thread(
@@ -681,6 +777,7 @@ async def classify_regime_async(
         symbol=symbol,
         timeframe=timeframe,
         cache_key=cache_key,
+        notifier=notifier,
     )
 
 
@@ -691,6 +788,7 @@ async def classify_regime_with_patterns_async(
     config_path: Optional[str] = None,
     symbol: Optional[str] = None,
     timeframe: Optional[str] = None,
+    notifier: TelegramNotifier | None = None,
 ) -> Tuple[str, Dict[str, float]]:
     """Async wrapper around :func:`classify_regime_with_patterns`."""
     return await asyncio.to_thread(
@@ -700,6 +798,7 @@ async def classify_regime_with_patterns_async(
         config_path=config_path,
         symbol=symbol,
         timeframe=timeframe,
+        notifier=notifier,
     )
 
 
@@ -718,6 +817,7 @@ async def classify_regime_cached(
     profile: bool = False,
     *,
     config_path: Optional[str] = None,
+    notifier: TelegramNotifier | None = None,
 ) -> Tuple[str, object]:
     """Classify ``symbol`` regime with caching and optional profiling."""
 
@@ -740,6 +840,7 @@ async def classify_regime_cached(
         symbol=symbol,
         timeframe=timeframe,
         cache_key=key,
+        notifier=notifier,
     )
     async with _regime_cache_lock:
         regime_cache[key] = label
