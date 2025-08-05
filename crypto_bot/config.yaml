@@ -423,6 +423,7 @@ strategy_allocation:
   trend: 0.2
 strategy_evaluation_mode: ensemble
 strategy_router:
+  # range_arb_bot runs globally and is appended automatically; no need to list it under regimes
   bandit_enabled: true
   bounce_timeframe: 5m
   breakout_timeframe: 15m

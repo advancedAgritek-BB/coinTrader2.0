@@ -37,6 +37,7 @@ from crypto_bot.strategy import (
     bounce_scalper,
     cross_chain_arb_bot,
     flash_crash_bot,
+    range_arb_bot,
 )
 
 try:
@@ -379,7 +380,11 @@ def strategy_for(
     """Return strategy callable for a given regime."""
     cfg = config or DEFAULT_ROUTER_CFG
     strategies = get_strategies_for_regime(regime, cfg)
-    if strategies and _has_regime(cfg, regime):
+    if regime == "unknown" and strategies:
+        def base(df: pd.DataFrame, cfg_p=None):
+            return evaluate_regime(regime, df, cfg)
+        base.__name__ = strategies[0].__name__
+    elif strategies and _has_regime(cfg, regime):
         base = strategies[0]
     elif regime == "unknown":
         if ML_AVAILABLE:
@@ -415,9 +420,13 @@ def get_strategies_for_regime(
             pairs.append((name, fn))
     if not pairs:
         _, mapping = _build_mappings_cached(id(cfg))
-        return mapping.get(regime, [grid_bot.generate_signal])
-    pairs.sort(key=lambda p: score_bot(load_bot_stats(p[0])), reverse=True)
-    return [fn for _, fn in pairs]
+        result = mapping.get(regime, [grid_bot.generate_signal])
+    else:
+        pairs.sort(key=lambda p: score_bot(load_bot_stats(p[0])), reverse=True)
+        result = [fn for _, fn in pairs]
+    if getattr(range_arb_bot, "generate_signal", None) and range_arb_bot.generate_signal not in result:
+        result.append(range_arb_bot.generate_signal)
+    return result
 
 
 def evaluate_regime(
@@ -657,8 +666,11 @@ def route(
     )
 
     if not ML_AVAILABLE and regime == "unknown":
-        logger.warning("ML unavailable; using fallback regime and default strategy.")
-        return _wrap(grid_bot.generate_signal)
+        logger.warning(
+            "ML unavailable; using fallback regime and default strategy. falling back to default strategy."
+        )
+        tf = cfg_get(cfg, "timeframe", "1h") if not isinstance(cfg, RouterConfig) else cfg.timeframe
+        return _wrap(wrap_with_tf(grid_bot.generate_signal, tf))
 
     def _post_fastpath():
         symbol = ""
