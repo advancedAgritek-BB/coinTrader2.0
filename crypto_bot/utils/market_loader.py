@@ -244,21 +244,27 @@ def configure(
 ) -> None:
     """Configure module-wide settings."""
     global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES, SEMA, GECKO_SEMAPHORE
-    cfg = None
-    if ohlcv_timeout is None or max_failures is None:
-        try:
-            with open(CONFIG_PATH) as f:
-                cfg = yaml.safe_load(f) or {}
-        except Exception:
-            cfg = {}
-    if ohlcv_timeout is None and cfg is not None:
+    try:
+        with open(CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception:
+        cfg = {}
+    if ohlcv_timeout is None:
         cfg_val = cfg.get("ohlcv_timeout")
         if cfg_val is not None:
             ohlcv_timeout = cfg_val
-    if max_failures is None and cfg is not None:
+    if max_failures is None:
         cfg_val = cfg.get("max_ohlcv_failures")
         if cfg_val is not None:
             max_failures = cfg_val
+    if max_ws_limit is None:
+        cfg_val = cfg.get("max_ws_limit")
+        if cfg_val is not None:
+            max_ws_limit = cfg_val
+    if max_concurrent is None:
+        cfg_val = cfg.get("max_concurrent_ohlcv")
+        if cfg_val is not None:
+            max_concurrent = cfg_val
     if ohlcv_timeout is not None:
         try:
             val = max(1, int(ohlcv_timeout))
@@ -298,15 +304,6 @@ def configure(
                 max_failures,
                 MAX_OHLCV_FAILURES,
             )
-    if max_ws_limit is None:
-        try:
-            with open(CONFIG_PATH) as f:
-                cfg = yaml.safe_load(f) or {}
-            cfg_val = cfg.get("max_ws_limit")
-            if cfg_val is not None:
-                max_ws_limit = cfg_val
-        except Exception:
-            pass
     if max_ws_limit is not None:
         try:
             MAX_WS_LIMIT = max(1, int(max_ws_limit))
@@ -318,15 +315,6 @@ def configure(
             )
     if status_updates is not None:
         STATUS_UPDATES = bool(status_updates)
-    if max_concurrent is None:
-        try:
-            with open(CONFIG_PATH) as f:
-                cfg = yaml.safe_load(f) or {}
-            cfg_val = cfg.get("max_concurrent_ohlcv")
-            if cfg_val is not None:
-                max_concurrent = cfg_val
-        except Exception:
-            pass
     if max_concurrent is not None:
         try:
             val = int(max_concurrent)
