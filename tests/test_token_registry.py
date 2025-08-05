@@ -674,3 +674,75 @@ def test_check_cex_arbitrage_no_trigger(monkeypatch, tmp_path):
     asyncio.run(mod._check_cex_arbitrage("AAA"))
 
     assert called == {}
+def test_monitor_pump_raydium(monkeypatch, tmp_path):
+    from datetime import datetime
+
+    mod = _load_module(monkeypatch, tmp_path)
+
+    now = datetime.utcnow()
+    pump_data = [
+        {
+            "symbol": "AAA",
+            "mint": "mintAAA",
+            "market_cap": 123,
+            "created_at": now.isoformat(),
+        }
+    ]
+    ray_data = [
+        {
+            "baseSymbol": "BBB",
+            "baseMint": "mintBBB",
+            "liquidity": 60000,
+            "created_at": now.isoformat(),
+        }
+    ]
+
+    class DummyResp:
+        def __init__(self, data):
+            self._data = data
+
+        async def json(self, content_type=None):
+            return self._data
+
+    class DummySession:
+        def __init__(self):
+            self.calls = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def get(self, url, timeout=10):
+            self.calls.append(url)
+            if url == mod.PUMP_URL:
+                return DummyResp(pump_data)
+            return DummyResp(ray_data)
+
+    session = DummySession()
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
+    monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+
+    calls: list[tuple] = []
+
+    async def fake_fetch(*args):
+        calls.append(args)
+
+    monkeypatch.setattr(mod, "fetch_data_range_async", fake_fetch)
+
+    cmds: list[str] = []
+    monkeypatch.setattr(mod.os, "system", lambda cmd: cmds.append(cmd) or 0)
+
+    async def fake_sleep(_):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fake_sleep)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(mod.monitor_pump_raydium())
+
+    assert mod.TOKEN_MINTS["AAA"] == "mintAAA"
+    assert mod.TOKEN_MINTS["BBB"] == "mintBBB"
+    assert len(calls) == 2
+    assert len(cmds) == 2
