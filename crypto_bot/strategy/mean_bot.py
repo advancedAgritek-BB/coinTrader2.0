@@ -32,9 +32,17 @@ logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model
+    ML_AVAILABLE = True
+except Exception:  # pragma: no cover - trainer missing
+    ML_AVAILABLE = False
+
+if ML_AVAILABLE:
     MODEL = load_model("mean_bot")
-except Exception:  # pragma: no cover - fallback
+else:  # pragma: no cover - fallback
     MODEL = None
+    logger.warning(
+        "Skipping mean_bot: machine learning support is unavailable",
+    )
 
 
 async def generate_signal(

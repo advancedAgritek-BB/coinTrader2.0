@@ -16,6 +16,8 @@ from .pattern_detector import detect_patterns
 from crypto_bot.utils.pattern_logger import log_patterns
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils import timeframe_seconds
+from crypto_bot.utils.telemetry import telemetry
+from crypto_bot.utils.telegram import TelegramNotifier
 
 
 # Thresholds and ML blend settings are defined in ``regime_config.yaml``
@@ -132,9 +134,7 @@ def adaptive_thresholds(cfg: dict, df: pd.DataFrame | None, symbol: str | None) 
         from statsmodels.tsa.stattools import adfuller
         from statsmodels.tsa.ar_model import AutoReg
     except ImportError as exc:
-        logger.warning(
-            "statsmodels unavailable; drift detection disabled: %s", exc
-        )
+        logger.warning("statsmodels unavailable; drift detection disabled: %s", exc)
     else:
         try:
             close = df["close"].dropna()
@@ -145,9 +145,7 @@ def adaptive_thresholds(cfg: dict, df: pd.DataFrame | None, symbol: str | None) 
                 if pval > 0.1 or abs(slope) > 0.9:
                     adj = 5
                     out["rsi_mean_rev_min"] = max(0, cfg["rsi_mean_rev_min"] - adj)
-                    out["rsi_mean_rev_max"] = min(
-                        100, cfg["rsi_mean_rev_max"] + adj
-                    )
+                    out["rsi_mean_rev_max"] = min(100, cfg["rsi_mean_rev_max"] + adj)
         except Exception:
             pass
 
@@ -171,6 +169,13 @@ def _ml_fallback(
         return label, float(conf)
     except Exception as exc:  # pragma: no cover - log and fallback
         logger.error("%s", exc)
+        telemetry.inc("ml_fallbacks")
+        logger.warning("ML model unavailable; using fallback")
+        if notifier is not None:
+            try:
+                notifier.notify("⚠️ ML model unavailable; using fallback")
+            except Exception:
+                pass
         logger.info("Falling back to embedded model")
         try:
             loop = asyncio.get_running_loop()
@@ -216,6 +221,7 @@ async def _download_supabase_model():
             path = Path(__file__).with_name(file_name)
             await asyncio.to_thread(path.write_bytes, data)
             import lightgbm as lgb  # pragma: no cover - optional dependency
+
             model = await asyncio.to_thread(lgb.Booster, model_file=str(path))
             logger.info("Downloaded %s from Supabase", file_name)
             return model
@@ -268,6 +274,7 @@ def _classify_ml(
             return _ml_fallback(df, notifier)
         except TypeError:
             return _ml_fallback(df)
+        return _ml_fallback(df, notifier)
 
     if _supabase_model is None:
         # Running the async download in a blocking manner; callers should
@@ -281,6 +288,7 @@ def _classify_ml(
             return _ml_fallback(df, notifier)
         except TypeError:
             return _ml_fallback(df)
+        return _ml_fallback(df, notifier)
 
     try:
         change = df["close"].iloc[-1] - df["close"].iloc[0]
@@ -298,6 +306,7 @@ def _classify_ml(
             return _ml_fallback(df, notifier)
         except TypeError:
             return _ml_fallback(df)
+        return _ml_fallback(df, notifier)
 
 
 def _probabilities(label: str, confidence: float | None = None) -> Dict[str, float]:
@@ -467,9 +476,10 @@ def _classify_core(
             confirm_key = None
             if cache_key is not None and cfg.get("higher_timeframe"):
                 confirm_key = (cache_key[0], str(cfg.get("higher_timeframe")))
-            if _classify_core(
-                higher_df, confirm_cfg, None, cache_key=confirm_key
-            ) != "trending":
+            if (
+                _classify_core(higher_df, confirm_cfg, None, cache_key=confirm_key)
+                != "trending"
+            ):
                 trending = False
 
     regime = "unknown"
@@ -587,6 +597,23 @@ def _classify_all(
     if use_ml and len(df) >= ml_min_bars:
         ml_label, conf = _classify_ml(df, notifier)
         ml_probs = _probabilities(ml_label, conf)
+        if regime == "unknown" and ml_label != "unknown":
+            log_patterns(ml_label, patterns)
+            return ml_label, ml_probs, patterns
+
+    if regime == "unknown":
+        if cfg.get("use_ml_regime_classifier", False) and len(df) >= ml_min_bars:
+            label, conf = _classify_ml(df, notifier)
+            log_patterns(label, patterns)
+            return label, _normalize(_probabilities(label, conf)), patterns
+        if len(df) >= ml_min_bars:
+            logger.info("Skipping ML fallback \u2014 ML disabled")
+        else:
+            logger.info(
+                "Skipping ML fallback \u2014 insufficient data (%d rows)", len(df)
+            )
+        return regime, _probabilities(regime, 0.0), patterns
+
     if ml_label != "unknown" and use_ml and len(df) >= ml_min_bars:
         weight = cfg.get("ml_blend_weight", 0.5)
         final_probs = {
@@ -693,6 +720,9 @@ def classify_regime(
     if notifier is not None:
         kwargs["notifier"] = notifier
     result = _classify_all(df, higher_df, cfg, **kwargs)
+    result = _classify_all(
+        df, higher_df, cfg, df_map=df_map, cache_key=cache_key, notifier=notifier
+    )
 
     if df_map is not None:
         return result
@@ -722,6 +752,7 @@ def classify_regime_with_patterns(
     if notifier is not None:
         kwargs["notifier"] = notifier
     label, _, patterns = _classify_all(df, higher_df, cfg, **kwargs)
+    label, _, patterns = _classify_all(df, higher_df, cfg, notifier=notifier)
     return label, patterns
 
 

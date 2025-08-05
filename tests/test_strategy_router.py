@@ -3,6 +3,7 @@ import asyncio
 import sys
 import types
 import json
+import logging
 
 import fakeredis
 import pandas as pd
@@ -88,7 +89,7 @@ def test_strategy_for_mapping():
     assert strategy_for("volatile", cfg).__name__ == sniper_bot.generate_signal.__name__
     assert strategy_for("scalp", cfg).__name__ == micro_scalp_bot.generate_signal.__name__
     assert strategy_for("bounce", cfg).__name__ == bounce_scalper.generate_signal.__name__
-    assert strategy_for("unknown", cfg).__name__ == sniper_bot.generate_signal.__name__
+    assert strategy_for("unknown", cfg).__name__ == grid_bot.generate_signal.__name__
 
 
 def test_strategy_for_momentum_bot():
@@ -147,6 +148,17 @@ def test_route_handles_none_df_map():
     score, direction = fn(None)
     assert isinstance(score, float)
     assert isinstance(direction, str)
+
+
+def test_route_unknown_fallback(monkeypatch, caplog):
+    monkeypatch.setattr(strategy_router, "ML_AVAILABLE", False)
+    fake_r = fakeredis.FakeRedis()
+    monkeypatch.setattr(strategy_router.commit_lock, "REDIS_CLIENT", fake_r)
+    cfg = RouterConfig.from_dict({"strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]}})
+    with caplog.at_level("WARNING"):
+        fn = route("unknown", "cex", cfg)
+    assert fn.__name__ == grid_bot.generate_signal.__name__
+    assert "ML unavailable; using fallback regime and default strategy." in caplog.text
 
 
 def test_route_notifier(monkeypatch):
@@ -435,4 +447,20 @@ def test_route_mempool_blocks_signal(monkeypatch):
     )
     score, direction = fn(df, cfg)
     assert (score, direction) == (0.0, "none")
+
+
+def _unwrap(fn):
+    inner = fn.__closure__[0].cell_contents
+    base_wrapped = inner.__closure__[0].cell_contents
+    return base_wrapped.__closure__[0].cell_contents
+
+
+def test_route_unknown_ml_unavailable(monkeypatch, caplog):
+    caplog.set_level(logging.WARNING)
+    monkeypatch.setattr(strategy_router, "ML_AVAILABLE", False)
+    cfg = {"strategy_router": {"regimes": {}}}
+    fn = route("unknown", "cex", cfg)
+    base = _unwrap(fn)
+    assert base is grid_bot.generate_signal
+    assert any("falling back" in r.getMessage() for r in caplog.records)
 
