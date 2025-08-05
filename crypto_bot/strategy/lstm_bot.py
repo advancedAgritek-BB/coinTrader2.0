@@ -10,8 +10,8 @@ try:  # pragma: no cover - optional trainer
     ML_AVAILABLE = True
 except Exception:  # pragma: no cover - trainer unavailable
     ML_AVAILABLE = False
-    logger.warning(
-        "Skipping lstm_bot: machine learning support is unavailable",
+    logger.info(
+        "Machine learning model not found; running without ML features."
     )
 
 if ML_AVAILABLE:
