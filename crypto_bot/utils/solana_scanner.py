@@ -20,7 +20,10 @@ logger = logging.getLogger(__name__)
 _MIN_VOLUME_USD = 0.0
 
 RAYDIUM_URL = "https://api.raydium.io/pairs"
-PUMP_FUN_URL = "https://client-api.prod.pump.fun/v1/launches"
+PUMP_FUN_URL = "https://api.pump.fun/tokens"
+
+# Timestamp of the most recent Pump.fun token processed
+last_pump_ts: float = 0.0
 
 
 async def search_geckoterminal_token(query: str) -> tuple[str, float] | None:
@@ -157,11 +160,21 @@ async def fetch_new_raydium_pools(api_key: str, limit: int) -> List[str]:
     return tokens[:limit]
 
 
-async def fetch_pump_fun_launches(api_key: str, limit: int) -> List[str]:
-    """Return recent Pump.fun launches."""
-    url = f"{PUMP_FUN_URL}?api-key={api_key}&limit={limit}"
+async def fetch_pump_fun_launches(limit: int) -> List[str]:
+    """Return recent Pump.fun launches.
+
+    The Pump.fun API returns a JSON array of token objects. Results are
+    filtered to only include tokens newer than the last invocation using
+    the module level ``last_pump_ts``. Tokens are further filtered by
+    ``initial_buy`` and ``market_cap`` thresholds and require a non-empty
+    ``twitter`` field.
+    """
+
+    global last_pump_ts
+
+    url = f"{PUMP_FUN_URL}?limit={limit}&offset=0"
     data = await _fetch_json(url)
-    if not data:
+    if not isinstance(data, list):
         return []
 
     # Filter results based on basic Pump.fun launch criteria.  Only tokens
@@ -191,6 +204,44 @@ async def fetch_pump_fun_launches(api_key: str, limit: int) -> List[str]:
 
     tokens = await _extract_tokens(filtered)
     return tokens[:limit]
+    results: List[str] = []
+    max_ts = last_pump_ts
+
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+
+        ts = (
+            item.get("timestamp")
+            or item.get("ts")
+            or item.get("created_at")
+            or item.get("createdAt")
+            or 0
+        )
+        try:
+            ts_val = float(ts)
+        except Exception:
+            ts_val = 0.0
+        if ts_val <= last_pump_ts:
+            continue
+        if ts_val > max_ts:
+            max_ts = ts_val
+
+        try:
+            initial_buy = float(item.get("initial_buy") or item.get("initialBuy") or 0)
+            market_cap = float(item.get("market_cap") or item.get("marketCap") or 0)
+        except Exception:
+            continue
+        twitter = item.get("twitter") or ""
+        if initial_buy < 10_000 or market_cap < 50_000 or not twitter:
+            continue
+
+        mint = item.get("mint")
+        if mint:
+            results.append(str(mint))
+
+    last_pump_ts = max_ts
+    return results[:limit]
 
 
 async def get_solana_new_tokens(config: dict) -> List[str]:
@@ -201,7 +252,6 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
     limit = int(config.get("max_tokens_per_scan", 0)) or 20
     _MIN_VOLUME_USD = float(config.get("min_volume_usd", 0.0))
     raydium_key = str(config.get("raydium_api_key", ""))
-    pump_key = str(config.get("pump_fun_api_key", ""))
     gecko_search = bool(config.get("gecko_search", True))
 
     tasks = []
@@ -212,16 +262,21 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
                 return res
             coro = _wrap()
         tasks.append(coro)
-    if pump_key:
-        coro = fetch_pump_fun_launches(pump_key, limit)
+
+        # Pump.fun shares the same API key as Raydium
+        coro = fetch_pump_fun_launches(raydium_key, limit)
         if not asyncio.iscoroutine(coro):
             async def _wrap(res=coro):
                 return res
             coro = _wrap()
         tasks.append(coro)
 
-    if not tasks:
-        return []
+    coro = fetch_pump_fun_launches(limit)
+    if not asyncio.iscoroutine(coro):
+        async def _wrap(res=coro):
+            return res
+        coro = _wrap()
+    tasks.append(coro)
 
     results = await asyncio.gather(*tasks)
     candidates: list[str] = []
