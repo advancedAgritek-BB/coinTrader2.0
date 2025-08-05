@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from datetime import datetime
 from typing import List
+
 import aiohttp
 import ccxt.async_support as ccxt
+
 from .gecko import gecko_request
-
-from .token_registry import TOKEN_MINTS, get_mint_from_gecko, fetch_from_helius
-
 from . import symbol_scoring
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 # Global min volume filter updated by ``get_solana_new_tokens``
 _MIN_VOLUME_USD = 0.0
 
+RAYDIUM_URL = "https://api.raydium.io/v2/main/pairs"
 RAYDIUM_URL = "https://api.raydium.io/v2/pairs/new"
 PUMP_FUN_URL = "https://client-api.prod.pump.fun/v1/launches"
 RAYDIUM_URL = "https://api.raydium.io/pairs"
@@ -26,6 +27,15 @@ PUMP_FUN_URL = "https://api.pump.fun/tokens"
 
 # Timestamp of the most recent Pump.fun token processed
 last_pump_ts: float = 0.0
+
+# Persist last processed Raydium creation timestamp
+RAYDIUM_TS_FILE = (
+    Path(__file__).resolve().parents[2] / "cache" / "raydium_last_ts.txt"
+)
+try:
+    _LAST_RAYDIUM_TS = float(RAYDIUM_TS_FILE.read_text())
+except Exception:
+    _LAST_RAYDIUM_TS = 0.0
 
 
 async def search_geckoterminal_token(query: str) -> tuple[str, float] | None:
@@ -102,11 +112,66 @@ async def _close_exchange(exchange) -> None:
 
 
 async def _extract_tokens(data: list | dict) -> List[str]:
-    """Return token mints from ``data`` respecting ``_MIN_VOLUME_USD``.
+    """Return new Raydium pool mints from ``data``.
 
-    Tokens not present in :data:`TOKEN_MINTS` are verified via
-    :func:`get_mint_from_gecko`. Unresolvable entries are skipped.
+    The v2 API returns a list of pair objects with ``base.address`` providing
+    the token mint.  Results are filtered to only include pools where:
+
+    * ``liquidity_locked`` is ``True``
+    * ``creationTimestamp`` is newer than the last poll
+    * ``volume24h`` >= 100_000 and ``liquidity`` >= 50_000
+
+    The most recent ``creationTimestamp`` encountered is persisted to disk so
+    subsequent polls skip older entries.
     """
+
+    items = data.get("data") if isinstance(data, dict) else data
+    if not isinstance(items, list):
+        return []
+
+    global _LAST_RAYDIUM_TS
+    latest = _LAST_RAYDIUM_TS
+    results: list[tuple[str, float]] = []
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        base = item.get("base") or {}
+        mint = base.get("address") if isinstance(base, dict) else None
+        try:
+            liq = float(item.get("liquidity") or 0)
+            vol = float(item.get("volume24h") or 0)
+            ts = float(item.get("creationTimestamp") or 0)
+            locked = bool(item.get("liquidity_locked"))
+        except Exception:
+            continue
+        if (
+            not mint
+            or not locked
+            or ts <= _LAST_RAYDIUM_TS
+            or vol < 100_000
+            or liq < 50_000
+        ):
+            continue
+        results.append((str(mint), ts))
+        if ts > latest:
+            latest = ts
+
+    if results and latest > _LAST_RAYDIUM_TS:
+        _LAST_RAYDIUM_TS = latest
+        try:
+            RAYDIUM_TS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            RAYDIUM_TS_FILE.write_text(str(int(latest)))
+        except Exception:  # pragma: no cover - best effort
+            pass
+
+    results.sort(key=lambda x: x[1], reverse=True)
+    return [mint for mint, _ in results]
+
+
+async def _extract_pump_fun_tokens(data: list | dict) -> List[str]:
+    """Return token mints from Pump.fun responses."""
+
     items = data.get("data") if isinstance(data, dict) else data
     if isinstance(items, dict):
         items = list(items.values())
@@ -137,23 +202,13 @@ async def _extract_tokens(data: list | dict) -> List[str]:
         except Exception:
             volume = 0.0
         if volume >= _MIN_VOLUME_USD:
-            base = str(mint).split("/")[0]
-            if base not in TOKEN_MINTS:
-                resolved = await get_mint_from_gecko(base)
-                if not resolved:
-                    helius = await fetch_from_helius([base])
-                    resolved = helius.get(base.upper()) if helius else None
-                if resolved:
-                    TOKEN_MINTS[base] = resolved
-                else:
-                    logger.warning("Mint lookup failed for %s", base)
-                    continue
             results.append(str(mint))
     return results
 
 
-async def fetch_new_raydium_pools(api_key: str, limit: int) -> List[str]:
+async def fetch_new_raydium_pools(limit: int) -> List[str]:
     """Return new Raydium pool token mints."""
+
     url = f"{RAYDIUM_URL}?limit={limit}"
     data = await _fetch_json(url)
     if not data:
@@ -207,6 +262,7 @@ async def fetch_pump_fun_launches(limit: int) -> List[str]:
     data = await _fetch_json(url)
     if not isinstance(data, list):
         return []
+    tokens = await _extract_pump_fun_tokens(data)
 
     # Filter results based on basic Pump.fun launch criteria.  Only tokens
     # which provide a ``created_at`` timestamp, have an ``initial_buy`` flag,
@@ -282,6 +338,18 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
 
     limit = int(config.get("max_tokens_per_scan", 0)) or 20
     _MIN_VOLUME_USD = float(config.get("min_volume_usd", 0.0))
+    pump_key = str(config.get("pump_fun_api_key", ""))
+    gecko_search = bool(config.get("gecko_search", True))
+
+    tasks = []
+    coro = fetch_new_raydium_pools(limit)
+    if not asyncio.iscoroutine(coro):
+        async def _wrap(res=coro):
+            return res
+        coro = _wrap()
+    tasks.append(coro)
+    if pump_key:
+        coro = fetch_pump_fun_launches(pump_key, limit)
     raydium_key = str(config.get("raydium_api_key", ""))
     gecko_search = bool(config.get("gecko_search", True))
 
