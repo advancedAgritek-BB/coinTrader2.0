@@ -33,7 +33,8 @@ TOKEN_MINTS: Dict[str, str] = {}
 _LOADED = False
 
 # Poll interval for monitoring external token feeds
-POLL_INTERVAL = 60
+# Reduced poll interval to surface new tokens faster
+POLL_INTERVAL = 5
 
 
 async def fetch_from_jupiter() -> Dict[str, str]:
@@ -342,6 +343,25 @@ async def monitor_new_tokens() -> None:
                     "https://api.raydium.io/v2/main/pairs", timeout=10
                 )
                 pump_resp, raydium_resp = await asyncio.gather(pump_task, raydium_task)
+
+                # Respect rate limiting
+                if pump_resp.status == 429:
+                    retry_after = pump_resp.headers.get("Retry-After")
+                    try:
+                        delay = int(retry_after) if retry_after else 0
+                    except (TypeError, ValueError):
+                        delay = 0
+                    await asyncio.sleep(delay or 5)
+                    continue
+                if raydium_resp.status == 429:
+                    retry_after = raydium_resp.headers.get("Retry-After")
+                    try:
+                        delay = int(retry_after) if retry_after else 0
+                    except (TypeError, ValueError):
+                        delay = 0
+                    await asyncio.sleep(delay or 5)
+                    continue
+
                 pump_data = await pump_resp.json(content_type=None)
                 raydium_data = await raydium_resp.json(content_type=None)
 
@@ -359,7 +379,24 @@ async def monitor_new_tokens() -> None:
                 except Exception:
                     continue
                 if last_pump is None or ts > last_pump:
-                    last_pump = ts if last_pump is None or ts > last_pump else last_pump
+                    last_pump = ts
+                    initial_buy = (
+                        item.get("initial_buy")
+                        or item.get("initialBuy")
+                        or 0
+                    )
+                    market_cap = (
+                        item.get("market_cap")
+                        or item.get("marketCap")
+                        or 0
+                    )
+                    twitter = item.get("twitter") or ""
+                    if not (
+                        initial_buy >= 10_000
+                        and market_cap >= 50_000
+                        and twitter
+                    ):
+                        continue
                     key = str(symbol).upper()
                     if key not in TOKEN_MINTS:
                         TOKEN_MINTS[key] = mint
@@ -369,25 +406,39 @@ async def monitor_new_tokens() -> None:
 
             # Process Raydium pairs
             for item in raydium_data if isinstance(raydium_data, list) else []:
-                base_symbol = (
-                    item.get("baseSymbol")
-                    or item.get("symbol")
-                    or item.get("name")
-                )
-                base_mint = item.get("baseMint")
-                created = item.get("created_at") or item.get("createdAt")
-                if not (base_symbol and base_mint and created):
+                base = item.get("base") or {}
+                base_symbol = base.get("symbol")
+                base_address = base.get("address")
+                created = item.get("creation_timestamp")
+                locked = item.get("liquidity_locked")
+                volume = item.get("volume24h")
+                liquidity = item.get("liquidity")
+                if not (
+                    base_symbol
+                    and base_address
+                    and created
+                    and locked
+                ):
+                    continue
+                if not locked:
                     continue
                 try:
-                    ts = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+                    if float(volume) <= 100_000 or float(liquidity) <= 50_000:
+                        continue
+                except Exception:
+                    continue
+                try:
+                    ts = datetime.fromtimestamp(float(created))
                 except Exception:
                     continue
                 if last_raydium is None or ts > last_raydium:
-                    last_raydium = ts if last_raydium is None or ts > last_raydium else last_raydium
+                    last_raydium = ts
                     key = str(base_symbol).split("/")[0].upper()
                     if key not in TOKEN_MINTS:
-                        TOKEN_MINTS[key] = base_mint
-                        logger.info("New token detected: %s -> %s", key, base_mint)
+                        TOKEN_MINTS[key] = base_address
+                        logger.info(
+                            "New Raydium token detected: %s -> %s", key, base_address
+                        )
                         _write_cache()
                         new_symbols.append(key)
 

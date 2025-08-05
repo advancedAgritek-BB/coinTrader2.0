@@ -8,9 +8,12 @@ pkg_root = types.ModuleType("crypto_bot")
 utils_pkg = types.ModuleType("crypto_bot.utils")
 pkg_root.utils = utils_pkg
 pkg_root.__path__ = [str(pathlib.Path("crypto_bot"))]
+pkg_root.volatility_filter = types.ModuleType("crypto_bot.volatility_filter")
+pkg_root.volatility_filter.calc_atr = lambda *_a, **_k: 0.0
 utils_pkg.__path__ = [str(pathlib.Path("crypto_bot/utils"))]
 sys.modules.setdefault("crypto_bot", pkg_root)
 sys.modules.setdefault("crypto_bot.utils", utils_pkg)
+sys.modules.setdefault("crypto_bot.volatility_filter", pkg_root.volatility_filter)
 sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
 sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
 
@@ -111,7 +114,7 @@ def test_get_solana_new_tokens(monkeypatch):
     monkeypatch.setattr(
         solana_scanner,
         "fetch_pump_fun_launches",
-        lambda key, limit: ["Y", "Z"],
+        lambda limit: ["Y", "Z"],
     )
     async def fake_score(*_a, **_k):
         return 1.0
@@ -169,7 +172,7 @@ def test_get_solana_new_tokens_gecko_filter(monkeypatch):
     monkeypatch.setattr(
         solana_scanner,
         "fetch_pump_fun_launches",
-        lambda *_a, **_k: [],
+        lambda limit: [],
     )
 
     async def fake_search(q):
@@ -207,7 +210,7 @@ def test_get_solana_new_tokens_scoring(monkeypatch):
     monkeypatch.setattr(
         solana_scanner,
         "fetch_pump_fun_launches",
-        lambda *_a, **_k: [],
+        lambda limit: [],
     )
 
     async def search(q):
