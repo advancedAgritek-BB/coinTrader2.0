@@ -48,7 +48,11 @@ def generate_signal(
     df: pd.DataFrame,
     config: Optional[dict] = None,
 ) -> Tuple[float, str]:
-    """Generate arb signal in low vol ranges using kernel prediction."""
+    """Generate arb signal using kernel prediction.
+
+    The strategy can run in any market regime, but trades are only taken
+    when low volatility conditions are detected.
+    """
     if df.empty:
         return 0.0, "none"
 
@@ -124,9 +128,15 @@ def generate_signal(
 
 
 class regime_filter:
-    """Match low volatility or sideways regimes."""
+    """Match all market regimes.
+
+    This filter now always returns ``True`` so the strategy is considered in
+    every regime.  Additional safeguards within :func:`generate_signal`
+    ensure trades only occur during suitable low volatility conditions.
+    """
 
     @staticmethod
     def matches(regime: str) -> bool:
-        return regime in {"sideways", "low_vol", "mean-reverting"}
+        """Return ``True`` for every supplied regime."""
+        return True
 
