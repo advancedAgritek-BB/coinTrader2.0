@@ -52,10 +52,12 @@ def fetch_fng_index() -> int:
             value = int(data.get("data", [{}])[0].get("value", 50))
             _CACHE[key] = value
             return value
+    except Exception as exc:
     except Exception as exc:  # pragma: no cover - network failure
         logger.error("Failed to fetch FNG index: %s", exc)
 
 
+async def fetch_twitter_sentiment(query: str = "bitcoin", symbol: str | None = None) -> int:
 async def fetch_twitter_sentiment(
     query: str = "bitcoin", symbol: str | None = None
 ) -> int:
@@ -71,6 +73,14 @@ async def fetch_twitter_sentiment(
             return int(mock)
         except ValueError:
             return 50
+
+    if symbol:
+        api_key = os.getenv("LUNARCRUSH_API_KEY")
+        if not api_key:
+            logger.error("LUNARCRUSH_API_KEY not set")
+            return 50
+        return await fetch_lunarcrush_sentiment(symbol)
+
     if symbol and os.getenv("LUNARCRUSH_API_KEY"):
         return await fetch_lunarcrush_sentiment(symbol)
     key = f"twitter:{query}"
@@ -92,6 +102,7 @@ def fetch_lunarcrush_sentiment(symbol: str) -> int:
             value = int(data.get("score", 50))
             _CACHE[key] = value
             return value
+    except Exception as exc:  # pragma: no cover - network failure
     except Exception:
         # Fallback to async client if requests fails
         pass
@@ -123,6 +134,7 @@ async def fetch_lunarcrush_sentiment_async(symbol: str) -> int:
         return _CACHE[key]
 
     try:
+        value = int(lunar_client.get_sentiment(symbol))
         try:
             # Prefer the async client when possible
             value = int(await lunar_client.get_sentiment(symbol))
@@ -136,6 +148,8 @@ async def fetch_lunarcrush_sentiment_async(symbol: str) -> int:
     except Exception as exc:  # pragma: no cover - network failure
         logger.error("Failed to fetch LunarCrush sentiment: %s", exc)
         return 50
+    _CACHE[key] = value
+    return value
 
 
 def fetch_twitter_sentiment(
