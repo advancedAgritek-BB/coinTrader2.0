@@ -27,7 +27,7 @@ async def test_too_bearish(monkeypatch):
     monkeypatch.setattr(
         "crypto_bot.sentiment_filter.lunar_client.get_sentiment", fake_get_sentiment
     )
-    assert asyncio.run(sf.too_bearish(20, 40, symbol="BTC")) is True
+    assert await sf.too_bearish(20, 40, symbol="BTC") is True
 
 
 @pytest.mark.asyncio
@@ -44,7 +44,7 @@ async def test_boost_factor(monkeypatch):
     monkeypatch.setattr(
         "crypto_bot.sentiment_filter.lunar_client.get_sentiment", fake_get_sentiment
     )
-    assert asyncio.run(sf.boost_factor(70, 60, symbol="BTC")) > 1.0
+    assert await sf.boost_factor(70, 60, symbol="BTC") > 1.0
 
 
 def test_fetch_twitter_sentiment_no_api_key(monkeypatch, caplog):
