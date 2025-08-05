@@ -44,6 +44,16 @@ _last_snapshot_time = 0
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
+UNSUPPORTED_SYMBOLS = [
+    "AIBTC/EUR",
+    "AIBTC/USD",
+]
+"""Symbols that consistently fail to load OHLCV data.
+
+Extend this list to skip additional markets without making network
+requests.
+"""
+
 failed_symbols: Dict[str, Dict[str, Any]] = {}
 # Track WebSocket OHLCV failures per symbol
 WS_FAIL_COUNTS: Dict[str, int] = {}
@@ -1075,6 +1085,10 @@ async def fetch_ohlcv_async(
 ) -> list | Exception:
     """Return OHLCV data for ``symbol`` with simple retries."""
 
+    if symbol in UNSUPPORTED_SYMBOLS:
+        logger.info("Skipping unsupported symbol %s", symbol)
+        return []
+
     for attempt in range(3):
         try:
             return await _fetch_ohlcv_async_inner(
@@ -1484,6 +1498,17 @@ async def load_ohlcv_parallel(
 
     since_map = since_map or {}
 
+    data: Dict[str, list] = {}
+    symbols = list(symbols)
+    unsupported = [s for s in symbols if s in UNSUPPORTED_SYMBOLS]
+    for s in unsupported:
+        logger.info("Skipping unsupported symbol %s", s)
+        data[s] = []
+    symbols = [s for s in symbols if s not in UNSUPPORTED_SYMBOLS]
+
+    if not symbols:
+        return data
+
     now = time.time()
     filtered_symbols: List[str] = []
     for s in symbols:
@@ -1507,7 +1532,7 @@ async def load_ohlcv_parallel(
         symbols = prio_list + [s for s in symbols if s not in seen]
 
     if not symbols:
-        return {}
+        return data
 
     if (
         use_websocket
@@ -1570,7 +1595,6 @@ async def load_ohlcv_parallel(
                 t.cancel()
         raise asyncio.CancelledError()
 
-    data: Dict[str, list] = {}
     ex_id = getattr(exchange, "id", "unknown")
     mode = "websocket" if use_websocket else "REST"
     for sym, res in zip(symbols, results):

@@ -1086,6 +1086,12 @@ OHLCV data for these symbols is now fetched concurrently using
 `load_ohlcv_parallel`, greatly reducing the time needed to evaluate
 large symbol lists.
 
+Some markets are known to fail consistently when requesting historical
+data. These pairs are listed in `UNSUPPORTED_SYMBOLS` within
+`crypto_bot/utils/market_loader.py`. The loader skips any symbol in this
+list without making network requests. To ignore additional markets,
+append their identifiers to `UNSUPPORTED_SYMBOLS`.
+
 Each candidate pair is also assigned a score based on volume, recent price
 change, bid/ask spread, age and API latency. The weights and limits for this
 calculation can be tuned via `symbol_score_weights`, `max_vol`,
