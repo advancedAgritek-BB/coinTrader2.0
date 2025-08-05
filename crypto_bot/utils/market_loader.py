@@ -47,6 +47,7 @@ logger = setup_logger(__name__, LOG_DIR / "bot.log")
 failed_symbols: Dict[str, Dict[str, Any]] = {}
 # Track WebSocket OHLCV failures per symbol
 WS_FAIL_COUNTS: Dict[str, int] = {}
+UNSUPPORTED_SYMBOLS: set[str] = set()
 RETRY_DELAY = 300
 MAX_RETRY_DELAY = 3600
 # Default timeout when fetching OHLCV data
@@ -572,6 +573,10 @@ async def _fetch_ohlcv_async_inner(
     ):
         ex_id = getattr(exchange, "id", "unknown")
         logger.warning("Timeframe %s not supported on %s", timeframe, ex_id)
+        return []
+
+    if symbol in UNSUPPORTED_SYMBOLS:
+        logger.warning("Skipping unsupported symbol %s", symbol)
         return []
 
     if timeframe in ("4h", "1d"):
@@ -1668,11 +1673,12 @@ async def load_ohlcv_parallel(
                     f"Failed to load OHLCV for {sym} on {timeframe} limit {limit}: {res}"
                 )
             info = failed_symbols.get(sym)
-            delay = RETRY_DELAY
+            status = getattr(res, "http_status", getattr(res, "status", None))
+            delay = 60 if status == 429 else RETRY_DELAY
             count = 1
             disabled = False
             if info is not None:
-                delay = min(info["delay"] * 2, MAX_RETRY_DELAY)
+                delay = 60 if status == 429 else min(info["delay"] * 2, MAX_RETRY_DELAY)
                 count = info.get("count", 0) + 1
                 disabled = info.get("disabled", False)
             if count >= MAX_OHLCV_FAILURES:
