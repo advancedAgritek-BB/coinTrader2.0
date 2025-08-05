@@ -3,6 +3,7 @@ import importlib
 import sys
 import types
 from datetime import datetime
+import pathlib
 
 pkg_root = types.ModuleType("crypto_bot")
 utils_pkg = types.ModuleType("crypto_bot.utils")

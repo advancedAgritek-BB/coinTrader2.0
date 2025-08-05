@@ -243,15 +243,20 @@ async def fetch_new_raydium_pools(limit: int) -> List[str]:
     return tokens[:limit]
 
 
-async def fetch_pump_fun_launches(limit: int) -> List[str]:
+async def fetch_pump_fun_launches(*args) -> List[str]:
     """Return recent Pump.fun launches.
 
-    The Pump.fun API returns a JSON array of token objects. Results are
-    filtered to only include tokens newer than the last invocation using
-    the module level ``last_pump_ts``. Tokens are further filtered by
-    ``initial_buy`` and ``market_cap`` thresholds and require a non-empty
-    ``twitter`` field.
+    The function accepts ``limit`` as the last positional argument to
+    remain backward compatible with older call sites that passed an API key
+    first.  The Pump.fun API returns a JSON array of token objects.  Each
+    item must provide ``created_at``, ``initial_buy``, ``market_cap`` and
+    ``twitter`` fields.  Only tokens newer than ``last_pump_ts`` are
+    returned.
     """
+
+    if not args:
+        return []
+    limit = int(args[-1])
 
     global last_pump_ts
 
@@ -259,73 +264,47 @@ async def fetch_pump_fun_launches(limit: int) -> List[str]:
     data = await _fetch_json(url)
     if not isinstance(data, list):
         return []
-    tokens = await _extract_pump_fun_tokens(data)
 
-    # Filter results based on basic Pump.fun launch criteria.  Only tokens
-    # which provide a ``created_at`` timestamp, have an ``initial_buy`` flag,
-    # include a positive ``market_cap`` value and expose a ``twitter`` handle
-    # are considered valid.  This mirrors the behaviour of the production
-    # scanner which ignores incomplete listings.
-    items = data.get("data") if isinstance(data, dict) else data
-    filtered: list[dict] = []
-    if isinstance(items, list):
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            created = item.get("created_at") or item.get("createdAt")
-            initial_buy = item.get("initial_buy") or item.get("initialBuy")
-            market_cap = item.get("market_cap") or item.get("marketCap")
-            twitter = item.get("twitter") or item.get("twitter_profile")
-            if not (created and initial_buy and market_cap and twitter):
-                continue
-            try:
-                datetime.fromisoformat(str(created).replace("Z", "+00:00"))
-                if float(market_cap) <= 0:
-                    continue
-            except Exception:
-                continue
-            filtered.append(item)
-
-    tokens = await _extract_tokens(filtered)
-    return tokens[:limit]
     results: List[str] = []
     max_ts = last_pump_ts
 
     for item in data:
+        if len(results) >= limit:
+            break
         if not isinstance(item, dict):
             continue
 
-        ts = (
-            item.get("timestamp")
-            or item.get("ts")
-            or item.get("created_at")
-            or item.get("createdAt")
-            or 0
-        )
-        try:
-            ts_val = float(ts)
-        except Exception:
-            ts_val = 0.0
-        if ts_val <= last_pump_ts:
+        created = item.get("created_at") or item.get("createdAt")
+        initial_buy = item.get("initial_buy") or item.get("initialBuy")
+        market_cap = item.get("market_cap") or item.get("marketCap")
+        twitter = item.get("twitter") or item.get("twitter_profile")
+        if not (created and initial_buy and market_cap and twitter):
             continue
+
+        try:
+            ts_val = datetime.fromisoformat(str(created).replace("Z", "+00:00")).timestamp()
+            mcap = float(market_cap)
+            if mcap <= 0:
+                continue
+        except Exception:
+            continue
+        if not bool(initial_buy) or ts_val <= last_pump_ts:
+            continue
+
         if ts_val > max_ts:
             max_ts = ts_val
 
-        try:
-            initial_buy = float(item.get("initial_buy") or item.get("initialBuy") or 0)
-            market_cap = float(item.get("market_cap") or item.get("marketCap") or 0)
-        except Exception:
-            continue
-        twitter = item.get("twitter") or ""
-        if initial_buy < 10_000 or market_cap < 50_000 or not twitter:
-            continue
-
-        mint = item.get("mint")
+        mint = (
+            item.get("mint")
+            or item.get("tokenMint")
+            or item.get("token_mint")
+            or item.get("address")
+        )
         if mint:
             results.append(str(mint))
 
     last_pump_ts = max_ts
-    return results[:limit]
+    return results
 
 
 async def get_solana_new_tokens(config: dict) -> List[str]:
