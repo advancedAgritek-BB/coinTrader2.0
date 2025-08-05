@@ -1,14 +1,20 @@
 import asyncio
 import logging
-
-import pytest
 import sys
 import types
+
+import pytest
 
 # Stub out commit_lock to avoid import errors in tests
 commit_lock_stub = types.ModuleType("commit_lock")
 commit_lock_stub.check_and_update = lambda *a, **k: None
 sys.modules.setdefault("crypto_bot.utils.commit_lock", commit_lock_stub)
+
+# Stub out ml_utils to avoid syntax errors during import
+ml_utils_stub = types.ModuleType("ml_utils")
+ml_utils_stub.is_ml_available = lambda: False
+ml_utils_stub.ML_AVAILABLE = False
+sys.modules.setdefault("crypto_bot.utils.ml_utils", ml_utils_stub)
 
 import crypto_bot.sentiment_filter as sf
 
@@ -27,7 +33,7 @@ async def test_too_bearish(monkeypatch):
     monkeypatch.setattr(
         "crypto_bot.sentiment_filter.lunar_client.get_sentiment", fake_get_sentiment
     )
-    assert asyncio.run(sf.too_bearish(20, 40, symbol="BTC")) is True
+    assert await sf.too_bearish(20, 40, symbol="BTC") is True
 
 
 @pytest.mark.asyncio
@@ -44,7 +50,7 @@ async def test_boost_factor(monkeypatch):
     monkeypatch.setattr(
         "crypto_bot.sentiment_filter.lunar_client.get_sentiment", fake_get_sentiment
     )
-    assert asyncio.run(sf.boost_factor(70, 60, symbol="BTC")) > 1.0
+    assert await sf.boost_factor(70, 60, symbol="BTC") > 1.0
 
 
 def test_fetch_twitter_sentiment_no_api_key(monkeypatch, caplog):
@@ -106,12 +112,14 @@ async def test_fetch_twitter_sentiment_async_lunar(monkeypatch):
     monkeypatch.setattr(sf.lunar_client, "get_sentiment", lambda s: 66)
     score = await sf.fetch_twitter_sentiment(symbol="DOGE")
     assert score == 66
+    calls = {"n": 0}
+
     async def fake_get_sentiment(symbol):
         calls["n"] += 1
         return 70
 
     monkeypatch.setattr(sf.lunar_client, "get_sentiment", fake_get_sentiment)
-    assert sf.fetch_lunarcrush_sentiment("BTC") == 70
-    assert sf.fetch_lunarcrush_sentiment("BTC") == 70
+    assert await sf.fetch_lunarcrush_sentiment_async("BTC") == 70
+    assert await sf.fetch_lunarcrush_sentiment_async("BTC") == 70
     assert calls["n"] == 1
 
