@@ -4,13 +4,19 @@ import json
 import logging
 import os
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Iterable, List
 
 import aiohttp
 
 from .gecko import gecko_request
+
+try:  # optional dependency
+    from coinTrader_Trainer.ml_trainer import fetch_data_range_async  # type: ignore
+except Exception:  # pragma: no cover - optional
+    async def fetch_data_range_async(*args, **kwargs):  # type: ignore
+        return None
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +38,11 @@ TOKEN_MINTS: Dict[str, str] = {}
 
 _LOADED = False
 
+PUMP_URL = "https://api.pump.fun/tokens?limit=50&offset=0"
+RAYDIUM_URL = "https://api.raydium.io/v2/main/pairs"
+
 # Poll interval for monitoring external token feeds
-POLL_INTERVAL = 60
+POLL_INTERVAL = 5
 
 
 async def fetch_from_jupiter() -> Dict[str, str]:
@@ -309,17 +318,9 @@ async def fetch_from_helius(symbols: Iterable[str]) -> Dict[str, str]:
     return result
 
 
-async def monitor_new_tokens() -> None:
-    """Continuously poll external APIs for newly listed tokens.
+async def monitor_pump_raydium() -> None:
+    """Monitor Pump.fun and Raydium for new tokens."""
 
-    The pump.fun and Raydium endpoints are queried every ``POLL_INTERVAL``
-    seconds.  Tokens with a ``created_at`` timestamp newer than previously
-    observed entries are added to :data:`TOKEN_MINTS` and written to
-    :data:`CACHE_FILE`.  When new tokens are detected the function attempts to
-    trigger retraining of ``coinTrader_Trainer``.
-    """
-
-    # Load cached mappings for persistence across restarts
     if not TOKEN_MINTS and CACHE_FILE.exists():
         try:
             with open(CACHE_FILE) as f:
@@ -329,83 +330,86 @@ async def monitor_new_tokens() -> None:
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("Failed to load cache: %s", exc)
 
-    last_pump: datetime | None = None
-    last_raydium: datetime | None = None
+    last_pump_ts = datetime.utcnow() - timedelta(minutes=5)
+    last_ray_ts = datetime.utcnow() - timedelta(minutes=5)
 
-    while True:
-        try:
-            async with aiohttp.ClientSession() as session:
-                pump_task = session.get(
-                    "https://api.pump.fun/tokens?limit=50&offset=0", timeout=10
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                pump_resp, ray_resp = await asyncio.gather(
+                    session.get(PUMP_URL, timeout=10),
+                    session.get(RAYDIUM_URL, timeout=10),
                 )
-                raydium_task = session.get(
-                    "https://api.raydium.io/v2/main/pairs", timeout=10
-                )
-                pump_resp, raydium_resp = await asyncio.gather(pump_task, raydium_task)
                 pump_data = await pump_resp.json(content_type=None)
-                raydium_data = await raydium_resp.json(content_type=None)
+                ray_data = await ray_resp.json(content_type=None)
 
-            new_symbols: list[str] = []
-
-            # Process pump.fun tokens
-            for item in pump_data if isinstance(pump_data, list) else []:
-                symbol = item.get("symbol")
-                mint = item.get("mint") or item.get("address")
-                created = item.get("created_at") or item.get("createdAt")
-                if not (symbol and mint and created):
-                    continue
-                try:
-                    ts = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
-                except Exception:
-                    continue
-                if last_pump is None or ts > last_pump:
-                    last_pump = ts if last_pump is None or ts > last_pump else last_pump
-                    key = str(symbol).upper()
-                    if key not in TOKEN_MINTS:
-                        TOKEN_MINTS[key] = mint
-                        logger.info("New token detected: %s -> %s", key, mint)
+                for token in pump_data if isinstance(pump_data, list) else []:
+                    symbol = token.get("symbol")
+                    mint = token.get("mint") or token.get("address")
+                    created = token.get("created_at") or token.get("createdAt")
+                    if not (symbol and mint and created):
+                        continue
+                    try:
+                        ts = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+                    except Exception:
+                        continue
+                    if ts > last_pump_ts:
+                        TOKEN_MINTS[str(symbol).upper()] = mint
+                        logger.info(
+                            "Pump.fun %s market cap %s", symbol, token.get("market_cap")
+                        )
                         _write_cache()
-                        new_symbols.append(key)
+                        start = ts - timedelta(hours=1)
+                        end = ts
+                        try:
+                            await fetch_data_range_async(
+                                "trade_logs", start.isoformat(), end.isoformat()
+                            )
+                        except Exception as exc:  # pragma: no cover - best effort
+                            logger.error("fetch_data_range_async failed: %s", exc)
+                        os.system("python ml_trainer.py train regime --use-gpu")
+                        last_pump_ts = max(last_pump_ts, ts)
 
-            # Process Raydium pairs
-            for item in raydium_data if isinstance(raydium_data, list) else []:
-                base_symbol = (
-                    item.get("baseSymbol")
-                    or item.get("symbol")
-                    or item.get("name")
-                )
-                base_mint = item.get("baseMint")
-                created = item.get("created_at") or item.get("createdAt")
-                if not (base_symbol and base_mint and created):
-                    continue
-                try:
-                    ts = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
-                except Exception:
-                    continue
-                if last_raydium is None or ts > last_raydium:
-                    last_raydium = ts if last_raydium is None or ts > last_raydium else last_raydium
-                    key = str(base_symbol).split("/")[0].upper()
-                    if key not in TOKEN_MINTS:
-                        TOKEN_MINTS[key] = base_mint
-                        logger.info("New token detected: %s -> %s", key, base_mint)
+                for pool in ray_data if isinstance(ray_data, list) else []:
+                    symbol = (
+                        pool.get("baseSymbol")
+                        or pool.get("symbol")
+                        or pool.get("name")
+                    )
+                    mint = pool.get("baseMint")
+                    created = (
+                        pool.get("created_at")
+                        or pool.get("createdAt")
+                        or pool.get("creationTime")
+                    )
+                    liquidity = pool.get("liquidity")
+                    if not (symbol and mint and created and liquidity):
+                        continue
+                    try:
+                        ts = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+                    except Exception:
+                        continue
+                    if ts > last_ray_ts and float(liquidity) > 50000:
+                        TOKEN_MINTS[str(symbol).split("/")[0].upper()] = mint
+                        logger.info(
+                            "Raydium %s liquidity %s", symbol, liquidity
+                        )
                         _write_cache()
-                        new_symbols.append(key)
+                        start = ts - timedelta(hours=1)
+                        end = datetime.utcnow()
+                        try:
+                            await fetch_data_range_async(
+                                "trade_logs", start.isoformat(), end.isoformat()
+                            )
+                        except Exception as exc:  # pragma: no cover - best effort
+                            logger.error("fetch_data_range_async failed: %s", exc)
+                        os.system("python ml_trainer.py train regime --use-gpu")
+                        last_ray_ts = max(last_ray_ts, ts)
 
-            if new_symbols:
-                try:  # pragma: no cover - external dependency
-                    from coinTrader_Trainer.ml_trainer import fetch_data_range_async
+                await asyncio.sleep(POLL_INTERVAL)
 
-                    await fetch_data_range_async()
-                except Exception as exc:  # pragma: no cover - best effort
-                    logger.error("Retraining fetch failed: %s", exc)
-
-                # Trigger training regardless of fetch outcome
-                os.system("python ml_trainer.py train regime --use-gpu")
-
-            await asyncio.sleep(POLL_INTERVAL)
-
-        except asyncio.CancelledError:  # pragma: no cover - cooperative cancel
-            raise
-        except Exception as exc:  # pragma: no cover - network errors
-            logger.error("monitor_new_tokens error: %s", exc)
-            await asyncio.sleep(10)
+            except asyncio.CancelledError:  # pragma: no cover - cooperative cancel
+                raise
+            except Exception as exc:  # pragma: no cover - network errors
+                logger.error("monitor_pump_raydium error: %s", exc)
+                await asyncio.sleep(10)
