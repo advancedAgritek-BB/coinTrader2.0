@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 import os
 import threading
 from typing import Optional
+import asyncio
+from typing import Optional, Awaitable
 
 import requests
 from cachetools import TTLCache
