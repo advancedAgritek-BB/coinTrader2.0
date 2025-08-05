@@ -315,43 +315,29 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
     limit = int(config.get("max_tokens_per_scan", 0)) or 20
     _MIN_VOLUME_USD = float(config.get("min_volume_usd", 0.0))
     pump_key = str(config.get("pump_fun_api_key", ""))
-    gecko_search = bool(config.get("gecko_search", True))
-
-    tasks = []
-    coro = fetch_new_raydium_pools(limit)
-    if not asyncio.iscoroutine(coro):
-        async def _wrap(res=coro):
-            return res
-        coro = _wrap()
-    tasks.append(coro)
-    if pump_key:
-        coro = fetch_pump_fun_launches(pump_key, limit)
     raydium_key = str(config.get("raydium_api_key", ""))
     gecko_search = bool(config.get("gecko_search", True))
 
-    tasks = []
+    tasks: list[asyncio.Future] = []
+
     if raydium_key:
-        coro = fetch_new_raydium_pools(raydium_key, limit)
+        coro = fetch_new_raydium_pools(limit)
         if not asyncio.iscoroutine(coro):
             async def _wrap(res=coro):
                 return res
             coro = _wrap()
         tasks.append(coro)
 
-        # Pump.fun shares the same API key as Raydium
-        coro = fetch_pump_fun_launches(raydium_key, limit)
+    if pump_key or raydium_key:
+        coro = fetch_pump_fun_launches(limit)
         if not asyncio.iscoroutine(coro):
             async def _wrap(res=coro):
                 return res
             coro = _wrap()
         tasks.append(coro)
 
-    coro = fetch_pump_fun_launches(limit)
-    if not asyncio.iscoroutine(coro):
-        async def _wrap(res=coro):
-            return res
-        coro = _wrap()
-    tasks.append(coro)
+    if not tasks:
+        return []
 
     results = await asyncio.gather(*tasks)
     candidates: list[str] = []
