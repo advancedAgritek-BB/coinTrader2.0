@@ -193,6 +193,30 @@ def test_watch_ohlcv_sync_fallback_runs_in_thread():
     assert ex.fetch_thread != main_thread
 
 
+class DummyWSExchangeNoTimeout:
+    has = {"fetchOHLCV": True}
+
+    def __init__(self):
+        self.ws_called = False
+        self.fetch_called = False
+
+    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.ws_called = True
+        return [[2] * 6 for _ in range(limit)]
+
+    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+        self.fetch_called = True
+        return [[1] * 6 for _ in range(limit)]
+
+
+def test_watch_ohlcv_skips_timeout_when_unsupported():
+    ex = DummyWSExchangeNoTimeout()
+    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
+    assert ex.ws_called is True
+    assert ex.fetch_called is False
+    assert len(data) == 2
+
+
 class IncompleteExchange:
     has = {"fetchOHLCV": True}
 
