@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+from datetime import datetime
 from typing import List
 
 import aiohttp
@@ -19,7 +20,13 @@ logger = logging.getLogger(__name__)
 _MIN_VOLUME_USD = 0.0
 
 RAYDIUM_URL = "https://api.raydium.io/v2/main/pairs"
+RAYDIUM_URL = "https://api.raydium.io/v2/pairs/new"
 PUMP_FUN_URL = "https://client-api.prod.pump.fun/v1/launches"
+RAYDIUM_URL = "https://api.raydium.io/pairs"
+PUMP_FUN_URL = "https://api.pump.fun/tokens"
+
+# Timestamp of the most recent Pump.fun token processed
+last_pump_ts: float = 0.0
 
 # Persist last processed Raydium creation timestamp
 RAYDIUM_TS_FILE = (
@@ -206,18 +213,122 @@ async def fetch_new_raydium_pools(limit: int) -> List[str]:
     data = await _fetch_json(url)
     if not data:
         return []
-    tokens = await _extract_tokens(data)
+
+    items = data.get("data") if isinstance(data, dict) else data
+    if isinstance(items, dict):
+        items = list(items.values())
+    if not isinstance(items, list):
+        return []
+
+    filtered: list[dict] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        mint = item.get("base", {}).get("address")
+        if not isinstance(mint, str):
+            continue
+        liquidity = item.get("liquidity") or 0.0
+        try:
+            liquidity = float(liquidity)
+        except Exception:
+            liquidity = 0.0
+        creation = item.get("creation_timestamp") or 0.0
+        try:
+            creation = float(creation)
+        except Exception:
+            creation = 0.0
+        if not item.get("liquidity_locked") or liquidity < _MIN_VOLUME_USD or creation <= 0:
+            continue
+        vol = item.get("volume24h") or 0.0
+        filtered.append({"tokenMint": mint, "volumeUsd": vol})
+
+    tokens = await _extract_tokens({"data": filtered})
     return tokens[:limit]
 
 
-async def fetch_pump_fun_launches(api_key: str, limit: int) -> List[str]:
-    """Return recent Pump.fun launches."""
-    url = f"{PUMP_FUN_URL}?api-key={api_key}&limit={limit}"
+async def fetch_pump_fun_launches(limit: int) -> List[str]:
+    """Return recent Pump.fun launches.
+
+    The Pump.fun API returns a JSON array of token objects. Results are
+    filtered to only include tokens newer than the last invocation using
+    the module level ``last_pump_ts``. Tokens are further filtered by
+    ``initial_buy`` and ``market_cap`` thresholds and require a non-empty
+    ``twitter`` field.
+    """
+
+    global last_pump_ts
+
+    url = f"{PUMP_FUN_URL}?limit={limit}&offset=0"
     data = await _fetch_json(url)
-    if not data:
+    if not isinstance(data, list):
         return []
     tokens = await _extract_pump_fun_tokens(data)
+
+    # Filter results based on basic Pump.fun launch criteria.  Only tokens
+    # which provide a ``created_at`` timestamp, have an ``initial_buy`` flag,
+    # include a positive ``market_cap`` value and expose a ``twitter`` handle
+    # are considered valid.  This mirrors the behaviour of the production
+    # scanner which ignores incomplete listings.
+    items = data.get("data") if isinstance(data, dict) else data
+    filtered: list[dict] = []
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            created = item.get("created_at") or item.get("createdAt")
+            initial_buy = item.get("initial_buy") or item.get("initialBuy")
+            market_cap = item.get("market_cap") or item.get("marketCap")
+            twitter = item.get("twitter") or item.get("twitter_profile")
+            if not (created and initial_buy and market_cap and twitter):
+                continue
+            try:
+                datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+                if float(market_cap) <= 0:
+                    continue
+            except Exception:
+                continue
+            filtered.append(item)
+
+    tokens = await _extract_tokens(filtered)
     return tokens[:limit]
+    results: List[str] = []
+    max_ts = last_pump_ts
+
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+
+        ts = (
+            item.get("timestamp")
+            or item.get("ts")
+            or item.get("created_at")
+            or item.get("createdAt")
+            or 0
+        )
+        try:
+            ts_val = float(ts)
+        except Exception:
+            ts_val = 0.0
+        if ts_val <= last_pump_ts:
+            continue
+        if ts_val > max_ts:
+            max_ts = ts_val
+
+        try:
+            initial_buy = float(item.get("initial_buy") or item.get("initialBuy") or 0)
+            market_cap = float(item.get("market_cap") or item.get("marketCap") or 0)
+        except Exception:
+            continue
+        twitter = item.get("twitter") or ""
+        if initial_buy < 10_000 or market_cap < 50_000 or not twitter:
+            continue
+
+        mint = item.get("mint")
+        if mint:
+            results.append(str(mint))
+
+    last_pump_ts = max_ts
+    return results[:limit]
 
 
 async def get_solana_new_tokens(config: dict) -> List[str]:
@@ -239,14 +350,32 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
     tasks.append(coro)
     if pump_key:
         coro = fetch_pump_fun_launches(pump_key, limit)
+    raydium_key = str(config.get("raydium_api_key", ""))
+    gecko_search = bool(config.get("gecko_search", True))
+
+    tasks = []
+    if raydium_key:
+        coro = fetch_new_raydium_pools(raydium_key, limit)
         if not asyncio.iscoroutine(coro):
             async def _wrap(res=coro):
                 return res
             coro = _wrap()
         tasks.append(coro)
 
-    if not tasks:
-        return []
+        # Pump.fun shares the same API key as Raydium
+        coro = fetch_pump_fun_launches(raydium_key, limit)
+        if not asyncio.iscoroutine(coro):
+            async def _wrap(res=coro):
+                return res
+            coro = _wrap()
+        tasks.append(coro)
+
+    coro = fetch_pump_fun_launches(limit)
+    if not asyncio.iscoroutine(coro):
+        async def _wrap(res=coro):
+            return res
+        coro = _wrap()
+    tasks.append(coro)
 
     results = await asyncio.gather(*tasks)
     candidates: list[str] = []

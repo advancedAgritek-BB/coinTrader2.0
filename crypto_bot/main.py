@@ -82,7 +82,7 @@ from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import write_cycle_metrics
 from crypto_bot.utils.token_registry import (
     TOKEN_MINTS,
-    monitor_new_tokens,
+    monitor_pump_raydium,
     refresh_mints,
 )
 from crypto_bot.utils import pnl_logger, regime_pnl_tracker
@@ -2332,7 +2332,7 @@ async def _main_impl() -> TelegramNotifier:
             balance_updates,
         )
 
-    register_task(asyncio.create_task(monitor_new_tokens()))
+    register_task(asyncio.create_task(monitor_pump_raydium()))
 
     monitor_task = register_task(
         asyncio.create_task(
