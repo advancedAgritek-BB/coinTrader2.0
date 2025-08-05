@@ -518,10 +518,13 @@ regime_overrides:
 * **optimization** – periodic parameter optimisation.
 * **portfolio_rotation** – rotate holdings based on scoring metrics.
 * **arbitrage_enabled** – enable cross-exchange arbitrage features.
-  The previous `cross_chain_arb_bot.py` module has been
-  consolidated into helper functions. Use `scan_cex_arbitrage` or
-  `scan_arbitrage` in `crypto_bot/main.py` when implementing a
-  multi-exchange arbitrage strategy.
+  When the token registry monitors pump.fun or Raydium for new listings it
+  now auto-snipes price discrepancies between Kraken and Coinbase. If both
+  exchanges list the token and the spread exceeds `0.5%`, a cross-chain
+  arbitrage helper swaps the asset into BTC and updates the wallet balance.
+  The previous `cross_chain_arb_bot.py` module has been consolidated into
+  helper functions. Use `scan_cex_arbitrage` or `scan_arbitrage` in
+  `crypto_bot/main.py` when implementing a multi-exchange arbitrage strategy.
 * **scoring_weights** - weighting factors for regime confidence, symbol score and volume metrics.
 * **signal_fusion** – enable to combine scores from multiple strategies via a `fusion_method` for improved selection.
 * **strategy_router** - maps market regimes to lists of strategy names. Each regime also accepts a `<regime>_timeframe` key (e.g. `trending_timeframe: 1h`, `volatile_timeframe: 1m`). The `range_arb_bot` strategy is always active and does not need to be listed in any regime.
