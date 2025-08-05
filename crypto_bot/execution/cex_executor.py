@@ -405,6 +405,9 @@ async def execute_trade_async(
                 raise ValueError("token/chat_id or notifier must be provided")
             notifier = TelegramNotifier(token, chat_id)
 
+    if use_websocket and ws_client is None and not dry_run:
+        raise ValueError("WebSocket trading enabled but ws_client is missing")
+
     msg = f"Placing {side} order for {amount} {symbol}"
     err = notifier.notify(msg)
     if err:
