@@ -13,11 +13,11 @@ import asyncio
 import threading
 import os
 import time
+import inspect
 
 import telegram
 
 from .logger import LOG_DIR, setup_logger
-from pathlib import Path
 
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
@@ -53,33 +53,16 @@ set_admin_ids(None)
 async def send_message(token: str, chat_id: str, text: str) -> None:
     """Send ``text`` to ``chat_id`` using ``token`` asynchronously.
 
-    Any exception raised by the underlying ``telegram`` library is propagated
-    to the caller after being logged.  This allows callers to handle
-    ``ValueError`` or ``asyncio.TimeoutError`` explicitly.
-    """
-    bot = Bot(token)
-
-    try:
-        if inspect.iscoroutinefunction(bot.send_message):
-            await bot.send_message(chat_id=chat_id, text=text)
-        else:
-            await asyncio.to_thread(bot.send_message, chat_id=chat_id, text=text)
-    except Exception as exc:  # pragma: no cover - network
-        logger.error(
-            "Failed to send message: %s. Verify your Telegram token and chat ID "
-            "and ensure the bot has started a chat.",
-            exc,
-        )
-        raise
-    """Asynchronously send ``text`` to ``chat_id`` using ``token``.
-
     Retries once after a :class:`telegram.error.TimedOut` and raises
     :class:`ValueError` when an ``InvalidToken`` is encountered.
     """
     bot = telegram.Bot(token)
     for attempt in range(2):
         try:
-            await bot.send_message(chat_id=chat_id, text=text)
+            if inspect.iscoroutinefunction(bot.send_message):
+                await bot.send_message(chat_id=chat_id, text=text)
+            else:
+                await asyncio.to_thread(bot.send_message, chat_id=chat_id, text=text)
             return None
         except telegram.error.TimedOut:
             if attempt == 0:
@@ -88,6 +71,13 @@ async def send_message(token: str, chat_id: str, text: str) -> None:
             raise
         except telegram.error.InvalidToken as exc:
             raise ValueError("Invalid Telegram token") from exc
+        except Exception as exc:  # pragma: no cover - network
+            logger.error(
+                "Failed to send message: %s. Verify your Telegram token and chat ID "
+                "and ensure the bot has started a chat.",
+                exc,
+            )
+            raise
 
 
 def send_message_sync(token: str, chat_id: str, text: str) -> None:
