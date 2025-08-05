@@ -1132,24 +1132,77 @@ async def load_ohlcv(
     symbol: str,
     timeframe: str = "1h",
     limit: int = 100,
-    since: int | None = None,
-    use_websocket: bool = False,
-    force_websocket_history: bool = False,
+    mode: str = "rest",
+    **kwargs,
 ) -> list:
-    """Fetch OHLCV data with automatic retries."""
+    """Load OHLCV data via websocket or REST with retries.
 
-    data = await _fetch_ohlcv_async_inner(
-        exchange,
-        symbol,
-        timeframe=timeframe,
-        limit=limit,
-        since=since,
-        use_websocket=use_websocket,
-        force_websocket_history=force_websocket_history,
-    )
-    if isinstance(data, Exception):
-        raise data
-    return data
+    Parameters
+    ----------
+    exchange : Any
+        Exchange instance providing ``watch_ohlcv``/``fetch_ohlcv``.
+    symbol : str
+        Trading pair symbol.
+    timeframe : str
+        Candle timeframe, e.g. ``"1m"``.
+    limit : int
+        Number of candles to retrieve.
+    mode : str
+        ``"websocket"`` to use ``watch_ohlcv``; anything else uses
+        ``fetch_ohlcv``.
+    **kwargs : Any
+        Additional keyword arguments forwarded to the exchange methods.
+
+    Returns
+    -------
+    list
+        List of OHLCV candles.
+    """
+
+    try:
+        if mode == "websocket":
+            watch_fn = getattr(exchange, "watch_ohlcv")
+            if asyncio.iscoroutinefunction(watch_fn):
+                data = await watch_fn(symbol, timeframe=timeframe, limit=limit, **kwargs)
+            else:  # pragma: no cover - synchronous fallback
+                data = await asyncio.to_thread(
+                    watch_fn, symbol, timeframe, limit=limit, **kwargs
+                )
+            await asyncio.sleep(1)
+            if len(data) < limit:
+                logger.warning(
+                    "watch_ohlcv returned %d of %d candles for %s %s; fetching remainder",
+                    len(data),
+                    limit,
+                    symbol,
+                    timeframe,
+                )
+                missing = limit - len(data)
+                fetch_fn = getattr(exchange, "fetch_ohlcv")
+                if asyncio.iscoroutinefunction(fetch_fn):
+                    rest = await fetch_fn(
+                        symbol, timeframe=timeframe, limit=missing, **kwargs
+                    )
+                else:  # pragma: no cover - synchronous fallback
+                    rest = await asyncio.to_thread(
+                        fetch_fn, symbol, timeframe, missing, **kwargs
+                    )
+                await asyncio.sleep(1)
+                data = (rest or []) + (data or [])
+        else:
+            fetch_fn = getattr(exchange, "fetch_ohlcv")
+            if asyncio.iscoroutinefunction(fetch_fn):
+                data = await fetch_fn(symbol, timeframe=timeframe, limit=limit, **kwargs)
+            else:  # pragma: no cover - synchronous fallback
+                data = await asyncio.to_thread(
+                    fetch_fn, symbol, timeframe, limit, **kwargs
+                )
+            await asyncio.sleep(1)
+        return data
+    except Exception as exc:
+        if "429" in str(exc):
+            await asyncio.sleep(60)
+        raise
 
 
 async def fetch_geckoterminal_ohlcv(

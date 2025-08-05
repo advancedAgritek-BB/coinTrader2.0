@@ -3,13 +3,13 @@ from .kraken import get_ws_token
 from .notifier import Notifier
 from .eval_queue import compute_batches, build_priority_queue
 from .market_loader import (
-    load_kraken_symbols,
     fetch_ohlcv_async,
     fetch_order_book_async,
+    load_kraken_symbols,
     load_ohlcv,
     load_ohlcv_parallel,
-    update_ohlcv_cache,
     timeframe_seconds,
+    update_ohlcv_cache,
 )
 from .pair_cache import load_liquid_pairs
 # Symbol filtering utilities import is optional because the module has
