@@ -25,6 +25,30 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 
 On-chain DEX execution submits real transactions when not running in dry-run mode.
 
+## Wallet
+
+`Wallet` acts as a simple balance and PnL tracker in dry-run mode. It keeps a
+cash balance along with realized and unrealized profit, letting you test trading
+logic without contacting a live exchange.
+
+```python
+from crypto_bot.paper_wallet import PaperWallet as Wallet
+import time
+
+wallet = Wallet(1000.0)
+wallet.open("BTC/USDT", "buy", 1.0, 100.0)  # buy
+wallet.close("BTC/USDT", 1.0, 110.0)        # sell
+
+while True:
+    current = 110.0  # replace with a real price feed
+    total = wallet.balance + wallet.realized_pnl + wallet.unrealized(current)
+    print(f"Total balance: ${total:.2f}")
+    time.sleep(60)
+```
+
+The snippet above initializes a dry-run wallet, demonstrates buy and sell calls,
+and periodically prints the combined total balance.
+
 ## Regime Classifier
 
 The bot selects a strategy by first classifying the current market regime. The
@@ -1085,6 +1109,12 @@ adaptive_scan:
 OHLCV data for these symbols is now fetched concurrently using
 `load_ohlcv_parallel`, greatly reducing the time needed to evaluate
 large symbol lists.
+
+Some markets are known to fail consistently when requesting historical
+data. These pairs are listed in `UNSUPPORTED_SYMBOLS` within
+`crypto_bot/utils/market_loader.py`. The loader skips any symbol in this
+list without making network requests. To ignore additional markets,
+append their identifiers to `UNSUPPORTED_SYMBOLS`.
 
 Each candidate pair is also assigned a score based on volume, recent price
 change, bid/ask spread, age and API latency. The weights and limits for this

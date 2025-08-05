@@ -340,7 +340,7 @@ def test_swap_no_message_when_disabled(monkeypatch):
     calls = {"count": 0}
 
     monkeypatch.setattr(
-        "crypto_bot.utils.telegram.send_message",
+        "crypto_bot.utils.telegram.send_message_sync",
         lambda *a, **k: calls.__setitem__("count", calls["count"] + 1),
     )
     monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: DummySession())

@@ -48,7 +48,7 @@ def test_send_message_async_no_warning(monkeypatch):
             calls["chat_id"] = chat_id
             calls["text"] = text
 
-    monkeypatch.setattr("crypto_bot.utils.telegram.Bot", DummyBot)
+    monkeypatch.setattr("crypto_bot.utils.telegram.telegram.Bot", DummyBot)
 
     async def runner():
         with warnings.catch_warnings(record=True) as w:
@@ -57,6 +57,9 @@ def test_send_message_async_no_warning(monkeypatch):
         return w
 
     w = asyncio.run(runner())
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("error")
+        err = asyncio.run(send_message("t", "c", "msg"))
 
     assert calls["chat_id"] == "c"
     assert calls["text"] == "msg"
@@ -87,6 +90,7 @@ def test_send_message_exception_logged(monkeypatch, tmp_path, caplog):
 
 
 def test_send_message_async_exception_logged(monkeypatch, tmp_path, caplog):
+def test_send_message_exception_raises(monkeypatch):
     class DummyBot:
         def __init__(self, token):
             pass
@@ -110,6 +114,10 @@ def test_send_message_async_exception_logged(monkeypatch, tmp_path, caplog):
         asyncio.run(runner())
 
     assert any("boom" in r.getMessage() for r in caplog.records)
+    monkeypatch.setattr("crypto_bot.utils.telegram.telegram.Bot", DummyBot)
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(telegram.send_message("t", "c", "msg"))
 
 
 def test_send_test_message_success(monkeypatch):
@@ -123,6 +131,8 @@ def test_send_test_message_success(monkeypatch):
     monkeypatch.setattr(telegram, "send_message", fake_send)
 
     assert asyncio.run(telegram.send_test_message("t", "c", "hello")) is True
+    monkeypatch.setattr(telegram, "send_message_sync", fake_send)
+    assert telegram.send_test_message("t", "c", "hello") is True
     assert calls["args"] == ("t", "c", "hello")
 
 
@@ -149,6 +159,10 @@ def test_send_test_message_timeout_retry(monkeypatch):
             raise asyncio.TimeoutError
 
     monkeypatch.setattr(telegram, "send_message", fake_send)
+    def boom(*a, **k):
+        raise RuntimeError("err")
+
+    monkeypatch.setattr(telegram, "send_message_sync", boom)
 
     assert (
         asyncio.run(
@@ -168,7 +182,8 @@ def test_notifier_stops_after_failure(monkeypatch, caplog):
         calls["count"] += 1
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(telegram, "send_message", fake_send)
+    monkeypatch.setattr(telegram, "send_message_sync", fake_send)
+    monkeypatch.setattr(telegram.asyncio, "get_running_loop", lambda: object())
     monkeypatch.setattr(telegram, "logger", logging.getLogger("test_notifier"))
 
     notifier = telegram.TelegramNotifier(True, "t", "c")
@@ -200,7 +215,7 @@ def test_notifier_rate_limits(monkeypatch):
     async def fake_send(token, chat_id, text):
         send_times.append(current["t"])
 
-    monkeypatch.setattr(telegram, "send_message", fake_send)
+    monkeypatch.setattr(telegram, "send_message_sync", fake_send)
     monkeypatch.setattr(telegram, "time", types.SimpleNamespace(time=fake_time, sleep=fake_sleep))
 
     notifier = telegram.TelegramNotifier(True, "t", "c")

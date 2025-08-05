@@ -29,9 +29,11 @@ def test_notify_uses_send_message(monkeypatch):
         calls['token'] = token
         calls['chat_id'] = chat_id
         calls['text'] = text
-        return 'err'
+        raise RuntimeError('err')
 
-    monkeypatch.setattr('crypto_bot.utils.telegram.send_message', fake_send)
+    monkeypatch.setattr('crypto_bot.utils.telegram.send_message_sync', fake_send)
+    import crypto_bot.utils.telegram as tg_module
+    monkeypatch.setattr(tg_module.asyncio, 'get_running_loop', lambda: object())
 
     notifier = TelegramNotifier(True, 't', 'c')
     err = notifier.notify('msg')
@@ -45,12 +47,14 @@ def test_notify_calls_send_message_when_enabled(monkeypatch):
     calls = {}
     def fake_send(token, chat_id, text):
         calls['args'] = (token, chat_id, text)
-        return 'ok'
-    monkeypatch.setattr('crypto_bot.utils.telegram.send_message', fake_send)
+
+    monkeypatch.setattr('crypto_bot.utils.telegram.send_message_sync', fake_send)
+    import crypto_bot.utils.telegram as tg_module
+    monkeypatch.setattr(tg_module.asyncio, 'get_running_loop', lambda: object())
     notifier = TelegramNotifier(True, 't', 'c')
     res = notifier.notify('msg')
     assert calls['args'] == ('t', 'c', 'msg')
-    assert res == 'ok'
+    assert res is None
 
 
 def test_notify_noop_when_disabled(monkeypatch):
@@ -58,7 +62,9 @@ def test_notify_noop_when_disabled(monkeypatch):
     def fake_send(*a, **k):
         nonlocal called
         called = True
-    monkeypatch.setattr('crypto_bot.utils.telegram.send_message', fake_send)
+    monkeypatch.setattr('crypto_bot.utils.telegram.send_message_sync', fake_send)
+    import crypto_bot.utils.telegram as tg_module
+    monkeypatch.setattr(tg_module.asyncio, 'get_running_loop', lambda: object())
     notifier = TelegramNotifier(False, 't', 'c')
     res = notifier.notify('msg')
     assert called is False
@@ -78,9 +84,8 @@ async def test_notify_async_respects_message_interval(monkeypatch):
 
     send_times = []
 
-    def fake_send(token, chat_id, text):
+    async def fake_send(token, chat_id, text):
         send_times.append(current["t"])
-        return None
 
     monkeypatch.setattr(tg, "send_message", fake_send)
 
@@ -110,9 +115,8 @@ async def test_notify_async_respects_max_messages_per_minute(monkeypatch):
     import crypto_bot.utils.telegram as tg
     send_times = []
 
-    def fake_send(token, chat_id, text):
+    async def fake_send(token, chat_id, text):
         send_times.append(current["t"])
-        return None
 
     monkeypatch.setattr(tg, "send_message", fake_send)
 
@@ -143,11 +147,11 @@ async def test_notify_async_respects_max_messages_per_minute(monkeypatch):
 async def test_notify_async_uses_send_message(monkeypatch):
     calls = {}
 
-    def fake_send(token, chat_id, text):
+    async def fake_send(token, chat_id, text):
         calls['token'] = token
         calls['chat_id'] = chat_id
         calls['text'] = text
-        return 'err'
+        raise RuntimeError('err')
 
     monkeypatch.setattr('crypto_bot.utils.telegram.send_message', fake_send)
 
@@ -172,3 +176,55 @@ def test_notify_runs_notify_async(monkeypatch):
 
     assert res == 'ok'
     assert calls['text'] == 'msg'
+
+
+@pytest.mark.asyncio
+async def test_send_message_retries_and_invalid_token(monkeypatch):
+    import crypto_bot.utils.telegram as tg
+
+    calls = {"count": 0, "slept": 0}
+
+    class DummyTimedOut(Exception):
+        pass
+
+    class DummyInvalidToken(Exception):
+        pass
+
+    class DummyBot:
+        def __init__(self, token):
+            pass
+
+        async def send_message(self, chat_id, text):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise DummyTimedOut()
+            return None
+
+    async def fake_sleep(sec):
+        calls["slept"] += sec
+
+    dummy_module = types.SimpleNamespace(
+        Bot=DummyBot,
+        error=types.SimpleNamespace(TimedOut=DummyTimedOut, InvalidToken=DummyInvalidToken),
+    )
+    monkeypatch.setattr(tg, "telegram", dummy_module)
+    monkeypatch.setattr(tg.asyncio, "sleep", fake_sleep)
+
+    await tg.send_message("t", "c", "msg")
+    assert calls["count"] == 2
+    assert calls["slept"] == 5
+
+    class BadBot:
+        def __init__(self, token):
+            pass
+
+        async def send_message(self, chat_id, text):
+            raise DummyInvalidToken()
+
+    dummy_module2 = types.SimpleNamespace(
+        Bot=BadBot,
+        error=types.SimpleNamespace(TimedOut=DummyTimedOut, InvalidToken=DummyInvalidToken),
+    )
+    monkeypatch.setattr(tg, "telegram", dummy_module2)
+    with pytest.raises(ValueError, match="Invalid Telegram token"):
+        await tg.send_message("t", "c", "msg")

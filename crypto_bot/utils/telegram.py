@@ -10,12 +10,11 @@ and asynchronous (:meth:`notify_async`) interfaces are provided.
 from dataclasses import dataclass
 from typing import Optional, Iterable, Any
 import asyncio
-import inspect
 import threading
 import os
 import time
 
-from telegram import Bot
+import telegram
 
 from .logger import LOG_DIR, setup_logger
 from pathlib import Path
@@ -72,6 +71,41 @@ async def send_message(token: str, chat_id: str, text: str) -> None:
             exc,
         )
         raise
+    """Asynchronously send ``text`` to ``chat_id`` using ``token``.
+
+    Retries once after a :class:`telegram.error.TimedOut` and raises
+    :class:`ValueError` when an ``InvalidToken`` is encountered.
+    """
+    bot = telegram.Bot(token)
+    for attempt in range(2):
+        try:
+            await bot.send_message(chat_id=chat_id, text=text)
+            return None
+        except telegram.error.TimedOut:
+            if attempt == 0:
+                await asyncio.sleep(5)
+                continue
+            raise
+        except telegram.error.InvalidToken as exc:
+            raise ValueError("Invalid Telegram token") from exc
+
+
+def send_message_sync(token: str, chat_id: str, text: str) -> None:
+    """Synchronous wrapper around :func:`send_message`.
+
+    When called from within a running event loop the coroutine is scheduled as
+    a background task. Otherwise :func:`asyncio.run` is used.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        loop.create_task(send_message(token, chat_id, text))
+        return None
+
+    return asyncio.run(send_message(token, chat_id, text))
 
 
 @dataclass
@@ -131,12 +165,14 @@ class TelegramNotifier:
             try:
                 await send_message(self.token, self.chat_id, text)
             except Exception as exc:  # pragma: no cover - network
+            except Exception as err:  # pragma: no cover - network
                 self._disabled = True
                 logger.error(
                     "Disabling Telegram notifications due to send failure: %s",
                     exc,
                 )
                 return str(exc)
+                return str(err)
             else:
                 self._last_sent = now
                 self._recent_sends.append(now)
@@ -182,6 +218,19 @@ class TelegramNotifier:
             self._last_sent = now
             self._recent_sends.append(now)
         return None
+            try:
+                send_message_sync(self.token, self.chat_id, text)
+            except Exception as err:  # pragma: no cover - network
+                self._disabled = True
+                logger.error(
+                    "Disabling Telegram notifications due to send failure: %s",
+                    err,
+                )
+                return str(err)
+            else:
+                self._last_sent = now
+                self._recent_sends.append(now)
+                return None
 
 
     @classmethod
@@ -248,3 +297,9 @@ async def send_test_message(
             logger.error("Failed to send test message: %s", exc)
             return False
     return False
+        return False
+    try:
+        send_message_sync(token, chat_id, text)
+        return True
+    except Exception:
+        return False

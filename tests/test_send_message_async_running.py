@@ -16,13 +16,15 @@ def test_send_message_async_running(monkeypatch):
             calls['chat_id'] = chat_id
             calls['text'] = text
 
-    monkeypatch.setattr('crypto_bot.utils.telegram.Bot', DummyBot)
+    monkeypatch.setattr('crypto_bot.utils.telegram.telegram.Bot', DummyBot)
 
     async def runner():
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter('error')
             await send_message('t', 'c', 'msg')
         return w
+            err = await send_message('t', 'c', 'msg')
+        return err, w
 
     w = asyncio.run(runner())
 
