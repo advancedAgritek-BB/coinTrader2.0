@@ -55,6 +55,25 @@ def fetch_fng_index() -> int:
     except Exception as exc:  # pragma: no cover - network failure
         logger.error("Failed to fetch FNG index: %s", exc)
 
+
+async def fetch_twitter_sentiment(
+    query: str = "bitcoin", symbol: str | None = None
+) -> int:
+    """Return sentiment score for ``query`` between 0-100.
+
+    When ``symbol`` is provided and ``LUNARCRUSH_API_KEY`` is set this will
+    return LunarCrush sentiment for that symbol instead of calling the
+    external Twitter API.
+    """
+    mock = os.getenv("MOCK_TWITTER_SENTIMENT")
+    if mock is not None:
+        try:
+            return int(mock)
+        except ValueError:
+            return 50
+    if symbol and os.getenv("LUNARCRUSH_API_KEY"):
+        return await fetch_lunarcrush_sentiment(symbol)
+    key = f"twitter:{query}"
     return 50
 
 
@@ -66,6 +85,28 @@ def fetch_lunarcrush_sentiment(symbol: str) -> int:
         return _CACHE[key]
 
     try:
+        resp = requests.get(f"{SENTIMENT_URL}?q={query}", timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, dict):
+            value = int(data.get("score", 50))
+            _CACHE[key] = value
+            return value
+    except Exception:
+        # Fallback to async client if requests fails
+        pass
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{SENTIMENT_URL}?q={query}", timeout=5) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+                if isinstance(data, dict):
+                    value = int(data.get("score", 50))
+                    _CACHE[key] = value
+                    return value
+    except Exception as exc:
+        logger.error("Failed to fetch Twitter sentiment: %s", exc)
+    return 50
         value = int(asyncio.run(lunar_client.get_sentiment(symbol)))
         _CACHE[key] = value
         return value
@@ -82,6 +123,13 @@ async def fetch_lunarcrush_sentiment_async(symbol: str) -> int:
         return _CACHE[key]
 
     try:
+        try:
+            # Prefer the async client when possible
+            value = int(await lunar_client.get_sentiment(symbol))
+        except TypeError:
+            # Fallback to the synchronous wrapper when a non-awaitable
+            # implementation is supplied (e.g. during tests).
+            value = int(lunar_client.get_sentiment_sync(symbol))
         value = int(await lunar_client.get_sentiment(symbol))
         _CACHE[key] = value
         return value
