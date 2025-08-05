@@ -7,6 +7,7 @@ import types
 pkg_root = types.ModuleType("crypto_bot")
 utils_pkg = types.ModuleType("crypto_bot.utils")
 pkg_root.utils = utils_pkg
+pkg_root.__path__ = [str(pathlib.Path("crypto_bot"))]
 utils_pkg.__path__ = [str(pathlib.Path("crypto_bot/utils"))]
 sys.modules.setdefault("crypto_bot", pkg_root)
 sys.modules.setdefault("crypto_bot.utils", utils_pkg)
@@ -124,7 +125,6 @@ def test_get_solana_new_tokens(monkeypatch):
 
     cfg = {
         "raydium_api_key": "r",
-        "pump_fun_api_key": "p",
         "max_tokens_per_scan": 2,
         "min_volume_usd": 0,
         "gecko_search": False,
