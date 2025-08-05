@@ -115,5 +115,5 @@ def test_equal_scores_use_order(monkeypatch):
     monkeypatch.setattr(sr, "load_bot_stats", lambda n: BotStats())
     cfg = RouterConfig.from_dict({"strategy_router": {"regimes": {"trending": ["bot_a", "bot_b"]}}})
     result = sr.get_strategies_for_regime("trending", cfg)
-    assert result == [bot_a, bot_b]
+    assert result[:2] == [bot_a, bot_b]
 

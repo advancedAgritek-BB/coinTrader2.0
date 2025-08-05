@@ -279,6 +279,43 @@ class _FakeJoblib:
 sys.modules.setdefault("joblib", _FakeJoblib())
 
 
+# Stubs to allow importing strategy_router without optional dependencies.
+class _FakeTelegram:
+    class TelegramNotifier:
+        def __init__(self, *a, **k):
+            pass
+
+        async def notify_async(self, text):
+            pass
+
+        def notify(self, text):
+            pass
+
+
+sys.modules.setdefault("crypto_bot.utils.telegram", _FakeTelegram())
+
+
+class _FakeSolanaMempool:
+    class SolanaMempoolMonitor:
+        pass
+
+
+sys.modules.setdefault(
+    "crypto_bot.execution.solana_mempool", _FakeSolanaMempool()
+)
+
+
+sniper_solana_mod = types.ModuleType("crypto_bot.strategies.sniper_solana")
+
+
+def _fake_sniper_signal(df, config=None):  # pragma: no cover - simple stub
+    return 0.0, "none"
+
+
+sniper_solana_mod.generate_signal = _fake_sniper_signal
+sys.modules.setdefault("crypto_bot.strategies.sniper_solana", sniper_solana_mod)
+
+
 # Minimal stub for the ``sklearn`` package required by ml_signal_model.
 class _FakeSklearn:
     class linear_model:

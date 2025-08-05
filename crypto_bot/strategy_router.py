@@ -420,6 +420,14 @@ def get_strategies_for_regime(
             pairs.append((name, fn))
     if not pairs:
         _, mapping = _build_mappings_cached(id(cfg))
+        strategies = mapping.get(regime, [grid_bot.generate_signal])
+    else:
+        pairs.sort(key=lambda p: score_bot(load_bot_stats(p[0])), reverse=True)
+        strategies = [fn for _, fn in pairs]
+    if getattr(range_arb_bot, "generate_signal", None):
+        if range_arb_bot.generate_signal not in strategies:
+            strategies.append(range_arb_bot.generate_signal)
+    return strategies
         result = mapping.get(regime, [grid_bot.generate_signal])
     else:
         pairs.sort(key=lambda p: score_bot(load_bot_stats(p[0])), reverse=True)
