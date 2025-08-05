@@ -72,7 +72,7 @@ class Notifier:
         # Running inside an event loop – fall back to synchronous sending
         for attempt in range(1, retries + 1):
             try:
-                return send_message(self.token, self.chat_id, text)
+                return send_message_sync(self.token, self.chat_id, text)
             except TimeoutError:
                 if attempt == retries:
                     return f"Timed out after {retries} attempts"
@@ -81,29 +81,4 @@ class Notifier:
             except Exception as exc:  # pragma: no cover - unexpected errors
                 return str(exc)
         return f"Timed out after {retries} attempts"
-    def notify(self, text: str) -> Optional[str]:
-        """Send ``text`` via Telegram and return an error string if any."""
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            try:
-                asyncio.run(send_message(self.token, self.chat_id, text))
-                return None
-            except Exception as exc:  # pragma: no cover - network
-                return str(exc)
-        else:
-            loop.create_task(send_message(self.token, self.chat_id, text))
-            return None
-            send_message_sync(self.token, self.chat_id, text)
-            return None
-        except Exception as err:  # pragma: no cover - network
-            return str(err)
-
-    async def notify_async(self, text: str) -> Optional[str]:
-        """Asynchronously send ``text`` via Telegram."""
-        try:
-            await send_message(self.token, self.chat_id, text)
-            return None
-        except Exception as err:  # pragma: no cover - network
-            return str(err)
 
