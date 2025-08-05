@@ -18,8 +18,8 @@ if ML_AVAILABLE:
     MODEL = load_model("momentum_bot")
 else:  # pragma: no cover - fallback
     MODEL = None
-    logger.warning(
-        "Skipping momentum_bot: machine learning support is unavailable",
+    logger.info(
+        "Machine learning model not found; running without ML features."
     )
 
 

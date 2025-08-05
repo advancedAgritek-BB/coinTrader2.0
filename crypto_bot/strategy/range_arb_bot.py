@@ -20,8 +20,8 @@ try:  # pragma: no cover - optional dependency
     ML_AVAILABLE = True
 except Exception:  # pragma: no cover - trainer missing
     ML_AVAILABLE = False
-    logger.warning(
-        "Skipping range_arb_bot: machine learning support is unavailable",
+    logger.info(
+        "Machine learning model not found; running without ML features."
     )
 
 if ML_AVAILABLE:
