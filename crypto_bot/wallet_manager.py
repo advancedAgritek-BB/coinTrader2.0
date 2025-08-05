@@ -118,18 +118,21 @@ def prompt_user() -> dict:
         data["coinbase_api_secret"] = os.getenv("COINBASE_API_SECRET", "")
         data["coinbase_passphrase"] = os.getenv("API_PASSPHRASE", "")
 
-    data["telegram_token"] = _env_or_prompt("TELEGRAM_TOKEN", "Enter Telegram bot token: ")
-    data["telegram_chat_id"] = _env_or_prompt("TELEGRAM_CHAT_ID", "Enter Telegram chat id: ")
-    data["wallet_address"] = _env_or_prompt("WALLET_ADDRESS", "Enter public wallet address: ")
-    data["solana_private_key"] = _env_or_prompt(
+    data["telegram_token"] = env_or_prompt(
+        "TELEGRAM_TOKEN", "Enter Telegram bot token: "
+    )
+    data["telegram_chat_id"] = env_or_prompt(
+        "TELEGRAM_CHAT_ID", "Enter Telegram chat id: "
+    )
+    data["wallet_address"] = env_or_prompt(
+        "WALLET_ADDRESS", "Enter public wallet address: "
+    )
+    data["solana_private_key"] = env_or_prompt(
         "SOLANA_PRIVATE_KEY", "Enter Solana private key: "
     )
-    data["helius_api_key"] = _env_or_prompt("HELIUS_KEY", "Enter Helius API key: ")
-    data["lunarcrush_api_key"] = _env_or_prompt(
-    data["telegram_token"] = env_or_prompt("TELEGRAM_TOKEN", "Enter Telegram bot token: ")
-    data["telegram_chat_id"] = env_or_prompt("TELEGRAM_CHAT_ID", "Enter Telegram chat id: ")
-    data["wallet_address"] = env_or_prompt("WALLET_ADDRESS", "Enter public wallet address: ")
-    data["helius_api_key"] = env_or_prompt("HELIUS_KEY", "Enter Helius API key: ")
+    data["helius_api_key"] = env_or_prompt(
+        "HELIUS_KEY", "Enter Helius API key: "
+    )
     data["lunarcrush_api_key"] = env_or_prompt(
         "LUNARCRUSH_API_KEY", "Enter LunarCrush API key: "
     )
@@ -213,7 +216,7 @@ def get_wallet() -> "Keypair":
     """Return a Keypair loaded from ``SOLANA_PRIVATE_KEY`` env variable."""
     from solana.keypair import Keypair
 
-    private_key = _env_or_prompt(
+    private_key = env_or_prompt(
         "SOLANA_PRIVATE_KEY", "Enter Solana private key: "
     )
     try:
