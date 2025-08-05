@@ -57,9 +57,6 @@ def test_send_message_async_no_warning(monkeypatch):
         return w
 
     w = asyncio.run(runner())
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("error")
-        err = asyncio.run(send_message("t", "c", "msg"))
 
     assert calls["chat_id"] == "c"
     assert calls["text"] == "msg"
@@ -89,8 +86,7 @@ def test_send_message_exception_logged(monkeypatch, tmp_path, caplog):
     assert any("boom" in r.getMessage() for r in caplog.records)
 
 
-def test_send_message_async_exception_logged(monkeypatch, tmp_path, caplog):
-def test_send_message_exception_raises(monkeypatch):
+def test_send_message_exception_raises(monkeypatch, tmp_path, caplog):
     class DummyBot:
         def __init__(self, token):
             pass
@@ -114,10 +110,6 @@ def test_send_message_exception_raises(monkeypatch):
         asyncio.run(runner())
 
     assert any("boom" in r.getMessage() for r in caplog.records)
-    monkeypatch.setattr("crypto_bot.utils.telegram.telegram.Bot", DummyBot)
-
-    with pytest.raises(RuntimeError):
-        asyncio.run(telegram.send_message("t", "c", "msg"))
 
 
 def test_send_test_message_success(monkeypatch):
