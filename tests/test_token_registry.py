@@ -436,6 +436,41 @@ def test_get_mint_from_gecko(monkeypatch):
     assert "query=BONK" in urls[0]
 
 
+def test_get_mint_from_gecko_cached(monkeypatch):
+    import importlib.util, pathlib
+
+    spec = importlib.util.spec_from_file_location(
+        "crypto_bot.utils.token_registry",
+        pathlib.Path(__file__).resolve().parents[1]
+        / "crypto_bot"
+        / "utils"
+        / "token_registry.py",
+    )
+    tr = importlib.util.module_from_spec(spec)
+    sys.modules["crypto_bot.utils.token_registry"] = tr
+    spec.loader.exec_module(tr)
+
+    tr.TOKEN_MINTS["AAA"] = "mint"
+
+    called = {"gecko": False, "helius": False}
+
+    async def fake_req(url, params=None, retries=3):
+        called["gecko"] = True
+        return {}
+
+    async def fake_hel(symbols):
+        called["helius"] = True
+        return {}
+
+    monkeypatch.setattr(tr, "gecko_request", fake_req)
+    monkeypatch.setattr(tr, "fetch_from_helius", fake_hel)
+
+    mint = asyncio.run(tr.get_mint_from_gecko("AAA"))
+    assert mint == "mint"
+    assert called["gecko"] is False
+    assert called["helius"] is False
+
+
 def test_get_mint_from_gecko_error(monkeypatch):
 
     import importlib.util, pathlib
