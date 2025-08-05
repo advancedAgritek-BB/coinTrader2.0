@@ -39,6 +39,12 @@ from crypto_bot.strategy import (
     flash_crash_bot,
 )
 
+try:
+    import crypto_bot.ml_signal_model  # noqa: F401
+    ML_AVAILABLE = True
+except ImportError:  # pragma: no cover - optional dependency
+    ML_AVAILABLE = False
+
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
@@ -374,7 +380,7 @@ def strategy_for(
     if strategies and _has_regime(cfg, regime):
         base = strategies[0]
     else:
-        base = sniper_bot.generate_signal if regime == "unknown" else grid_bot.generate_signal
+        base = grid_bot.generate_signal
     tf_key = f"{regime.replace('-', '_')}_timeframe"
     tf = cfg_get(cfg, tf_key, cfg_get(cfg, "timeframe", "1h"))
     if base is flash_crash_bot.generate_signal or getattr(base, "__name__", "") == flash_crash_bot.generate_signal.__name__:
@@ -641,6 +647,10 @@ def route(
         tf_sec,
         cfg_get(cfg, "commit_lock_intervals", 0),
     )
+
+    if not ML_AVAILABLE and regime == "unknown":
+        logger.warning("ML unavailable; using fallback regime and default strategy.")
+        return _wrap(grid_bot.generate_signal)
 
     def _post_fastpath():
         symbol = ""
