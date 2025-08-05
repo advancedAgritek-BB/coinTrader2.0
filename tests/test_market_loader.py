@@ -1286,7 +1286,9 @@ def test_main_preserves_symbols_on_scan_failure(monkeypatch, caplog):
     monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
     monkeypatch.setattr(main, "dotenv_values", lambda path: {})
     monkeypatch.setattr(main, "load_or_create", lambda: {})
-    monkeypatch.setattr(main, "send_test_message", lambda *_a, **_k: True)
+    async def fake_send_test(*_a, **_k):
+        return True
+    monkeypatch.setattr(main, "send_test_message", fake_send_test)
     monkeypatch.setattr(main, "log_balance", lambda *_a, **_k: None)
 
     class DummyRC:
@@ -1337,7 +1339,9 @@ def test_main_uses_pair_cache_when_scan_none(monkeypatch, caplog):
     monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
     monkeypatch.setattr(main, "dotenv_values", lambda path: {})
     monkeypatch.setattr(main, "load_or_create", lambda: {})
-    monkeypatch.setattr(main, "send_test_message", lambda *_a, **_k: True)
+    async def fake_send_test2(*_a, **_k):
+        return True
+    monkeypatch.setattr(main, "send_test_message", fake_send_test2)
     monkeypatch.setattr(main, "log_balance", lambda *_a, **_k: None)
 
     class DummyRC:

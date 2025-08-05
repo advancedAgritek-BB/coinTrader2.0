@@ -51,40 +51,27 @@ def is_admin(chat_id: str) -> bool:
 set_admin_ids(None)
 
 
-def send_message(token: str, chat_id: str, text: str) -> Optional[str]:
-    """Send ``text`` to ``chat_id`` using ``token``.
+async def send_message(token: str, chat_id: str, text: str) -> None:
+    """Send ``text`` to ``chat_id`` using ``token`` asynchronously.
 
-    Returns ``None`` on success or an error string on failure.
+    Any exception raised by the underlying ``telegram`` library is propagated
+    to the caller after being logged.  This allows callers to handle
+    ``ValueError`` or ``asyncio.TimeoutError`` explicitly.
     """
+    bot = Bot(token)
+
     try:
-        bot = Bot(token)
-
-        async def _send() -> None:
-            try:
-                await bot.send_message(chat_id=chat_id, text=text)
-            except Exception as exc:  # pragma: no cover - network
-                logger.error(
-                    "Failed to send message: %s. Verify your Telegram token "
-                    "and chat ID and ensure the bot has started a chat.",
-                    exc,
-                )
-
         if inspect.iscoroutinefunction(bot.send_message):
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
-
-            if loop and loop.is_running():
-                loop.create_task(_send())
-            else:
-                asyncio.run(_send())
+            await bot.send_message(chat_id=chat_id, text=text)
         else:
-            bot.send_message(chat_id=chat_id, text=text)
-        return None
-    except Exception as e:  # pragma: no cover - network
-        logger.error("Failed to send message: %s", e)
-        return str(e)
+            await asyncio.to_thread(bot.send_message, chat_id=chat_id, text=text)
+    except Exception as exc:  # pragma: no cover - network
+        logger.error(
+            "Failed to send message: %s. Verify your Telegram token and chat ID "
+            "and ensure the bot has started a chat.",
+            exc,
+        )
+        raise
 
 
 @dataclass
@@ -141,22 +128,24 @@ class TelegramNotifier:
                 await asyncio.sleep(delay)
                 now = time.time()
 
-            err = await asyncio.to_thread(send_message, self.token, self.chat_id, text)
-            if err is not None:
+            try:
+                await send_message(self.token, self.chat_id, text)
+            except Exception as exc:  # pragma: no cover - network
                 self._disabled = True
                 logger.error(
                     "Disabling Telegram notifications due to send failure: %s",
-                    err,
+                    exc,
                 )
+                return str(exc)
             else:
                 self._last_sent = now
                 self._recent_sends.append(now)
-            return err
+                return None
 
     def notify(self, text: str) -> Optional[str]:
         """Send ``text`` if notifications are enabled and credentials exist."""
         try:
-            asyncio.get_running_loop()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
             return asyncio.run(self.notify_async(text))
 
@@ -179,17 +168,20 @@ class TelegramNotifier:
                 time.sleep(delay)
                 now = time.time()
 
-            err = send_message(self.token, self.chat_id, text)
-            if err is not None:
-                self._disabled = True
-                logger.error(
-                    "Disabling Telegram notifications due to send failure: %s",
-                    err,
-                )
-            else:
-                self._last_sent = now
-                self._recent_sends.append(now)
-        return err
+            async def _send() -> None:
+                try:
+                    await send_message(self.token, self.chat_id, text)
+                except Exception as exc:  # pragma: no cover - network
+                    self._disabled = True
+                    logger.error(
+                        "Disabling Telegram notifications due to send failure: %s",
+                        exc,
+                    )
+
+            loop.create_task(_send())
+            self._last_sent = now
+            self._recent_sends.append(now)
+        return None
 
 
     @classmethod
@@ -207,9 +199,52 @@ class TelegramNotifier:
         return notifier
 
 
-def send_test_message(token: str, chat_id: str, text: str = "Test message") -> bool:
-    """Send a short test message to verify Telegram configuration."""
+async def send_test_message(
+    token: str,
+    chat_id: str,
+    text: str = "Test message",
+    retries: int = 3,
+    retry_delay: float = 1.0,
+) -> bool:
+    """Send a short test message to verify Telegram configuration.
+
+    Parameters
+    ----------
+    token, chat_id:
+        Credentials used for the Telegram bot.
+    text:
+        Message to send.
+    retries:
+        Number of times to retry on ``asyncio.TimeoutError``.
+    retry_delay:
+        Seconds to wait between retries.
+
+    Returns
+    -------
+    bool
+        ``True`` if the message was sent successfully.
+
+    Raises
+    ------
+    ValueError
+        If ``token`` or ``chat_id`` is missing or invalid.
+    asyncio.TimeoutError
+        If all retry attempts time out.
+    """
     if not token or not chat_id:
-        return False
-    err = send_message(token, chat_id, text)
-    return err is None
+        raise ValueError("token and chat_id must be provided")
+
+    for attempt in range(retries):
+        try:
+            await send_message(token, chat_id, text)
+            return True
+        except asyncio.TimeoutError:
+            if attempt == retries - 1:
+                raise
+            await asyncio.sleep(retry_delay)
+        except ValueError:
+            raise
+        except Exception as exc:  # pragma: no cover - network
+            logger.error("Failed to send test message: %s", exc)
+            return False
+    return False

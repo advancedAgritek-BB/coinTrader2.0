@@ -2,6 +2,7 @@
 import logging
 import warnings
 import asyncio
+import pytest
 
 from crypto_bot.utils.telegram import send_message
 
@@ -49,11 +50,14 @@ def test_send_message_async_no_warning(monkeypatch):
 
     monkeypatch.setattr("crypto_bot.utils.telegram.Bot", DummyBot)
 
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("error")
-        err = send_message("t", "c", "msg")
+    async def runner():
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("error")
+            await send_message("t", "c", "msg")
+        return w
 
-    assert err is None
+    w = asyncio.run(runner())
+
     assert calls["chat_id"] == "c"
     assert calls["text"] == "msg"
     assert w == []
@@ -76,9 +80,9 @@ def test_send_message_exception_logged(monkeypatch, tmp_path, caplog):
     monkeypatch.setattr(telegram, "logger", logger)
 
     with caplog.at_level(logging.ERROR):
-        err = telegram.send_message("t", "c", "msg")
+        with pytest.raises(RuntimeError):
+            asyncio.run(telegram.send_message("t", "c", "msg"))
 
-    assert err == "boom"
     assert any("boom" in r.getMessage() for r in caplog.records)
 
 
@@ -99,38 +103,60 @@ def test_send_message_async_exception_logged(monkeypatch, tmp_path, caplog):
     monkeypatch.setattr(telegram, "logger", logger)
 
     async def runner():
-        err = telegram.send_message("t", "c", "msg")
-        await asyncio.sleep(0)
-        return err
+        with pytest.raises(RuntimeError):
+            await telegram.send_message("t", "c", "msg")
 
     with caplog.at_level(logging.ERROR):
-        err = asyncio.run(runner())
+        asyncio.run(runner())
 
-    assert err is None
     assert any("boom" in r.getMessage() for r in caplog.records)
 
 
 def test_send_test_message_success(monkeypatch):
     calls = {}
 
-    def fake_send(token, chat_id, text):
+    async def fake_send(token, chat_id, text):
         calls["args"] = (token, chat_id, text)
-        return None
 
     import crypto_bot.utils.telegram as telegram
 
     monkeypatch.setattr(telegram, "send_message", fake_send)
 
-    assert telegram.send_test_message("t", "c", "hello") is True
+    assert asyncio.run(telegram.send_test_message("t", "c", "hello")) is True
     assert calls["args"] == ("t", "c", "hello")
 
 
-def test_send_test_message_failure(monkeypatch):
+def test_send_test_message_invalid_token(monkeypatch):
     import crypto_bot.utils.telegram as telegram
 
-    monkeypatch.setattr(telegram, "send_message", lambda *a, **k: "err")
+    async def fake_send(token, chat_id, text):
+        raise ValueError("bad token")
 
-    assert telegram.send_test_message("t", "c") is False
+    monkeypatch.setattr(telegram, "send_message", fake_send)
+
+    with pytest.raises(ValueError):
+        asyncio.run(telegram.send_test_message("t", "c"))
+
+
+def test_send_test_message_timeout_retry(monkeypatch):
+    import crypto_bot.utils.telegram as telegram
+
+    calls = {"count": 0}
+
+    async def fake_send(token, chat_id, text):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise asyncio.TimeoutError
+
+    monkeypatch.setattr(telegram, "send_message", fake_send)
+
+    assert (
+        asyncio.run(
+            telegram.send_test_message("t", "c", retries=2, retry_delay=0)
+        )
+        is True
+    )
+    assert calls["count"] == 2
 
 
 def test_notifier_stops_after_failure(monkeypatch, caplog):
@@ -138,9 +164,9 @@ def test_notifier_stops_after_failure(monkeypatch, caplog):
 
     calls = {"count": 0}
 
-    def fake_send(token, chat_id, text):
+    async def fake_send(token, chat_id, text):
         calls["count"] += 1
-        return "boom"
+        raise RuntimeError("boom")
 
     monkeypatch.setattr(telegram, "send_message", fake_send)
     monkeypatch.setattr(telegram, "logger", logging.getLogger("test_notifier"))
@@ -171,9 +197,8 @@ def test_notifier_rate_limits(monkeypatch):
 
     send_times = []
 
-    def fake_send(token, chat_id, text):
+    async def fake_send(token, chat_id, text):
         send_times.append(current["t"])
-        return None
 
     monkeypatch.setattr(telegram, "send_message", fake_send)
     monkeypatch.setattr(telegram, "time", types.SimpleNamespace(time=fake_time, sleep=fake_sleep))
