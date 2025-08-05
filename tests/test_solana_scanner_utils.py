@@ -1,6 +1,5 @@
 import asyncio
-import importlib.util
-import pathlib
+import importlib
 import sys
 import types
 from datetime import datetime
@@ -18,13 +17,7 @@ sys.modules.setdefault("crypto_bot.volatility_filter", pkg_root.volatility_filte
 sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
 sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
 
-spec = importlib.util.spec_from_file_location(
-    "crypto_bot.utils.solana_scanner",
-    pathlib.Path(__file__).resolve().parents[1] / "crypto_bot" / "utils" / "solana_scanner.py",
-)
-solana_scanner = importlib.util.module_from_spec(spec)
-sys.modules["crypto_bot.utils.solana_scanner"] = solana_scanner
-spec.loader.exec_module(solana_scanner)
+solana_scanner = importlib.import_module("crypto_bot.utils.solana_scanner")
 
 
 class DummyResp:
@@ -63,8 +56,41 @@ class DummySession:
 def test_fetch_new_raydium_pools(monkeypatch):
     data = {
         "data": [
-            {"tokenMint": "A", "volumeUsd": 150},
-            {"tokenMint": "B", "volumeUsd": 50},
+            {
+                "base": {"address": "A"},
+                "liquidity": 150,
+                "volume24h": 150,
+                "creation_timestamp": 1,
+                "liquidity_locked": True,
+            },
+            {
+                "base": {"address": "B"},
+                "liquidity": 50,
+                "volume24h": 150,
+                "creation_timestamp": 1,
+                "liquidity_locked": True,
+            },
+            {
+                "base": {"address": "C"},
+                "liquidity": 150,
+                "volume24h": 50,
+                "creation_timestamp": 1,
+                "liquidity_locked": True,
+            },
+            {
+                "base": {"address": "D"},
+                "liquidity": 150,
+                "volume24h": 150,
+                "creation_timestamp": 0,
+                "liquidity_locked": True,
+            },
+            {
+                "base": {"address": "E"},
+                "liquidity": 150,
+                "volume24h": 150,
+                "creation_timestamp": 1,
+                "liquidity_locked": False,
+            },
         ]
     }
     session = DummySession(data)
@@ -80,11 +106,24 @@ def test_fetch_new_raydium_pools(monkeypatch):
     solana_scanner._MIN_VOLUME_USD = 100
     tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools("k", 5))
     assert tokens == ["A"]
-    assert "k" in session.url
+    assert "B" not in tokens
+    assert "C" not in tokens
+    assert "D" not in tokens
+    assert "E" not in tokens
 
 
 def test_fetch_new_raydium_pools_helius(monkeypatch):
-    data = {"data": [{"tokenMint": "A", "volumeUsd": 150}]}
+    data = {
+        "data": [
+            {
+                "base": {"address": "A"},
+                "liquidity": 150,
+                "volume24h": 150,
+                "creation_timestamp": 1,
+                "liquidity_locked": True,
+            }
+        ]
+    }
     session = DummySession(data)
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
     monkeypatch.setattr(solana_scanner, "aiohttp", aiohttp_mod)

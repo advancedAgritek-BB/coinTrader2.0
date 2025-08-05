@@ -152,9 +152,9 @@ class DummySession:
 
 def test_get_solana_liquid_pairs(monkeypatch):
     data = [
-        {"name": "A/USDC", "liquidity": 2_000_000},
-        {"name": "B/USDC", "liquidity": 500_000},
-        {"name": "C/OTHER", "liquidity": 5_000_000},
+        {"base": {"symbol": "A"}, "quote": {"symbol": "USDC"}, "liquidity": 2_000_000},
+        {"base": {"symbol": "B"}, "quote": {"symbol": "USDC"}, "liquidity": 500_000},
+        {"base": {"symbol": "C"}, "quote": {"symbol": "OTHER"}, "liquidity": 5_000_000},
     ]
     session = DummySession(data)
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session, "ClientError": Exception})
