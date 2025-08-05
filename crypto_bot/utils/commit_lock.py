@@ -2,39 +2,33 @@ from __future__ import annotations
 
 import json
 import time
+from pathlib import Path
+from typing import Optional
 
 import redis
 
-# Optional Redis client for commit lock persistence
-REDIS_CLIENT = None
+from .logger import LOG_DIR
+
+REDIS_CLIENT: Optional[redis.Redis] = None
 REDIS_KEY = "commit_lock:last_regime"
 
 
-def check_and_update(regime: str, tf_seconds: int, intervals: int) -> str:
-    """Return commit-locked regime and update persistence layer.
 def check_and_update(
     regime: str,
     tf_seconds: int,
     intervals: int,
     *,
-    redis_client: redis.Redis | None = None,
+    redis_client: Optional[redis.Redis] = None,
 ) -> str:
-    """Return commit-locked regime using Redis for coordination.
+    """Return a commit-locked regime value.
 
-    Parameters
-    ----------
-    regime : str
-        Current detected regime.
-    tf_seconds : int
-        Base timeframe in seconds.
-    intervals : int
-        Number of intervals to lock the regime for.
-    redis_client : redis.Redis | None
-        Optional Redis client. If not provided, a new client is created.
+    The last regime is stored either in a Redis instance or on disk. If a
+    previous regime exists and is still within the lock window, that value is
+    returned; otherwise the provided ``regime`` is persisted and returned.
     """
 
-    client = REDIS_CLIENT
-    if client is not None:  # pragma: no cover - exercised via tests
+    client = redis_client or REDIS_CLIENT
+    if client is not None:  # pragma: no cover - optional redis path
         try:
             raw = client.get(REDIS_KEY)
             if raw:
@@ -58,7 +52,7 @@ def check_and_update(
             pass
         return regime
 
-    # Fallback to filesystem persistence if no Redis client is provided
+    # Fallback to filesystem persistence
     file = LOG_DIR / "last_regime.json"
     file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -68,32 +62,12 @@ def check_and_update(
             last_reg = data.get("regime")
             last_ts = float(data.get("timestamp", 0))
             if last_reg and time.time() - last_ts < tf_seconds * intervals and regime != last_reg:
-    if intervals <= 0:
-        return regime
-
-    client = redis_client or redis.Redis(decode_responses=True)
-    data_key = "commit_lock:last_regime"
-    lock_key = f"{data_key}:lock"
-    ttl = tf_seconds * intervals
-
-    with client.lock(lock_key, blocking_timeout=1):
-        raw = client.get(data_key)
-        if raw:
-            try:
-                payload = json.loads(raw)
-                last_reg = payload.get("regime")
-                last_ts = float(payload.get("timestamp", 0))
-            except Exception:
-                last_reg = None
-                last_ts = 0.0
-            if last_reg and regime != last_reg and time.time() - last_ts < ttl:
                 return last_reg
+        except Exception:
+            pass
 
-        client.set(
-            data_key,
-            json.dumps({"regime": regime, "timestamp": time.time()}),
-            ex=ttl,
-        )
-
+    try:
+        file.write_text(json.dumps({"regime": regime, "timestamp": time.time()}))
+    except Exception:
+        pass
     return regime
-

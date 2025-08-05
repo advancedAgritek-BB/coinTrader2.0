@@ -6,7 +6,6 @@ import os
 
 import requests
 from cachetools import TTLCache
-import aiohttp
 
 from crypto_bot.lunarcrush_client import LunarCrushClient
 
@@ -46,20 +45,9 @@ async def fetch_fng_index() -> int:
             value = int(data.get("data", [{}])[0].get("value", 50))
             _CACHE[key] = value
             return value
-        async with aiohttp.ClientSession() as session:
-            async with session.get(FNG_URL, timeout=5) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
-                if isinstance(data, dict):
-                    return int(data.get("data", [{}])[0].get("value", 50))
     except Exception as exc:
         logger.error("Failed to fetch FNG index: %s", exc)
     return 50
-
-
-async def fetch_twitter_sentiment(
-    query: str = "bitcoin", symbol: str | None = None
-) -> int:
 
 
 async def fetch_twitter_sentiment(query: str = "bitcoin", symbol: str | None = None) -> int:
@@ -75,8 +63,14 @@ async def fetch_twitter_sentiment(query: str = "bitcoin", symbol: str | None = N
             return int(mock)
         except ValueError:
             return 50
-    if symbol and os.getenv("LUNARCRUSH_API_KEY"):
-        return fetch_lunarcrush_sentiment(symbol)
+
+    if symbol:
+        api_key = os.getenv("LUNARCRUSH_API_KEY")
+        if not api_key:
+            logger.error("LUNARCRUSH_API_KEY not set")
+            return 50
+        return await fetch_lunarcrush_sentiment(symbol)
+
     key = f"twitter:{query}"
     if key in _CACHE:
         return _CACHE[key]
@@ -88,15 +82,7 @@ async def fetch_twitter_sentiment(query: str = "bitcoin", symbol: str | None = N
             value = int(data.get("score", 50))
             _CACHE[key] = value
             return value
-        return await fetch_lunarcrush_sentiment(symbol)
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{SENTIMENT_URL}?q={query}", timeout=5) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
-                if isinstance(data, dict):
-                    return int(data.get("score", 50))
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover - network failure
         logger.error("Failed to fetch Twitter sentiment: %s", exc)
     return 50
 
@@ -108,12 +94,11 @@ async def fetch_lunarcrush_sentiment(symbol: str) -> int:
         return _CACHE[key]
     try:
         value = int(lunar_client.get_sentiment(symbol))
-        _CACHE[key] = value
-        return value
-        return int(await lunar_client.get_sentiment(symbol))
     except Exception as exc:  # pragma: no cover - network failure
         logger.error("Failed to fetch LunarCrush sentiment: %s", exc)
         return 50
+    _CACHE[key] = value
+    return value
 
 
 async def too_bearish(
