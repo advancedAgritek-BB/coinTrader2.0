@@ -247,55 +247,29 @@ async def analyze_symbol(
     higher_df = df_map.get("1d")
     if ML_AVAILABLE:
         try:
-            regime, info = await classify_regime_async(df, higher_df)
+            regime, info = await classify_regime_async(
+                df, higher_df, notifier=notifier
+            )
         except Exception as exc:
             analysis_logger.error("classify_regime_async failed: %s", exc)
             regime, info = _heuristic_regime(df)
     else:
         analysis_logger.error("ML unavailable; using heuristic regime")
         regime, info = _heuristic_regime(df)
-    regime, probs = await classify_regime_async(df, higher_df, notifier=notifier)
+
     sub_regime = regime.split("_")[-1]
-    patterns = {}
     if isinstance(info, dict) and regime not in info:
         patterns = info
         probs = {regime: 1.0}
     else:
         probs = info if isinstance(info, dict) else {regime: float(info)}
         patterns = detect_patterns(df)
+
     base_conf = float(probs.get(regime, 0.0))
     max_prob = max(probs.values()) if probs else 0.0
     if max_prob > 0:
         base_conf /= max_prob
-    try:
-        regime, probs = await classify_regime_async(df, higher_df)
-        sub_regime = regime.split("_")[-1]
-        patterns = detect_patterns(df)
-        base_conf = float(probs.get(regime, 0.0))
-    except Exception as exc:  # pragma: no cover - triggered in tests
-        analysis_logger.warning(
-            "classify_regime failed: %s - falling back to heuristics", exc
-        )
-        change = float(df["close"].iloc[-1] - df["close"].iloc[0])
-        if change > 0:
-            regime = sub_regime = "trending"
-        elif change < 0:
-            regime = sub_regime = "mean-reverting"
-        else:
-            regime = sub_regime = "sideways"
-        probs = {regime: 1.0}
-        patterns = {}
-        return {
-            "symbol": symbol,
-            "df": df,
-            "regime": regime,
-            "sub_regime": sub_regime,
-            "patterns": patterns,
-            "future_return": 0.0,
-            "confidence": 1.0,
-            "min_confidence": min_conf_adaptive,
-            "probabilities": probs,
-        }
+
     bias_cfg = config.get("sentiment_filter", {})
     try:
         from crypto_bot.sentiment_filter import boost_factor
@@ -315,86 +289,8 @@ async def analyze_symbol(
         total = sum(probs.values())
         if total > 0:
             probs = {kk: vv / total for kk, vv in probs.items()}
+
     profile = bool(config.get("profile_regime", False))
-    if ML_AVAILABLE:
-        try:
-            cache_symbol = (
-                f"{symbol}_{float(df['close'].iloc[-1])}" if 'close' in df else f"{symbol}_{len(df)}"
-            )
-            res = classify_regime_cached(
-                cache_symbol,
-                base_tf,
-                df,
-                higher_df,
-                profile,
-            )
-            if asyncio.iscoroutine(res):
-                regime, _ = await res
-            else:
-                regime, _ = res
-        except Exception as exc:
-            analysis_logger.error("classify_regime_cached failed: %s", exc)
-            regime, _ = _heuristic_regime(df)
-    else:
-        analysis_logger.error("ML unavailable; using heuristic regime")
-        regime, _ = _heuristic_regime(df)
-    sub_regime = regime.split("_")[-1]
-    higher_df = df_map.get(higher_tf)
-
-    if df is not None and not patterns:
-        if ML_AVAILABLE:
-            try:
-                regime_tmp, patterns = await classify_regime_with_patterns_async(df, higher_df)
-            except Exception as exc:
-                analysis_logger.error("classify_regime_with_patterns_async failed: %s", exc)
-                regime_tmp, _ = _heuristic_regime(df)
-                patterns = {}
-        else:
-            analysis_logger.error("ML unavailable; using heuristic regime")
-            regime_tmp, _ = _heuristic_regime(df)
-            patterns = {}
-        regime = regime_tmp
-        sub_regime = regime_tmp.split("_")[-1]
-        # Refresh probabilities based on the final regime determination
-        if ML_AVAILABLE:
-            try:
-                _label, info = await classify_regime_async(df, higher_df)
-            except Exception as exc:
-                analysis_logger.error("classify_regime_async failed: %s", exc)
-                _label, info = _heuristic_regime(df)
-        else:
-            analysis_logger.error("ML unavailable; using heuristic regime")
-            _label, info = _heuristic_regime(df)
-    regime, _ = await classify_regime_cached(
-        symbol,
-        base_tf,
-        df,
-        higher_df,
-        profile,
-        notifier=notifier,
-    )
-    sub_regime = regime.split("_")[-1]
-    higher_df = df_map.get(higher_tf)
-
-    if df is not None:
-        regime_tmp, patterns = await classify_regime_with_patterns_async(
-            df, higher_df, notifier=notifier
-        )
-        regime = regime_tmp
-        sub_regime = regime_tmp.split("_")[-1]
-        # Refresh probabilities based on the final regime determination
-        _label, info = await classify_regime_async(df, higher_df, notifier=notifier)
-        if isinstance(info, dict):
-            probs = info
-            base_conf = float(info.get(regime, 0.0))
-        elif isinstance(info, set):
-            probs = {p: 1.0 for p in info}
-            base_conf = float(probs.get(regime, 0.0))
-        else:
-            base_conf = float(info)
-        max_prob = max(probs.values()) if probs else 0.0
-        if max_prob > 0:
-            base_conf /= max_prob
 
     regime_counts: Dict[str, int] = {}
     regime_tfs = config.get("regime_timeframes", [base_tf])
@@ -412,11 +308,7 @@ async def analyze_symbol(
                     f"{symbol}_{float(tf_df['close'].iloc[-1])}" if 'close' in tf_df else f"{symbol}_{len(tf_df)}"
                 )
                 res = classify_regime_cached(
-                    cache_symbol,
-                    tf,
-                    tf_df,
-                    higher_df,
-                    profile,
+                    cache_symbol, tf, tf_df, higher_df, profile
                 )
                 if asyncio.iscoroutine(res):
                     r, _ = await res
@@ -428,39 +320,35 @@ async def analyze_symbol(
         else:
             analysis_logger.error("ML unavailable; using heuristic regime")
             r, _ = _heuristic_regime(tf_df)
-        r, _ = await classify_regime_cached(
-            symbol,
-            tf,
-            tf_df,
-            higher_df,
-            profile,
-            notifier=notifier,
-        )
         r = r.split("_")[-1]
         regime_counts[r] = regime_counts.get(r, 0) + 1
-        if tf_df is not None:
-            vote_map[tf] = tf_df
+        vote_map[tf] = tf_df
     if higher_tf in df_map:
         vote_map.setdefault(higher_tf, df_map[higher_tf])
 
     if vote_map:
         if ML_AVAILABLE:
             try:
-                labels = await classify_regime_async(df_map=vote_map)
+                labels = await classify_regime_async(
+                    df_map=vote_map, notifier=notifier
+                )
             except Exception as exc:
-                analysis_logger.error("classify_regime_async voting failed: %s", exc)
-                label_map = {tf: _heuristic_regime(df)[0] for tf, df in vote_map.items()}
+                analysis_logger.error(
+                    "classify_regime_async voting failed: %s", exc
+                )
+                label_map = {
+                    tf: _heuristic_regime(df)[0] for tf, df in vote_map.items()
+                }
             else:
                 if isinstance(labels, tuple):
                     label_map = dict(zip(vote_map.keys(), labels))
                 else:
                     label_map = labels
-        labels = await classify_regime_async(df_map=vote_map, notifier=notifier)
-        if isinstance(labels, tuple):
-            label_map = dict(zip(vote_map.keys(), labels))
         else:
             analysis_logger.error("ML unavailable; using heuristic regime")
-            label_map = {tf: _heuristic_regime(df)[0] for tf, df in vote_map.items()}
+            label_map = {
+                tf: _heuristic_regime(df)[0] for tf, df in vote_map.items()
+            }
         for tf in regime_tfs:
             r = label_map.get(tf)
             if r:
@@ -612,9 +500,6 @@ async def analyze_symbol(
             score, direction, atr = (
                 await evaluate_async([strategy_fn], df, cfg)
             )[0]
-            score, direction, atr = (await evaluate_async([strategy_fn], df_map, cfg))[
-                0
-            ]
 
         atr_period = int(config.get("risk", {}).get("atr_period", 14))
         if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
