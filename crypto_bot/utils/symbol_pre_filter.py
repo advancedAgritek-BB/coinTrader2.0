@@ -32,7 +32,7 @@ import logging
 
 from .logger import LOG_DIR, setup_logger
 from .market_loader import (
-    fetch_ohlcv_async,
+    load_ohlcv,
     update_ohlcv_cache,
     update_multi_tf_ohlcv_cache,
     fetch_geckoterminal_ohlcv,
@@ -169,7 +169,7 @@ async def has_enough_history(
     candles_needed = int((days * 86400) / seconds)
     try:
         async with SEMA:
-            data = await fetch_ohlcv_async(
+            data = await load_ohlcv(
                 exchange, symbol, timeframe=timeframe, limit=candles_needed
             )
     except Exception as exc:  # pragma: no cover - network

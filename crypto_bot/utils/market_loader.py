@@ -1,5 +1,7 @@
 """Utilities for loading trading symbols and fetching OHLCV data."""
 
+from __future__ import annotations
+
 from typing import Iterable, List, Dict, Any, Deque
 from dataclasses import dataclass
 import asyncio
@@ -35,7 +37,11 @@ from .token_registry import (
     fetch_from_helius,
 )
 
-from .telegram import TelegramNotifier
+# Avoid heavy import at module load time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover - type hints only
+    from .telegram import TelegramNotifier
 from .logger import LOG_DIR, setup_logger
 from .constants import NON_SOLANA_BASES
 
@@ -44,20 +50,19 @@ _last_snapshot_time = 0
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
-UNSUPPORTED_SYMBOLS = [
+UNSUPPORTED_SYMBOLS: set[str] = {
     "AIBTC/EUR",
     "AIBTC/USD",
-]
+}
 """Symbols that consistently fail to load OHLCV data.
 
-Extend this list to skip additional markets without making network
+Extend this set to skip additional markets without making network
 requests.
 """
 
 failed_symbols: Dict[str, Dict[str, Any]] = {}
 # Track WebSocket OHLCV failures per symbol
 WS_FAIL_COUNTS: Dict[str, int] = {}
-UNSUPPORTED_SYMBOLS: set[str] = set()
 RETRY_DELAY = 300
 MAX_RETRY_DELAY = 3600
 # Default timeout when fetching OHLCV data
@@ -1120,17 +1125,10 @@ async def fetch_ohlcv_async(
     return []
 
 
-@retry(
-    wait=wait_exponential(multiplier=1, min=1, max=30),
-    stop=stop_after_attempt(3),
-    reraise=True,
-    before=before_log(logger, logging.DEBUG),
-    before_sleep=before_sleep_log(logger, logging.WARNING),
-)
 async def load_ohlcv(
     exchange,
     symbol: str,
-    timeframe: str = "1h",
+    timeframe: str = "1m",
     limit: int = 100,
     mode: str = "rest",
     **kwargs,
@@ -1159,50 +1157,49 @@ async def load_ohlcv(
         List of OHLCV candles.
     """
 
-    try:
-        if mode == "websocket":
-            watch_fn = getattr(exchange, "watch_ohlcv")
-            if asyncio.iscoroutinefunction(watch_fn):
-                data = await watch_fn(symbol, timeframe=timeframe, limit=limit, **kwargs)
-            else:  # pragma: no cover - synchronous fallback
-                data = await asyncio.to_thread(
-                    watch_fn, symbol, timeframe, limit=limit, **kwargs
-                )
-            await asyncio.sleep(1)
-            if len(data) < limit:
-                logger.warning(
-                    "watch_ohlcv returned %d of %d candles for %s %s; fetching remainder",
-                    len(data),
-                    limit,
-                    symbol,
-                    timeframe,
-                )
-                missing = limit - len(data)
-                fetch_fn = getattr(exchange, "fetch_ohlcv")
-                if asyncio.iscoroutinefunction(fetch_fn):
-                    rest = await fetch_fn(
-                        symbol, timeframe=timeframe, limit=missing, **kwargs
+    force_ws_history = kwargs.pop("force_websocket_history", False)
+
+    while True:
+        try:
+            if mode == "websocket":
+                watch_fn = getattr(exchange, "watch_ohlcv")
+                if asyncio.iscoroutinefunction(watch_fn):
+                    data = await watch_fn(
+                        symbol, timeframe=timeframe, limit=limit, **kwargs
                     )
                 else:  # pragma: no cover - synchronous fallback
-                    rest = await asyncio.to_thread(
-                        fetch_fn, symbol, timeframe, missing, **kwargs
+                    data = await asyncio.to_thread(
+                        watch_fn, symbol, timeframe, limit=limit, **kwargs
                     )
-                await asyncio.sleep(1)
-                data = (rest or []) + (data or [])
-        else:
-            fetch_fn = getattr(exchange, "fetch_ohlcv")
-            if asyncio.iscoroutinefunction(fetch_fn):
-                data = await fetch_fn(symbol, timeframe=timeframe, limit=limit, **kwargs)
-            else:  # pragma: no cover - synchronous fallback
-                data = await asyncio.to_thread(
-                    fetch_fn, symbol, timeframe, limit, **kwargs
-                )
+                if not force_ws_history and data is not None and len(data) < limit:
+                    missing = limit - len(data)
+                    fetch_fn = getattr(exchange, "fetch_ohlcv")
+                    if asyncio.iscoroutinefunction(fetch_fn):
+                        rest = await fetch_fn(
+                            symbol, timeframe=timeframe, limit=missing, **kwargs
+                        )
+                    else:  # pragma: no cover - synchronous fallback
+                        rest = await asyncio.to_thread(
+                            fetch_fn, symbol, timeframe, missing, **kwargs
+                        )
+                    data = (rest or []) + (data or [])
+            else:
+                fetch_fn = getattr(exchange, "fetch_ohlcv")
+                if asyncio.iscoroutinefunction(fetch_fn):
+                    data = await fetch_fn(
+                        symbol, timeframe=timeframe, limit=limit, **kwargs
+                    )
+                else:  # pragma: no cover - synchronous fallback
+                    data = await asyncio.to_thread(
+                        fetch_fn, symbol, timeframe, limit, **kwargs
+                    )
             await asyncio.sleep(1)
-        return data
-    except Exception as exc:
-        if "429" in str(exc):
-            await asyncio.sleep(60)
-        raise
+            return data
+        except Exception as exc:
+            if "429" in str(exc):
+                await asyncio.sleep(60)
+                continue
+            raise
 
 
 async def fetch_geckoterminal_ohlcv(
@@ -1452,7 +1449,7 @@ async def fetch_dex_ohlcv(
     if quote.upper() in SUPPORTED_USD_QUOTES:
         try:
             cb = ccxt.coinbase({"enableRateLimit": True})
-            data = await fetch_ohlcv_async(cb, symbol, timeframe=timeframe, limit=limit)
+            data = await load_ohlcv(cb, symbol, timeframe=timeframe, limit=limit)
         finally:
             close = getattr(cb, "close", None)
             if close:
@@ -1466,7 +1463,7 @@ async def fetch_dex_ohlcv(
         if data and not isinstance(data, Exception):
             return data
 
-    data = await fetch_ohlcv_async(exchange, symbol, timeframe=timeframe, limit=limit)
+    data = await load_ohlcv(exchange, symbol, timeframe=timeframe, limit=limit)
     if isinstance(data, Exception):
         return None
     return data
@@ -1656,15 +1653,16 @@ async def load_ohlcv_parallel(
 
     async def sem_fetch(sym: str):
         async def _fetch_and_sleep():
-            data = await fetch_ohlcv_async(
-                exchange,
-                sym,
-                timeframe=timeframe,
-                limit=limit,
-                since=since_map.get(sym),
-                use_websocket=use_websocket,
-                force_websocket_history=force_websocket_history,
-            )
+            params = {
+                "timeframe": timeframe,
+                "limit": limit,
+                "mode": "websocket" if use_websocket else "rest",
+                "force_websocket_history": force_websocket_history,
+            }
+            s_val = since_map.get(sym)
+            if s_val is not None:
+                params["since"] = s_val
+            data = await load_ohlcv(exchange, sym, **params)
             rl = getattr(exchange, "rateLimit", None)
             if rl:
                 await asyncio.sleep(rl / 1000)
@@ -2278,13 +2276,13 @@ async def update_multi_tf_ohlcv_cache(
                 remaining = sym_total
                 while remaining > 0:
                     req = min(remaining, 1000)
-                    data = await fetch_ohlcv_async(
+                    data = await load_ohlcv(
                         exchange,
                         sym,
                         timeframe=tf,
                         limit=req,
+                        mode="websocket" if use_websocket else "rest",
                         since=current_since,
-                        use_websocket=use_websocket,
                         force_websocket_history=force_websocket_history,
                     )
                     if not data or isinstance(data, Exception):

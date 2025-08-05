@@ -11,6 +11,7 @@ ml_mod = types.ModuleType("crypto_bot.utils.market_loader")
 ml_mod.timeframe_seconds = lambda *_a, **_k: 60
 ml_mod.load_kraken_symbols = lambda *_a, **_k: []
 ml_mod.fetch_ohlcv_async = lambda *_a, **_k: None
+ml_mod.load_ohlcv = lambda *_a, **_k: None
 ml_mod.fetch_order_book_async = lambda *_a, **_k: None
 ml_mod.load_ohlcv_parallel = lambda *_a, **_k: None
 ml_mod.update_ohlcv_cache = lambda *_a, **_k: None

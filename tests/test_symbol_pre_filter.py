@@ -578,7 +578,7 @@ async def mock_fetch_history(exchange, symbol, timeframe="1d", limit=30, **_):
 
 def test_has_enough_history_true(monkeypatch):
     monkeypatch.setattr(
-        "crypto_bot.utils.symbol_pre_filter.fetch_ohlcv_async",
+        "crypto_bot.utils.symbol_pre_filter.load_ohlcv",
         mock_fetch_history,
     )
     assert asyncio.run(has_enough_history(None, "BTC/USD", days=10))
@@ -590,7 +590,7 @@ async def mock_fetch_history_short(exchange, symbol, timeframe="1d", limit=30, *
 
 def test_has_enough_history_false(monkeypatch):
     monkeypatch.setattr(
-        "crypto_bot.utils.symbol_pre_filter.fetch_ohlcv_async",
+        "crypto_bot.utils.symbol_pre_filter.load_ohlcv",
         mock_fetch_history_short,
     )
     assert not asyncio.run(has_enough_history(None, "BTC/USD", days=10))
@@ -602,7 +602,7 @@ async def mock_fetch_history_error(exchange, symbol, timeframe="1d", limit=30, *
 
 def test_has_enough_history_error(monkeypatch):
     monkeypatch.setattr(
-        "crypto_bot.utils.symbol_pre_filter.fetch_ohlcv_async",
+        "crypto_bot.utils.symbol_pre_filter.load_ohlcv",
         mock_fetch_history_error,
     )
     assert not asyncio.run(has_enough_history(None, "BTC/USD", days=10))
@@ -617,7 +617,7 @@ async def mock_fetch_history_exception(exchange, symbol, timeframe="1d", limit=3
 def test_has_enough_history_exception(monkeypatch, caplog):
     caplog.set_level("WARNING")
     monkeypatch.setattr(
-        "crypto_bot.utils.symbol_pre_filter.fetch_ohlcv_async",
+        "crypto_bot.utils.symbol_pre_filter.load_ohlcv",
         mock_fetch_history_exception,
     )
     assert not asyncio.run(has_enough_history(None, "BTC/USD", days=10))
