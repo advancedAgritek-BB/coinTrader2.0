@@ -112,7 +112,7 @@ _OHLCV_BATCH_TASKS: Dict[tuple, asyncio.Task] = {}
 )
 async def _watch_ohlcv_with_retry(exchange, **kwargs):
     """Call ``exchange.watch_ohlcv`` with retries."""
-
+    kwargs.setdefault("timeout", WS_OHLCV_TIMEOUT)
     return await exchange.watch_ohlcv(**kwargs)
 
 

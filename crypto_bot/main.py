@@ -62,6 +62,7 @@ from crypto_bot.utils.market_loader import (
     timeframe_seconds,
     configure as market_loader_configure,
     fetch_order_book_async,
+    WS_OHLCV_TIMEOUT,
 )
 from crypto_bot.utils.pair_cache import PAIR_FILE, load_liquid_pairs
 from tasks.refresh_pairs import (
@@ -1142,7 +1143,7 @@ async def update_caches(ctx: BotContext) -> None:
 
         async def subscribe(sym: str) -> None:
             try:
-                await ctx.exchange.watch_ohlcv(sym, timeframe)
+                await ctx.exchange.watch_ohlcv(sym, timeframe, timeout=WS_OHLCV_TIMEOUT)
             except Exception as exc:  # pragma: no cover - network
                 logger.warning("WS subscribe failed for %s: %s", sym, exc)
 
