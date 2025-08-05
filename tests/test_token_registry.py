@@ -5,6 +5,12 @@ import logging
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _mock_listing_date(monkeypatch):
+    """Override listing date fixture to avoid importing market_loader."""
+    yield
+
+
 class DummyErr(Exception):
     """Minimal exception class for simulating aiohttp errors in tests."""
 
@@ -36,7 +42,6 @@ def test_fetch_from_jupiter(monkeypatch, tmp_path):
     class DummyResp:
         def __init__(self, d):
             self._d = d
-            self.status = 200
             self.status = 200
 
         async def json(self, content_type=None):
@@ -72,25 +77,8 @@ def test_fetch_from_jupiter(monkeypatch, tmp_path):
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
 
-    import importlib.util, pathlib
-
-    spec = importlib.util.spec_from_file_location(
-        "crypto_bot.utils.token_registry",
-        pathlib.Path(__file__).resolve().parents[1]
-        / "crypto_bot"
-        / "utils"
-        / "token_registry.py",
-    )
-    tr = importlib.util.module_from_spec(spec)
-    sys.modules["crypto_bot.utils.token_registry"] = tr
-    spec.loader.exec_module(tr)
-    tr.TOKEN_MINTS.clear()
-    monkeypatch.setattr(tr, "aiohttp", aiohttp_mod)
-    monkeypatch.setattr(tr, "CACHE_FILE", tmp_path / "token_mints.json", raising=False)
-
-    mapping = asyncio.run(tr.load_token_mints())
-    mapping = asyncio.run(mod.fetch_from_jupiter())
-    assert mapping == {"SOL": "So111"}
+    result = asyncio.run(mod.fetch_from_jupiter())
+    assert result == {"SOL": "So111"}
     assert session.url == mod.JUPITER_TOKEN_URL
 
 
