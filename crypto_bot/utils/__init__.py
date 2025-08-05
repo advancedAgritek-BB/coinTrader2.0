@@ -1,6 +1,5 @@
 from .gecko import gecko_request
 from .kraken import get_ws_token
-from .notifier import Notifier
 from .eval_queue import compute_batches, build_priority_queue
 from .market_loader import (
     fetch_ohlcv_async,
@@ -12,6 +11,11 @@ from .market_loader import (
     update_ohlcv_cache,
 )
 from .pair_cache import load_liquid_pairs
+
+try:  # optional dependency with known syntax issues
+    from .notifier import Notifier
+except Exception:  # pragma: no cover - optional
+    Notifier = None
 # Symbol filtering utilities import is optional because the module has
 # heavy async dependencies and some environments may not need it during
 # initialization. Import it lazily where required.

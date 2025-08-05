@@ -35,9 +35,13 @@ from .token_registry import (
     fetch_from_helius,
 )
 
-from .telegram import TelegramNotifier
 from .logger import LOG_DIR, setup_logger
 from .constants import NON_SOLANA_BASES
+
+try:  # optional dependency
+    from .telegram import TelegramNotifier
+except Exception:  # pragma: no cover - optional
+    TelegramNotifier = Any
 
 
 _last_snapshot_time = 0
@@ -753,19 +757,29 @@ async def _fetch_ohlcv_async_inner(
                 and not force_websocket_history
                 and hasattr(exchange, "fetch_ohlcv")
             ):
+                logger.warning(
+                    "watch_ohlcv returned %d of %d candles for %s %s; fetching remainder",
+                    len(data),
+                    limit,
+                    symbol,
+                    timeframe,
+                )
+                missing = limit - len(data)
                 params_f = inspect.signature(exchange.fetch_ohlcv).parameters
-                kwargs_f = {"symbol": symbol, "timeframe": timeframe, "limit": limit}
-                if since is not None and "since" in params_f:
-                    kwargs_f["since"] = since
+                kwargs_f = {
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "limit": missing,
+                }
                 try:
                     if asyncio.iscoroutinefunction(exchange.fetch_ohlcv):
-                        data = await _call_with_retry(
+                        rest = await _call_with_retry(
                             exchange.fetch_ohlcv,
                             timeout=REST_OHLCV_TIMEOUT,
                             **kwargs_f,
                         )
                     else:
-                        data = await _call_with_retry(
+                        rest = await _call_with_retry(
                             asyncio.to_thread,
                             exchange.fetch_ohlcv,
                             timeout=REST_OHLCV_TIMEOUT,
@@ -773,6 +787,7 @@ async def _fetch_ohlcv_async_inner(
                         )
                 except asyncio.CancelledError:
                     raise
+                data = (rest or []) + (data or [])
                 expected = limit
                 if since is not None:
                     try:
