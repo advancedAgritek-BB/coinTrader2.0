@@ -1,10 +1,22 @@
-import pandas as pd
 from typing import Optional, Tuple
+
+import logging
+import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - optional trainer
     from coinTrader_Trainer.ml_trainer import load_model
+    ML_AVAILABLE = True
+except Exception:  # pragma: no cover - trainer unavailable
+    ML_AVAILABLE = False
+    logger.warning(
+        "Skipping lstm_bot: machine learning support is unavailable",
+    )
+
+if ML_AVAILABLE:
     MODEL = load_model("lstm_bot")
-except Exception:  # pragma: no cover - fallback when trainer unavailable
+else:  # pragma: no cover - fallback
     MODEL = None
 
 

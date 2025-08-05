@@ -10,13 +10,21 @@ from crypto_bot.utils import stats
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.cooldown_manager import cooldown, in_cooldown
 
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
+
 try:  # Optional LightGBM integration
     from coinTrader_Trainer.ml_trainer import load_model
-    MODEL = load_model("dip_hunter")
-except Exception:  # pragma: no cover - fallback
-    MODEL = None
+    ML_AVAILABLE = True
+except Exception:  # pragma: no cover - trainer missing
+    ML_AVAILABLE = False
+    logger.warning(
+        "Skipping dip_hunter: machine learning support is unavailable",
+    )
 
-logger = setup_logger(__name__, LOG_DIR / "bot.log")
+if ML_AVAILABLE:
+    MODEL = load_model("dip_hunter")
+else:  # pragma: no cover - fallback
+    MODEL = None
 
 
 def generate_signal(

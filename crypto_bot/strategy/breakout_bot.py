@@ -42,13 +42,21 @@ from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
 
+logger = logging.getLogger(__name__)
+
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model
-    MODEL = load_model("breakout_bot")
-except Exception:  # pragma: no cover - fallback
-    MODEL = None
+    ML_AVAILABLE = True
+except Exception:  # pragma: no cover - trainer missing
+    ML_AVAILABLE = False
+    logger.warning(
+        "Skipping breakout_bot: machine learning support is unavailable",
+    )
 
-logger = logging.getLogger(__name__)
+if ML_AVAILABLE:
+    MODEL = load_model("breakout_bot")
+else:  # pragma: no cover - fallback
+    MODEL = None
 
 
 def _squeeze(
