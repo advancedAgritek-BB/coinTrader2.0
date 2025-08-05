@@ -210,6 +210,10 @@ async def get_mint_from_gecko(base: str) -> str | None:
     given symbol.
     """
 
+    base_upper = base.upper()
+    if base_upper in TOKEN_MINTS:
+        return TOKEN_MINTS[base_upper]
+
     from urllib.parse import quote_plus
 
     url = (
@@ -242,7 +246,7 @@ async def get_mint_from_gecko(base: str) -> str | None:
     # Fallback: Helius if Gecko fails
     logger.info("Gecko failed; falling back to Helius for %s", base)
     helius = await fetch_from_helius([base])
-    return helius.get(base.upper())
+    return helius.get(base_upper)
 
 
 async def fetch_from_helius(symbols: Iterable[str]) -> Dict[str, str]:
