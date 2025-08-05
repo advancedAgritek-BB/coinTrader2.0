@@ -369,25 +369,39 @@ async def monitor_new_tokens() -> None:
 
             # Process Raydium pairs
             for item in raydium_data if isinstance(raydium_data, list) else []:
-                base_symbol = (
-                    item.get("baseSymbol")
-                    or item.get("symbol")
-                    or item.get("name")
-                )
-                base_mint = item.get("baseMint")
-                created = item.get("created_at") or item.get("createdAt")
-                if not (base_symbol and base_mint and created):
+                base = item.get("base") or {}
+                base_symbol = base.get("symbol")
+                base_address = base.get("address")
+                created = item.get("creation_timestamp")
+                locked = item.get("liquidity_locked")
+                volume = item.get("volume24h")
+                liquidity = item.get("liquidity")
+                if not (
+                    base_symbol
+                    and base_address
+                    and created
+                    and locked
+                ):
+                    continue
+                if not locked:
                     continue
                 try:
-                    ts = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+                    if float(volume) <= 100_000 or float(liquidity) <= 50_000:
+                        continue
+                except Exception:
+                    continue
+                try:
+                    ts = datetime.fromtimestamp(float(created))
                 except Exception:
                     continue
                 if last_raydium is None or ts > last_raydium:
-                    last_raydium = ts if last_raydium is None or ts > last_raydium else last_raydium
+                    last_raydium = ts
                     key = str(base_symbol).split("/")[0].upper()
                     if key not in TOKEN_MINTS:
-                        TOKEN_MINTS[key] = base_mint
-                        logger.info("New token detected: %s -> %s", key, base_mint)
+                        TOKEN_MINTS[key] = base_address
+                        logger.info(
+                            "New Raydium token detected: %s -> %s", key, base_address
+                        )
                         _write_cache()
                         new_symbols.append(key)
 
