@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import asyncio
 from pathlib import Path
 from typing import Dict, Iterable, List
 
@@ -69,26 +70,50 @@ async def load_token_mints(
 
     mapping: Dict[str, str] = {}
 
-    try:
-        mapping.update(await fetch_from_jupiter())
-    except Exception as exc:  # pragma: no cover - network failures
-        logger.error("Failed to fetch Jupiter tokens: %s", exc)
+    # Fetch from Jupiter with retries
+    for attempt in range(3):
+        try:
+            mapping = await fetch_from_jupiter()
+            if mapping:
+                break
+        except Exception as exc:  # pragma: no cover - network failures
+            logger.error(
+                "Failed to fetch Jupiter tokens (attempt %d/3): %s", attempt + 1, exc
+            )
+        if attempt < 2:
+            await asyncio.sleep(0.5 * 2**attempt)
 
+    # Fallback to static registry if Jupiter fails
     if not mapping:
         fetch_url = url or os.getenv("TOKEN_MINTS_URL", TOKEN_REGISTRY_URL)
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(fetch_url, timeout=10) as resp:
-                    resp.raise_for_status()
-                    data = await resp.json(content_type=None)
-            tokens = data.get("tokens") or data.get("data", {}).get("tokens") or []
-            for item in tokens:
-                symbol = item.get("symbol") or item.get("ticker")
-                mint = item.get("address") or item.get("mint") or item.get("tokenMint")
-                if isinstance(symbol, str) and isinstance(mint, str):
-                    mapping[symbol.upper()] = mint
-        except Exception as exc:  # pragma: no cover - network failures
-            logger.error("Failed to fetch token registry: %s", exc)
+        for attempt in range(3):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(fetch_url, timeout=10) as resp:
+                        resp.raise_for_status()
+                        data = await resp.json(content_type=None)
+                tokens = data.get("tokens") or data.get("data", {}).get("tokens") or []
+                temp: Dict[str, str] = {}
+                for item in tokens:
+                    symbol = item.get("symbol") or item.get("ticker")
+                    mint = (
+                        item.get("address")
+                        or item.get("mint")
+                        or item.get("tokenMint")
+                    )
+                    if isinstance(symbol, str) and isinstance(mint, str):
+                        temp[symbol.upper()] = mint
+                if temp:
+                    mapping = temp
+                    break
+            except Exception as exc:  # pragma: no cover - network failures
+                logger.error(
+                    "Failed to fetch token registry (attempt %d/3): %s",
+                    attempt + 1,
+                    exc,
+                )
+            if attempt < 2:
+                await asyncio.sleep(0.5 * 2**attempt)
 
     if not mapping and CACHE_FILE.exists():
         try:
@@ -99,14 +124,17 @@ async def load_token_mints(
         except Exception as err:  # pragma: no cover - best effort
             logger.error("Failed to read cache: %s", err)
 
-    if mapping:
-        TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
-        try:
-            CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(CACHE_FILE, "w") as f:
-                json.dump(TOKEN_MINTS, f, indent=2)
-        except Exception as exc:  # pragma: no cover - optional cache
-            logger.error("Failed to write %s: %s", CACHE_FILE, exc)
+    if not mapping:
+        logger.warning("Token mint mapping is empty; cache not written")
+        return {}
+
+    TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
+    try:
+        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(CACHE_FILE, "w") as f:
+            json.dump(TOKEN_MINTS, f, indent=2)
+    except Exception as exc:  # pragma: no cover - optional cache
+        logger.error("Failed to write %s: %s", CACHE_FILE, exc)
 
     _LOADED = True
     return mapping
@@ -146,7 +174,9 @@ _write_cache()  # Save immediately
 
 async def refresh_mints() -> None:
     """Force refresh cached token mints and add known symbols."""
-    await load_token_mints(force_refresh=True)
+    loaded = await load_token_mints(force_refresh=True)
+    if not loaded:
+        raise RuntimeError("Failed to load token mints")
     TOKEN_MINTS.update(
         {
             "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
