@@ -1099,6 +1099,38 @@ async def fetch_ohlcv_async(
     return []
 
 
+@retry(
+    wait=wait_exponential(multiplier=1, min=1, max=30),
+    stop=stop_after_attempt(3),
+    reraise=True,
+    before=before_log(logger, logging.DEBUG),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+)
+async def load_ohlcv(
+    exchange,
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+    since: int | None = None,
+    use_websocket: bool = False,
+    force_websocket_history: bool = False,
+) -> list:
+    """Fetch OHLCV data with automatic retries."""
+
+    data = await _fetch_ohlcv_async_inner(
+        exchange,
+        symbol,
+        timeframe=timeframe,
+        limit=limit,
+        since=since,
+        use_websocket=use_websocket,
+        force_websocket_history=force_websocket_history,
+    )
+    if isinstance(data, Exception):
+        raise data
+    return data
+
+
 async def fetch_geckoterminal_ohlcv(
     symbol: str,
     timeframe: str = "1h",
