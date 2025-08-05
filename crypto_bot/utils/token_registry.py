@@ -33,7 +33,8 @@ TOKEN_MINTS: Dict[str, str] = {}
 _LOADED = False
 
 # Poll interval for monitoring external token feeds
-POLL_INTERVAL = 60
+# Reduced poll interval to surface new tokens faster
+POLL_INTERVAL = 5
 
 
 async def fetch_from_jupiter() -> Dict[str, str]:
@@ -342,6 +343,25 @@ async def monitor_new_tokens() -> None:
                     "https://api.raydium.io/v2/main/pairs", timeout=10
                 )
                 pump_resp, raydium_resp = await asyncio.gather(pump_task, raydium_task)
+
+                # Respect rate limiting
+                if pump_resp.status == 429:
+                    retry_after = pump_resp.headers.get("Retry-After")
+                    try:
+                        delay = int(retry_after) if retry_after else 0
+                    except (TypeError, ValueError):
+                        delay = 0
+                    await asyncio.sleep(delay or 5)
+                    continue
+                if raydium_resp.status == 429:
+                    retry_after = raydium_resp.headers.get("Retry-After")
+                    try:
+                        delay = int(retry_after) if retry_after else 0
+                    except (TypeError, ValueError):
+                        delay = 0
+                    await asyncio.sleep(delay or 5)
+                    continue
+
                 pump_data = await pump_resp.json(content_type=None)
                 raydium_data = await raydium_resp.json(content_type=None)
 
@@ -359,7 +379,24 @@ async def monitor_new_tokens() -> None:
                 except Exception:
                     continue
                 if last_pump is None or ts > last_pump:
-                    last_pump = ts if last_pump is None or ts > last_pump else last_pump
+                    last_pump = ts
+                    initial_buy = (
+                        item.get("initial_buy")
+                        or item.get("initialBuy")
+                        or 0
+                    )
+                    market_cap = (
+                        item.get("market_cap")
+                        or item.get("marketCap")
+                        or 0
+                    )
+                    twitter = item.get("twitter") or ""
+                    if not (
+                        initial_buy >= 10_000
+                        and market_cap >= 50_000
+                        and twitter
+                    ):
+                        continue
                     key = str(symbol).upper()
                     if key not in TOKEN_MINTS:
                         TOKEN_MINTS[key] = mint
