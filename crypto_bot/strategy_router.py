@@ -35,7 +35,6 @@ from crypto_bot.strategy import (
     micro_scalp_bot,
     lstm_bot,
     bounce_scalper,
-    cross_chain_arb_bot,
     flash_crash_bot,
     range_arb_bot,
 )
@@ -51,8 +50,6 @@ logger = setup_logger(__name__, LOG_DIR / "bot.log")
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 with open(CONFIG_PATH) as f:
     DEFAULT_CONFIG = yaml.safe_load(f)
-
-ML_AVAILABLE = True
 
 # Map symbols to asyncio locks guarding order placement
 symbol_locks: Dict[str, asyncio.Lock] = {}
@@ -428,13 +425,6 @@ def get_strategies_for_regime(
         if range_arb_bot.generate_signal not in strategies:
             strategies.append(range_arb_bot.generate_signal)
     return strategies
-        result = mapping.get(regime, [grid_bot.generate_signal])
-    else:
-        pairs.sort(key=lambda p: score_bot(load_bot_stats(p[0])), reverse=True)
-        result = [fn for _, fn in pairs]
-    if getattr(range_arb_bot, "generate_signal", None) and range_arb_bot.generate_signal not in result:
-        result.append(range_arb_bot.generate_signal)
-    return result
 
 
 def evaluate_regime(
