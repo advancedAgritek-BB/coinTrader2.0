@@ -7,6 +7,7 @@ import types
 pkg_root = types.ModuleType("crypto_bot")
 utils_pkg = types.ModuleType("crypto_bot.utils")
 pkg_root.utils = utils_pkg
+pkg_root.__path__ = [str(pathlib.Path("crypto_bot"))]
 pkg_root.volatility_filter = types.ModuleType("crypto_bot.volatility_filter")
 pkg_root.volatility_filter.calc_atr = lambda *_a, **_k: 0.0
 utils_pkg.__path__ = [str(pathlib.Path("crypto_bot/utils"))]

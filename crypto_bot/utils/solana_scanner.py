@@ -235,6 +235,14 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
             coro = _wrap()
         tasks.append(coro)
 
+        # Pump.fun shares the same API key as Raydium
+        coro = fetch_pump_fun_launches(raydium_key, limit)
+        if not asyncio.iscoroutine(coro):
+            async def _wrap(res=coro):
+                return res
+            coro = _wrap()
+        tasks.append(coro)
+
     coro = fetch_pump_fun_launches(limit)
     if not asyncio.iscoroutine(coro):
         async def _wrap(res=coro):
