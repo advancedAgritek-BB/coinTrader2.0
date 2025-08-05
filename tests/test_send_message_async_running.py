@@ -23,8 +23,6 @@ def test_send_message_async_running(monkeypatch):
             warnings.simplefilter('error')
             await send_message('t', 'c', 'msg')
         return w
-            err = await send_message('t', 'c', 'msg')
-        return err, w
 
     w = asyncio.run(runner())
 
