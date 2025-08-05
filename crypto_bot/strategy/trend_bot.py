@@ -72,46 +72,6 @@ def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[fl
     volume_window = _num("volume_window", 20, int, 1)
     volume_mult = _num("volume_mult", 1.0, float, 0.0)
     adx_threshold = _num("adx_threshold", 25.0, float, 0.0)
-    try:
-        lookback_cfg = int(config.get("indicator_lookback", 250))
-    except (TypeError, ValueError):
-        lookback_cfg = 250
-    try:
-        rsi_overbought_pct = float(config.get("rsi_overbought_pct", 90))
-    except (TypeError, ValueError):
-        rsi_overbought_pct = 90.0
-    try:
-        rsi_oversold_pct = float(config.get("rsi_oversold_pct", 10))
-    except (TypeError, ValueError):
-        rsi_oversold_pct = 10.0
-    try:
-        fast_window = int(config.get("trend_ema_fast", 3))
-    except (TypeError, ValueError):
-        fast_window = 3
-    try:
-        slow_window = int(config.get("trend_ema_slow", 10))
-    except (TypeError, ValueError):
-        slow_window = 10
-    try:
-        atr_period = int(config.get("atr_period", 14))
-    except (TypeError, ValueError):
-        atr_period = 14
-    try:
-        k = float(config.get("k", 1.0))
-    except (TypeError, ValueError):
-        k = 1.0
-    try:
-        volume_window = int(config.get("volume_window", 20))
-    except (TypeError, ValueError):
-        volume_window = 20
-    try:
-        volume_mult = float(config.get("volume_mult", 1.0))
-    except (TypeError, ValueError):
-        volume_mult = 1.0
-    try:
-        adx_threshold = float(config.get("adx_threshold", 25))
-    except (TypeError, ValueError):
-        adx_threshold = 25.0
 
     df["ema_fast"] = ta.trend.ema_indicator(df["close"], window=fast_window)
     df["ema_slow"] = ta.trend.ema_indicator(df["close"], window=slow_window)
