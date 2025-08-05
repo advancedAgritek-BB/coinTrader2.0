@@ -3,10 +3,12 @@ import importlib.util
 import pathlib
 import sys
 import types
+from datetime import datetime
 
 pkg_root = types.ModuleType("crypto_bot")
 utils_pkg = types.ModuleType("crypto_bot.utils")
 pkg_root.utils = utils_pkg
+pkg_root.__path__ = [str(pathlib.Path("crypto_bot"))]
 utils_pkg.__path__ = [str(pathlib.Path("crypto_bot/utils"))]
 sys.modules.setdefault("crypto_bot", pkg_root)
 sys.modules.setdefault("crypto_bot.utils", utils_pkg)
@@ -99,6 +101,61 @@ def test_fetch_new_raydium_pools_helius(monkeypatch):
     tokens = asyncio.run(solana_scanner.fetch_new_raydium_pools("k", 5))
     assert tokens == ["A"]
     assert solana_scanner.TOKEN_MINTS["A"] == "mint"
+
+
+def test_fetch_pump_fun_launches_filters(monkeypatch):
+    now = datetime.utcnow().isoformat()
+    data = [
+        {
+            "mint": "GOOD",
+            "created_at": now,
+            "initial_buy": True,
+            "market_cap": 1000,
+            "twitter": "x",
+        },
+        {
+            "mint": "BAD1",
+            "created_at": now,
+            "initial_buy": False,
+            "market_cap": 1000,
+            "twitter": "x",
+        },
+        {
+            "mint": "BAD2",
+            "created_at": None,
+            "initial_buy": True,
+            "market_cap": 1000,
+            "twitter": "x",
+        },
+        {
+            "mint": "BAD3",
+            "created_at": now,
+            "initial_buy": True,
+            "market_cap": 0,
+            "twitter": "x",
+        },
+        {
+            "mint": "BAD4",
+            "created_at": now,
+            "initial_buy": True,
+            "market_cap": 1000,
+            "twitter": None,
+        },
+    ]
+
+    session = DummySession(data)
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
+    monkeypatch.setattr(solana_scanner, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(solana_scanner, "TOKEN_MINTS", {})
+
+    async def fake_gecko(base):
+        return base
+
+    monkeypatch.setattr(solana_scanner, "get_mint_from_gecko", fake_gecko)
+    solana_scanner._MIN_VOLUME_USD = 0
+
+    tokens = asyncio.run(solana_scanner.fetch_pump_fun_launches("k", 10))
+    assert tokens == ["GOOD"]
 
 
 def test_get_solana_new_tokens(monkeypatch):

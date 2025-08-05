@@ -352,10 +352,15 @@ async def monitor_new_tokens() -> None:
                 symbol = item.get("symbol")
                 mint = item.get("mint") or item.get("address")
                 created = item.get("created_at") or item.get("createdAt")
-                if not (symbol and mint and created):
+                initial_buy = item.get("initial_buy") or item.get("initialBuy")
+                market_cap = item.get("market_cap") or item.get("marketCap")
+                twitter = item.get("twitter") or item.get("twitter_profile")
+                if not (symbol and mint and created and initial_buy and market_cap and twitter):
                     continue
                 try:
                     ts = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+                    if float(market_cap) <= 0:
+                        continue
                 except Exception:
                     continue
                 if last_pump is None or ts > last_pump:
