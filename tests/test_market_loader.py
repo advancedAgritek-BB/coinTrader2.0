@@ -322,6 +322,28 @@ def test_load_ohlcv_parallel():
     assert set(result.keys()) == {"BTC/USD", "ETH/USD"}
 
 
+def test_load_ohlcv_parallel_skips_unsupported_symbol(monkeypatch, caplog):
+    from crypto_bot.utils import market_loader
+
+    called = False
+
+    async def fake_fetch(*args, **kwargs):
+        nonlocal called
+        called = True
+        return [[0] * 6]
+
+    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+    ex = object()
+    with caplog.at_level(logging.INFO):
+        result = asyncio.run(load_ohlcv_parallel(ex, ["AIBTC/EUR"]))
+    assert result == {"AIBTC/EUR": []}
+    assert called is False
+    assert any(
+        "Skipping unsupported symbol AIBTC/EUR" in r.getMessage()
+        for r in caplog.records
+    )
+
+
 class DummyWSEchange:
     has = {"fetchOHLCV": True}
 
@@ -1683,6 +1705,29 @@ def test_fetch_ohlcv_async_skips_unsupported_timeframe():
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", timeframe="1m"))
     assert data == []
     assert ex.called is False
+
+
+class DummyUnsupportedExchange:
+    has = {"fetchOHLCV": True}
+
+    def __init__(self):
+        self.called = False
+
+    async def fetch_ohlcv(self, *args, **kwargs):
+        self.called = True
+        return [[0] * 6]
+
+
+def test_fetch_ohlcv_async_skips_unsupported_symbol(caplog):
+    ex = DummyUnsupportedExchange()
+    with caplog.at_level(logging.INFO):
+        data = asyncio.run(fetch_ohlcv_async(ex, "AIBTC/EUR"))
+    assert data == []
+    assert ex.called is False
+    assert any(
+        "Skipping unsupported symbol AIBTC/EUR" in r.getMessage()
+        for r in caplog.records
+    )
 
 
 def test_fetch_ohlcv_retry_520(monkeypatch):
