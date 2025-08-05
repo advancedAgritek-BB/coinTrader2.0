@@ -79,8 +79,8 @@ from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import write_cycle_metrics
 from crypto_bot.utils.token_registry import TOKEN_MINTS
-from crypto_bot.utils import regime_pnl_tracker
 from crypto_bot.utils import pnl_logger, regime_pnl_tracker
+from crypto_bot.utils.ml_utils import ML_AVAILABLE
 
 from crypto_bot.monitoring import record_sol_scanner_metrics
 from crypto_bot.fund_manager import (
@@ -109,6 +109,9 @@ _CONFIG_MTIMES: dict[Path, float] = {}
 _LAST_ML_CFG: dict[str, object] | None = None
 
 logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
+
+# Log ML dependency availability for downstream guards
+logger.info("ML components available: %s", ML_AVAILABLE)
 
 
 class MLUnavailableError(RuntimeError):
