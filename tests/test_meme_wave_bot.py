@@ -137,7 +137,7 @@ def test_high_volume_positive_sentiment(meme_df, high_monitor, monkeypatch):
     monkeypatch.setattr(
         meme_wave_bot, "fetch_twitter_sentiment_async", fake_sentiment
     )
-    async def good_sentiment(*a, **k):
+    def good_sentiment(*a, **k):
         return 80
 
     monkeypatch.setattr(meme_wave_bot, "fetch_twitter_sentiment", good_sentiment)
@@ -155,7 +155,7 @@ def test_high_volume_negative_sentiment(meme_df, high_monitor, monkeypatch):
     monkeypatch.setattr(
         meme_wave_bot, "fetch_twitter_sentiment_async", fake_sentiment
     )
-    async def bad_sentiment(*a, **k):
+    def bad_sentiment(*a, **k):
         return 20
 
     monkeypatch.setattr(meme_wave_bot, "fetch_twitter_sentiment", bad_sentiment)
@@ -173,7 +173,7 @@ def test_low_volume_any_sentiment(meme_df, low_monitor, monkeypatch):
     monkeypatch.setattr(
         meme_wave_bot, "fetch_twitter_sentiment_async", fake_sentiment
     )
-    async def good_sentiment(*a, **k):
+    def good_sentiment(*a, **k):
         return 80
 
     monkeypatch.setattr(meme_wave_bot, "fetch_twitter_sentiment", good_sentiment)
