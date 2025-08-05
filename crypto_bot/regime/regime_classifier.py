@@ -10,6 +10,8 @@ import numpy as np
 import ta
 import yaml
 
+from crypto_bot.utils.telegram import TelegramNotifier
+
 from .pattern_detector import detect_patterns
 from crypto_bot.utils.pattern_logger import log_patterns
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
@@ -44,6 +46,7 @@ _configure_logger(CONFIG)
 _supabase_model = None
 _supabase_model_lock = asyncio.Lock()
 _model_lock = asyncio.Lock()
+_ml_recovery_task: asyncio.Task | None = None
 
 _ALL_REGIMES = [
     "trending",
@@ -68,6 +71,18 @@ PATTERN_WEIGHTS = {
     "bullish_engulfing": ("mean-reverting", 1.2),
     "ascending_triangle": ("breakout", 2.0),
 }
+
+
+def is_ml_available() -> bool:
+    """Return ``True`` if ML dependencies and credentials are available."""
+    if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_KEY"):
+        return False
+    try:  # pragma: no cover - optional dependency
+        import lightgbm  # noqa: F401
+        from supabase import create_client  # noqa: F401
+    except Exception:
+        return False
+    return True
 
 
 def _apply_hft_overrides(cfg: dict, timeframe: Optional[str]) -> dict:
@@ -162,6 +177,16 @@ def _ml_fallback(
             except Exception:
                 pass
         logger.info("Falling back to embedded model")
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            global _ml_recovery_task
+            if _ml_recovery_task is None or _ml_recovery_task.done():
+                _ml_recovery_task = loop.create_task(
+                    _ml_recovery_loop(notifier)
+                )
 
     try:  # pragma: no cover - optional dependency
         from .ml_fallback import predict_regime
@@ -214,6 +239,27 @@ async def _get_supabase_model() -> object | None:
         return _supabase_model
 
 
+async def _ml_recovery_loop(notifier: TelegramNotifier | None) -> None:
+    """Periodically attempt to restore the Supabase ML model."""
+    global _supabase_model, _ml_recovery_task
+    while True:
+        await asyncio.sleep(3600)
+        if not is_ml_available():
+            continue
+        model = await _download_supabase_model()
+        if model is None:
+            continue
+        _supabase_model = model
+        logger.info("Supabase ML model reloaded")
+        if notifier is not None:
+            try:
+                await notifier.notify_async("Supabase ML model reloaded")
+            except Exception:  # pragma: no cover - notifier errors aren't critical
+                logger.exception("Failed to send Telegram notification")
+        _ml_recovery_task = None
+        return
+
+
 def _classify_ml(
     df: pd.DataFrame, notifier: TelegramNotifier | None = None
 ) -> Tuple[str, float]:
@@ -224,6 +270,10 @@ def _classify_ml(
         logger.warning(
             "lightgbm unavailable; ML-based classification disabled: %s", exc
         )
+        try:
+            return _ml_fallback(df, notifier)
+        except TypeError:
+            return _ml_fallback(df)
         return _ml_fallback(df, notifier)
 
     if _supabase_model is None:
@@ -234,6 +284,10 @@ def _classify_ml(
     model = _supabase_model
     model = asyncio.run(_get_supabase_model())
     if model is None:
+        try:
+            return _ml_fallback(df, notifier)
+        except TypeError:
+            return _ml_fallback(df)
         return _ml_fallback(df, notifier)
 
     try:
@@ -248,6 +302,10 @@ def _classify_ml(
             label = "sideways"
         return label, abs(prob - 0.5) * 2
     except Exception:
+        try:
+            return _ml_fallback(df, notifier)
+        except TypeError:
+            return _ml_fallback(df)
         return _ml_fallback(df, notifier)
 
 
@@ -501,6 +559,19 @@ def _classify_all(
     patterns = detect_patterns(df, min_conf=pattern_min)
 
     regime = _classify_core(df, cfg, higher_df, cache_key=cache_key)
+    if regime == "unknown":
+        use_ml = cfg.get("use_ml_regime_classifier", False)
+        if use_ml and len(df) >= ml_min_bars:
+            label, conf = _classify_ml(df, notifier)
+            log_patterns(label, patterns)
+            return label, _probabilities(label, conf), patterns
+        if len(df) >= ml_min_bars:
+            logger.info("Skipping ML fallback \u2014 ML disabled")
+        else:
+            logger.info(
+                "Skipping ML fallback \u2014 insufficient data (%d rows)", len(df)
+            )
+        return regime, _probabilities(regime, 0.0), patterns
 
     # Score regimes based on indicator result and detected patterns
     scores: Dict[str, float] = {}
@@ -512,15 +583,11 @@ def _classify_all(
             continue
         scores[target] = scores.get(target, 0.0) + weight * float(strength)
 
-    if regime != "unknown":
-        scores[regime] = scores.get(regime, 0.0) + 1.0
+    scores[regime] = scores.get(regime, 0.0) + 1.0
 
-    if scores:
-        total = sum(scores.values())
-        probabilities = {r: scores.get(r, 0.0) / total for r in _ALL_REGIMES}
-        regime = max(scores, key=scores.get)
-        log_patterns(regime, patterns)
-        return regime, probabilities, patterns
+    total = sum(scores.values())
+    probabilities = {r: scores.get(r, 0.0) / total for r in _ALL_REGIMES}
+    regime = max(scores, key=scores.get)
 
     rule_probs = _probabilities(regime)
 
@@ -647,6 +714,12 @@ def classify_regime(
     if df_map is None and df is None:
         return "unknown", {"unknown": 0.0}
 
+    kwargs = dict(df_map=df_map)
+    if cache_key is not None:
+        kwargs["cache_key"] = cache_key
+    if notifier is not None:
+        kwargs["notifier"] = notifier
+    result = _classify_all(df, higher_df, cfg, **kwargs)
     result = _classify_all(
         df, higher_df, cfg, df_map=df_map, cache_key=cache_key, notifier=notifier
     )
@@ -675,6 +748,10 @@ def classify_regime_with_patterns(
     _configure_logger(cfg)
     cfg = _apply_hft_overrides(cfg, timeframe)
     cfg = adaptive_thresholds(cfg, df, symbol)
+    kwargs = {}
+    if notifier is not None:
+        kwargs["notifier"] = notifier
+    label, _, patterns = _classify_all(df, higher_df, cfg, **kwargs)
     label, _, patterns = _classify_all(df, higher_df, cfg, notifier=notifier)
     return label, patterns
 
