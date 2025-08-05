@@ -51,6 +51,8 @@ CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 with open(CONFIG_PATH) as f:
     DEFAULT_CONFIG = yaml.safe_load(f)
 
+ML_AVAILABLE = True
+
 # Map symbols to asyncio locks guarding order placement
 symbol_locks: Dict[str, asyncio.Lock] = {}
 
@@ -379,6 +381,12 @@ def strategy_for(
     strategies = get_strategies_for_regime(regime, cfg)
     if strategies and _has_regime(cfg, regime):
         base = strategies[0]
+    elif regime == "unknown":
+        if ML_AVAILABLE:
+            base = sniper_bot.generate_signal
+        else:
+            logger.warning("ML not available; falling back to grid bot")
+            base = grid_bot.generate_signal
     else:
         base = grid_bot.generate_signal
     tf_key = f"{regime.replace('-', '_')}_timeframe"
