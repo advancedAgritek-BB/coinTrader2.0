@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Dict, Iterable, List
 
 import aiohttp
+import ccxt.async_support as ccxt
 
+from crypto_bot.strategy import cross_chain_arb_bot
 from .gecko import gecko_request
 
 try:  # optional dependency
@@ -61,6 +63,53 @@ async def fetch_from_jupiter() -> Dict[str, str]:
         if isinstance(symbol, str) and isinstance(mint, str):
             result[symbol.upper()] = mint
     return result
+
+
+async def _check_cex_arbitrage(symbol: str) -> None:
+    """Check Kraken and Coinbase for arbitrage on ``symbol`` and trade to BTC."""
+
+    pair = f"{symbol}/USD"
+    try:
+        kraken = ccxt.kraken()
+        coinbase = ccxt.coinbase()
+        ticker_kraken, ticker_coinbase = await asyncio.gather(
+            kraken.fetch_ticker(pair), coinbase.fetch_ticker(pair)
+        )
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("CEX fetch failed for %s: %s", pair, exc)
+        return
+    finally:
+        try:
+            await kraken.close()
+        except Exception:  # pragma: no cover - best effort
+            pass
+        try:
+            await coinbase.close()
+        except Exception:  # pragma: no cover - best effort
+            pass
+
+    p1 = ticker_kraken.get("last") or ticker_kraken.get("close")
+    p2 = ticker_coinbase.get("last") or ticker_coinbase.get("close")
+    if p1 is None or p2 is None:
+        return
+    try:
+        f1 = float(p1)
+        f2 = float(p2)
+    except Exception:
+        return
+    if f1 <= 0 or f2 <= 0:
+        return
+    spread = abs(f1 - f2) / ((f1 + f2) / 2)
+    if spread <= 0.005:
+        return
+
+    exec_fn = getattr(cross_chain_arb_bot, "execute_arbitrage", None)
+    if exec_fn is None:
+        return
+    try:
+        await exec_fn(pair, "BTC")
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.error("Arbitrage execution failed for %s: %s", pair, exc)
 
 
 async def load_token_mints(
@@ -460,6 +509,7 @@ async def monitor_pump_raydium() -> None:
                         logger.info("New token detected: %s -> %s", key, mint)
                         _write_cache()
                         new_symbols.append(key)
+                        await _check_cex_arbitrage(key)
 
             # Process Raydium pairs
             for item in raydium_data if isinstance(raydium_data, list) else []:
@@ -497,6 +547,27 @@ async def monitor_pump_raydium() -> None:
                             "New Raydium token detected: %s -> %s", key, base_address
                         )
                         _write_cache()
+                        new_symbols.append(key)
+                        await _check_cex_arbitrage(key)
+
+            if new_symbols:
+                try:  # pragma: no cover - external dependency
+                    from coinTrader_Trainer.ml_trainer import fetch_data_range_async
+
+                    await fetch_data_range_async()
+                except Exception as exc:  # pragma: no cover - best effort
+                    logger.error("Retraining fetch failed: %s", exc)
+
+                # Trigger training regardless of fetch outcome
+                os.system("python ml_trainer.py train regime --use-gpu")
+
+            await asyncio.sleep(POLL_INTERVAL)
+
+        except asyncio.CancelledError:  # pragma: no cover - cooperative cancel
+            raise
+        except Exception as exc:  # pragma: no cover - network errors
+            logger.error("monitor_new_tokens error: %s", exc)
+            await asyncio.sleep(10)
                         start = ts - timedelta(hours=1)
                         end = datetime.utcnow()
                         try:

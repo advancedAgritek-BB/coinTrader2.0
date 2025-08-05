@@ -600,6 +600,80 @@ def test_refresh_mints_propagates_failure(monkeypatch, tmp_path):
         asyncio.run(mod.refresh_mints())
 
 
+def test_check_cex_arbitrage_triggers(monkeypatch, tmp_path):
+    mod = _load_module(monkeypatch, tmp_path)
+
+    class DummyEx:
+        def __init__(self, price):
+            self.price = price
+
+        async def fetch_ticker(self, symbol):
+            return {"last": self.price}
+
+        async def close(self):
+            pass
+
+    import types
+
+    fake_ccxt = types.SimpleNamespace(
+        kraken=lambda: DummyEx(100),
+        coinbase=lambda: DummyEx(101),
+    )
+    monkeypatch.setattr(mod, "ccxt", fake_ccxt)
+
+    called = {}
+
+    async def fake_exec(pair, target):
+        called["pair"] = pair
+        called["target"] = target
+
+    monkeypatch.setattr(
+        mod,
+        "cross_chain_arb_bot",
+        types.SimpleNamespace(execute_arbitrage=fake_exec),
+    )
+
+    asyncio.run(mod._check_cex_arbitrage("AAA"))
+
+    assert called == {"pair": "AAA/USD", "target": "BTC"}
+
+
+def test_check_cex_arbitrage_no_trigger(monkeypatch, tmp_path):
+    mod = _load_module(monkeypatch, tmp_path)
+
+    class DummyEx:
+        def __init__(self, price):
+            self.price = price
+
+        async def fetch_ticker(self, symbol):
+            return {"last": self.price}
+
+        async def close(self):
+            pass
+
+    import types
+
+    fake_ccxt = types.SimpleNamespace(
+        kraken=lambda: DummyEx(100),
+        coinbase=lambda: DummyEx(100.4),
+    )
+    monkeypatch.setattr(mod, "ccxt", fake_ccxt)
+
+    called = {}
+
+    async def fake_exec(pair, target):
+        called["pair"] = pair
+        called["target"] = target
+
+    monkeypatch.setattr(
+        mod,
+        "cross_chain_arb_bot",
+        types.SimpleNamespace(execute_arbitrage=fake_exec),
+    )
+
+    asyncio.run(mod._check_cex_arbitrage("AAA"))
+
+    assert called == {}
 def test_monitor_pump_raydium(monkeypatch, tmp_path):
     from datetime import datetime
 
