@@ -3,6 +3,7 @@ import asyncio
 import sys
 import types
 import json
+import logging
 
 import fakeredis
 import pandas as pd
@@ -435,4 +436,20 @@ def test_route_mempool_blocks_signal(monkeypatch):
     )
     score, direction = fn(df, cfg)
     assert (score, direction) == (0.0, "none")
+
+
+def _unwrap(fn):
+    inner = fn.__closure__[0].cell_contents
+    base_wrapped = inner.__closure__[0].cell_contents
+    return base_wrapped.__closure__[0].cell_contents
+
+
+def test_route_unknown_ml_unavailable(monkeypatch, caplog):
+    caplog.set_level(logging.WARNING)
+    monkeypatch.setattr(strategy_router, "ML_AVAILABLE", False)
+    cfg = {"strategy_router": {"regimes": {}}}
+    fn = route("unknown", "cex", cfg)
+    base = _unwrap(fn)
+    assert base is grid_bot.generate_signal
+    assert any("falling back" in r.getMessage() for r in caplog.records)
 
