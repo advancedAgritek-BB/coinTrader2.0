@@ -1,41 +1,18 @@
 from __future__ import annotations
 
-import os
 import inspect
 from typing import Mapping, Optional, Tuple
 
-import httpx
 import pandas as pd
 import ta
 
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
+from crypto_bot.sentiment_filter import (
+    fetch_twitter_sentiment,
+    fetch_twitter_sentiment_async,
+)
 from crypto_bot.solana.exit import monitor_price
 from crypto_bot.solana_trading import sniper_trade
-from crypto_bot.utils.volatility import normalize_score_by_volatility
-
-
-SENTIMENT_URL = os.getenv(
-    "TWITTER_SENTIMENT_URL", "https://api.example.com/twitter-sentiment"
-)
-
-
-async def fetch_twitter_sentiment_async(query: str = "bitcoin") -> int:
-    """Return sentiment score for ``query`` (0-100).
-
-    The request is performed using :class:`httpx.AsyncClient`. Any network
-    errors result in a neutral ``0`` score.
-    """
-
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(f"{SENTIMENT_URL}?q={query}")
-            resp.raise_for_status()
-            data = resp.json()
-            if isinstance(data, dict):
-                return int(data.get("score", 0))
-    except Exception:
-        pass
-    return 0
 
 
 async def trade(symbol: str, amount: float, cfg: Mapping[str, object]) -> dict:
@@ -108,10 +85,7 @@ async def generate_signal(
     try:
         sentiment = await fetch_twitter_sentiment_async(query) / 100.0
     except Exception:
-        sentiment = 0.0
-        pass
-
-    sentiment = asyncio.run(fetch_twitter_sentiment(query)) / 100.0
+        sentiment = fetch_twitter_sentiment(query) / 100.0
 
     if avg_vol and recent_vol >= avg_vol * vol_threshold and sentiment >= sentiment_thr:
         return 1.0, "long"
@@ -154,11 +128,12 @@ async def generate_signal(
             if not q:
                 q = config.get("symbol") if isinstance(config, dict) else None
             sentiment = await fetch_twitter_sentiment_async(q or "") / 100.0
-            sentiment = asyncio.run(fetch_twitter_sentiment(q or "")) / 100.0
             if sentiment < float(sentiment_thr):
                 sentiment_ok = False
         except Exception:
-            sentiment_ok = False
+            sentiment = fetch_twitter_sentiment(q or "") / 100.0
+            if sentiment < float(sentiment_thr):
+                sentiment_ok = False
 
     if mempool_ok and sentiment_ok:
         return 1.0, "long" if price_change > 0 else "short"
