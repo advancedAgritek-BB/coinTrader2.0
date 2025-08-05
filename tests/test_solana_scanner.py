@@ -11,6 +11,8 @@ sol_pkg = types.ModuleType("crypto_bot.solana")
 utils_pkg = types.ModuleType("crypto_bot.utils")
 pkg_root.solana = sol_pkg
 pkg_root.utils = utils_pkg
+pkg_root.volatility_filter = types.ModuleType("crypto_bot.volatility_filter")
+pkg_root.volatility_filter.calc_atr = lambda *_a, **_k: 0.0
 import importlib.machinery
 pkg_root.__spec__ = importlib.machinery.ModuleSpec(
     "crypto_bot", None, is_package=True
@@ -31,6 +33,7 @@ utils_pkg.__path__ = [str(pathlib.Path("crypto_bot/utils"))]
 sys.modules.setdefault("crypto_bot", pkg_root)
 sys.modules.setdefault("crypto_bot.solana", sol_pkg)
 sys.modules.setdefault("crypto_bot.utils", utils_pkg)
+sys.modules.setdefault("crypto_bot.volatility_filter", pkg_root.volatility_filter)
 
 # Ensure the real solana_scanner module is loaded even if another test
 # inserted a stub under this name.
