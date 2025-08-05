@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import asyncio
 
 import aiohttp
 
@@ -35,6 +36,14 @@ class LunarCrushClient:
             async with aiohttp.ClientSession() as session:
                 return await self._fetch(session, params)
         return await self._fetch(self.session, params)
+
+    def get_sentiment_sync(self, symbol: str) -> float:
+        """Return sentiment score for ``symbol`` using ``asyncio.run``.
+
+        This provides a synchronous interface for environments where
+        running an event loop is inconvenient.
+        """
+        return asyncio.run(self.get_sentiment(symbol))
 
     async def _fetch(
         self, session: aiohttp.ClientSession, params: dict[str, str]
