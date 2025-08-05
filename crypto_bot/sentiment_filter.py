@@ -1,10 +1,3 @@
-"""Sentiment helpers relying solely on LunarCrush data.
-
-This module previously fell back to a Twitter sentiment HTTP API. That
-behaviour has been removed: all sentiment lookups are now served via the
-`LunarCrushClient`.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -17,7 +10,6 @@ from cachetools import TTLCache
 from crypto_bot.lunarcrush_client import LunarCrushClient
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
-
 logger = setup_logger(__name__, LOG_DIR / "sentiment.log")
 
 # Re-used client for sentiment queries
@@ -26,13 +18,11 @@ lunar_client = LunarCrushClient()
 # Cache for all sentiment lookups (5 minutes)
 _CACHE: TTLCache[str, int] = TTLCache(maxsize=128, ttl=300)
 
-
 FNG_URL = "https://api.alternative.me/fng/?limit=1"
 
 
 def fetch_fng_index() -> int:
     """Return the current Fear & Greed index (0-100)."""
-
     mock = os.getenv("MOCK_FNG_VALUE")
     if mock is not None:
         try:
@@ -52,115 +42,64 @@ def fetch_fng_index() -> int:
             value = int(data.get("data", [{}])[0].get("value", 50))
             _CACHE[key] = value
             return value
-    except Exception as exc:
     except Exception as exc:  # pragma: no cover - network failure
         logger.error("Failed to fetch FNG index: %s", exc)
 
-
-async def fetch_twitter_sentiment(query: str = "bitcoin", symbol: str | None = None) -> int:
-async def fetch_twitter_sentiment(
-    query: str = "bitcoin", symbol: str | None = None
-) -> int:
-    """Return sentiment score for ``query`` between 0-100.
-
-    When ``symbol`` is provided and ``LUNARCRUSH_API_KEY`` is set this will
-    return LunarCrush sentiment for that symbol instead of calling the
-    external Twitter API.
-    """
-    mock = os.getenv("MOCK_TWITTER_SENTIMENT")
-    if mock is not None:
-        try:
-            return int(mock)
-        except ValueError:
-            return 50
-
-    if symbol:
-        api_key = os.getenv("LUNARCRUSH_API_KEY")
-        if not api_key:
-            logger.error("LUNARCRUSH_API_KEY not set")
-            return 50
-        return await fetch_lunarcrush_sentiment(symbol)
-
-    if symbol and os.getenv("LUNARCRUSH_API_KEY"):
-        return await fetch_lunarcrush_sentiment(symbol)
-    key = f"twitter:{query}"
+    _CACHE[key] = 50
     return 50
 
 
 def fetch_lunarcrush_sentiment(symbol: str) -> int:
     """Synchronously return LunarCrush sentiment score for ``symbol``."""
-
     key = f"lunar:{symbol}"
     if key in _CACHE:
         return _CACHE[key]
 
     try:
-        resp = requests.get(f"{SENTIMENT_URL}?q={query}", timeout=5)
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, dict):
-            value = int(data.get("score", 50))
-            _CACHE[key] = value
-            return value
-    except Exception as exc:  # pragma: no cover - network failure
-    except Exception:
-        # Fallback to async client if requests fails
-        pass
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{SENTIMENT_URL}?q={query}", timeout=5) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
-                if isinstance(data, dict):
-                    value = int(data.get("score", 50))
-                    _CACHE[key] = value
-                    return value
-    except Exception as exc:
-        logger.error("Failed to fetch Twitter sentiment: %s", exc)
-    return 50
-        value = int(asyncio.run(lunar_client.get_sentiment(symbol)))
+        result = lunar_client.get_sentiment(symbol)
+        if asyncio.iscoroutine(result):
+            value = int(asyncio.run(result))
+        else:
+            value = int(result)
         _CACHE[key] = value
         return value
     except Exception as exc:  # pragma: no cover - network failure
         logger.error("Failed to fetch LunarCrush sentiment: %s", exc)
+        _CACHE[key] = 50
         return 50
 
 
 async def fetch_lunarcrush_sentiment_async(symbol: str) -> int:
     """Asynchronously return LunarCrush sentiment score for ``symbol``."""
-
     key = f"lunar:{symbol}"
     if key in _CACHE:
         return _CACHE[key]
 
     try:
-        value = int(lunar_client.get_sentiment(symbol))
-        try:
-            # Prefer the async client when possible
-            value = int(await lunar_client.get_sentiment(symbol))
-        except TypeError:
-            # Fallback to the synchronous wrapper when a non-awaitable
-            # implementation is supplied (e.g. during tests).
-            value = int(lunar_client.get_sentiment_sync(symbol))
-        value = int(await lunar_client.get_sentiment(symbol))
+        result = lunar_client.get_sentiment(symbol)
+        if asyncio.iscoroutine(result):
+            value = int(await result)
+        else:
+            value = int(result)
         _CACHE[key] = value
         return value
     except Exception as exc:  # pragma: no cover - network failure
         logger.error("Failed to fetch LunarCrush sentiment: %s", exc)
+        _CACHE[key] = 50
         return 50
-    _CACHE[key] = value
-    return value
 
 
 def fetch_twitter_sentiment(
     query: str = "bitcoin", symbol: Optional[str] = None
-) -> int:
+) -> int | asyncio.Future:
     """Return sentiment score using LunarCrush.
 
-    ``symbol`` takes precedence over ``query``. A mock value can be supplied via
-    the ``MOCK_TWITTER_SENTIMENT`` environment variable which is useful for
-    tests. When no LunarCrush API key is available a neutral score of 50 is
-    returned and an error is logged.
+    ``symbol`` takes precedence over ``query``. When ``symbol`` is provided a
+    coroutine is returned so callers may ``await`` it or run it via
+    :func:`asyncio.run`. A mock value can be supplied via the
+    ``MOCK_TWITTER_SENTIMENT`` environment variable which is useful for tests.
+    When no LunarCrush API key is available a neutral score of 50 is returned
+    and an error is logged.
     """
 
     mock = os.getenv("MOCK_TWITTER_SENTIMENT")
@@ -173,6 +112,22 @@ def fetch_twitter_sentiment(
     target = symbol or query
     if not target:
         return 50
+
+    if symbol is not None:
+        if not os.getenv("LUNARCRUSH_API_KEY"):
+            logger.error(
+                "LUNARCRUSH_API_KEY missing; returning neutral sentiment"
+            )
+
+            async def _neutral() -> int:
+                return 50
+
+            return _neutral()
+
+        async def _fetch() -> int:
+            return await fetch_lunarcrush_sentiment_async(target)
+
+        return _fetch()
 
     if not os.getenv("LUNARCRUSH_API_KEY"):
         logger.error("LUNARCRUSH_API_KEY missing; returning neutral sentiment")
@@ -208,7 +163,6 @@ async def too_bearish(
     min_fng: int, min_sentiment: int, *, symbol: Optional[str] = None
 ) -> bool:
     """Return ``True`` when sentiment is below thresholds."""
-
     fng = fetch_fng_index()
     if symbol:
         sentiment = await fetch_lunarcrush_sentiment_async(symbol)
@@ -222,7 +176,6 @@ async def boost_factor(
     bull_fng: int, bull_sentiment: int, *, symbol: Optional[str] = None
 ) -> float:
     """Return a trade size boost factor based on strong sentiment."""
-
     fng = fetch_fng_index()
     if symbol:
         sentiment = await fetch_lunarcrush_sentiment_async(symbol)
@@ -244,4 +197,3 @@ __all__ = [
     "fetch_twitter_sentiment_async",
     "too_bearish",
 ]
-
