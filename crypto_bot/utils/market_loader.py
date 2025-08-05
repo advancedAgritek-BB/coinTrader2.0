@@ -44,9 +44,20 @@ _last_snapshot_time = 0
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
+UNSUPPORTED_SYMBOLS = [
+    "AIBTC/EUR",
+    "AIBTC/USD",
+]
+"""Symbols that consistently fail to load OHLCV data.
+
+Extend this list to skip additional markets without making network
+requests.
+"""
+
 failed_symbols: Dict[str, Dict[str, Any]] = {}
 # Track WebSocket OHLCV failures per symbol
 WS_FAIL_COUNTS: Dict[str, int] = {}
+UNSUPPORTED_SYMBOLS: set[str] = set()
 RETRY_DELAY = 300
 MAX_RETRY_DELAY = 3600
 # Default timeout when fetching OHLCV data
@@ -112,7 +123,9 @@ _OHLCV_BATCH_TASKS: Dict[tuple, asyncio.Task] = {}
 )
 async def _watch_ohlcv_with_retry(exchange, **kwargs):
     """Call ``exchange.watch_ohlcv`` with retries."""
-    kwargs.setdefault("timeout", WS_OHLCV_TIMEOUT)
+    params = inspect.signature(exchange.watch_ohlcv).parameters
+    if "timeout" in params and "timeout" not in kwargs:
+        kwargs["timeout"] = WS_OHLCV_TIMEOUT
     return await exchange.watch_ohlcv(**kwargs)
 
 
@@ -570,6 +583,10 @@ async def _fetch_ohlcv_async_inner(
     ):
         ex_id = getattr(exchange, "id", "unknown")
         logger.warning("Timeframe %s not supported on %s", timeframe, ex_id)
+        return []
+
+    if symbol in UNSUPPORTED_SYMBOLS:
+        logger.warning("Skipping unsupported symbol %s", symbol)
         return []
 
     if timeframe in ("4h", "1d"):
@@ -1075,6 +1092,10 @@ async def fetch_ohlcv_async(
 ) -> list | Exception:
     """Return OHLCV data for ``symbol`` with simple retries."""
 
+    if symbol in UNSUPPORTED_SYMBOLS:
+        logger.info("Skipping unsupported symbol %s", symbol)
+        return []
+
     for attempt in range(3):
         try:
             return await _fetch_ohlcv_async_inner(
@@ -1097,6 +1118,38 @@ async def fetch_ohlcv_async(
             )
             await asyncio.sleep(2 ** attempt)
     return []
+
+
+@retry(
+    wait=wait_exponential(multiplier=1, min=1, max=30),
+    stop=stop_after_attempt(3),
+    reraise=True,
+    before=before_log(logger, logging.DEBUG),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+)
+async def load_ohlcv(
+    exchange,
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+    since: int | None = None,
+    use_websocket: bool = False,
+    force_websocket_history: bool = False,
+) -> list:
+    """Fetch OHLCV data with automatic retries."""
+
+    data = await _fetch_ohlcv_async_inner(
+        exchange,
+        symbol,
+        timeframe=timeframe,
+        limit=limit,
+        since=since,
+        use_websocket=use_websocket,
+        force_websocket_history=force_websocket_history,
+    )
+    if isinstance(data, Exception):
+        raise data
+    return data
 
 
 async def fetch_geckoterminal_ohlcv(
@@ -1484,6 +1537,17 @@ async def load_ohlcv_parallel(
 
     since_map = since_map or {}
 
+    data: Dict[str, list] = {}
+    symbols = list(symbols)
+    unsupported = [s for s in symbols if s in UNSUPPORTED_SYMBOLS]
+    for s in unsupported:
+        logger.info("Skipping unsupported symbol %s", s)
+        data[s] = []
+    symbols = [s for s in symbols if s not in UNSUPPORTED_SYMBOLS]
+
+    if not symbols:
+        return data
+
     now = time.time()
     filtered_symbols: List[str] = []
     for s in symbols:
@@ -1507,7 +1571,7 @@ async def load_ohlcv_parallel(
         symbols = prio_list + [s for s in symbols if s not in seen]
 
     if not symbols:
-        return {}
+        return data
 
     if (
         use_websocket
@@ -1570,7 +1634,6 @@ async def load_ohlcv_parallel(
                 t.cancel()
         raise asyncio.CancelledError()
 
-    data: Dict[str, list] = {}
     ex_id = getattr(exchange, "id", "unknown")
     mode = "websocket" if use_websocket else "REST"
     for sym, res in zip(symbols, results):
@@ -1634,11 +1697,12 @@ async def load_ohlcv_parallel(
                     f"Failed to load OHLCV for {sym} on {timeframe} limit {limit}: {res}"
                 )
             info = failed_symbols.get(sym)
-            delay = RETRY_DELAY
+            status = getattr(res, "http_status", getattr(res, "status", None))
+            delay = 60 if status == 429 else RETRY_DELAY
             count = 1
             disabled = False
             if info is not None:
-                delay = min(info["delay"] * 2, MAX_RETRY_DELAY)
+                delay = 60 if status == 429 else min(info["delay"] * 2, MAX_RETRY_DELAY)
                 count = info.get("count", 0) + 1
                 disabled = info.get("disabled", False)
             if count >= MAX_OHLCV_FAILURES:

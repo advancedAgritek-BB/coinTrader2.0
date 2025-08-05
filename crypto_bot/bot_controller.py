@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from .paper_wallet import PaperWallet
+from wallet import Wallet
 
 from crypto_bot.utils.logger import LOG_DIR
 from crypto_bot import main
@@ -29,6 +30,7 @@ class TradingBotController:
         config_path: str | Path = "crypto_bot/config.yaml",
         trades_file: str | Path = LOG_DIR / "trades.csv",
         log_file: str | Path = LOG_DIR / "bot.log",
+        wallet: "Wallet | PaperWallet | None" = None,
         paper_wallet: "PaperWallet | None" = None,
     ) -> None:
         self.config_path = Path(config_path)
@@ -36,7 +38,15 @@ class TradingBotController:
         self.log_file = Path(log_file)
         self.config = self._load_config()
         self.rotator = PortfolioRotator()
-        self.paper_wallet = paper_wallet
+        self.wallet = wallet or paper_wallet
+        if self.wallet is None and self.config.get("execution_mode") == "dry_run":
+            self.wallet = Wallet(
+                self.config.get("start_balance", 1000.0),
+                self.config.get("max_open_trades", 1),
+                self.config.get("allow_short", False),
+            )
+        # Backwards compat – retain attribute name expected in some tests
+        self.paper_wallet = self.wallet
         self.exchange, self.ws_client = get_exchange(self.config)
         self.proc: asyncio.subprocess.Process | None = None
         self.enabled: Dict[str, bool] = {
@@ -150,7 +160,7 @@ class TradingBotController:
             use_websocket=self.config.get("use_websocket", False),
             config=self.config,
         )
-        if self.config.get("execution_mode") == "dry_run" and self.paper_wallet:
+        if self.config.get("execution_mode") == "dry_run" and self.wallet:
             price = order.get("price") or 0.0
             if not price:
                 try:
@@ -171,13 +181,13 @@ class TradingBotController:
                     if qty > 0:
                         price = total / qty
             try:
-                self.paper_wallet.close(symbol, amount, price)
-                main.log_balance(self.paper_wallet.balance)
+                self.wallet.sell(symbol, amount, price)
+                main.log_balance(self.wallet.total_balance)
             except Exception:
                 pass
 
         balance = await main.fetch_and_log_balance(
-            self.exchange, self.paper_wallet, self.config
+            self.exchange, self.wallet, self.config
         )
         if isinstance(order, dict):
             order["balance"] = balance

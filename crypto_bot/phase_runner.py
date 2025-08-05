@@ -19,7 +19,8 @@ class BotContext:
     ws_client: object | None = None
     risk_manager: object | None = None
     notifier: object | None = None
-    paper_wallet: object | None = None
+    wallet: object | None = None
+    paper_wallet: object | None = None  # legacy alias
     position_guard: object | None = None
     balance: float = 0.0
     current_batch: list[str] = field(default_factory=list)

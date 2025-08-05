@@ -75,7 +75,8 @@ from crypto_bot.solana import get_solana_new_tokens
 from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
 from crypto_bot.utils import symbol_utils
 from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
-from crypto_bot.paper_wallet import PaperWallet
+from crypto_bot.paper_wallet import PaperWallet  # backward compatibility
+from wallet import Wallet
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import write_cycle_metrics
@@ -331,7 +332,7 @@ def notify_balance_change(
     return new_balance
 
 
-async def fetch_balance(exchange, paper_wallet, config):
+async def fetch_balance(exchange, wallet, config):
     """Return the latest wallet balance without logging."""
     if config["execution_mode"] != "dry_run":
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_balance", None)):
@@ -339,12 +340,12 @@ async def fetch_balance(exchange, paper_wallet, config):
         else:
             bal = await asyncio.to_thread(exchange.fetch_balance)
         return bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
-    return paper_wallet.balance if paper_wallet else 0.0
+    return wallet.total_balance if wallet else 0.0
 
 
-async def fetch_and_log_balance(exchange, paper_wallet, config):
+async def fetch_and_log_balance(exchange, wallet, config):
     """Return the latest wallet balance and log it."""
-    latest_balance = await fetch_balance(exchange, paper_wallet, config)
+    latest_balance = await fetch_balance(exchange, wallet, config)
     log_balance(float(latest_balance))
     return latest_balance
 
@@ -353,7 +354,7 @@ async def refresh_balance(ctx: BotContext) -> float:
     """Update ``ctx.balance`` from the exchange or paper wallet."""
     latest = await fetch_and_log_balance(
         ctx.exchange,
-        ctx.paper_wallet,
+        ctx.wallet,
         ctx.config,
     )
     ctx.balance = notify_balance_change(
@@ -1143,7 +1144,11 @@ async def update_caches(ctx: BotContext) -> None:
 
         async def subscribe(sym: str) -> None:
             try:
-                await ctx.exchange.watch_ohlcv(sym, timeframe, timeout=WS_OHLCV_TIMEOUT)
+                params = inspect.signature(ctx.exchange.watch_ohlcv).parameters
+                kwargs = {"symbol": sym, "timeframe": timeframe}
+                if "timeout" in params:
+                    kwargs["timeout"] = WS_OHLCV_TIMEOUT
+                await ctx.exchange.watch_ohlcv(**kwargs)
             except Exception as exc:  # pragma: no cover - network
                 logger.warning("WS subscribe failed for %s: %s", sym, exc)
 
@@ -1509,9 +1514,15 @@ async def execute_signals(ctx: BotContext) -> None:
             time.perf_counter() - start_exec,
         )
 
-        if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
-            ctx.paper_wallet.open(sym, side, amount, price)
-            ctx.balance = ctx.paper_wallet.balance
+        if ctx.config.get("execution_mode") == "dry_run" and ctx.wallet:
+            try:
+                if side == "buy":
+                    ctx.wallet.buy(sym, amount, price)
+                else:
+                    ctx.wallet.sell(sym, amount, price)
+                ctx.balance = ctx.wallet.total_balance
+            except Exception:
+                pass
         ctx.risk_manager.allocate_capital(strategy, abs(size))
         if ctx.config.get("execution_mode") == "dry_run":
             ctx.positions[sym] = {
@@ -1603,12 +1614,13 @@ async def handle_exits(ctx: BotContext) -> None:
                     use_websocket=ctx.config.get("use_websocket", False),
                     config=ctx.config,
                 )
-                if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
+                if ctx.config.get("execution_mode") == "dry_run" and ctx.wallet:
                     try:
-                        ctx.paper_wallet.open(
-                            sym, pos["side"], add_amount, current_price
-                        )
-                        ctx.balance = ctx.paper_wallet.balance
+                        if pos["side"] == "buy":
+                            ctx.wallet.buy(sym, add_amount, current_price)
+                        else:
+                            ctx.wallet.sell(sym, add_amount, current_price)
+                        ctx.balance = ctx.wallet.total_balance
                     except Exception:
                         pass
                 await refresh_balance(ctx)
@@ -1640,10 +1652,13 @@ async def handle_exits(ctx: BotContext) -> None:
                 use_websocket=ctx.config.get("use_websocket", False),
                 config=ctx.config,
             )
-            if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
+            if ctx.config.get("execution_mode") == "dry_run" and ctx.wallet:
                 try:
-                    ctx.paper_wallet.close(sym, pos["size"], current_price)
-                    ctx.balance = ctx.paper_wallet.balance
+                    if pos["side"] == "buy":
+                        ctx.wallet.sell(sym, pos["size"], current_price)
+                    else:
+                        ctx.wallet.buy(sym, pos["size"], current_price)
+                    ctx.balance = ctx.wallet.total_balance
                 except Exception:
                     pass
             await refresh_balance(ctx)
@@ -1715,10 +1730,13 @@ async def handle_exits(ctx: BotContext) -> None:
                     use_websocket=ctx.config.get("use_websocket", False),
                     config=ctx.config,
                 )
-                if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
+                if ctx.config.get("execution_mode") == "dry_run" and ctx.wallet:
                     try:
-                        ctx.paper_wallet.open(sym, pos["side"], new_size, current_price)
-                        ctx.balance = ctx.paper_wallet.balance
+                        if pos["side"] == "buy":
+                            ctx.wallet.buy(sym, new_size, current_price)
+                        else:
+                            ctx.wallet.sell(sym, new_size, current_price)
+                        ctx.balance = ctx.wallet.total_balance
                     except Exception:
                         pass
                 ctx.risk_manager.allocate_capital(
@@ -1768,10 +1786,13 @@ async def force_exit_all(ctx: BotContext) -> None:
             config=ctx.config,
         )
 
-        if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
+        if ctx.config.get("execution_mode") == "dry_run" and ctx.wallet:
             try:
-                ctx.paper_wallet.close(sym, pos["size"], exit_price)
-                ctx.balance = ctx.paper_wallet.balance
+                if pos["side"] == "buy":
+                    ctx.wallet.sell(sym, pos["size"], exit_price)
+                else:
+                    ctx.wallet.buy(sym, pos["size"], exit_price)
+                ctx.balance = ctx.wallet.total_balance
             except Exception:
                 pass
 
@@ -1808,8 +1829,8 @@ async def force_exit_all(ctx: BotContext) -> None:
         except Exception:
             pass
 
-    if not ctx.positions and ctx.paper_wallet and ctx.paper_wallet.positions:
-        for pid, wpos in list(ctx.paper_wallet.positions.items()):
+    if not ctx.positions and ctx.wallet and ctx.wallet.positions:
+        for pid, wpos in list(ctx.wallet.positions.items()):
             sym = wpos.get("symbol") or pid
             df = tf_cache.get(sym)
             exit_price = wpos.get("entry_price", 0.0)
@@ -1818,11 +1839,13 @@ async def force_exit_all(ctx: BotContext) -> None:
 
             size = wpos.get("size", wpos.get("amount", 0.0))
             try:
-                ctx.paper_wallet.close(size, exit_price, pid)
-                ctx.balance = ctx.paper_wallet.balance
+                if wpos.get("side") == "buy":
+                    ctx.wallet.sell(sym, size, exit_price)
+                else:
+                    ctx.wallet.buy(sym, size, exit_price)
+                ctx.balance = ctx.wallet.total_balance
             except Exception:
                 pass
-
             realized_pnl = (exit_price - wpos.get("entry_price", 0.0)) * size
             if wpos.get("side") == "sell":
                 realized_pnl = -realized_pnl
@@ -1855,7 +1878,8 @@ async def force_exit_all(ctx: BotContext) -> None:
                 pass
             logger.info("Liquidated %s %.4f @ %.2f", sym, size, exit_price)
 
-        ctx.paper_wallet.positions.clear()
+        if ctx.wallet:
+            ctx.wallet.positions.clear()
 
 
 async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
@@ -1887,10 +1911,13 @@ async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
         config=ctx.config,
     )
 
-    if ctx.config.get("execution_mode") == "dry_run" and ctx.paper_wallet:
+    if ctx.config.get("execution_mode") == "dry_run" and ctx.wallet:
         try:
-            ctx.paper_wallet.close(sym, pos["size"], exit_price)
-            ctx.balance = ctx.paper_wallet.balance
+            if pos["side"] == "buy":
+                ctx.wallet.sell(sym, pos["size"], exit_price)
+            else:
+                ctx.wallet.buy(sym, pos["size"], exit_price)
+            ctx.balance = ctx.wallet.total_balance
         except Exception:
             pass
 
@@ -2278,22 +2305,22 @@ async def _main_impl() -> TelegramNotifier:
     risk_config = RiskConfig(**risk_params)
     risk_manager = RiskManager(risk_config)
 
-    paper_wallet = None
+    wallet: Wallet | None = None
     if config.get("execution_mode") == "dry_run":
         try:
             start_bal = float(input("Enter paper trading balance in USDT: "))
         except Exception:
             start_bal = 1000.0
-        paper_wallet = PaperWallet(
+        wallet = Wallet(
             start_bal,
             config.get("max_open_trades", 1),
             config.get("allow_short", False),
         )
-        log_balance(paper_wallet.balance)
+        log_balance(wallet.total_balance)
         last_balance = notify_balance_change(
             notifier,
             last_balance,
-            float(paper_wallet.balance),
+            float(wallet.total_balance),
             balance_updates,
         )
 
@@ -2301,7 +2328,7 @@ async def _main_impl() -> TelegramNotifier:
         asyncio.create_task(
             console_monitor.monitor_loop(
                 exchange,
-                paper_wallet,
+                wallet,
                 LOG_DIR / "bot.log",
                 quiet_mode=config.get("quiet_mode", False),
             )
@@ -2408,9 +2435,11 @@ async def _main_impl() -> TelegramNotifier:
     ctx.ws_client = ws_client
     ctx.risk_manager = risk_manager
     ctx.notifier = notifier
-    ctx.paper_wallet = paper_wallet
+    ctx.wallet = wallet
+    # backwards compatibility for modules still expecting ``paper_wallet``
+    ctx.paper_wallet = wallet
     ctx.position_guard = position_guard
-    ctx.balance = await fetch_and_log_balance(exchange, paper_wallet, config)
+    ctx.balance = await fetch_and_log_balance(exchange, wallet, config)
     last_balance = ctx.balance
     runner = PhaseRunner(
         [
