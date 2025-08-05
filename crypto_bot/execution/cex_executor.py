@@ -394,8 +394,10 @@ async def execute_trade_async(
     max_retries: int = 3,
     poll_timeout: int = 60,
 ) -> Dict:
-    """Asynchronous version of :func:`execute_trade` with retry support."""
-    """Simplified async trade execution used in tests."""
+    """Asynchronous version of :func:`execute_trade` with retry support.
+
+    Simplified async trade execution used in tests.
+    """
 
     if notifier is None:
         if isinstance(token, TelegramNotifier):
