@@ -2,16 +2,27 @@
 
 from typing import Optional, Tuple
 
+import logging
 import pandas as pd
 
 from crypto_bot.utils import stats
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
+logger = logging.getLogger(__name__)
+
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model
+    ML_AVAILABLE = True
+except Exception:  # pragma: no cover - trainer missing
+    ML_AVAILABLE = False
+    logger.warning(
+        "Skipping stat_arb_bot: machine learning support is unavailable",
+    )
+
+if ML_AVAILABLE:
     MODEL = load_model("stat_arb_bot")
-except Exception:  # pragma: no cover - fallback
+else:  # pragma: no cover - fallback
     MODEL = None
 
 _ZSCORE_THRESHOLD_DEFAULT = 2.0

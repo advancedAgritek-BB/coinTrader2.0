@@ -1,16 +1,27 @@
 from typing import Optional, Tuple
 
 import asyncio
+import logging
 import pandas as pd
 import ta
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
+logger = logging.getLogger(__name__)
+
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model
+    ML_AVAILABLE = True
+except Exception:  # pragma: no cover - trainer missing
+    ML_AVAILABLE = False
+    logger.warning(
+        "Skipping micro_scalp_bot: machine learning support is unavailable",
+    )
+
+if ML_AVAILABLE:
     MODEL = load_model("micro_scalp_bot")
-except Exception:  # pragma: no cover - fallback
+else:  # pragma: no cover - fallback
     MODEL = None
 
 
