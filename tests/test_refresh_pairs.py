@@ -15,11 +15,13 @@ ml_mod = types.ModuleType("crypto_bot.utils.market_loader")
 ml_mod.timeframe_seconds = lambda *_a, **_k: 60
 ml_mod.load_kraken_symbols = lambda *_a, **_k: []
 ml_mod.fetch_ohlcv_async = lambda *_a, **_k: None
+ml_mod.load_ohlcv = lambda *_a, **_k: None
 ml_mod.fetch_order_book_async = lambda *_a, **_k: None
 ml_mod.load_ohlcv_parallel = lambda *_a, **_k: None
 ml_mod.update_ohlcv_cache = lambda *_a, **_k: None
 ml_mod.update_multi_tf_ohlcv_cache = lambda *_a, **_k: None
 ml_mod.fetch_geckoterminal_ohlcv = lambda *_a, **_k: None
+ml_mod.get_kraken_listing_date = lambda *_a, **_k: None
 sys.modules.setdefault("crypto_bot.utils.market_loader", ml_mod)
 
 from tasks import refresh_pairs as rp

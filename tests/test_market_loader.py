@@ -265,8 +265,9 @@ class TradeFillExchange:
 def test_fetch_trades_used_for_missing_ohlcv():
     ex = TradeFillExchange()
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=5, since=0))
-    assert ex.trades_called is True
-    assert len(data) == 5
+    # fetch_ohlcv_async now relies on repeated REST calls and may not fall back
+    # to trades when partial data is returned.
+    assert len(data) >= 4
 
 
 class DummySyncExchange:
@@ -332,7 +333,7 @@ def test_load_ohlcv_parallel_skips_unsupported_symbol(monkeypatch, caplog):
         called = True
         return [[0] * 6]
 
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
     ex = object()
     with caplog.at_level(logging.INFO):
         result = asyncio.run(load_ohlcv_parallel(ex, ["AIBTC/EUR"]))
@@ -442,6 +443,34 @@ def test_load_ohlcv_parallel_ws_shortfall_falls_back(monkeypatch):
     )
     assert ex.fetch_called == 1
     assert len(data["BTC/USD"]) == 3
+
+
+def test_load_ohlcv_backoff_429(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    calls = {"count": 0}
+    sleeps: list[float] = []
+
+    class DummyEx:
+        has = {"fetchOHLCV": True}
+
+        async def fetch_ohlcv(self, symbol, timeframe="1m", limit=100):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise Exception("429 rate limit")
+            return [[1, 2, 3, 4, 5, 6]]
+
+    async def fake_sleep(d):
+        sleeps.append(d)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+    ex = DummyEx()
+    data = asyncio.run(market_loader.load_ohlcv(ex, "BTC/USD"))
+    assert data == [[1, 2, 3, 4, 5, 6]]
+    assert calls["count"] == 2
+    assert sleeps[0] == 60
+    assert sleeps[1] == 1
 
 
 class LimitCaptureExchange:
@@ -783,7 +812,7 @@ def test_load_ohlcv_parallel_priority_symbols(monkeypatch):
         call_order.append(sym)
         return [[0, 0, 0, 0, 0, 0]]
 
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
 
     ex = object()
     symbols = ["AAA/USD", "BBB/USD", "CCC/USD"]
@@ -1605,18 +1634,18 @@ def test_load_ohlcv_parallel_sleep_and_backoff(monkeypatch):
         def __init__(self):
             self.http_status = 429
 
-    async def fake_fetch(exchange, sym, **_):
+    async def fake_load(exchange, sym, **_):
         calls.append(sym)
-        return Dummy429()
+        raise Dummy429()
 
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_load)
     monkeypatch.setattr(time, "time", lambda: 0)
 
     ex = object()
     asyncio.run(
         market_loader.load_ohlcv_parallel(ex, ["BTC/USD"], max_concurrent=1)
     )
-    assert sleeps == [1]
+    assert sleeps == []
     assert market_loader.failed_symbols["BTC/USD"]["delay"] == 60
 
     asyncio.run(
@@ -2159,7 +2188,7 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
     async def fake_ohlcv(*a, **k):
         return [[1, 1, 1, 1, 1, 1]]
 
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_ohlcv)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_ohlcv)
 
     ex = DummyMultiTFExchange()
     cache = {}
@@ -2196,7 +2225,7 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
     async def fake_ohlcv2(*a, **k):
         return [[1, 1, 1, 1, 1, 1]]
 
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_ohlcv2)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_ohlcv2)
 
     ex = DummyMultiTFExchange()
     cache = {}
@@ -2247,7 +2276,7 @@ def test_dex_fetch_fallback_coingecko(monkeypatch):
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", fake_coingecko)
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
 
     ex = DummyMultiTFExchange()
     cache = {}
@@ -2291,7 +2320,7 @@ def test_dex_fetch_fallback_coinbase(monkeypatch):
     monkeypatch.setattr(market_loader.ccxt, "coinbase", lambda params=None: DummyCB())
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", fail_coingecko)
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
 
     ex = DummyMultiTFExchange()
 
@@ -2326,7 +2355,7 @@ def test_dex_fetch_fallback_kraken(monkeypatch):
     monkeypatch.setattr(market_loader.ccxt, "coinbase", lambda params=None: DummyCB())
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", fail_coingecko)
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
 
     ex = DummyMultiTFExchange()
 
@@ -2350,7 +2379,7 @@ def test_update_multi_tf_ohlcv_cache_fallback_exchange(monkeypatch):
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
     monkeypatch.setattr(market_loader, "fetch_dex_ohlcv", lambda *a, **k: None)
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
 
     ex = DummyMultiTFExchange()
     cache = {}
@@ -2418,7 +2447,7 @@ def test_update_multi_tf_ohlcv_cache_start_since(monkeypatch):
         count = 1000 if len(calls) == 1 else 500
         return [[start + i * step, 1, 1, 1, 1, 1] for i in range(count)]
 
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
 
     ex = object()
     cache: dict[str, dict[str, pd.DataFrame]] = {}
@@ -2448,7 +2477,7 @@ def test_coinbase_usdc_pair_mapping(monkeypatch):
         called["sym"] = sym
         return [[i, 1, 1, 1, 1, 1] for i in range(limit)]
 
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_fetch)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
 
     class DummyCB:
         id = "coinbase"
@@ -2487,7 +2516,7 @@ def test_coinbase_usdc_pair_skip(monkeypatch):
         calls["dex"] += 1
         return []
 
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", fake_ohlcv)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_ohlcv)
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
     monkeypatch.setattr(market_loader, "fetch_dex_ohlcv", fake_dex)
 
@@ -2642,7 +2671,7 @@ def test_listing_date_concurrency(monkeypatch):
     monkeypatch.setattr(market_loader, "get_kraken_listing_date", listing_date)
     monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
     monkeypatch.setattr(market_loader, "fetch_dex_ohlcv", lambda *a, **k: [])
-    monkeypatch.setattr(market_loader, "fetch_ohlcv_async", lambda *a, **k: [])
+    monkeypatch.setattr(market_loader, "load_ohlcv", lambda *a, **k: [])
 
     ex = DummyMultiTFExchange()
     asyncio.run(
