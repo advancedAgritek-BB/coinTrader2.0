@@ -80,7 +80,11 @@ from wallet import Wallet
 from crypto_bot.utils.strategy_utils import compute_strategy_weights
 from crypto_bot.auto_optimizer import optimize_strategies
 from crypto_bot.utils.telemetry import write_cycle_metrics
-from crypto_bot.utils.token_registry import TOKEN_MINTS
+from crypto_bot.utils.token_registry import (
+    TOKEN_MINTS,
+    monitor_new_tokens,
+    refresh_mints,
+)
 from crypto_bot.utils import pnl_logger, regime_pnl_tracker
 from crypto_bot.utils.ml_utils import ML_AVAILABLE
 
@@ -2328,6 +2332,8 @@ async def _main_impl() -> TelegramNotifier:
             balance_updates,
         )
 
+    register_task(asyncio.create_task(monitor_new_tokens()))
+
     monitor_task = register_task(
         asyncio.create_task(
             console_monitor.monitor_loop(
@@ -2698,8 +2704,6 @@ async def main() -> None:
     """Entry point for running the trading bot with error handling."""
     notifier: TelegramNotifier | None = None
     try:
-        from crypto_bot.utils.token_registry import refresh_mints
-
         await refresh_mints()
         notifier = await _main_impl()
     except Exception as exc:  # pragma: no cover - error path
