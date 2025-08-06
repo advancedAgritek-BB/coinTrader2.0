@@ -490,15 +490,15 @@ symbol_filter:
   - 5m
   kraken_batch_size: 200
   log_ticker_exceptions: true
-  max_concurrent_ohlcv: 50
+  max_concurrent_ohlcv: 10
   max_correlation: 0.9
   max_spread_pct: 8
-  min_volume_usd: 1000000
+  min_volume_usd: 10000
   ohlcv_batch_size: 10
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
   volume_percentile: 5
-symbol_refresh_minutes: 1
+symbol_refresh_minutes: 5
 symbol_score_weights:
   age: 0.1
   change: 0.3
