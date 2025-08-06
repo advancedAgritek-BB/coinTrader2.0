@@ -2,7 +2,7 @@ import os
 import time
 from typing import TYPE_CHECKING, Any, Dict
 
-import ccxt  # type: ignore
+import ccxt.pro as ccxt  # type: ignore
 import keyring
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
