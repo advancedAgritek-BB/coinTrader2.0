@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Iterable, List, Dict
 
-import ccxt
+import ccxt.pro as ccxt
 try:  # pragma: no cover - import fallback
     from ccxt.base.errors import NetworkError as CCXTNetworkError
 except Exception:  # pragma: no cover - import fallback

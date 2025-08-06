@@ -5,7 +5,6 @@ scikit-learn
 lightgbm
 joblib
 scipy
-ccxt
 ccxtpro
 gspread
 oauth2client

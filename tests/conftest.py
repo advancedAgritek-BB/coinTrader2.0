@@ -204,7 +204,11 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 # Basic ccxt stub so utils can import without the real dependency
 import types
-sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
+_ccxt_mod = types.ModuleType("ccxt")
+_ccxt_pro_mod = types.ModuleType("ccxt.pro")
+_ccxt_mod.pro = _ccxt_pro_mod
+sys.modules.setdefault("ccxt", _ccxt_mod)
+sys.modules.setdefault("ccxt.pro", _ccxt_pro_mod)
 sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
 sys.modules.setdefault("base58", types.ModuleType("base58"))
 class _FakeProm:
@@ -290,6 +294,18 @@ class _FakeTelegram:
 
         def notify(self, text):
             pass
+
+    @staticmethod
+    def send_test_message(*_a, **_k):
+        pass
+
+    @staticmethod
+    def send_message(*_a, **_k):
+        pass
+
+    @staticmethod
+    def send_message_sync(*_a, **_k):
+        pass
 
 
 sys.modules.setdefault("crypto_bot.utils.telegram", _FakeTelegram())
