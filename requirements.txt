@@ -5,7 +5,7 @@ scikit-learn
 lightgbm
 joblib
 scipy
-ccxtpro
+ccxtpro  # includes ccxt; required for WebSocket support
 gspread
 oauth2client
 python-dotenv
