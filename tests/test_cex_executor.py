@@ -1,11 +1,14 @@
-import ccxt
-import types
 import asyncio
 import os
+import types
+
+import ccxt
+import pytest
+
+from crypto_bot.execution import cex_executor, executor as simple_executor
 from crypto_bot.execution.cex_executor import place_stop_order
 from crypto_bot.utils import trade_logger
 from crypto_bot.utils.telegram import TelegramNotifier
-from crypto_bot.execution import executor as simple_executor
 
 
 class DummyStopExchange:
@@ -55,8 +58,6 @@ def test_place_stop_order_dry_run(monkeypatch):
     assert called.get("flag") is True
 
 
-import pytest
-from crypto_bot.execution import cex_executor
 
 
 class DummyMarketExchange:
@@ -288,7 +289,6 @@ def test_get_exchange_websocket(monkeypatch):
         expected = ("key", "sec", None, "apitoken")
     else:
         expected = ("key", "sec", None, None)
-    expected = ("key", "sec", "token", "apitoken")
     assert created["args"] == expected
 
 

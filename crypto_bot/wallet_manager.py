@@ -8,33 +8,9 @@ from typing import Dict, List
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.env import env_or_prompt
 
-
-try:
-    from cryptography.fernet import Fernet
-except Exception:
-    Fernet = None
-
 logger = setup_logger(__name__, LOG_DIR / "wallet.log")
 
 CONFIG_FILE = Path(__file__).resolve().parent / 'user_config.yaml'
-
-FERNET_KEY = os.getenv("FERNET_KEY")
-_fernet = Fernet(FERNET_KEY) if FERNET_KEY and Fernet else None
-
-
-def _encrypt(value: str) -> str:
-    if _fernet:
-        return _fernet.encrypt(value.encode()).decode()
-    return value
-
-
-def _decrypt(value: str) -> str:
-    if _fernet:
-        try:
-            return _fernet.decrypt(value.encode()).decode()
-        except Exception:
-            pass
-    return value
 
 
 def _sanitize_secret(secret: str) -> str:
