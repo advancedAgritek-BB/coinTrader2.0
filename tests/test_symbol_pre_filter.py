@@ -1669,3 +1669,35 @@ def test_quote_volume_converted(monkeypatch):
     result = asyncio.run(filter_symbols(BTCQuoteExchange(), ["ETH/BTC"], cfg))
 
     assert [s for s, _ in result[0]] == ["ETH/BTC"]
+
+
+class FailExchange:
+    def __init__(self):
+        self.calls = 0
+
+    async def watch_tickers(self, symbols):
+        self.calls += 1
+        raise Exception("boom")
+
+
+def test_watch_tickers_retry_count_and_delay(monkeypatch):
+    ex = FailExchange()
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay):
+        sleeps.append(delay)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+    with pytest.raises(Exception):
+        asyncio.run(sp._watch_tickers_with_retry(ex, ["ETH/USD"]))
+
+    assert ex.calls == 5
+    assert sleeps == [1, 2, 1, 4, 1, 8, 1, 16, 1]
+
+
+def test_watch_tickers_retry_config():
+    retry = sp._watch_tickers_with_retry.retry
+    assert retry.stop.max_attempt_number == 5
+    assert retry.wait.multiplier == 2
+    assert retry.wait.max == 60
