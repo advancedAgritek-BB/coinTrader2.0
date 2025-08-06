@@ -401,13 +401,24 @@ async def monitor_pump_raydium() -> None:
                     initial_buy = item.get("initial_buy") or item.get("initialBuy")
                     market_cap = item.get("market_cap") or item.get("marketCap")
                     twitter = item.get("twitter") or item.get("twitter_profile")
-                    if not (symbol and mint and created and initial_buy and market_cap and twitter):
+                    if not (symbol and mint and created and market_cap):
+                        logger.debug(
+                            "Skipping Pump.fun token with incomplete data: %s", item
+                        )
                         continue
                     try:
                         ts = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
                         if float(market_cap) <= 0:
+                            logger.debug(
+                                "Skipping Pump.fun token %s due to non-positive market cap %s",
+                                symbol,
+                                market_cap,
+                            )
                             continue
-                    except Exception:
+                    except Exception as exc:
+                        logger.debug(
+                            "Skipping Pump.fun token with invalid data %s: %s", item, exc
+                        )
                         continue
                     if ts > last_pump_ts:
                         last_pump_ts = ts
