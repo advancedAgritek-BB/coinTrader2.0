@@ -138,7 +138,7 @@ max_liquidity_usage: 0.8
 listing_date_concurrency: 5
 log_to_google: true
 loop_interval_minutes: 0.05
-loop_interval_seconds: 0.1
+loop_interval_seconds: 0.05
 hft_mode: true
 max_age_days: 90
 max_change_pct: 20
@@ -484,8 +484,8 @@ symbol_filter:
   http_timeout: 5
   initial_history_candles: 50
   initial_timeframes:
-  - 1h
-  - 1d
+  - 1m
+  - 5m
   kraken_batch_size: 200
   log_ticker_exceptions: true
   max_concurrent_ohlcv: 50
@@ -526,11 +526,8 @@ ticker_backoff_max: 60
 ticker_rate_limit: null
 timeframe: 15m
 timeframes:
-- 30s
 - 1m
 - 5m
-- 15m
-- 1h
 token_registry:
   refresh_interval_minutes: 15
 top_n_symbols: 50
