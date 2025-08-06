@@ -1284,11 +1284,11 @@ def test_ticker_retry_attempts(monkeypatch):
 def test_ticker_failure_backoff(monkeypatch):
     class FailExchange(DummyExchange):
         def __init__(self):
-            self.has = {"fetchTickers": True}
+            self.has = {"fetchTicker": True}
             self.calls = 0
             self.markets = {"ETH/USD": {}}
 
-        async def fetch_tickers(self, symbols):
+        async def fetch_ticker(self, symbol):
             self.calls += 1
             raise RuntimeError("boom")
 
@@ -1296,8 +1296,6 @@ def test_ticker_failure_backoff(monkeypatch):
     sp.ticker_ts.clear()
     sp.ticker_failures.clear()
     ex = FailExchange()
-
-    monkeypatch.setattr(sp, "_fetch_ticker_async", lambda *_a, **_k: {"result": {}})
 
     t = {"now": 0}
     monkeypatch.setattr(sp.time, "time", lambda: t["now"])
@@ -1354,6 +1352,52 @@ def test_ticker_backoff_resets_on_success(monkeypatch):
     t["now"] += 3
     asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
     assert "ETH/USD" not in sp.ticker_failures
+
+
+def test_ticker_failures_added_to_unsupported(monkeypatch, caplog):
+    class FailExchange(DummyExchange):
+        def __init__(self):
+            self.has = {"fetchTicker": True}
+            self.calls = 0
+            self.markets = {"ETH/USD": {}}
+
+        async def fetch_ticker(self, symbol):
+            self.calls += 1
+            raise RuntimeError("boom")
+
+    sp.ticker_cache.clear()
+    sp.ticker_ts.clear()
+    sp.ticker_failures.clear()
+    from crypto_bot.utils import market_loader
+    import ccxt
+
+    unsupported: set[str] = set()
+    monkeypatch.setattr(market_loader, "UNSUPPORTED_SYMBOLS", unsupported)
+    monkeypatch.setattr(sp, "UNSUPPORTED_SYMBOLS", unsupported)
+    monkeypatch.setattr(ccxt, "BadSymbol", Exception, raising=False)
+
+    ex = FailExchange()
+    t = {"now": 0}
+    monkeypatch.setattr(sp.time, "time", lambda: t["now"])
+
+    cfg = {"ticker_backoff_initial": 2, "ticker_backoff_max": 8, "symbol_filter": {"ticker_retry_attempts": 1}}
+
+    caplog.set_level("WARNING")
+
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    t["now"] += 3
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    t["now"] += 5
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    t["now"] += 9
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+
+    assert "ETH/USD" in unsupported
+    assert any("Exceeded ticker failure threshold" in r.message for r in caplog.records)
+    # further calls skip the symbol
+    t["now"] += 20
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
+    assert ex.calls == 4
 
 
 def test_log_ticker_exceptions(monkeypatch, caplog):

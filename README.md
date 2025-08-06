@@ -1124,8 +1124,10 @@ large symbol lists.
 Some markets are known to fail consistently when requesting historical
 data. These pairs are listed in `UNSUPPORTED_SYMBOLS` within
 `crypto_bot/utils/market_loader.py`. The loader skips any symbol in this
-list without making network requests. To ignore additional markets,
-append their identifiers to `UNSUPPORTED_SYMBOLS`.
+list without making network requests. When ticker lookups fail more than
+three times in `symbol_pre_filter`, the symbol is logged and automatically
+added to `UNSUPPORTED_SYMBOLS` so future scans skip it. You can also
+manually append identifiers to this set to ignore additional markets.
 
 Each candidate pair is also assigned a score based on volume, recent price
 change, bid/ask spread, age and API latency. The weights and limits for this
