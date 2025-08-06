@@ -213,6 +213,12 @@ async def load_token_mints(
 
     TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
     try:
+        from .symbol_utils import invalidate_symbol_cache
+
+        invalidate_symbol_cache()
+    except Exception:  # pragma: no cover - best effort
+        pass
+    try:
         CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(CACHE_FILE, "w") as f:
             json.dump(TOKEN_MINTS, f, indent=2)
@@ -276,6 +282,12 @@ async def refresh_mints() -> None:
         }
     )
     _write_cache()
+    try:
+        from .symbol_utils import invalidate_symbol_cache
+
+        invalidate_symbol_cache()
+    except Exception:  # pragma: no cover - best effort
+        pass
     logger.info("Refreshed TOKEN_MINTS with %d entries", len(TOKEN_MINTS))
 
 
@@ -284,6 +296,12 @@ def set_token_mints(mapping: dict[str, str]) -> None:
     TOKEN_MINTS.clear()
     TOKEN_MINTS.update({k.upper(): v for k, v in mapping.items()})
     _write_cache()
+    try:
+        from .symbol_utils import invalidate_symbol_cache
+
+        invalidate_symbol_cache()
+    except Exception:  # pragma: no cover - best effort
+        pass
 
 
 async def get_mint_from_gecko(base: str) -> str | None:
@@ -464,6 +482,12 @@ async def monitor_pump_raydium() -> None:
                                 except Exception as exc:  # pragma: no cover - best effort
                                     logger.error("enqueue_solana_tokens failed: %s", exc)
                             _write_cache()
+                            try:
+                                from .symbol_utils import invalidate_symbol_cache
+
+                                invalidate_symbol_cache()
+                            except Exception:  # pragma: no cover - best effort
+                                pass
                             start = ts - timedelta(hours=1)
                             end = ts
                             asyncio.create_task(_fetch_and_train(start, end))
@@ -502,6 +526,12 @@ async def monitor_pump_raydium() -> None:
                                 except Exception as exc:  # pragma: no cover - best effort
                                     logger.error("enqueue_solana_tokens failed: %s", exc)
                             _write_cache()
+                            try:
+                                from .symbol_utils import invalidate_symbol_cache
+
+                                invalidate_symbol_cache()
+                            except Exception:  # pragma: no cover - best effort
+                                pass
                             start = ts - timedelta(hours=1)
                             end = datetime.utcnow()
                             asyncio.create_task(_fetch_and_train(start, end))
