@@ -674,6 +674,8 @@ def test_monitor_pump_raydium(monkeypatch, tmp_path):
             "mint": "mintAAA",
             "market_cap": 123,
             "created_at": now.isoformat(),
+            "initial_buy": True,
+            "twitter": "x",
         }
     ]
     ray_data = [
@@ -719,10 +721,24 @@ def test_monitor_pump_raydium(monkeypatch, tmp_path):
 
     monkeypatch.setattr(mod, "fetch_data_range_async", fake_fetch)
 
-    cmds: list[str] = []
-    monkeypatch.setattr(mod.os, "system", lambda cmd: cmds.append(cmd) or 0)
+    runs: list[int] = []
+
+    async def fake_run_ml():
+        runs.append(1)
+
+    monkeypatch.setattr(mod, "_run_ml_trainer", fake_run_ml)
+
+    writes: list[int] = []
+
+    def fake_write_cache():
+        writes.append(1)
+
+    monkeypatch.setattr(mod, "_write_cache", fake_write_cache)
+
+    orig_sleep = asyncio.sleep
 
     async def fake_sleep(_):
+        await orig_sleep(0)
         raise asyncio.CancelledError
 
     monkeypatch.setattr(mod.asyncio, "sleep", fake_sleep)
@@ -733,4 +749,5 @@ def test_monitor_pump_raydium(monkeypatch, tmp_path):
     assert mod.TOKEN_MINTS["AAA"] == "mintAAA"
     assert mod.TOKEN_MINTS["BBB"] == "mintBBB"
     assert len(calls) == 2
-    assert len(cmds) == 2
+    assert len(runs) == 2
+    assert len(writes) == 2

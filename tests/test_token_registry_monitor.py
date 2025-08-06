@@ -100,7 +100,11 @@ def test_monitor_new_tokens_filters_and_backoff(monkeypatch):
 
     monkeypatch.setattr(token_registry, "TOKEN_MINTS", {})
     monkeypatch.setattr(token_registry, "_write_cache", lambda: None)
-    monkeypatch.setattr(token_registry, "os", types.SimpleNamespace(system=lambda *_: 0))
+
+    async def fake_run_ml_trainer():
+        pass
+
+    monkeypatch.setattr(token_registry, "_run_ml_trainer", fake_run_ml_trainer)
 
     pkg = types.ModuleType("coinTrader_Trainer")
     sys.modules.setdefault("coinTrader_Trainer", pkg)
@@ -111,10 +115,14 @@ def test_monitor_new_tokens_filters_and_backoff(monkeypatch):
     sys.modules["coinTrader_Trainer.ml_trainer"] = trainer
 
     calls = []
+    orig_sleep = asyncio.sleep
+
     async def fake_sleep(delay):
         calls.append(delay)
+        await orig_sleep(0)
         if len(calls) >= 2:
             raise asyncio.CancelledError
+
     monkeypatch.setattr(token_registry.asyncio, "sleep", fake_sleep)
     monkeypatch.setattr(token_registry, "POLL_INTERVAL", 0)
 
