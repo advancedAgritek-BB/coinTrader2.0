@@ -20,6 +20,14 @@ _cached_symbols: tuple[list[tuple[str, float]], list[str]] | None = None
 _last_refresh: float = 0.0
 
 
+def invalidate_symbol_cache() -> None:
+    """Clear cached symbols and reset refresh timestamp."""
+    global _cached_symbols, _last_refresh
+    _cached_symbols = None
+    _last_refresh = 0.0
+    logger.info("Symbol cache invalidated")
+
+
 async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]], list[str]]:
     """Return CEX symbols plus onchain symbols.
 
@@ -36,6 +44,8 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         and now - _last_refresh < refresh_m * 60
     ):
         return _cached_symbols
+
+    logger.info("Refreshing symbol cache")
 
     if config.get("skip_symbol_filters"):
         syms = config.get("symbols", [config.get("symbol")])
