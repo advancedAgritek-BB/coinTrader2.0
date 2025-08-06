@@ -268,10 +268,7 @@ def test_get_exchange_websocket(monkeypatch):
 
     exchange, ws = cex_executor.get_exchange(config)
     assert isinstance(ws, DummyWSClient)
-    if cex_executor.ccxtpro:
-        expected = ("key", "sec", "token", "apitoken")
-    else:
-        expected = ("key", "sec", None, None)
+    expected = ("key", "sec", "token", "apitoken")
     assert created["args"] == expected
 
 
