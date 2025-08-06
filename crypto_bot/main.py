@@ -1,3 +1,9 @@
+"""Main entry point for the trading bot.
+
+This module has a hard dependency on the `ccxtpro` package for exchange
+connectivity.
+"""
+
 import os
 import sys
 import asyncio
@@ -12,12 +18,8 @@ import re
 
 import aiohttp
 
-try:
-    import ccxt  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    import types
-
-    ccxt = types.SimpleNamespace()
+# ccxtpro is a hard dependency; startup should fail if it's missing.
+import ccxt.pro as ccxt  # type: ignore
 
 import pandas as pd
 import numpy as np
