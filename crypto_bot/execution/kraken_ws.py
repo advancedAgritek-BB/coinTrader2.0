@@ -7,13 +7,7 @@ from collections import deque
 from typing import Optional, Callable, Union, List, Any, Dict, Deque
 from datetime import datetime, timedelta, timezone
 import keyring
-
-try:
-    import ccxt  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    import types
-
-    ccxt = types.SimpleNamespace()
+import ccxt.pro as ccxt  # type: ignore
 from websocket import WebSocketApp
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from pathlib import Path
@@ -521,8 +515,9 @@ class KrakenWSClient:
         params = {}
         if self.api_token:
             params["otp"] = self.api_token
-
         resp = self.exchange.privatePostGetWebSocketsToken(params)
+        if asyncio.iscoroutine(resp):
+            resp = asyncio.run(resp)
         self.token = resp["token"]
         self.token_created = datetime.now(timezone.utc)
         return self.token
