@@ -87,7 +87,9 @@ exchange: kraken
 exchange_market_types:
 - spot
 - futures
-excluded_symbols: []
+excluded_symbols:
+- ABC/USDT
+- XYZ/USDC
 exec:
   allow_market_orders: true
   order_retry_interval: 3
@@ -491,7 +493,7 @@ symbol_filter:
   max_concurrent_ohlcv: 50
   max_correlation: 0.9
   max_spread_pct: 8
-  min_volume_usd: 5
+  min_volume_usd: 1000000
   ohlcv_batch_size: 10
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
@@ -533,7 +535,7 @@ timeframes:
 - 1h
 token_registry:
   refresh_interval_minutes: 15
-top_n_symbols: 50
+top_n_symbols: 20
 tp_mult: 2.0
 tp_pct: 0.1
 trade_size_pct: 0.3
