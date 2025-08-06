@@ -87,11 +87,13 @@ exchange: kraken
 exchange_market_types:
 - spot
 - futures
-excluded_symbols: []
+excluded_symbols:
+- ABC/USDT
+- XYZ/USDC
 exec:
   allow_market_orders: true
   order_retry_interval: 3
-execution_mode: dry_run
+execution_mode: live
 exit_strategy:
   default_sl_pct: 0.015
   default_tp_pct: 0.07
@@ -138,7 +140,7 @@ max_liquidity_usage: 0.8
 listing_date_concurrency: 5
 log_to_google: true
 loop_interval_minutes: 0.05
-loop_interval_seconds: 0.1
+loop_interval_seconds: 0.05
 hft_mode: true
 max_age_days: 90
 max_change_pct: 20
@@ -146,7 +148,7 @@ max_concurrent_ohlcv: 50
 max_concurrent_tickers: 20
 max_latency_ms: 500
 max_ohlcv_failures: 2
-max_open_trades: 5
+max_open_trades: 10
 max_parallel: 50
 max_slippage_pct: 0.2
 max_spread_pct: 10
@@ -409,8 +411,8 @@ solana_scanner:
   enabled: true
   gecko_search: true
   interval_minutes: 0.1
-  max_tokens_per_scan: 200
-  min_volume_usd: 10
+  max_tokens_per_scan: 50
+  min_volume_usd: 100000
 solana_slippage_bps: 10
 stat_arb_bot:
   pairs:
@@ -431,7 +433,7 @@ strategy_router:
     breakout_max_bandwidth: 0.03
     breakout_squeeze_window: 10
     breakout_volume_multiplier: 3
-    trend_adx_threshold: 20
+    trend_adx_threshold: 25
     breakdown_window: 20
     breakdown_volume_multiplier: 3
   mean_reverting_timeframe: 1h
@@ -484,19 +486,19 @@ symbol_filter:
   http_timeout: 5
   initial_history_candles: 50
   initial_timeframes:
-  - 1h
-  - 1d
+  - 1m
+  - 5m
   kraken_batch_size: 200
   log_ticker_exceptions: true
-  max_concurrent_ohlcv: 50
+  max_concurrent_ohlcv: 10
   max_correlation: 0.9
   max_spread_pct: 8
-  min_volume_usd: 5
+  min_volume_usd: 10000
   ohlcv_batch_size: 10
   ticker_retry_attempts: 5
   uncached_volume_multiplier: 1.5
   volume_percentile: 5
-symbol_refresh_minutes: 1
+symbol_refresh_minutes: 5
 symbol_score_weights:
   age: 0.1
   change: 0.3
@@ -526,14 +528,11 @@ ticker_backoff_max: 60
 ticker_rate_limit: null
 timeframe: 15m
 timeframes:
-- 30s
 - 1m
 - 5m
-- 15m
-- 1h
 token_registry:
   refresh_interval_minutes: 15
-top_n_symbols: 50
+top_n_symbols: 20
 tp_mult: 2.0
 tp_pct: 0.1
 trade_size_pct: 0.3
@@ -557,4 +556,4 @@ voting_strategies:
 - sniper_bot
 wallet_address: your_wallet
 ws_failures_before_disable: 1
-ws_ping_interval: 5
+ws_ping_interval: 5  # seconds between WebSocket pings

@@ -1148,11 +1148,11 @@ async def update_caches(ctx: BotContext) -> None:
 
         async def subscribe(sym: str) -> None:
             try:
-                params = inspect.signature(ctx.exchange.watch_ohlcv).parameters
+                params = inspect.signature(ctx.exchange.watchOHLCV).parameters
                 kwargs = {"symbol": sym, "timeframe": timeframe}
                 if "timeout" in params:
                     kwargs["timeout"] = WS_OHLCV_TIMEOUT
-                await ctx.exchange.watch_ohlcv(**kwargs)
+                await ctx.exchange.watchOHLCV(**kwargs)
             except Exception as exc:  # pragma: no cover - network
                 logger.warning("WS subscribe failed for %s: %s", sym, exc)
 
@@ -1246,12 +1246,13 @@ async def analyse_batch(ctx: BotContext) -> None:
             sym,
             len(df) if isinstance(df, pd.DataFrame) else 0,
         )
+        cfg = {**ctx.config, "hft_mode": ctx.config.get("hft_mode", False)}
         tasks.append(
             analyze_symbol(
                 sym,
                 df_map,
                 mode,
-                ctx.config,
+                cfg,
                 ctx.notifier,
                 mempool_monitor=ctx.mempool_monitor,
                 mempool_cfg=ctx.mempool_cfg,
@@ -2153,16 +2154,14 @@ async def _main_impl() -> TelegramNotifier:
     else:
         exchange, ws_client = get_exchange(config)
         secondary_exchange = None
+    ping_interval = int(config.get("ws_ping_interval", 5) or 5)
     if hasattr(exchange, "options"):
         opts = getattr(exchange, "options", {})
-        opts["ws"] = {"ping_interval": 10, "ping_timeout": 45}
+        opts["ws"] = {"ping_interval": ping_interval, "ping_timeout": 45}
         exchange.options = opts
 
-    ping_interval = int(config.get("ws_ping_interval", 0) or 0)
-    if ping_interval > 0 and hasattr(exchange, "ping"):
-        task = register_task(
-            asyncio.create_task(_ws_ping_loop(exchange, ping_interval))
-        )
+    if hasattr(exchange, "ping"):
+        task = register_task(asyncio.create_task(_ws_ping_loop(exchange, ping_interval)))
         WS_PING_TASKS.add(task)
 
     if not hasattr(exchange, "load_markets"):
