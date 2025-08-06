@@ -13,11 +13,11 @@ import os
 from crypto_bot.utils.market_loader import fetch_geckoterminal_ohlcv, timeframe_seconds
 
 try:
-    import ccxt  # type: ignore
+    import ccxt.pro as ccxt  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
     import types
 
-    ccxt = types.SimpleNamespace()
+    ccxt = types.ModuleType("ccxt.pro")
 import numpy as np
 import pandas as pd
 from numpy.random import default_rng, Generator
@@ -128,6 +128,33 @@ class BacktestRunner:
         return cfg
 
     @staticmethod
+    def _fetch_from_exchange(
+        exchange: object,
+        symbol: str,
+        timeframe: str,
+        since: int,
+        limit: int,
+    ) -> List[List[float]]:
+        """Fetch OHLCV data handling async/sync exchanges."""
+        result = exchange.fetch_ohlcv(
+            symbol,
+            timeframe=timeframe,
+            since=since,
+            limit=limit,
+        )
+        if asyncio.iscoroutine(result):
+            result = asyncio.run(result)
+        return result
+
+    @staticmethod
+    def _close_exchange(exchange: object) -> None:
+        close = getattr(exchange, "close", None)
+        if close is not None:
+            res = close()
+            if asyncio.iscoroutine(res):
+                asyncio.run(res)
+
+    @staticmethod
     @lru_cache(maxsize=None)
     def _cached_fetch(symbol: str, timeframe: str, since: int, limit: int) -> pd.DataFrame:
         if symbol.endswith("/USDC"):
@@ -143,8 +170,15 @@ class BacktestRunner:
                 df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
             return df
         exch = ccxt.binance()
-        ohlcv = exch.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
-        df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        try:
+            ohlcv = BacktestRunner._fetch_from_exchange(
+                exch, symbol, timeframe, since, limit
+            )
+        finally:
+            BacktestRunner._close_exchange(exch)
+        df = pd.DataFrame(
+            ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"]
+        )
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         return df
 
@@ -172,13 +206,16 @@ class BacktestRunner:
                 self.config.since,
                 self.config.limit,
             )
-        ohlcv = self.exchange.fetch_ohlcv(
+        ohlcv = self._fetch_from_exchange(
+            self.exchange,
             self.config.symbol,
-            timeframe=self.config.timeframe,
-            since=self.config.since,
-            limit=self.config.limit,
+            self.config.timeframe,
+            self.config.since,
+            self.config.limit,
         )
-        df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        df = pd.DataFrame(
+            ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"]
+        )
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         return df
 
