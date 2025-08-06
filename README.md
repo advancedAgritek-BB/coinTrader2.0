@@ -145,14 +145,18 @@ needed.
    ```bash
    pip install -r requirements.txt
    ```
+   This installs [ccxt.pro](https://github.com/ccxt/ccxt.pro) for WebSocket
+   support. `ccxtpro` bundles `ccxt`, so a separate `ccxt` entry isn't needed.
+   If you only require REST APIs or do not have access to `ccxtpro`, comment out
+   the `ccxtpro` line in `requirements.txt` and install
+   [`ccxt`](https://github.com/ccxt/ccxt) manually.
    The optional `rich` package is included and provides colorized
-   console output when viewing live positions.
-   Exchange connectivity relies on [ccxt](https://github.com/ccxt/ccxt) which is installed with these requirements. Make sure the `ccxt` package is available when running the trading bot.
-   The reinforcement learning strategy selector requires additional packages:
-   `gymnasium` and `stable-baselines3`. These are included in `requirements.txt`.
-   Install them with `pip install -r requirements.txt` when `rl_selector.enabled`
-   is set to `true` in `crypto_bot/config.yaml`. Set `rl_selector.enabled: false`
-   if you prefer not to install these extra dependencies.
+   console output when viewing live positions. The reinforcement learning
+   strategy selector requires additional packages: `gymnasium` and
+   `stable-baselines3`. These are included in `requirements.txt`. Install them
+   with `pip install -r requirements.txt` when `rl_selector.enabled` is set to
+   `true` in `crypto_bot/config.yaml`. Set `rl_selector.enabled: false` if you
+   prefer not to install these extra dependencies.
 2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius API key.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:
@@ -934,8 +938,9 @@ file for later analysis.
 and bounce_scalper strategies while `timeframe` covers all other analysis.
 
 When `use_websocket` is enabled the bot relies on `ccxt.pro` for realtime
-streaming data. Install it alongside the other requirements or disable
-websockets if you do not have access to `ccxt.pro`.
+streaming data. Ensure the `ccxtpro` package is installed
+(`pip install ccxtpro`). Disable websockets if you do not have access to
+`ccxt.pro`.
 When OHLCV streaming returns fewer candles than requested the bot calculates
 how many bars are missing and fetches only that remainder via REST. This
 adaptive limit keeps history current without waiting for a full response.
@@ -1638,7 +1643,7 @@ pytest -q
 ## Testing
 
 The repository includes an automated test suite. Some tests rely on optional
-packages such as `numpy`, `pandas`, `pytest-asyncio`, `ccxt`, `flask`, `base58`,
+packages such as `numpy`, `pandas`, `pytest-asyncio`, `ccxtpro`, `flask`, `base58`,
 `prometheus_client`, `python-dotenv` and `websocket-client`. The **full** set of
 tests requires the dependencies listed in `requirements.txt` together with the
 additional packages enumerated in `requirements-dev.txt`. When running only a
