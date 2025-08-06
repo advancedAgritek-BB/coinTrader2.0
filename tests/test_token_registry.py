@@ -667,6 +667,17 @@ def test_monitor_pump_raydium(monkeypatch, tmp_path):
 
     mod = _load_module(monkeypatch, tmp_path)
 
+    # Provide minimal crypto_bot.main stub so monitor_pump_raydium can record new tokens
+    import types, sys
+    from collections import deque
+
+    main_stub = types.SimpleNamespace(
+        enqueue_solana_tokens=lambda tokens: None,
+        symbol_priority_queue=deque(),
+        NEW_SOLANA_TOKENS=set(),
+    )
+    sys.modules["crypto_bot.main"] = main_stub
+
     now = datetime.utcnow()
     pump_data = [
         {
@@ -751,3 +762,5 @@ def test_monitor_pump_raydium(monkeypatch, tmp_path):
     assert len(calls) == 2
     assert len(runs) == 2
     assert len(writes) == 2
+    assert main_stub.NEW_SOLANA_TOKENS == {"AAA/USDC", "BBB/USDC"}
+    sys.modules.pop("crypto_bot.main", None)
