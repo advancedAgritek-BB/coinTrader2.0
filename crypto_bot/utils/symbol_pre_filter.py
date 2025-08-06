@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Iterable, List, Dict
 
-import ccxt
+import ccxt.pro as ccxt
 try:  # pragma: no cover - import fallback
     from ccxt.base.errors import NetworkError as CCXTNetworkError
 except Exception:  # pragma: no cover - import fallback
@@ -37,6 +37,7 @@ from .market_loader import (
     update_multi_tf_ohlcv_cache,
     fetch_geckoterminal_ohlcv,
     timeframe_seconds,
+    UNSUPPORTED_SYMBOLS,
 )
 from .constants import NON_SOLANA_BASES
 from .correlation import incremental_correlation
@@ -143,8 +144,8 @@ def _ws_retry_filter(exc: Exception) -> bool:
 
 
 @retry(
-    wait=wait_exponential(multiplier=1, min=1, max=30),
-    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, max=60),
+    stop=stop_after_attempt(5),
     reraise=True,
     before=before_log(logger, logging.DEBUG),
     before_sleep=before_sleep_log(logger, logging.WARNING),
@@ -153,7 +154,11 @@ def _ws_retry_filter(exc: Exception) -> bool:
 async def _watch_tickers_with_retry(exchange, symbols):
     """Call ``exchange.watch_tickers`` with retries."""
 
-    return await exchange.watch_tickers(symbols)
+    try:
+        return await exchange.watch_tickers(symbols)
+    except Exception:
+        await asyncio.sleep(1)
+        raise
 
 
 async def has_enough_history(
@@ -345,7 +350,7 @@ async def _refresh_tickers(
 
     start_time = time.perf_counter()
 
-    symbols = list(symbols)
+    symbols = [s for s in symbols if s not in UNSUPPORTED_SYMBOLS]
     cfg = config if config is not None else globals().get("cfg", {})
     sf = cfg.get("symbol_filter", {})
     init_ticker_semaphore(
@@ -367,7 +372,6 @@ async def _refresh_tickers(
     now = time.time()
     batch = cfg.get("symbol_filter", {}).get("kraken_batch_size", 100)
     timeout = cfg.get("symbol_filter", {}).get("http_timeout", 10)
-    symbols = list(symbols)
     filtered: list[str] = []
     for s in symbols:
         info = ticker_failures.get(s)
@@ -410,6 +414,12 @@ async def _refresh_tickers(
                     delay = min(info["delay"] * 2, backoff_max)
                     count = info.get("count", 0) + 1
                 ticker_failures[sym] = {"time": now, "delay": delay, "count": count}
+                if count > 3:
+                    logger.warning(
+                        "Exceeded ticker failure threshold for %s; adding to UNSUPPORTED_SYMBOLS",
+                        sym,
+                    )
+                    UNSUPPORTED_SYMBOLS.add(sym)
 
     try_ws = (
         getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
@@ -847,11 +857,13 @@ async def filter_symbols(
     cache_changed = False
 
     symbols = list(symbols)
+    unsupported = [s for s in symbols if s in UNSUPPORTED_SYMBOLS]
+    symbols = [s for s in symbols if s not in UNSUPPORTED_SYMBOLS]
     cex_syms = [s for s in symbols if not str(s).upper().endswith("/USDC")]
     onchain_syms = [s for s in symbols if str(s).upper().endswith("/USDC")]
 
-    telemetry.inc("scan.symbols_considered", len(symbols))
-    skipped = 0
+    telemetry.inc("scan.symbols_considered", len(symbols) + len(unsupported))
+    skipped = len(unsupported)
 
     cached_data: dict[str, tuple[float, float, float]] = {}
     for sym in cex_syms:

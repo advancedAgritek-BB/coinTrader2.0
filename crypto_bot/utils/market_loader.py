@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 import pandas as pd
 import numpy as np
-import ccxt
+import ccxt.pro as ccxt
 import aiohttp
 
 try:  # optional redis for caching
@@ -125,11 +125,11 @@ _OHLCV_BATCH_TASKS: Dict[tuple, asyncio.Task] = {}
     before_sleep=before_sleep_log(logger, logging.WARNING),
 )
 async def _watch_ohlcv_with_retry(exchange, **kwargs):
-    """Call ``exchange.watch_ohlcv`` with retries."""
-    params = inspect.signature(exchange.watch_ohlcv).parameters
+    """Call ``exchange.watchOHLCV`` with retries."""
+    params = inspect.signature(exchange.watchOHLCV).parameters
     if "timeout" in params and "timeout" not in kwargs:
         kwargs["timeout"] = WS_OHLCV_TIMEOUT
-    return await exchange.watch_ohlcv(**kwargs)
+    return await exchange.watchOHLCV(**kwargs)
 
 
 @dataclass
@@ -696,8 +696,8 @@ async def _fetch_ohlcv_async_inner(
                     limit = candles_needed
             except Exception:
                 pass
-        if use_websocket and hasattr(exchange, "watch_ohlcv"):
-            params = inspect.signature(exchange.watch_ohlcv).parameters
+        if use_websocket and hasattr(exchange, "watchOHLCV"):
+            params = inspect.signature(exchange.watchOHLCV).parameters
             ws_limit = limit
             kwargs = {"symbol": symbol, "timeframe": timeframe, "limit": ws_limit}
             if since is not None and "since" in params:
@@ -757,7 +757,7 @@ async def _fetch_ohlcv_async_inner(
                 and hasattr(exchange, "fetch_ohlcv")
             ):
                 logger.warning(
-                    "watch_ohlcv returned %d of %d candles for %s %s; fetching remainder",
+                    "watchOHLCV returned %d of %d candles for %s %s; fetching remainder",
                     len(data),
                     limit,
                     symbol,
@@ -998,7 +998,7 @@ async def _fetch_ohlcv_async_inner(
         return data
     except asyncio.TimeoutError as exc:
         ex_id = getattr(exchange, "id", "unknown")
-        if use_websocket and hasattr(exchange, "watch_ohlcv"):
+        if use_websocket and hasattr(exchange, "watchOHLCV"):
             logger.error(
                 "WS OHLCV timeout for %s on %s (tf=%s limit=%s ws=%s): %s",
                 symbol,
@@ -1144,7 +1144,7 @@ async def load_ohlcv(
 ) -> list:
     """Load OHLCV data via websocket or REST with basic retries.
 
-    The function dispatches to :meth:`exchange.watch_ohlcv` when ``mode`` is
+    The function dispatches to :meth:`exchange.watchOHLCV` when ``mode`` is
     ``"websocket"`` and to :meth:`exchange.fetch_ohlcv` otherwise.  On a
     successful call it sleeps for one second to respect exchange rate limits.
     When the exchange returns fewer candles than requested over a websocket
@@ -1160,7 +1160,7 @@ async def load_ohlcv(
     while True:
         try:
             if mode == "websocket":
-                watch_fn = getattr(exchange, "watch_ohlcv")
+                watch_fn = getattr(exchange, "watchOHLCV")
                 if asyncio.iscoroutinefunction(watch_fn):
                     data = await watch_fn(
                         symbol, timeframe=timeframe, limit=limit, **kwargs
@@ -1625,10 +1625,10 @@ async def load_ohlcv_parallel(
 
     if (
         use_websocket
-        and hasattr(exchange, "watch_ohlcv")
+        and hasattr(exchange, "watchOHLCV")
         and len(symbols) > 1
     ):
-        params = inspect.signature(exchange.watch_ohlcv).parameters
+        params = inspect.signature(exchange.watchOHLCV).parameters
         if "symbols" in params and not any(since_map.get(s) for s in symbols):
             try:
                 result = await _watch_ohlcv_with_retry(

@@ -895,6 +895,7 @@ scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
 loop_interval_minutes: 0.05  # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
 max_ws_limit: 50             # skip WebSocket when request exceeds this
+ws_ping_interval: 5          # send WebSocket pings every 5 seconds
 gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
@@ -904,6 +905,7 @@ ticker_rate_limit: 0         # override exchange rate limit (ms)
 poll_timeout: 60             # seconds to wait for order fill or transaction confirmation
 force_websocket_history: true  # set false to enable REST fallback
 max_ws_limit: 200            # skip WebSocket when request exceeds this
+ws_ping_interval: 5          # send WebSocket pings every 5 seconds
 gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
@@ -1129,8 +1131,10 @@ large symbol lists.
 Some markets are known to fail consistently when requesting historical
 data. These pairs are listed in `UNSUPPORTED_SYMBOLS` within
 `crypto_bot/utils/market_loader.py`. The loader skips any symbol in this
-list without making network requests. To ignore additional markets,
-append their identifiers to `UNSUPPORTED_SYMBOLS`.
+list without making network requests. When ticker lookups fail more than
+three times in `symbol_pre_filter`, the symbol is logged and automatically
+added to `UNSUPPORTED_SYMBOLS` so future scans skip it. You can also
+manually append identifiers to this set to ignore additional markets.
 
 Each candidate pair is also assigned a score based on volume, recent price
 change, bid/ask spread, age and API latency. The weights and limits for this
