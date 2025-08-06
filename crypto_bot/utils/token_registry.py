@@ -371,6 +371,18 @@ async def fetch_from_helius(symbols: Iterable[str]) -> Dict[str, str]:
 async def monitor_pump_raydium() -> None:
     """Monitor Pump.fun and Raydium for new tokens."""
 
+    # ``crypto_bot.main`` may not be loaded when this module is imported. Try to
+    # access the queue helpers lazily via ``sys.modules`` to avoid triggering an
+    # import during test runs or standalone usage.
+    import sys
+
+    enqueue_solana_tokens = None  # type: ignore
+    _symbol_priority_queue = None  # type: ignore
+    main_mod = sys.modules.get("crypto_bot.main")
+    if main_mod is not None:  # pragma: no branch - best effort
+        enqueue_solana_tokens = getattr(main_mod, "enqueue_solana_tokens", None)
+        _symbol_priority_queue = getattr(main_mod, "symbol_priority_queue", None)
+
     if not TOKEN_MINTS and CACHE_FILE.exists():
         try:
             with open(CACHE_FILE) as f:
@@ -415,6 +427,11 @@ async def monitor_pump_raydium() -> None:
                         if key not in TOKEN_MINTS:
                             TOKEN_MINTS[key] = mint
                             logger.info("Pump.fun %s market cap %s", symbol, market_cap)
+                            if enqueue_solana_tokens:
+                                try:
+                                    enqueue_solana_tokens([f"{key}/{mint}"])
+                                except Exception as exc:  # pragma: no cover - best effort
+                                    logger.error("enqueue_solana_tokens failed: %s", exc)
                             _write_cache()
                             start = ts - timedelta(hours=1)
                             end = ts
@@ -454,6 +471,11 @@ async def monitor_pump_raydium() -> None:
                         if key not in TOKEN_MINTS:
                             TOKEN_MINTS[key] = mint
                             logger.info("Raydium %s liquidity %s", symbol, liquidity)
+                            if enqueue_solana_tokens:
+                                try:
+                                    enqueue_solana_tokens([f"{key}/{mint}"])
+                                except Exception as exc:  # pragma: no cover - best effort
+                                    logger.error("enqueue_solana_tokens failed: %s", exc)
                             _write_cache()
                             start = ts - timedelta(hours=1)
                             end = datetime.utcnow()
