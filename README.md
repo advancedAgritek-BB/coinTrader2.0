@@ -230,7 +230,6 @@ API_PASSPHRASE=your_coinbase_passphrase_if_needed
 # generate with:
 # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 FERNET_KEY=your_generated_fernet_key
-KRAKEN_WS_TOKEN=your_ws_token          # optional for Kraken
 KRAKEN_API_TOKEN=your_api_token        # optional for Kraken
 TELEGRAM_TOKEN=your_telegram_token
 TELEGRAM_CHAT_ID=your_chat_id          # chat to receive Telegram notifications
@@ -255,6 +254,8 @@ SUPABASE_KEY=your_service_key
 LUNARCRUSH_API_KEY=your_lunarcrush_api_key  # optional, LunarCrush social metrics
 token_registry.refresh_interval_minutes=720  # optional cache update interval
 ```
+
+Kraken WebSocket tokens are fetched automatically using your API key and secret. Set `KRAKEN_WS_TOKEN` in `.env` only if you need to override the fetched token.
 
 `FERNET_KEY` holds the encryption key used by wallet_manager.py when saving credentials. Generate it with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` and set in `crypto_bot/.env`.
 
@@ -858,19 +859,12 @@ environment so the bot can retrieve social metrics. The free tier allows about
    use_websocket: true      # enable when trading on Kraken via WebSocket
    ```
 
-   For Kraken, optionally place WebSocket tokens in `crypto_bot/.env`:
+  For Kraken, a WebSocket token is requested automatically using your API key and secret. To override the fetched token, add it to `crypto_bot/.env`:
 
-   ```env
-   KRAKEN_WS_TOKEN=your_ws_token
-   KRAKEN_API_TOKEN=your_api_token
-   ```
-
-Generate `KRAKEN_WS_TOKEN` by calling Kraken's `GetWebSocketsToken` REST endpoint with your API credentials. The response contains a short-lived token used for authenticating WebSocket connections. The WebSocket client connects to the `/v2` URLs (`wss://ws.kraken.com/v2` and `wss://ws-auth.kraken.com/v2`), so the token is required for trading. A helper is provided in `crypto_bot.utils`:
-
-```python
-from crypto_bot.utils import get_ws_token
-token = get_ws_token(API_KEY, API_SECRET, "123456")
-```
+  ```env
+  # KRAKEN_WS_TOKEN=your_ws_token  # optional override
+  KRAKEN_API_TOKEN=your_api_token
+  ```
 
 5. In `crypto_bot/config.yaml` set:
 
