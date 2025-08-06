@@ -556,4 +556,4 @@ voting_strategies:
 - sniper_bot
 wallet_address: your_wallet
 ws_failures_before_disable: 1
-ws_ping_interval: 5
+ws_ping_interval: 5  # seconds between WebSocket pings
