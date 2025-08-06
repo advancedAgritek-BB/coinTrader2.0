@@ -65,7 +65,7 @@ async def fetch_from_jupiter() -> Dict[str, str]:
     return result
 
 
-async def _check_cex_arbitrage(symbol: str) -> None:
+async def _check_cex_arbitrage(symbol: str, threshold: float) -> None:
     """Check Kraken and Coinbase for arbitrage on ``symbol`` and trade to BTC."""
 
     pair = f"{symbol}/USD"
@@ -100,7 +100,7 @@ async def _check_cex_arbitrage(symbol: str) -> None:
     if f1 <= 0 or f2 <= 0:
         return
     spread = abs(f1 - f2) / ((f1 + f2) / 2)
-    if spread <= 0.005:
+    if spread <= threshold:
         return
 
     exec_fn = getattr(cross_chain_arb_bot, "execute_arbitrage", None)
@@ -416,10 +416,12 @@ async def monitor_pump_raydium() -> None:
 
     enqueue_solana_tokens = None  # type: ignore
     _symbol_priority_queue = None  # type: ignore
+    register_task = None  # type: ignore
     main_mod = sys.modules.get("crypto_bot.main")
     if main_mod is not None:  # pragma: no branch - best effort
         enqueue_solana_tokens = getattr(main_mod, "enqueue_solana_tokens", None)
         _symbol_priority_queue = getattr(main_mod, "symbol_priority_queue", None)
+        register_task = getattr(main_mod, "register_task", None)
 
     if not TOKEN_MINTS and CACHE_FILE.exists():
         try:
@@ -490,7 +492,18 @@ async def monitor_pump_raydium() -> None:
                                 pass
                             start = ts - timedelta(hours=1)
                             end = ts
-                            asyncio.create_task(_fetch_and_train(start, end))
+                            task = asyncio.create_task(_fetch_and_train(start, end))
+                            if register_task:
+                                register_task(task)
+                            cfg = getattr(main_mod, "config", {}) if main_mod else {}
+                            if cfg.get("arbitrage_enabled"):
+                                arb_task = asyncio.create_task(
+                                    _check_cex_arbitrage(
+                                        key, cfg.get("arbitrage_threshold", 0.005)
+                                    )
+                                )
+                                if register_task:
+                                    register_task(arb_task)
 
                 # Raydium pools
                 for pool in ray_data if isinstance(ray_data, list) else []:
@@ -534,7 +547,18 @@ async def monitor_pump_raydium() -> None:
                                 pass
                             start = ts - timedelta(hours=1)
                             end = datetime.utcnow()
-                            asyncio.create_task(_fetch_and_train(start, end))
+                            task = asyncio.create_task(_fetch_and_train(start, end))
+                            if register_task:
+                                register_task(task)
+                            cfg = getattr(main_mod, "config", {}) if main_mod else {}
+                            if cfg.get("arbitrage_enabled"):
+                                arb_task = asyncio.create_task(
+                                    _check_cex_arbitrage(
+                                        key, cfg.get("arbitrage_threshold", 0.005)
+                                    )
+                                )
+                                if register_task:
+                                    register_task(arb_task)
 
                 await asyncio.sleep(POLL_INTERVAL)
             except asyncio.CancelledError:

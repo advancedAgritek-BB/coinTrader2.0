@@ -5,7 +5,7 @@ adaptive_scan:
 adx_threshold: 15
 allow_short: true
 arbitrage_enabled: true
-arbitrage_threshold: 0.005
+arbitrage_threshold: 0.002
 atr_normalization: true
 auto_convert_quote: USDC
 balance_poll_mod: 1
