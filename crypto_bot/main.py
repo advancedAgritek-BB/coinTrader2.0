@@ -806,7 +806,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
         and not ctx.config.get("onchain_symbols")
         and not ctx.config.get("symbol")
     ):
-        ctx.config["symbol"] = "BTC/USDT"
+        ctx.config["symbol"] = "XBT/USDT"
     orig_min_volume = sf.get("min_volume_usd")
     orig_volume_pct = sf.get("volume_percentile")
 
@@ -834,7 +834,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
             sf["volume_percentile"] = orig_volume_pct
 
     # Always include major benchmark pairs
-    symbols.extend([("BTC/USDT", 10.0), ("SOL/USDC", 10.0)])
+    symbols.extend([("XBT/USDT", 10.0), ("SOL/USDC", 10.0)])
 
     ctx.timing["symbol_time"] = time.perf_counter() - t0
 

@@ -112,7 +112,7 @@ gas_threshold_gwei: 50
 gecko_limit: 10
 grid_bot:
   arbitrage_pairs:
-  - BTC/USDT
+  - XBT/USDT
   - SOL/USDC
   arbitrage_threshold: 0.001
   atr_normalization: true
@@ -478,7 +478,7 @@ strategy_router:
   sideways_timeframe: 1h
   trending_timeframe: 1h
   volatile_timeframe: 1m
-symbol: BTC/USDT
+symbol: XBT/USDT
 symbol_batch_size: 50
 symbol_filter:
   change_pct_percentile: 10
