@@ -82,7 +82,7 @@ def test_pair_flow():
     df = pd.DataFrame({'high': [1, 2], 'low': [0, 1], 'close': [1, 2]})
 
     class DummyExchange:
-        async def watch_ohlcv(self, symbol, timeframe="1h", **kwargs):
+        async def watchOHLCV(self, symbol, timeframe="1h", **kwargs):
             return []
 
     ctx = BotContext(

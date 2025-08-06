@@ -137,7 +137,7 @@ class DummyWSExchange:
         self.fetch_called = False
         self.fetch_thread = None
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
+    async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
         return [[0] * 6]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
@@ -147,7 +147,7 @@ class DummyWSExchange:
 
 
 class DummyWSExchangeEnough(DummyWSExchange):
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
+    async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
         return [[2] * 6 for _ in range(limit)]
 
 
@@ -165,7 +165,7 @@ def test_fetch_ohlcv_async():
     assert data[0][0] == 0
 
 
-def test_watch_ohlcv_fallback_to_fetch():
+def test_watchOHLCV_fallback_to_fetch():
     ex = DummyWSExchange()
     main_thread = threading.get_ident()
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
@@ -175,7 +175,7 @@ def test_watch_ohlcv_fallback_to_fetch():
     assert ex.fetch_thread == main_thread
 
 
-def test_watch_ohlcv_no_fallback_when_enough():
+def test_watchOHLCV_no_fallback_when_enough():
     ex = DummyWSExchangeEnough()
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
     assert ex.fetch_called is False
@@ -183,7 +183,7 @@ def test_watch_ohlcv_no_fallback_when_enough():
     assert data[0][0] == 2
 
 
-def test_watch_ohlcv_sync_fallback_runs_in_thread():
+def test_watchOHLCV_sync_fallback_runs_in_thread():
     ex = DummyWSSyncExchange()
     main_thread = threading.get_ident()
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
@@ -200,7 +200,7 @@ class DummyWSExchangeNoTimeout:
         self.ws_called = False
         self.fetch_called = False
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100):
+    async def watchOHLCV(self, symbol, timeframe="1h", limit=100):
         self.ws_called = True
         return [[2] * 6 for _ in range(limit)]
 
@@ -209,7 +209,7 @@ class DummyWSExchangeNoTimeout:
         return [[1] * 6 for _ in range(limit)]
 
 
-def test_watch_ohlcv_skips_timeout_when_unsupported():
+def test_watchOHLCV_skips_timeout_when_unsupported():
     ex = DummyWSExchangeNoTimeout()
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
     assert ex.ws_called is True
@@ -348,7 +348,7 @@ def test_load_ohlcv_parallel_skips_unsupported_symbol(monkeypatch, caplog):
 class DummyWSEchange:
     has = {"fetchOHLCV": True}
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
+    async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
         return [[0, 1, 2, 3, 4, 5]]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
@@ -361,7 +361,7 @@ class DummyWSExceptionExchange:
     def __init__(self):
         self.fetch_called = False
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
+    async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
         raise RuntimeError("ws failed")
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
@@ -402,7 +402,7 @@ def test_load_ohlcv_parallel_websocket_force_history():
     assert len(result["BTC/USD"]) == 1
 
 
-def test_watch_ohlcv_exception_falls_back_to_fetch():
+def test_watchOHLCV_exception_falls_back_to_fetch():
     ex = DummyWSExceptionExchange()
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
     assert ex.fetch_called is True
@@ -416,7 +416,7 @@ class WSShortfallExchange:
     def __init__(self):
         self.fetch_called = 0
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
+    async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
         return [[0] * 6 for _ in range(max(0, limit - 1))]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
@@ -480,7 +480,7 @@ class LimitCaptureExchange:
         self.watch_limit = None
         self.fetch_called = False
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100, **kwargs):
+    async def watchOHLCV(self, symbol, timeframe="1h", since=None, limit=100, **kwargs):
         self.watch_limit = limit
         return [[0] * 6 for _ in range(limit)]
 
@@ -489,7 +489,7 @@ class LimitCaptureExchange:
         return [[1] * 6 for _ in range(limit)]
 
 
-def test_watch_ohlcv_since_limit_reduction():
+def test_watchOHLCV_since_limit_reduction():
     ex = LimitCaptureExchange()
     since = int(time.time() * 1000) - 2 * 3600 * 1000
     data = asyncio.run(
@@ -512,7 +512,7 @@ class SkipLargeLimitExchange:
         self.ws_called = False
         self.fetch_called = False
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
+    async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
         self.ws_called = True
         return [[0] * 6 for _ in range(limit)]
 
@@ -521,7 +521,7 @@ class SkipLargeLimitExchange:
         return [[1] * 6 for _ in range(limit)]
 
 
-def test_watch_ohlcv_skipped_when_limit_exceeds(monkeypatch):
+def test_watchOHLCV_skipped_when_limit_exceeds(monkeypatch):
     from crypto_bot.utils import market_loader
 
     ex = SkipLargeLimitExchange()
@@ -835,7 +835,7 @@ class RetryIncompleteExchange:
     def __init__(self):
         self.fetch_calls = 0
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
+    async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
         return [[0] * 6 for _ in range(2)]
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
@@ -1482,7 +1482,7 @@ class SlowWSExchange:
     def __init__(self):
         self.fetch_called = False
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
+    async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
         await asyncio.sleep(0.05)
         return [[0] * 6]
 
@@ -1565,12 +1565,12 @@ class LimitCaptureWS:
     def __init__(self):
         self.limit = None
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, since=None, **kwargs):
+    async def watchOHLCV(self, symbol, timeframe="1h", limit=100, since=None, **kwargs):
         self.limit = limit
         return [[0] * 6]
 
 
-def test_watch_ohlcv_since_reduces_limit(monkeypatch):
+def test_watchOHLCV_since_reduces_limit(monkeypatch):
     from crypto_bot.utils import market_loader
 
     ex = LimitCaptureWS()
@@ -1832,7 +1832,7 @@ class CancelWSExchange:
         self.fetch_called = False
         self.closed = False
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
+    async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
         raise asyncio.CancelledError
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
@@ -1907,7 +1907,7 @@ class PendingWSExchange:
         self.closed = False
         self.calls: list[str] = []
 
-    async def watch_ohlcv(self, symbol, timeframe="1h", limit=100, **kwargs):
+    async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
         self.calls.append("watch")
         try:
             await asyncio.sleep(1)
