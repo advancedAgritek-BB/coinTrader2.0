@@ -288,6 +288,7 @@ def test_get_exchange_websocket(monkeypatch):
         expected = ("key", "sec", None, "apitoken")
     else:
         expected = ("key", "sec", None, None)
+    expected = ("key", "sec", "token", "apitoken")
     assert created["args"] == expected
 
 

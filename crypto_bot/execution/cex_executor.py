@@ -24,9 +24,13 @@ from crypto_bot.utils.trade_logger import log_trade
 from crypto_bot import tax_logger
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.env import env_or_prompt
+from crypto_bot.utils.kraken import get_ws_token
 
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
+
+# Alias for backward compatibility in tests
+Notifier = TelegramNotifier
 
 
 def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
@@ -42,10 +46,9 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
     use_ws = config.get("use_websocket", False)
 
     ws_client: Optional[KrakenWSClient] = None
-    api_key = env_or_prompt("API_KEY", "Enter API key: ")
-    api_secret = env_or_prompt("API_SECRET", "Enter API secret: ")
-    ws_token = env_or_prompt("KRAKEN_WS_TOKEN", "Enter Kraken WebSocket token: ")
-    api_token = env_or_prompt("KRAKEN_API_TOKEN", "Enter Kraken API token: ")
+    api_key = env_or_prompt("API_KEY", "Enter API key: ") or None
+    api_secret = env_or_prompt("API_SECRET", "Enter API secret: ") or None
+    api_token = env_or_prompt("KRAKEN_API_TOKEN", "Enter Kraken API token: ") or None
 
     if use_ws and ccxtpro:
         ccxt_mod = ccxtpro
@@ -63,11 +66,18 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
         )
     elif exchange_name == "kraken":
         if use_ws:
+            ws_token = os.getenv("KRAKEN_WS_TOKEN")
+            if not ws_token and api_key and api_secret:
+                ws_token = get_ws_token(api_key, api_secret, api_token or None)
             if ccxtpro:
                 if (api_key and api_secret) or ws_token:
-                    ws_client = KrakenWSClient(api_key, api_secret, ws_token, api_token)
+                    ws_client = KrakenWSClient(
+                        api_key, api_secret, ws_token=ws_token, api_token=api_token
+                    )
             else:
-                ws_client = KrakenWSClient(api_key, api_secret)
+                ws_client = KrakenWSClient(
+                    api_key, api_secret, ws_token=ws_token, api_token=api_token
+                )
 
         exchange = ccxt_mod.kraken(
             {
