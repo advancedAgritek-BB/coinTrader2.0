@@ -258,7 +258,6 @@ TOKEN_MINTS.update(
         # Add more as needed; skip USDQ/USTC/XTZ as non-Solana
     }
 )
-_write_cache()  # Save immediately
 
 
 async def refresh_mints() -> None:
