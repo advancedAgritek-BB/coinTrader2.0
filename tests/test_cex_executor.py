@@ -1,6 +1,7 @@
 import ccxt
 import types
 import asyncio
+import os
 from crypto_bot.execution.cex_executor import place_stop_order
 from crypto_bot.utils import trade_logger
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -242,8 +243,18 @@ def test_get_exchange_websocket(monkeypatch):
 
     monkeypatch.setenv("API_KEY", "key")
     monkeypatch.setenv("API_SECRET", "sec")
-    monkeypatch.setenv("KRAKEN_WS_TOKEN", "token")
     monkeypatch.setenv("KRAKEN_API_TOKEN", "apitoken")
+
+    monkeypatch.setattr(
+        "crypto_bot.utils.kraken.get_ws_token", lambda *a, **k: "token"
+    )
+
+    def fake_env_or_prompt(name, prompt):
+        if name == "KRAKEN_WS_TOKEN":
+            return None
+        return os.getenv(name, "")
+
+    monkeypatch.setattr(cex_executor, "env_or_prompt", fake_env_or_prompt)
 
     created = {}
 
@@ -260,7 +271,12 @@ def test_get_exchange_websocket(monkeypatch):
             created["params"] = params
             self.options = {}
 
-    monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: DummyCCXT(params), raising=False)
+    monkeypatch.setattr(
+        cex_executor.ccxt,
+        "kraken",
+        lambda params: DummyCCXT(params),
+        raising=False,
+    )
     if getattr(cex_executor, "ccxtpro", None):
         monkeypatch.setattr(
             cex_executor.ccxtpro, "kraken", lambda params: DummyCCXT(params)
@@ -268,6 +284,10 @@ def test_get_exchange_websocket(monkeypatch):
 
     exchange, ws = cex_executor.get_exchange(config)
     assert isinstance(ws, DummyWSClient)
+    if cex_executor.ccxtpro:
+        expected = ("key", "sec", None, "apitoken")
+    else:
+        expected = ("key", "sec", None, None)
     expected = ("key", "sec", "token", "apitoken")
     assert created["args"] == expected
 
@@ -276,7 +296,6 @@ def test_get_exchange_websocket_missing_creds(monkeypatch):
     config = {"exchange": "kraken", "use_websocket": True}
     monkeypatch.delenv("API_KEY", raising=False)
     monkeypatch.delenv("API_SECRET", raising=False)
-    monkeypatch.delenv("KRAKEN_WS_TOKEN", raising=False)
     monkeypatch.setattr(
         "crypto_bot.execution.kraken_ws.keyring.get_password",
         lambda *a, **k: "dummy",
@@ -292,6 +311,10 @@ def test_get_exchange_websocket_missing_creds(monkeypatch):
             self.options = {}
 
     monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: DummyCCXT2(params), raising=False)
+    monkeypatch.setattr(
+        "crypto_bot.utils.kraken.get_ws_token", lambda *a, **k: "token"
+    )
+    monkeypatch.setattr(cex_executor, "env_or_prompt", lambda *a, **k: None)
     if getattr(cex_executor, "ccxtpro", None):
         monkeypatch.setattr(cex_executor.ccxtpro, "kraken", lambda params: object())
 
@@ -361,6 +384,16 @@ def test_execute_trade_skips_on_liquidity_usage(monkeypatch):
 def test_ws_client_refreshes_expired_token(monkeypatch):
     from crypto_bot.execution.kraken_ws import KrakenWSClient
     from datetime import timedelta, timezone, datetime
+
+    monkeypatch.setattr(
+        "crypto_bot.execution.kraken_ws.keyring.get_password",
+        lambda *a, **k: "dummy",
+    )
+    monkeypatch.setattr(
+        "crypto_bot.execution.kraken_ws.ccxt",
+        types.SimpleNamespace(kraken=lambda params: object()),
+        raising=False,
+    )
 
     ws = KrakenWSClient(ws_token="old")
     ws.token_created = datetime.now(timezone.utc) - timedelta(minutes=15)
