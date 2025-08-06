@@ -45,7 +45,7 @@ RAYDIUM_URL = "https://api.raydium.io/v2/main/pairs"
 
 # Poll interval for monitoring external token feeds
 # Reduced poll interval to surface new tokens faster
-POLL_INTERVAL = 10
+POLL_INTERVAL = 5
 
 
 async def fetch_from_jupiter() -> Dict[str, str]:
@@ -416,10 +416,12 @@ async def monitor_pump_raydium() -> None:
 
     enqueue_solana_tokens = None  # type: ignore
     _symbol_priority_queue = None  # type: ignore
+    NEW_SOLANA_TOKENS = None  # type: ignore
     main_mod = sys.modules.get("crypto_bot.main")
     if main_mod is not None:  # pragma: no branch - best effort
         enqueue_solana_tokens = getattr(main_mod, "enqueue_solana_tokens", None)
         _symbol_priority_queue = getattr(main_mod, "symbol_priority_queue", None)
+        NEW_SOLANA_TOKENS = getattr(main_mod, "NEW_SOLANA_TOKENS", None)
 
     if not TOKEN_MINTS and CACHE_FILE.exists():
         try:
@@ -479,6 +481,8 @@ async def monitor_pump_raydium() -> None:
                             if enqueue_solana_tokens:
                                 try:
                                     enqueue_solana_tokens([f"{key}/{mint}"])
+                                    if NEW_SOLANA_TOKENS is not None:
+                                        NEW_SOLANA_TOKENS.add(f"{key}/USDC")
                                 except Exception as exc:  # pragma: no cover - best effort
                                     logger.error("enqueue_solana_tokens failed: %s", exc)
                             _write_cache()
@@ -523,6 +527,8 @@ async def monitor_pump_raydium() -> None:
                             if enqueue_solana_tokens:
                                 try:
                                     enqueue_solana_tokens([f"{key}/{mint}"])
+                                    if NEW_SOLANA_TOKENS is not None:
+                                        NEW_SOLANA_TOKENS.add(f"{key}/USDC")
                                 except Exception as exc:  # pragma: no cover - best effort
                                     logger.error("enqueue_solana_tokens failed: %s", exc)
                             _write_cache()
