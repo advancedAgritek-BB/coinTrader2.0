@@ -40,5 +40,5 @@ def test_fetch_candidates_logs_batch(monkeypatch, caplog):
 
     asyncio.run(main.fetch_candidates(ctx))
 
-    assert ctx.current_batch == ["BTC/USDT"]
+    assert ctx.current_batch == ["XBT/USDT"]
     assert "Current batch" in caplog.text
