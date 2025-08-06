@@ -1246,12 +1246,13 @@ async def analyse_batch(ctx: BotContext) -> None:
             sym,
             len(df) if isinstance(df, pd.DataFrame) else 0,
         )
+        cfg = {**ctx.config, "hft_mode": ctx.config.get("hft_mode", False)}
         tasks.append(
             analyze_symbol(
                 sym,
                 df_map,
                 mode,
-                ctx.config,
+                cfg,
                 ctx.notifier,
                 mempool_monitor=ctx.mempool_monitor,
                 mempool_cfg=ctx.mempool_cfg,
