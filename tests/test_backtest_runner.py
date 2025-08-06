@@ -1,13 +1,14 @@
 import pandas as pd
 import ccxt
 import logging
+import asyncio
 
 from crypto_bot.backtest import backtest_runner as bt, backtest_runner
 from crypto_bot.backtest.backtest_runner import BacktestConfig, BacktestRunner
 
 
 class FakeExchange:
-    def fetch_ohlcv(self, symbol, timeframe, since, limit):
+    async def fetch_ohlcv(self, symbol, timeframe, since, limit):
         ts = pd.date_range("2020-01-01", periods=120, freq="H")
         price = 100.0
         data = []
@@ -17,6 +18,9 @@ class FakeExchange:
                 [int(t.timestamp() * 1000), price, price + 1, price - 1, price, 100]
             )
         return data
+
+    async def close(self):
+        pass
 
 
 def _constant_strategy(df):
@@ -32,7 +36,7 @@ def test_backtest_tracks_switches(monkeypatch):
 
     monkeypatch.setattr(bt, "classify_regime", fake_classify)
     monkeypatch.setattr(bt, "strategy_for", lambda r: _constant_strategy)
-    fake_data = FakeExchange().fetch_ohlcv("XBT/USDT", "1h", 0, 120)
+    fake_data = asyncio.run(FakeExchange().fetch_ohlcv("XBT/USDT", "1h", 0, 120))
     monkeypatch.setattr(BacktestRunner, "_fetch_data", lambda self: fake_data)
     monkeypatch.setattr(backtest_runner, "classify_regime", fake_classify)
     monkeypatch.setattr(backtest_runner, "strategy_for", lambda r: _constant_strategy)
@@ -56,12 +60,12 @@ def test_backtest_tracks_switches(monkeypatch):
 
 
 def test_backtest_misclassification(monkeypatch):
-    monkeypatch.setattr(ccxt, "binance", lambda: FakeExchange())
+    monkeypatch.setattr(ccxt, "binance", lambda: FakeExchange(), raising=False)
     monkeypatch.setattr(bt, "classify_regime", lambda df: ("trending", {"trending": 1.0}))
     monkeypatch.setattr(bt, "strategy_for", lambda r: _constant_strategy)
     monkeypatch.setattr(backtest_runner, "classify_regime", lambda df: ("trending", {}))
     monkeypatch.setattr(backtest_runner, "strategy_for", lambda r: _constant_strategy)
-    fake_data = FakeExchange().fetch_ohlcv("XBT/USDT", "1h", 0, 80)
+    fake_data = asyncio.run(FakeExchange().fetch_ohlcv("XBT/USDT", "1h", 0, 80))
     monkeypatch.setattr(BacktestRunner, "_fetch_data", lambda self: fake_data)
 
     cfg = BacktestConfig(
@@ -81,12 +85,12 @@ def test_backtest_misclassification(monkeypatch):
 
 
 def test_walk_forward_optimize(monkeypatch):
-    monkeypatch.setattr(ccxt, "binance", lambda: FakeExchange())
+    monkeypatch.setattr(ccxt, "binance", lambda: FakeExchange(), raising=False)
     monkeypatch.setattr(bt, "classify_regime", lambda df: ("trending", {"trending": 1.0}))
     monkeypatch.setattr(bt, "strategy_for", lambda r: _constant_strategy)
     monkeypatch.setattr(backtest_runner, "classify_regime", lambda df: ("trending", {}))
     monkeypatch.setattr(backtest_runner, "strategy_for", lambda r: _constant_strategy)
-    fake_data = FakeExchange().fetch_ohlcv("XBT/USDT", "1h", 0, 60)
+    fake_data = asyncio.run(FakeExchange().fetch_ohlcv("XBT/USDT", "1h", 0, 60))
     monkeypatch.setattr(BacktestRunner, "_fetch_data", lambda self: fake_data)
 
     cfg = BacktestConfig(
