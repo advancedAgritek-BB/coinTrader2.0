@@ -143,8 +143,8 @@ def _ws_retry_filter(exc: Exception) -> bool:
 
 
 @retry(
-    wait=wait_exponential(multiplier=1, min=1, max=30),
-    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, max=60),
+    stop=stop_after_attempt(5),
     reraise=True,
     before=before_log(logger, logging.DEBUG),
     before_sleep=before_sleep_log(logger, logging.WARNING),
@@ -153,7 +153,11 @@ def _ws_retry_filter(exc: Exception) -> bool:
 async def _watch_tickers_with_retry(exchange, symbols):
     """Call ``exchange.watch_tickers`` with retries."""
 
-    return await exchange.watch_tickers(symbols)
+    try:
+        return await exchange.watch_tickers(symbols)
+    except Exception:
+        await asyncio.sleep(1)
+        raise
 
 
 async def has_enough_history(
