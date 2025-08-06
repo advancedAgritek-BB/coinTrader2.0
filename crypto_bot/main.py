@@ -2153,16 +2153,14 @@ async def _main_impl() -> TelegramNotifier:
     else:
         exchange, ws_client = get_exchange(config)
         secondary_exchange = None
+    ping_interval = int(config.get("ws_ping_interval", 5) or 5)
     if hasattr(exchange, "options"):
         opts = getattr(exchange, "options", {})
-        opts["ws"] = {"ping_interval": 10, "ping_timeout": 45}
+        opts["ws"] = {"ping_interval": ping_interval, "ping_timeout": 45}
         exchange.options = opts
 
-    ping_interval = int(config.get("ws_ping_interval", 0) or 0)
-    if ping_interval > 0 and hasattr(exchange, "ping"):
-        task = register_task(
-            asyncio.create_task(_ws_ping_loop(exchange, ping_interval))
-        )
+    if hasattr(exchange, "ping"):
+        task = register_task(asyncio.create_task(_ws_ping_loop(exchange, ping_interval)))
         WS_PING_TASKS.add(task)
 
     if not hasattr(exchange, "load_markets"):

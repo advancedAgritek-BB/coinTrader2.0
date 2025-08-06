@@ -891,6 +891,7 @@ scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
 loop_interval_minutes: 0.05  # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
 max_ws_limit: 50             # skip WebSocket when request exceeds this
+ws_ping_interval: 5          # send WebSocket pings every 5 seconds
 gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
@@ -900,6 +901,7 @@ ticker_rate_limit: 0         # override exchange rate limit (ms)
 poll_timeout: 60             # seconds to wait for order fill or transaction confirmation
 force_websocket_history: true  # set false to enable REST fallback
 max_ws_limit: 200            # skip WebSocket when request exceeds this
+ws_ping_interval: 5          # send WebSocket pings every 5 seconds
 gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
