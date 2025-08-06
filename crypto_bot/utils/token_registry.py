@@ -112,6 +112,26 @@ async def _check_cex_arbitrage(symbol: str) -> None:
         logger.error("Arbitrage execution failed for %s: %s", pair, exc)
 
 
+async def _run_ml_trainer() -> None:
+    """Invoke the ML trainer asynchronously."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "python", "ml_trainer.py", "train", "regime", "--use-gpu"
+        )
+        await proc.wait()
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.error("ml_trainer failed: %s", exc)
+
+
+async def _fetch_and_train(start: datetime, end: datetime) -> None:
+    """Fetch training data and kick off training in the background."""
+    try:
+        await fetch_data_range_async("trade_logs", start.isoformat(), end.isoformat())
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.error("fetch_data_range_async failed: %s", exc)
+    await _run_ml_trainer()
+
+
 async def load_token_mints(
     url: str | None = None,
     *,
@@ -418,13 +438,7 @@ async def monitor_pump_raydium() -> None:
                             _write_cache()
                             start = ts - timedelta(hours=1)
                             end = ts
-                            try:
-                                await fetch_data_range_async(
-                                    "trade_logs", start.isoformat(), end.isoformat()
-                                )
-                            except Exception as exc:  # pragma: no cover - best effort
-                                logger.error("fetch_data_range_async failed: %s", exc)
-                            os.system("python ml_trainer.py train regime --use-gpu")
+                            asyncio.create_task(_fetch_and_train(start, end))
 
                 # Raydium pools
                 for pool in ray_data if isinstance(ray_data, list) else []:
@@ -457,13 +471,7 @@ async def monitor_pump_raydium() -> None:
                             _write_cache()
                             start = ts - timedelta(hours=1)
                             end = datetime.utcnow()
-                            try:
-                                await fetch_data_range_async(
-                                    "trade_logs", start.isoformat(), end.isoformat()
-                                )
-                            except Exception as exc:  # pragma: no cover - best effort
-                                logger.error("fetch_data_range_async failed: %s", exc)
-                            os.system("python ml_trainer.py train regime --use-gpu")
+                            asyncio.create_task(_fetch_and_train(start, end))
 
                 await asyncio.sleep(POLL_INTERVAL)
             except asyncio.CancelledError:
