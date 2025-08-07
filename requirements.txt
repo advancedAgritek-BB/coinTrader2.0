@@ -5,14 +5,13 @@ scikit-learn
 lightgbm
 joblib
 scipy
-ccxt
-cryptofeed
+ccxtpro
 gspread
 oauth2client
 python-dotenv
-pyyaml
+PyYAML
 python-telegram-bot
-flask
+Flask
 pytest
 websocket-client
 requests
@@ -45,4 +44,5 @@ gymnasium
 torch
 stable-baselines3
 lunarcrush
+
 keyring

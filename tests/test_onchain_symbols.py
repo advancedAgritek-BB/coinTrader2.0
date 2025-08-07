@@ -118,4 +118,4 @@ def test_fetch_candidates_adds_onchain(monkeypatch):
 
     asyncio.run(main.fetch_candidates(ctx))
 
-    assert set(ctx.current_batch) == {"XBT/USDT", "BONK/USDC"}
+    assert set(ctx.current_batch) == {"BTC/USD", "BONK/USDC"}

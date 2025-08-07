@@ -39,4 +39,4 @@ def test_single_symbol_no_duplicates(monkeypatch):
 
     asyncio.run(main.fetch_candidates(ctx))
 
-    assert set(ctx.current_batch) == {"XBT/USDT", "SOL/USDC"}
+    assert set(ctx.current_batch) == {"BTC/USDT", "SOL/USDC"}

@@ -1,13 +1,3 @@
-"""Main entry point for the trading bot.
-
-Prefers :mod:`websocket-client`/`cryptofeed` for realtime data and falls back
-to standard ``ccxt`` for REST access.
-This module relies on the standard :mod:`ccxt` library for exchange
-connectivity. WebSocket market data is handled separately by dedicated
-clients such as :class:`crypto_bot.execution.kraken_ws.KrakenWSClient` or
-`cryptofeed` feeds.
-"""
-
 import os
 import sys
 import asyncio
@@ -22,24 +12,12 @@ import re
 
 import aiohttp
 
-# Prefer websocket/cryptofeed for realtime; fall back to ccxt for REST.
-try:  # pragma: no cover - optional dependency
-    import websocket  # type: ignore
-except Exception:  # pragma: no cover
-    websocket = None  # type: ignore
-
-try:  # pragma: no cover - optional dependency
-    from cryptofeed import FeedHandler  # type: ignore
-except Exception:  # pragma: no cover
-    FeedHandler = None  # type: ignore
-
 try:
     import ccxt  # type: ignore
-except ImportError as exc:  # pragma: no cover - required for REST
-    raise ImportError(
-        "ccxt is required for exchange connectivity. Install it via pip."
-    ) from exc
-import ccxt  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    import types
+
+    ccxt = types.SimpleNamespace()
 
 import pandas as pd
 import numpy as np
@@ -515,9 +493,6 @@ def _load_config_file() -> dict:
         print("Invalid configuration (pyth):\n", exc)
         raise SystemExit(1)
 
-    if "use_websocket_client" in data:
-        data["use_websocket"] = data["use_websocket_client"]
-
     return data
 
 
@@ -831,7 +806,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
         and not ctx.config.get("onchain_symbols")
         and not ctx.config.get("symbol")
     ):
-        ctx.config["symbol"] = "XBT/USDT"
+        ctx.config["symbol"] = "BTC/USDT"
     orig_min_volume = sf.get("min_volume_usd")
     orig_volume_pct = sf.get("volume_percentile")
 
@@ -859,7 +834,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
             sf["volume_percentile"] = orig_volume_pct
 
     # Always include major benchmark pairs
-    symbols.extend([("XBT/USDT", 10.0), ("SOL/USDC", 10.0)])
+    symbols.extend([("BTC/USDT", 10.0), ("SOL/USDC", 10.0)])
 
     ctx.timing["symbol_time"] = time.perf_counter() - t0
 
@@ -1271,13 +1246,12 @@ async def analyse_batch(ctx: BotContext) -> None:
             sym,
             len(df) if isinstance(df, pd.DataFrame) else 0,
         )
-        cfg = {**ctx.config, "hft_mode": ctx.config.get("hft_mode", False)}
         tasks.append(
             analyze_symbol(
                 sym,
                 df_map,
                 mode,
-                cfg,
+                ctx.config,
                 ctx.notifier,
                 mempool_monitor=ctx.mempool_monitor,
                 mempool_cfg=ctx.mempool_cfg,
@@ -2179,14 +2153,16 @@ async def _main_impl() -> TelegramNotifier:
     else:
         exchange, ws_client = get_exchange(config)
         secondary_exchange = None
-    ping_interval = int(config.get("ws_ping_interval", 5) or 5)
     if hasattr(exchange, "options"):
         opts = getattr(exchange, "options", {})
-        opts["ws"] = {"ping_interval": ping_interval, "ping_timeout": 45}
+        opts["ws"] = {"ping_interval": 10, "ping_timeout": 45}
         exchange.options = opts
 
-    if hasattr(exchange, "ping"):
-        task = register_task(asyncio.create_task(_ws_ping_loop(exchange, ping_interval)))
+    ping_interval = int(config.get("ws_ping_interval", 0) or 0)
+    if ping_interval > 0 and hasattr(exchange, "ping"):
+        task = register_task(
+            asyncio.create_task(_ws_ping_loop(exchange, ping_interval))
+        )
         WS_PING_TASKS.add(task)
 
     if not hasattr(exchange, "load_markets"):
