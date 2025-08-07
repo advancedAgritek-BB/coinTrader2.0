@@ -6,5 +6,4 @@ websocket-client
 keyring
 tenacity
 fakeredis
-ccxt
-cryptofeed
+ccxtpro

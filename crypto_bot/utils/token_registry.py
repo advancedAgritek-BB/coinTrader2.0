@@ -45,7 +45,7 @@ RAYDIUM_URL = "https://api.raydium.io/v2/main/pairs"
 
 # Poll interval for monitoring external token feeds
 # Reduced poll interval to surface new tokens faster
-POLL_INTERVAL = 5
+POLL_INTERVAL = 10
 
 
 async def fetch_from_jupiter() -> Dict[str, str]:
@@ -65,17 +65,8 @@ async def fetch_from_jupiter() -> Dict[str, str]:
     return result
 
 
-async def _check_cex_arbitrage(symbol: str, threshold: float = 0.005) -> None:
-    """Check Kraken and Coinbase for arbitrage on ``symbol`` and trade to BTC.
-
-    Parameters
-    ----------
-    symbol:
-        The token symbol to check.
-    threshold:
-        Minimum relative price difference required to trigger a trade. Defaults
-        to ``0.5%``.
-    """
+async def _check_cex_arbitrage(symbol: str) -> None:
+    """Check Kraken and Coinbase for arbitrage on ``symbol`` and trade to BTC."""
 
     pair = f"{symbol}/USD"
     try:
@@ -109,7 +100,7 @@ async def _check_cex_arbitrage(symbol: str, threshold: float = 0.005) -> None:
     if f1 <= 0 or f2 <= 0:
         return
     spread = abs(f1 - f2) / ((f1 + f2) / 2)
-    if spread <= threshold:
+    if spread <= 0.005:
         return
 
     exec_fn = getattr(cross_chain_arb_bot, "execute_arbitrage", None)
@@ -248,31 +239,25 @@ def _write_cache() -> None:
         logger.error("Failed to write %s: %s", CACHE_FILE, exc)
 
 
-# Additional mints discovered via manual searches.  These are merged into
-# :data:`TOKEN_MINTS` both at import time and whenever the registry is
-# refreshed.  Keeping the mapping in a single place avoids divergence between
-# module initialization and :func:`refresh_mints`.
-CUSTOM_MINTS: Dict[str, str] = {
-    "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
-    "BERA": "A7y2wgyytufsxjg2ub616zqnte3x62f7fcp8fujdmoon",
-    "EUROP": "pD6L7wWeei1LJqb7tmnpfEnvkcBvqMgkfqvg23Bpump",
-    "FARTCOIN": "Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw",
-    "RLUSD": "BkbjmJVa84eiGyp27FTofuQVFLqmKFev4ZPZ3U33pump",
-    # Correct mint for USDG
-    "USDG": "2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH",
-    "VIRTUAL": "2FupRnaRfnyPHg798WsCBMGAauEkrhMs4YN7nBmujPtM",
-    "XMR": "Fi9GeixxfhMEGfnAe75nJVrwPqfVefyS6fgmyiTxkS6q",  # Wrapped, verify
-    "MELANIA": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
-    "PENGU": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
-    "USDR": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  # USDT as proxy
-    "USTC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC proxy (adjust if needed)
-    "TRUMP": "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
-    "SOL": "So11111111111111111111111111111111111111112",
-}
-
-# Apply the custom mints immediately so that users importing this module get
-# the overrides without having to refresh.
-TOKEN_MINTS.update(CUSTOM_MINTS)
+# Additional mints discovered via manual searches
+TOKEN_MINTS.update(
+    {
+        "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
+        "BERA": "A7y2wgyytufsxjg2ub616zqnte3x62f7fcp8fujdmoon",
+        "EUROP": "pD6L7wWeei1LJqb7tmnpfEnvkcBvqMgkfqvg23Bpump",
+        "FARTCOIN": "Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw",
+        "RLUSD": "BkbjmJVa84eiGyp27FTofuQVFLqmKFev4ZPZ3U33pump",
+        "USDG": "2gc4f72GkEtggrkUDJRSbLcBpEUPPPFsnDGJJeNKpump",  # Assuming Unlimited Solana Dump
+        "VIRTUAL": "2FupRnaRfnyPHg798WsCBMGAauEkrhMs4YN7nBmujPtM",
+        "XMR": "Fi9GeixxfhMEGfnAe75nJVrwPqfVefyS6fgmyiTxkS6q",  # Wrapped, verify
+        "MELANIA": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
+        "PENGU": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
+        "USDR": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  # USDT as proxy
+        "USTC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC proxy (adjust if needed)
+        "TRUMP": "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
+        # Add more as needed; skip USDQ/USTC/XTZ as non-Solana
+    }
+)
 _write_cache()  # Save immediately
 
 
@@ -281,8 +266,21 @@ async def refresh_mints() -> None:
     loaded = await load_token_mints(force_refresh=True)
     if not loaded:
         raise RuntimeError("Failed to load token mints")
-    # Reapply custom mints so they override any values from the fetched list.
-    TOKEN_MINTS.update(CUSTOM_MINTS)
+    TOKEN_MINTS.update(
+        {
+            "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
+            "FARTCOIN": "Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw",
+            "MELANIA": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
+            "PENGU": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
+            "RLUSD": "BkbjmJVa84eiGyp27FTofuQVFLqmKFev4ZPZ3U33pump",
+            "VIRTUAL": "2FupRnaRfnyPHg798WsCBMGAauEkrhMs4YN7nBmujPtM",
+            "USDG": "2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH",
+            "USDR": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+            "USTC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "TRUMP": "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
+            "SOL": "So11111111111111111111111111111111111111112",
+        }
+    )
     _write_cache()
     try:
         from .symbol_utils import invalidate_symbol_cache
@@ -418,14 +416,10 @@ async def monitor_pump_raydium() -> None:
 
     enqueue_solana_tokens = None  # type: ignore
     _symbol_priority_queue = None  # type: ignore
-    register_task = None  # type: ignore
-    NEW_SOLANA_TOKENS = None  # type: ignore
     main_mod = sys.modules.get("crypto_bot.main")
     if main_mod is not None:  # pragma: no branch - best effort
         enqueue_solana_tokens = getattr(main_mod, "enqueue_solana_tokens", None)
         _symbol_priority_queue = getattr(main_mod, "symbol_priority_queue", None)
-        register_task = getattr(main_mod, "register_task", None)
-        NEW_SOLANA_TOKENS = getattr(main_mod, "NEW_SOLANA_TOKENS", None)
 
     if not TOKEN_MINTS and CACHE_FILE.exists():
         try:
@@ -485,8 +479,6 @@ async def monitor_pump_raydium() -> None:
                             if enqueue_solana_tokens:
                                 try:
                                     enqueue_solana_tokens([f"{key}/{mint}"])
-                                    if NEW_SOLANA_TOKENS is not None:
-                                        NEW_SOLANA_TOKENS.add(f"{key}/USDC")
                                 except Exception as exc:  # pragma: no cover - best effort
                                     logger.error("enqueue_solana_tokens failed: %s", exc)
                             _write_cache()
@@ -498,18 +490,7 @@ async def monitor_pump_raydium() -> None:
                                 pass
                             start = ts - timedelta(hours=1)
                             end = ts
-                            task = asyncio.create_task(_fetch_and_train(start, end))
-                            if register_task:
-                                register_task(task)
-                            cfg = getattr(main_mod, "config", {}) if main_mod else {}
-                            if cfg.get("arbitrage_enabled"):
-                                arb_task = asyncio.create_task(
-                                    _check_cex_arbitrage(
-                                        key, cfg.get("arbitrage_threshold", 0.005)
-                                    )
-                                )
-                                if register_task:
-                                    register_task(arb_task)
+                            asyncio.create_task(_fetch_and_train(start, end))
 
                 # Raydium pools
                 for pool in ray_data if isinstance(ray_data, list) else []:
@@ -542,8 +523,6 @@ async def monitor_pump_raydium() -> None:
                             if enqueue_solana_tokens:
                                 try:
                                     enqueue_solana_tokens([f"{key}/{mint}"])
-                                    if NEW_SOLANA_TOKENS is not None:
-                                        NEW_SOLANA_TOKENS.add(f"{key}/USDC")
                                 except Exception as exc:  # pragma: no cover - best effort
                                     logger.error("enqueue_solana_tokens failed: %s", exc)
                             _write_cache()
@@ -555,18 +534,7 @@ async def monitor_pump_raydium() -> None:
                                 pass
                             start = ts - timedelta(hours=1)
                             end = datetime.utcnow()
-                            task = asyncio.create_task(_fetch_and_train(start, end))
-                            if register_task:
-                                register_task(task)
-                            cfg = getattr(main_mod, "config", {}) if main_mod else {}
-                            if cfg.get("arbitrage_enabled"):
-                                arb_task = asyncio.create_task(
-                                    _check_cex_arbitrage(
-                                        key, cfg.get("arbitrage_threshold", 0.005)
-                                    )
-                                )
-                                if register_task:
-                                    register_task(arb_task)
+                            asyncio.create_task(_fetch_and_train(start, end))
 
                 await asyncio.sleep(POLL_INTERVAL)
             except asyncio.CancelledError:

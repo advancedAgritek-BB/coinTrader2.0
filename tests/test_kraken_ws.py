@@ -7,13 +7,6 @@ import asyncio
 sys.modules.setdefault("scipy", types.ModuleType("scipy"))
 sys.modules.setdefault("scipy.stats", types.SimpleNamespace(pearsonr=lambda *a, **k: 0))
 
-sys.modules.setdefault("websocket", types.SimpleNamespace(WebSocketApp=object))
-_ccxt_mod = types.ModuleType("ccxt")
-_ccxt_pro = types.ModuleType("ccxt.pro")
-_ccxt_mod.pro = _ccxt_pro
-sys.modules.setdefault("ccxt", _ccxt_mod)
-sys.modules.setdefault("ccxt.pro", _ccxt_pro)
-
 from crypto_bot.execution.kraken_ws import KrakenWSClient, PUBLIC_URL, PRIVATE_URL
 import pytest
 
@@ -569,13 +562,48 @@ def test_subscribe_and_unsubscribe_book(monkeypatch):
     assert client._public_subs == []
 
 
-def test_parse_ohlc_message_extracts_volume(kraken_ohlc_update_msg):
-    result = kraken_ws.parse_ohlc_message(kraken_ohlc_update_msg)
+def test_parse_ohlc_message_extracts_volume():
+    candle = [
+        "1712106000",
+        "30000.0",
+        "30100.0",
+        "29900.0",
+        "30050.0",
+        "30025.0",
+        "12.34",
+        42,
+    ]
+    msg = json.dumps([
+        1,
+        {"channel": "ohlc-1", "symbol": "XBT/USD"},
+        candle,
+        {"channel": "ohlc", "symbol": "XBT/USD"},
+    ])
+
+    result = kraken_ws.parse_ohlc_message(msg)
     assert result == [1712106000000, 30000.0, 30100.0, 29900.0, 30050.0, 12.34]
 
 
-def test_parse_ohlc_message_object_format(kraken_ohlc_object_msg):
-    result = kraken_ws.parse_ohlc_message(kraken_ohlc_object_msg)
+def test_parse_ohlc_message_object_format():
+    msg = json.dumps(
+        {
+            "channel": "ohlc",
+            "type": "update",
+            "data": [
+                {
+                    "interval": 1,
+                    "interval_begin": "2024-04-02T00:00:00Z",
+                    "open": "100.0",
+                    "high": "110.0",
+                    "low": "90.0",
+                    "close": "105.0",
+                    "volume": "5.5",
+                }
+            ],
+        }
+    )
+
+    result = kraken_ws.parse_ohlc_message(msg)
     assert result == [1712016000000, 100.0, 110.0, 90.0, 105.0, 5.5]
 
 

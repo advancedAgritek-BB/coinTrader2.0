@@ -758,9 +758,6 @@ def route(
     if df is None:
         return _post_fastpath()
 
-    if not getattr(cfg, "raw", {}).get("hft_mode", False):
-        return _post_fastpath()
-
     # === FAST-PATH FOR STRONG SIGNALS ===
     fp = (
         cfg.raw.get('strategy_router', {}).get('fast_path', {})
@@ -786,10 +783,8 @@ def route(
         vol_mean = df['volume'].rolling(window).mean().iloc[-1]
         if z < bw_z_thr and df['volume'].iloc[-1] > vol_mean * vol_mult:
             logger.info(
-                'FAST-PATH: breakout via bandwidth z-score and volume spike',
+                'FAST-PATH: breakout_bot via bandwidth z-score and volume spike',
             )
-            if mode == "onchain":
-                return _wrap(sniper_solana.generate_signal)
             return _wrap(breakout_bot.generate_signal)
         z_series = (
             wband_series - wband_series.rolling(window).mean()
@@ -802,10 +797,8 @@ def route(
             and df['volume'].iloc[-1] > vol_ma.iloc[-1] * vol_mult
         ):
             logger.info(
-                'FAST-PATH: breakout via BB squeeze z-score + volume spike',
+                'FAST-PATH: breakout_bot via BB squeeze z-score + volume spike',
             )
-            if mode == "onchain":
-                return _wrap(sniper_solana.generate_signal)
             return _wrap(breakout_bot.generate_signal)
 
         # 2) ultra-strong trend by ADX

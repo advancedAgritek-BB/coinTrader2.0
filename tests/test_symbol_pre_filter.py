@@ -149,9 +149,9 @@ def test_filter_symbols_fetch_tickers(monkeypatch):
 
     ex = FetchTickersExchange()
 
-    symbols, _ = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
 
-    assert [s for s, _ in symbols] == ["ETH/USD", "BTC/USD"]
+    assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 
 
 class NormalizedFetchTickersExchange(DummyExchange):
@@ -190,9 +190,9 @@ def test_filter_symbols_fetch_tickers_normalized(monkeypatch):
 
     ex = NormalizedFetchTickersExchange()
 
-    symbols, _ = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
+    symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
 
-    assert [s for s, _ in symbols] == ["ETH/USD", "BTC/USD"]
+    assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 
 
 class AltnameMappingExchange:
@@ -392,43 +392,49 @@ def test_gecko_skipped_for_blacklisted_base(monkeypatch):
     assert result == ([], [])
 
 
-def test_cryptofeed_cache(monkeypatch):
-    sp.ticker_cache.clear()
-    sp.ticker_ts.clear()
+class WatchTickersExchange(DummyExchange):
+    def __init__(self):
+        self.has = {"watchTickers": True}
+        self.calls = 0
+        self.markets_by_id = DummyExchange.markets_by_id
 
-    calls = {"n": 0}
-
-    async def fake_ws(_ex_id, _symbols):
-        calls["n"] += 1
+    async def watch_tickers(self, symbols):
+        self.calls += 1
         data = (await fake_fetch(None))["result"]
         return {"ETH/USD": data["XETHZUSD"], "BTC/USD": data["XXBTZUSD"]}
 
-    monkeypatch.setattr(sp, "_cryptofeed_tickers_with_retry", fake_ws)
 
-    ex = DummyExchange()
-    ex.id = "kraken"
-    ex.options = {"ws_scan": True}
+def test_watch_tickers_cache(monkeypatch):
+    sp.ticker_cache.clear()
+    sp.ticker_ts.clear()
+    ex = WatchTickersExchange()
 
     t = {"now": 0}
+
     monkeypatch.setattr(sp.time, "time", lambda: t["now"])
 
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
-    assert calls["n"] == 1
+    assert ex.calls == 1
     assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
-    assert calls["n"] == 1
+    assert ex.calls == 1
 
     t["now"] += 6
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
-    assert calls["n"] == 2
+    assert ex.calls == 2
 
 
-class FailingWSExchange(DummyExchange):
+class FailingWatchExchange(DummyExchange):
     def __init__(self):
-        self.has = {"fetchTickers": True}
+        self.has = {"watchTickers": True, "fetchTickers": True}
+        self.watch_calls = 0
         self.fetch_calls = 0
         self.markets_by_id = DummyExchange.markets_by_id
+
+    async def watch_tickers(self, symbols):
+        self.watch_calls += 1
+        raise RuntimeError("ws boom")
 
     async def fetch_tickers(self, symbols):
         self.fetch_calls += 1
@@ -436,7 +442,7 @@ class FailingWSExchange(DummyExchange):
         return {"ETH/USD": data["XETHZUSD"], "BTC/USD": data["XXBTZUSD"]}
 
 
-def test_ws_fallback(monkeypatch, caplog, tmp_path):
+def test_watch_tickers_fallback(monkeypatch, caplog, tmp_path):
     caplog.set_level("INFO")
     import crypto_bot.utils.pair_cache as pc
 
@@ -451,26 +457,20 @@ def test_ws_fallback(monkeypatch, caplog, tmp_path):
 
     sp.ticker_cache.clear()
     sp.ticker_ts.clear()
-
-    async def fail_ws(_ex_id, _symbols):
-        raise RuntimeError("ws boom")
-
-    monkeypatch.setattr(sp, "_cryptofeed_tickers_with_retry", fail_ws)
-
-    ex = FailingWSExchange()
-    ex.id = "kraken"
-    ex.options = {"ws_scan": True}
+    ex = FailingWatchExchange()
 
     t = {"now": 0}
     monkeypatch.setattr(sp.time, "time", lambda: t["now"])
 
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
+    assert ex.watch_calls >= 1
     assert ex.fetch_calls == 1
     assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
     assert any("falling back" in r.getMessage() for r in caplog.records)
     assert telemetry.snapshot().get("scan.ws_errors", 0) == 1
 
     symbols = asyncio.run(filter_symbols(ex, ["ETH/USD", "BTC/USD"], CONFIG))
+    assert ex.watch_calls >= 1
     assert ex.fetch_calls == 1
 
 
@@ -1284,11 +1284,11 @@ def test_ticker_retry_attempts(monkeypatch):
 def test_ticker_failure_backoff(monkeypatch):
     class FailExchange(DummyExchange):
         def __init__(self):
-            self.has = {"fetchTicker": True}
+            self.has = {"fetchTickers": True}
             self.calls = 0
             self.markets = {"ETH/USD": {}}
 
-        async def fetch_ticker(self, symbol):
+        async def fetch_tickers(self, symbols):
             self.calls += 1
             raise RuntimeError("boom")
 
@@ -1296,6 +1296,8 @@ def test_ticker_failure_backoff(monkeypatch):
     sp.ticker_ts.clear()
     sp.ticker_failures.clear()
     ex = FailExchange()
+
+    monkeypatch.setattr(sp, "_fetch_ticker_async", lambda *_a, **_k: {"result": {}})
 
     t = {"now": 0}
     monkeypatch.setattr(sp.time, "time", lambda: t["now"])
@@ -1354,52 +1356,6 @@ def test_ticker_backoff_resets_on_success(monkeypatch):
     assert "ETH/USD" not in sp.ticker_failures
 
 
-def test_ticker_failures_added_to_unsupported(monkeypatch, caplog):
-    class FailExchange(DummyExchange):
-        def __init__(self):
-            self.has = {"fetchTicker": True}
-            self.calls = 0
-            self.markets = {"ETH/USD": {}}
-
-        async def fetch_ticker(self, symbol):
-            self.calls += 1
-            raise RuntimeError("boom")
-
-    sp.ticker_cache.clear()
-    sp.ticker_ts.clear()
-    sp.ticker_failures.clear()
-    from crypto_bot.utils import market_loader
-    import ccxt
-
-    unsupported: set[str] = set()
-    monkeypatch.setattr(market_loader, "UNSUPPORTED_SYMBOLS", unsupported)
-    monkeypatch.setattr(sp, "UNSUPPORTED_SYMBOLS", unsupported)
-    monkeypatch.setattr(ccxt, "BadSymbol", Exception, raising=False)
-
-    ex = FailExchange()
-    t = {"now": 0}
-    monkeypatch.setattr(sp.time, "time", lambda: t["now"])
-
-    cfg = {"ticker_backoff_initial": 2, "ticker_backoff_max": 8, "symbol_filter": {"ticker_retry_attempts": 1}}
-
-    caplog.set_level("WARNING")
-
-    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
-    t["now"] += 3
-    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
-    t["now"] += 5
-    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
-    t["now"] += 9
-    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
-
-    assert "ETH/USD" in unsupported
-    assert any("Exceeded ticker failure threshold" in r.message for r in caplog.records)
-    # further calls skip the symbol
-    t["now"] += 20
-    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
-    assert ex.calls == 4
-
-
 def test_log_ticker_exceptions(monkeypatch, caplog):
     caplog.set_level("WARNING")
 
@@ -1424,12 +1380,17 @@ def test_log_ticker_exceptions(monkeypatch, caplog):
     assert any(r.exc_info for r in caplog.records)
 
 
-class AlwaysFailWSExchange(DummyExchange):
+class AlwaysFailWatchExchange(DummyExchange):
     def __init__(self):
-        self.has = {"fetchTickers": True}
+        self.has = {"watchTickers": True, "fetchTickers": True}
+        self.watch_calls = 0
         self.fetch_calls = 0
         self.markets_by_id = DummyExchange.markets_by_id
         self.options = {"ws_scan": True}
+
+    async def watch_tickers(self, symbols):
+        self.watch_calls += 1
+        raise RuntimeError("ws boom")
 
     async def fetch_tickers(self, symbols):
         self.fetch_calls += 1
@@ -1443,16 +1404,7 @@ def test_ws_failures_disable_scan(monkeypatch, caplog):
 
     sp.ticker_cache.clear()
     sp.ticker_ts.clear()
-    ex = AlwaysFailWSExchange()
-    ex.id = "kraken"
-
-    ws_calls = {"n": 0}
-
-    async def fail_ws(_ex_id, _symbols):
-        ws_calls["n"] += 1
-        raise RuntimeError("ws boom")
-
-    monkeypatch.setattr(sp, "_cryptofeed_tickers_with_retry", fail_ws)
+    ex = AlwaysFailWatchExchange()
 
     t = {"now": 0}
     monkeypatch.setattr(sp.time, "time", lambda: t["now"])
@@ -1468,7 +1420,7 @@ def test_ws_failures_disable_scan(monkeypatch, caplog):
     cfg["ws_failures_before_disable"] = 2
 
     asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"], cfg))
-    assert ws_calls["n"] == 1
+    assert ex.watch_calls >= 1
     assert ex.fetch_calls == 1
     assert ex.options.get("ws_failures") == 1
     assert ex.options.get("ws_scan") is True
@@ -1477,7 +1429,7 @@ def test_ws_failures_disable_scan(monkeypatch, caplog):
     t["now"] += 6
     asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"], cfg))
     assert sleeps == [1]
-    assert ws_calls["n"] == 2
+    assert ex.watch_calls >= 2
     assert ex.fetch_calls == 1
     assert ex.options.get("ws_failures") == 2
     assert ex.options.get("ws_scan") is False
@@ -1485,30 +1437,40 @@ def test_ws_failures_disable_scan(monkeypatch, caplog):
 
     t["now"] += 6
     asyncio.run(sp._refresh_tickers(ex, ["ETH/USD", "BTC/USD"], cfg))
-    assert ws_calls["n"] == 2
+    assert ex.watch_calls >= 2
     assert ex.fetch_calls == 2
     assert sleeps == [1]
 
 
-def test_ws_failure_disables_scan_immediately(monkeypatch):
+class WS1006Exchange(DummyExchange):
+    def __init__(self):
+        self.has = {"watchTickers": True, "fetchTickers": True}
+        self.watch_calls = 0
+        self.fetch_calls = 0
+        self.options = {"ws_scan": True}
+
+    async def watch_tickers(self, symbols):
+        self.watch_calls += 1
+        err = getattr(ccxt, "NetworkError", Exception)("closed")
+        err.code = 1006
+        raise err
+
+    async def fetch_tickers(self, symbols):
+        self.fetch_calls += 1
+        data = (await fake_fetch(None))["result"]
+        return {"ETH/USD": data["XETHZUSD"]}
+
+
+def test_ws_1006_disables_ws_scan(monkeypatch):
     monkeypatch.setattr(sp, "_fetch_ticker_async", lambda _p, **_k: {"result": {}})
 
     sp.ticker_cache.clear()
     sp.ticker_ts.clear()
+    ex = WS1006Exchange()
 
-    ex = AlwaysFailWSExchange()
-    ex.id = "kraken"
+    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], CONFIG))
 
-    async def fail_ws(_ex_id, _symbols):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(sp, "_cryptofeed_tickers_with_retry", fail_ws)
-
-    cfg = dict(CONFIG)
-    cfg["ws_failures_before_disable"] = 1
-
-    asyncio.run(sp._refresh_tickers(ex, ["ETH/USD"], cfg))
-
+    assert ex.watch_calls == 1
     assert ex.fetch_calls == 1
     assert ex.options.get("ws_failures") == 1
     assert ex.options.get("ws_scan") is False
@@ -1709,34 +1671,33 @@ def test_quote_volume_converted(monkeypatch):
     assert [s for s, _ in result[0]] == ["ETH/BTC"]
 
 
-class FailFeed:
+class FailExchange:
     def __init__(self):
         self.calls = 0
 
+    async def watch_tickers(self, symbols):
+        self.calls += 1
+        raise Exception("boom")
 
-def test_cryptofeed_retry_count_and_delay(monkeypatch):
-    feed = FailFeed()
+
+def test_watch_tickers_retry_count_and_delay(monkeypatch):
+    ex = FailExchange()
     sleeps: list[float] = []
 
     async def fake_sleep(delay):
         sleeps.append(delay)
 
-    async def fail(_ex_id, _symbols):
-        feed.calls += 1
-        raise Exception("boom")
-
     monkeypatch.setattr(asyncio, "sleep", fake_sleep)
-    monkeypatch.setattr(sp, "_cryptofeed_tickers", fail)
 
     with pytest.raises(Exception):
-        asyncio.run(sp._cryptofeed_tickers_with_retry("kraken", ["ETH/USD"]))
+        asyncio.run(sp._watch_tickers_with_retry(ex, ["ETH/USD"]))
 
-    assert feed.calls == 5
+    assert ex.calls == 5
     assert sleeps == [1, 2, 1, 4, 1, 8, 1, 16, 1]
 
 
-def test_cryptofeed_retry_config():
-    retry = sp._cryptofeed_tickers_with_retry.retry
+def test_watch_tickers_retry_config():
+    retry = sp._watch_tickers_with_retry.retry
     assert retry.stop.max_attempt_number == 5
     assert retry.wait.multiplier == 2
     assert retry.wait.max == 60

@@ -6,18 +6,17 @@ import asyncio
 from collections import deque
 from typing import Optional, Callable, Union, List, Any, Dict, Deque
 from datetime import datetime, timedelta, timezone
-
 import keyring
-import pandas as pd
+
+try:
+    import ccxt  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    import types
+
+    ccxt = types.SimpleNamespace()
 from websocket import WebSocketApp
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
-
-try:  # optional dependency
-    from coinTrader_Trainer.data_loader import fetch_data_range_async  # type: ignore
-    from coinTrader_Trainer import regime_lgbm  # type: ignore
-except Exception:  # pragma: no cover - optional
-    fetch_data_range_async = None  # type: ignore
-    regime_lgbm = None  # type: ignore
+from pathlib import Path
 
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
@@ -442,6 +441,14 @@ class KrakenWSClient:
         self.api_token = api_token or os.getenv("KRAKEN_API_TOKEN")
 
         self.exchange = None
+        if self.api_key and self.api_secret:
+            self.exchange = ccxt.kraken(
+                {
+                    "apiKey": self.api_key,
+                    "secret": self.api_secret,
+                    "enableRateLimit": True,
+                }
+            )
 
         self.token: Optional[str] = self.ws_token
         self.token_created: Optional[datetime] = None
@@ -459,7 +466,7 @@ class KrakenWSClient:
         self._message_cond = threading.Condition()
 
     def _handle_message(self, ws: WebSocketApp, message: str) -> None:
-        """Handle incoming WebSocket messages."""
+        """Default ``on_message`` handler that records heartbeats."""
         logger.info("WS message: %s", message)
         try:
             data = json.loads(message)
@@ -490,88 +497,6 @@ class KrakenWSClient:
             self._messages.append(message)
             self._message_cond.notify_all()
 
-        # Parse OHLC messages
-        candle = parse_ohlc_message(message)
-        if candle:
-            df = pd.DataFrame(
-                [candle],
-                columns=["timestamp", "open", "high", "low", "close", "volume"],
-            )
-            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-
-            if fetch_data_range_async:
-                try:
-                    ts_iso = df["timestamp"].iloc[-1].isoformat()
-                    asyncio.run(
-                        fetch_data_range_async("ohlc", ts_iso, ts_iso)  # type: ignore
-                    )
-                except RuntimeError:
-                    try:
-                        loop = asyncio.get_running_loop()
-                        loop.create_task(
-                            fetch_data_range_async("ohlc", ts_iso, ts_iso)  # type: ignore
-                        )
-                    except Exception as exc:  # pragma: no cover - best effort
-                        logger.error("fetch_data_range_async failed: %s", exc)
-                except Exception as exc:  # pragma: no cover - best effort
-                    logger.error("fetch_data_range_async failed: %s", exc)
-
-            regime = "unknown"
-            if regime_lgbm and hasattr(regime_lgbm, "predict"):
-                try:
-                    regime = regime_lgbm.predict(df)[0]  # type: ignore
-                except Exception as exc:  # pragma: no cover - best effort
-                    logger.error("regime_lgbm prediction failed: %s", exc)
-
-            if regime == "volatile":
-                try:
-                    from crypto_bot.solana import sniper_solana
-
-                    sniper_solana.generate_signal(df)
-                except Exception as exc:  # pragma: no cover - best effort
-                    logger.error("sniper_solana signal failed: %s", exc)
-            return
-
-        trades = parse_trade_message(message)
-        if trades:
-            df = pd.DataFrame(trades)
-            if fetch_data_range_async:
-                try:
-                    start = pd.to_datetime(df["timestamp_ms"].min(), unit="ms")
-                    end = pd.to_datetime(df["timestamp_ms"].max(), unit="ms")
-                    asyncio.run(
-                        fetch_data_range_async(
-                            "trades", start.isoformat(), end.isoformat()
-                        )
-                    )
-                except RuntimeError:
-                    try:
-                        loop = asyncio.get_running_loop()
-                        loop.create_task(
-                            fetch_data_range_async(
-                                "trades", start.isoformat(), end.isoformat()
-                            )
-                        )
-                    except Exception as exc:  # pragma: no cover - best effort
-                        logger.error("fetch_data_range_async failed: %s", exc)
-                except Exception as exc:  # pragma: no cover - best effort
-                    logger.error("fetch_data_range_async failed: %s", exc)
-
-            regime = "unknown"
-            if regime_lgbm and hasattr(regime_lgbm, "predict"):
-                try:
-                    regime = regime_lgbm.predict(df)[0]  # type: ignore
-                except Exception as exc:  # pragma: no cover - best effort
-                    logger.error("regime_lgbm prediction failed: %s", exc)
-
-            if regime == "volatile":
-                try:
-                    from crypto_bot.solana import sniper_solana
-
-                    sniper_solana.generate_signal(df)
-                except Exception as exc:  # pragma: no cover - best effort
-                    logger.error("sniper_solana signal failed: %s", exc)
-
     def _regenerate_private_subs(self) -> None:
         """Update stored private subscription messages with the current token."""
         updated = []
@@ -596,9 +521,8 @@ class KrakenWSClient:
         params = {}
         if self.api_token:
             params["otp"] = self.api_token
+
         resp = self.exchange.privatePostGetWebSocketsToken(params)
-        if asyncio.iscoroutine(resp):
-            resp = asyncio.run(resp)
         self.token = resp["token"]
         self.token_created = datetime.now(timezone.utc)
         return self.token
@@ -607,7 +531,6 @@ class KrakenWSClient:
         self,
         url: str,
         conn_type: Optional[str] = None,
-        on_open: Optional[Callable] = None,
         on_message: Optional[Callable] = None,
         on_error: Optional[Callable] = None,
         on_close: Optional[Callable] = None,
@@ -627,10 +550,6 @@ class KrakenWSClient:
         def default_on_close(ws, close_status_code, close_msg):
             logger.info("WS closed: %s %s", close_status_code, close_msg)
 
-        def default_on_open(ws):
-            logger.info("WS opened: %s", conn_type)
-
-        on_open = on_open or default_on_open
         on_message = on_message or default_on_message
         on_error = on_error or default_on_error
 
@@ -644,7 +563,6 @@ class KrakenWSClient:
 
         ws = WebSocketApp(
             url,
-            on_open=on_open,
             on_message=on_message,
             on_error=on_error,
             on_close=_on_close,
@@ -834,30 +752,21 @@ class KrakenWSClient:
 
     def subscribe_ohlc(
         self,
-        symbols: List[str] | str,
+        symbol: Union[str, List[str]],
         interval: int,
         *,
         snapshot: bool = True,
         req_id: Optional[int] = None,
     ) -> None:
-        """Subscribe to OHLC updates for ``symbols``.
-
-        Parameters
-        ----------
-        symbols:
-            List of trading pairs to subscribe to. A single string is accepted
-            for backward compatibility.
-        interval:
-            Candle interval in minutes.
-        """
+        """Subscribe to OHLC updates for one or more symbols."""
 
         self.connect_public()
-        if isinstance(symbols, str):
-            symbols = [symbols]
+        if isinstance(symbol, str):
+            symbol = [symbol]
 
         params = {
             "channel": "ohlc",
-            "symbol": symbols,
+            "symbol": symbol,
             "interval": interval,
             "snapshot": snapshot,
         }

@@ -5,7 +5,7 @@ adaptive_scan:
 adx_threshold: 15
 allow_short: true
 arbitrage_enabled: true
-arbitrage_threshold: 0.002
+arbitrage_threshold: 0.005
 atr_normalization: true
 auto_convert_quote: USDC
 balance_poll_mod: 1
@@ -112,7 +112,7 @@ gas_threshold_gwei: 50
 gecko_limit: 10
 grid_bot:
   arbitrage_pairs:
-  - XBT/USDT
+  - BTC/USDT
   - SOL/USDC
   arbitrage_threshold: 0.001
   atr_normalization: true
@@ -139,7 +139,8 @@ liquidity_depth: 5
 max_liquidity_usage: 0.8
 listing_date_concurrency: 5
 log_to_google: true
-loop_interval_seconds: 3
+loop_interval_minutes: 0.05
+loop_interval_seconds: 0.05
 hft_mode: true
 max_age_days: 90
 max_change_pct: 20
@@ -147,7 +148,7 @@ max_concurrent_ohlcv: 50
 max_concurrent_tickers: 20
 max_latency_ms: 500
 max_ohlcv_failures: 2
-max_open_trades: 10
+max_open_trades: 5
 max_parallel: 50
 max_slippage_pct: 0.2
 max_spread_pct: 10
@@ -368,6 +369,21 @@ sniper_bot:
   price_fallback: true
   volume_multiple: 1.2
   volume_window: 3
+momentum_bot:
+  donchian_period: 20
+  vol_multiplier: 1.0
+  atr_period: 14
+  setup_window: 10
+  trigger_window: 3
+  fast_length: 20
+  slow_length: 50
+  adx_threshold: 25
+  risk:
+    stop_loss_pct: 0.01
+    take_profit_pct: 0.03
+    trailing_stop_factor: 1.5  # ATR multiple for trailing stop
+    risk_pct: 0.01
+    max_drawdown: 0.4
 flash_crash_bot:
   drop_thr: -0.10   # 10% 1m drop
   vol_thr: 5.0      # volume spike multiplier
@@ -398,6 +414,11 @@ solana_scanner:
   max_tokens_per_scan: 50
   min_volume_usd: 100000
 solana_slippage_bps: 10
+stat_arb_bot:
+  pairs:
+  - SOL/USDC,ETH/USDC
+  window: 50
+  z_threshold: 2.0
 strategy_allocation:
   grid: 0.2
   sniper_solana: 0.6
@@ -412,7 +433,7 @@ strategy_router:
     breakout_max_bandwidth: 0.03
     breakout_squeeze_window: 10
     breakout_volume_multiplier: 3
-    trend_adx_threshold: 25
+    trend_adx_threshold: 20
     breakdown_window: 20
     breakdown_volume_multiplier: 3
   mean_reverting_timeframe: 1h
@@ -457,7 +478,7 @@ strategy_router:
   sideways_timeframe: 1h
   trending_timeframe: 1h
   volatile_timeframe: 1m
-symbol: XBT/USDT
+symbol: BTC/USDT
 symbol_batch_size: 50
 symbol_filter:
   change_pct_percentile: 10
@@ -524,7 +545,7 @@ twap_enabled: true
 twap_interval_seconds: 5
 twap_slices: 6
 use_ml_regime_classifier: true
-use_websocket_client: true
+use_websocket: true
 volatility_filter:
   max_funding_rate: 0.1
   min_atr_pct: 0
@@ -535,4 +556,4 @@ voting_strategies:
 - sniper_bot
 wallet_address: your_wallet
 ws_failures_before_disable: 1
-ws_ping_interval: 5  # seconds between WebSocket pings
+ws_ping_interval: 5
