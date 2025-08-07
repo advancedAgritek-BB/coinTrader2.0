@@ -1,6 +1,7 @@
 import importlib.util
 import sys
 import types
+import json
 from pathlib import Path
 import pytest
 
@@ -205,10 +206,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 # Basic ccxt stub so utils can import without the real dependency
 import types
 _ccxt_mod = types.ModuleType("ccxt")
-_ccxt_pro_mod = types.ModuleType("ccxt.pro")
-_ccxt_mod.pro = _ccxt_pro_mod
 sys.modules.setdefault("ccxt", _ccxt_mod)
-sys.modules.setdefault("ccxt.pro", _ccxt_pro_mod)
 sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
 sys.modules.setdefault("base58", types.ModuleType("base58"))
 class _FakeProm:
@@ -557,6 +555,45 @@ except Exception:  # pragma: no cover - requests not installed
                 pass
 
     sys.modules.setdefault("requests", _FakeRequests())
+
+@pytest.fixture
+def kraken_ohlc_update_msg():
+    """Simulated Kraken OHLC update message."""
+    candle = [
+        "1712106000",
+        "30000.0",
+        "30100.0",
+        "29900.0",
+        "30050.0",
+        "30025.0",
+        "12.34",
+        42,
+    ]
+    return json.dumps([
+        1,
+        {"channel": "ohlc-1", "symbol": "XBT/USD"},
+        candle,
+        {"channel": "ohlc", "symbol": "XBT/USD"},
+    ])
+
+
+@pytest.fixture
+def kraken_ohlc_object_msg():
+    """Simulated Kraken OHLC message using object-based format."""
+    return json.dumps({
+        "channel": "ohlc",
+        "type": "update",
+        "data": [{
+            "interval": 1,
+            "interval_begin": "2024-04-02T00:00:00Z",
+            "open": "100.0",
+            "high": "110.0",
+            "low": "90.0",
+            "close": "105.0",
+            "volume": "5.5",
+        }]
+    })
+
 
 
 @pytest.fixture(autouse=True)

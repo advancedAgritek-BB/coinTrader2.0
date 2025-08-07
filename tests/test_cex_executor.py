@@ -1,6 +1,19 @@
 import asyncio
 import os
 import types
+import sys
+
+sys.modules.setdefault("websocket", types.SimpleNamespace(WebSocketApp=object))
+_ccxt_mod = types.SimpleNamespace(
+    NetworkError=Exception,
+    ExchangeError=Exception,
+    RateLimitExceeded=Exception,
+)
+_ccxt_pro = types.ModuleType("ccxt.pro")
+_ccxt_pro.kraken = lambda params=None: object()
+_ccxt_mod.pro = _ccxt_pro
+sys.modules.setdefault("ccxt", _ccxt_mod)
+sys.modules.setdefault("ccxt.pro", _ccxt_pro)
 
 import ccxt
 import pytest
@@ -9,6 +22,9 @@ from crypto_bot.execution import cex_executor, executor as simple_executor
 from crypto_bot.execution.cex_executor import place_stop_order
 from crypto_bot.utils import trade_logger
 from crypto_bot.utils.telegram import TelegramNotifier
+
+# Ensure cex_executor sees the stubbed ccxt.pro
+cex_executor.ccxtpro = _ccxt_pro
 
 
 class DummyStopExchange:
@@ -244,10 +260,13 @@ def test_get_exchange_websocket(monkeypatch):
 
     monkeypatch.setenv("API_KEY", "key")
     monkeypatch.setenv("API_SECRET", "sec")
-    monkeypatch.setenv("KRAKEN_API_TOKEN", "apitoken")
+    monkeypatch.delenv("KRAKEN_API_TOKEN", raising=False)
+    cex_executor.ccxtpro = None
 
     monkeypatch.setattr(
-        "crypto_bot.utils.kraken.get_ws_token", lambda *a, **k: "token"
+        cex_executor,
+        "get_ws_token",
+        lambda *a, **k: None,
     )
 
     def fake_env_or_prompt(name, prompt):
@@ -310,9 +329,14 @@ def test_get_exchange_websocket_missing_creds(monkeypatch):
         def __init__(self, params):
             self.options = {}
 
-    monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: DummyCCXT2(params), raising=False)
     monkeypatch.setattr(
-        "crypto_bot.utils.kraken.get_ws_token", lambda *a, **k: "token"
+        cex_executor.ccxt, "kraken", lambda params: DummyCCXT2(params), raising=False
+    )
+    cex_executor.ccxtpro = None
+    monkeypatch.setattr(
+        cex_executor,
+        "get_ws_token",
+        lambda *a, **k: None,
     )
     monkeypatch.setattr(cex_executor, "env_or_prompt", lambda *a, **k: None)
     if getattr(cex_executor, "ccxtpro", None):
