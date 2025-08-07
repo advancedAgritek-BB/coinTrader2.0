@@ -1,5 +1,7 @@
 """Main entry point for the trading bot.
 
+Prefers :mod:`websocket-client`/`cryptofeed` for realtime data and falls back
+to standard ``ccxt`` for REST access.
 This module relies on the standard :mod:`ccxt` library for exchange
 connectivity. WebSocket market data is handled separately by dedicated
 clients such as :class:`crypto_bot.execution.kraken_ws.KrakenWSClient` or
@@ -19,6 +21,24 @@ import inspect
 import re
 
 import aiohttp
+
+# Prefer websocket/cryptofeed for realtime; fall back to ccxt for REST.
+try:  # pragma: no cover - optional dependency
+    import websocket  # type: ignore
+except Exception:  # pragma: no cover
+    websocket = None  # type: ignore
+
+try:  # pragma: no cover - optional dependency
+    from cryptofeed import FeedHandler  # type: ignore
+except Exception:  # pragma: no cover
+    FeedHandler = None  # type: ignore
+
+try:
+    import ccxt  # type: ignore
+except ImportError as exc:  # pragma: no cover - required for REST
+    raise ImportError(
+        "ccxt is required for exchange connectivity. Install it via pip."
+    ) from exc
 import ccxt  # type: ignore
 
 import pandas as pd
@@ -494,6 +514,9 @@ def _load_config_file() -> dict:
     except ValidationError as exc:
         print("Invalid configuration (pyth):\n", exc)
         raise SystemExit(1)
+
+    if "use_websocket_client" in data:
+        data["use_websocket"] = data["use_websocket_client"]
 
     return data
 

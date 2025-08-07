@@ -14,6 +14,9 @@ import asyncio
 from typing import Any, Dict, Optional, Tuple, List
 
 try:  # pragma: no cover - optional dependency
+    from cryptofeed import FeedHandler  # type: ignore
+except Exception:  # pragma: no cover
+    FeedHandler = None  # type: ignore
     from cryptofeed.feedhandler import FeedHandler  # type: ignore
     from cryptofeed.exchanges import Coinbase as CoinbaseFeed  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
@@ -38,6 +41,12 @@ logger = setup_logger(__name__, LOG_DIR / "execution.log")
 Notifier = TelegramNotifier
 
 
+def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[object]]:
+    """Instantiate and return a ccxt exchange and optional websocket client.
+
+    When ``use_websocket_client`` is enabled a dedicated WebSocket helper is
+    created. For Kraken this is :class:`KrakenWSClient`; for other exchanges a
+    :class:`cryptofeed.FeedHandler` instance is returned if available.
 def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[Any]]:
     """Instantiate and return a ccxt exchange and optional websocket client.
 
@@ -50,14 +59,17 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[Any]]:
     """
 
     exchange_name = config.get("exchange", "coinbase")
-    use_ws = config.get("use_websocket", False)
+    use_ws = config.get("use_websocket_client", config.get("use_websocket", False))
 
+    ws_client: Optional[object] = None
     ws_client: Optional[Any] = None
     api_key = env_or_prompt("API_KEY", "Enter API key: ") or None
     api_secret = env_or_prompt("API_SECRET", "Enter API secret: ") or None
     api_token = env_or_prompt("KRAKEN_API_TOKEN", "Enter Kraken API token: ") or None
 
     if exchange_name == "coinbase":
+        if use_ws and FeedHandler is not None:
+            ws_client = FeedHandler()
         exchange = ccxt.coinbase(
             {
                 "apiKey": api_key,
@@ -93,12 +105,14 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[Any]]:
     return exchange, ws_client
 
 
+def get_exchanges(config) -> Dict[str, Tuple[ccxt.Exchange, Optional[object]]]:
 def get_exchanges(config) -> Dict[str, Tuple[ccxt.Exchange, Optional[Any]]]:
     """Return exchange instances for all configured CEXes."""
     names = config.get("exchanges")
     if not names:
         primary = config.get("primary_exchange") or config.get("exchange")
         names = [name for name in [primary, config.get("secondary_exchange")] if name]
+    result: Dict[str, Tuple[ccxt.Exchange, Optional[object]]] = {}
     result: Dict[str, Tuple[ccxt.Exchange, Optional[Any]]] = {}
     for name in names:
         cfg = dict(config)
@@ -218,6 +232,7 @@ async def _check_slippage_async(
 
 def _place_order_sync(
     exchange: ccxt.Exchange,
+    ws_client: Optional[object],
     ws_client: Optional[Any],
     symbol: str,
     side: str,
@@ -258,6 +273,10 @@ def _place_order_sync(
                         order = exchange.create_limit_order(symbol, side, remaining, price, params)
                         break
 
+                if ws_client is not None and hasattr(ws_client, "add_order"):
+                    order = ws_client.add_order(symbol, side, remaining)
+                else:
+                    order = exchange.create_market_order(symbol, side, remaining)
                 order = exchange.create_market_order(symbol, side, remaining)
                 break
             except (NetworkError, RateLimitExceeded) as exc:
@@ -309,6 +328,7 @@ def _place_order_sync(
 
 async def _place_order_async(
     exchange: ccxt.Exchange,
+    ws_client: Optional[object],
     ws_client: Optional[Any],
     symbol: str,
     side: str,
@@ -365,6 +385,13 @@ async def _place_order_async(
                             )
                         break
 
+                if (
+                    use_websocket
+                    and ws_client is not None
+                    and hasattr(ws_client, "add_order")
+                ):
+                    order = ws_client.add_order(symbol, side, remaining)
+                elif asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
                 if asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
                     order = await exchange.create_market_order(symbol, side, remaining)
                 else:
@@ -428,6 +455,7 @@ async def _place_order_async(
 
 def execute_trade(
     exchange: ccxt.Exchange,
+    ws_client: Optional[object],
     ws_client: Optional[Any],
     symbol: str,
     side: str,
@@ -600,6 +628,7 @@ def execute_trade(
 
 async def execute_trade_async(
     exchange: ccxt.Exchange,
+    ws_client: Optional[object],
     ws_client: Optional[Any],
     symbol: str,
     side: str,
