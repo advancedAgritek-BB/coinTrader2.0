@@ -1,7 +1,9 @@
 """Main entry point for the trading bot.
 
-This module has a hard dependency on the `ccxtpro` package for exchange
-connectivity.
+This module relies on the standard :mod:`ccxt` library for exchange
+connectivity. WebSocket market data is handled separately by dedicated
+clients such as :class:`crypto_bot.execution.kraken_ws.KrakenWSClient` or
+`cryptofeed` feeds.
 """
 
 import os
@@ -17,15 +19,7 @@ import inspect
 import re
 
 import aiohttp
-
-# ccxtpro is a hard dependency; startup should fail if it's missing.
-try:
-    import ccxt.pro as ccxt  # type: ignore
-except ImportError as exc:
-    raise ImportError(
-        "ccxtpro is required for exchange connectivity. Install it via pip and "
-        "ensure you have a valid ccxtpro license."
-    ) from exc
+import ccxt  # type: ignore
 
 import pandas as pd
 import numpy as np

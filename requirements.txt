@@ -5,6 +5,9 @@ scikit-learn
 lightgbm
 joblib
 scipy
+ccxt
+# Optional for Coinbase WebSocket data
+cryptofeed
 gspread
 oauth2client
 python-dotenv
