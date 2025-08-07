@@ -5,6 +5,7 @@ scikit-learn
 lightgbm
 joblib
 scipy
+ccxt  # REST exchange support
 ccxt
 # Optional for Coinbase WebSocket data
 cryptofeed

@@ -145,6 +145,12 @@ needed.
    ```bash
    pip install -r requirements.txt
    ```
+   This installs [`websocket-client`](https://pypi.org/project/websocket-client/)
+   for WebSocket support. Add
+   [`cryptofeed`](https://github.com/bmoscon/cryptofeed) if you want a unified
+   multi-exchange feed handler. [`ccxt`](https://github.com/ccxt/ccxt) remains
+   in the requirements for REST APIs.
+   The previous paid dependency `ccxt.pro` has been removed.
    This installs [ccxt](https://github.com/ccxt/ccxt) for REST API access.
    WebSocket market data relies on either the built-in
    `KrakenWSClient` or optional [cryptofeed](https://github.com/bmoscon/cryptofeed)
@@ -200,6 +206,15 @@ needed.
 
    Save the file and type `reload` in the console or send `/reload` via Telegram
    to apply the changes immediately.
+
+### Profit-Focused Workflow
+
+1. Stream real-time market data over WebSockets using `websocket-client` or a
+   multi-exchange aggregator like `cryptofeed`.
+2. Call `data_loader.fetch_data_range_async` to backfill historical ranges
+   needed for signals.
+3. Run regime prediction on the combined dataset to adapt strategies toward
+   profitability.
 
 ## Examples
 
@@ -352,6 +367,8 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **exchange** – target CEX (`coinbase` or `kraken`).
 * **execution_mode** – choose `dry_run` for simulation or `live` for real orders.
   Paper trading defaults to long-only on spot exchanges.
+* **use_websocket** – enable WebSocket data via `websocket-client`; add
+  `cryptofeed` for unified multi-exchange feeds.
 * **use_websocket** – enable WebSocket data via `KrakenWSClient` or
   `cryptofeed` feeds.
 * **force_websocket_history** – disable REST fallbacks when streaming (default: true).
@@ -939,6 +956,10 @@ file for later analysis.
 `scalp_timeframe` sets the candle interval specifically for the micro_scalp
 and bounce_scalper strategies while `timeframe` covers all other analysis.
 
+When `use_websocket` is enabled the bot uses `websocket-client` for realtime
+streaming. Install it with `pip install websocket-client`. For aggregated
+multi-exchange feeds consider `pip install cryptofeed`. Disable websockets if
+these packages are unavailable.
 When `use_websocket` is enabled the bot streams realtime data using
 `KrakenWSClient` or, for other exchanges, optional `cryptofeed` integrations.
 Install `cryptofeed` if you require Coinbase order book streams.
@@ -995,7 +1016,7 @@ low, close, volume]` where `timestamp` is the `interval_begin` field converted
 to a Unix epoch in milliseconds.
 
 ```python
-ws.subscribe_ohlc("ETH/USD", interval=1)
+ws.subscribe_ohlc(["ETH/USD", "BTC/USD"], interval=1)
 
 msg = ...  # read from ws.public_ws
 candle = parse_ohlc_message(msg)
@@ -1003,7 +1024,25 @@ if candle:
     ts, o, h, l, c, volume = candle
     print(ts, o, h, l, c, volume)
 ```
-Call `unsubscribe_ohlc("ETH/USD", interval=1)` to stop receiving updates.
+Call `unsubscribe_ohlc(["ETH/USD", "BTC/USD"], interval=1)` to stop receiving
+updates.
+
+For multi-exchange feeds, the [`cryptofeed`](https://github.com/bmoscon/cryptofeed)
+library provides a `FeedHandler` that can aggregate streams:
+
+```python
+from cryptofeed import FeedHandler
+from cryptofeed.exchanges import Kraken, Coinbase
+from cryptofeed.defines import TICKER
+
+def handle_ticker(feed, pair, bid, ask, **_):
+    print(feed, pair, bid, ask)
+
+fh = FeedHandler()
+fh.add_feed(Kraken(symbols=["BTC-USD"], channels=[TICKER], callbacks={TICKER: handle_ticker}))
+fh.add_feed(Coinbase(symbols=["ETH-USD"], channels=[TICKER], callbacks={TICKER: handle_ticker}))
+fh.run()
+```
 
 `subscribe_book` streams the order book for the given pair. `depth` sets how many levels are sent, while `snapshot` requests an initial book snapshot before updates.
 
