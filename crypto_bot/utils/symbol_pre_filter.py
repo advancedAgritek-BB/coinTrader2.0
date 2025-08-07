@@ -9,7 +9,6 @@ import time
 from pathlib import Path
 from typing import Iterable, List, Dict
 
-import ccxt
 # ``ccxt.pro`` previously provided WebSocket support for ticker data.  With the
 # migration to ``cryptofeed`` we no longer rely on the pro package and instead
 # use the asynchronous support module for HTTP fallbacks.
