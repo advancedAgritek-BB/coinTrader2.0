@@ -8,11 +8,9 @@ from typing import Optional, Callable, Union, List, Any, Dict, Deque
 from datetime import datetime, timedelta, timezone
 
 import keyring
-import ccxt  # type: ignore
 import pandas as pd
 from websocket import WebSocketApp
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from pathlib import Path
 
 try:  # optional dependency
     from coinTrader_Trainer.data_loader import fetch_data_range_async  # type: ignore
