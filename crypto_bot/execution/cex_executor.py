@@ -13,10 +13,10 @@ except Exception:  # pragma: no cover - optional dependency
 import asyncio
 from typing import Dict, Optional, Tuple, List
 
-try:
-    import ccxt.pro as ccxtpro  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    ccxtpro = None
+try:  # pragma: no cover - optional dependency
+    from cryptofeed import FeedHandler  # type: ignore
+except Exception:  # pragma: no cover
+    FeedHandler = None  # type: ignore
 
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.execution.kraken_ws import KrakenWSClient
@@ -33,30 +33,26 @@ logger = setup_logger(__name__, LOG_DIR / "execution.log")
 Notifier = TelegramNotifier
 
 
-def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
+def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[object]]:
     """Instantiate and return a ccxt exchange and optional websocket client.
 
-    When ``use_websocket`` is enabled and ``ccxtpro`` is available, an
-    asynchronous ``ccxt.pro`` instance is returned. Otherwise the standard
-    ``ccxt`` exchange is used. ``KrakenWSClient`` is retained for backward
-    compatibility when WebSocket trading is desired without ccxt.pro.
+    When ``use_websocket_client`` is enabled a dedicated WebSocket helper is
+    created. For Kraken this is :class:`KrakenWSClient`; for other exchanges a
+    :class:`cryptofeed.FeedHandler` instance is returned if available.
     """
 
     exchange_name = config.get("exchange", "coinbase")
-    use_ws = config.get("use_websocket", False)
+    use_ws = config.get("use_websocket_client", config.get("use_websocket", False))
 
-    ws_client: Optional[KrakenWSClient] = None
+    ws_client: Optional[object] = None
     api_key = env_or_prompt("API_KEY", "Enter API key: ") or None
     api_secret = env_or_prompt("API_SECRET", "Enter API secret: ") or None
     api_token = env_or_prompt("KRAKEN_API_TOKEN", "Enter Kraken API token: ") or None
 
-    if use_ws and ccxtpro:
-        ccxt_mod = ccxtpro
-    else:
-        ccxt_mod = ccxt
-
     if exchange_name == "coinbase":
-        exchange = ccxt_mod.coinbase(
+        if use_ws and FeedHandler is not None:
+            ws_client = FeedHandler()
+        exchange = ccxt.coinbase(
             {
                 "apiKey": api_key,
                 "secret": api_secret,
@@ -69,17 +65,11 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
             ws_token = os.getenv("KRAKEN_WS_TOKEN")
             if not ws_token and api_key and api_secret:
                 ws_token = get_ws_token(api_key, api_secret, api_token or None)
-            if ccxtpro:
-                if (api_key and api_secret) or ws_token:
-                    ws_client = KrakenWSClient(
-                        api_key, api_secret, ws_token=ws_token, api_token=api_token
-                    )
-            else:
-                ws_client = KrakenWSClient(
-                    api_key, api_secret, ws_token=ws_token, api_token=api_token
-                )
+            ws_client = KrakenWSClient(
+                api_key, api_secret, ws_token=ws_token, api_token=api_token
+            )
 
-        exchange = ccxt_mod.kraken(
+        exchange = ccxt.kraken(
             {
                 "apiKey": api_key,
                 "secret": api_secret,
@@ -89,18 +79,18 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
     else:
         raise ValueError(f"Unsupported exchange: {exchange_name}")
 
-    exchange.options["ws_scan"] = config.get("use_websocket", False)
+    exchange.options["ws_scan"] = use_ws
 
     return exchange, ws_client
 
 
-def get_exchanges(config) -> Dict[str, Tuple[ccxt.Exchange, Optional[KrakenWSClient]]]:
+def get_exchanges(config) -> Dict[str, Tuple[ccxt.Exchange, Optional[object]]]:
     """Return exchange instances for all configured CEXes."""
     names = config.get("exchanges")
     if not names:
         primary = config.get("primary_exchange") or config.get("exchange")
         names = [name for name in [primary, config.get("secondary_exchange")] if name]
-    result: Dict[str, Tuple[ccxt.Exchange, Optional[KrakenWSClient]]] = {}
+    result: Dict[str, Tuple[ccxt.Exchange, Optional[object]]] = {}
     for name in names:
         cfg = dict(config)
         cfg["exchange"] = name
@@ -219,7 +209,7 @@ async def _check_slippage_async(
 
 def _place_order_sync(
     exchange: ccxt.Exchange,
-    ws_client: Optional[KrakenWSClient],
+    ws_client: Optional[object],
     symbol: str,
     side: str,
     size: float,
@@ -259,7 +249,7 @@ def _place_order_sync(
                         order = exchange.create_limit_order(symbol, side, remaining, price, params)
                         break
 
-                if ws_client is not None:
+                if ws_client is not None and hasattr(ws_client, "add_order"):
                     order = ws_client.add_order(symbol, side, remaining)
                 else:
                     order = exchange.create_market_order(symbol, side, remaining)
@@ -313,7 +303,7 @@ def _place_order_sync(
 
 async def _place_order_async(
     exchange: ccxt.Exchange,
-    ws_client: Optional[KrakenWSClient],
+    ws_client: Optional[object],
     symbol: str,
     side: str,
     size: float,
@@ -369,7 +359,11 @@ async def _place_order_async(
                             )
                         break
 
-                if use_websocket and ws_client is not None and not ccxtpro:
+                if (
+                    use_websocket
+                    and ws_client is not None
+                    and hasattr(ws_client, "add_order")
+                ):
                     order = ws_client.add_order(symbol, side, remaining)
                 elif asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
                     order = await exchange.create_market_order(symbol, side, remaining)
@@ -434,7 +428,7 @@ async def _place_order_async(
 
 def execute_trade(
     exchange: ccxt.Exchange,
-    ws_client: Optional[KrakenWSClient],
+    ws_client: Optional[object],
     symbol: str,
     side: str,
     amount: float,
@@ -608,7 +602,7 @@ def execute_trade(
 
 async def execute_trade_async(
     exchange: ccxt.Exchange,
-    ws_client: Optional[KrakenWSClient],
+    ws_client: Optional[object],
     symbol: str,
     side: str,
     amount: float,

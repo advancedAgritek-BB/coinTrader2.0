@@ -1,7 +1,7 @@
 """Main entry point for the trading bot.
 
-This module has a hard dependency on the `ccxtpro` package for exchange
-connectivity.
+Prefers :mod:`websocket-client`/`cryptofeed` for realtime data and falls back
+to standard ``ccxt`` for REST access.
 """
 
 import os
@@ -18,13 +18,22 @@ import re
 
 import aiohttp
 
-# ccxtpro is a hard dependency; startup should fail if it's missing.
+# Prefer websocket/cryptofeed for realtime; fall back to ccxt for REST.
+try:  # pragma: no cover - optional dependency
+    import websocket  # type: ignore
+except Exception:  # pragma: no cover
+    websocket = None  # type: ignore
+
+try:  # pragma: no cover - optional dependency
+    from cryptofeed import FeedHandler  # type: ignore
+except Exception:  # pragma: no cover
+    FeedHandler = None  # type: ignore
+
 try:
-    import ccxt.pro as ccxt  # type: ignore
-except ImportError as exc:
+    import ccxt  # type: ignore
+except ImportError as exc:  # pragma: no cover - required for REST
     raise ImportError(
-        "ccxtpro is required for exchange connectivity. Install it via pip and "
-        "ensure you have a valid ccxtpro license."
+        "ccxt is required for exchange connectivity. Install it via pip."
     ) from exc
 
 import pandas as pd
@@ -500,6 +509,9 @@ def _load_config_file() -> dict:
     except ValidationError as exc:
         print("Invalid configuration (pyth):\n", exc)
         raise SystemExit(1)
+
+    if "use_websocket_client" in data:
+        data["use_websocket"] = data["use_websocket_client"]
 
     return data
 
