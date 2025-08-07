@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 import pandas as pd
 import numpy as np
-import ccxt.pro as ccxt
+import ccxt
 import aiohttp
 
 try:  # optional redis for caching
