@@ -2,6 +2,10 @@
 
 Prefers :mod:`websocket-client`/`cryptofeed` for realtime data and falls back
 to standard ``ccxt`` for REST access.
+This module relies on the standard :mod:`ccxt` library for exchange
+connectivity. WebSocket market data is handled separately by dedicated
+clients such as :class:`crypto_bot.execution.kraken_ws.KrakenWSClient` or
+`cryptofeed` feeds.
 """
 
 import os
@@ -35,6 +39,7 @@ except ImportError as exc:  # pragma: no cover - required for REST
     raise ImportError(
         "ccxt is required for exchange connectivity. Install it via pip."
     ) from exc
+import ccxt  # type: ignore
 
 import pandas as pd
 import numpy as np

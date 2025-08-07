@@ -6,6 +6,7 @@ lightgbm
 joblib
 scipy
 ccxt
+# Optional for Coinbase WebSocket data
 cryptofeed
 gspread
 oauth2client
@@ -15,6 +16,7 @@ python-telegram-bot
 Flask
 pytest
 websocket-client
+cryptofeed
 requests
 solana>=0.28,<0.29
 boto3

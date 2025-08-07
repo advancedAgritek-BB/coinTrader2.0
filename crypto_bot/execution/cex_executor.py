@@ -11,12 +11,20 @@ except Exception:  # pragma: no cover - optional dependency
     ccxt = types.SimpleNamespace()
     NetworkError = RateLimitExceeded = ExchangeError = Exception
 import asyncio
-from typing import Dict, Optional, Tuple, List
+from typing import Any, Dict, Optional, Tuple, List
 
 try:  # pragma: no cover - optional dependency
     from cryptofeed import FeedHandler  # type: ignore
 except Exception:  # pragma: no cover
     FeedHandler = None  # type: ignore
+    from cryptofeed.feedhandler import FeedHandler  # type: ignore
+    from cryptofeed.exchanges import Coinbase as CoinbaseFeed  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    FeedHandler = None
+    CoinbaseFeed = None
+
+# Retain ``ccxtpro`` attribute for backward compatibility; no longer used.
+ccxtpro = None
 
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.execution.kraken_ws import KrakenWSClient
@@ -39,12 +47,22 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[object]]:
     When ``use_websocket_client`` is enabled a dedicated WebSocket helper is
     created. For Kraken this is :class:`KrakenWSClient`; for other exchanges a
     :class:`cryptofeed.FeedHandler` instance is returned if available.
+def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[Any]]:
+    """Instantiate and return a ccxt exchange and optional websocket client.
+
+    Trades are always executed via the standard :mod:`ccxt` REST API. When
+    ``use_websocket`` is enabled a dedicated client is created for streaming
+    order book data. Kraken relies on :class:`KrakenWSClient` while Coinbase
+    uses a ``cryptofeed`` :class:`~cryptofeed.feedhandler.FeedHandler` when
+    available. The websocket client is returned alongside the exchange and may
+    be ``None`` if the optional dependency is missing.
     """
 
     exchange_name = config.get("exchange", "coinbase")
     use_ws = config.get("use_websocket_client", config.get("use_websocket", False))
 
     ws_client: Optional[object] = None
+    ws_client: Optional[Any] = None
     api_key = env_or_prompt("API_KEY", "Enter API key: ") or None
     api_secret = env_or_prompt("API_SECRET", "Enter API secret: ") or None
     api_token = env_or_prompt("KRAKEN_API_TOKEN", "Enter Kraken API token: ") or None
@@ -60,6 +78,9 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[object]]:
                 "enableRateLimit": True,
             }
         )
+        if use_ws and FeedHandler and CoinbaseFeed:
+            # Feed subscriptions are configured by the caller
+            ws_client = FeedHandler()
     elif exchange_name == "kraken":
         if use_ws:
             ws_token = os.getenv("KRAKEN_WS_TOKEN")
@@ -85,12 +106,14 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[object]]:
 
 
 def get_exchanges(config) -> Dict[str, Tuple[ccxt.Exchange, Optional[object]]]:
+def get_exchanges(config) -> Dict[str, Tuple[ccxt.Exchange, Optional[Any]]]:
     """Return exchange instances for all configured CEXes."""
     names = config.get("exchanges")
     if not names:
         primary = config.get("primary_exchange") or config.get("exchange")
         names = [name for name in [primary, config.get("secondary_exchange")] if name]
     result: Dict[str, Tuple[ccxt.Exchange, Optional[object]]] = {}
+    result: Dict[str, Tuple[ccxt.Exchange, Optional[Any]]] = {}
     for name in names:
         cfg = dict(config)
         cfg["exchange"] = name
@@ -210,6 +233,7 @@ async def _check_slippage_async(
 def _place_order_sync(
     exchange: ccxt.Exchange,
     ws_client: Optional[object],
+    ws_client: Optional[Any],
     symbol: str,
     side: str,
     size: float,
@@ -253,6 +277,7 @@ def _place_order_sync(
                     order = ws_client.add_order(symbol, side, remaining)
                 else:
                     order = exchange.create_market_order(symbol, side, remaining)
+                order = exchange.create_market_order(symbol, side, remaining)
                 break
             except (NetworkError, RateLimitExceeded) as exc:
                 if attempt < max_retries - 1:
@@ -304,6 +329,7 @@ def _place_order_sync(
 async def _place_order_async(
     exchange: ccxt.Exchange,
     ws_client: Optional[object],
+    ws_client: Optional[Any],
     symbol: str,
     side: str,
     size: float,
@@ -366,6 +392,7 @@ async def _place_order_async(
                 ):
                     order = ws_client.add_order(symbol, side, remaining)
                 elif asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
+                if asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
                     order = await exchange.create_market_order(symbol, side, remaining)
                 else:
                     order = await asyncio.to_thread(
@@ -429,6 +456,7 @@ async def _place_order_async(
 def execute_trade(
     exchange: ccxt.Exchange,
     ws_client: Optional[object],
+    ws_client: Optional[Any],
     symbol: str,
     side: str,
     amount: float,
@@ -454,8 +482,6 @@ def execute_trade(
         remaining quantity. Defaults to ``60``.
     """
     notifier = _resolve_notifier(token, chat_id, notifier)
-    if use_websocket and ws_client is None and not dry_run:
-        raise ValueError("WebSocket trading enabled but ws_client is missing")
     config = config or {}
 
     depth = config.get("liquidity_depth", 10)
@@ -603,6 +629,7 @@ def execute_trade(
 async def execute_trade_async(
     exchange: ccxt.Exchange,
     ws_client: Optional[object],
+    ws_client: Optional[Any],
     symbol: str,
     side: str,
     amount: float,
@@ -628,9 +655,6 @@ async def execute_trade_async(
             if token is None or chat_id is None:
                 raise ValueError("token/chat_id or notifier must be provided")
             notifier = TelegramNotifier(token, chat_id)
-
-    if use_websocket and ws_client is None and not dry_run:
-        raise ValueError("WebSocket trading enabled but ws_client is missing")
 
     msg = f"Placing {side} order for {amount} {symbol}"
     err = notifier.notify(msg)
