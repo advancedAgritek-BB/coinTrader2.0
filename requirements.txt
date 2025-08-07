@@ -5,7 +5,9 @@ scikit-learn
 lightgbm
 joblib
 scipy
-ccxtpro  # includes ccxt; required for WebSocket support
+ccxt
+# Optional for Coinbase WebSocket data
+cryptofeed
 gspread
 oauth2client
 python-dotenv

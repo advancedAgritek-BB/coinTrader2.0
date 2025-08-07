@@ -7,7 +7,7 @@ from collections import deque
 from typing import Optional, Callable, Union, List, Any, Dict, Deque
 from datetime import datetime, timedelta, timezone
 import keyring
-import ccxt.pro as ccxt  # type: ignore
+import ccxt  # type: ignore
 from websocket import WebSocketApp
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from pathlib import Path
