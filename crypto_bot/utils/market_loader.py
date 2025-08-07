@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import time
 from pathlib import Path
+import importlib
 import yaml
 import pandas as pd
 import numpy as np
@@ -37,6 +38,13 @@ from .token_registry import (
 
 from .logger import LOG_DIR, setup_logger
 from .constants import NON_SOLANA_BASES
+
+try:  # optional websocket dependency
+    from cryptofeed.feedhandler import FeedHandler
+    from cryptofeed.defines import CANDLES
+except Exception:  # pragma: no cover - optional
+    FeedHandler = None  # type: ignore
+    CANDLES = None  # type: ignore
 
 try:  # optional dependency
     from .telegram import TelegramNotifier
@@ -125,11 +133,70 @@ _OHLCV_BATCH_TASKS: Dict[tuple, asyncio.Task] = {}
     before_sleep=before_sleep_log(logger, logging.WARNING),
 )
 async def _watch_ohlcv_with_retry(exchange, **kwargs):
-    """Call ``exchange.watchOHLCV`` with retries."""
-    params = inspect.signature(exchange.watchOHLCV).parameters
-    if "timeout" in params and "timeout" not in kwargs:
-        kwargs["timeout"] = WS_OHLCV_TIMEOUT
-    return await exchange.watchOHLCV(**kwargs)
+    """Fetch real-time OHLCV data using WebSocket feeds.
+
+    If the provided ``exchange`` exposes a ``watchOHLCV`` coroutine (legacy
+    ccxt-style), that method is used for backwards compatibility.  When no
+    such method exists, the function attempts to subscribe to candles via
+    ``cryptofeed`` and returns collected OHLCV rows.
+    """
+
+    # Legacy path: use provided watchOHLCV if available
+    watch = getattr(exchange, "watchOHLCV", None)
+    if watch is not None:
+        params = inspect.signature(watch).parameters
+        if "timeout" in params and "timeout" not in kwargs:
+            kwargs["timeout"] = WS_OHLCV_TIMEOUT
+        return await watch(**kwargs)
+
+    if FeedHandler is None or CANDLES is None:
+        raise RuntimeError("cryptofeed library not available")
+
+    symbol = kwargs.get("symbol")
+    timeframe = kwargs.get("timeframe", "1m")
+    limit = int(kwargs.get("limit", 100))
+
+    exch_id = getattr(exchange, "id", exchange)
+    exch_id = str(exch_id).replace("-", "").replace(" ", "").lower()
+
+    try:
+        module = importlib.import_module(f"cryptofeed.exchanges.{exch_id}")
+        class_name = "".join(part.capitalize() for part in exch_id.split("_"))
+        cf_exchange = getattr(module, class_name)
+    except Exception as exc:  # pragma: no cover - unsupported exchange
+        raise ValueError(f"Unsupported exchange for cryptofeed: {exch_id}") from exc
+
+    handler = FeedHandler()
+    data: List[List[float]] = []
+
+    async def _candle_cb(*args):
+        candle = args[2] if len(args) > 2 else args[0]
+        ts = getattr(candle, "timestamp", None)
+        if ts is None and hasattr(candle, "start"):
+            ts = candle.start.timestamp()
+        ts_ms = int(float(ts) * 1000)
+        data.append([
+            ts_ms,
+            float(candle.open),
+            float(candle.high),
+            float(candle.low),
+            float(candle.close),
+            float(candle.volume),
+        ])
+        if len(data) >= limit:
+            handler.stop()
+
+    handler.add_feed(
+        cf_exchange(
+            symbols=[symbol],
+            channels=[CANDLES],
+            callbacks={CANDLES: _candle_cb},
+            candle_interval=timeframe,
+        )
+    )
+
+    await handler.run(start_loop=False)
+    return data
 
 
 @dataclass
