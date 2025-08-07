@@ -13,11 +13,11 @@ import os
 from crypto_bot.utils.market_loader import fetch_geckoterminal_ohlcv, timeframe_seconds
 
 try:
-    import ccxt.pro as ccxt  # type: ignore
+    import ccxt  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
     import types
 
-    ccxt = types.ModuleType("ccxt.pro")
+    ccxt = types.ModuleType("ccxt")
 import numpy as np
 import pandas as pd
 from numpy.random import default_rng, Generator

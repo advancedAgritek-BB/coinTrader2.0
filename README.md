@@ -151,6 +151,10 @@ needed.
    multi-exchange feed handler. [`ccxt`](https://github.com/ccxt/ccxt) remains
    in the requirements for REST APIs.
    The previous paid dependency `ccxt.pro` has been removed.
+   This installs [ccxt](https://github.com/ccxt/ccxt) for REST API access.
+   WebSocket market data relies on either the built-in
+   `KrakenWSClient` or optional [cryptofeed](https://github.com/bmoscon/cryptofeed)
+   feeds for exchanges like Coinbase.
    The optional `rich` package is included and provides colorized
    console output when viewing live positions. The reinforcement learning
    strategy selector requires additional packages: `gymnasium` and
@@ -365,6 +369,8 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   Paper trading defaults to long-only on spot exchanges.
 * **use_websocket** – enable WebSocket data via `websocket-client`; add
   `cryptofeed` for unified multi-exchange feeds.
+* **use_websocket** – enable WebSocket data via `KrakenWSClient` or
+  `cryptofeed` feeds.
 * **force_websocket_history** – disable REST fallbacks when streaming (default: true).
 * **max_ws_limit** – skip WebSocket OHLCV when `limit` exceeds this value.
 * **exchange_market_types** – market types to trade (spot, margin, futures).
@@ -954,6 +960,9 @@ When `use_websocket` is enabled the bot uses `websocket-client` for realtime
 streaming. Install it with `pip install websocket-client`. For aggregated
 multi-exchange feeds consider `pip install cryptofeed`. Disable websockets if
 these packages are unavailable.
+When `use_websocket` is enabled the bot streams realtime data using
+`KrakenWSClient` or, for other exchanges, optional `cryptofeed` integrations.
+Install `cryptofeed` if you require Coinbase order book streams.
 When OHLCV streaming returns fewer candles than requested the bot calculates
 how many bars are missing and fetches only that remainder via REST. This
 adaptive limit keeps history current without waiting for a full response.
