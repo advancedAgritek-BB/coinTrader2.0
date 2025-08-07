@@ -145,11 +145,12 @@ needed.
    ```bash
    pip install -r requirements.txt
    ```
-   This installs [ccxt.pro](https://github.com/ccxt/ccxt.pro) for WebSocket
-   support. `ccxtpro` bundles `ccxt`, so a separate `ccxt` entry isn't needed.
-   If you only require REST APIs or do not have access to `ccxtpro`, comment out
-   the `ccxtpro` line in `requirements.txt` and install
-   [`ccxt`](https://github.com/ccxt/ccxt) manually.
+   This installs [`websocket-client`](https://pypi.org/project/websocket-client/)
+   for WebSocket support. Add
+   [`cryptofeed`](https://github.com/bmoscon/cryptofeed) if you want a unified
+   multi-exchange feed handler. [`ccxt`](https://github.com/ccxt/ccxt) remains
+   in the requirements for REST APIs.
+   The previous paid dependency `ccxt.pro` has been removed.
    The optional `rich` package is included and provides colorized
    console output when viewing live positions. The reinforcement learning
    strategy selector requires additional packages: `gymnasium` and
@@ -201,6 +202,15 @@ needed.
 
    Save the file and type `reload` in the console or send `/reload` via Telegram
    to apply the changes immediately.
+
+### Profit-Focused Workflow
+
+1. Stream real-time market data over WebSockets using `websocket-client` or a
+   multi-exchange aggregator like `cryptofeed`.
+2. Call `data_loader.fetch_data_range_async` to backfill historical ranges
+   needed for signals.
+3. Run regime prediction on the combined dataset to adapt strategies toward
+   profitability.
 
 ## Examples
 
@@ -353,7 +363,8 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **exchange** – target CEX (`coinbase` or `kraken`).
 * **execution_mode** – choose `dry_run` for simulation or `live` for real orders.
   Paper trading defaults to long-only on spot exchanges.
-* **use_websocket** – enable WebSocket data via `ccxt.pro`.
+* **use_websocket** – enable WebSocket data via `websocket-client`; add
+  `cryptofeed` for unified multi-exchange feeds.
 * **force_websocket_history** – disable REST fallbacks when streaming (default: true).
 * **max_ws_limit** – skip WebSocket OHLCV when `limit` exceeds this value.
 * **exchange_market_types** – market types to trade (spot, margin, futures).
@@ -939,10 +950,10 @@ file for later analysis.
 `scalp_timeframe` sets the candle interval specifically for the micro_scalp
 and bounce_scalper strategies while `timeframe` covers all other analysis.
 
-When `use_websocket` is enabled the bot relies on `ccxt.pro` for realtime
-streaming data. Ensure the `ccxtpro` package is installed
-(`pip install ccxtpro`). Disable websockets if you do not have access to
-`ccxt.pro`.
+When `use_websocket` is enabled the bot uses `websocket-client` for realtime
+streaming. Install it with `pip install websocket-client`. For aggregated
+multi-exchange feeds consider `pip install cryptofeed`. Disable websockets if
+these packages are unavailable.
 When OHLCV streaming returns fewer candles than requested the bot calculates
 how many bars are missing and fetches only that remainder via REST. This
 adaptive limit keeps history current without waiting for a full response.
@@ -996,7 +1007,7 @@ low, close, volume]` where `timestamp` is the `interval_begin` field converted
 to a Unix epoch in milliseconds.
 
 ```python
-ws.subscribe_ohlc("ETH/USD", interval=1)
+ws.subscribe_ohlc(["ETH/USD", "BTC/USD"], interval=1)
 
 msg = ...  # read from ws.public_ws
 candle = parse_ohlc_message(msg)
@@ -1004,7 +1015,25 @@ if candle:
     ts, o, h, l, c, volume = candle
     print(ts, o, h, l, c, volume)
 ```
-Call `unsubscribe_ohlc("ETH/USD", interval=1)` to stop receiving updates.
+Call `unsubscribe_ohlc(["ETH/USD", "BTC/USD"], interval=1)` to stop receiving
+updates.
+
+For multi-exchange feeds, the [`cryptofeed`](https://github.com/bmoscon/cryptofeed)
+library provides a `FeedHandler` that can aggregate streams:
+
+```python
+from cryptofeed import FeedHandler
+from cryptofeed.exchanges import Kraken, Coinbase
+from cryptofeed.defines import TICKER
+
+def handle_ticker(feed, pair, bid, ask, **_):
+    print(feed, pair, bid, ask)
+
+fh = FeedHandler()
+fh.add_feed(Kraken(symbols=["BTC-USD"], channels=[TICKER], callbacks={TICKER: handle_ticker}))
+fh.add_feed(Coinbase(symbols=["ETH-USD"], channels=[TICKER], callbacks={TICKER: handle_ticker}))
+fh.run()
+```
 
 `subscribe_book` streams the order book for the given pair. `depth` sets how many levels are sent, while `snapshot` requests an initial book snapshot before updates.
 
@@ -1647,8 +1676,8 @@ pytest -q
 ## Testing
 
 The repository includes an automated test suite. Some tests rely on optional
-packages such as `numpy`, `pandas`, `pytest-asyncio`, `ccxtpro`, `flask`, `base58`,
-`prometheus_client`, `python-dotenv` and `websocket-client`. The **full** set of
+packages such as `numpy`, `pandas`, `pytest-asyncio`, `flask`, `base58`,
+`prometheus_client`, `python-dotenv`, `websocket-client` and `cryptofeed`. The **full** set of
 tests requires the dependencies listed in `requirements.txt` together with the
 additional packages enumerated in `requirements-dev.txt`. When running only a
 subset of tests you may need to install these optional packages manually so

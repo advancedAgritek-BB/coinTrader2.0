@@ -5,7 +5,7 @@ scikit-learn
 lightgbm
 joblib
 scipy
-ccxtpro  # includes ccxt; required for WebSocket support
+ccxt  # REST exchange support
 gspread
 oauth2client
 python-dotenv
