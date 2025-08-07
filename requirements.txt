@@ -15,6 +15,7 @@ python-telegram-bot
 Flask
 pytest
 websocket-client
+cryptofeed
 requests
 solana>=0.28,<0.29
 boto3

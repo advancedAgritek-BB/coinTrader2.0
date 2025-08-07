@@ -545,7 +545,7 @@ twap_enabled: true
 twap_interval_seconds: 5
 twap_slices: 6
 use_ml_regime_classifier: true
-use_websocket: true
+use_websocket_client: true
 volatility_filter:
   max_funding_rate: 0.1
   min_atr_pct: 0
