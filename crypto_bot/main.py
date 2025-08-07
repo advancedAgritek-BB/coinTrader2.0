@@ -19,7 +19,13 @@ import re
 import aiohttp
 
 # ccxtpro is a hard dependency; startup should fail if it's missing.
-import ccxt.pro as ccxt  # type: ignore
+try:
+    import ccxt.pro as ccxt  # type: ignore
+except ImportError as exc:
+    raise ImportError(
+        "ccxtpro is required for exchange connectivity. Install it via pip and "
+        "ensure you have a valid ccxtpro license."
+    ) from exc
 
 import pandas as pd
 import numpy as np
