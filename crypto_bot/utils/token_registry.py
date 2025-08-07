@@ -65,8 +65,17 @@ async def fetch_from_jupiter() -> Dict[str, str]:
     return result
 
 
-async def _check_cex_arbitrage(symbol: str, threshold: float) -> None:
-    """Check Kraken and Coinbase for arbitrage on ``symbol`` and trade to BTC."""
+async def _check_cex_arbitrage(symbol: str, threshold: float = 0.005) -> None:
+    """Check Kraken and Coinbase for arbitrage on ``symbol`` and trade to BTC.
+
+    Parameters
+    ----------
+    symbol:
+        The token symbol to check.
+    threshold:
+        Minimum relative price difference required to trigger a trade. Defaults
+        to ``0.5%``.
+    """
 
     pair = f"{symbol}/USD"
     try:
@@ -265,25 +274,6 @@ CUSTOM_MINTS: Dict[str, str] = {
 # the overrides without having to refresh.
 TOKEN_MINTS.update(CUSTOM_MINTS)
 _write_cache()  # Save immediately
-# Additional mints discovered via manual searches
-TOKEN_MINTS.update(
-    {
-        "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
-        "BERA": "A7y2wgyytufsxjg2ub616zqnte3x62f7fcp8fujdmoon",
-        "EUROP": "pD6L7wWeei1LJqb7tmnpfEnvkcBvqMgkfqvg23Bpump",
-        "FARTCOIN": "Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw",
-        "RLUSD": "BkbjmJVa84eiGyp27FTofuQVFLqmKFev4ZPZ3U33pump",
-        "USDG": "2gc4f72GkEtggrkUDJRSbLcBpEUPPPFsnDGJJeNKpump",  # Assuming Unlimited Solana Dump
-        "VIRTUAL": "2FupRnaRfnyPHg798WsCBMGAauEkrhMs4YN7nBmujPtM",
-        "XMR": "Fi9GeixxfhMEGfnAe75nJVrwPqfVefyS6fgmyiTxkS6q",  # Wrapped, verify
-        "MELANIA": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
-        "PENGU": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
-        "USDR": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  # USDT as proxy
-        "USTC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC proxy (adjust if needed)
-        "TRUMP": "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
-        # Add more as needed; skip USDQ/USTC/XTZ as non-Solana
-    }
-)
 
 
 async def refresh_mints() -> None:
