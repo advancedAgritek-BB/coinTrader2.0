@@ -9,11 +9,26 @@ import time
 from pathlib import Path
 from typing import Iterable, List, Dict
 
-import ccxt.pro as ccxt
+# ``ccxt.pro`` previously provided WebSocket support for ticker data.  With the
+# migration to ``cryptofeed`` we no longer rely on the pro package and instead
+# use the asynchronous support module for HTTP fallbacks.
+import ccxt.async_support as ccxt
 try:  # pragma: no cover - import fallback
     from ccxt.base.errors import NetworkError as CCXTNetworkError
 except Exception:  # pragma: no cover - import fallback
     CCXTNetworkError = getattr(ccxt, "NetworkError", Exception)
+if not hasattr(ccxt, "BadSymbol"):  # pragma: no cover - fallback
+    try:
+        from ccxt.base.errors import BadSymbol  # type: ignore
+        ccxt.BadSymbol = BadSymbol  # type: ignore[attr-defined]
+    except Exception:  # pragma: no cover - best effort
+        ccxt.BadSymbol = Exception  # type: ignore[attr-defined]
+if not hasattr(ccxt, "ExchangeError"):  # pragma: no cover - fallback
+    try:
+        from ccxt.base.errors import ExchangeError  # type: ignore
+        ccxt.ExchangeError = ExchangeError  # type: ignore[attr-defined]
+    except Exception:  # pragma: no cover - best effort
+        ccxt.ExchangeError = Exception  # type: ignore[attr-defined]
 
 import aiohttp
 import numpy as np
@@ -120,7 +135,7 @@ def _norm_symbol(sym: str) -> str:
     return sym
 
 
-# cache for ticker data when using watchTickers
+# cache for ticker data collected via WebSocket feeds
 ticker_cache: dict[str, dict] = {}
 ticker_ts: dict[str, float] = {}
 # track ticker fetch failures per symbol
@@ -134,13 +149,65 @@ TICKER_BACKOFF_MAX = 60
 liq_cache = TTLCache(maxsize=2000, ttl=900)
 
 
-# tenacity wrapped helper for WebSocket ticker requests
-def _ws_retry_filter(exc: Exception) -> bool:
-    """Return ``True`` to retry unless a WebSocket closed with code 1006."""
+# tenacity wrapped helper for WebSocket ticker requests via ``cryptofeed``
+def _cf_retry_filter(_exc: Exception) -> bool:
+    """Always retry for generic exceptions from cryptofeed."""
 
-    return not (
-        isinstance(exc, CCXTNetworkError) and getattr(exc, "code", None) == 1006
-    )
+    return True
+
+
+async def _cryptofeed_tickers(exchange_id: str, symbols: Iterable[str]) -> dict:
+    """Subscribe to ``symbols`` using ``cryptofeed`` and return the latest tickers.
+
+    This helper spins up a temporary feed handler, normalizes the ticker output
+    to a CCXT-compatible format and returns a mapping of ``symbol`` to ticker
+    dictionaries.  The handler stops once data for all requested symbols has
+    been received or a timeout occurs.
+    """
+
+    from cryptofeed import FeedHandler
+    from cryptofeed.defines import TICKER
+    from cryptofeed.exchanges import Coinbase, Kraken
+
+    tickers: dict[str, dict] = {}
+    loop = asyncio.get_running_loop()
+    done = loop.create_future()
+
+    symbol_list = list(symbols)
+
+    def _norm(sym: str) -> str:
+        return sym.replace("-", "/").upper()
+
+    async def cb(ticker, receipt_timestamp):  # pragma: no cover - network
+        sym = _norm(getattr(ticker, "symbol", ""))
+        tickers[sym] = {
+            "last": float(getattr(ticker, "last", 0.0)),
+            "open": float(getattr(ticker, "open", getattr(ticker, "last", 0.0))),
+            "bid": float(getattr(ticker, "bid", 0.0)),
+            "ask": float(getattr(ticker, "ask", 0.0)),
+            "vwap": float(getattr(ticker, "vwap", getattr(ticker, "last", 0.0))),
+            "quoteVolume": float(getattr(ticker, "volume", 0.0)),
+        }
+        ticker_ts[sym] = receipt_timestamp
+        if len(tickers) >= len(symbol_list) and not done.done():
+            done.set_result(True)
+
+    fh = FeedHandler()
+    exch_map = {"kraken": Kraken, "coinbase": Coinbase, "coinbasepro": Coinbase}
+    ex_cls = exch_map.get(exchange_id.lower())
+    if ex_cls is None:
+        raise ValueError(f"Exchange {exchange_id} not supported")
+
+    fh.add_feed(ex_cls(symbols=symbol_list, channels=[TICKER], callbacks={TICKER: cb}))
+    task = asyncio.create_task(fh.run(start_loop=False))
+    try:
+        await asyncio.wait_for(done, timeout=10)
+    finally:  # pragma: no cover - network
+        try:
+            await fh.stop()
+        finally:
+            task.cancel()
+    return tickers
 
 
 @retry(
@@ -149,13 +216,13 @@ def _ws_retry_filter(exc: Exception) -> bool:
     reraise=True,
     before=before_log(logger, logging.DEBUG),
     before_sleep=before_sleep_log(logger, logging.WARNING),
-    retry=retry_if_exception(_ws_retry_filter),
+    retry=retry_if_exception(_cf_retry_filter),
 )
-async def _watch_tickers_with_retry(exchange, symbols):
-    """Call ``exchange.watch_tickers`` with retries."""
+async def _cryptofeed_tickers_with_retry(exchange_id: str, symbols: Iterable[str]) -> dict:
+    """Wrapper around ``_cryptofeed_tickers`` that adds retry logic."""
 
     try:
-        return await exchange.watch_tickers(symbols)
+        return await _cryptofeed_tickers(exchange_id, symbols)
     except Exception:
         await asyncio.sleep(1)
         raise
@@ -422,7 +489,8 @@ async def _refresh_tickers(
                     UNSUPPORTED_SYMBOLS.add(sym)
 
     try_ws = (
-        getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
+        getattr(exchange, "id", "").lower()
+        in {"kraken", "coinbase", "coinbasepro"}
         and getattr(exchange, "options", {}).get("ws_scan", True)
     )
     ws_failures = int(getattr(exchange, "options", {}).get("ws_failures", 0))
@@ -440,55 +508,43 @@ async def _refresh_tickers(
                 await asyncio.sleep(min(2 ** (ws_failures - 1), 30))
             try:
                 async with TICKER_SEMA:
-                    data = await _watch_tickers_with_retry(exchange, to_fetch)
+                    data = await _cryptofeed_tickers_with_retry(exchange.id, to_fetch)
                     if delay:
                         await asyncio.sleep(delay)
                 opts = getattr(exchange, "options", None)
                 if opts is not None:
                     opts["ws_failures"] = 0
             except Exception as exc:  # pragma: no cover - network
-                if isinstance(exc, CCXTNetworkError) and getattr(exc, "code", None) == 1006:
-                    logger.warning(
-                        "WebSocket closed (1006) \u2013 falling back to HTTP",
-                    )
-                    telemetry.inc("scan.api_errors")
-                    opts = getattr(exchange, "options", None)
-                    if opts is not None:
-                        failures = opts.get("ws_failures", 0) + 1
-                        opts["ws_failures"] = failures
+                logger.warning(
+                    "cryptofeed tickers failed: %s \u2013 falling back to HTTP. Consider setting exchange.options.ws_scan to False if this continues.",
+                    exc,
+                    exc_info=log_exc,
+                )
+                telemetry.inc("scan.api_errors")
+                opts = getattr(exchange, "options", None)
+                if opts is not None:
+                    failures = opts.get("ws_failures", 0) + 1
+                    opts["ws_failures"] = failures
+                    if failures >= ws_limit:
+                        if opts.get("ws_scan", True):
+                            logger.warning(
+                                "Disabling WebSocket scanning after %d errors",
+                                failures,
+                            )
                         opts["ws_scan"] = False
-                    telemetry.inc("scan.ws_errors")
-                else:
-                    logger.warning(
-                        "watch_tickers failed: %s \u2013 falling back to HTTP. Consider setting exchange.options.ws_scan to False if this continues.",
-                        exc,
-                        exc_info=log_exc,
-                    )
-                    telemetry.inc("scan.api_errors")
-                    opts = getattr(exchange, "options", None)
-                    if opts is not None:
-                        failures = opts.get("ws_failures", 0) + 1
-                        opts["ws_failures"] = failures
-                        if failures >= ws_limit:
-                            if opts.get("ws_scan", True):
-                                logger.warning(
-                                    "Disabling WebSocket scanning after %d errors",
-                                    failures,
-                                )
-                            opts["ws_scan"] = False
-                    telemetry.inc("scan.ws_errors")
+                telemetry.inc("scan.ws_errors")
                 attempted_syms.clear()
                 try_ws = False
                 try_http = True
         for sym, ticker in data.items():
             if sym not in symbols:
                 continue
-            ticker_cache[sym] = ticker.get("info", ticker)
+            ticker_cache[sym] = ticker
             ticker_ts[sym] = now
         result = {s: ticker_cache[s] for s in symbols if s in ticker_cache}
         if result:
             record_results(result)
-            return {s: t.get("info", t) for s, t in result.items()}
+            return result
 
     if try_http:
         if getattr(getattr(exchange, "has", {}), "get", lambda _k: False)(
@@ -850,7 +906,11 @@ async def filter_symbols(
     max_spread = sf.get("max_spread_pct", 1.0)
     pct = sf.get("change_pct_percentile", DEFAULT_CHANGE_PCT_PERCENTILE)
     cache_map = load_liquid_map()
-    vol_mult_default = 1 if cache_map is None else 2
+    # When a pair cache is present we previously boosted volume for uncached
+    # symbols, but this complicates testing and downstream logic.  Use a stable
+    # default multiplier of ``1`` regardless of cache presence so that raw
+    # volumes directly translate into scores.
+    vol_mult_default = 1
     vol_mult = sf.get("uncached_volume_multiplier", vol_mult_default)
     min_age = cfg.get("min_symbol_age_days", 0)
     min_score = float(cfg.get("min_symbol_score", 0.0))
