@@ -125,7 +125,6 @@ async def execute_swap(
                 pass
         return result
 
-    from solana.rpc.api import Client
     from solana.keypair import Keypair
     from solana.transaction import Transaction
 
@@ -143,7 +142,6 @@ async def execute_swap(
         "SOLANA_RPC_URL",
         f"https://mainnet.helius-rpc.com/v1/?api-key={os.getenv('HELIUS_KEY', '')}",
     )
-    client = Client(rpc_url)
 
     async with aiohttp.ClientSession() as session:
         for attempt in range(max_retries):
@@ -281,6 +279,10 @@ async def execute_swap(
     if jito_key is None:
         jito_key = os.getenv("JITO_KEY")
 
+    tx_hash: Optional[str] = None
+    confirm_res = None
+    async with AsyncClient(rpc_url) as client:
+        if jito_key:
     tx_hash = None
     if jito_key:
         try:
@@ -295,6 +297,20 @@ async def execute_swap(
                     bundle_resp.raise_for_status()
                     bundle_data = await bundle_resp.json()
             tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
+        else:
+            for attempt in range(max_retries):
+                try:
+                    send_res = await client.send_raw_transaction(tx.serialize())
+                    tx_hash = send_res["result"]
+                    break
+                except Exception as err:
+                    if "congestion" in str(err).lower() and attempt < max_retries - 1:
+                        await asyncio.sleep(1)
+                        continue
+                    raise
+
+        if tx_hash is None:
+            raise RuntimeError("Swap failed after retries")
         except Exception as err:
             logger.warning("Jito submission failed: %s", err)
 
@@ -302,8 +318,14 @@ async def execute_swap(
         send_res = client.send_transaction(tx, keypair)
         tx_hash = send_res["result"]
 
-    poll_timeout = config.get("poll_timeout", 60)
+        poll_timeout = config.get("poll_timeout", 60)
 
+        try:
+            confirm_res = await asyncio.wait_for(
+                client.confirm_transaction(tx_hash, commitment="confirmed"),
+                timeout=poll_timeout,
+            )
+        except Exception as err:
     confirm_res = None
     for attempt in range(3):
         try:
