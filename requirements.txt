@@ -9,9 +9,9 @@ ccxt>=4.0.0,<5
 gspread
 oauth2client
 python-dotenv
-PyYAML
+pyyaml
 python-telegram-bot
-Flask
+flask
 pytest
 websocket-client
 requests
@@ -44,5 +44,4 @@ gymnasium
 torch
 stable-baselines3
 lunarcrush
-
 keyring
