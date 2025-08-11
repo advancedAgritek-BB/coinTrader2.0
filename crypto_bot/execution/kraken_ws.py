@@ -1,12 +1,12 @@
+import asyncio
 import json
+import os
 import threading
 import time
-import os
-import asyncio
 from collections import deque
-from typing import Optional, Callable, Union, List, Any, Dict, Deque
 from datetime import datetime, timedelta, timezone
-import keyring
+from pathlib import Path
+from typing import Any, Callable, Deque, Dict, List, Optional, Union
 
 try:
     import ccxt  # type: ignore
@@ -14,9 +14,11 @@ except Exception:  # pragma: no cover - optional dependency
     import types
 
     ccxt = types.SimpleNamespace()
+
+import keyring
 from websocket import WebSocketApp
+
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from pathlib import Path
 
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
