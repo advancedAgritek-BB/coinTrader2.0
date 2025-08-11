@@ -2485,7 +2485,7 @@ async def _main_impl() -> TelegramNotifier:
         while True:
             try:
                 await asyncio.wait_for(
-                    asyncio.to_thread(mempool_monitor.fetch_priority_fee),
+                    mempool_monitor.fetch_priority_fee(),
                     timeout=interval,
                 )
                 wake_event.set()

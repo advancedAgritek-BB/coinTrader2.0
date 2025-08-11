@@ -626,10 +626,10 @@ class DummyMempool:
     def __init__(self, fee):
         self.fee = fee
 
-    def fetch_priority_fee(self):
+    async def fetch_priority_fee(self):
         return self.fee
 
-    def is_suspicious(self, threshold):
+    async def is_suspicious(self, threshold):
         return False
 
 
@@ -824,10 +824,10 @@ def test_execute_swap_low_liquidity(monkeypatch):
 
 def test_swap_paused_on_suspicious(monkeypatch):
     class DummyMonitor:
-        def fetch_priority_fee(self):
+        async def fetch_priority_fee(self):
             return 0.0
 
-        def is_suspicious(self, threshold):
+        async def is_suspicious(self, threshold):
             return True
 
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
