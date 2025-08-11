@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 import asyncio
 import os
 import time
+from decimal import Decimal
 from typing import Dict, Optional
 
 import aiohttp
@@ -21,6 +20,37 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 logger = setup_logger(__name__, LOG_DIR / "solana_trading.log")
 
 
+_DECIMALS_CACHE: Dict[str, int] = {}
+
+
+def to_base_units(amount: float | int, decimals: int) -> int:
+    """Return ``amount`` converted to base units for ``decimals`` precision."""
+    return int(Decimal(str(amount)) * (10 ** decimals))
+
+
+async def get_decimals(mint: str) -> int:
+    """Return cached decimals for ``mint`` using Solana RPC when needed."""
+    cached = _DECIMALS_CACHE.get(mint)
+    if cached is not None:
+        return cached
+
+    rpc_url = os.getenv(
+        "SOLANA_RPC_URL",
+        f"https://mainnet.helius-rpc.com/?api-key={os.getenv('HELIUS_KEY', '')}",
+    )
+    client = AsyncClient(rpc_url)
+    try:
+        resp = await client.get_token_supply(mint)
+        decimals = resp.get("result", {}).get("value", {}).get("decimals", 0)
+    except Exception:
+        decimals = 0
+    finally:
+        await client.close()
+
+    _DECIMALS_CACHE[mint] = decimals
+    return decimals
+
+
 async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> float:
     """Return current price for ``token_in``/``token_out`` using Jupiter.
 
@@ -29,6 +59,8 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
     max_retries:
         Maximum attempts when the price request fails. Defaults to ``3``.
     """
+    decimals = await get_decimals(token_in)
+    amount = to_base_units(1, decimals)
     async with aiohttp.ClientSession() as session:
         for attempt in range(max_retries):
             try:
@@ -37,7 +69,7 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
                     params={
                         "inputMint": token_in,
                         "outputMint": token_out,
-                        "amount": 1_000_000,
+                        "amount": amount,
                         "slippageBps": 50,
                     },
                     timeout=10,

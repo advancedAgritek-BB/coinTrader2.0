@@ -1,5 +1,6 @@
 import asyncio
 import types
+from typing import Dict
 
 import pytest
 
@@ -82,6 +83,38 @@ class DummyClient:
 
 async def dummy_get_wallet():
     return DummyKeypair(), DummyClient()
+
+
+@pytest.mark.asyncio
+async def test_fetch_price_respects_decimals(monkeypatch):
+    captured_params: Dict[str, int] = {}
+
+    class QuoteSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, params=None, timeout=10):
+            captured_params.update(params or {})
+            return DummyResp({"data": [{"inAmount": "1000000000", "outAmount": "2500000"}]})
+
+    monkeypatch.setattr(
+        solana_trading,
+        "aiohttp",
+        types.SimpleNamespace(ClientSession=lambda: QuoteSession()),
+    )
+
+    async def fake_decimals(mint):
+        assert mint == "SOL"
+        return 9
+
+    monkeypatch.setattr(solana_trading, "get_decimals", fake_decimals)
+
+    price = await solana_trading._fetch_price("SOL", "USDC")
+    assert price == pytest.approx(2500000 / 1000000000)
+    assert captured_params["amount"] == 1_000_000_000
 
 
 @pytest.mark.asyncio

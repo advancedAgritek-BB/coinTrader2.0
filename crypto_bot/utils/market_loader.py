@@ -40,6 +40,8 @@ from .token_registry import (
 )
 
 
+async def get_kraken_listing_date(*_a, **_k):  # pragma: no cover - network stub
+    """Return ``None`` for Kraken listing date to avoid network calls in tests."""
 async def get_kraken_listing_date(symbol: str) -> Optional[int]:
     """Return Kraken listing timestamp for *symbol*.
 
