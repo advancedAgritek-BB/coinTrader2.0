@@ -6,8 +6,6 @@ import pytest
 import os
 import time
 
-sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
-sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
 yaml_mod = types.ModuleType("yaml")
 yaml_mod.safe_load = lambda *_a, **_k: {}
 sys.modules.setdefault("yaml", yaml_mod)

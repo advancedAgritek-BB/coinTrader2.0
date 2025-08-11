@@ -5,8 +5,6 @@ import types
 import os
 import time
 
-sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
-sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
 ml_mod = types.ModuleType("crypto_bot.utils.market_loader")
 ml_mod.timeframe_seconds = lambda *_a, **_k: 60
 ml_mod.load_kraken_symbols = lambda *_a, **_k: []
