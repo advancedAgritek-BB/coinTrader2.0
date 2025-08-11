@@ -13,6 +13,10 @@ pkg_root.solana = sol_pkg
 pkg_root.utils = utils_pkg
 pkg_root.volatility_filter = types.ModuleType("crypto_bot.volatility_filter")
 pkg_root.volatility_filter.calc_atr = lambda *_a, **_k: 0.0
+pkg_root.strategy = types.ModuleType("crypto_bot.strategy")
+pkg_root.strategy.cross_chain_arb_bot = types.ModuleType(
+    "crypto_bot.strategy.cross_chain_arb_bot"
+)
 import importlib.machinery
 pkg_root.__spec__ = importlib.machinery.ModuleSpec(
     "crypto_bot", None, is_package=True
@@ -34,6 +38,7 @@ sys.modules.setdefault("crypto_bot", pkg_root)
 sys.modules.setdefault("crypto_bot.solana", sol_pkg)
 sys.modules.setdefault("crypto_bot.utils", utils_pkg)
 sys.modules.setdefault("crypto_bot.volatility_filter", pkg_root.volatility_filter)
+sys.modules.setdefault("crypto_bot.strategy", pkg_root.strategy)
 
 # Ensure the real solana_scanner module is loaded even if another test
 # inserted a stub under this name.
@@ -45,9 +50,6 @@ real_spec = importlib.util.spec_from_file_location(
 solana_scanner = importlib.util.module_from_spec(real_spec)
 sys.modules["crypto_bot.utils.solana_scanner"] = solana_scanner
 real_spec.loader.exec_module(solana_scanner)
-
-sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
-sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
 
 spec = importlib.util.spec_from_file_location(
     "crypto_bot.solana.scanner",

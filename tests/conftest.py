@@ -202,14 +202,9 @@ except Exception:  # pragma: no cover - pandas not installed
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-# Basic ccxt stub so utils can import without the real dependency
+# Provide minimal stubs for optional dependencies
 import types
-_ccxt_mod = types.ModuleType("ccxt")
-_ccxt_pro_mod = types.ModuleType("ccxt.pro")
-_ccxt_mod.pro = _ccxt_pro_mod
-sys.modules.setdefault("ccxt", _ccxt_mod)
-sys.modules.setdefault("ccxt.pro", _ccxt_pro_mod)
-sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
+sys.modules.setdefault("ccxt.pro", types.ModuleType("ccxt.pro"))
 sys.modules.setdefault("base58", types.ModuleType("base58"))
 class _FakeProm:
     class Counter:

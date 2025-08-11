@@ -26,8 +26,6 @@ sys.modules.setdefault("crypto_bot.utils", utils_pkg)
 sys.modules.setdefault("crypto_bot.volatility_filter", pkg_root.volatility_filter)
 sys.modules.setdefault("crypto_bot.utils.market_loader", market_loader_mod)
 sys.modules.setdefault("crypto_bot.utils.token_registry", token_registry_mod)
-sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
-sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
 vf_mod = types.ModuleType("volatility_filter")
 vf_mod.calc_atr = lambda *a, **k: 0
 sys.modules.setdefault("crypto_bot.volatility_filter", vf_mod)
