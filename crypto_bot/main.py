@@ -84,6 +84,7 @@ from crypto_bot.utils.token_registry import (
     TOKEN_MINTS,
     monitor_pump_raydium,
     refresh_mints,
+    periodic_mint_sanity_check,
 )
 from crypto_bot.utils import pnl_logger, regime_pnl_tracker
 from crypto_bot.utils.ml_utils import ML_AVAILABLE
@@ -2333,6 +2334,7 @@ async def _main_impl() -> TelegramNotifier:
         )
 
     register_task(asyncio.create_task(monitor_pump_raydium()))
+    register_task(asyncio.create_task(periodic_mint_sanity_check()))
 
     monitor_task = register_task(
         asyncio.create_task(
