@@ -8,7 +8,7 @@ class DummyMonitor:
         self.suspicious = suspicious
         self.calls = 0
 
-    def is_suspicious(self, threshold: float) -> bool:
+    async def is_suspicious(self, threshold: float) -> bool:
         self.calls += 1
         return self.suspicious
 

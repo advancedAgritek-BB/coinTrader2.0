@@ -1,6 +1,6 @@
 """Utilities for loading trading symbols and fetching OHLCV data."""
 
-from typing import Iterable, List, Dict, Any, Deque
+from typing import Iterable, List, Dict, Any, Deque, Optional
 from dataclasses import dataclass
 import asyncio
 import inspect
@@ -42,6 +42,12 @@ from .token_registry import (
 
 async def get_kraken_listing_date(*_a, **_k):  # pragma: no cover - network stub
     """Return ``None`` for Kraken listing date to avoid network calls in tests."""
+async def get_kraken_listing_date(symbol: str) -> Optional[int]:
+    """Return Kraken listing timestamp for *symbol*.
+
+    This is a lightweight placeholder used in tests; production code may
+    provide a more complete implementation elsewhere."""
+
     return None
 
 from .logger import LOG_DIR, setup_logger

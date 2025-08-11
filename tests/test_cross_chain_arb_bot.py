@@ -13,7 +13,7 @@ class DummyMonitor:
     def __init__(self, suspicious=False):
         self._suspicious = suspicious
 
-    def is_suspicious(self, threshold: float) -> bool:  # pragma: no cover - simple
+    async def is_suspicious(self, threshold: float) -> bool:  # pragma: no cover - simple
         return self._suspicious
 
 

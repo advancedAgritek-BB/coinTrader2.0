@@ -53,7 +53,19 @@ def generate_signal(
             fee_thr = float(cfg.get("suspicious_fee_threshold", 0.0))
         except (TypeError, ValueError):
             fee_thr = 0.0
-        if mempool_monitor.is_suspicious(fee_thr):
+        try:
+            suspicious = asyncio.run(mempool_monitor.is_suspicious(fee_thr))
+        except RuntimeError:
+            try:
+                loop = asyncio.get_event_loop()
+                suspicious = loop.run_until_complete(
+                    mempool_monitor.is_suspicious(fee_thr)
+                )
+            except Exception:
+                suspicious = False
+        except Exception:
+            suspicious = False
+        if suspicious:
             return 0.0, "none"
 
     try:

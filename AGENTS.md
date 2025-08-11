@@ -597,7 +597,7 @@ The Helius Dashboard provides a free tier with 100,000 DAS API calls per month. 
 Helius' `getAssetsByOwner` method returns compressed and standard NFTs with a single request. The call structure is:
 
 ```json
-POST https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+POST https://mainnet.helius-rpc.com/v1/?api-key=YOUR_KEY
 {
   "jsonrpc": "2.0",
   "id": "1",

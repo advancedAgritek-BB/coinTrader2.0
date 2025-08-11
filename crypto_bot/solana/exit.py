@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Callable, Mapping, Dict
+from typing import Callable, Mapping, Dict, Optional
 
 
 async def monitor_price(
     price_feed: Callable[[], float],
     entry_price: float,
     cfg: Mapping[str, float],
+    *,
+    mempool_monitor: Optional[object] = None,
+    mempool_cfg: Optional[Mapping[str, float]] = None,
 ) -> Dict:
     """Monitor price until exit conditions are met."""
 
@@ -24,6 +27,16 @@ async def monitor_price(
     start = time.time()
     price = entry_price
     while time.time() - start < timeout:
+        if mempool_monitor and (mempool_cfg or {}).get("enabled"):
+            try:
+                thr = float((mempool_cfg or {}).get("suspicious_fee_threshold", 0.0))
+            except (TypeError, ValueError):
+                thr = 0.0
+            try:
+                if await mempool_monitor.is_suspicious(thr):
+                    return {"exit_price": price, "reason": "mempool_spike"}
+            except Exception:
+                pass
         await asyncio.sleep(poll)
         price = price_feed()
         if price > peak:

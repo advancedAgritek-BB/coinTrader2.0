@@ -13,7 +13,6 @@ from collections import deque
 from typing import Optional, Deque
 
 import aiohttp
-import requests
 
 
 class SolanaMempoolMonitor:
@@ -36,7 +35,7 @@ class SolanaMempoolMonitor:
         self._volume_history: Deque[float] = deque(maxlen=history_size)
         self._volume_task: asyncio.Task | None = None
 
-    def fetch_priority_fee(self) -> float:
+    async def fetch_priority_fee(self) -> float:
         """Return the current priority fee per compute unit in micro lamports."""
         mock_fee = os.getenv("MOCK_PRIORITY_FEE")
         if mock_fee is not None:
@@ -45,18 +44,19 @@ class SolanaMempoolMonitor:
             except ValueError:
                 return 0.0
         try:
-            resp = requests.get(self.priority_fee_url, timeout=5)
-            resp.raise_for_status()
-            data = resp.json()
-            if isinstance(data, dict):
-                return float(data.get("priorityFee", 0.0))
+            async with aiohttp.ClientSession() as session:
+                async with session.get(self.priority_fee_url, timeout=5) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json()
+                    if isinstance(data, dict):
+                        return float(data.get("priorityFee", 0.0))
         except Exception:
             pass
         return 0.0
 
-    def is_suspicious(self, threshold: float) -> bool:
+    async def is_suspicious(self, threshold: float) -> bool:
         """Return True when the priority fee exceeds ``threshold``."""
-        fee = self.fetch_priority_fee()
+        fee = await self.fetch_priority_fee()
         return fee >= threshold
 
     async def _fetch_volume(self) -> float:
