@@ -240,6 +240,14 @@ def _write_cache() -> None:
 
 
 # Additional mints discovered via manual searches
+#
+# Hand-verified via Helius on 2025-08-11; these overrides require
+# periodic validation. Maintainers can cross-check quickly using:
+#   curl https://api.helius.xyz/v0/token-metadata?api-key=<API_KEY> \
+#        -X POST -H "Content-Type: application/json" \
+#        -d '{"mintAccounts":["<MINT_ADDRESS>"]}'
+# or inspect https://explorer.solana.com/address/<MINT_ADDRESS>
+# to ensure mappings remain accurate.
 TOKEN_MINTS.update(
     {
         "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
@@ -268,6 +276,8 @@ async def refresh_mints() -> None:
         raise RuntimeError("Failed to load token mints")
     TOKEN_MINTS.update(
         {
+            # Hand-verified via Helius on 2025-08-11; validate periodically
+            # using the API call above or the Solana explorer.
             "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
             "FARTCOIN": "Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw",
             "MELANIA": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
