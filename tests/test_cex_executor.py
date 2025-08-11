@@ -301,9 +301,7 @@ def test_get_exchange_websocket_missing_creds(monkeypatch):
             self.options = {}
 
     monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: DummyCCXT2(params), raising=False)
-    monkeypatch.setattr(
-        "crypto_bot.utils.kraken.get_ws_token", lambda *a, **k: "token"
-    )
+    monkeypatch.setattr(cex_executor, "get_ws_token", lambda *a, **k: "token")
     monkeypatch.setattr(cex_executor, "env_or_prompt", lambda *a, **k: None)
     exchange, ws = cex_executor.get_exchange(config)
     assert isinstance(ws, cex_executor.KrakenWSClient)
@@ -311,6 +309,7 @@ def test_get_exchange_websocket_missing_creds(monkeypatch):
 
 class SlippageExchange:
     def fetch_order_book(self, symbol, limit=10):
+        return {"bids": [[100, 10]], "asks": [[120, 0.5], [150, 0.5]]}
         return {"bids": [[100, 10]], "asks": [[100, 0.5], [120, 10]]}
 
     def create_market_order(self, symbol, side, amount):
@@ -501,6 +500,9 @@ def test_execute_trade_async_retries_network_error(monkeypatch):
 
 def test_execute_trade_no_message_when_disabled(monkeypatch):
     calls = {"count": 0}
+    from crypto_bot.utils import telegram
+    monkeypatch.setattr(
+        telegram,
     import crypto_bot.utils.telegram as telegram_mod
 
     monkeypatch.setattr(
