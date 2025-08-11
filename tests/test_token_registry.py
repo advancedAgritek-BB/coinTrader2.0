@@ -33,11 +33,12 @@ def _load_module(monkeypatch, tmp_path):
     # use temporary cache and clear preloaded tokens
     monkeypatch.setattr(mod, "CACHE_FILE", tmp_path / "token_mints.json", raising=False)
     mod.TOKEN_MINTS.clear()
+    mod.TOKEN_DECIMALS.clear()
     return mod
 
 
 def test_fetch_from_jupiter(monkeypatch, tmp_path):
-    data = [{"symbol": "SOL", "address": "So111"}]
+    data = [{"symbol": "SOL", "address": "So111", "decimals": 9}]
 
     class DummyResp:
         def __init__(self, d):
@@ -80,6 +81,7 @@ def test_fetch_from_jupiter(monkeypatch, tmp_path):
     result = asyncio.run(mod.fetch_from_jupiter())
     assert result == {"SOL": "So111"}
     assert session.url == mod.JUPITER_TOKEN_URL
+    assert mod.TOKEN_DECIMALS["So111"] == 9
 
 
 def test_fetch_from_helius(monkeypatch, tmp_path):
@@ -828,3 +830,54 @@ def test_monitor_pump_raydium(monkeypatch, tmp_path):
     assert len(calls) == 2
     assert len(runs) == 2
     assert len(writes) == 2
+
+
+def test_to_base_units(monkeypatch, tmp_path):
+    mod = _load_module(monkeypatch, tmp_path)
+    assert mod.to_base_units(1, 9) == 1_000_000_000
+    assert mod.to_base_units(1.5, 6) == 1_500_000
+
+
+def test_get_decimals_cache_and_fallback(monkeypatch, tmp_path):
+    mod = _load_module(monkeypatch, tmp_path)
+    mod.TOKEN_DECIMALS["So111"] = 9
+    assert asyncio.run(mod.get_decimals("So111")) == 9
+
+    class DummyResp:
+        def __init__(self):
+            self.status = 200
+
+        async def json(self, content_type=None):
+            return [{"mint": "m2", "decimals": 6}]
+
+        def raise_for_status(self):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+    class DummySession:
+        def __init__(self):
+            self.url = None
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=10):
+            self.url = url
+            return DummyResp()
+
+    session = DummySession()
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
+    monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+    monkeypatch.setenv("HELIUS_KEY", "KEY")
+
+    dec = asyncio.run(mod.get_decimals("m2"))
+    assert dec == 6
+    assert mod.TOKEN_DECIMALS["m2"] == 6

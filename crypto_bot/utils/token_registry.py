@@ -5,6 +5,7 @@ import logging
 import os
 import asyncio
 from datetime import datetime, timedelta
+from decimal import Decimal, ROUND_DOWN
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
@@ -38,6 +39,9 @@ CACHE_FILE = Path(__file__).resolve().parents[2] / "cache" / "token_mints.json"
 # dictionary at runtime.
 TOKEN_MINTS: Dict[str, str] = {}
 
+# Mapping of mint addresses to their decimal precision
+TOKEN_DECIMALS: Dict[str, int] = {}
+
 _LOADED = False
 
 PUMP_URL = "https://api.pump.fun/tokens?limit=50&offset=0"
@@ -46,6 +50,15 @@ RAYDIUM_URL = "https://api.raydium.io/v2/main/pairs"
 # Poll interval for monitoring external token feeds
 # Reduced poll interval to surface new tokens faster
 POLL_INTERVAL = 10
+
+
+def to_base_units(amount_tokens: float, decimals: int) -> int:
+    """Convert human readable ``amount_tokens`` to integer base units."""
+    factor = Decimal(10) ** decimals
+    quantized = (Decimal(str(amount_tokens)) * factor).quantize(
+        Decimal("1"), rounding=ROUND_DOWN
+    )
+    return int(quantized)
 
 
 async def fetch_from_jupiter() -> Dict[str, str]:
@@ -62,6 +75,9 @@ async def fetch_from_jupiter() -> Dict[str, str]:
         mint = item.get("address") or item.get("mint") or item.get("tokenMint")
         if isinstance(symbol, str) and isinstance(mint, str):
             result[symbol.upper()] = mint
+            dec = item.get("decimals")
+            if isinstance(dec, int):
+                TOKEN_DECIMALS[mint] = dec
     return result
 
 
@@ -446,6 +462,47 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     return result
 
 
+async def get_decimals(mint: str) -> int:
+    """Return decimal precision for ``mint``.
+
+    The value is first looked up in ``TOKEN_DECIMALS``.  If not found and a
+    ``HELIUS_KEY`` is configured, the Helius metadata endpoint is queried and
+    the result cached for subsequent calls.
+    """
+
+    cached = TOKEN_DECIMALS.get(mint)
+    if cached is not None:
+        return cached
+
+    api_key = os.getenv("HELIUS_KEY")
+    if not api_key:
+        return 0
+
+    from urllib.parse import urlencode
+
+    params = {"mint": mint, "api-key": api_key}
+    url = f"{HELIUS_TOKEN_API}?{urlencode(params)}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as resp:
+                resp.raise_for_status()
+                data = await resp.json(content_type=None)
+    except Exception as exc:  # pragma: no cover - network
+        logger.error("Helius decimals lookup failed for %s: %s", mint, exc)
+        return 0
+
+    items = data if isinstance(data, list) else data.get("tokens") or data.get("data") or []
+    if isinstance(items, dict):
+        items = list(items.values())
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        mint_addr = item.get("mint") or item.get("address") or item.get("tokenMint")
+        dec = item.get("decimals")
+        if isinstance(mint_addr, str) and mint_addr == mint and isinstance(dec, int):
+            TOKEN_DECIMALS[mint] = dec
+            return dec
+    return 0
 async def periodic_mint_sanity_check(interval_hours: float = 24.0) -> None:
     """Periodically verify manual mint overrides via Helius metadata."""
 
