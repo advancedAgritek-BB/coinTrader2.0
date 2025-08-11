@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Iterable, List, Dict
 
-import ccxt.pro as ccxt
+import ccxt  # type: ignore
 try:  # pragma: no cover - import fallback
     from ccxt.base.errors import NetworkError as CCXTNetworkError
 except Exception:  # pragma: no cover - import fallback
@@ -26,7 +26,7 @@ from tenacity import (
     wait_exponential,
     before_log,
     before_sleep_log,
-    retry_if_exception,
+    retry_if_exception_type,
 )
 import logging
 
@@ -133,28 +133,20 @@ TICKER_BACKOFF_MAX = 60
 liq_cache = TTLCache(maxsize=2000, ttl=900)
 
 
-# tenacity wrapped helper for WebSocket ticker requests
-def _ws_retry_filter(exc: Exception) -> bool:
-    """Return ``True`` to retry unless a WebSocket closed with code 1006."""
-
-    return not (
-        isinstance(exc, CCXTNetworkError) and getattr(exc, "code", None) == 1006
-    )
-
-
+# tenacity wrapped helper for REST ticker requests
 @retry(
     wait=wait_exponential(multiplier=2, max=60),
     stop=stop_after_attempt(5),
     reraise=True,
     before=before_log(logger, logging.DEBUG),
     before_sleep=before_sleep_log(logger, logging.WARNING),
-    retry=retry_if_exception(_ws_retry_filter),
+    retry=retry_if_exception_type(CCXTNetworkError),
 )
-async def _watch_tickers_with_retry(exchange, symbols):
-    """Call ``exchange.watch_tickers`` with retries."""
+async def _fetch_tickers_with_retry(exchange, symbols):
+    """Call ``exchange.fetch_tickers`` with retries."""
 
     try:
-        return await exchange.watch_tickers(symbols)
+        return await exchange.fetch_tickers(symbols)
     except Exception:
         await asyncio.sleep(1)
         raise
@@ -415,10 +407,7 @@ async def _refresh_tickers(
                     count = info.get("count", 0) + 1
                 ticker_failures[sym] = {"time": now, "delay": delay, "count": count}
 
-    try_ws = (
-        getattr(getattr(exchange, "has", {}), "get", lambda _k: False)("watchTickers")
-        and getattr(exchange, "options", {}).get("ws_scan", True)
-    )
+    try_ws = False  # WebSocket streaming disabled; use REST polling
     ws_failures = int(getattr(exchange, "options", {}).get("ws_failures", 0))
     ws_limit = int(cfg.get("ws_failures_before_disable", 3))
     try_http = True
@@ -434,7 +423,7 @@ async def _refresh_tickers(
                 await asyncio.sleep(min(2 ** (ws_failures - 1), 30))
             try:
                 async with TICKER_SEMA:
-                    data = await _watch_tickers_with_retry(exchange, to_fetch)
+                    data = await _fetch_tickers_with_retry(exchange, to_fetch)
                     if delay:
                         await asyncio.sleep(delay)
                 opts = getattr(exchange, "options", None)

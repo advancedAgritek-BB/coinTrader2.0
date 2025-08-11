@@ -205,6 +205,10 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 # Provide minimal stubs for optional dependencies
 import types
 sys.modules.setdefault("ccxt.pro", types.ModuleType("ccxt.pro"))
+# Basic ccxt stub so utils can import without the real dependency
+_ccxt_mod = types.ModuleType("ccxt")
+sys.modules.setdefault("ccxt", _ccxt_mod)
+sys.modules.setdefault("ccxt.async_support", types.ModuleType("ccxt.async_support"))
 sys.modules.setdefault("base58", types.ModuleType("base58"))
 class _FakeProm:
     class Counter:

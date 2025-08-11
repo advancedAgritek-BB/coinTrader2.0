@@ -13,11 +13,6 @@ except Exception:  # pragma: no cover - optional dependency
 import asyncio
 from typing import Dict, Optional, Tuple, List
 
-try:
-    import ccxt.pro as ccxtpro  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    ccxtpro = None
-
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.execution.kraken_ws import KrakenWSClient
 from crypto_bot.utils.trade_logger import log_trade
@@ -36,10 +31,9 @@ Notifier = TelegramNotifier
 def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
     """Instantiate and return a ccxt exchange and optional websocket client.
 
-    When ``use_websocket`` is enabled and ``ccxtpro`` is available, an
-    asynchronous ``ccxt.pro`` instance is returned. Otherwise the standard
-    ``ccxt`` exchange is used. ``KrakenWSClient`` is retained for backward
-    compatibility when WebSocket trading is desired without ccxt.pro.
+    When ``use_websocket`` is enabled a :class:`KrakenWSClient` is returned for
+    realtime trading on Kraken. Only the standard ``ccxt`` library is used for
+    exchange access.
     """
 
     exchange_name = config.get("exchange", "coinbase")
@@ -50,13 +44,8 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
     api_secret = env_or_prompt("API_SECRET", "Enter API secret: ") or None
     api_token = env_or_prompt("KRAKEN_API_TOKEN", "Enter Kraken API token: ") or None
 
-    if use_ws and ccxtpro:
-        ccxt_mod = ccxtpro
-    else:
-        ccxt_mod = ccxt
-
     if exchange_name == "coinbase":
-        exchange = ccxt_mod.coinbase(
+        exchange = ccxt.coinbase(
             {
                 "apiKey": api_key,
                 "secret": api_secret,
@@ -69,17 +58,11 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
             ws_token = os.getenv("KRAKEN_WS_TOKEN")
             if not ws_token and api_key and api_secret:
                 ws_token = get_ws_token(api_key, api_secret, api_token or None)
-            if ccxtpro:
-                if (api_key and api_secret) or ws_token:
-                    ws_client = KrakenWSClient(
-                        api_key, api_secret, ws_token=ws_token, api_token=api_token
-                    )
-            else:
-                ws_client = KrakenWSClient(
-                    api_key, api_secret, ws_token=ws_token, api_token=api_token
-                )
+            ws_client = KrakenWSClient(
+                api_key, api_secret, ws_token=ws_token, api_token=api_token
+            )
 
-        exchange = ccxt_mod.kraken(
+        exchange = ccxt.kraken(
             {
                 "apiKey": api_key,
                 "secret": api_secret,
@@ -369,7 +352,7 @@ async def _place_order_async(
                             )
                         break
 
-                if use_websocket and ws_client is not None and not ccxtpro:
+                if use_websocket and ws_client is not None:
                     order = ws_client.add_order(symbol, side, remaining)
                 elif asyncio.iscoroutinefunction(getattr(exchange, "create_market_order", None)):
                     order = await exchange.create_market_order(symbol, side, remaining)

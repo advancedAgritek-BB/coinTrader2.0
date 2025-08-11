@@ -245,9 +245,7 @@ def test_get_exchange_websocket(monkeypatch):
     monkeypatch.setenv("API_SECRET", "sec")
     monkeypatch.setenv("KRAKEN_API_TOKEN", "apitoken")
 
-    monkeypatch.setattr(
-        "crypto_bot.utils.kraken.get_ws_token", lambda *a, **k: "token"
-    )
+    monkeypatch.setattr(cex_executor, "get_ws_token", lambda *a, **k: "token")
 
     def fake_env_or_prompt(name, prompt):
         if name == "KRAKEN_WS_TOKEN":
@@ -277,17 +275,9 @@ def test_get_exchange_websocket(monkeypatch):
         lambda params: DummyCCXT(params),
         raising=False,
     )
-    if getattr(cex_executor, "ccxtpro", None):
-        monkeypatch.setattr(
-            cex_executor.ccxtpro, "kraken", lambda params: DummyCCXT(params)
-        )
 
     exchange, ws = cex_executor.get_exchange(config)
     assert isinstance(ws, DummyWSClient)
-    if cex_executor.ccxtpro:
-        expected = ("key", "sec", None, "apitoken")
-    else:
-        expected = ("key", "sec", None, None)
     expected = ("key", "sec", "token", "apitoken")
     assert created["args"] == expected
 
@@ -311,23 +301,16 @@ def test_get_exchange_websocket_missing_creds(monkeypatch):
             self.options = {}
 
     monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: DummyCCXT2(params), raising=False)
-    monkeypatch.setattr(
-        "crypto_bot.utils.kraken.get_ws_token", lambda *a, **k: "token"
-    )
+    monkeypatch.setattr(cex_executor, "get_ws_token", lambda *a, **k: "token")
     monkeypatch.setattr(cex_executor, "env_or_prompt", lambda *a, **k: None)
-    if getattr(cex_executor, "ccxtpro", None):
-        monkeypatch.setattr(cex_executor.ccxtpro, "kraken", lambda params: object())
-
     exchange, ws = cex_executor.get_exchange(config)
-    if cex_executor.ccxtpro:
-        assert ws is None
-    else:
-        assert isinstance(ws, cex_executor.KrakenWSClient)
+    assert isinstance(ws, cex_executor.KrakenWSClient)
 
 
 class SlippageExchange:
     def fetch_order_book(self, symbol, limit=10):
-        return {"bids": [[100, 10]], "asks": [[120, 10]]}
+        return {"bids": [[100, 10]], "asks": [[120, 0.5], [150, 0.5]]}
+        return {"bids": [[100, 10]], "asks": [[100, 0.5], [120, 10]]}
 
     def create_market_order(self, symbol, side, amount):
         raise AssertionError("should not execute")
@@ -517,8 +500,14 @@ def test_execute_trade_async_retries_network_error(monkeypatch):
 
 def test_execute_trade_no_message_when_disabled(monkeypatch):
     calls = {"count": 0}
+    from crypto_bot.utils import telegram
     monkeypatch.setattr(
-        "crypto_bot.utils.telegram.send_message_sync",
+        telegram,
+    import crypto_bot.utils.telegram as telegram_mod
+
+    monkeypatch.setattr(
+        telegram_mod,
+        "send_message_sync",
         lambda *a, **k: calls.__setitem__("count", calls["count"] + 1),
     )
 
