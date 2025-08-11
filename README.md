@@ -349,7 +349,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **exchange** – target CEX (`coinbase` or `kraken`).
 * **execution_mode** – choose `dry_run` for simulation or `live` for real orders.
   Paper trading defaults to long-only on spot exchanges.
-* **use_websocket** – enable WebSocket data via `ccxt.pro`.
+* **use_websocket** – enable WebSocket data via `KrakenWSClient`.
 * **force_websocket_history** – disable REST fallbacks when streaming (default: true).
 * **max_ws_limit** – skip WebSocket OHLCV when `limit` exceeds this value.
 * **exchange_market_types** – market types to trade (spot, margin, futures).
@@ -933,9 +933,9 @@ file for later analysis.
 `scalp_timeframe` sets the candle interval specifically for the micro_scalp
 and bounce_scalper strategies while `timeframe` covers all other analysis.
 
-When `use_websocket` is enabled the bot relies on `ccxt.pro` for realtime
-streaming data. Install it alongside the other requirements or disable
-websockets if you do not have access to `ccxt.pro`.
+When `use_websocket` is enabled the bot uses a dedicated Kraken WebSocket
+client for realtime streaming data. Disable websockets if you do not need
+this functionality.
 When OHLCV streaming returns fewer candles than requested the bot calculates
 how many bars are missing and fetches only that remainder via REST. This
 adaptive limit keeps history current without waiting for a full response.
