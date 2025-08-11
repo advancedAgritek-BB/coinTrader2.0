@@ -140,7 +140,7 @@ async def execute_swap(
     keypair = Keypair.from_secret_key(bytes(json.loads(private_key)))
     rpc_url = os.getenv(
         "SOLANA_RPC_URL",
-        f"https://mainnet.helius-rpc.com/?api-key={os.getenv('HELIUS_KEY', '')}",
+        f"https://mainnet.helius-rpc.com/v1/?api-key={os.getenv('HELIUS_KEY', '')}",
     )
 
     async with aiohttp.ClientSession() as session:
@@ -283,6 +283,9 @@ async def execute_swap(
     confirm_res = None
     async with AsyncClient(rpc_url) as client:
         if jito_key:
+    tx_hash = None
+    if jito_key:
+        try:
             signed_tx = base64.b64encode(tx.serialize()).decode()
             async with aiohttp.ClientSession() as jito_session:
                 async with jito_session.post(
@@ -308,6 +311,12 @@ async def execute_swap(
 
         if tx_hash is None:
             raise RuntimeError("Swap failed after retries")
+        except Exception as err:
+            logger.warning("Jito submission failed: %s", err)
+
+    if tx_hash is None:
+        send_res = client.send_transaction(tx, keypair)
+        tx_hash = send_res["result"]
 
         poll_timeout = config.get("poll_timeout", 60)
 
@@ -317,6 +326,19 @@ async def execute_swap(
                 timeout=poll_timeout,
             )
         except Exception as err:
+    confirm_res = None
+    for attempt in range(3):
+        try:
+            async with AsyncClient(rpc_url) as aclient:
+                confirm_res = await asyncio.wait_for(
+                    aclient.confirm_transaction(tx_hash, commitment="confirmed"),
+                    timeout=poll_timeout,
+                )
+            break
+        except Exception as err:
+            if attempt < 2:
+                await asyncio.sleep(2 ** (attempt + 1))
+                continue
             err_msg = notifier.notify(f"Confirmation failed for {tx_hash}")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)

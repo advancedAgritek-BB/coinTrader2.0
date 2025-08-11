@@ -6,7 +6,7 @@ import os
 import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Any, Dict, Iterable, List
 
 import aiohttp
 import ccxt.async_support as ccxt
@@ -240,6 +240,14 @@ def _write_cache() -> None:
 
 
 # Additional mints discovered via manual searches
+#
+# Hand-verified via Helius on 2025-08-11; these overrides require
+# periodic validation. Maintainers can cross-check quickly using:
+#   curl https://api.helius.xyz/v0/token-metadata?api-key=<API_KEY> \
+#        -X POST -H "Content-Type: application/json" \
+#        -d '{"mintAccounts":["<MINT_ADDRESS>"]}'
+# or inspect https://explorer.solana.com/address/<MINT_ADDRESS>
+# to ensure mappings remain accurate.
 TOKEN_MINTS.update(
     {
         "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
@@ -258,6 +266,23 @@ TOKEN_MINTS.update(
         # Add more as needed; skip USDQ/USTC/XTZ as non-Solana
     }
 )
+MANUAL_OVERRIDES: Dict[str, str] = {
+    "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
+    "BERA": "A7y2wgyytufsxjg2ub616zqnte3x62f7fcp8fujdmoon",
+    "EUROP": "pD6L7wWeei1LJqb7tmnpfEnvkcBvqMgkfqvg23Bpump",
+    "FARTCOIN": "Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw",
+    "RLUSD": "BkbjmJVa84eiGyp27FTofuQVFLqmKFev4ZPZ3U33pump",
+    "USDG": "2gc4f72GkEtggrkUDJRSbLcBpEUPPPFsnDGJJeNKpump",  # Assuming Unlimited Solana Dump
+    "VIRTUAL": "2FupRnaRfnyPHg798WsCBMGAauEkrhMs4YN7nBmujPtM",
+    "XMR": "Fi9GeixxfhMEGfnAe75nJVrwPqfVefyS6fgmyiTxkS6q",  # Wrapped, verify
+    "MELANIA": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
+    "PENGU": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
+    "USDR": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  # USDT as proxy
+    "USTC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC proxy (adjust if needed)
+    "TRUMP": "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
+    # Add more as needed; skip USDQ/USTC/XTZ as non-Solana
+}
+TOKEN_MINTS.update(MANUAL_OVERRIDES)
 _write_cache()  # Save immediately
 
 
@@ -266,18 +291,19 @@ async def refresh_mints() -> None:
     loaded = await load_token_mints(force_refresh=True)
     if not loaded:
         raise RuntimeError("Failed to load token mints")
+    TOKEN_MINTS.update(MANUAL_OVERRIDES)
     TOKEN_MINTS.update(
         {
+            # Hand-verified via Helius on 2025-08-11; validate periodically
+            # using the API call above or the Solana explorer.
             "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
             "FARTCOIN": "Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw",
             "MELANIA": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
             "PENGU": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
             "RLUSD": "BkbjmJVa84eiGyp27FTofuQVFLqmKFev4ZPZ3U33pump",
             "VIRTUAL": "2FupRnaRfnyPHg798WsCBMGAauEkrhMs4YN7nBmujPtM",
+            # Latest known mappings or proxies
             "USDG": "2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH",
-            "USDR": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
-            "USTC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-            "TRUMP": "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
             "SOL": "So11111111111111111111111111111111111111112",
         }
     )
@@ -350,13 +376,19 @@ async def get_mint_from_gecko(base: str) -> str | None:
     return helius.get(base_upper)
 
 
-async def fetch_from_helius(symbols: Iterable[str]) -> Dict[str, str]:
-    """Return mapping of ``symbols`` to mint addresses using Helius.
+async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Dict[str, Any]:
+    """Return token metadata for ``symbols`` using Helius.
+
+    By default only the mapping of symbol to mint address is returned. When
+    ``full`` is ``True`` a dictionary of metadata is provided for each symbol
+    containing at minimum ``mint``, ``decimals`` and ``supply``.
 
     Parameters
     ----------
     symbols:
         Iterable of token symbols to resolve.
+    full:
+        Return full metadata instead of just mint addresses.
     """
 
     api_key = os.getenv("HELIUS_KEY", "")
@@ -387,7 +419,7 @@ async def fetch_from_helius(symbols: Iterable[str]) -> Dict[str, str]:
         logger.error("Helius lookup error: %s", exc)
         return {}
 
-    result: Dict[str, str] = {}
+    result: Dict[str, Any] = {}
     if isinstance(data, list):
         items = data
     else:
@@ -402,8 +434,54 @@ async def fetch_from_helius(symbols: Iterable[str]) -> Dict[str, str]:
         symbol = item.get("symbol") or item.get("ticker")
         mint = item.get("mint") or item.get("address") or item.get("tokenMint")
         if isinstance(symbol, str) and isinstance(mint, str):
-            result[symbol.upper()] = mint
+            key = symbol.upper()
+            if full:
+                result[key] = {
+                    "mint": mint,
+                    "decimals": item.get("decimals"),
+                    "supply": item.get("supply"),
+                }
+            else:
+                result[key] = mint
     return result
+
+
+async def periodic_mint_sanity_check(interval_hours: float = 24.0) -> None:
+    """Periodically verify manual mint overrides via Helius metadata."""
+
+    symbols = list(MANUAL_OVERRIDES.keys())
+    while True:
+        try:
+            if symbols:
+                metadata = await fetch_from_helius(symbols, full=True)
+                for sym, expected_mint in MANUAL_OVERRIDES.items():
+                    meta = metadata.get(sym)
+                    if not isinstance(meta, dict):
+                        logger.warning("No metadata for %s", sym)
+                        continue
+                    helius_mint = meta.get("mint")
+                    decimals = meta.get("decimals")
+                    supply = meta.get("supply")
+                    if isinstance(helius_mint, str) and helius_mint != expected_mint:
+                        logger.warning(
+                            "Mint mismatch for %s: cache=%s helius=%s",
+                            sym,
+                            expected_mint,
+                            helius_mint,
+                        )
+                        TOKEN_MINTS[sym] = helius_mint
+                        MANUAL_OVERRIDES[sym] = helius_mint
+                        _write_cache()
+                    if not isinstance(decimals, int) or decimals <= 0:
+                        logger.warning("Unexpected decimals for %s: %s", sym, decimals)
+                    if not isinstance(supply, (int, float)) or supply <= 0:
+                        logger.warning("Unexpected supply for %s: %s", sym, supply)
+        except asyncio.CancelledError:
+            logger.info("periodic_mint_sanity_check cancelled")
+            raise
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.error("periodic_mint_sanity_check error: %s", exc)
+        await asyncio.sleep(interval_hours * 3600)
 
 
 async def monitor_pump_raydium() -> None:

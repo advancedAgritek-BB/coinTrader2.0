@@ -133,6 +133,53 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
     )
 
 
+def test_fetch_from_helius_full(monkeypatch, tmp_path):
+    data = [{"symbol": "AAA", "mint": "mmm", "decimals": 5, "supply": 10}]
+
+    class DummyResp:
+        def __init__(self, d):
+            self._d = d
+            self.status = 200
+
+        async def json(self, content_type=None):
+            return self._d
+
+        def raise_for_status(self):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+    class DummySession:
+        def __init__(self, d):
+            self.d = d
+            self.url = None
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=10):
+            self.url = url
+            return DummyResp(self.d)
+
+    session = DummySession(data)
+
+    mod = _load_module(monkeypatch, tmp_path)
+    aiohttp_mod = type(
+        "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
+    )
+    monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+
+    mapping = asyncio.run(mod.fetch_from_helius(["AAA"], full=True))
+    assert mapping == {"AAA": {"mint": "mmm", "decimals": 5, "supply": 10}}
+
+
 def test_fetch_from_helius_4xx(monkeypatch, tmp_path, caplog):
     class DummyResp:
         def __init__(self, status=401):
@@ -178,6 +225,36 @@ def test_fetch_from_helius_4xx(monkeypatch, tmp_path, caplog):
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
     assert mapping == {}
     assert "Helius lookup failed" in caplog.text
+
+
+def test_periodic_mint_sanity_check(monkeypatch, tmp_path):
+    mod = _load_module(monkeypatch, tmp_path)
+    mod.MANUAL_OVERRIDES.clear()
+    mod.MANUAL_OVERRIDES.update({"AAA": "old"})
+    mod.TOKEN_MINTS.update(mod.MANUAL_OVERRIDES)
+
+    async def fake_fetch(_symbols, *, full=False):
+        return {"AAA": {"mint": "new", "decimals": 9, "supply": 100}}
+
+    monkeypatch.setattr(mod, "fetch_from_helius", fake_fetch)
+
+    called = []
+
+    def fake_write():
+        called.append(True)
+
+    monkeypatch.setattr(mod, "_write_cache", fake_write)
+
+    async def fast_sleep(_):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fast_sleep)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(mod.periodic_mint_sanity_check(interval_hours=0))
+
+    assert mod.TOKEN_MINTS["AAA"] == "new"
+    assert called
 
 
 def test_load_token_mints(monkeypatch, tmp_path):
