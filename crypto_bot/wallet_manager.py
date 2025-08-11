@@ -1,12 +1,13 @@
-import os
 import base64
 import json
-import yaml
+import os
 from pathlib import Path
 from typing import Dict, List
 
-from crypto_bot.utils.logger import LOG_DIR, setup_logger
+import yaml
+
 from crypto_bot.utils.env import env_or_prompt
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 
 try:
