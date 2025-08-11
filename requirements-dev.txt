@@ -6,4 +6,4 @@ websocket-client
 keyring
 tenacity
 fakeredis
-ccxtpro
+ccxt>=4.0.0,<5
