@@ -19,7 +19,6 @@ from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot import tax_logger
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.token_registry import get_decimals, to_base_units
-from pathlib import Path
 
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
