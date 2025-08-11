@@ -1,6 +1,6 @@
 """Utilities for loading trading symbols and fetching OHLCV data."""
 
-from typing import Iterable, List, Dict, Any, Deque, Optional
+from typing import Any, Dict, Optional, List, Iterable, Deque
 from dataclasses import dataclass
 import asyncio
 import inspect
@@ -13,7 +13,6 @@ try:  # pragma: no cover - optional dependency
     import ccxt.pro as ccxt  # type: ignore
 except Exception:  # pragma: no cover - fall back to standard ccxt
     import ccxt  # type: ignore
-import ccxt
 import aiohttp
 
 try:  # optional redis for caching
@@ -40,8 +39,6 @@ from .token_registry import (
 )
 
 
-async def get_kraken_listing_date(*_a, **_k):  # pragma: no cover - network stub
-    """Return ``None`` for Kraken listing date to avoid network calls in tests."""
 async def get_kraken_listing_date(symbol: str) -> Optional[int]:
     """Return Kraken listing timestamp for *symbol*.
 
