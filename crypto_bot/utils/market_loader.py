@@ -39,6 +39,11 @@ from .token_registry import (
     fetch_from_helius,
 )
 
+
+async def get_kraken_listing_date(*_a, **_k):  # pragma: no cover - network stub
+    """Return ``None`` for Kraken listing date to avoid network calls in tests."""
+    return None
+
 from .logger import LOG_DIR, setup_logger
 from .constants import NON_SOLANA_BASES
 
