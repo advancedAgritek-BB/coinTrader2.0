@@ -430,7 +430,7 @@ def test_route_mempool_blocks_signal(monkeypatch):
     df = pd.DataFrame({"open": prices, "high": prices, "low": prices, "close": prices, "volume": volumes})
 
     class DummyMonitor:
-        def is_suspicious(self, threshold):
+        async def is_suspicious(self, threshold):
             return True
 
     cfg = {

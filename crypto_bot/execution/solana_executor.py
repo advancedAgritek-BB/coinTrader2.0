@@ -68,7 +68,7 @@ async def execute_swap(
     if mempool_monitor and cfg.get("enabled"):
         threshold = cfg.get("suspicious_fee_threshold", 0.0)
         action = cfg.get("action", "pause")
-        if mempool_monitor.is_suspicious(threshold):
+        if await mempool_monitor.is_suspicious(threshold):
             err_msg = notifier.notify("High priority fees detected")
             if err_msg:
                 logger.error("Failed to send message: %s", err_msg)
@@ -81,7 +81,7 @@ async def execute_swap(
                 }
             if action == "reprice":
                 amount *= cfg.get("reprice_multiplier", 1.0)
-        fee = mempool_monitor.fetch_priority_fee()
+        fee = await mempool_monitor.fetch_priority_fee()
         gas_limit = config.get("gas_threshold_gwei", 0.0)
         if gas_limit and fee > gas_limit:
             logger.warning("Swap aborted due to high priority fee: %s", fee)

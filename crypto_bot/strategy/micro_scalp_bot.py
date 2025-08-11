@@ -126,7 +126,19 @@ def generate_signal(
     cfg = mempool_cfg or {}
     if mempool_monitor and cfg.get("enabled"):
         threshold = cfg.get("suspicious_fee_threshold", 0.0)
-        if mempool_monitor.is_suspicious(threshold):
+        try:
+            suspicious = asyncio.run(mempool_monitor.is_suspicious(threshold))
+        except RuntimeError:
+            try:
+                loop = asyncio.get_event_loop()
+                suspicious = loop.run_until_complete(
+                    mempool_monitor.is_suspicious(threshold)
+                )
+            except Exception:
+                suspicious = False
+        except Exception:
+            suspicious = False
+        if suspicious:
             return 0.0, "none"
     fast_window = int(params.get("ema_fast", 2))
     slow_window = int(params.get("ema_slow", 5))
@@ -286,10 +298,11 @@ def generate_signal(
 
     if mempool_monitor is not None:
         try:
-            fee = asyncio.run(asyncio.to_thread(mempool_monitor.fetch_priority_fee))
+            fee = asyncio.run(mempool_monitor.fetch_priority_fee())
         except RuntimeError:
             try:
-                fee = mempool_monitor.fetch_priority_fee()
+                loop = asyncio.get_event_loop()
+                fee = loop.run_until_complete(mempool_monitor.fetch_priority_fee())
             except Exception:
                 fee = None
         except Exception:
