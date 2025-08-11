@@ -18,6 +18,7 @@ from crypto_bot.utils.notifier import Notifier
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot import tax_logger
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils.token_registry import get_decimals, to_base_units
 from pathlib import Path
 
 
@@ -125,6 +126,9 @@ async def execute_swap(
                 pass
         return result
 
+    decimals = await get_decimals(token_in)
+    amount_base = to_base_units(amount, decimals)
+
     from solana.rpc.api import Client
     from solana.keypair import Keypair
     from solana.transaction import Transaction
@@ -153,7 +157,7 @@ async def execute_swap(
                     params={
                         "inputMint": token_in,
                         "outputMint": token_out,
-                        "amount": int(amount),
+                        "amount": amount_base,
                         "slippageBps": slippage_bps,
                     },
                     timeout=10,
