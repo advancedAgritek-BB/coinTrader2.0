@@ -275,6 +275,7 @@ def test_get_exchange_websocket(monkeypatch):
         lambda params: DummyCCXT(params),
         raising=False,
     )
+
     exchange, ws = cex_executor.get_exchange(config)
     assert isinstance(ws, DummyWSClient)
     expected = ("key", "sec", "token", "apitoken")
@@ -309,6 +310,7 @@ def test_get_exchange_websocket_missing_creds(monkeypatch):
 class SlippageExchange:
     def fetch_order_book(self, symbol, limit=10):
         return {"bids": [[100, 10]], "asks": [[120, 0.5], [150, 0.5]]}
+        return {"bids": [[100, 10]], "asks": [[100, 0.5], [120, 10]]}
 
     def create_market_order(self, symbol, side, amount):
         raise AssertionError("should not execute")
@@ -501,6 +503,10 @@ def test_execute_trade_no_message_when_disabled(monkeypatch):
     from crypto_bot.utils import telegram
     monkeypatch.setattr(
         telegram,
+    import crypto_bot.utils.telegram as telegram_mod
+
+    monkeypatch.setattr(
+        telegram_mod,
         "send_message_sync",
         lambda *a, **k: calls.__setitem__("count", calls["count"] + 1),
     )

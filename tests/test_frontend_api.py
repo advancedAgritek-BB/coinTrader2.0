@@ -2,7 +2,6 @@ import sys
 import types
 
 sys.modules.setdefault("ccxt", types.ModuleType("ccxt"))
-sys.modules.setdefault("ccxtpro", types.ModuleType("ccxtpro"))
 
 from frontend import api
 from fastapi.testclient import TestClient

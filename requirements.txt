@@ -5,7 +5,7 @@ scikit-learn
 lightgbm
 joblib
 scipy
-ccxtpro
+ccxt>=4.0.0,<5
 gspread
 oauth2client
 python-dotenv
