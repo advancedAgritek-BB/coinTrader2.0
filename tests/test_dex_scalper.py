@@ -93,7 +93,7 @@ class DummyMonitor:
     def __init__(self, fee):
         self._fee = fee
 
-    def fetch_priority_fee(self):
+    async def fetch_priority_fee(self):
         return self._fee
 
 

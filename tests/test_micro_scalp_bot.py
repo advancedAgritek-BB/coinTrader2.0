@@ -185,7 +185,7 @@ def test_filters_return_none(make_df, prices, volumes, cfg):
 
 
 class DummyMempool:
-    def is_suspicious(self, threshold):
+    async def is_suspicious(self, threshold):
         return True
 
 
@@ -205,10 +205,10 @@ def test_mempool_blocks_signal(make_df):
 
 
 class LowFeeMempool:
-    def fetch_priority_fee(self):
+    async def fetch_priority_fee(self):
         return 3.0
 
-    def is_suspicious(self, threshold):
+    async def is_suspicious(self, threshold):
         return False
 
 

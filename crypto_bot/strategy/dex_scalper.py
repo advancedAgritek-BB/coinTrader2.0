@@ -85,7 +85,13 @@ def generate_signal(
         fee = None
         if mempool_monitor is not None:
             try:
-                fee = mempool_monitor.fetch_priority_fee()
+                fee = asyncio.run(mempool_monitor.fetch_priority_fee())
+            except RuntimeError:
+                try:
+                    loop = asyncio.get_event_loop()
+                    fee = loop.run_until_complete(mempool_monitor.fetch_priority_fee())
+                except Exception:
+                    fee = None
             except Exception:
                 fee = None
         if fee is None:

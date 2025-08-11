@@ -626,10 +626,10 @@ class DummyMempool:
     def __init__(self, fee):
         self.fee = fee
 
-    def fetch_priority_fee(self):
+    async def fetch_priority_fee(self):
         return self.fee
 
-    def is_suspicious(self, threshold):
+    async def is_suspicious(self, threshold):
         return False
 
 
@@ -824,10 +824,10 @@ def test_execute_swap_low_liquidity(monkeypatch):
 
 def test_swap_paused_on_suspicious(monkeypatch):
     class DummyMonitor:
-        def fetch_priority_fee(self):
+        async def fetch_priority_fee(self):
             return 0.0
 
-        def is_suspicious(self, threshold):
+        async def is_suspicious(self, threshold):
             return True
 
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
@@ -904,7 +904,7 @@ def test_confirm_transaction_called(monkeypatch):
     assert DummyAsyncClient.instance.called
 
 
-def test_execute_swap_retries_and_confirms(monkeypatch):
+def test_execute_swap_confirms_with_retry(monkeypatch):
     monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
@@ -935,13 +935,30 @@ def test_execute_swap_retries_and_confirms(monkeypatch):
 
     class Client:
         def __init__(self, *a, **k):
+            Client.instance = self
             self.calls = 0
 
         def send_transaction(self, tx, kp):
             self.calls += 1
-            if self.calls <= 2:
-                raise Exception("congestion")
             return {"result": "h"}
+
+    class AC:
+        calls = 0
+
+        def __init__(self, url):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        async def confirm_transaction(self, *a, **k):
+            AC.calls += 1
+            if AC.calls == 1:
+                raise Exception("fail")
+            return {"status": "confirmed"}
 
     import sys, types
 
@@ -952,7 +969,8 @@ def test_execute_swap_retries_and_confirms(monkeypatch):
     monkeypatch.setattr(sys.modules["solana.keypair"], "Keypair", KP, raising=False)
     monkeypatch.setattr(sys.modules["solana.transaction"], "Transaction", Tx, raising=False)
     monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
-    monkeypatch.setattr(sys.modules["solana.rpc.async_api"], "AsyncClient", DummyAsyncClient, raising=False)
+    monkeypatch.setattr(sys.modules["solana.rpc.async_api"], "AsyncClient", AC, raising=False)
+    monkeypatch.setattr(solana_executor, "AsyncClient", AC, raising=False)
 
     async def no_sleep(*a, **k):
         pass
@@ -970,7 +988,8 @@ def test_execute_swap_retries_and_confirms(monkeypatch):
         )
     )
 
-    assert AC.instance.called
+    assert AC.calls == 2
+    assert Client.instance.calls == 1
 
 
 def test_keyring_fallback(monkeypatch):
