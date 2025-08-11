@@ -9,7 +9,10 @@ from pathlib import Path
 import yaml
 import pandas as pd
 import numpy as np
-import ccxt.pro as ccxt
+try:  # pragma: no cover - optional dependency
+    import ccxt.pro as ccxt  # type: ignore
+except Exception:  # pragma: no cover - fall back to standard ccxt
+    import ccxt  # type: ignore
 import aiohttp
 
 try:  # optional redis for caching

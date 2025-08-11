@@ -25,19 +25,22 @@ from crypto_bot.strategy import (
 LOG_FILE = LOG_DIR / "strategy_pnl.csv"
 
 # Map strategy names to generation functions
-_STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {
-    "trend_bot": trend_bot.generate_signal,
-    "grid_bot": grid_bot.generate_signal,
-    "sniper_bot": sniper_bot.generate_signal,
-    "dex_scalper": dex_scalper.generate_signal,
-    "dca_bot": dca_bot.generate_signal,
-    "mean_bot": mean_bot.generate_signal,
-    "breakout_bot": breakout_bot.generate_signal,
-    "meme_wave_bot": meme_wave_bot.generate_signal,
-    "solana_scalping": solana_scalping.generate_signal,
-    "cross_chain_arb_bot": cross_chain_arb_bot.generate_signal,
-    "lstm_bot": lstm_bot.generate_signal,
-}
+_STRATEGY_FN_MAP: Dict[str, Callable[[pd.DataFrame], tuple]] = {}
+for name, mod in [
+    ("trend_bot", trend_bot),
+    ("grid_bot", grid_bot),
+    ("sniper_bot", sniper_bot),
+    ("dex_scalper", dex_scalper),
+    ("dca_bot", dca_bot),
+    ("mean_bot", mean_bot),
+    ("breakout_bot", breakout_bot),
+    ("meme_wave_bot", meme_wave_bot),
+    ("solana_scalping", solana_scalping),
+    ("cross_chain_arb_bot", cross_chain_arb_bot),
+    ("lstm_bot", lstm_bot),
+]:
+    if mod is not None:
+        _STRATEGY_FN_MAP[name] = mod.generate_signal
 
 if momentum_bot is not None:
     _STRATEGY_FN_MAP["momentum_bot"] = momentum_bot.generate_signal

@@ -9,7 +9,10 @@ import time
 from pathlib import Path
 from typing import Iterable, List, Dict
 
-import ccxt.pro as ccxt
+try:  # pragma: no cover - optional dependency
+    import ccxt.pro as ccxt  # type: ignore
+except Exception:  # pragma: no cover - fall back to standard ccxt
+    import ccxt  # type: ignore
 try:  # pragma: no cover - import fallback
     from ccxt.base.errors import NetworkError as CCXTNetworkError
 except Exception:  # pragma: no cover - import fallback
