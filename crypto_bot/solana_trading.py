@@ -70,7 +70,7 @@ async def monitor_profit(tx_sig: str, threshold: float = 0.2) -> float:
 
     rpc_url = os.getenv(
         "SOLANA_RPC_URL",
-        f"https://mainnet.helius-rpc.com/?api-key={os.getenv('HELIUS_KEY', '')}",
+        f"https://mainnet.helius-rpc.com/v1/?api-key={os.getenv('HELIUS_KEY', '')}",
     )
     client = AsyncClient(rpc_url)
     try:

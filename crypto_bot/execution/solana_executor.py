@@ -141,7 +141,7 @@ async def execute_swap(
     keypair = Keypair.from_secret_key(bytes(json.loads(private_key)))
     rpc_url = os.getenv(
         "SOLANA_RPC_URL",
-        f"https://mainnet.helius-rpc.com/?api-key={os.getenv('HELIUS_KEY', '')}",
+        f"https://mainnet.helius-rpc.com/v1/?api-key={os.getenv('HELIUS_KEY', '')}",
     )
     client = Client(rpc_url)
 
