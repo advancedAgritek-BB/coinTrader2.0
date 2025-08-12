@@ -2,7 +2,12 @@ import asyncio
 import time
 
 from .logger import LOG_DIR, setup_logger
-from .symbol_pre_filter import filter_symbols
+try:
+    from .symbol_pre_filter import filter_symbols  # legacy dependency
+except Exception:
+    # Safe default: return the list unchanged when pre-filter module isn't present
+    def filter_symbols(symbols):
+        return symbols
 from .telemetry import telemetry
 from .token_registry import TOKEN_MINTS
 
