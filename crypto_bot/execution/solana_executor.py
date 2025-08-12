@@ -13,7 +13,6 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # pragma: no cover - optional dependency
     keyring = None  # type: ignore
 
-import crypto_bot.utils.telegram  # ensure submodule attribute for monkeypatch
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot import tax_logger
