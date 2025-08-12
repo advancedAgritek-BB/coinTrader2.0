@@ -284,23 +284,23 @@ async def execute_swap(
         jito_key = os.getenv("JITO_KEY")
 
     tx_hash: Optional[str] = None
-    confirm_res = None
     async with AsyncClient(rpc_url) as client:
         if jito_key:
-    tx_hash = None
-    if jito_key:
-        try:
-            signed_tx = base64.b64encode(tx.serialize()).decode()
-            async with aiohttp.ClientSession() as jito_session:
-                async with jito_session.post(
-                    JITO_BUNDLE_URL,
-                    json={"transactions": [signed_tx]},
-                    headers={"Authorization": f"Bearer {jito_key}"},
-                    timeout=10,
-                ) as bundle_resp:
-                    bundle_resp.raise_for_status()
-                    bundle_data = await bundle_resp.json()
-            tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
+            try:
+                signed_tx = base64.b64encode(tx.serialize()).decode()
+                async with aiohttp.ClientSession() as jito_session:
+                    async with jito_session.post(
+                        JITO_BUNDLE_URL,
+                        json={"transactions": [signed_tx]},
+                        headers={"Authorization": f"Bearer {jito_key}"},
+                        timeout=10,
+                    ) as bundle_resp:
+                        bundle_resp.raise_for_status()
+                        bundle_data = await bundle_resp.json()
+                tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
+            except Exception as err:
+                logger.warning("Jito submission failed: %s", err)
+                tx_hash = None
         else:
             for attempt in range(max_retries):
                 try:
@@ -312,24 +312,10 @@ async def execute_swap(
                         await asyncio.sleep(1)
                         continue
                     raise
-
         if tx_hash is None:
             raise RuntimeError("Swap failed after retries")
-        except Exception as err:
-            logger.warning("Jito submission failed: %s", err)
 
-    if tx_hash is None:
-        send_res = client.send_transaction(tx, keypair)
-        tx_hash = send_res["result"]
-
-        poll_timeout = config.get("poll_timeout", 60)
-
-        try:
-            confirm_res = await asyncio.wait_for(
-                client.confirm_transaction(tx_hash, commitment="confirmed"),
-                timeout=poll_timeout,
-            )
-        except Exception as err:
+    poll_timeout = config.get("poll_timeout", 60)
     confirm_res = None
     for attempt in range(3):
         try:
