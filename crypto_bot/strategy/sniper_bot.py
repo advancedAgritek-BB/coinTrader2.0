@@ -7,6 +7,7 @@ from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
 DEFAULT_PAIRS = ["BTC/USD", "ETH/USD"]
 ALLOWED_PAIRS = load_liquid_pairs() or DEFAULT_PAIRS
@@ -18,9 +19,7 @@ try:  # pragma: no cover - optional dependency
     ML_AVAILABLE = True
 except Exception:  # pragma: no cover - trainer missing
     ML_AVAILABLE = False
-    logger.info(
-        "Machine learning model not found; running without ML features."
-    )
+    warn_ml_unavailable_once()
 
 if ML_AVAILABLE:
     MODEL = load_model("sniper_bot")

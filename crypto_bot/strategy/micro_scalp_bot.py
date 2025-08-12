@@ -7,6 +7,7 @@ import ta
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +16,7 @@ try:  # pragma: no cover - optional dependency
     ML_AVAILABLE = True
 except Exception:  # pragma: no cover - trainer missing
     ML_AVAILABLE = False
-    logger.info(
-        "Machine learning model not found; running without ML features."
-    )
+    warn_ml_unavailable_once()
 
 if ML_AVAILABLE:
     MODEL = load_model("micro_scalp_bot")
