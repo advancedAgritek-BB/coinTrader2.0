@@ -107,8 +107,7 @@ from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.solana.exit import monitor_price
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
-# Backwards compatibility for tests
-_fix_symbol = fix_symbol
+# _fix_symbol is defined below for backward compatibility
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENV_PATH = Path(__file__).resolve().parent / ".env"
@@ -2804,7 +2803,6 @@ async def main() -> None:
     global check_wallet_balances, detect_non_trade_tokens
     global classify_regime_async, classify_regime_cached, calc_atr, monitor_price
     global SolanaMempoolMonitor, ScannerConfig, SolanaScannerConfig, PythConfig
-    global _fix_symbol
 
     from schema.scanner import (
         ScannerConfig,
@@ -2876,8 +2874,6 @@ async def main() -> None:
     from crypto_bot.volatility_filter import calc_atr
     from crypto_bot.solana.exit import monitor_price
     from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
-
-    _fix_symbol = fix_symbol
 
     global logger
     logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
