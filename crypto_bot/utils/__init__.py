@@ -12,11 +12,6 @@ from .market_loader import (
 )
 from .pair_cache import load_liquid_pairs
 import crypto_bot.utils.telegram as telegram
-
-try:  # optional dependency with known syntax issues
-    from .notifier import Notifier
-except Exception:  # pragma: no cover - optional
-    Notifier = None
 # Symbol filtering utilities import is optional because the module has
 # heavy async dependencies and some environments may not need it during
 # initialization. Import it lazily where required.

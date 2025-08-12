@@ -15,7 +15,6 @@ except Exception:  # pragma: no cover - optional dependency
 
 import crypto_bot.utils.telegram  # ensure submodule attribute for monkeypatch
 from crypto_bot.utils.telegram import TelegramNotifier
-from crypto_bot.utils.notifier import Notifier
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot import tax_logger
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
@@ -56,7 +55,7 @@ async def execute_swap(
     if notifier is None:
         if telegram_token is None or chat_id is None:
             raise ValueError("telegram_token/chat_id or notifier must be provided")
-        notifier = Notifier(telegram_token, chat_id)
+        notifier = TelegramNotifier(True, telegram_token, chat_id)
 
     msg = f"Swapping {amount} {token_in} to {token_out}"
     err = notifier.notify(msg)
@@ -305,6 +304,7 @@ async def execute_swap(
     async with AsyncClient(rpc_url) as client:
         if jito_key:
             try:
+                signed_tx = base64.b64encode(tx.serialize()).decode()
                 signed_tx = base64.b64encode(signed_bytes).decode()
                 async with aiohttp.ClientSession() as jito_session:
                     async with jito_session.post(

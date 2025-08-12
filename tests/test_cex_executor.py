@@ -45,7 +45,6 @@ def test_place_stop_order_dry_run(monkeypatch):
         "sell",
         1,
         9000,
-        TelegramNotifier("t", "c"),
         notifier=notifier,
         dry_run=True,
     )
@@ -95,7 +94,6 @@ class DummyWS:
 
 def test_execute_trade_rest_path(monkeypatch):
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     ex = DummyMarketExchange()
@@ -106,7 +104,6 @@ def test_execute_trade_rest_path(monkeypatch):
         "XBT/USDT",
         "buy",
         1.0,
-        TelegramNotifier("t", "c"),
         notifier=notifier,
         dry_run=False,
     )
@@ -137,7 +134,6 @@ class LimitExchange:
 
 def test_execute_trade_uses_limit(monkeypatch):
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     ex = LimitExchange()
@@ -148,7 +144,6 @@ def test_execute_trade_uses_limit(monkeypatch):
         "XBT/USDT",
         "buy",
         1.0,
-        TelegramNotifier("t", "c"),
         notifier=notifier,
         dry_run=False,
         config={"hidden_limit": True},
@@ -162,7 +157,6 @@ def test_execute_trade_uses_limit(monkeypatch):
 
 def test_execute_trade_ws_path(monkeypatch):
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     ws = DummyWS()
@@ -177,7 +171,6 @@ def test_execute_trade_ws_path(monkeypatch):
         "XBT/USDT",
         "buy",
         1.0,
-        TelegramNotifier("t", "c"),
         notifier=notifier,
         dry_run=False,
         use_websocket=True,
@@ -193,7 +186,6 @@ def test_execute_trade_ws_path(monkeypatch):
 
 def test_execute_trade_ws_missing(monkeypatch):
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     with pytest.raises(ValueError):
@@ -203,7 +195,6 @@ def test_execute_trade_ws_missing(monkeypatch):
             "XBT/USDT",
             "buy",
             1.0,
-            TelegramNotifier("t", "c"),
             notifier=DummyNotifier(),
             dry_run=False,
             use_websocket=True,
@@ -219,7 +210,6 @@ def test_execute_trade_calls_sync(monkeypatch):
 
     monkeypatch.setattr(cex_executor, "sync_positions", fake_sync)
     monkeypatch.setattr(TelegramNotifier, "notify", lambda *a, **k: None)
-    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
 
@@ -230,7 +220,6 @@ def test_execute_trade_calls_sync(monkeypatch):
         "XBT/USDT",
         "buy",
         1.0,
-        TelegramNotifier("t", "c"),
         notifier=DummyNotifier(),
         dry_run=False,
     )
@@ -317,7 +306,6 @@ class SlippageExchange:
 
 def test_execute_trade_skips_on_slippage(monkeypatch):
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     notifier = DummyNotifier()
@@ -327,7 +315,6 @@ def test_execute_trade_skips_on_slippage(monkeypatch):
         "XBT/USDT",
         "buy",
         1.0,
-        TelegramNotifier("t", "c"),
         notifier=notifier,
         dry_run=False,
         config={"max_slippage_pct": 0.05, "liquidity_depth": 10},
@@ -345,7 +332,6 @@ class LowBookExchange:
 
 def test_execute_trade_skips_on_liquidity_usage(monkeypatch):
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
     notifier = DummyNotifier()
@@ -355,7 +341,6 @@ def test_execute_trade_skips_on_liquidity_usage(monkeypatch):
         "XBT/USDT",
         "buy",
         1.0,
-        TelegramNotifier("t", "c"),
         notifier=notifier,
         dry_run=False,
         config={"max_liquidity_usage": 0.5, "liquidity_depth": 10},
@@ -407,8 +392,7 @@ def test_execute_trade_dry_run_logs_price(tmp_path, monkeypatch):
 
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
 
-    cex_executor.execute_trade(DummyEx(), None, "XBT/USDT", "buy", 1.0, TelegramNotifier("t", "c"), dry_run=True)
-    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
+    cex_executor.execute_trade(DummyEx(), None, "XBT/USDT", "buy", 1.0, notifier=TelegramNotifier("t", "c"), dry_run=True)
     notifier = DummyNotifier()
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
 
@@ -441,10 +425,9 @@ def test_execute_trade_async_dry_run_logs_price(tmp_path, monkeypatch):
 
     asyncio.run(
         cex_executor.execute_trade_async(
-            DummyEx(), None, "XBT/USDT", "buy", 1.0, TelegramNotifier("t", "c"), dry_run=True
+            DummyEx(), None, "XBT/USDT", "buy", 1.0, notifier=TelegramNotifier("t", "c"), dry_run=True
         )
     )
-    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda self, text: None)
     notifier = DummyNotifier()
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
 
@@ -477,7 +460,6 @@ def test_execute_trade_async_retries_network_error(monkeypatch):
     NetworkError = type("NetworkError", (Exception,), {})
     monkeypatch.setattr(cex_executor.ccxt, "NetworkError", NetworkError, raising=False)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
-    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
 
     order = asyncio.run(
@@ -570,7 +552,6 @@ def test_execute_trade_async_calls_sync(monkeypatch):
 
     monkeypatch.setattr(cex_executor, "sync_positions_async", fake_sync)
     monkeypatch.setattr(cex_executor.TelegramNotifier, "notify", lambda *a, **k: None)
-    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
 
     asyncio.run(
@@ -597,7 +578,6 @@ def test_execute_trade_async_skips_on_slippage(monkeypatch):
             raise AssertionError("should not execute")
 
     monkeypatch.setattr(TelegramNotifier, "notify", lambda *a, **k: None)
-    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
 
     order = asyncio.run(
@@ -625,7 +605,6 @@ def test_execute_trade_async_insufficient_liquidity(monkeypatch):
             raise AssertionError("should not execute")
 
     monkeypatch.setattr(TelegramNotifier, "notify", lambda *a, **k: None)
-    monkeypatch.setattr(cex_executor.Notifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(cex_executor, "log_trade", lambda order: None)
 
     order = asyncio.run(

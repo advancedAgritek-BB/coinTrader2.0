@@ -7,19 +7,6 @@ from crypto_bot.solana import api_helpers
 from crypto_bot.utils.telegram import TelegramNotifier
 
 
-def test_execute_swap_dry_run(monkeypatch):
-    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
-    monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    res = asyncio.run(
-        solana_executor.execute_swap(
-            "SOL",
-            "USDC",
-            1,
-            TelegramNotifier("t", "c"),
-            dry_run=True,
-        )
-    )
-
 class DummyNotifier:
     def __init__(self):
         self.messages = []
@@ -31,7 +18,6 @@ class DummyNotifier:
 
 def test_execute_swap_dry_run(monkeypatch):
     monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
-    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     notifier = DummyNotifier()
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     res = asyncio.run(
@@ -183,7 +169,6 @@ class LowLiquiditySession:
 def test_execute_swap_skips_on_slippage(monkeypatch):
     monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: DummySession())
     monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")
@@ -247,7 +232,6 @@ def test_execute_swap_skips_on_slippage(monkeypatch):
             "SOL",
             "USDC",
             100,
-            TelegramNotifier("t", "c"),
             notifier=notifier,
             dry_run=False,
             config={"max_slippage_pct": 0.05, "confirm_execution": True},
@@ -259,7 +243,6 @@ def test_execute_swap_skips_on_slippage(monkeypatch):
 def test_slippage_calc_failure(monkeypatch):
     monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: BadRouteSession())
     monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")
@@ -443,7 +426,6 @@ class EmptySession:
 def test_execute_swap_no_routes(monkeypatch):
     monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: EmptySession())
     monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")
@@ -502,7 +484,6 @@ def test_execute_swap_no_routes(monkeypatch):
             "SOL",
             "USDC",
             100,
-            TelegramNotifier("t", "c"),
             notifier=DummyNotifier(),
             dry_run=False,
             config={"confirm_execution": True},
@@ -544,7 +525,6 @@ def test_execute_swap_quote_retry(monkeypatch):
     sys.modules["aiohttp"] = importlib.import_module("aiohttp")
     monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     session = ErrorSession()
     monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: session)
@@ -637,7 +617,6 @@ class DummyMempool:
 def test_fee_abort(monkeypatch):
     monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: EmptySession())
     monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")
@@ -681,7 +660,6 @@ def test_fee_abort(monkeypatch):
             "SOL",
             "USDC",
             100,
-            TelegramNotifier("t", "c"),
             notifier=DummyNotifier(),
             dry_run=False,
             mempool_monitor=monitor,
@@ -695,7 +673,6 @@ def test_fee_abort(monkeypatch):
 def test_execute_swap_jito(monkeypatch):
     monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     session = DummyJitoSession()
     monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: session)
@@ -758,7 +735,6 @@ def test_execute_swap_jito(monkeypatch):
             "SOL",
             "USDC",
             100,
-            TelegramNotifier("t", "c"),
             notifier=DummyNotifier(),
             dry_run=False,
             jito_key="KEY",
@@ -921,7 +897,6 @@ def test_confirm_transaction_called(monkeypatch):
 def test_execute_swap_confirms_with_retry(monkeypatch):
     monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
     monkeypatch.setattr(TelegramNotifier, "notify", lambda self, text: None)
-    monkeypatch.setattr(solana_executor.Notifier, "notify", lambda self, text: None)
     monkeypatch.setattr(solana_executor.TelegramNotifier, "notify", lambda *a, **k: None)
     monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: DummySession())
     monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")

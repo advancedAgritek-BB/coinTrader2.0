@@ -24,9 +24,6 @@ from crypto_bot.utils.kraken import get_ws_token
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
 
-# Alias for backward compatibility in tests
-Notifier = TelegramNotifier
-
 
 def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
     """Instantiate and return a ccxt exchange and optional websocket client.
