@@ -301,6 +301,7 @@ async def execute_swap(
     from crypto_bot.solana import api_helpers
 
     tx_hash: Optional[str] = None
+    bundle_id: Optional[str] = None
     async with AsyncClient(rpc_url) as client:
         if jito_key:
             try:
@@ -414,6 +415,8 @@ async def execute_swap(
         "route": route,
         "status": status or "confirmed",
     }
+    if bundle_id is not None:
+        result["bundle_id"] = bundle_id
     err = notifier.notify(f"Swap executed: {result}")
     if err:
         logger.error("Failed to send message: %s", err)
