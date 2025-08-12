@@ -11,6 +11,7 @@ from .market_loader import (
     update_ohlcv_cache,
 )
 from .pair_cache import load_liquid_pairs
+import crypto_bot.utils.telegram as telegram
 
 try:  # optional dependency with known syntax issues
     from .notifier import Notifier
