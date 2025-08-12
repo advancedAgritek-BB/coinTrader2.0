@@ -286,13 +286,13 @@ async def execute_swap(
         jito_key = os.getenv("JITO_KEY")
 
     from solana.rpc.async_api import AsyncClient
+    from crypto_bot.solana import api_helpers
 
     tx_hash: Optional[str] = None
     async with AsyncClient(rpc_url) as client:
         if jito_key:
             try:
                 signed_tx = base64.b64encode(signed_bytes).decode()
-                signed_tx = base64.b64encode(tx.serialize()).decode()
                 async with aiohttp.ClientSession() as jito_session:
                     async with jito_session.post(
                         JITO_BUNDLE_URL,
@@ -302,14 +302,37 @@ async def execute_swap(
                     ) as bundle_resp:
                         bundle_resp.raise_for_status()
                         bundle_data = await bundle_resp.json()
-                tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
+                bundle_id = bundle_data["bundleId"]
+                start = asyncio.get_event_loop().time()
+                poll_timeout = config.get("jito_poll_timeout", 15)
+                while True:
+                    try:
+                        status_data = await api_helpers.fetch_jito_bundle(bundle_id, jito_key)
+                    except Exception as err:
+                        logger.warning("Jito bundle fetch failed: %s", err)
+                        break
+                    txs = (
+                        status_data.get("transactions")
+                        or status_data.get("bundle", {}).get("transactions")
+                        or []
+                    )
+                    sigs = [t.get("signature") for t in txs if t.get("signature")]
+                    landed = (
+                        status_data.get("landed")
+                        or status_data.get("status") == "Landed"
+                        or status_data.get("bundle", {}).get("state") == "Landed"
+                    )
+                    if landed and sigs:
+                        tx_hash = sigs[0]
+                        break
+                    if asyncio.get_event_loop().time() - start > poll_timeout:
+                        logger.warning("Jito bundle %s did not land in time", bundle_id)
+                        break
+                    await asyncio.sleep(1)
             except Exception as err:
                 logger.warning("Jito submission failed: %s", err)
         if tx_hash is None:
-
-        if tx_hash is None:
-                tx_hash = None
-        else:
+            logger.info("Falling back to send_raw_transaction")
             for attempt in range(max_retries):
                 try:
                     if signed_bytes and hasattr(client, "send_raw_transaction"):
@@ -328,37 +351,9 @@ async def execute_swap(
             raise RuntimeError("Swap failed after retries")
 
         poll_timeout = config.get("poll_timeout", 60)
-
-        try:
-            confirm_res = await asyncio.wait_for(
-                client.confirm_transaction(tx_hash, commitment="confirmed"),
-                timeout=poll_timeout,
-            )
-        except Exception:
-            confirm_res = None
-            for attempt in range(3):
-                try:
-                    async with AsyncClient(rpc_url) as aclient:
-                        confirm_res = await asyncio.wait_for(
-                            aclient.confirm_transaction(tx_hash, commitment="confirmed"),
-                            timeout=poll_timeout,
-                        )
-                    break
-                except Exception as err:
-                    if attempt < 2:
-                        await asyncio.sleep(2 ** (attempt + 1))
-                        continue
-                    err_msg = notifier.notify(f"Confirmation failed for {tx_hash}")
-                    if err_msg:
-                        logger.error("Failed to send message: %s", err_msg)
-                    raise TimeoutError("Transaction confirmation failed") from err
+        confirm_res = None
         for attempt in range(3):
             try:
-    poll_timeout = config.get("poll_timeout", 60)
-    confirm_res = None
-    for attempt in range(3):
-        try:
-            async with AsyncClient(rpc_url) as aclient:
                 confirm_res = await asyncio.wait_for(
                     client.confirm_transaction(tx_hash, commitment="confirmed"),
                     timeout=poll_timeout,
