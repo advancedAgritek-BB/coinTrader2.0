@@ -108,7 +108,7 @@ exit_strategy:
   trailing_stop_factor: 1.2
   trailing_stop_pct: 0.005
 force_websocket_history: false
-gas_threshold_gwei: 50
+priority_fee_cap_micro_lamports: 50
 gecko_limit: 10
 grid_bot:
   arbitrage_pairs:

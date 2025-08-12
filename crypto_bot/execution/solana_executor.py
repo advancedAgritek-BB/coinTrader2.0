@@ -82,12 +82,8 @@ async def execute_swap(
             if action == "reprice":
                 amount *= cfg.get("reprice_multiplier", 1.0)
         fee = await mempool_monitor.fetch_priority_fee()
-        gas_limit = config.get("gas_threshold_gwei", 0.0)
-        if gas_limit and fee > gas_limit:
-            logger.warning("Swap aborted due to high priority fee: %s", fee)
-            return {}
-        tp = config.get("take_profit_pct") or config.get("risk", {}).get("take_profit_pct", 0.0)
-        if not gas_limit and tp and fee > tp * 0.05:
+        fee_cap = config.get("priority_fee_cap_micro_lamports", 0.0)
+        if fee_cap and fee > fee_cap:
             logger.warning("Swap aborted due to high priority fee: %s", fee)
             return {}
 
@@ -287,21 +283,21 @@ async def execute_swap(
     confirm_res = None
     async with AsyncClient(rpc_url) as client:
         if jito_key:
-    tx_hash = None
-    if jito_key:
-        try:
-            signed_tx = base64.b64encode(tx.serialize()).decode()
-            async with aiohttp.ClientSession() as jito_session:
-                async with jito_session.post(
-                    JITO_BUNDLE_URL,
-                    json={"transactions": [signed_tx]},
-                    headers={"Authorization": f"Bearer {jito_key}"},
-                    timeout=10,
-                ) as bundle_resp:
-                    bundle_resp.raise_for_status()
-                    bundle_data = await bundle_resp.json()
-            tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
-        else:
+            try:
+                signed_tx = base64.b64encode(tx.serialize()).decode()
+                async with aiohttp.ClientSession() as jito_session:
+                    async with jito_session.post(
+                        JITO_BUNDLE_URL,
+                        json={"transactions": [signed_tx]},
+                        headers={"Authorization": f"Bearer {jito_key}"},
+                        timeout=10,
+                    ) as bundle_resp:
+                        bundle_resp.raise_for_status()
+                        bundle_data = await bundle_resp.json()
+                tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
+            except Exception as err:
+                logger.warning("Jito submission failed: %s", err)
+        if tx_hash is None:
             for attempt in range(max_retries):
                 try:
                     send_res = await client.send_raw_transaction(tx.serialize())
@@ -312,15 +308,8 @@ async def execute_swap(
                         await asyncio.sleep(1)
                         continue
                     raise
-
         if tx_hash is None:
             raise RuntimeError("Swap failed after retries")
-        except Exception as err:
-            logger.warning("Jito submission failed: %s", err)
-
-    if tx_hash is None:
-        send_res = client.send_transaction(tx, keypair)
-        tx_hash = send_res["result"]
 
         poll_timeout = config.get("poll_timeout", 60)
 
@@ -329,24 +318,24 @@ async def execute_swap(
                 client.confirm_transaction(tx_hash, commitment="confirmed"),
                 timeout=poll_timeout,
             )
-        except Exception as err:
-    confirm_res = None
-    for attempt in range(3):
-        try:
-            async with AsyncClient(rpc_url) as aclient:
-                confirm_res = await asyncio.wait_for(
-                    aclient.confirm_transaction(tx_hash, commitment="confirmed"),
-                    timeout=poll_timeout,
-                )
-            break
-        except Exception as err:
-            if attempt < 2:
-                await asyncio.sleep(2 ** (attempt + 1))
-                continue
-            err_msg = notifier.notify(f"Confirmation failed for {tx_hash}")
-            if err_msg:
-                logger.error("Failed to send message: %s", err_msg)
-            raise TimeoutError("Transaction confirmation failed") from err
+        except Exception:
+            confirm_res = None
+            for attempt in range(3):
+                try:
+                    async with AsyncClient(rpc_url) as aclient:
+                        confirm_res = await asyncio.wait_for(
+                            aclient.confirm_transaction(tx_hash, commitment="confirmed"),
+                            timeout=poll_timeout,
+                        )
+                    break
+                except Exception as err:
+                    if attempt < 2:
+                        await asyncio.sleep(2 ** (attempt + 1))
+                        continue
+                    err_msg = notifier.notify(f"Confirmation failed for {tx_hash}")
+                    if err_msg:
+                        logger.error("Failed to send message: %s", err_msg)
+                    raise TimeoutError("Transaction confirmation failed") from err
 
     status = None
     if isinstance(confirm_res, dict):

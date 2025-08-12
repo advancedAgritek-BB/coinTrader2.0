@@ -72,8 +72,8 @@ def test_scalper_custom_config():
 def test_priority_fee_aborts(monkeypatch):
     close = pd.Series(range(1, 21))
     df = pd.DataFrame({"close": close})
-    monkeypatch.setenv("MOCK_ETH_PRIORITY_FEE_GWEI", "50")
-    cfg = {"dex_scalper": {"gas_threshold_gwei": 10}}
+    monkeypatch.setenv("MOCK_PRIORITY_FEE", "50")
+    cfg = {"dex_scalper": {"priority_fee_cap_micro_lamports": 10}}
     score, direction = dex_scalper.generate_signal(df, cfg)
     assert score == 0.0
     assert direction == "none"
@@ -82,8 +82,8 @@ def test_priority_fee_aborts(monkeypatch):
 def test_priority_fee_below_threshold(monkeypatch):
     close = pd.Series(range(1, 21))
     df = pd.DataFrame({"close": close})
-    monkeypatch.setenv("MOCK_ETH_PRIORITY_FEE_GWEI", "5")
-    cfg = {"dex_scalper": {"gas_threshold_gwei": 10}}
+    monkeypatch.setenv("MOCK_PRIORITY_FEE", "5")
+    cfg = {"dex_scalper": {"priority_fee_cap_micro_lamports": 10}}
     score, direction = dex_scalper.generate_signal(df, cfg)
     assert direction == "long"
     assert score > 0
@@ -99,7 +99,7 @@ class DummyMonitor:
 
 def test_monitor_fee_blocks_signal():
     df = pd.DataFrame({"close": pd.Series(range(1, 21))})
-    cfg = {"dex_scalper": {"gas_threshold_gwei": 10}}
+    cfg = {"dex_scalper": {"priority_fee_cap_micro_lamports": 10}}
     score, direction = dex_scalper.generate_signal(
         df, cfg, mempool_monitor=DummyMonitor(15)
     )
@@ -109,7 +109,7 @@ def test_monitor_fee_blocks_signal():
 
 def test_monitor_fee_allows_signal():
     df = pd.DataFrame({"close": pd.Series(range(1, 21))})
-    cfg = {"dex_scalper": {"gas_threshold_gwei": 10}}
+    cfg = {"dex_scalper": {"priority_fee_cap_micro_lamports": 10}}
     score, direction = dex_scalper.generate_signal(
         df, cfg, mempool_monitor=DummyMonitor(5)
     )
