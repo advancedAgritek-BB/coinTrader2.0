@@ -109,10 +109,6 @@ from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
 # _fix_symbol is defined below for backward compatibility
 
-CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
-ENV_PATH = Path(__file__).resolve().parent / ".env"
-USER_CONFIG_FILE = Path(__file__).resolve().parent / "user_config.yaml"
-
 REQUIRED_ENV_VARS = {
     "HELIUS_KEY",
     "SOLANA_PRIVATE_KEY",
@@ -180,6 +176,7 @@ def _run_wallet_manager() -> None:
 
 def _ensure_user_setup() -> None:
     """Ensure a user has configured credentials or launch the wizard."""
+    if USER_CONFIG_PATH.exists():
     env = _load_env()
     if USER_CONFIG_FILE.exists():
         return
