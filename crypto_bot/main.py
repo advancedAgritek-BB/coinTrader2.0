@@ -3,6 +3,7 @@ import sys
 import asyncio
 import contextlib
 import time
+import runpy
 from pathlib import Path
 from datetime import datetime
 from collections import deque, OrderedDict
@@ -108,6 +109,31 @@ _fix_symbol = fix_symbol
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENV_PATH = Path(__file__).resolve().parent / ".env"
+USER_CONFIG_FILE = Path(__file__).resolve().parent / "user_config.yaml"
+
+REQUIRED_ENV_VARS = {
+    "HELIUS_KEY",
+    "SOLANA_PRIVATE_KEY",
+    "TELEGRAM_TOKEN",
+    "TELEGRAM_CHAT_ID",
+}
+
+
+def _run_wallet_manager() -> None:
+    """Launch the interactive wallet manager or exit in headless mode."""
+    if not sys.stdin.isatty():
+        print("wallet_manager requires an interactive terminal")
+        sys.exit(2)
+    runpy.run_module("crypto_bot.wallet_manager", run_name="__main__")
+
+
+def _ensure_user_setup() -> None:
+    """Ensure a user has configured credentials or launch the wizard."""
+    if USER_CONFIG_FILE.exists():
+        return
+    if all(os.getenv(var) for var in REQUIRED_ENV_VARS):
+        return
+    _run_wallet_manager()
 
 # In-memory cache of configuration and file mtimes
 _CONFIG_CACHE: dict[str, object] = {}
