@@ -326,6 +326,8 @@ secondary_exchange: kraken
 execution_mode: dry_run  # or live
 mode: auto               # router chooses CEX or on-chain based on token mints
 use_websocket: true
+kraken:
+  use_private_ws: false  # set true only if private WS feeds are required
 telegram:
   token: your_telegram_token
   chat_id: your_chat_id
@@ -354,6 +356,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   Paper trading defaults to long-only on spot exchanges.
 * **use_websocket** – enable WebSocket data via `KrakenWSClient`.
 * **force_websocket_history** – disable REST fallbacks when streaming (default: true).
+* **kraken.use_private_ws** – enable private WebSocket feeds for trading; REST-only trading continues when `false`.
 * **max_ws_limit** – skip WebSocket OHLCV when `limit` exceeds this value.
 * **exchange_market_types** – market types to trade (spot, margin, futures).
 * **preferred_chain** – chain used for on-chain swaps (e.g. `solana`).
@@ -938,7 +941,9 @@ and bounce_scalper strategies while `timeframe` covers all other analysis.
 
 When `use_websocket` is enabled the bot uses a dedicated Kraken WebSocket
 client for realtime streaming data. Disable websockets if you do not need
-this functionality.
+this functionality. Private order feeds are disabled by default; set
+`kraken.use_private_ws` to `true` to enable them. When `false`, trading
+continues via REST only.
 When OHLCV streaming returns fewer candles than requested the bot calculates
 how many bars are missing and fetches only that remainder via REST. This
 adaptive limit keeps history current without waiting for a full response.

@@ -4,15 +4,14 @@ import logging
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
 try:  # pragma: no cover - optional trainer
     from coinTrader_Trainer.ml_trainer import load_model
     ML_AVAILABLE = True
 except Exception:  # pragma: no cover - trainer unavailable
     ML_AVAILABLE = False
-    logger.info(
-        "Machine learning model not found; running without ML features."
-    )
+    warn_ml_unavailable_once()
 
 if ML_AVAILABLE:
     MODEL = load_model("lstm_bot")

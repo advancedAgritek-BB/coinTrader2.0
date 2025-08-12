@@ -16,6 +16,7 @@ from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility, atr_percent
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.volatility_filter import calc_atr
+from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
 DYNAMIC_THRESHOLD = 1.5
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
@@ -34,9 +35,7 @@ if ML_AVAILABLE:
     MODEL = load_model("grid_bot")
 else:  # pragma: no cover - fallback
     MODEL = None
-    logger.info(
-        "Machine learning model not found; running without ML features."
-    )
+    warn_ml_unavailable_once()
 
 
 @dataclass

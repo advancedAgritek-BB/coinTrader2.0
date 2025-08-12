@@ -1,26 +1,36 @@
 import base64
 import hashlib
 import hmac
-import json
+import os
 import time
-import urllib.request
 import urllib.parse
+
+import requests
 
 DEFAULT_KRAKEN_URL = "https://api.kraken.com"
 PATH = "/0/private/GetWebSocketsToken"
 
 
-def get_ws_token(api_key: str, private_key: str, otp: str | None = None, environment: str = DEFAULT_KRAKEN_URL) -> str:
+def get_ws_token(
+    api_key: str,
+    api_secret: str,
+    otp: str | None = None,
+    timeout: float = 15.0,
+) -> str:
     """Return a WebSocket authentication token from Kraken."""
+
+    if otp is None:
+        otp = os.getenv("KRAKEN_OTP")
+
     nonce = str(int(time.time() * 1000))
-    body = [("nonce", nonce)]
+    body = {"nonce": nonce}
     if otp:
-        body.append(("otp", otp))
+        body["otp"] = otp
     encoded_body = urllib.parse.urlencode(body)
 
     message = PATH.encode() + hashlib.sha256((nonce + encoded_body).encode()).digest()
     signature = base64.b64encode(
-        hmac.new(base64.b64decode(private_key), message, hashlib.sha512).digest()
+        hmac.new(base64.b64decode(api_secret), message, hashlib.sha512).digest()
     ).decode()
 
     headers = {
@@ -29,17 +39,22 @@ def get_ws_token(api_key: str, private_key: str, otp: str | None = None, environ
         "Content-Type": "application/x-www-form-urlencoded",
     }
 
-    req = urllib.request.Request(
-        environment + PATH,
-        data=encoded_body.encode(),
-        headers=headers,
-        method="POST",
-    )
+    try:
+        resp = requests.post(
+            DEFAULT_KRAKEN_URL + PATH,
+            data=encoded_body,
+            headers=headers,
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except (requests.RequestException, ValueError) as exc:
+        raise RuntimeError("Failed to fetch WebSocket token") from exc
 
-    with urllib.request.urlopen(req) as resp:
-        data = json.loads(resp.read().decode())
+    if data.get("error"):
+        raise RuntimeError(f"Kraken API error: {data['error']}")
 
     token = data.get("result", {}).get("token") or data.get("token")
     if not token:
-        raise ValueError("Token not found in response")
+        raise RuntimeError("Token not found in response")
     return token

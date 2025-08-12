@@ -16,7 +16,7 @@ def test_wizard_launch(monkeypatch, tmp_path):
 
     monkeypatch.setattr(runpy, "run_module", fake_run_module)
     cfg = tmp_path / "user_config.yaml"
-    monkeypatch.setattr(main, "USER_CONFIG_FILE", cfg)
+    monkeypatch.setattr(main, "USER_CONFIG_PATH", cfg)
     for var in main.REQUIRED_ENV_VARS:
         monkeypatch.delenv(var, raising=False)
 
@@ -34,7 +34,7 @@ def test_no_launch_when_configured(monkeypatch, tmp_path):
     monkeypatch.setattr(runpy, "run_module", fake_run_module)
     cfg = tmp_path / "user_config.yaml"
     cfg.write_text("dummy: 1")
-    monkeypatch.setattr(main, "USER_CONFIG_FILE", cfg)
+    monkeypatch.setattr(main, "USER_CONFIG_PATH", cfg)
     for var in main.REQUIRED_ENV_VARS:
         monkeypatch.setenv(var, "x")
 
@@ -57,5 +57,5 @@ def test_headless_exit(monkeypatch, capsys):
         main._run_wallet_manager()
 
     assert exit_code.get("code") == 2
-    assert "interactive terminal" in capsys.readouterr().out
+    assert "Wallet setup required" in capsys.readouterr().out
 
