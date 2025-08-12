@@ -107,12 +107,7 @@ from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.solana.exit import monitor_price
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
-# Backwards compatibility for tests
-_fix_symbol = fix_symbol
-
-CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
-ENV_PATH = Path(__file__).resolve().parent / ".env"
-USER_CONFIG_FILE = Path(__file__).resolve().parent / "user_config.yaml"
+# _fix_symbol is defined below for backward compatibility
 
 REQUIRED_ENV_VARS = {
     "HELIUS_KEY",
@@ -122,11 +117,11 @@ REQUIRED_ENV_VARS = {
 }
 
 
+LOG_DIR: Path = Path(".")
 def _run_wallet_manager() -> None:
     """Launch the interactive wallet manager or exit in headless mode."""
     if not sys.stdin.isatty():
         print("wallet_manager requires an interactive terminal")
-LOG_DIR: Path = Path(".")
 logger = logging.getLogger("bot")
 
 CONFIG_DIR = Path(__file__).resolve().parent
@@ -172,7 +167,8 @@ def _run_wallet_manager() -> None:
     """Execute the wallet manager or guide the user in non-interactive mode."""
     if not sys.stdin.isatty():
         print(
-            "Wallet setup required. Run `python -m crypto_bot.wallet_manager` interactively.",
+            "Wallet setup requires an interactive terminal. "
+            "Run `python -m crypto_bot.wallet_manager` interactively.",
             flush=True,
         )
         sys.exit(2)
@@ -180,17 +176,30 @@ def _run_wallet_manager() -> None:
 
 
 def _ensure_user_setup() -> None:
+    """Ensure API credentials and user configuration are available."""
+    if USER_CONFIG_FILE.exists() and all(
+        os.getenv(var) for var in REQUIRED_ENV_VARS
+    ):
+        return
+    env = _load_env()
+    if _needs_wallet_setup(env, USER_CONFIG_FILE) or not all(
+        os.getenv(var) for var in REQUIRED_ENV_VARS
+    ):
     """Ensure a user has configured credentials or launch the wizard."""
+    if USER_CONFIG_PATH.exists():
+    env = _load_env()
     if USER_CONFIG_FILE.exists():
         return
     if all(os.getenv(var) for var in REQUIRED_ENV_VARS):
         return
-    _run_wallet_manager()
-    """Ensure API credentials and user configuration are available."""
-    env = _load_env()
     if _needs_wallet_setup(env):
         _run_wallet_manager()
         _load_env()
+    if USER_CONFIG_PATH.exists():
+        return
+    if all(os.getenv(var) for var in REQUIRED_ENV_VARS):
+        return
+    _run_wallet_manager()
 
 
 def _fix_symbol(symbol: str) -> str:
@@ -217,7 +226,6 @@ class MLUnavailableError(RuntimeError):
 
 # Track WebSocket ping tasks
 WS_PING_TASKS: set[asyncio.Task] = set()
-# Track async sniper trade tasks
 # Track async sniper trade tasks
 SNIPER_TASKS: set[asyncio.Task] = set()
 # Track newly scanned Solana tokens pending evaluation
@@ -2810,7 +2818,6 @@ async def main() -> None:
     global check_wallet_balances, detect_non_trade_tokens
     global classify_regime_async, classify_regime_cached, calc_atr, monitor_price
     global SolanaMempoolMonitor, ScannerConfig, SolanaScannerConfig, PythConfig
-    global _fix_symbol
 
     from schema.scanner import (
         ScannerConfig,
@@ -2882,8 +2889,6 @@ async def main() -> None:
     from crypto_bot.volatility_filter import calc_atr
     from crypto_bot.solana.exit import monitor_price
     from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
-
-    _fix_symbol = fix_symbol
 
     global logger
     logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)

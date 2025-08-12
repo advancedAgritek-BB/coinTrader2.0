@@ -108,6 +108,8 @@ exit_strategy:
   trailing_stop_factor: 1.2
   trailing_stop_pct: 0.005
 force_websocket_history: false
+kraken:
+  use_private_ws: false  # set true only if private WS feeds are required
 priority_fee_cap_micro_lamports: 50
 gecko_limit: 10
 grid_bot:

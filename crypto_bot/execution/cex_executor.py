@@ -35,6 +35,7 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
 
     exchange_name = config.get("exchange", "coinbase")
     use_ws = config.get("use_websocket", False)
+    use_private_ws = config.get("kraken", {}).get("use_private_ws", False)
 
     ws_client: Optional[KrakenWSClient] = None
     api_key = env_or_prompt("API_KEY", "Enter API key: ") or None
@@ -66,6 +67,16 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
                 ws_client = KrakenWSClient(
                     api_key, api_secret, ws_token=ws_token, api_token=api_token
                 )
+            ws_token = os.getenv("KRAKEN_WS_TOKEN") if use_private_ws else None
+            try:
+                if use_private_ws and not ws_token and api_key and api_secret:
+                    ws_token = get_ws_token(api_key, api_secret, api_token or None)
+                ws_client = KrakenWSClient(
+                    api_key, api_secret, ws_token=ws_token, api_token=api_token
+                )
+            except Exception as err:  # pragma: no cover - optional dependency
+                logger.warning("Failed to initialize Kraken WS client: %s", err)
+                ws_client = None
 
         exchange = ccxt.kraken(
             {

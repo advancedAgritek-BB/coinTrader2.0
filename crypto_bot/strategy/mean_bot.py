@@ -24,6 +24,7 @@ except Exception:  # pragma: no cover - fallback
 from ta.trend import ADXIndicator
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
+from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
@@ -40,9 +41,7 @@ if ML_AVAILABLE:
     MODEL = load_model("mean_bot")
 else:  # pragma: no cover - fallback
     MODEL = None
-    logger.info(
-        "Machine learning model not found; running without ML features."
-    )
+    warn_ml_unavailable_once()
 
 
 async def generate_signal(
