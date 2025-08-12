@@ -292,11 +292,11 @@ async def execute_swap(
     from solana.rpc.async_api import AsyncClient
 
     tx_hash: Optional[str] = None
-    confirm_res = None
     async with AsyncClient(rpc_url) as client:
         if jito_key:
             try:
                 signed_tx = base64.b64encode(signed_bytes).decode()
+                signed_tx = base64.b64encode(tx.serialize()).decode()
                 async with aiohttp.ClientSession() as jito_session:
                     async with jito_session.post(
                         JITO_BUNDLE_URL,
@@ -311,6 +311,8 @@ async def execute_swap(
                 logger.warning("Jito submission failed: %s", err)
 
         if tx_hash is None:
+                tx_hash = None
+        else:
             for attempt in range(max_retries):
                 try:
                     if signed_bytes and hasattr(client, "send_raw_transaction"):
@@ -325,13 +327,17 @@ async def execute_swap(
                         await asyncio.sleep(1)
                         continue
                     raise
-
         if tx_hash is None:
             raise RuntimeError("Swap failed after retries")
 
         poll_timeout = config.get("poll_timeout", 60)
         for attempt in range(3):
             try:
+    poll_timeout = config.get("poll_timeout", 60)
+    confirm_res = None
+    for attempt in range(3):
+        try:
+            async with AsyncClient(rpc_url) as aclient:
                 confirm_res = await asyncio.wait_for(
                     client.confirm_transaction(tx_hash, commitment="confirmed"),
                     timeout=poll_timeout,
