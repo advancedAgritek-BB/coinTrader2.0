@@ -2086,7 +2086,7 @@ async def _main_impl() -> TelegramNotifier:
             logger.info("Setting %s from .env", key)
     os.environ.update(secrets)
 
-    user = load_or_create()
+    user = load_or_create(interactive=False)
 
     status_updates = config.get("telegram", {}).get("status_updates", True)
     balance_updates = config.get("telegram", {}).get("balance_updates", False)
@@ -2316,10 +2316,10 @@ async def _main_impl() -> TelegramNotifier:
 
     wallet: Wallet | None = None
     if config.get("execution_mode") == "dry_run":
-        try:
-            start_bal = float(input("Enter paper trading balance in USDT: "))
-        except Exception:
-            start_bal = 1000.0
+        start_bal = float(
+            os.getenv("PAPER_BALANCE")
+            or config.get("paper_balance", 1000.0)
+        )
         wallet = Wallet(
             start_bal,
             config.get("max_open_trades", 1),
