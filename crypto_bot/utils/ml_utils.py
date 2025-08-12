@@ -11,6 +11,17 @@ logger = logging.getLogger(__name__)
 
 _REQUIRED_PACKAGES: Iterable[str] = ("sklearn", "joblib", "ta")
 
+_LOGGER_ONCE = {"ml_unavailable": False}
+
+
+def warn_ml_unavailable_once() -> None:
+    """Log a one-time notice when ML components are missing."""
+    if not _LOGGER_ONCE["ml_unavailable"]:
+        logger.info(
+            "Machine learning model not found; running without ML features."
+        )
+        _LOGGER_ONCE["ml_unavailable"] = True
+
 
 def _check_packages(pkgs: Iterable[str]) -> bool:
     """Return ``True`` if all packages in ``pkgs`` can be imported."""
@@ -42,5 +53,5 @@ def is_ml_available() -> bool:
 
 ML_AVAILABLE = is_ml_available()
 
-__all__ = ["is_ml_available", "ML_AVAILABLE"]
+__all__ = ["is_ml_available", "ML_AVAILABLE", "warn_ml_unavailable_once"]
 

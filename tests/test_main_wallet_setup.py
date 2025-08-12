@@ -57,5 +57,5 @@ def test_headless_exit(monkeypatch, capsys):
         main._run_wallet_manager()
 
     assert exit_code.get("code") == 2
-    assert "interactive terminal" in capsys.readouterr().out
+    assert "Wallet setup required" in capsys.readouterr().out
 

@@ -29,6 +29,7 @@ from crypto_bot.utils import stats
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.cooldown_manager import in_cooldown, mark_cooldown
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
+from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +38,7 @@ try:  # pragma: no cover - optional dependency
     ML_AVAILABLE = True
 except Exception:  # pragma: no cover - trainer missing
     ML_AVAILABLE = False
-    logger.info(
-        "Machine learning model not found; running without ML features."
-    )
+    warn_ml_unavailable_once()
 
 if ML_AVAILABLE:
     MODEL = load_model("bounce_scalper")
