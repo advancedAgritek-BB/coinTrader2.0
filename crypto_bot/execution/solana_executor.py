@@ -190,22 +190,6 @@ async def execute_swap(
             return {}
         route = quote_data["data"][0]
 
-        # Abort if available liquidity is too low
-        liq = route.get("liquidity")
-        if liq is None:
-            try:
-                liq = (route.get("marketInfos") or [{}])[0].get("liquidity")
-            except Exception:
-                liq = None
-        if liq is not None:
-            max_use = amount * config.get("max_liquidity_usage", 0.8)
-            if liq < max_use:
-                logger.warning("Swap aborted due to low liquidity: %s", liq)
-                err = notifier.notify("Swap aborted: insufficient liquidity")
-                if err:
-                    logger.error("Failed to send message: %s", err)
-                return {}
-
         try:
             async with session.get(
                 JUPITER_QUOTE_URL,
@@ -221,13 +205,12 @@ async def execute_swap(
                 back_data = await back_resp.json()
             back_route = back_data["data"][0]
             try:
-                ask = float(route["outAmount"]) / float(route["inAmount"])
-                bid = float(back_route["inAmount"]) / float(back_route["outAmount"])
+                out_amt = float(route["outAmount"])
+                back_in_amt = float(back_route["inAmount"])
+                slippage = abs(out_amt - back_in_amt) / out_amt if out_amt else 0.0
             except (KeyError, ValueError, ZeroDivisionError) as e:
                 logger.warning("Slippage calc failed: %s - skipping check", e)
                 slippage = 0.0
-            else:
-                slippage = (ask - bid) / ((ask + bid) / 2)
             if slippage > config.get("max_slippage_pct", 1.0):
                 logger.warning("Trade skipped due to slippage.")
                 logger.info(

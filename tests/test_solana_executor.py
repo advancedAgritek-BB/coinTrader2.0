@@ -62,7 +62,7 @@ class DummySession:
         if params.get("inputMint") == "SOL":
             data = {"inAmount": 100, "outAmount": 110}
         else:
-            data = {"inAmount": 110, "outAmount": 110}
+            data = {"inAmount": 120, "outAmount": 100}
         return DummyResp(data)
 
     def post(self, url, json=None, timeout=10):
@@ -90,7 +90,7 @@ class BadRouteSession(DummySession):
         if params.get("inputMint") == "SOL":
             data = {"inAmount": 100, "outAmount": 110}
         else:
-            data = {"inAmount": 110}  # missing outAmount
+            data = {"outAmount": 110}  # missing inAmount
         return DummyResp(data)
 
 
@@ -133,37 +133,6 @@ class DummyAsyncClient:
     async def confirm_transaction(self, sig, commitment=None, sleep_seconds=0.5, last_valid_block_height=None):
         self.called = True
         return {"status": "confirmed"}
-
-
-class LowLiquidityResp:
-    def __init__(self, liq):
-        self._data = {"data": [{"inAmount": 100, "outAmount": 110, "liquidity": liq}]}
-
-    async def json(self):
-        return self._data
-
-    def raise_for_status(self):
-        pass
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        pass
-
-
-class LowLiquiditySession:
-    def __init__(self, liq):
-        self.liq = liq
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        pass
-
-    def get(self, *a, **k):
-        return LowLiquidityResp(self.liq)
 
 
 def test_execute_swap_skips_on_slippage(monkeypatch):
@@ -753,64 +722,6 @@ def test_execute_swap_jito(monkeypatch):
     }
     assert hasattr(session, "jito_payload")
     assert DummyAsyncClient.instance.called
-
-
-def test_execute_swap_low_liquidity(monkeypatch):
-    monkeypatch.setenv("SOLANA_RPC_URL", "http://dummy")
-    monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: LowLiquiditySession(50))
-    monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")
-
-    class KP:
-        public_key = "k"
-
-        @staticmethod
-        def from_secret_key(b):
-            return KP()
-
-        def sign(self, tx):
-            pass
-
-    class Tx:
-        @staticmethod
-        def deserialize(raw):
-            return Tx()
-
-        def sign(self, kp):
-            pass
-
-    class Client:
-        def __init__(self, *a, **k):
-            pass
-
-        def send_transaction(self, tx, kp):
-            return {"result": "h"}
-
-    import sys, types
-
-    sys.modules.setdefault("solana.keypair", types.ModuleType("solana.keypair"))
-    sys.modules.setdefault("solana.transaction", types.ModuleType("solana.transaction"))
-    sys.modules.setdefault("solana.rpc.api", types.ModuleType("solana.rpc.api"))
-    sys.modules.setdefault("solana.rpc.async_api", types.ModuleType("solana.rpc.async_api"))
-    monkeypatch.setattr(sys.modules["solana.keypair"], "Keypair", KP, raising=False)
-    monkeypatch.setattr(sys.modules["solana.transaction"], "Transaction", Tx, raising=False)
-    monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
-    monkeypatch.setattr(sys.modules["solana.rpc.async_api"], "AsyncClient", lambda url: None, raising=False)
-
-    notifier = DummyNotifier()
-
-    res = asyncio.run(
-        solana_executor.execute_swap(
-            "SOL",
-            "USDC",
-            100,
-            notifier=notifier,
-            dry_run=False,
-            config={"max_liquidity_usage": 0.8, "confirm_execution": True},
-        )
-    )
-
-    assert res == {}
-    assert any("liquidity" in m.lower() for m in notifier.messages)
 
 
 def test_swap_paused_on_suspicious(monkeypatch):
