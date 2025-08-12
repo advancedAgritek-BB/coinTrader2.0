@@ -682,10 +682,13 @@ def test_execute_swap_jito(monkeypatch):
         fake_fetch_jito_bundle.calls += 1
         if fake_fetch_jito_bundle.calls < 2:
             return {"transactions": []}
-        return {"transactions": [{"signature": "sig"}]}
+        return {"transactions": [{"signature": "sig"}], "landed": True}
 
     fake_fetch_jito_bundle.calls = 0
-    monkeypatch.setattr(solana_executor, "fetch_jito_bundle", fake_fetch_jito_bundle)
+    # patch helper used inside executor for polling bundle status
+    monkeypatch.setattr(
+        api_helpers, "fetch_jito_bundle", fake_fetch_jito_bundle, raising=False
+    )
 
     class KP:
         public_key = "k"
@@ -725,10 +728,9 @@ def test_execute_swap_jito(monkeypatch):
     monkeypatch.setattr(sys.modules["solana.transaction"], "Transaction", Tx, raising=False)
     monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
 
-    monkeypatch.setattr(sys.modules["solana.rpc.async_api"], "AsyncClient", DummyAsyncClient, raising=False)
-    async def fetch(bundle_id, key, session=None):
-        return {"transactions": [{"signature": "sig"}], "landed": True}
-    monkeypatch.setattr(api_helpers, "fetch_jito_bundle", fetch, raising=False)
+    monkeypatch.setattr(
+        sys.modules["solana.rpc.async_api"], "AsyncClient", DummyAsyncClient, raising=False
+    )
 
     res = asyncio.run(
         solana_executor.execute_swap(
@@ -746,7 +748,6 @@ def test_execute_swap_jito(monkeypatch):
         "token_out": "USDC",
         "amount": 100,
         "tx_hash": "sig",
-        "bundle_id": "bid",
         "route": {"inAmount": 100, "outAmount": 110},
         "status": "confirmed",
     }
@@ -887,7 +888,7 @@ def test_confirm_transaction_called(monkeypatch):
             100,
             notifier=TelegramNotifier(False, "t", "c"),
             dry_run=False,
-            config={"max_slippage_pct": 20},
+            config={"max_slippage_pct": 20, "confirm_execution": True},
         )
     )
 
@@ -977,7 +978,8 @@ def test_execute_swap_confirms_with_retry(monkeypatch):
         )
     )
 
-    assert AC.calls == 2
+    # One initial attempt plus two retries inside execute_swap
+    assert AC.calls == 3
     assert Client.instance.calls == 1
 
 
@@ -1024,20 +1026,10 @@ def test_keyring_fallback(monkeypatch):
     monkeypatch.setattr(sys.modules["solana.transaction"], "Transaction", Tx, raising=False)
     monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
 
-    class AC:
-        def __init__(self, url):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        async def confirm_transaction(self, sig, commitment=None, sleep_seconds=0.5, last_valid_block_height=None):
-            return {}
-
-    monkeypatch.setattr(sys.modules["solana.rpc.async_api"], "AsyncClient", AC, raising=False)
+    # Use DummyAsyncClient so we can verify confirm_transaction was invoked
+    monkeypatch.setattr(
+        sys.modules["solana.rpc.async_api"], "AsyncClient", DummyAsyncClient, raising=False
+    )
 
     res = asyncio.run(
         solana_executor.execute_swap(

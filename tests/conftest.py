@@ -309,6 +309,11 @@ class _FakeTelegram:
 
 sys.modules.setdefault("crypto_bot.utils.telegram", _FakeTelegram())
 
+# Prepopulate common token decimals to avoid network lookups in tests
+from crypto_bot.utils.token_registry import TOKEN_DECIMALS  # type: ignore
+TOKEN_DECIMALS.setdefault("SOL", 9)
+TOKEN_DECIMALS.setdefault("USDC", 6)
+
 
 class _FakeSolanaMempool:
     class SolanaMempoolMonitor:
