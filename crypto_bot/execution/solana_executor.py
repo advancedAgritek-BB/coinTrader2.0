@@ -19,7 +19,7 @@ from crypto_bot.utils.notifier import Notifier
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot import tax_logger
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from crypto_bot.utils.token_registry import get_decimals, to_base_units
+from crypto_bot.utils.token_registry import fetch_from_jupiter, get_decimals, to_base_units
 
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
@@ -123,6 +123,19 @@ async def execute_swap(
         return result
 
     decimals = await get_decimals(token_in)
+    if decimals == 0:
+        try:
+            await fetch_from_jupiter()
+        except Exception as exc:
+            logger.error("Failed to refresh token decimals: %s", exc)
+        decimals = await get_decimals(token_in)
+        if decimals == 0:
+            msg = f"Unknown token decimals for {token_in}"
+            logger.warning(msg)
+            err = notifier.notify(msg)
+            if err:
+                logger.error("Failed to send message: %s", err)
+            return {}
     amount_base = to_base_units(amount, decimals)
 
     from solana.keypair import Keypair
@@ -306,10 +319,6 @@ async def execute_swap(
             except Exception as err:
                 logger.warning("Jito submission failed: %s", err)
         if tx_hash is None:
-
-        if tx_hash is None:
-                tx_hash = None
-        else:
             for attempt in range(max_retries):
                 try:
                     if signed_bytes and hasattr(client, "send_raw_transaction"):
@@ -352,26 +361,6 @@ async def execute_swap(
                     if err_msg:
                         logger.error("Failed to send message: %s", err_msg)
                     raise TimeoutError("Transaction confirmation failed") from err
-        for attempt in range(3):
-            try:
-    poll_timeout = config.get("poll_timeout", 60)
-    confirm_res = None
-    for attempt in range(3):
-        try:
-            async with AsyncClient(rpc_url) as aclient:
-                confirm_res = await asyncio.wait_for(
-                    client.confirm_transaction(tx_hash, commitment="confirmed"),
-                    timeout=poll_timeout,
-                )
-                break
-            except Exception as err:
-                if attempt < 2:
-                    await asyncio.sleep(2 ** (attempt + 1))
-                    continue
-                err_msg = notifier.notify(f"Confirmation failed for {tx_hash}")
-                if err_msg:
-                    logger.error("Failed to send message: %s", err_msg)
-                raise TimeoutError("Transaction confirmation failed") from err
 
     status = None
     if isinstance(confirm_res, dict):

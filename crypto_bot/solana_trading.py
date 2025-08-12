@@ -15,6 +15,7 @@ from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.execution.cex_executor import execute_trade_async as cex_trade_async
 from crypto_bot.fund_manager import auto_convert_funds
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils.token_registry import fetch_from_jupiter
 
 
 logger = setup_logger(__name__, LOG_DIR / "solana_trading.log")
@@ -60,6 +61,15 @@ async def _fetch_price(token_in: str, token_out: str, max_retries: int = 3) -> f
         Maximum attempts when the price request fails. Defaults to ``3``.
     """
     decimals = await get_decimals(token_in)
+    if decimals == 0:
+        try:
+            await fetch_from_jupiter()
+        except Exception:
+            pass
+        decimals = await get_decimals(token_in)
+        if decimals == 0:
+            logger.warning("Unknown token decimals for %s", token_in)
+            return 0.0
     amount = to_base_units(1, decimals)
     async with aiohttp.ClientSession() as session:
         for attempt in range(max_retries):
