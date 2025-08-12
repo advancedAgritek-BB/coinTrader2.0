@@ -19,7 +19,7 @@ from crypto_bot.utils.trade_logger import log_trade
 from crypto_bot import tax_logger
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.env import env_or_prompt
-from crypto_bot.utils.kraken import get_ws_token
+from crypto_bot.utils import kraken
 
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
@@ -53,11 +53,19 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
     elif exchange_name == "kraken":
         if use_ws:
             ws_token = os.getenv("KRAKEN_WS_TOKEN")
-            if not ws_token and api_key and api_secret:
-                ws_token = get_ws_token(api_key, api_secret, api_token or None)
-            ws_client = KrakenWSClient(
-                api_key, api_secret, ws_token=ws_token, api_token=api_token
-            )
+            if kraken.use_private_ws:
+                if not ws_token and api_key and api_secret:
+                    try:
+                        ws_token = kraken.get_ws_token(
+                            api_key, api_secret, api_token or None
+                        )
+                    except Exception as err:
+                        logger.warning("Failed to get WS token: %s", err)
+                        kraken.use_private_ws = False
+            if kraken.use_private_ws and ws_token:
+                ws_client = KrakenWSClient(
+                    api_key, api_secret, ws_token=ws_token, api_token=api_token
+                )
 
         exchange = ccxt.kraken(
             {
