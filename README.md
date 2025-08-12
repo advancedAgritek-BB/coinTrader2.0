@@ -153,7 +153,7 @@ needed.
    Install them with `pip install -r requirements.txt` when `rl_selector.enabled`
    is set to `true` in `crypto_bot/config.yaml`. Set `rl_selector.enabled: false`
    if you prefer not to install these extra dependencies.
-2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius API key.
+2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius and Supabase API keys.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:
    ```bash
@@ -209,7 +209,7 @@ Run it with:
 python examples/wallet_demo.py
 ```
 
-Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials and Helius API key. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
+Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials and Helius and Supabase API keys. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
 
 ## Configuration Files
 
