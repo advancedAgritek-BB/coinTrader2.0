@@ -180,6 +180,14 @@ def _run_wallet_manager() -> None:
 
 def _ensure_user_setup() -> None:
     """Ensure a user has configured credentials or launch the wizard."""
+    env = _load_env()
+    if USER_CONFIG_FILE.exists():
+        return
+    if all(os.getenv(var) for var in REQUIRED_ENV_VARS):
+        return
+    if _needs_wallet_setup(env):
+        _run_wallet_manager()
+        _load_env()
     if USER_CONFIG_PATH.exists():
         return
     if all(os.getenv(var) for var in REQUIRED_ENV_VARS):
