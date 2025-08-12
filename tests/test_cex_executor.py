@@ -228,7 +228,7 @@ def test_execute_trade_calls_sync(monkeypatch):
 
 
 def test_get_exchange_websocket(monkeypatch):
-    config = {"exchange": "kraken", "use_websocket": True}
+    config = {"exchange": "kraken", "use_websocket": True, "kraken": {"use_private_ws": True}}
 
     monkeypatch.setenv("API_KEY", "key")
     monkeypatch.setenv("API_SECRET", "sec")
