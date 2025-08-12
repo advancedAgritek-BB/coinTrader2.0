@@ -29,6 +29,103 @@ import yaml
 from dotenv import dotenv_values
 from pydantic import ValidationError
 
+from schema.scanner import (
+    ScannerConfig,
+    SolanaScannerConfig,
+    PythConfig,
+)
+
+from crypto_bot.utils.telegram import TelegramNotifier, send_test_message
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.portfolio_rotator import PortfolioRotator
+from crypto_bot.wallet_manager import load_or_create
+from crypto_bot.utils.market_analyzer import analyze_symbol
+from crypto_bot.strategy import dca_bot
+from crypto_bot.cooldown_manager import (
+    configure as cooldown_configure,
+)
+from crypto_bot.phase_runner import BotContext, PhaseRunner
+from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
+from crypto_bot.risk.exit_manager import (
+    calculate_trailing_stop,
+    should_exit,
+)
+from crypto_bot.execution.cex_executor import (
+    execute_trade_async as cex_trade_async,
+    get_exchange,
+    get_exchanges,
+)
+from crypto_bot.open_position_guard import OpenPositionGuard
+from crypto_bot import console_monitor, console_control
+from crypto_bot.utils.position_logger import log_position, log_balance
+from crypto_bot.utils.market_loader import (
+    load_kraken_symbols,
+    update_ohlcv_cache,
+    update_multi_tf_ohlcv_cache,
+    update_regime_tf_cache,
+    timeframe_seconds,
+    configure as market_loader_configure,
+    fetch_order_book_async,
+    WS_OHLCV_TIMEOUT,
+)
+from crypto_bot.utils.pair_cache import PAIR_FILE, load_liquid_pairs
+from tasks.refresh_pairs import (
+    DEFAULT_MIN_VOLUME_USD,
+    DEFAULT_TOP_K,
+    refresh_pairs_async,
+)
+from crypto_bot.utils.eval_queue import build_priority_queue
+from crypto_bot.solana import get_solana_new_tokens
+from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
+from crypto_bot.utils import symbol_utils
+from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
+from crypto_bot.paper_wallet import PaperWallet  # backward compatibility
+from wallet import Wallet
+from crypto_bot.utils.strategy_utils import compute_strategy_weights
+from crypto_bot.auto_optimizer import optimize_strategies
+from crypto_bot.utils.telemetry import write_cycle_metrics
+from crypto_bot.utils.token_registry import (
+    TOKEN_MINTS,
+    monitor_pump_raydium,
+    refresh_mints,
+    periodic_mint_sanity_check,
+)
+from crypto_bot.utils import pnl_logger, regime_pnl_tracker
+from crypto_bot.utils.ml_utils import ML_AVAILABLE
+
+from crypto_bot.monitoring import record_sol_scanner_metrics
+from crypto_bot.fund_manager import (
+    auto_convert_funds,
+    check_wallet_balances,
+    detect_non_trade_tokens,
+)
+from crypto_bot.regime.regime_classifier import (
+    classify_regime_async,
+    classify_regime_cached,
+)
+from crypto_bot.volatility_filter import calc_atr
+from crypto_bot.solana.exit import monitor_price
+from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
+
+# Backwards compatibility for tests
+_fix_symbol = fix_symbol
+
+CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
+ENV_PATH = Path(__file__).resolve().parent / ".env"
+USER_CONFIG_FILE = Path(__file__).resolve().parent / "user_config.yaml"
+
+REQUIRED_ENV_VARS = {
+    "HELIUS_KEY",
+    "SOLANA_PRIVATE_KEY",
+    "TELEGRAM_TOKEN",
+    "TELEGRAM_CHAT_ID",
+}
+
+
+def _run_wallet_manager() -> None:
+    """Launch the interactive wallet manager or exit in headless mode."""
+    if not sys.stdin.isatty():
+        print("wallet_manager requires an interactive terminal")
 LOG_DIR: Path = Path(".")
 logger = logging.getLogger("bot")
 
@@ -83,6 +180,12 @@ def _run_wallet_manager() -> None:
 
 
 def _ensure_user_setup() -> None:
+    """Ensure a user has configured credentials or launch the wizard."""
+    if USER_CONFIG_FILE.exists():
+        return
+    if all(os.getenv(var) for var in REQUIRED_ENV_VARS):
+        return
+    _run_wallet_manager()
     """Ensure API credentials and user configuration are available."""
     env = _load_env()
     if _needs_wallet_setup(env):
