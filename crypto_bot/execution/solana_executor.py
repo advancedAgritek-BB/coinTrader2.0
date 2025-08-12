@@ -304,8 +304,8 @@ async def execute_swap(
     async with AsyncClient(rpc_url) as client:
         if jito_key:
             try:
-                signed_tx = base64.b64encode(tx.serialize()).decode()
-                signed_tx = base64.b64encode(signed_bytes).decode()
+                signed_tx_bytes = signed_bytes or tx.serialize()
+                signed_tx = base64.b64encode(signed_tx_bytes).decode()
                 async with aiohttp.ClientSession() as jito_session:
                     async with jito_session.post(
                         JITO_BUNDLE_URL,
