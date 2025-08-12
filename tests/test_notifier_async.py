@@ -11,7 +11,7 @@ import crypto_bot.utils.notifier as notifier_mod
 async def test_notify_async_success(monkeypatch):
     calls = []
 
-    def fake_send(token, chat, text):
+    async def fake_send(token, chat, text):
         calls.append(text)
         return None
 
@@ -25,7 +25,7 @@ async def test_notify_async_success(monkeypatch):
 def test_notify_sync_wrapper(monkeypatch):
     calls = []
 
-    def fake_send(token, chat, text):
+    async def fake_send(token, chat, text):
         calls.append(text)
         return None
 
@@ -40,11 +40,11 @@ def test_notify_sync_wrapper(monkeypatch):
 async def test_notify_inside_event_loop(monkeypatch):
     calls = []
 
-    def fake_send(token, chat, text):
+    def fake_send_sync(token, chat, text):
         calls.append(text)
         return None
 
-    monkeypatch.setattr(notifier_mod, "send_message", fake_send)
+    monkeypatch.setattr(notifier_mod, "send_message_sync", fake_send_sync)
     n = Notifier("t", "c")
     res = n.notify("loop")
     assert res is None
@@ -53,10 +53,14 @@ async def test_notify_inside_event_loop(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_value_error_reporting(monkeypatch):
-    def fake_send(token, chat, text):
+    async def fake_send(token, chat, text):
+        raise ValueError("bad token")
+
+    def fake_send_sync(token, chat, text):
         raise ValueError("bad token")
 
     monkeypatch.setattr(notifier_mod, "send_message", fake_send)
+    monkeypatch.setattr(notifier_mod, "send_message_sync", fake_send_sync)
     n = Notifier("t", "c")
     res = await n.notify_async("msg")
     assert "bad token" in res
@@ -68,10 +72,10 @@ async def test_value_error_reporting(monkeypatch):
 async def test_timeout_retries(monkeypatch):
     calls = 0
 
-    def slow_send(token, chat, text):
+    async def slow_send(token, chat, text):
         nonlocal calls
         calls += 1
-        time.sleep(0.05)
+        await asyncio.sleep(0.05)
         return None
 
     monkeypatch.setattr(notifier_mod, "send_message", slow_send)
@@ -84,7 +88,7 @@ async def test_timeout_retries(monkeypatch):
 def test_sync_timeout_retries(monkeypatch):
     calls = 0
 
-    def fail_send(token, chat, text):
+    async def fail_send(token, chat, text):
         nonlocal calls
         calls += 1
         raise TimeoutError("network")
