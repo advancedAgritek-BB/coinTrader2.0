@@ -365,34 +365,19 @@ async def execute_swap(
 
         poll_timeout = config.get("poll_timeout", 60)
         confirm_res = None
-        try:
-            confirm_res = await asyncio.wait_for(
-                client.confirm_transaction(tx_hash, commitment="confirmed"),
-                timeout=poll_timeout,
-            )
-        except Exception:
-            for attempt in range(3):
-                try:
+        for attempt in range(3):
+            try:
+                if attempt == 0:
+                    confirm_res = await asyncio.wait_for(
+                        client.confirm_transaction(tx_hash, commitment="confirmed"),
+                        timeout=poll_timeout,
+                    )
+                else:
                     async with AsyncClient(rpc_url) as aclient:
                         confirm_res = await asyncio.wait_for(
                             aclient.confirm_transaction(tx_hash, commitment="confirmed"),
                             timeout=poll_timeout,
                         )
-                    break
-                except Exception as err:
-                    if attempt < 2:
-                        await asyncio.sleep(2 ** (attempt + 1))
-                        continue
-                    err_msg = notifier.notify(f"Confirmation failed for {tx_hash}")
-                    if err_msg:
-                        logger.error("Failed to send message: %s", err_msg)
-                    raise TimeoutError("Transaction confirmation failed") from err
-        for attempt in range(3):
-            try:
-                confirm_res = await asyncio.wait_for(
-                    client.confirm_transaction(tx_hash, commitment="confirmed"),
-                    timeout=poll_timeout,
-                )
                 break
             except Exception as err:
                 if attempt < 2:
