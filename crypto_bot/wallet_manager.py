@@ -123,6 +123,12 @@ def prompt_user() -> dict:
     data["helius_api_key"] = env_or_prompt(
         "HELIUS_KEY", "Enter Helius API key: "
     )
+    data["supabase_url"] = env_or_prompt(
+        "SUPABASE_URL", "Enter Supabase URL: "
+    )
+    data["supabase_key"] = env_or_prompt(
+        "SUPABASE_KEY", "Enter Supabase API key: "
+    )
     data["lunarcrush_api_key"] = env_or_prompt(
         "LUNARCRUSH_API_KEY", "Enter LunarCrush API key: "
     )
@@ -177,6 +183,8 @@ def load_or_create(interactive: bool = False) -> dict:
         "wallet_address",
         "solana_private_key",
         "helius_api_key",
+        "supabase_url",
+        "supabase_key",
         "lunarcrush_api_key",
         "mode",
     }
@@ -216,6 +224,8 @@ def load_or_create(interactive: bool = False) -> dict:
     os.environ["KRAKEN_API_KEY"] = creds.get("kraken_api_key", "")
     os.environ["KRAKEN_API_SECRET"] = creds.get("kraken_api_secret", "")
     os.environ["HELIUS_KEY"] = creds.get("helius_api_key", "")
+    os.environ["SUPABASE_URL"] = creds.get("supabase_url", "")
+    os.environ["SUPABASE_KEY"] = creds.get("supabase_key", "")
     os.environ["LUNARCRUSH_API_KEY"] = creds.get("lunarcrush_api_key", "")
 
     # expose selected exchange credentials via generic env vars for ccxt

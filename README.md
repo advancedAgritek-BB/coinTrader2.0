@@ -155,6 +155,7 @@ needed.
    if you prefer not to install these extra dependencies.
 2. (Optional) Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius API key.
    `python -m crypto_bot.main` will launch this setup wizard automatically when credentials or `user_config.yaml` are missing.
+2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius and Supabase API keys.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:
    ```bash
@@ -211,6 +212,7 @@ python examples/wallet_demo.py
 ```
 
 Run `python crypto_bot/wallet_manager.py` if you want to create `user_config.yaml` and enter your exchange credentials and Helius API key manually. This step is optional—`python -m crypto_bot.main` launches the same wizard automatically whenever credentials or `user_config.yaml` are missing. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
+Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials and Helius and Supabase API keys. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
 
 ## Configuration Files
 
