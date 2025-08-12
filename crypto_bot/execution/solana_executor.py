@@ -19,7 +19,7 @@ from crypto_bot.utils.notifier import Notifier
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot import tax_logger
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from crypto_bot.utils.token_registry import get_decimals, to_base_units
+from crypto_bot.utils.token_registry import fetch_from_jupiter, get_decimals, to_base_units
 
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
@@ -123,6 +123,19 @@ async def execute_swap(
         return result
 
     decimals = await get_decimals(token_in)
+    if decimals == 0:
+        try:
+            await fetch_from_jupiter()
+        except Exception as exc:
+            logger.error("Failed to refresh token decimals: %s", exc)
+        decimals = await get_decimals(token_in)
+        if decimals == 0:
+            msg = f"Unknown token decimals for {token_in}"
+            logger.warning(msg)
+            err = notifier.notify(msg)
+            if err:
+                logger.error("Failed to send message: %s", err)
+            return {}
     amount_base = to_base_units(amount, decimals)
 
     from solana.keypair import Keypair
