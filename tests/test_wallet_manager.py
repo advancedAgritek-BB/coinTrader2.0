@@ -81,6 +81,20 @@ def test_load_exports_lunarcrush_key(tmp_path, monkeypatch):
     assert creds["lunarcrush_api_key"] == "lk"
 
 
+def test_load_exports_supabase_creds(tmp_path, monkeypatch):
+    cfg = tmp_path / "user_config.yaml"
+    data = {"supabase_url": "url", "supabase_key": "key"}
+    cfg.write_text(yaml.safe_dump(data))
+    monkeypatch.setattr(wallet_manager, "CONFIG_FILE", cfg)
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_KEY", raising=False)
+    creds = wallet_manager.load_or_create()
+    assert os.environ["SUPABASE_URL"] == "url"
+    assert os.environ["SUPABASE_KEY"] == "key"
+    assert creds["supabase_url"] == "url"
+    assert creds["supabase_key"] == "key"
+
+
 def test_sanitize_secret_adds_padding():
     secret = "YWJjZA"
     padded = wallet_manager._sanitize_secret(secret)
