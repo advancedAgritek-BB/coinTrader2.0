@@ -213,7 +213,6 @@ class MLUnavailableError(RuntimeError):
 # Track WebSocket ping tasks
 WS_PING_TASKS: set[asyncio.Task] = set()
 # Track async sniper trade tasks
-# Track async sniper trade tasks
 SNIPER_TASKS: set[asyncio.Task] = set()
 # Track newly scanned Solana tokens pending evaluation
 NEW_SOLANA_TOKENS: set[str] = set()
