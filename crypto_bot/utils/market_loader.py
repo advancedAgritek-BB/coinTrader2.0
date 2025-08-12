@@ -1411,6 +1411,43 @@ async def _update_ohlcv_cache_inner(
     return cache
 
 
+# --- Back-compat: GeckoTerminal OHLCV wrapper using CCXT (real fetch, no stubs) ---
+from typing import Optional, Any, List
+import os
+
+try:
+    import ccxt  # type: ignore
+except Exception:
+    ccxt = None
+
+
+def fetch_geckoterminal_ohlcv(
+    symbol: str,
+    timeframe: str = "1h",
+    since: Optional[int] = None,
+    limit: int = 500,
+    exchange: Any = None,
+) -> List[List[float]]:
+    """
+    Compatibility wrapper for older code paths that expected a GeckoTerminal OHLCV loader.
+    This uses CCXT to fetch OHLCV from the active exchange (or the provided `exchange`).
+    Returns CCXT-standard rows: [timestamp_ms, open, high, low, close, volume].
+    """
+    if exchange is not None and hasattr(exchange, "fetch_ohlcv"):
+        return exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
+
+    if ccxt is None:
+        raise RuntimeError(
+            "ccxt is required for OHLCV fetching. Install ccxt or pass an exchange instance."
+        )
+
+    # Choose exchange from ENV (fallback to kraken, which supports OHLCV for many pairs)
+    ex_name = os.environ.get("EXCHANGE", "kraken").lower()
+    ex_cls = getattr(ccxt, ex_name, None) or getattr(ccxt, "kraken")
+    ex = ex_cls({"enableRateLimit": True})
+    return ex.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
+
+
 async def update_ohlcv_cache(
     exchange,
     cache: Dict[str, pd.DataFrame],
