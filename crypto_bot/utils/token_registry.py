@@ -11,6 +11,7 @@ from typing import Any, Dict, Iterable, List
 
 import aiohttp
 import ccxt.async_support as ccxt
+import yaml
 
 from crypto_bot.strategy import cross_chain_arb_bot
 from .gecko import gecko_request
@@ -34,6 +35,8 @@ JUPITER_TOKEN_URL = "https://token.jup.ag/all"
 HELIUS_TOKEN_API = "https://api.helius.xyz/v0/token-metadata"
 
 CACHE_FILE = Path(__file__).resolve().parents[2] / "cache" / "token_mints.json"
+CONFIG_FILE = Path(__file__).resolve().parents[1] / "config.yaml"
+OVERRIDES_FILE = Path(__file__).with_name("token_overrides.json")
 
 # Mapping of token symbols to Solana mints. ``load_token_mints`` populates this
 # dictionary at runtime.
@@ -268,31 +271,34 @@ def _write_cache() -> None:
         logger.error("Failed to write %s: %s", CACHE_FILE, exc)
 
 
-# Additional mints discovered via manual searches
-#
-# Hand-verified via Helius on 2025-08-11; these overrides require
-# periodic validation. Maintainers can cross-check quickly using:
-#   curl https://api.helius.xyz/v0/token-metadata?api-key=<API_KEY> \
-#        -X POST -H "Content-Type: application/json" \
-#        -d '{"mintAccounts":["<MINT_ADDRESS>"]}'
-# or inspect https://explorer.solana.com/address/<MINT_ADDRESS>
-# to ensure mappings remain accurate.
-MANUAL_OVERRIDES: Dict[str, str] = {
-    "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
-    "BERA": "A7y2wgyytufsxjg2ub616zqnte3x62f7fcp8fujdmoon",
-    "EUROP": "pD6L7wWeei1LJqb7tmnpfEnvkcBvqMgkfqvg23Bpump",
-    "FARTCOIN": "Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw",
-    "RLUSD": "BkbjmJVa84eiGyp27FTofuQVFLqmKFev4ZPZ3U33pump",
-    "USDG": "2gc4f72GkEtggrkUDJRSbLcBpEUPPPFsnDGJJeNKpump",  # Assuming Unlimited Solana Dump
-    "VIRTUAL": "2FupRnaRfnyPHg798WsCBMGAauEkrhMs4YN7nBmujPtM",
-    "XMR": "Fi9GeixxfhMEGfnAe75nJVrwPqfVefyS6fgmyiTxkS6q",  # Wrapped, verify
-    "MELANIA": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
-    "PENGU": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
-    "USDR": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  # USDT as proxy
-    "USTC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # USDC proxy (adjust if needed)
-    "TRUMP": "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
-    # Add more as needed; skip USDQ/USTC/XTZ as non-Solana
-}
+def _load_token_overrides() -> Dict[str, str]:
+    """Load manual token overrides from JSON if enabled."""
+    try:
+        with open(CONFIG_FILE) as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception:
+        cfg = {}
+    if not cfg.get("enable_token_overrides", True):
+        return {}
+    try:
+        with open(OVERRIDES_FILE) as f:
+            data = json.load(f)
+    except Exception:
+        logger.warning("token_overrides.json missing or unreadable")
+        return {}
+    overrides: Dict[str, str] = {}
+    for sym, info in data.items():
+        if sym.startswith("_"):
+            continue
+        mint = info.get("mint") if isinstance(info, dict) else None
+        if isinstance(mint, str):
+            overrides[sym.upper()] = mint
+    return overrides
+
+
+# Manual overrides are loaded from ``token_overrides.json`` when enabled via
+# ``enable_token_overrides`` in ``config.yaml``.
+MANUAL_OVERRIDES: Dict[str, str] = _load_token_overrides()
 TOKEN_MINTS.update(MANUAL_OVERRIDES)
 _write_cache()  # Save immediately
 
@@ -302,22 +308,9 @@ async def refresh_mints() -> None:
     loaded = await load_token_mints(force_refresh=True)
     if not loaded:
         raise RuntimeError("Failed to load token mints")
+    global MANUAL_OVERRIDES
+    MANUAL_OVERRIDES = _load_token_overrides()
     TOKEN_MINTS.update(MANUAL_OVERRIDES)
-    TOKEN_MINTS.update(
-        {
-            # Hand-verified via Helius on 2025-08-11; validate periodically
-            # using the API call above or the Solana explorer.
-            "AI16Z": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
-            "FARTCOIN": "Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw",
-            "MELANIA": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
-            "PENGU": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
-            "RLUSD": "BkbjmJVa84eiGyp27FTofuQVFLqmKFev4ZPZ3U33pump",
-            "VIRTUAL": "2FupRnaRfnyPHg798WsCBMGAauEkrhMs4YN7nBmujPtM",
-            # Latest known mappings or proxies
-            "USDG": "2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH",
-            "SOL": "So11111111111111111111111111111111111111112",
-        }
-    )
     _write_cache()
     try:
         from .symbol_utils import invalidate_symbol_cache
