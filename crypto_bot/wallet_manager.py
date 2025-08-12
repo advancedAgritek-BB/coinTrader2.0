@@ -133,20 +133,31 @@ def prompt_user() -> dict:
     return data
 
 
-def load_or_create() -> dict:
-    """Load credentials prioritizing environment variables."""
+def load_or_create(interactive: bool = False) -> dict:
+    """Load credentials prioritizing environment variables.
+
+    When ``interactive`` is ``False`` (the default), missing configuration values
+    are not prompted for and only environment variables are consulted. This
+    prevents library code from blocking on ``input()`` when running under
+    non-interactive environments such as systemd or Docker.
+    """
+
     creds: Dict[str, str] = {}
 
     if CONFIG_FILE.exists():
         logger.info("Loading user configuration from %s", CONFIG_FILE)
         with open(CONFIG_FILE) as f:
             creds.update(yaml.safe_load(f))
-    else:
+    elif interactive:
         logger.info("user_config.yaml not found; prompting for credentials")
         creds.update(prompt_user())
         logger.info("Creating new user configuration at %s", CONFIG_FILE)
         with open(CONFIG_FILE, "w") as f:
             yaml.safe_dump(creds, f)
+    else:
+        logger.info(
+            "user_config.yaml not found; running in non-interactive mode"
+        )
 
     provider = os.getenv("SECRETS_PROVIDER")
     if provider:
@@ -154,7 +165,23 @@ def load_or_create() -> dict:
         if path:
             creds.update(load_external_secrets(provider, path))
 
-    env_mapping: Dict[str, List[str]] = {key: [key.upper()] for key in creds.keys()}
+    fields = {
+        "exchange",
+        "coinbase_api_key",
+        "coinbase_api_secret",
+        "coinbase_passphrase",
+        "kraken_api_key",
+        "kraken_api_secret",
+        "telegram_token",
+        "telegram_chat_id",
+        "wallet_address",
+        "solana_private_key",
+        "helius_api_key",
+        "lunarcrush_api_key",
+        "mode",
+    }
+    fields.update(creds.keys())
+    env_mapping: Dict[str, List[str]] = {key: [key.upper()] for key in fields}
 
     aliases = {
         "coinbase_api_key": ["API_KEY"],
@@ -225,3 +252,7 @@ __all__ = [
     "load_external_secrets",
     "get_wallet",
 ]
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI helper
+    load_or_create(interactive=True)
