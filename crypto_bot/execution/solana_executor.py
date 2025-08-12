@@ -179,22 +179,6 @@ async def execute_swap(
             return {}
         route = quote_data["data"][0]
 
-        # Abort if available liquidity is too low
-        liq = route.get("liquidity")
-        if liq is None:
-            try:
-                liq = (route.get("marketInfos") or [{}])[0].get("liquidity")
-            except Exception:
-                liq = None
-        if liq is not None:
-            max_use = amount * config.get("max_liquidity_usage", 0.8)
-            if liq < max_use:
-                logger.warning("Swap aborted due to low liquidity: %s", liq)
-                err = notifier.notify("Swap aborted: insufficient liquidity")
-                if err:
-                    logger.error("Failed to send message: %s", err)
-                return {}
-
         try:
             async with session.get(
                 JUPITER_QUOTE_URL,
@@ -210,13 +194,12 @@ async def execute_swap(
                 back_data = await back_resp.json()
             back_route = back_data["data"][0]
             try:
-                ask = float(route["outAmount"]) / float(route["inAmount"])
-                bid = float(back_route["inAmount"]) / float(back_route["outAmount"])
+                out_amt = float(route["outAmount"])
+                back_in_amt = float(back_route["inAmount"])
+                slippage = abs(out_amt - back_in_amt) / out_amt if out_amt else 0.0
             except (KeyError, ValueError, ZeroDivisionError) as e:
                 logger.warning("Slippage calc failed: %s - skipping check", e)
                 slippage = 0.0
-            else:
-                slippage = (ask - bid) / ((ask + bid) / 2)
             if slippage > config.get("max_slippage_pct", 1.0):
                 logger.warning("Trade skipped due to slippage.")
                 logger.info(
@@ -306,10 +289,6 @@ async def execute_swap(
             except Exception as err:
                 logger.warning("Jito submission failed: %s", err)
         if tx_hash is None:
-
-        if tx_hash is None:
-                tx_hash = None
-        else:
             for attempt in range(max_retries):
                 try:
                     if signed_bytes and hasattr(client, "send_raw_transaction"):
@@ -352,26 +331,6 @@ async def execute_swap(
                     if err_msg:
                         logger.error("Failed to send message: %s", err_msg)
                     raise TimeoutError("Transaction confirmation failed") from err
-        for attempt in range(3):
-            try:
-    poll_timeout = config.get("poll_timeout", 60)
-    confirm_res = None
-    for attempt in range(3):
-        try:
-            async with AsyncClient(rpc_url) as aclient:
-                confirm_res = await asyncio.wait_for(
-                    client.confirm_transaction(tx_hash, commitment="confirmed"),
-                    timeout=poll_timeout,
-                )
-                break
-            except Exception as err:
-                if attempt < 2:
-                    await asyncio.sleep(2 ** (attempt + 1))
-                    continue
-                err_msg = notifier.notify(f"Confirmation failed for {tx_hash}")
-                if err_msg:
-                    logger.error("Failed to send message: %s", err_msg)
-                raise TimeoutError("Transaction confirmation failed") from err
 
     status = None
     if isinstance(confirm_res, dict):
