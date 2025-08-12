@@ -1,6 +1,7 @@
 import asyncio
 import aiohttp
 from crypto_bot.execution import solana_executor
+from crypto_bot.solana import api_helpers
 
 
 from crypto_bot.utils.telegram import TelegramNotifier
@@ -127,7 +128,7 @@ class DummyJitoSession(DummySession):
                 async def __aexit__(self, exc_type, exc, tb):
                     pass
 
-            return PR({"signature": "sig"})
+            return PR({"bundleId": "bid"})
         return super().post(url, json=json, timeout=timeout)
 
 
@@ -669,6 +670,15 @@ def test_execute_swap_jito(monkeypatch):
     monkeypatch.setattr(solana_executor.aiohttp, "ClientSession", lambda: session)
     monkeypatch.setenv("SOLANA_PRIVATE_KEY", "[1,2,3,4]")
 
+    async def fake_fetch_jito_bundle(bundle_id, api_key, session=None):
+        fake_fetch_jito_bundle.calls += 1
+        if fake_fetch_jito_bundle.calls < 2:
+            return {"transactions": []}
+        return {"transactions": [{"signature": "sig"}]}
+
+    fake_fetch_jito_bundle.calls = 0
+    monkeypatch.setattr(solana_executor, "fetch_jito_bundle", fake_fetch_jito_bundle)
+
     class KP:
         public_key = "k"
 
@@ -708,6 +718,9 @@ def test_execute_swap_jito(monkeypatch):
     monkeypatch.setattr(sys.modules["solana.rpc.api"], "Client", Client, raising=False)
 
     monkeypatch.setattr(sys.modules["solana.rpc.async_api"], "AsyncClient", DummyAsyncClient, raising=False)
+    async def fetch(bundle_id, key, session=None):
+        return {"transactions": [{"signature": "sig"}], "landed": True}
+    monkeypatch.setattr(api_helpers, "fetch_jito_bundle", fetch, raising=False)
 
     res = asyncio.run(
         solana_executor.execute_swap(
@@ -726,6 +739,7 @@ def test_execute_swap_jito(monkeypatch):
         "token_out": "USDC",
         "amount": 100,
         "tx_hash": "sig",
+        "bundle_id": "bid",
         "route": {"inAmount": 100, "outAmount": 110},
         "status": "confirmed",
     }

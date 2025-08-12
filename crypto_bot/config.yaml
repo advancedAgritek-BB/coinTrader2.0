@@ -523,6 +523,7 @@ telegram_ctl:
   enabled: true
   update_interval: 30
 testing_mode: true
+enable_token_overrides: true
 ticker_backoff_initial: 2
 ticker_backoff_max: 60
 ticker_rate_limit: null

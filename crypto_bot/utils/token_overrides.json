@@ -1,0 +1,59 @@
+{
+  "_comment": "Hand-verified via Helius on 2025-08-11; each entry includes mint and source.",
+  "AI16Z": {
+    "mint": "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC",
+    "source": "Helius token-metadata 2025-08-11"
+  },
+  "BERA": {
+    "mint": "A7y2wgyytufsxjg2ub616zqnte3x62f7fcp8fujdmoon",
+    "source": "Helius token-metadata 2025-08-11"
+  },
+  "EUROP": {
+    "mint": "pD6L7wWeei1LJqb7tmnpfEnvkcBvqMgkfqvg23Bpump",
+    "source": "Helius token-metadata 2025-08-11"
+  },
+  "FARTCOIN": {
+    "mint": "Bzc9NZfMqkXR6fz1DBph7BDf9BroyEf6pnzESP7v5iiw",
+    "source": "Helius token-metadata 2025-08-11"
+  },
+  "RLUSD": {
+    "mint": "BkbjmJVa84eiGyp27FTofuQVFLqmKFev4ZPZ3U33pump",
+    "source": "Helius token-metadata 2025-08-11"
+  },
+  "USDG": {
+    "mint": "2u1tszSeqZ3qBWF3uNGPFc8TzMk2tdiwknnRMWGWjGWH",
+    "source": "Helius token-metadata 2025-08-11 (Unlimited Solana Dump)"
+  },
+  "VIRTUAL": {
+    "mint": "2FupRnaRfnyPHg798WsCBMGAauEkrhMs4YN7nBmujPtM",
+    "source": "Helius token-metadata 2025-08-11"
+  },
+  "XMR": {
+    "mint": "Fi9GeixxfhMEGfnAe75nJVrwPqfVefyS6fgmyiTxkS6q",
+    "source": "Helius token-metadata 2025-08-11 (wrapped)"
+  },
+  "MELANIA": {
+    "mint": "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
+    "source": "Helius token-metadata 2025-08-11"
+  },
+  "PENGU": {
+    "mint": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
+    "source": "Helius token-metadata 2025-08-11"
+  },
+  "USDR": {
+    "mint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    "source": "Proxy to USDT"
+  },
+  "USTC": {
+    "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "source": "Proxy to USDC"
+  },
+  "TRUMP": {
+    "mint": "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
+    "source": "Helius token-metadata 2025-08-11"
+  },
+  "SOL": {
+    "mint": "So11111111111111111111111111111111111111112",
+    "source": "Native SOL"
+  }
+}
