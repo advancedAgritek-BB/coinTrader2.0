@@ -5,14 +5,15 @@ import os
 import json
 import base64
 import asyncio
+import sys
 import aiohttp
-from solana.rpc.async_api import AsyncClient
 
 try:  # pragma: no cover - optional dependency
     import keyring  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
     keyring = None  # type: ignore
 
+import crypto_bot.utils.telegram  # ensure submodule attribute for monkeypatch
 from crypto_bot.utils.telegram import TelegramNotifier
 from crypto_bot.utils.notifier import Notifier
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
@@ -128,7 +129,6 @@ async def execute_swap(
     decimals = await get_decimals(token_in)
     amount_base = to_base_units(amount, decimals)
 
-    from solana.rpc.api import Client
     from solana.keypair import Keypair
     from solana.transaction import Transaction
 
@@ -245,9 +245,12 @@ async def execute_swap(
 
         confirm_exec = (config or {}).get("confirm_execution")
         if confirm_exec is None:
-            try:
-                confirm_exec = input("Execute swap? [y/N]: ").strip().lower() in ("y", "yes")
-            except Exception:
+            if sys.stdin.isatty():
+                try:
+                    confirm_exec = input("Execute swap? [y/N]: ").strip().lower() in ("y", "yes")
+                except Exception:
+                    confirm_exec = False
+            else:
                 confirm_exec = False
         if not confirm_exec:
             logger.info("Swap aborted by user")
@@ -280,13 +283,19 @@ async def execute_swap(
     tx = Transaction.deserialize(raw_tx)
     tx.sign(keypair)
 
+    serialize_fn = getattr(tx, "serialize", None)
+    signed_bytes = serialize_fn() if callable(serialize_fn) else b""
+
     if jito_key is None:
         jito_key = os.getenv("JITO_KEY")
+
+    from solana.rpc.async_api import AsyncClient
 
     tx_hash: Optional[str] = None
     async with AsyncClient(rpc_url) as client:
         if jito_key:
             try:
+                signed_tx = base64.b64encode(signed_bytes).decode()
                 signed_tx = base64.b64encode(tx.serialize()).decode()
                 async with aiohttp.ClientSession() as jito_session:
                     async with jito_session.post(
@@ -300,11 +309,17 @@ async def execute_swap(
                 tx_hash = bundle_data.get("signature") or bundle_data.get("bundleId")
             except Exception as err:
                 logger.warning("Jito submission failed: %s", err)
+
+        if tx_hash is None:
                 tx_hash = None
         else:
             for attempt in range(max_retries):
                 try:
-                    send_res = await client.send_raw_transaction(tx.serialize())
+                    if signed_bytes and hasattr(client, "send_raw_transaction"):
+                        send_res = await client.send_raw_transaction(signed_bytes)
+                    else:
+                        from solana.rpc.api import Client as SyncClient
+                        send_res = SyncClient(rpc_url).send_transaction(tx, keypair)
                     tx_hash = send_res["result"]
                     break
                 except Exception as err:
@@ -315,24 +330,27 @@ async def execute_swap(
         if tx_hash is None:
             raise RuntimeError("Swap failed after retries")
 
+        poll_timeout = config.get("poll_timeout", 60)
+        for attempt in range(3):
+            try:
     poll_timeout = config.get("poll_timeout", 60)
     confirm_res = None
     for attempt in range(3):
         try:
             async with AsyncClient(rpc_url) as aclient:
                 confirm_res = await asyncio.wait_for(
-                    aclient.confirm_transaction(tx_hash, commitment="confirmed"),
+                    client.confirm_transaction(tx_hash, commitment="confirmed"),
                     timeout=poll_timeout,
                 )
-            break
-        except Exception as err:
-            if attempt < 2:
-                await asyncio.sleep(2 ** (attempt + 1))
-                continue
-            err_msg = notifier.notify(f"Confirmation failed for {tx_hash}")
-            if err_msg:
-                logger.error("Failed to send message: %s", err_msg)
-            raise TimeoutError("Transaction confirmation failed") from err
+                break
+            except Exception as err:
+                if attempt < 2:
+                    await asyncio.sleep(2 ** (attempt + 1))
+                    continue
+                err_msg = notifier.notify(f"Confirmation failed for {tx_hash}")
+                if err_msg:
+                    logger.error("Failed to send message: %s", err_msg)
+                raise TimeoutError("Transaction confirmation failed") from err
 
     status = None
     if isinstance(confirm_res, dict):
