@@ -36,7 +36,7 @@ class Notifier:
         for attempt in range(1, retries + 1):
             try:
                 return await asyncio.wait_for(
-                    asyncio.to_thread(send_message, self.token, self.chat_id, text),
+                    send_message(self.token, self.chat_id, text),
                     timeout=timeout,
                 )
             except asyncio.TimeoutError:
