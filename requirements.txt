@@ -29,7 +29,7 @@ httpx<0.28
 uvicorn
 rich
 scikit-optimize
-pydantic<2
+pydantic==1.10.22  # pin to last 1.x release for FastAPI 0.97 compatibility
 numba
 cachetools
 tenacity

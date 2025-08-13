@@ -1637,6 +1637,11 @@ source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
 ```
 
+This project pins **Pydantic** to version `1.10.22` in `requirements.txt` because
+FastAPI 0.97.0 still depends on the 1.x API. Using the latest 1.x release avoids
+compatibility issues introduced in Pydantic 2.x while keeping bug fixes from the
+final 1.x series.
+
 Run the test suite to verify your environment:
 
 ```bash
