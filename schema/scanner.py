@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class ScannerConfig(BaseModel):
@@ -23,27 +23,28 @@ class ScannerConfig(BaseModel):
     class Config:
         extra = "allow"
 
-    @validator("symbols", pre=True)
-    def _default_symbols(cls, v):
+    @field_validator("symbols", mode="before")
+    def _default_symbols(cls, v, info):
         return v or []
 
-    @validator("symbols")
-    def _require_symbols_if_not_scanning(cls, v, values):
-        if not values.get("scan_markets") and not v:
+    @field_validator("symbols")
+    def _require_symbols_if_not_scanning(cls, v, info):
+        if not info.data.get("scan_markets") and not v:
             raise ValueError("symbols must be provided when scan_markets is false")
         return v
 
-    @validator("exchange_market_types", each_item=True)
-    def _validate_market_type(cls, v):
+    @field_validator("exchange_market_types")
+    def _validate_market_type(cls, v, info):
         allowed = {"spot", "margin", "futures"}
-        if v not in allowed:
-            raise ValueError(f"invalid market type: {v}")
+        for item in v:
+            if item not in allowed:
+                raise ValueError(f"invalid market type: {item}")
         return v
 
-    @validator("symbol_batch_size", "scan_lookback_limit", "cycle_lookback_limit")
-    def _positive_int(cls, v, field):
+    @field_validator("symbol_batch_size", "scan_lookback_limit", "cycle_lookback_limit")
+    def _positive_int(cls, v, info):
         if v is not None and v <= 0:
-            raise ValueError(f"{field.name} must be > 0")
+            raise ValueError(f"{info.field_name} must be > 0")
         return v
 
 
