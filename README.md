@@ -237,7 +237,6 @@ API_PASSPHRASE=your_coinbase_passphrase_if_needed
 # generate with:
 # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 FERNET_KEY=your_generated_fernet_key
-KRAKEN_API_TOKEN=your_api_token        # optional for Kraken
 TELEGRAM_TOKEN=your_telegram_token
 TELEGRAM_CHAT_ID=your_chat_id          # chat to receive Telegram notifications
 WALLET_ADDRESS=your_wallet_address     # default on-chain wallet for trades
@@ -869,12 +868,11 @@ environment so the bot can retrieve social metrics. The free tier allows about
    use_websocket: true      # enable when trading on Kraken via WebSocket
    ```
 
-  For Kraken, a WebSocket token is requested automatically using your API key and secret. To override the fetched token, add it to `crypto_bot/.env`:
+For Kraken, a WebSocket token is requested automatically using your API key and secret. To override the fetched token, add it to `crypto_bot/.env`:
 
-  ```env
-  # KRAKEN_WS_TOKEN=your_ws_token  # optional override
-  KRAKEN_API_TOKEN=your_api_token
-  ```
+```env
+# KRAKEN_WS_TOKEN=your_ws_token  # optional override
+```
 
 5. In `crypto_bot/config.yaml` set:
 
