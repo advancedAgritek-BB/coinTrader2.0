@@ -719,6 +719,7 @@ def test_execute_swap_jito(monkeypatch):
         "tx_hash": "sig",
         "route": {"inAmount": 100, "outAmount": 110},
         "status": "confirmed",
+        "bundle_id": "bid",
     }
     assert hasattr(session, "jito_payload")
     assert DummyAsyncClient.instance.called
@@ -889,8 +890,8 @@ def test_execute_swap_confirms_with_retry(monkeypatch):
         )
     )
 
-    # One initial attempt plus two retries inside execute_swap
-    assert AC.calls == 3
+    # Two async confirm attempts after the initial client attempt
+    assert AC.calls == 2
     assert Client.instance.calls == 1
 
 
