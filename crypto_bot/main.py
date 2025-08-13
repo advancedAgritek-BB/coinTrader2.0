@@ -177,29 +177,16 @@ def _run_wallet_manager() -> None:
 
 def _ensure_user_setup() -> None:
     """Ensure API credentials and user configuration are available."""
-    if USER_CONFIG_FILE.exists() and all(
+    if USER_CONFIG_PATH.exists() and all(
         os.getenv(var) for var in REQUIRED_ENV_VARS
     ):
         return
     env = _load_env()
-    if _needs_wallet_setup(env, USER_CONFIG_FILE) or not all(
+    if _needs_wallet_setup(env, USER_CONFIG_PATH) or not all(
         os.getenv(var) for var in REQUIRED_ENV_VARS
     ):
-    """Ensure a user has configured credentials or launch the wizard."""
-    if USER_CONFIG_PATH.exists():
-    env = _load_env()
-    if USER_CONFIG_FILE.exists():
-        return
-    if all(os.getenv(var) for var in REQUIRED_ENV_VARS):
-        return
-    if _needs_wallet_setup(env):
         _run_wallet_manager()
         _load_env()
-    if USER_CONFIG_PATH.exists():
-        return
-    if all(os.getenv(var) for var in REQUIRED_ENV_VARS):
-        return
-    _run_wallet_manager()
 
 
 def _fix_symbol(symbol: str) -> str:
@@ -2796,102 +2783,23 @@ async def _main_impl() -> TelegramNotifier:
     return notifier
 
 
+def _reload_modules() -> None:
+    """Reload project modules for hot-reload scenarios."""
+    if not os.environ.get("CRYPTOBOT_HOT_RELOAD"):
+        return
+    import importlib
+
+    for name, module in list(sys.modules.items()):
+        if name.startswith("crypto_bot") or name.startswith("schema"):
+            importlib.reload(module)
+
+
 async def main() -> None:
     """Entry point for running the trading bot with error handling."""
     _ensure_user_setup()
+    _reload_modules()
 
-    global TelegramNotifier, send_test_message, LOG_DIR, setup_logger
-    global PortfolioRotator, load_or_create, analyze_symbol, dca_bot
-    global cooldown_configure, BotContext, PhaseRunner, RiskManager, RiskConfig
-    global calculate_trailing_stop, should_exit, cex_trade_async, get_exchange
-    global get_exchanges, OpenPositionGuard, console_monitor, console_control
-    global log_position, log_balance, load_kraken_symbols, update_ohlcv_cache
-    global update_multi_tf_ohlcv_cache, update_regime_tf_cache, timeframe_seconds
-    global market_loader_configure, fetch_order_book_async, WS_OHLCV_TIMEOUT
-    global PAIR_FILE, load_liquid_pairs, DEFAULT_MIN_VOLUME_USD, DEFAULT_TOP_K
-    global refresh_pairs_async, build_priority_queue, get_solana_new_tokens
-    global get_filtered_symbols, symbol_utils, log_cycle_metrics
-    global PaperWallet, Wallet, compute_strategy_weights, optimize_strategies
-    global write_cycle_metrics, TOKEN_MINTS, monitor_pump_raydium, refresh_mints
-    global periodic_mint_sanity_check, pnl_logger, regime_pnl_tracker
-    global ML_AVAILABLE, record_sol_scanner_metrics, auto_convert_funds
-    global check_wallet_balances, detect_non_trade_tokens
-    global classify_regime_async, classify_regime_cached, calc_atr, monitor_price
-    global SolanaMempoolMonitor, ScannerConfig, SolanaScannerConfig, PythConfig
-
-    from schema.scanner import (
-        ScannerConfig,
-        SolanaScannerConfig,
-        PythConfig,
-    )
-    from crypto_bot.utils.telegram import TelegramNotifier, send_test_message
-    from crypto_bot.utils.logger import LOG_DIR, setup_logger
-    from crypto_bot.portfolio_rotator import PortfolioRotator
-    from crypto_bot.wallet_manager import load_or_create
-    from crypto_bot.utils.market_analyzer import analyze_symbol
-    from crypto_bot.strategy import dca_bot
-    from crypto_bot.cooldown_manager import configure as cooldown_configure
-    from crypto_bot.phase_runner import BotContext, PhaseRunner
-    from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
-    from crypto_bot.risk.exit_manager import calculate_trailing_stop, should_exit
-    from crypto_bot.execution.cex_executor import (
-        execute_trade_async as cex_trade_async,
-        get_exchange,
-        get_exchanges,
-    )
-    from crypto_bot.open_position_guard import OpenPositionGuard
-    from crypto_bot import console_monitor, console_control
-    from crypto_bot.utils.position_logger import log_position, log_balance
-    from crypto_bot.utils.market_loader import (
-        load_kraken_symbols,
-        update_ohlcv_cache,
-        update_multi_tf_ohlcv_cache,
-        update_regime_tf_cache,
-        timeframe_seconds,
-        configure as market_loader_configure,
-        fetch_order_book_async,
-        WS_OHLCV_TIMEOUT,
-    )
-    from crypto_bot.utils.pair_cache import PAIR_FILE, load_liquid_pairs
-    from tasks.refresh_pairs import (
-        DEFAULT_MIN_VOLUME_USD,
-        DEFAULT_TOP_K,
-        refresh_pairs_async,
-    )
-    from crypto_bot.utils.eval_queue import build_priority_queue
-    from crypto_bot.solana import get_solana_new_tokens
-    from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
-    from crypto_bot.utils import symbol_utils
-    from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
-    from crypto_bot.paper_wallet import PaperWallet  # backward compatibility
-    from wallet import Wallet
-    from crypto_bot.utils.strategy_utils import compute_strategy_weights
-    from crypto_bot.auto_optimizer import optimize_strategies
-    from crypto_bot.utils.telemetry import write_cycle_metrics
-    from crypto_bot.utils.token_registry import (
-        TOKEN_MINTS,
-        monitor_pump_raydium,
-        refresh_mints,
-        periodic_mint_sanity_check,
-    )
-    from crypto_bot.utils import pnl_logger, regime_pnl_tracker
-    from crypto_bot.utils.ml_utils import ML_AVAILABLE
-    from crypto_bot.monitoring import record_sol_scanner_metrics
-    from crypto_bot.fund_manager import (
-        auto_convert_funds,
-        check_wallet_balances,
-        detect_non_trade_tokens,
-    )
-    from crypto_bot.regime.regime_classifier import (
-        classify_regime_async,
-        classify_regime_cached,
-    )
-    from crypto_bot.volatility_filter import calc_atr
-    from crypto_bot.solana.exit import monitor_price
-    from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
-
-    global logger
-    logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
+    setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
     logger.info("ML components available: %s", ML_AVAILABLE)
 
     notifier: TelegramNotifier | None = None
