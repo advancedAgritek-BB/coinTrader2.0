@@ -8,6 +8,8 @@ import os
 import time
 from pathlib import Path
 from typing import Iterable, List, Dict
+from collections import Counter
+from enum import Enum
 
 import ccxt  # type: ignore
 try:  # pragma: no cover - import fallback
@@ -106,6 +108,17 @@ DEFAULT_CHANGE_PCT_PERCENTILE = 50
 
 # Mapping of exchange specific symbols to standardized forms
 _ALIASES = {"XBT": "BTC", "XBTUSDT": "BTC/USDT"}
+
+
+class RejectReason(str, Enum):
+    LOW_VOLUME = "low_volume"
+    HIGH_SPREAD = "high_spread"
+    DISALLOWED_QUOTE = "disallowed_quote"
+    MISSING_OHLCV = "missing_ohlcv"
+    INSUFFICIENT_HISTORY = "insufficient_history"
+    MISSING_TICKER = "missing_ticker"
+    CORRELATED = "correlated"
+    LOW_SCORE = "low_score"
 
 
 def _norm_symbol(sym: str) -> str:
@@ -840,11 +853,13 @@ async def filter_symbols(
     cache_changed = False
 
     symbols = list(symbols)
+    total_symbols = len(symbols)
     cex_syms = [s for s in symbols if not str(s).upper().endswith("/USDC")]
     onchain_syms = [s for s in symbols if str(s).upper().endswith("/USDC")]
 
     telemetry.inc("scan.symbols_considered", len(symbols))
     skipped = 0
+    rejects: Counter[RejectReason] = Counter()
 
     cached_data: dict[str, tuple[float, float, float]] = {}
     for sym in cex_syms:
@@ -941,18 +956,28 @@ async def filter_symbols(
                 local_min_volume,
             )
             skipped += 1
+            rejects[RejectReason.LOW_VOLUME] += 1
+            continue
+        if spread_pct > max_spread:
+            logger.warning(
+                "Skipping %s due to high spread %.2f%% > %.2f%%",
+                symbol,
+                spread_pct,
+                max_spread,
+            )
+            skipped += 1
+            rejects[RejectReason.HIGH_SPREAD] += 1
             continue
         if cache_map and vol_usd < local_min_volume * vol_mult:
             skipped += 1
+            rejects[RejectReason.LOW_VOLUME] += 1
             continue
-        if vol_usd >= local_min_volume and spread_pct <= max_spread:
-            metrics.append((symbol, vol_usd, change_pct, spread_pct))
-            if cache_map is not None and symbol not in cache_map:
-                cache_map[symbol] = time.time()
-                cache_changed = True
-        if vol_usd >= local_min_volume:
-            volumes.append(vol_usd)
-            raw.append((symbol, vol_usd, change_pct, spread_pct))
+        metrics.append((symbol, vol_usd, change_pct, spread_pct))
+        if cache_map is not None and symbol not in cache_map:
+            cache_map[symbol] = time.time()
+            cache_changed = True
+        volumes.append(vol_usd)
+        raw.append((symbol, vol_usd, change_pct, spread_pct))
 
     for sym in cex_syms:
         norm_sym = _norm_symbol(sym)
@@ -965,30 +990,42 @@ async def filter_symbols(
                 sym,
             )
             skipped += 1
+            rejects[RejectReason.MISSING_TICKER] += 1
             continue
         vol_usd, spread_pct, _ = cached
         seen.add(norm_sym)
         local_min_volume = min_volume * 0.5 if norm_sym.endswith("/USDC") else min_volume
-        if cache_map and vol_usd < local_min_volume * vol_mult:
+        if vol_usd < local_min_volume:
+            rejects[RejectReason.LOW_VOLUME] += 1
             skipped += 1
             continue
-        if vol_usd >= local_min_volume and spread_pct <= max_spread:
-            metrics.append((norm_sym, vol_usd, 0.0, spread_pct))
-            if cache_map is not None and norm_sym not in cache_map:
-                cache_map[norm_sym] = time.time()
-                cache_changed = True
-        if vol_usd >= local_min_volume:
-            volumes.append(vol_usd)
-            raw.append((norm_sym, vol_usd, 0.0, spread_pct))
+        if spread_pct > max_spread:
+            rejects[RejectReason.HIGH_SPREAD] += 1
+            skipped += 1
+            continue
+        if cache_map and vol_usd < local_min_volume * vol_mult:
+            skipped += 1
+            rejects[RejectReason.LOW_VOLUME] += 1
+            continue
+        metrics.append((norm_sym, vol_usd, 0.0, spread_pct))
+        if cache_map is not None and norm_sym not in cache_map:
+            cache_map[norm_sym] = time.time()
+            cache_changed = True
+        volumes.append(vol_usd)
+        raw.append((norm_sym, vol_usd, 0.0, spread_pct))
 
     vol_cut = np.percentile(volumes, vol_pct) if volumes else 0
 
     metrics: List[tuple[str, float, float, float]] = []
     for sym, vol_usd, change_pct, spread_pct in raw:
-        if vol_usd >= vol_cut and spread_pct <= max_spread:
-            metrics.append((sym, vol_usd, change_pct, spread_pct))
-        else:
+        if vol_usd < vol_cut:
             skipped += 1
+            rejects[RejectReason.LOW_VOLUME] += 1
+        elif spread_pct > max_spread:
+            skipped += 1
+            rejects[RejectReason.HIGH_SPREAD] += 1
+        else:
+            metrics.append((sym, vol_usd, change_pct, spread_pct))
 
     candidates = [m[0] for m in metrics if m[1] >= vol_cut]
     if candidates:
@@ -1015,6 +1052,7 @@ async def filter_symbols(
     if metrics and pct:
         threshold = np.percentile([abs(m[2]) for m in metrics], pct)
         metrics = [m for m in metrics if abs(m[2]) >= threshold]
+    metric_map = {sym: (vol, spr) for sym, vol, _, spr in metrics}
 
     liq_scores: Dict[str, float] = {}
     if metrics:
@@ -1060,6 +1098,7 @@ async def filter_symbols(
                 scored.append((sym, score))
             else:
                 skipped += 1
+                rejects[RejectReason.LOW_SCORE] += 1
     scored.sort(key=lambda x: x[1], reverse=True)
 
     corr_map: Dict[tuple[str, str], float] = {}
@@ -1118,6 +1157,7 @@ async def filter_symbols(
         ):
             logger.debug("Skipping %s due to insufficient history", sym)
             skipped += 1
+            rejects[RejectReason.INSUFFICIENT_HISTORY] += 1
             continue
         keep = True
         if df_cache:
@@ -1131,6 +1171,7 @@ async def filter_symbols(
             result.append((sym, score))
         else:
             skipped += 1
+            rejects[RejectReason.CORRELATED] += 1
 
     telemetry.inc("scan.symbols_skipped", skipped)
     if cache_changed and cache_map is not None:
@@ -1153,6 +1194,7 @@ async def filter_symbols(
         base, _, quote = sym.partition("/")
         is_solana = quote.upper() == "USDC" and base.upper() not in NON_SOLANA_BASES
         if not is_solana:
+            rejects[RejectReason.DISALLOWED_QUOTE] += 1
             continue
         base = base.upper()
         mint = TOKEN_MINTS.get(base)
@@ -1169,6 +1211,7 @@ async def filter_symbols(
                     "Mint lookup failed for %s - consider adding to TOKEN_MINTS or NON_SOLANA_BASES",
                     sym,
                 )
+                rejects[RejectReason.MISSING_OHLCV] += 1
                 continue
         logger.info("Resolved %s to mint %s for onchain", sym, mint)
         try:
@@ -1180,18 +1223,35 @@ async def filter_symbols(
                     vol,
                     onchain_min_volume,
                 )
+                rejects[RejectReason.LOW_VOLUME] += 1
                 continue
             score = vol / float(onchain_min_volume)
             resolved_onchain.append((sym, score))
         except Exception:  # pragma: no cover - network
             logger.warning("Gecko fetch failed for %s; skipping", sym)
+            rejects[RejectReason.MISSING_OHLCV] += 1
 
+    kept_total = len(result) + len(resolved_onchain)
     elapsed = time.perf_counter() - start_time
     logger.debug(
         "filter_symbols processed %d symbols in %.2fs",
-        len(symbols),
+        total_symbols,
         elapsed,
     )
+    sample_n = min(5, len(result))
+    sample = [
+        f"{sym} spr={metric_map.get(sym, (0.0, 0.0))[1]:.2f}% vol={metric_map.get(sym, (0.0, 0.0))[0]:.0f}"
+        for sym, _ in result[:sample_n]
+    ]
+    logger.info(
+        "SymbolFilter summary: checked=%d kept=%d",
+        total_symbols,
+        kept_total,
+    )
+    if sample:
+        logger.info("Kept sample: %s", sample)
+    if rejects:
+        logger.info("Rejections: %s", dict(rejects))
     return (
         sorted(result, key=lambda x: x[1], reverse=True),
         sorted(resolved_onchain, key=lambda x: x[1], reverse=True),
