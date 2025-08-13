@@ -1630,6 +1630,15 @@ upload succeeds. Set `use_ml_regime_classifier: true` in
 `crypto_bot/regime/regime_config.yaml` to enable downloads of the trained model
 when the bot starts.
 
+### Ingest a 7-column minute CSV (CSV7) and train locally
+
+Our CSV7 format is headerless with 7 columns: `ts,open,high,low,close,volume,trades`.
+
+**Ingest → normalized CSV (and Parquet if available):**
+```bash
+cointrainer import-csv7 --file ./XRPUSD_1.csv --symbol XRPUSD --out ./data/XRPUSD_1m
+```
+
 ## Development Setup
 
 Use Python&nbsp;3.10 or later to avoid package incompatibilities. Set up a
