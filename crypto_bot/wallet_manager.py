@@ -227,7 +227,15 @@ def load_or_create(interactive: bool = False) -> dict:
     os.environ["HELIUS_API_KEY"] = helius_val
     os.environ["HELIUS_KEY"] = helius_val
     os.environ["SUPABASE_URL"] = creds.get("supabase_url", "")
-    os.environ["SUPABASE_KEY"] = creds.get("supabase_key", "")
+    supabase_key = creds.get("supabase_key", "")
+    os.environ["SUPABASE_KEY"] = supabase_key
+    os.environ["SUPABASE_SERVICE_ROLE_KEY"] = supabase_key
+    try:  # refresh ML availability after setting credentials
+        from crypto_bot.utils.ml_utils import init_ml_components
+
+        init_ml_components()
+    except Exception:  # pragma: no cover - optional dependency
+        pass
     os.environ["LUNARCRUSH_API_KEY"] = creds.get("lunarcrush_api_key", "")
 
     # expose selected exchange credentials via generic env vars for ccxt

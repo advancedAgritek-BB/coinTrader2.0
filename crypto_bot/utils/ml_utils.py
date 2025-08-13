@@ -1,11 +1,10 @@
 """Utility helpers for optional machine learning dependencies."""
 
-import importlib.util
+import importlib
 import logging
 import os
 from pathlib import Path
 from typing import Iterable
-
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +27,25 @@ def _check_packages(pkgs: Iterable[str]) -> bool:
     return all(importlib.util.find_spec(name) is not None for name in pkgs)
 
 
+def _get_supabase_creds() -> tuple[str | None, str | None]:
+    """Return Supabase URL and service key from the environment."""
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+    logger.debug(
+        "Supabase configured: url=%s key_len=%d",
+        bool(url),
+        len(key or ""),
+    )
+    return url, key
+
+
 def is_ml_available() -> bool:
     """Return ``True`` if optional ML dependencies and model are available."""
     try:
         if not _check_packages(_REQUIRED_PACKAGES):
             raise ImportError("Missing required ML packages")
 
-        url = os.getenv("SUPABASE_URL")
-        key = os.getenv("SUPABASE_KEY")
+        url, key = _get_supabase_creds()
         if not url or not key:
             raise ValueError("Missing Supabase credentials")
 
@@ -51,7 +61,14 @@ def is_ml_available() -> bool:
         return False
 
 
-ML_AVAILABLE = is_ml_available()
+ML_AVAILABLE = False
 
-__all__ = ["is_ml_available", "ML_AVAILABLE", "warn_ml_unavailable_once"]
 
+def init_ml_components() -> bool:
+    """Initialize ML components and update :data:`ML_AVAILABLE`."""
+    global ML_AVAILABLE
+    ML_AVAILABLE = is_ml_available()
+    return ML_AVAILABLE
+
+
+__all__ = ["is_ml_available", "ML_AVAILABLE", "warn_ml_unavailable_once", "init_ml_components"]

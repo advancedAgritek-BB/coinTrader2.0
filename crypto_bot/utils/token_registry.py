@@ -70,6 +70,7 @@ __all__ = [
 
 
 _HELIUS_DISABLED_LOGGED = False
+_MISSING_MINT_LOGGED: set[str] = set()
 
 
 def _helius_api_key() -> str:
@@ -413,23 +414,20 @@ async def get_mint_from_gecko(base: str) -> str | None:
 
 
 async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Dict[str, Any]:
-    """Return token metadata for ``symbols`` using Helius.
+    """Return token metadata for ``symbols`` via Helius.
 
-    By default only the mapping of symbol to mint address is returned. When
-    ``full`` is ``True`` a dictionary of metadata is provided for each symbol
-    containing at minimum ``mint``, ``decimals`` and ``supply``.
+    The Helius token-metadata endpoint accepts mint addresses.  ``symbols``
+    are mapped to their known mints via ``TOKEN_MINTS``; unknown symbols are
+    skipped and logged only once to avoid excessive log spam.  Native SOL has
+    no mint and is handled as a static special case.
 
-    Parameters
-    ----------
-    symbols:
-        Iterable of token symbols to resolve.
-    full:
-        Return full metadata instead of just mint addresses.
+    When ``full`` is ``True`` a dictionary with ``mint``, ``decimals`` and
+    ``supply`` is returned for each symbol.  Otherwise only the mint address is
+    provided.
     """
 
     api_key = _helius_api_key()
-    tokens = [str(s) for s in symbols if s]
-    if not tokens or not api_key:
+    if not api_key:
         return {}
 
     logger.info("Fetching metadata for %d mints via Helius", len(tokens))
@@ -437,37 +435,58 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     params = {"symbol": ",".join(tokens), "api-key": api_key}
     url = _build_helius_url(params)
     if not url:
+    symbols_list = [str(s).upper() for s in symbols if s]
+    if not symbols_list:
         return {}
+
+    result: Dict[str, Any] = {}
+    mints: List[str] = []
+    mint_to_symbol: Dict[str, str] = {}
+    for sym in symbols_list:
+        if sym == "SOL":  # Native SOL has no mint
+            if full:
+                result[sym] = {"mint": "", "decimals": 9, "supply": None}
+            else:
+                result[sym] = ""
+            continue
+        mint = TOKEN_MINTS.get(sym)
+        if mint:
+            mints.append(mint)
+            mint_to_symbol[mint] = sym
+        else:
+            if sym not in _MISSING_MINT_LOGGED:
+                logger.info("No mint mapping for %s", sym)
+                _MISSING_MINT_LOGGED.add(sym)
+
+    if not mints:
+        return result
+
+    url = f"{HELIUS_TOKEN_API}?api-key={api_key}"
+    payload = {"mintAccounts": mints}
 
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=10) as resp:
+            async with session.post(url, json=payload, timeout=10) as resp:
                 if 400 <= resp.status < 500:
                     logger.warning(
                         "Helius lookup failed for %s [%s]",
-                        ",".join(tokens),
+                        ",".join(mint_to_symbol.values()),
                         resp.status,
                     )
-                    return {}
+                    return result
                 resp.raise_for_status()
                 data = await resp.json()
     except aiohttp.ClientError as exc:  # pragma: no cover - network
         logger.error("Helius lookup failed: %s", exc)
-        return {}
+        return result
     except Exception as exc:  # pragma: no cover - network
         logger.error("Helius lookup error: %s", exc)
-        return {}
+        return result
 
-    result: Dict[str, Any] = {}
-    if isinstance(data, list):
-        items = data
-    else:
-        items = data.get("tokens") or data.get("data") or []
+    items = data if isinstance(data, list) else data.get("tokens") or data.get("data") or []
     if isinstance(items, dict):
         items = list(items.values())
-    if not isinstance(items, list):
-        return {}
-    for item in items:
+    for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict):
             continue
         symbol = item.get("symbol") or item.get("ticker")
@@ -487,6 +506,29 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
         if sym.upper() not in result:
             logger.warning("No mint mapping for %s; skipping Helius", sym)
 
+        mint = (
+            item.get("onChainAccountInfo", {}).get("mint")
+            or item.get("mint")
+            or item.get("address")
+            or item.get("tokenMint")
+        )
+        if not isinstance(mint, str):
+            continue
+        sym = mint_to_symbol.get(mint)
+        if not sym:
+            continue
+        if full:
+            decimals = (
+                item.get("onChainAccountInfo", {}).get("decimals")
+                or item.get("decimals")
+            )
+            supply = (
+                item.get("onChainAccountInfo", {}).get("supply")
+                or item.get("supply")
+            )
+            result[sym] = {"mint": mint, "decimals": decimals, "supply": supply}
+        else:
+            result[sym] = mint
     return result
 
 

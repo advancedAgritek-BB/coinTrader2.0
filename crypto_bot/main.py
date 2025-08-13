@@ -2862,6 +2862,9 @@ def _reload_modules() -> None:
 async def main() -> None:
     """Entry point for running the trading bot with error handling."""
     _ensure_user_setup()
+    from crypto_bot.utils.ml_utils import init_ml_components
+
+    init_ml_components()
     _import_internal_modules()
     _reload_modules()
 

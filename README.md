@@ -237,7 +237,6 @@ API_PASSPHRASE=your_coinbase_passphrase_if_needed
 # generate with:
 # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 FERNET_KEY=your_generated_fernet_key
-KRAKEN_API_TOKEN=your_api_token        # optional for Kraken
 TELEGRAM_TOKEN=your_telegram_token
 TELEGRAM_CHAT_ID=your_chat_id          # chat to receive Telegram notifications
 WALLET_ADDRESS=your_wallet_address     # default on-chain wallet for trades
@@ -257,7 +256,7 @@ HELIUS_API_KEY=your_helius_api_key      # required for Jupiter/Helius registry
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 SUPABASE_URL=https://xyzcompany.supabase.co
-SUPABASE_KEY=your_service_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_key
 LUNARCRUSH_API_KEY=your_lunarcrush_api_key  # optional, LunarCrush social metrics
 token_registry.refresh_interval_minutes=720  # optional cache update interval
 ```
@@ -272,7 +271,7 @@ Each credential can be supplied in `.env`, or if missing, will be requested inte
 admin chats. Omit it to restrict control to the single `chat_id` in the
 configuration file.
 
-`SUPABASE_URL` and `SUPABASE_KEY` are required for downloading models used by `regime_classifier`.
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required for downloading models used by `regime_classifier`.
 
 ### Solana token registry
 
@@ -869,12 +868,11 @@ environment so the bot can retrieve social metrics. The free tier allows about
    use_websocket: true      # enable when trading on Kraken via WebSocket
    ```
 
-  For Kraken, a WebSocket token is requested automatically using your API key and secret. To override the fetched token, add it to `crypto_bot/.env`:
+For Kraken, a WebSocket token is requested automatically using your API key and secret. To override the fetched token, add it to `crypto_bot/.env`:
 
-  ```env
-  # KRAKEN_WS_TOKEN=your_ws_token  # optional override
-  KRAKEN_API_TOKEN=your_api_token
-  ```
+```env
+# KRAKEN_WS_TOKEN=your_ws_token  # optional override
+```
 
 5. In `crypto_bot/config.yaml` set:
 
@@ -1625,7 +1623,7 @@ LightGBM model to Supabase:
 python ml_trainer.py train regime --use-gpu --federated
 ```
 
-Ensure `SUPABASE_URL` and `SUPABASE_KEY` are set in `crypto_bot/.env` so the
+Ensure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set in `crypto_bot/.env` so the
 upload succeeds. Set `use_ml_regime_classifier: true` in
 `crypto_bot/regime/regime_config.yaml` to enable downloads of the trained model
 when the bot starts.
