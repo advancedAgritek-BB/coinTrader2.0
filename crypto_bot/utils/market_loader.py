@@ -1338,8 +1338,26 @@ async def _update_ohlcv_cache_inner(
             data, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
         tf_sec = timeframe_seconds(None, timeframe)
-        unit = "ms" if df_new["timestamp"].iloc[0] > 1e10 else "s"
-        df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit)
+
+        if df_new is None or df_new.empty or "timestamp" not in df_new.columns:
+            logger.info(
+                "OHLCV: no new data for %s @ %s; keeping existing cache", sym, timeframe
+            )
+            continue
+
+        df_new["timestamp"] = pd.to_numeric(df_new["timestamp"], errors="coerce")
+        df_new = df_new.dropna(subset=["timestamp"])
+        if df_new.empty:
+            logger.info(
+                "OHLCV: non-numeric/empty timestamps for %s @ %s; skipping update",
+                sym,
+                timeframe,
+            )
+            continue
+
+        unit = "ms" if df_new["timestamp"].max() > 1e12 else "s"
+        df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit, utc=True)
+        df_new = df_new.sort_values("timestamp").drop_duplicates("timestamp", keep="last")
         df_new = (
             df_new.set_index("timestamp")
             .resample(f"{tf_sec}s")
