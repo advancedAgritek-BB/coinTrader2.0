@@ -85,7 +85,9 @@ def test_fetch_from_jupiter(monkeypatch, tmp_path):
 
 
 def test_fetch_from_helius(monkeypatch, tmp_path):
-    data = [{"symbol": "AAA", "mint": "mmm"}]
+    data = [
+        {"onChainAccountInfo": {"mint": "mmm", "decimals": 5, "supply": 10}}
+    ]
 
     class DummyResp:
         def __init__(self, d):
@@ -108,6 +110,7 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
         def __init__(self, d):
             self.d = d
             self.url = None
+            self.payload = None
 
         async def __aenter__(self):
             return self
@@ -115,14 +118,16 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
         async def __aexit__(self, exc_type, exc, tb):
             pass
 
-        def get(self, url, timeout=10):
+        def post(self, url, json=None, timeout=10):
             self.url = url
+            self.payload = json
             return DummyResp(self.d)
 
     monkeypatch.setenv("HELIUS_API_KEY", "KEY")
     session = DummySession(data)
 
     mod = _load_module(monkeypatch, tmp_path)
+    mod.TOKEN_MINTS["AAA"] = "mmm"
     aiohttp_mod = type(
         "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
     )
@@ -130,13 +135,14 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
     assert mapping == {"AAA": "mmm"}
-    assert (
-        session.url == "https://api.helius.xyz/v0/token-metadata?symbol=AAA&api-key=KEY"
-    )
+    assert session.url == "https://api.helius.xyz/v0/token-metadata?api-key=KEY"
+    assert session.payload == {"mintAccounts": ["mmm"]}
 
 
 def test_fetch_from_helius_full(monkeypatch, tmp_path):
-    data = [{"symbol": "AAA", "mint": "mmm", "decimals": 5, "supply": 10}]
+    data = [
+        {"onChainAccountInfo": {"mint": "mmm", "decimals": 5, "supply": 10}}
+    ]
 
     class DummyResp:
         def __init__(self, d):
@@ -158,7 +164,6 @@ def test_fetch_from_helius_full(monkeypatch, tmp_path):
     class DummySession:
         def __init__(self, d):
             self.d = d
-            self.url = None
 
         async def __aenter__(self):
             return self
@@ -166,14 +171,14 @@ def test_fetch_from_helius_full(monkeypatch, tmp_path):
         async def __aexit__(self, exc_type, exc, tb):
             pass
 
-        def get(self, url, timeout=10):
-            self.url = url
+        def post(self, url, json=None, timeout=10):
             return DummyResp(self.d)
 
     monkeypatch.setenv("HELIUS_API_KEY", "KEY")
     session = DummySession(data)
 
     mod = _load_module(monkeypatch, tmp_path)
+    mod.TOKEN_MINTS["AAA"] = "mmm"
     aiohttp_mod = type(
         "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
     )
@@ -213,13 +218,14 @@ def test_fetch_from_helius_4xx(monkeypatch, tmp_path, caplog):
         async def __aexit__(self, exc_type, exc, tb):
             pass
 
-        def get(self, url, timeout=10):
+        def post(self, url, json=None, timeout=10):
             self.url = url
             return DummyResp()
 
     monkeypatch.setenv("HELIUS_API_KEY", "KEY")
     session = DummySession()
     mod = _load_module(monkeypatch, tmp_path)
+    mod.TOKEN_MINTS["AAA"] = "mmm"
     aiohttp_mod = type(
         "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
     )
