@@ -118,10 +118,6 @@ REQUIRED_ENV_VARS = {
 
 
 LOG_DIR: Path = Path(".")
-def _run_wallet_manager() -> None:
-    """Launch the interactive wallet manager or exit in headless mode."""
-    if not sys.stdin.isatty():
-        print("wallet_manager requires an interactive terminal")
 logger = logging.getLogger("bot")
 
 CONFIG_DIR = Path(__file__).resolve().parent
