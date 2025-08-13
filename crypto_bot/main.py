@@ -2538,7 +2538,7 @@ async def _main_impl() -> TelegramNotifier:
     )
 
     if telegram_bot:
-        telegram_bot.run_async()
+        register_task(telegram_bot.run_async())
 
     meme_wave_task = None
     if config.get("meme_wave_sniper", {}).get("enabled"):

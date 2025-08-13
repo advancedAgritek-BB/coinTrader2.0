@@ -557,6 +557,8 @@ async def monitor_pump_raydium() -> None:
     last_ray_ts = datetime.utcnow() - timedelta(minutes=5)
 
     async with aiohttp.ClientSession() as session:
+        backoff = 1
+        last_log = 0
         while True:
             try:
                 pump_resp, ray_resp = await asyncio.gather(
@@ -565,6 +567,8 @@ async def monitor_pump_raydium() -> None:
                 )
                 pump_data = await pump_resp.json(content_type=None)
                 ray_data = await ray_resp.json(content_type=None)
+                backoff = 1
+                last_log = 0
 
                 # Pump.fun tokens
                 for item in pump_data if isinstance(pump_data, list) else []:
@@ -663,9 +667,26 @@ async def monitor_pump_raydium() -> None:
             except asyncio.CancelledError:
                 logger.info("monitor_pump_raydium cancelled")
                 raise
+            except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as exc:
+                if backoff != last_log:
+                    logger.error(
+                        "monitor_pump_raydium network error: %s; retrying in %ss",
+                        exc,
+                        backoff,
+                    )
+                    last_log = backoff
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 60)
             except Exception as exc:  # pragma: no cover - network errors
-                logger.error("monitor_pump_raydium error: %s", exc)
-                await asyncio.sleep(10)
+                if backoff != last_log:
+                    logger.error(
+                        "monitor_pump_raydium error: %s; retrying in %ss",
+                        exc,
+                        backoff,
+                    )
+                    last_log = backoff
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 60)
 
 
 # Backward compatibility
