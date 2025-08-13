@@ -188,7 +188,6 @@ def _run_wallet_manager() -> None:
 
 
 def _ensure_user_setup() -> None:
-    """Ensure API credentials and user configuration are available."""
     """Ensure required credentials exist or launch the wallet setup wizard."""
     _load_env()
     if USER_CONFIG_PATH.exists() and all(
@@ -197,7 +196,6 @@ def _ensure_user_setup() -> None:
         return
     _run_wallet_manager()
     _load_env()
-    """Ensure API credentials and user configuration are available."""
     env = _load_env()
     if _needs_wallet_setup(env, USER_CONFIG_PATH) or not all(
         os.getenv(var) for var in REQUIRED_ENV_VARS
