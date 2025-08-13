@@ -153,6 +153,10 @@ needed.
    Install them with `pip install -r requirements.txt` when `rl_selector.enabled`
    is set to `true` in `crypto_bot/config.yaml`. Set `rl_selector.enabled: false`
    if you prefer not to install these extra dependencies.
+   Machine learning integrations such as the mean reversion model or regime
+   trainer also rely on the optional `cointrader-trainer` package. Install it
+   separately with `pip install cointrader-trainer` if you plan to use those
+   features; otherwise the bot will simply skip them.
 2. (Optional) Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius API key.
    `python -m crypto_bot.main` will launch this setup wizard automatically when credentials or `user_config.yaml` are missing.
 2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius and Supabase API keys.
@@ -595,8 +599,8 @@ mean_bot:
   ml_enabled: true
 ```
 This requires the optional `coinTrader_Trainer` package and a trained model.
-If either is missing, loading the configuration with `ml_enabled: true` will
-raise `MLUnavailableError`. The bot only opens positions when the current
+If either is missing, the bot logs a message and runs without machine learning
+predictions. The bot only opens positions when the current
 20-bar Bollinger bandwidth is below its 20-bar median, reducing trades during
 ranging periods and improving the win rate.
 
@@ -1612,9 +1616,10 @@ and caps the result between 0 and 1.
 
 ## ML Regime Trainer
 
-The optional `coinTrader_Trainer` package can bootstrap machine learning models
-used by the regime classifier. After generating trade logs, run the trainer to
-upload a LightGBM model to Supabase:
+The optional `coinTrader_Trainer` package (install separately with
+`pip install cointrader-trainer`) can bootstrap machine learning models used by
+the regime classifier. After generating trade logs, run the trainer to upload a
+LightGBM model to Supabase:
 
 ```bash
 python ml_trainer.py train regime --use-gpu --federated
