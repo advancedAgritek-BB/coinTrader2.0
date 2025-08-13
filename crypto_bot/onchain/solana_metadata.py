@@ -1,17 +1,6 @@
-import logging
-from collections import defaultdict
-
-logger = logging.getLogger(__name__)
-
-_missing_meta_seen = defaultdict(int)
-
-def log_missing_metadata(symbol: str):
-    _missing_meta_seen[symbol] += 1
-    # Only log the first occurrence and then every 50th to reduce noise
-    if _missing_meta_seen[symbol] == 1 or _missing_meta_seen[symbol] % 50 == 0:
-        logger.info("No metadata for %s (seen=%d)", symbol, _missing_meta_seen[symbol])
 import os
 import logging
+from collections import defaultdict
 from functools import lru_cache
 from typing import Dict, List
 
@@ -21,7 +10,15 @@ FEATURE_ENABLE_HELIUS = os.getenv("FEATURE_ENABLE_HELIUS", "0") in ("1", "true",
 HELIUS_API_KEY = os.getenv("HELIUS_API_KEY")
 
 logger = logging.getLogger(__name__)
+_missing_meta_seen = defaultdict(int)
 _NOT_FOUND_CACHE: set[str] = set()
+
+
+def log_missing_metadata(symbol: str) -> None:
+    _missing_meta_seen[symbol] += 1
+    # Only log the first occurrence and then every 50th to reduce noise
+    if _missing_meta_seen[symbol] == 1 or _missing_meta_seen[symbol] % 50 == 0:
+        logger.info("No metadata for %s (seen=%d)", symbol, _missing_meta_seen[symbol])
 
 
 @lru_cache(maxsize=1024)
@@ -49,8 +46,8 @@ def fetch_token_metadata(mint_addresses: List[str]) -> Dict[str, Dict]:
     if not mint_addresses:
         return {}
 
-    # Filter out addresses previously marked as not-found
-    mint_addresses = [m for m in mint_addresses if m not in _NOT_FOUND_CACHE]
+    # Filter out addresses previously marked as not-found and blank entries
+    mint_addresses = [m for m in mint_addresses if m and m not in _NOT_FOUND_CACHE]
     if not mint_addresses:
         return {}
 
@@ -66,9 +63,26 @@ def fetch_token_metadata(mint_addresses: List[str]) -> Dict[str, Dict]:
                 _mark_not_found(m)
             return {}
         resp.raise_for_status()
-        return resp.json() or {}
+        data = resp.json() or []
     except Exception as e:  # pragma: no cover - network / best effort
         logger.warning(
             "Helius metadata fetch failed (%s). Proceeding without metadata.", e
         )
         return {}
+
+    items = data if isinstance(data, list) else data.get("tokens") or data.get("data") or []
+    if isinstance(items, dict):
+        items = list(items.values())
+    result: Dict[str, Dict] = {}
+    for item in items if isinstance(items, list) else []:
+        mint = (
+            item.get("onChainAccountInfo", {}).get("mint")
+            or item.get("mint")
+            or item.get("address")
+            or item.get("tokenMint")
+        )
+        if isinstance(mint, str):
+            result[mint] = item
+        else:
+            log_missing_metadata(str(mint))
+    return result
