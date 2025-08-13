@@ -1,5 +1,6 @@
 import asyncio
 import time
+from threading import Lock
 
 from .logger import LOG_DIR, setup_logger
 try:
@@ -23,14 +24,23 @@ logger = setup_logger("bot", LOG_DIR / "bot.log")
 
 _cached_symbols: tuple[list[tuple[str, float]], list[str]] | None = None
 _last_refresh: float = 0.0
+_CACHE_INVALIDATION_LOCK = Lock()
+_LAST_INVALIDATION_TS = 0.0
+_INVALIDATION_DEBOUNCE_SEC = 10.0
 
 
 def invalidate_symbol_cache() -> None:
     """Clear cached symbols and reset refresh timestamp."""
-    global _cached_symbols, _last_refresh
-    _cached_symbols = None
-    _last_refresh = 0.0
-    logger.info("Symbol cache invalidated")
+    global _cached_symbols, _last_refresh, _LAST_INVALIDATION_TS
+    with _CACHE_INVALIDATION_LOCK:
+        now = time.time()
+        if now - _LAST_INVALIDATION_TS < _INVALIDATION_DEBOUNCE_SEC:
+            logger.debug("Symbol cache invalidation suppressed (debounced).")
+            return
+        _LAST_INVALIDATION_TS = now
+        _cached_symbols = None
+        _last_refresh = 0.0
+        logger.info("Symbol cache invalidated")
 
 
 async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]], list[str]]:

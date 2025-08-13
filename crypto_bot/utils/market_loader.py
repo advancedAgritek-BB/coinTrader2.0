@@ -195,20 +195,29 @@ async def _ohlcv_batch_worker(
             ]
 
             base = reqs[0]
-            cache = await _update_ohlcv_cache_inner(
-                base.exchange,
-                base.cache,
-                union_symbols,
-                timeframe=base.timeframe,
-                limit=base.limit,
-                start_since=base.start_since,
-                use_websocket=base.use_websocket,
-                force_websocket_history=base.force_websocket_history,
-                config=base.config,
-                max_concurrent=base.max_concurrent,
-                notifier=base.notifier,
-                priority_symbols=union_priority,
-            )
+            try:
+                cache = await _update_ohlcv_cache_inner(
+                    base.exchange,
+                    base.cache,
+                    union_symbols,
+                    timeframe=base.timeframe,
+                    limit=base.limit,
+                    start_since=base.start_since,
+                    use_websocket=base.use_websocket,
+                    force_websocket_history=base.force_websocket_history,
+                    config=base.config,
+                    max_concurrent=base.max_concurrent,
+                    notifier=base.notifier,
+                    priority_symbols=union_priority,
+                )
+            except Exception as e:  # pragma: no cover - defensive
+                logger.exception(
+                    "OHLCV worker: failed on timeframe=%s (batch size=%s). Continuing. Error: %s",
+                    base.timeframe,
+                    len(union_symbols),
+                    e,
+                )
+                cache = base.cache
 
             for r in reqs:
                 if r.cache is not cache:
@@ -1783,6 +1792,11 @@ async def update_multi_tf_ohlcv_cache(
                         current_since = data[-1][0] + 1
 
                     if not batches:
+                        logger.info(
+                            "OHLCV: empty or missing 'timestamp' for %s @ %s; skipping update.",
+                            sym,
+                            tf,
+                        )
                         continue
 
                     df_new = pd.DataFrame(
@@ -1790,7 +1804,41 @@ async def update_multi_tf_ohlcv_cache(
                         columns=["timestamp", "open", "high", "low", "close", "volume"],
                     )
                     tf_sec = timeframe_seconds(None, tf)
-                    unit = "ms" if df_new["timestamp"].iloc[0] > 1e10 else "s"
+
+                    # Guard for empty/malformed OHLCV responses.
+                    if df_new is None or df_new.empty or "timestamp" not in df_new.columns:
+                        logger.info(
+                            "OHLCV: empty or missing 'timestamp' for %s @ %s; skipping update.",
+                            sym,
+                            tf,
+                        )
+                        continue
+
+                    # Coerce and validate the first timestamp safely (avoid out-of-bounds on iloc[0]).
+                    try:
+                        ts0 = pd.to_numeric(df_new["timestamp"].iloc[0], errors="coerce")
+                    except Exception:
+                        ts0 = None
+
+                    if ts0 is None or pd.isna(ts0):
+                        logger.info(
+                            "OHLCV: first timestamp is NaN/invalid for %s @ %s; skipping update.",
+                            sym,
+                            tf,
+                        )
+                        continue
+
+                    # Robust unit detection:
+                    #   - >1e14 => ns (very unlikely), >1e12 => us, >1e10 => ms, else => s
+                    if ts0 > 1e14:
+                        unit = "ns"
+                    elif ts0 > 1e12:
+                        unit = "us"
+                    elif ts0 > 1e10:
+                        unit = "ms"
+                    else:
+                        unit = "s"
+
                     df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit)
                     df_new = (
                         df_new.set_index("timestamp")
