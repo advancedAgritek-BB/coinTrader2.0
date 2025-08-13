@@ -1,5 +1,4 @@
 import base64
-import base64
 import hashlib
 import hmac
 import os
@@ -18,26 +17,19 @@ use_private_ws = True
 
 def get_ws_token(
     api_key: str,
-    private_key: str,
+    api_secret: str,
     otp: str | None = None,
     environment: str = DEFAULT_KRAKEN_URL,
+    timeout: float = 15.0,
 ) -> str:
     """Return a WebSocket authentication token from Kraken.
 
-    The function performs a signed ``POST`` request using ``requests`` and
-    returns the token found either at ``result.token`` or the top-level
-    ``token`` key. If no token can be extracted a :class:`ValueError` is raised.
-    ``requests`` exceptions are allowed to propagate so callers can decide how
-    to handle network failures.
+    The function performs a signed ``POST`` request to ``environment`` using
+    :mod:`requests` and returns the token found either at ``result.token`` or the
+    top-level ``token`` key. Network failures raise the original
+    :class:`requests.RequestException` while missing tokens and malformed
+    responses raise :class:`RuntimeError`.
     """
-
-def get_ws_token(
-    api_key: str,
-    api_secret: str,
-    otp: str | None = None,
-    timeout: float = 15.0,
-) -> str:
-    """Return a WebSocket authentication token from Kraken."""
 
     if otp is None:
         otp = os.getenv("KRAKEN_OTP")
@@ -59,20 +51,19 @@ def get_ws_token(
         "Content-Type": "application/x-www-form-urlencoded",
     }
 
-    resp = requests.post(environment + PATH, data=encoded_body, headers=headers)
-    resp.raise_for_status()
-    data = resp.json()
     try:
         resp = requests.post(
-            DEFAULT_KRAKEN_URL + PATH,
+            f"{environment}{PATH}",
             data=encoded_body,
             headers=headers,
             timeout=timeout,
         )
         resp.raise_for_status()
         data = resp.json()
-    except (requests.RequestException, ValueError) as exc:
-        raise RuntimeError("Failed to fetch WebSocket token") from exc
+    except requests.RequestException:
+        raise
+    except ValueError as exc:  # json decoding error
+        raise RuntimeError("Failed to parse WebSocket token response") from exc
 
     if data.get("error"):
         raise RuntimeError(f"Kraken API error: {data['error']}")
