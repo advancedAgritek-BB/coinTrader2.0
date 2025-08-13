@@ -399,6 +399,9 @@ async def _refresh_tickers(
                 logger.warning("load_markets failed: %s", exc)
         missing = [s for s in symbols if s not in markets]
         if missing:
+            ex_id = getattr(exchange, "id", "unknown")
+            for sym in missing:
+                logger.debug("Skipping %s: not in markets for %s", sym, ex_id)
             logger.warning(
                 "Skipping symbols not in exchange.markets: %s",
                 ", ".join(missing),

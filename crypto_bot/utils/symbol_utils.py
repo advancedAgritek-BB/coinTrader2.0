@@ -53,6 +53,7 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
 
     refresh_m = config.get("symbol_refresh_minutes", 30)
     now = time.time()
+    sf = config.get("symbol_filter", {})
 
     if (
         _cached_symbols is not None
@@ -77,7 +78,7 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         return [], onchain
     cleaned_symbols = []
     onchain_syms: list[str] = []
-    markets = getattr(exchange, "markets", None)
+    markets = getattr(exchange, "markets", {}) or {}
     for sym in symbols:
         if not isinstance(sym, str):
             cleaned_symbols.append(sym)
@@ -153,5 +154,17 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
     if scored or onchain_syms:
         _cached_symbols = (scored, onchain_syms)
         _last_refresh = now
+
+    exchange_id = getattr(exchange, "id", "unknown")
+    quote_whitelist = sf.get("quote_whitelist")
+    min_vol = sf.get("min_volume_usd")
+    logger.info(
+        "Loaded %d markets from %s; %d symbols selected after filters (quote in %s, min_vol=%s)",
+        len(markets),
+        exchange_id,
+        len(scored),
+        quote_whitelist,
+        min_vol,
+    )
 
     return scored, onchain_syms

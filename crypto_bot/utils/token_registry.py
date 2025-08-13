@@ -432,6 +432,8 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     if not tokens or not api_key:
         return {}
 
+    logger.info("Fetching metadata for %d mints via Helius", len(tokens))
+
     params = {"symbol": ",".join(tokens), "api-key": api_key}
     url = _build_helius_url(params)
     if not url:
@@ -480,6 +482,11 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
                 }
             else:
                 result[key] = mint
+
+    for sym in tokens:
+        if sym.upper() not in result:
+            logger.warning("No mint mapping for %s; skipping Helius", sym)
+
     return result
 
 

@@ -586,7 +586,7 @@ async def _fetch_ohlcv_async_inner(
 
     if hasattr(exchange, "has") and not exchange.has.get("fetchOHLCV"):
         ex_id = getattr(exchange, "id", "unknown")
-        logger.warning("Exchange %s lacks fetchOHLCV capability", ex_id)
+        logger.debug("Skipping %s: OHLCV not supported on %s", symbol, ex_id)
         return []
     if getattr(exchange, "timeframes", None) and timeframe not in getattr(
         exchange, "timeframes", {}
@@ -596,7 +596,7 @@ async def _fetch_ohlcv_async_inner(
         return []
 
     if symbol in UNSUPPORTED_SYMBOLS:
-        logger.warning("Skipping unsupported symbol %s", symbol)
+        logger.debug("Skipping %s: OHLCV not supported", symbol)
         return []
 
     if timeframe in ("4h", "1d"):
@@ -1283,6 +1283,7 @@ async def _update_ohlcv_cache_inner(
         timeframe,
     )
 
+    t0 = time.time()
     data_map: Dict[str, list] = {s: [] for s in symbols}
     remaining = limit
     curr_since = since_map.copy()
@@ -1309,11 +1310,13 @@ async def _update_ohlcv_cache_inner(
             break
         remaining -= req_limit
 
+    count_ok = sum(1 for rows in data_map.values() if rows)
     logger.info(
-        "Fetched OHLCV for %d/%d symbols on %s",
-        len([s for s in symbols if s in data_map]),
+        "Fetched OHLCV for %d/%d symbols on %s in %.1fs",
+        count_ok,
         len(symbols),
         timeframe,
+        time.time() - t0,
     )
 
     for sym in symbols:
