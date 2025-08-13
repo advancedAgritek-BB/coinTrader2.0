@@ -6,7 +6,6 @@ import contextlib
 import time
 import runpy
 import os
-import logging
 from pathlib import Path
 from datetime import datetime
 from collections import deque, OrderedDict
@@ -117,8 +116,7 @@ REQUIRED_ENV_VARS = {
 }
 
 
-LOG_DIR: Path = Path(".")
-logger = logging.getLogger("bot")
+logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
 
 
 def _parse_version(ver: str) -> tuple[int, ...]:
@@ -2816,7 +2814,6 @@ async def main() -> None:
     _ensure_user_setup()
     _reload_modules()
 
-    setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
     logger.info("ML components available: %s", ML_AVAILABLE)
 
     notifier: TelegramNotifier | None = None
