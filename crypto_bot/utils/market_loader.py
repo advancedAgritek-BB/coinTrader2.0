@@ -1630,15 +1630,15 @@ async def update_multi_tf_ohlcv_cache(
         async with lock:
             logger.info("Starting update for timeframe %s", tf)
             tf_cache = cache.get(tf, {})
-    
+
             now_ms = int(time.time() * 1000)
             dynamic_limits: dict[str, int] = {}
             snapshot_cap = int(config.get("ohlcv_snapshot_limit", limit))
             max_cap = min(snapshot_cap, 720)
-    
+
             concurrency = int(config.get("listing_date_concurrency", 5) or 0)
             semaphore = asyncio.Semaphore(concurrency) if concurrency > 0 else None
-    
+
             async def _fetch_listing(sym: str) -> tuple[str, int | None]:
                 if semaphore is not None:
                     async with semaphore:
@@ -1646,10 +1646,20 @@ async def update_multi_tf_ohlcv_cache(
                 else:
                     ts = await get_kraken_listing_date(sym)
                 return sym, ts
-    
+
             start_list = time.perf_counter()
             tasks = [asyncio.create_task(_fetch_listing(sym)) for sym in symbols]
-            for sym, listing_ts in await asyncio.gather(*tasks):
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for sym, res in zip(symbols, results):
+                if isinstance(res, Exception):
+                    logger.exception(
+                        "OHLCV task failed for %s @ %s: %s",
+                        sym,
+                        tf,
+                        res,
+                    )
+                    continue
+                _, listing_ts = res
                 if listing_ts and 0 < listing_ts <= now_ms:
                     age_ms = now_ms - listing_ts
                     tf_sec = timeframe_seconds(exchange, tf)
@@ -1670,7 +1680,7 @@ async def update_multi_tf_ohlcv_cache(
                 len(symbols),
                 time.perf_counter() - start_list,
             )
-    
+
             cex_symbols: list[str] = []
             dex_symbols: list[str] = []
             for s in symbols:
@@ -1686,187 +1696,158 @@ async def update_multi_tf_ohlcv_cache(
                             continue  # skip unsupported pair
                         sym = mapped
                     cex_symbols.append(sym)
-    
+
             if priority_syms:
                 prio_set = set(priority_syms)
                 cex_symbols = [s for s in priority_syms if s in cex_symbols] + [s for s in cex_symbols if s not in prio_set]
                 dex_symbols = [s for s in priority_syms if s in dex_symbols] + [s for s in dex_symbols if s not in prio_set]
-    
+
             tf_sec = timeframe_seconds(exchange, tf)
             tf_limit = limit
             if start_since is not None:
                 needed = int((time.time() * 1000 - start_since) // (tf_sec * 1000)) + 1
                 tf_limit = max(limit, needed)
-    
-            if cex_symbols and start_since is None:
-                groups: Dict[int, list[str]] = {}
-                for sym in cex_symbols:
-                    sym_limit = dynamic_limits.get(sym, tf_limit)
-                    groups.setdefault(int(sym_limit), []).append(sym)
-                for lim, syms in groups.items():
-                    curr_limit = tf_limit
-                    if lim < tf_limit:
-                        for s in syms:
-                            logger.info(
-                                "Adjusting limit for %s on %s to %d", s, tf, lim
-                            )
-                        curr_limit = lim
-                    tf_cache = await update_ohlcv_cache(
-                        exchange,
-                        tf_cache,
-                        syms,
-                        timeframe=tf,
-                        limit=curr_limit,
-                        config={
-                            "min_history_fraction": 0,
-                            "ohlcv_batch_size": config.get("ohlcv_batch_size"),
-                        },
-                        batch_size=batch_size,
-                        start_since=start_since,
-                        use_websocket=use_websocket,
-                        force_websocket_history=force_websocket_history,
-                        max_concurrent=max_concurrent,
-                        notifier=notifier,
-                        priority_symbols=priority_syms
-                    )
-            else:
-                ts = await get_kraken_listing_date(sym)
-            return sym, ts
 
-        start_list = time.perf_counter()
-        tasks = [asyncio.create_task(_fetch_listing(sym)) for sym in symbols]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for sym, res in zip(symbols, results):
-            if isinstance(res, Exception):
-                logger.exception(
-                    "OHLCV task failed for %s @ %s: %s",
-                    sym,
-                    tf,
-                    res,
-                )
-                continue
-            _, listing_ts = res
-            if listing_ts and 0 < listing_ts <= now_ms:
-                age_ms = now_ms - listing_ts
-                tf_sec = timeframe_seconds(exchange, tf)
-                hist_candles = age_ms // (tf_sec * 1000)
-                if hist_candles <= 0:
-                    continue
-                if hist_candles > snapshot_cap * 1000:
-                    logger.info(
-                        "Skipping OHLCV history for %s on %s (age %d candles)",
-                        sym,
-                        tf,
-                        hist_candles,
-                        priority_symbols=priority_syms,
-                    )
-            elif cex_symbols:
-                from crypto_bot.main import update_df_cache
-
-                for sym in cex_symbols:
-                    batches: list = []
-                    current_since = start_since
-                    sym_total = min(tf_limit, dynamic_limits.get(sym, tf_limit))
-                    if sym_total < tf_limit:
-                        logger.info(
-                            "Adjusting limit for %s on %s to %d", sym, tf, sym_total
-                        )
-                    remaining = sym_total
-                    while remaining > 0:
-                        req = min(remaining, 1000)
-                        data = await load_ohlcv(
+            if cex_symbols:
+                if start_since is None:
+                    groups: Dict[int, list[str]] = {}
+                    for sym in cex_symbols:
+                        sym_limit = dynamic_limits.get(sym, tf_limit)
+                        groups.setdefault(int(sym_limit), []).append(sym)
+                    for lim, syms in groups.items():
+                        curr_limit = tf_limit
+                        if lim < tf_limit:
+                            for s in syms:
+                                logger.info(
+                                    "Adjusting limit for %s on %s to %d", s, tf, lim
+                                )
+                            curr_limit = lim
+                        tf_cache = await update_ohlcv_cache(
                             exchange,
-                            sym,
+                            tf_cache,
+                            syms,
                             timeframe=tf,
-                            limit=req,
-                            mode="rest",
-                            since=current_since,
+                            limit=curr_limit,
+                            config={
+                                "min_history_fraction": 0,
+                                "ohlcv_batch_size": config.get("ohlcv_batch_size"),
+                            },
+                            batch_size=batch_size,
+                            start_since=start_since,
+                            use_websocket=use_websocket,
                             force_websocket_history=force_websocket_history,
+                            max_concurrent=max_concurrent,
+                            notifier=notifier,
+                            priority_symbols=priority_syms,
                         )
-                        if not data or isinstance(data, Exception):
-                            break
-                        batches.extend(data)
-                        remaining -= len(data)
-                        if len(data) < req:
-                            break
-                        current_since = data[-1][0] + 1
+                else:
+                    from crypto_bot.main import update_df_cache
 
-                    if not batches:
-                        logger.info(
-                            "OHLCV: empty or missing 'timestamp' for %s @ %s; skipping update.",
-                            sym,
-                            tf,
-                        )
-                        continue
+                    for sym in cex_symbols:
+                        batches: list = []
+                        current_since = start_since
+                        sym_total = min(tf_limit, dynamic_limits.get(sym, tf_limit))
+                        if sym_total < tf_limit:
+                            logger.info(
+                                "Adjusting limit for %s on %s to %d", sym, tf, sym_total
+                            )
+                        remaining = sym_total
+                        while remaining > 0:
+                            req = min(remaining, 1000)
+                            data = await load_ohlcv(
+                                exchange,
+                                sym,
+                                timeframe=tf,
+                                limit=req,
+                                mode="rest",
+                                since=current_since,
+                                force_websocket_history=force_websocket_history,
+                            )
+                            if not data or isinstance(data, Exception):
+                                break
+                            batches.extend(data)
+                            remaining -= len(data)
+                            if len(data) < req:
+                                break
+                            current_since = data[-1][0] + 1
 
-                    df_new = pd.DataFrame(
-                        batches,
-                        columns=["timestamp", "open", "high", "low", "close", "volume"],
-                    )
-                    tf_sec = timeframe_seconds(None, tf)
-
-                    # Guard for empty/malformed OHLCV responses.
-                    if df_new is None or df_new.empty or "timestamp" not in df_new.columns:
-                        logger.info(
-                            "OHLCV: empty or missing 'timestamp' for %s @ %s; skipping update.",
-                            sym,
-                            tf,
-                        )
-                        continue
-
-                    # Coerce and validate the first timestamp safely (avoid out-of-bounds on iloc[0]).
-                    try:
-                        ts0 = pd.to_numeric(df_new["timestamp"].iloc[0], errors="coerce")
-                    except Exception:
-                        ts0 = None
-
-                    if ts0 is None or pd.isna(ts0):
-                        logger.info(
-                            "OHLCV: first timestamp is NaN/invalid for %s @ %s; skipping update.",
-                            sym,
-                            tf,
-                        )
-                        continue
-
-                    # Robust unit detection:
-                    #   - >1e14 => ns (very unlikely), >1e12 => us, >1e10 => ms, else => s
-                    if ts0 > 1e14:
-                        unit = "ns"
-                    elif ts0 > 1e12:
-                        unit = "us"
-                    elif ts0 > 1e10:
-                        unit = "ms"
-                    else:
-                        unit = "s"
-
-                    df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit)
-                    df_new = (
-                        df_new.set_index("timestamp")
-                        .resample(f"{tf_sec}s")
-                        .agg({
-                            "open": "first",
-                            "high": "max",
-                            "low": "min",
-                            "close": "last",
-                            "volume": "sum",
-                        })
-                        .ffill()
-                        .reset_index()
-                    )
-                    df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
-
-                    if sym in tf_cache and not tf_cache[sym].empty:
-                        last_ts = tf_cache[sym]["timestamp"].iloc[-1]
-                        df_new = df_new[df_new["timestamp"] > last_ts]
-                        if df_new.empty:
+                        if not batches:
+                            logger.info(
+                                "OHLCV: empty or missing 'timestamp' for %s @ %s; skipping update.",
+                                sym,
+                                tf,
+                            )
                             continue
-                        df_new = pd.concat([tf_cache[sym], df_new], ignore_index=True)
 
-                    update_df_cache(cache, tf, sym, df_new)
-                    tf_cache = cache.get(tf, {})
-                    tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
-                    clear_regime_cache(sym, tf)
-    
+                        df_new = pd.DataFrame(
+                            batches,
+                            columns=["timestamp", "open", "high", "low", "close", "volume"],
+                        )
+                        tf_sec = timeframe_seconds(None, tf)
+
+                        # Guard for empty/malformed OHLCV responses.
+                        if df_new is None or df_new.empty or "timestamp" not in df_new.columns:
+                            logger.info(
+                                "OHLCV: empty or missing 'timestamp' for %s @ %s; skipping update.",
+                                sym,
+                                tf,
+                            )
+                            continue
+
+                        # Coerce and validate the first timestamp safely (avoid out-of-bounds on iloc[0]).
+                        try:
+                            ts0 = pd.to_numeric(df_new["timestamp"].iloc[0], errors="coerce")
+                        except Exception:
+                            ts0 = None
+
+                        if ts0 is None or pd.isna(ts0):
+                            logger.info(
+                                "OHLCV: first timestamp is NaN/invalid for %s @ %s; skipping update.",
+                                sym,
+                                tf,
+                            )
+                            continue
+
+                        # Robust unit detection:
+                        if ts0 > 1e14:
+                            unit = "ns"
+                        elif ts0 > 1e12:
+                            unit = "us"
+                        elif ts0 > 1e10:
+                            unit = "ms"
+                        else:
+                            unit = "s"
+
+                        df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit)
+                        df_new = (
+                            df_new.set_index("timestamp")
+                            .resample(f"{tf_sec}s")
+                            .agg(
+                                {
+                                    "open": "first",
+                                    "high": "max",
+                                    "low": "min",
+                                    "close": "last",
+                                    "volume": "sum",
+                                }
+                            )
+                            .ffill()
+                            .reset_index()
+                        )
+                        df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
+
+                        if sym in tf_cache and not tf_cache[sym].empty:
+                            last_ts = tf_cache[sym]["timestamp"].iloc[-1]
+                            df_new = df_new[df_new["timestamp"] > last_ts]
+                            if df_new.empty:
+                                continue
+                            df_new = pd.concat([tf_cache[sym], df_new], ignore_index=True)
+
+                        update_df_cache(cache, tf, sym, df_new)
+                        tf_cache = cache.get(tf, {})
+                        tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
+                        clear_regime_cache(sym, tf)
+
             for sym in dex_symbols:
                 data = None
                 vol = 0.0
@@ -1892,7 +1873,7 @@ async def update_multi_tf_ohlcv_cache(
                         gecko_failed = True
                 else:
                     gecko_failed = True
-    
+
                 if res and not gecko_failed:
                     if isinstance(res, tuple):
                         data, vol, *_ = res
@@ -1900,7 +1881,7 @@ async def update_multi_tf_ohlcv_cache(
                         data = res
                         vol = min_volume_usd
                     add_priority(data, sym)
-    
+
                 if gecko_failed or not data or vol < min_volume_usd:
                     data = await fetch_dex_ohlcv(
                         exchange,
@@ -1913,10 +1894,10 @@ async def update_multi_tf_ohlcv_cache(
                     )
                     if isinstance(data, Exception) or not data:
                         continue
-    
+
                 if not data:
                     continue
-    
+
                 if not isinstance(data, list):
                     logger.error(
                         "Invalid OHLCV data type for %s on %s (type: %s), skipping",
@@ -1925,7 +1906,7 @@ async def update_multi_tf_ohlcv_cache(
                         type(data),
                     )
                     continue
-    
+
                 df_new = pd.DataFrame(
                     data,
                     columns=["timestamp", "open", "high", "low", "close", "volume"],
@@ -1944,7 +1925,7 @@ async def update_multi_tf_ohlcv_cache(
                 if changed:
                     tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
                     clear_regime_cache(sym, tf)
-    
+
             cache[tf] = tf_cache
             logger.info("Finished update for timeframe %s", tf)
 
