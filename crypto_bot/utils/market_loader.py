@@ -256,6 +256,37 @@ __all__ = [
                         force_websocket_history=force_websocket_history,
                         max_concurrent=max_concurrent,
                         notifier=notifier,
+                        priority_symbols=priority_syms
+                    )
+            else:
+                ts = await get_kraken_listing_date(sym)
+            return sym, ts
+
+        start_list = time.perf_counter()
+        tasks = [asyncio.create_task(_fetch_listing(sym)) for sym in symbols]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for sym, res in zip(symbols, results):
+            if isinstance(res, Exception):
+                logger.exception(
+                    "OHLCV task failed for %s @ %s: %s",
+                    sym,
+                    tf,
+                    res,
+                )
+                continue
+            _, listing_ts = res
+            if listing_ts and 0 < listing_ts <= now_ms:
+                age_ms = now_ms - listing_ts
+                tf_sec = timeframe_seconds(exchange, tf)
+                hist_candles = age_ms // (tf_sec * 1000)
+                if hist_candles <= 0:
+                    continue
+                if hist_candles > snapshot_cap * 1000:
+                    logger.info(
+                        "Skipping OHLCV history for %s on %s (age %d candles)",
+                        sym,
+                        tf,
+                        hist_candles,
                         priority_symbols=priority_syms,
                     )
             elif cex_symbols:
