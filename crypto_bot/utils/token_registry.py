@@ -430,11 +430,6 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     if not api_key:
         return {}
 
-    logger.info("Fetching metadata for %d mints via Helius", len(tokens))
-
-    params = {"symbol": ",".join(tokens), "api-key": api_key}
-    url = _build_helius_url(params)
-    if not url:
     symbols_list = [str(s).upper() for s in symbols if s]
     if not symbols_list:
         return {}
@@ -461,6 +456,7 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     if not mints:
         return result
 
+    logger.info("Fetching metadata for %d mints via Helius", len(mints))
     url = f"{HELIUS_TOKEN_API}?api-key={api_key}"
     payload = {"mintAccounts": mints}
 
@@ -489,43 +485,15 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict):
             continue
-        symbol = item.get("symbol") or item.get("ticker")
         mint = item.get("mint") or item.get("address") or item.get("tokenMint")
-        if isinstance(symbol, str) and isinstance(mint, str):
-            key = symbol.upper()
-            if full:
-                result[key] = {
-                    "mint": mint,
-                    "decimals": item.get("decimals"),
-                    "supply": item.get("supply"),
-                }
-            else:
-                result[key] = mint
-
-    for sym in tokens:
-        if sym.upper() not in result:
-            logger.warning("No mint mapping for %s; skipping Helius", sym)
-
-        mint = (
-            item.get("onChainAccountInfo", {}).get("mint")
-            or item.get("mint")
-            or item.get("address")
-            or item.get("tokenMint")
-        )
         if not isinstance(mint, str):
             continue
         sym = mint_to_symbol.get(mint)
         if not sym:
             continue
         if full:
-            decimals = (
-                item.get("onChainAccountInfo", {}).get("decimals")
-                or item.get("decimals")
-            )
-            supply = (
-                item.get("onChainAccountInfo", {}).get("supply")
-                or item.get("supply")
-            )
+            decimals = item.get("onChainAccountInfo", {}).get("decimals") or item.get("decimals")
+            supply = item.get("onChainAccountInfo", {}).get("supply") or item.get("supply")
             result[sym] = {"mint": mint, "decimals": decimals, "supply": supply}
         else:
             result[sym] = mint
@@ -578,6 +546,8 @@ async def get_decimals(mint: str) -> int:
             TOKEN_DECIMALS[mint] = dec
             return dec
     return 0
+
+
 async def periodic_mint_sanity_check(interval_hours: float = 24.0) -> None:
     """Periodically verify manual mint overrides via Helius metadata."""
 
