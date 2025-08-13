@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterable, List
 import aiohttp
 import ccxt.async_support as ccxt
 import yaml
+from urllib.parse import urlencode, urlparse
 
 from crypto_bot.strategy import cross_chain_arb_bot
 from .gecko import gecko_request
@@ -66,6 +67,37 @@ __all__ = [
     "get_mint_from_gecko",
     "fetch_from_helius",
 ]
+
+
+_HELIUS_DISABLED_LOGGED = False
+
+
+def _helius_api_key() -> str:
+    """Return configured Helius API key and log once if missing."""
+
+    key = os.getenv("HELIUS_API_KEY") or os.getenv("HELIUS_KEY") or ""
+    global _HELIUS_DISABLED_LOGGED
+    if not key and not _HELIUS_DISABLED_LOGGED:
+        logger.info("Helius disabled (no API key)")
+        _HELIUS_DISABLED_LOGGED = True
+    return key
+
+
+def _build_helius_url(params: Dict[str, str]) -> str | None:
+    """Return a validated Helius metadata URL for ``params``."""
+
+    parsed = urlparse(HELIUS_TOKEN_API)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc or not parsed.path:
+        logger.warning("Invalid Helius API URL: %s", HELIUS_TOKEN_API)
+        return None
+    if "token-metadata" not in parsed.path:
+        logger.warning("Invalid Helius API path: %s", HELIUS_TOKEN_API)
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{urlencode(params)}"
+
+
+# Prime startup log if no key is configured
+_helius_api_key()
 
 
 def to_base_units(amount_tokens: float, decimals: int) -> int:
@@ -395,24 +427,25 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
         Return full metadata instead of just mint addresses.
     """
 
-    api_key = os.getenv("HELIUS_KEY", "")
+    api_key = _helius_api_key()
     tokens = [str(s) for s in symbols if s]
-    if not tokens:
+    if not tokens or not api_key:
         return {}
 
-    params = {"symbol": ",".join(tokens)}
-    if api_key:
-        params["api-key"] = api_key
-    from urllib.parse import urlencode
-
-    url = f"{HELIUS_TOKEN_API}?{urlencode(params)}"
+    params = {"symbol": ",".join(tokens), "api-key": api_key}
+    url = _build_helius_url(params)
+    if not url:
+        return {}
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=10) as resp:
                 if 400 <= resp.status < 500:
-                    text = await resp.text()
-                    logger.error("Helius lookup failed [%s]: %s", resp.status, text)
+                    logger.warning(
+                        "Helius lookup failed for %s [%s]",
+                        ",".join(tokens),
+                        resp.status,
+                    )
                     return {}
                 resp.raise_for_status()
                 data = await resp.json()
@@ -462,17 +495,22 @@ async def get_decimals(mint: str) -> int:
     if cached is not None:
         return cached
 
-    api_key = os.getenv("HELIUS_KEY")
+    api_key = _helius_api_key()
     if not api_key:
         return 0
 
-    from urllib.parse import urlencode
-
     params = {"mint": mint, "api-key": api_key}
-    url = f"{HELIUS_TOKEN_API}?{urlencode(params)}"
+    url = _build_helius_url(params)
+    if not url:
+        return 0
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, timeout=10) as resp:
+                if 400 <= resp.status < 500:
+                    logger.warning(
+                        "Helius decimals lookup failed for %s [%s]", mint, resp.status
+                    )
+                    return 0
                 resp.raise_for_status()
                 data = await resp.json(content_type=None)
     except Exception as exc:  # pragma: no cover - network

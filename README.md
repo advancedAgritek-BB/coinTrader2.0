@@ -186,7 +186,7 @@ needed.
    ```
 5. Run the meme-wave sniper separately with Raydium v3 integration.
    Profits are automatically converted to BTC. Set `SOLANA_PRIVATE_KEY` and the
-   required `HELIUS_KEY` or provide a custom `SOLANA_RPC_URL` before launching:
+   required `HELIUS_API_KEY` or provide a custom `SOLANA_RPC_URL` before launching:
    ```bash
    python -m crypto_bot.solana.runner
    ```
@@ -249,11 +249,11 @@ FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-fundin
 SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
 SOLANA_PRIVATE_KEY="[1,2,3,...]"       # required for Solana trades
-# defaults to https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
+# defaults to https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_API_KEY}
 SOLANA_RPC_URL=https://devnet.solana.com  # optional custom endpoint
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com  # optional
 # SOLANA_RPC_URL=https://api.devnet.solana.com      # devnet example
-HELIUS_KEY=your_helius_api_key          # required for Jupiter/Helius registry
+HELIUS_API_KEY=your_helius_api_key      # required for Jupiter/Helius registry
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 SUPABASE_URL=https://xyzcompany.supabase.co
@@ -292,10 +292,10 @@ SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
 # SOLANA_RPC_URL=https://api.devnet.solana.com
 ```
 
-When using [Helius](https://www.helius.xyz/) endpoints, append `?api-key=${HELIUS_KEY}` to the URL:
+When using [Helius](https://www.helius.xyz/) endpoints, append `?api-key=${HELIUS_API_KEY}` to the URL:
 
 ```env
-SOLANA_RPC_URL=https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
+SOLANA_RPC_URL=https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_API_KEY}
 ```
 
 You can generate a key and enable advanced features like **ShredStream** and **LaserStream** from the [Helius dashboard](https://dashboard.helius.xyz/). These streams can be configured directly in the bot's web dashboard.
@@ -1445,16 +1445,16 @@ tweet volume is high.
 
 Add a `meme_wave_sniper` section to `crypto_bot/config.yaml`:
 
-Set `HELIUS_KEY` in `crypto_bot/.env` or as an environment variable. The pool
+Set `HELIUS_API_KEY` in `crypto_bot/.env` or as an environment variable. The pool
 URL should reference this key so Helius can authorize the requests:
 
 ```yaml
 meme_wave_sniper:
   enabled: true
   pool:
-    url: https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_KEY}
+    url: https://mainnet.helius-rpc.com/v1/?api-key=${HELIUS_API_KEY}
     interval: 5
-    websocket_url: wss://atlas-mainnet.helius-rpc.com/?api-key=${HELIUS_KEY}
+    websocket_url: wss://atlas-mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}
     raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk
   scoring:
     weight_liquidity: 1.0
@@ -1469,7 +1469,7 @@ meme_wave_sniper:
     dry_run: true
 
 ```
-Set the `HELIUS_KEY` environment variable with your Helius API key.
+Set the `HELIUS_API_KEY` environment variable with your Helius API key.
 
 ### Flow
 

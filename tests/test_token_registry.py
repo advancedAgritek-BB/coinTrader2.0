@@ -119,6 +119,7 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
             self.url = url
             return DummyResp(self.d)
 
+    monkeypatch.setenv("HELIUS_API_KEY", "KEY")
     session = DummySession(data)
 
     mod = _load_module(monkeypatch, tmp_path)
@@ -126,7 +127,6 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
         "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
     )
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
-    monkeypatch.setenv("HELIUS_KEY", "KEY")
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
     assert mapping == {"AAA": "mmm"}
@@ -170,6 +170,7 @@ def test_fetch_from_helius_full(monkeypatch, tmp_path):
             self.url = url
             return DummyResp(self.d)
 
+    monkeypatch.setenv("HELIUS_API_KEY", "KEY")
     session = DummySession(data)
 
     mod = _load_module(monkeypatch, tmp_path)
@@ -216,17 +217,37 @@ def test_fetch_from_helius_4xx(monkeypatch, tmp_path, caplog):
             self.url = url
             return DummyResp()
 
+    monkeypatch.setenv("HELIUS_API_KEY", "KEY")
     session = DummySession()
     mod = _load_module(monkeypatch, tmp_path)
     aiohttp_mod = type(
         "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
     )
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
-    caplog.set_level(logging.ERROR)
+    caplog.set_level(logging.WARNING)
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
     assert mapping == {}
-    assert "Helius lookup failed" in caplog.text
+    assert "Helius lookup failed for AAA [401]" in caplog.text
+
+
+def test_fetch_from_helius_no_api_key(monkeypatch, tmp_path, caplog):
+    caplog.set_level(logging.INFO)
+    monkeypatch.delenv("HELIUS_API_KEY", raising=False)
+    monkeypatch.delenv("HELIUS_KEY", raising=False)
+    mod = _load_module(monkeypatch, tmp_path)
+
+    def raising_session(*_a, **_k):
+        raise AssertionError("session should not be created")
+
+    aiohttp_mod = type(
+        "M", (), {"ClientSession": raising_session, "ClientError": Exception}
+    )
+    monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+
+    mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
+    assert mapping == {}
+    assert "Helius disabled (no API key)" in caplog.text
 
 
 def test_periodic_mint_sanity_check(monkeypatch, tmp_path):

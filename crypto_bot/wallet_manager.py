@@ -197,7 +197,7 @@ def load_or_create(interactive: bool = False) -> dict:
         "coinbase_passphrase": ["COINBASE_API_PASSPHRASE", "API_PASSPHRASE"],
         "kraken_api_key": ["API_KEY"],
         "kraken_api_secret": ["API_SECRET"],
-        "helius_api_key": ["HELIUS_KEY"],
+        "helius_api_key": ["HELIUS_API_KEY", "HELIUS_KEY"],
     }
 
     for key, env_keys in aliases.items():
@@ -223,7 +223,9 @@ def load_or_create(interactive: bool = False) -> dict:
     os.environ["COINBASE_API_PASSPHRASE"] = creds.get("coinbase_passphrase", "")
     os.environ["KRAKEN_API_KEY"] = creds.get("kraken_api_key", "")
     os.environ["KRAKEN_API_SECRET"] = creds.get("kraken_api_secret", "")
-    os.environ["HELIUS_KEY"] = creds.get("helius_api_key", "")
+    helius_val = creds.get("helius_api_key", "")
+    os.environ["HELIUS_API_KEY"] = helius_val
+    os.environ["HELIUS_KEY"] = helius_val
     os.environ["SUPABASE_URL"] = creds.get("supabase_url", "")
     os.environ["SUPABASE_KEY"] = creds.get("supabase_key", "")
     os.environ["LUNARCRUSH_API_KEY"] = creds.get("lunarcrush_api_key", "")

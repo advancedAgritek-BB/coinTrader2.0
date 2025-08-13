@@ -60,13 +60,15 @@ def test_load_returns_both_exchange_creds(tmp_path, monkeypatch):
     assert creds["kraken_api_key"] == "kr_key"
 
 
-def test_load_exports_helius_key(tmp_path, monkeypatch):
+def test_load_exports_helius_api_key(tmp_path, monkeypatch):
     cfg = tmp_path / "user_config.yaml"
     data = {"helius_api_key": "hk"}
     cfg.write_text(yaml.safe_dump(data))
     monkeypatch.setattr(wallet_manager, "CONFIG_FILE", cfg)
+    monkeypatch.delenv("HELIUS_API_KEY", raising=False)
     monkeypatch.delenv("HELIUS_KEY", raising=False)
     wallet_manager.load_or_create()
+    assert os.environ["HELIUS_API_KEY"] == "hk"
     assert os.environ["HELIUS_KEY"] == "hk"
 
 
