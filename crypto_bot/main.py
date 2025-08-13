@@ -120,6 +120,23 @@ REQUIRED_ENV_VARS = {
 LOG_DIR: Path = Path(".")
 logger = logging.getLogger("bot")
 
+
+def _parse_version(ver: str) -> tuple[int, ...]:
+    return tuple(int(p) for p in ver.split(".") if p.isdigit())
+
+
+try:  # pragma: no cover - optional dependency
+    from crypto_bot.version import __version__ as trainer_version, MIN_CT2_INTEGRATION
+except Exception:  # pragma: no cover - trainer not installed
+    trainer_version, MIN_CT2_INTEGRATION = "0.0.0", "0.1.0"
+
+if _parse_version(trainer_version) < _parse_version(MIN_CT2_INTEGRATION):
+    logger.warning(
+        "cointrader-trainer %s is below required integration level %s",
+        trainer_version,
+        MIN_CT2_INTEGRATION,
+    )
+
 CONFIG_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = CONFIG_DIR / "config.yaml"
 ENV_PATH = CONFIG_DIR / ".env"
@@ -179,6 +196,10 @@ def _ensure_user_setup() -> None:
         return
     _run_wallet_manager()
     _load_env()
+    """Ensure API credentials and user configuration are available."""
+    env = _load_env()
+    if _needs_wallet_setup(env):
+        _run_wallet_manager()
 
 
 def _fix_symbol(symbol: str) -> str:

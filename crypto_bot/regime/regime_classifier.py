@@ -35,6 +35,23 @@ CONFIG = _load_config(CONFIG_PATH)
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 
+def _log_prediction(action: str, score: float, meta: dict | None = None) -> None:
+    """Log prediction details and track fallback usage."""
+    meta = meta or {}
+    source = meta.get("source")
+    regime = meta.get("regime")
+    if source == "fallback":
+        telemetry.inc("ml_fallbacks")
+    extra = f" regime={regime}" if regime else ""
+    logger.info(
+        "ML predict action=%s score=%.4f source=%s%s",
+        action,
+        score,
+        source,
+        extra,
+    )
+
+
 def _configure_logger(cfg: dict) -> None:
     level_str = str(cfg.get("log_level", "INFO")).upper()
     level = getattr(logging, level_str, logging.INFO)
@@ -165,11 +182,10 @@ def _ml_fallback(
         else:
             label, conf = result, 1.0
 
-        logger.info("Using Supabase regime model")
+        _log_prediction(label, float(conf), {"source": "registry", "regime": label})
         return label, float(conf)
     except Exception as exc:  # pragma: no cover - log and fallback
         logger.error("%s", exc)
-        telemetry.inc("ml_fallbacks")
         logger.warning("ML model unavailable; using fallback")
         if notifier is not None:
             try:
@@ -194,9 +210,11 @@ def _ml_fallback(
         return "unknown", 0.0
 
     try:
-        return predict_regime(df)
+        label, conf = predict_regime(df)
     except Exception:
         return "unknown", 0.0
+    _log_prediction(label, float(conf), {"source": "fallback", "regime": label})
+    return label, float(conf)
 
 
 async def _download_supabase_model():
@@ -300,7 +318,9 @@ def _classify_ml(
             label = "mean-reverting"
         else:
             label = "sideways"
-        return label, abs(prob - 0.5) * 2
+        conf = abs(prob - 0.5) * 2
+        _log_prediction(label, conf, {"source": "registry", "regime": label})
+        return label, conf
     except Exception:
         try:
             return _ml_fallback(df, notifier)
