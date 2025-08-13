@@ -28,6 +28,61 @@ JUPITER_SWAP_URL = "https://quote-api.jup.ag/v6/swap"
 JITO_BUNDLE_URL = "https://mainnet.block-engine.jito.wtf/api/v1/bundles"
 
 
+def _log_swap_result(
+    *,
+    token_in: str,
+    token_out: str,
+    amount: float,
+    tx_hash: str,
+    notifier: TelegramNotifier,
+    config: Dict,
+    dry_run: bool,
+    route: Optional[Dict] = None,
+    status: Optional[str] = None,
+    bundle_id: Optional[str] = None,
+) -> Dict:
+    """Log the final swap result and handle tax tracking."""
+
+    result = {
+        "token_in": token_in,
+        "token_out": token_out,
+        "amount": amount,
+        "tx_hash": tx_hash,
+    }
+    if route is not None:
+        result["route"] = route
+    if status is not None:
+        result["status"] = status
+    if bundle_id is not None:
+        result["bundle_id"] = bundle_id
+
+    err = notifier.notify(f"Swap executed: {result}")
+    if err:
+        logger.error("Failed to send message: %s", err)
+    logger.info(
+        "Swap completed: %s -> %s amount=%s tx=%s",
+        token_in,
+        token_out,
+        amount,
+        tx_hash,
+    )
+    logger.info(
+        "Swap executed - tx=%s in=%s out=%s amount=%s dry_run=%s",
+        tx_hash,
+        token_in,
+        token_out,
+        amount,
+        dry_run,
+    )
+    if (config or {}).get("tax_tracking", {}).get("enabled"):
+        try:
+            tax_logger.record_exit({"symbol": token_in, "amount": amount, "side": "sell"})
+            tax_logger.record_entry({"symbol": token_out, "amount": amount, "side": "buy"})
+        except Exception:
+            pass
+    return result
+
+
 async def execute_swap(
     token_in: str,
     token_out: str,
@@ -88,37 +143,15 @@ async def execute_swap(
 
     if dry_run:
         tx_hash = "DRYRUN"
-        result = {
-            "token_in": token_in,
-            "token_out": token_out,
-            "amount": amount,
-            "tx_hash": tx_hash,
-        }
-        err_res = notifier.notify(f"Swap executed: {result}")
-        if err_res:
-            logger.error("Failed to send message: %s", err_res)
-        logger.info(
-            "Swap completed: %s -> %s amount=%s tx=%s",
-            token_in,
-            token_out,
-            amount,
-            tx_hash,
+        return _log_swap_result(
+            token_in=token_in,
+            token_out=token_out,
+            amount=amount,
+            tx_hash=tx_hash,
+            notifier=notifier,
+            config=config,
+            dry_run=True,
         )
-        logger.info(
-            "Swap executed - tx=%s in=%s out=%s amount=%s dry_run=%s",
-            tx_hash,
-            token_in,
-            token_out,
-            amount,
-            True,
-        )
-        if (config or {}).get("tax_tracking", {}).get("enabled"):
-            try:
-                tax_logger.record_exit({"symbol": token_in, "amount": amount, "side": "sell"})
-                tax_logger.record_entry({"symbol": token_out, "amount": amount, "side": "buy"})
-            except Exception:
-                pass
-        return result
 
     decimals = await get_decimals(token_in)
     if decimals == 0:
@@ -374,38 +407,15 @@ async def execute_swap(
     status = None
     if isinstance(confirm_res, dict):
         status = confirm_res.get("status") or confirm_res.get("value", {}).get("confirmationStatus")
-    result = {
-        "token_in": token_in,
-        "token_out": token_out,
-        "amount": amount,
-        "tx_hash": tx_hash,
-        "route": route,
-        "status": status or "confirmed",
-    }
-    if bundle_id is not None:
-        result["bundle_id"] = bundle_id
-    err = notifier.notify(f"Swap executed: {result}")
-    if err:
-        logger.error("Failed to send message: %s", err)
-    logger.info(
-        "Swap completed: %s -> %s amount=%s tx=%s",
-        token_in,
-        token_out,
-        amount,
-        tx_hash,
+    return _log_swap_result(
+        token_in=token_in,
+        token_out=token_out,
+        amount=amount,
+        tx_hash=tx_hash,
+        notifier=notifier,
+        config=config,
+        dry_run=False,
+        route=route,
+        status=status or "confirmed",
+        bundle_id=bundle_id,
     )
-    logger.info(
-        "Swap executed - tx=%s in=%s out=%s amount=%s dry_run=%s",
-        tx_hash,
-        token_in,
-        token_out,
-        amount,
-        False,
-    )
-    if (config or {}).get("tax_tracking", {}).get("enabled"):
-        try:
-            tax_logger.record_exit({"symbol": token_in, "amount": amount, "side": "sell"})
-            tax_logger.record_entry({"symbol": token_out, "amount": amount, "side": "buy"})
-        except Exception:
-            pass
-    return result
