@@ -1340,8 +1340,26 @@ async def _update_ohlcv_cache_inner(
             data, columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
         tf_sec = timeframe_seconds(None, timeframe)
-        unit = "ms" if df_new["timestamp"].iloc[0] > 1e10 else "s"
-        df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit)
+
+        if df_new is None or df_new.empty or "timestamp" not in df_new.columns:
+            logger.info(
+                "OHLCV: no new data for %s @ %s; keeping existing cache", sym, timeframe
+            )
+            continue
+
+        df_new["timestamp"] = pd.to_numeric(df_new["timestamp"], errors="coerce")
+        df_new = df_new.dropna(subset=["timestamp"])
+        if df_new.empty:
+            logger.info(
+                "OHLCV: non-numeric/empty timestamps for %s @ %s; skipping update",
+                sym,
+                timeframe,
+            )
+            continue
+
+        unit = "ms" if df_new["timestamp"].max() > 1e12 else "s"
+        df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit, utc=True)
+        df_new = df_new.sort_values("timestamp").drop_duplicates("timestamp", keep="last")
         df_new = (
             df_new.set_index("timestamp")
             .resample(f"{tf_sec}s")
@@ -1701,6 +1719,35 @@ async def update_multi_tf_ohlcv_cache(
                         max_concurrent=max_concurrent,
                         notifier=notifier,
                         priority_symbols=priority_syms,
+            else:
+                ts = await get_kraken_listing_date(sym)
+            return sym, ts
+
+        start_list = time.perf_counter()
+        tasks = [asyncio.create_task(_fetch_listing(sym)) for sym in symbols]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for sym, res in zip(symbols, results):
+            if isinstance(res, Exception):
+                logger.exception(
+                    "OHLCV task failed for %s @ %s: %s",
+                    sym,
+                    tf,
+                    res,
+                )
+                continue
+            _, listing_ts = res
+            if listing_ts and 0 < listing_ts <= now_ms:
+                age_ms = now_ms - listing_ts
+                tf_sec = timeframe_seconds(exchange, tf)
+                hist_candles = age_ms // (tf_sec * 1000)
+                if hist_candles <= 0:
+                    continue
+                if hist_candles > snapshot_cap * 1000:
+                    logger.info(
+                        "Skipping OHLCV history for %s on %s (age %d candles)",
+                        sym,
+                        tf,
+                        hist_candles,
                     )
             elif cex_symbols:
                 from crypto_bot.main import update_df_cache
