@@ -1618,7 +1618,17 @@ async def update_multi_tf_ohlcv_cache(
 
         start_list = time.perf_counter()
         tasks = [asyncio.create_task(_fetch_listing(sym)) for sym in symbols]
-        for sym, listing_ts in await asyncio.gather(*tasks):
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for sym, res in zip(symbols, results):
+            if isinstance(res, Exception):
+                logger.exception(
+                    "OHLCV task failed for %s @ %s: %s",
+                    sym,
+                    tf,
+                    res,
+                )
+                continue
+            _, listing_ts = res
             if listing_ts and 0 < listing_ts <= now_ms:
                 age_ms = now_ms - listing_ts
                 tf_sec = timeframe_seconds(exchange, tf)
