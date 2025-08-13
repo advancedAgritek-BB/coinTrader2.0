@@ -35,7 +35,10 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
 
     exchange_name = config.get("exchange", "coinbase")
     use_ws = config.get("use_websocket", False)
-    use_private_ws = config.get("kraken", {}).get("use_private_ws", False)
+    requested_private_ws = config.get("kraken", {}).get(
+        "use_private_ws", kraken.use_private_ws
+    )
+    use_private_ws = requested_private_ws and kraken.use_private_ws
 
     ws_client: Optional[KrakenWSClient] = None
     api_key = env_or_prompt("API_KEY", "Enter API key: ") or None
@@ -53,30 +56,28 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
         )
     elif exchange_name == "kraken":
         if use_ws:
-            ws_token = os.getenv("KRAKEN_WS_TOKEN")
-            if kraken.use_private_ws:
-                if not ws_token and api_key and api_secret:
-                    try:
-                        ws_token = kraken.get_ws_token(
-                            api_key, api_secret, api_token or None
-                        )
-                    except Exception as err:
-                        logger.warning("Failed to get WS token: %s", err)
-                        kraken.use_private_ws = False
-            if kraken.use_private_ws and ws_token:
-                ws_client = KrakenWSClient(
-                    api_key, api_secret, ws_token=ws_token, api_token=api_token
-                )
+            if use_private_ws and not (api_key and api_secret):
+                use_private_ws = kraken.use_private_ws = False
             ws_token = os.getenv("KRAKEN_WS_TOKEN") if use_private_ws else None
-            try:
-                if use_private_ws and not ws_token and api_key and api_secret:
-                    ws_token = get_ws_token(api_key, api_secret, api_token or None)
-                ws_client = KrakenWSClient(
-                    api_key, api_secret, ws_token=ws_token, api_token=api_token
-                )
-            except Exception as err:  # pragma: no cover - optional dependency
-                logger.warning("Failed to initialize Kraken WS client: %s", err)
-                ws_client = None
+            if use_private_ws and not ws_token and api_key and api_secret:
+                try:
+                    ws_token = kraken.get_ws_token(
+                        api_key, api_secret, api_token or None
+                    )
+                except Exception as err:
+                    logger.warning("Failed to get WS token: %s", err)
+                    use_private_ws = kraken.use_private_ws = False
+            if use_private_ws or not requested_private_ws:
+                try:
+                    ws_client = KrakenWSClient(
+                        api_key,
+                        api_secret,
+                        ws_token=ws_token if use_private_ws else None,
+                        api_token=api_token,
+                    )
+                except Exception as err:  # pragma: no cover - optional dependency
+                    logger.warning("Failed to initialize Kraken WS client: %s", err)
+                    ws_client = None
 
         exchange = ccxt.kraken(
             {
