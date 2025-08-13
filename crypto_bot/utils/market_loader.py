@@ -195,20 +195,29 @@ async def _ohlcv_batch_worker(
             ]
 
             base = reqs[0]
-            cache = await _update_ohlcv_cache_inner(
-                base.exchange,
-                base.cache,
-                union_symbols,
-                timeframe=base.timeframe,
-                limit=base.limit,
-                start_since=base.start_since,
-                use_websocket=base.use_websocket,
-                force_websocket_history=base.force_websocket_history,
-                config=base.config,
-                max_concurrent=base.max_concurrent,
-                notifier=base.notifier,
-                priority_symbols=union_priority,
-            )
+            try:
+                cache = await _update_ohlcv_cache_inner(
+                    base.exchange,
+                    base.cache,
+                    union_symbols,
+                    timeframe=base.timeframe,
+                    limit=base.limit,
+                    start_since=base.start_since,
+                    use_websocket=base.use_websocket,
+                    force_websocket_history=base.force_websocket_history,
+                    config=base.config,
+                    max_concurrent=base.max_concurrent,
+                    notifier=base.notifier,
+                    priority_symbols=union_priority,
+                )
+            except Exception as e:  # pragma: no cover - defensive
+                logger.exception(
+                    "OHLCV worker: failed on timeframe=%s (batch size=%s). Continuing. Error: %s",
+                    base.timeframe,
+                    len(union_symbols),
+                    e,
+                )
+                cache = base.cache
 
             for r in reqs:
                 if r.cache is not cache:
