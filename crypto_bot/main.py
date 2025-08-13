@@ -118,10 +118,6 @@ REQUIRED_ENV_VARS = {
 
 
 LOG_DIR: Path = Path(".")
-def _run_wallet_manager() -> None:
-    """Launch the interactive wallet manager or exit in headless mode."""
-    if not sys.stdin.isatty():
-        print("wallet_manager requires an interactive terminal")
 logger = logging.getLogger("bot")
 
 CONFIG_DIR = Path(__file__).resolve().parent
@@ -167,8 +163,7 @@ def _run_wallet_manager() -> None:
     """Execute the wallet manager or guide the user in non-interactive mode."""
     if not sys.stdin.isatty():
         print(
-            "Wallet setup requires an interactive terminal. "
-            "Run `python -m crypto_bot.wallet_manager` interactively.",
+            "Wallet setup required: run `python -m crypto_bot.wallet_manager` in an interactive terminal.",
             flush=True,
         )
         sys.exit(2)
@@ -176,30 +171,14 @@ def _run_wallet_manager() -> None:
 
 
 def _ensure_user_setup() -> None:
-    """Ensure API credentials and user configuration are available."""
-    if USER_CONFIG_FILE.exists() and all(
+    """Ensure required credentials exist or launch the wallet setup wizard."""
+    _load_env()
+    if USER_CONFIG_PATH.exists() and all(
         os.getenv(var) for var in REQUIRED_ENV_VARS
     ):
-        return
-    env = _load_env()
-    if _needs_wallet_setup(env, USER_CONFIG_FILE) or not all(
-        os.getenv(var) for var in REQUIRED_ENV_VARS
-    ):
-    """Ensure a user has configured credentials or launch the wizard."""
-    if USER_CONFIG_PATH.exists():
-    env = _load_env()
-    if USER_CONFIG_FILE.exists():
-        return
-    if all(os.getenv(var) for var in REQUIRED_ENV_VARS):
-        return
-    if _needs_wallet_setup(env):
-        _run_wallet_manager()
-        _load_env()
-    if USER_CONFIG_PATH.exists():
-        return
-    if all(os.getenv(var) for var in REQUIRED_ENV_VARS):
         return
     _run_wallet_manager()
+    _load_env()
 
 
 def _fix_symbol(symbol: str) -> str:
