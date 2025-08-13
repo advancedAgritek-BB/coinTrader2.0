@@ -572,6 +572,15 @@ def _load_config_file() -> dict:
     with open(CONFIG_PATH) as f:
         logger.info("Loading config from %s", CONFIG_PATH)
         data = yaml.safe_load(f) or {}
+    exchange_id = data.get("exchange") or os.getenv("EXCHANGE")
+    timeframes = data.get("timeframes")
+    trading_mode = data.get("execution_mode")
+    logger.info(
+        "Exchange=%s timeframes=%s mode=%s",
+        exchange_id,
+        timeframes,
+        trading_mode,
+    )
 
     data = replace_placeholders(data)
 

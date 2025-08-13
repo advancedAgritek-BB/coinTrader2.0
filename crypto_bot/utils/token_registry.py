@@ -430,6 +430,11 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     if not api_key:
         return {}
 
+    logger.info("Fetching metadata for %d mints via Helius", len(tokens))
+
+    params = {"symbol": ",".join(tokens), "api-key": api_key}
+    url = _build_helius_url(params)
+    if not url:
     symbols_list = [str(s).upper() for s in symbols if s]
     if not symbols_list:
         return {}
@@ -484,6 +489,23 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict):
             continue
+        symbol = item.get("symbol") or item.get("ticker")
+        mint = item.get("mint") or item.get("address") or item.get("tokenMint")
+        if isinstance(symbol, str) and isinstance(mint, str):
+            key = symbol.upper()
+            if full:
+                result[key] = {
+                    "mint": mint,
+                    "decimals": item.get("decimals"),
+                    "supply": item.get("supply"),
+                }
+            else:
+                result[key] = mint
+
+    for sym in tokens:
+        if sym.upper() not in result:
+            logger.warning("No mint mapping for %s; skipping Helius", sym)
+
         mint = (
             item.get("onChainAccountInfo", {}).get("mint")
             or item.get("mint")
