@@ -1783,6 +1783,11 @@ async def update_multi_tf_ohlcv_cache(
                         current_since = data[-1][0] + 1
 
                     if not batches:
+                        logger.info(
+                            "OHLCV: empty or missing 'timestamp' for %s @ %s; skipping update.",
+                            sym,
+                            tf,
+                        )
                         continue
 
                     df_new = pd.DataFrame(
@@ -1790,7 +1795,41 @@ async def update_multi_tf_ohlcv_cache(
                         columns=["timestamp", "open", "high", "low", "close", "volume"],
                     )
                     tf_sec = timeframe_seconds(None, tf)
-                    unit = "ms" if df_new["timestamp"].iloc[0] > 1e10 else "s"
+
+                    # Guard for empty/malformed OHLCV responses.
+                    if df_new is None or df_new.empty or "timestamp" not in df_new.columns:
+                        logger.info(
+                            "OHLCV: empty or missing 'timestamp' for %s @ %s; skipping update.",
+                            sym,
+                            tf,
+                        )
+                        continue
+
+                    # Coerce and validate the first timestamp safely (avoid out-of-bounds on iloc[0]).
+                    try:
+                        ts0 = pd.to_numeric(df_new["timestamp"].iloc[0], errors="coerce")
+                    except Exception:
+                        ts0 = None
+
+                    if ts0 is None or pd.isna(ts0):
+                        logger.info(
+                            "OHLCV: first timestamp is NaN/invalid for %s @ %s; skipping update.",
+                            sym,
+                            tf,
+                        )
+                        continue
+
+                    # Robust unit detection:
+                    #   - >1e14 => ns (very unlikely), >1e12 => us, >1e10 => ms, else => s
+                    if ts0 > 1e14:
+                        unit = "ns"
+                    elif ts0 > 1e12:
+                        unit = "us"
+                    elif ts0 > 1e10:
+                        unit = "ms"
+                    else:
+                        unit = "s"
+
                     df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit)
                     df_new = (
                         df_new.set_index("timestamp")
