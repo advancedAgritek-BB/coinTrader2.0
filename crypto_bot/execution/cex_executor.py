@@ -109,11 +109,15 @@ def get_exchanges(config) -> Dict[str, Tuple[ccxt.Exchange, Optional[KrakenWSCli
 
 
 def _resolve_notifier(
-    token: Optional[str],
+    token: str | TelegramNotifier | None,
     chat_id: Optional[str],
     notifier: Optional[TelegramNotifier],
 ) -> TelegramNotifier:
-    """Return a ready-to-use :class:`TelegramNotifier` instance."""
+    """Return a ready-to-use :class:`TelegramNotifier` instance.
+
+    The ``token`` argument may be a bot token string, an existing
+    :class:`TelegramNotifier`, or ``None`` when ``notifier`` is provided.
+    """
 
     if notifier is not None:
         return notifier
@@ -438,7 +442,7 @@ def execute_trade(
     symbol: str,
     side: str,
     amount: float,
-    token: Optional[str] = None,
+    token: str | TelegramNotifier | None = None,
     chat_id: Optional[str] = None,
     notifier: Optional[TelegramNotifier] = None,
     dry_run: bool = True,
@@ -612,7 +616,7 @@ async def execute_trade_async(
     symbol: str,
     side: str,
     amount: float,
-    token: Optional[str] = None,
+    token: str | TelegramNotifier | None = None,
     chat_id: Optional[str] = None,
     notifier: Optional[TelegramNotifier] = None,
     dry_run: bool = True,
@@ -763,7 +767,7 @@ def place_stop_order(
     side: str,
     amount: float,
     stop_price: float,
-    token: Optional[str] = None,
+    token: str | TelegramNotifier | None = None,
     chat_id: Optional[str] = None,
     notifier: Optional[TelegramNotifier] = None,
     dry_run: bool = True,
