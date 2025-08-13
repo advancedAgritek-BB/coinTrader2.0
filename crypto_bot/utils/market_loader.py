@@ -1719,39 +1719,10 @@ async def update_multi_tf_ohlcv_cache(
                         max_concurrent=max_concurrent,
                         notifier=notifier,
                         priority_symbols=priority_syms,
-            else:
-                ts = await get_kraken_listing_date(sym)
-            return sym, ts
-
-        start_list = time.perf_counter()
-        tasks = [asyncio.create_task(_fetch_listing(sym)) for sym in symbols]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for sym, res in zip(symbols, results):
-            if isinstance(res, Exception):
-                logger.exception(
-                    "OHLCV task failed for %s @ %s: %s",
-                    sym,
-                    tf,
-                    res,
-                )
-                continue
-            _, listing_ts = res
-            if listing_ts and 0 < listing_ts <= now_ms:
-                age_ms = now_ms - listing_ts
-                tf_sec = timeframe_seconds(exchange, tf)
-                hist_candles = age_ms // (tf_sec * 1000)
-                if hist_candles <= 0:
-                    continue
-                if hist_candles > snapshot_cap * 1000:
-                    logger.info(
-                        "Skipping OHLCV history for %s on %s (age %d candles)",
-                        sym,
-                        tf,
-                        hist_candles,
                     )
             elif cex_symbols:
                 from crypto_bot.main import update_df_cache
-    
+
                 for sym in cex_symbols:
                     batches: list = []
                     current_since = start_since
@@ -1779,10 +1750,10 @@ async def update_multi_tf_ohlcv_cache(
                         if len(data) < req:
                             break
                         current_since = data[-1][0] + 1
-    
+
                     if not batches:
                         continue
-    
+
                     df_new = pd.DataFrame(
                         batches,
                         columns=["timestamp", "open", "high", "low", "close", "volume"],
@@ -1804,14 +1775,14 @@ async def update_multi_tf_ohlcv_cache(
                         .reset_index()
                     )
                     df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
-    
+
                     if sym in tf_cache and not tf_cache[sym].empty:
                         last_ts = tf_cache[sym]["timestamp"].iloc[-1]
                         df_new = df_new[df_new["timestamp"] > last_ts]
                         if df_new.empty:
                             continue
                         df_new = pd.concat([tf_cache[sym], df_new], ignore_index=True)
-    
+
                     update_df_cache(cache, tf, sym, df_new)
                     tf_cache = cache.get(tf, {})
                     tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
