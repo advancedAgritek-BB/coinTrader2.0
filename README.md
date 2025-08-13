@@ -1632,15 +1632,35 @@ when the bot starts.
 
 ## Development Setup
 
-Create and activate a virtual environment, then install the Python dependencies.
-Running the test suite requires packages from **both** `requirements.txt` and
-`requirements-dev.txt`:
+Use Python&nbsp;3.10 or later to avoid package incompatibilities. Set up a
+virtual environment and install the dependencies:
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
-```
+1. **Create and activate a virtual environment**
+
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # Windows: .\.venv\Scripts\activate
+   ```
+
+2. **Install dependencies**
+
+   `requirements.txt` references an optional `cointrader-trainer` package. If
+   the package is unavailable, install it from its source or comment out the
+   line before running the command below:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+   Install the additional development packages if you plan to run the test
+   suite:
+
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+
+The project still relies on Pydantic&nbsp;1.x. If you see errors related to
+Pydantic&nbsp;2, ensure the dependency is pinned with `pydantic<2`.
 
 Run the test suite to verify your environment:
 
@@ -1682,6 +1702,10 @@ pytest -q
 ```
 
 ## Troubleshooting
+
+* **Pydantic version errors** – The project has not yet been migrated to
+  Pydantic&nbsp;2. If you encounter import issues, explicitly install
+  `pydantic<2`.
 
 High `max_concurrent_ohlcv` values combined with short `ohlcv_timeout`
 settings can overload the exchange and lead to failed candle fetches.
