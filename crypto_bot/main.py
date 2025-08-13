@@ -125,15 +125,22 @@ def _parse_version(ver: str) -> tuple[int, ...]:
 
 try:  # pragma: no cover - optional dependency
     from crypto_bot.version import __version__ as trainer_version, MIN_CT2_INTEGRATION
+    _TRAINER_AVAILABLE = True
 except Exception:  # pragma: no cover - trainer not installed
     trainer_version, MIN_CT2_INTEGRATION = "0.0.0", "0.1.0"
+    _TRAINER_AVAILABLE = False
 
-if _parse_version(trainer_version) < _parse_version(MIN_CT2_INTEGRATION):
+if _TRAINER_AVAILABLE and _parse_version(trainer_version) < _parse_version(
+    MIN_CT2_INTEGRATION
+):
     logger.warning(
         "cointrader-trainer %s is below required integration level %s",
         trainer_version,
         MIN_CT2_INTEGRATION,
     )
+
+if not _TRAINER_AVAILABLE:
+    logger.info("cointrader-trainer package not installed; ML features disabled")
 
 CONFIG_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = CONFIG_DIR / "config.yaml"
@@ -468,14 +475,17 @@ async def refresh_balance(ctx: BotContext) -> float:
 
 
 def _ensure_ml(cfg: dict) -> None:
-    """Attempt to load the mean_bot ML model.
+    """Attempt to load the mean_bot ML model if available.
 
     Raises
     ------
     MLUnavailableError
-        If the trainer package or model cannot be loaded.
+        If the trainer package is installed but the model cannot be loaded.
     """
     if not cfg.get("ml_enabled", True):
+        return
+    if not _TRAINER_AVAILABLE:
+        logger.info("cointrader-trainer not installed; skipping ML initialization")
         return
     try:  # pragma: no cover - best effort
         from coinTrader_Trainer.ml_trainer import load_model
@@ -484,7 +494,7 @@ def _ensure_ml(cfg: dict) -> None:
     except Exception as exc:  # pragma: no cover - missing trainer or model
         logger.error("Machine learning initialization failed: %s", exc)
         raise MLUnavailableError(
-            "coinTrader_Trainer or model load failure", cfg
+            "coinTrader_Trainer model load failure", cfg
         ) from exc
 
 
