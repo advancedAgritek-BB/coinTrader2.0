@@ -554,6 +554,12 @@ async def load_kraken_symbols(
         + ")"
     )
 
+    # Restrict to commonly traded quotes on Kraken
+    allowed_quotes = {"USD", "USDT", "EUR"}
+    quotes = df.get("quote", "").astype(str).str.upper()
+    mask_quote = quotes.isin(allowed_quotes)
+    df.loc[df["reason"].isna() & ~mask_quote, "reason"] = "disallowed_quote"
+
     df.loc[df["reason"].isna() & df["symbol"].isin(exclude_set), "reason"] = "excluded"
 
     symbols: List[str] = []
@@ -604,31 +610,34 @@ async def _fetch_ohlcv_async_inner(
 
 
     try:
-        if hasattr(exchange, "symbols"):
-            if not exchange.symbols and hasattr(exchange, "load_markets"):
+        if hasattr(exchange, "markets"):
+            markets = getattr(exchange, "markets", {})
+            if not markets and hasattr(exchange, "load_markets"):
                 try:
                     if asyncio.iscoroutinefunction(
                         getattr(exchange, "load_markets", None)
                     ):
-                        await exchange.load_markets()
+                        markets = await exchange.load_markets()
                     else:
-                        await asyncio.to_thread(exchange.load_markets)
+                        markets = await asyncio.to_thread(exchange.load_markets)
                 except Exception as exc:
                     logger.warning("load_markets failed: %s", exc)
-            if exchange.symbols and symbol not in exchange.symbols:
-                logger.warning(
-                    "Skipping unsupported symbol %s on %s",
+            if markets and symbol not in markets:
+                logger.debug(
+                    "Skipping unsupported symbol %s: not in markets",
                     symbol,
-                    getattr(exchange, "id", "unknown"),
                 )
                 return []
+            market_id = markets.get(symbol, {}).get("id", symbol)
+        else:
+            market_id = symbol
 
         if limit > 0:
             data_all: list = []
             orig_limit = limit
             while limit > 0:
                 req_limit = min(limit, 720)
-                params = {"symbol": symbol, "timeframe": timeframe, "limit": req_limit}
+                params = {"symbol": market_id, "timeframe": timeframe, "limit": req_limit}
                 if since is not None:
                     params["since"] = since
                 if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ohlcv", None)):
@@ -975,16 +984,33 @@ async def load_ohlcv(
     request is retried.
     """
 
+    markets = getattr(exchange, "markets", None)
+    if markets is not None:
+        if not markets and hasattr(exchange, "load_markets"):
+            try:
+                if asyncio.iscoroutinefunction(exchange.load_markets):
+                    markets = await exchange.load_markets()
+                else:
+                    markets = await asyncio.to_thread(exchange.load_markets)
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.warning("load_markets failed: %s", exc)
+        if markets and symbol not in markets:
+            logger.debug("Skipping unsupported symbol %s: not in markets", symbol)
+            return []
+        market_id = markets.get(symbol, {}).get("id", symbol)
+    else:
+        market_id = symbol
+
     while True:
         try:
             fetch_fn = getattr(exchange, "fetch_ohlcv")
             if asyncio.iscoroutinefunction(fetch_fn):
                 data = await fetch_fn(
-                    symbol, timeframe=timeframe, limit=limit, **kwargs
+                    market_id, timeframe=timeframe, limit=limit, **kwargs
                 )
             else:  # pragma: no cover - synchronous fallback
                 data = await asyncio.to_thread(
-                    fetch_fn, symbol, timeframe, limit, **kwargs
+                    fetch_fn, market_id, timeframe, limit, **kwargs
                 )
             await asyncio.sleep(1)
             return data
@@ -1022,6 +1048,22 @@ async def load_ohlcv_parallel(
         logger.info("Skipping unsupported symbol %s", s)
         data[s] = []
     symbols = [s for s in symbols if s not in UNSUPPORTED_SYMBOLS]
+
+    markets = getattr(exchange, "markets", None)
+    if markets is not None:
+        if not markets and hasattr(exchange, "load_markets"):
+            try:
+                if asyncio.iscoroutinefunction(exchange.load_markets):
+                    markets = await exchange.load_markets()
+                else:
+                    markets = await asyncio.to_thread(exchange.load_markets)
+            except Exception as exc:
+                logger.warning("load_markets failed: %s", exc)
+        missing = [s for s in symbols if s not in markets]
+        for s in missing:
+            logger.info("Skipping unsupported symbol %s: not in markets", s)
+            data[s] = []
+        symbols = [s for s in symbols if s in markets]
 
     if not symbols:
         return data
