@@ -92,7 +92,9 @@ PATTERN_WEIGHTS = {
 
 def is_ml_available() -> bool:
     """Return ``True`` if ML dependencies and credentials are available."""
-    if not os.getenv("SUPABASE_URL") or not os.getenv("SUPABASE_KEY"):
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+    if not url or not key:
         return False
     try:  # pragma: no cover - optional dependency
         import lightgbm  # noqa: F401
@@ -221,7 +223,7 @@ async def _download_supabase_model():
     """Download LightGBM model from Supabase and return a Booster."""
     async with _supabase_model_lock:
         url = os.getenv("SUPABASE_URL")
-        key = os.getenv("SUPABASE_KEY")
+        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
         if not url or not key:
             logger.error("Missing Supabase credentials")
             return None
