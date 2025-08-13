@@ -1718,7 +1718,8 @@ async def update_multi_tf_ohlcv_cache(
                         force_websocket_history=force_websocket_history,
                         max_concurrent=max_concurrent,
                         notifier=notifier,
-                        priority_symbols=priority_syms,
+                        priority_symbols=priority_syms
+                    )
             else:
                 ts = await get_kraken_listing_date(sym)
             return sym, ts
