@@ -1,5 +1,5 @@
 import os
-import runpy
+import subprocess
 import sys
 
 import pytest
@@ -11,10 +11,10 @@ def test_wizard_launch(monkeypatch, tmp_path):
     calls: list[str] = []
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
 
-    def fake_run_module(name, *a, **k):
-        calls.append(name)
+    def fake_run(cmd, *a, **k):
+        calls.append(cmd)
 
-    monkeypatch.setattr(runpy, "run_module", fake_run_module)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     cfg = tmp_path / "user_config.yaml"
     monkeypatch.setattr(main, "USER_CONFIG_PATH", cfg)
     for var in main.REQUIRED_ENV_VARS:
@@ -22,16 +22,17 @@ def test_wizard_launch(monkeypatch, tmp_path):
 
     main._ensure_user_setup()
 
-    assert calls == ["crypto_bot.wallet_manager"]
+    expected = [sys.executable, "-m", "crypto_bot.wallet_manager"]
+    assert calls and calls[0] == expected
 
 
 def test_no_launch_when_configured(monkeypatch, tmp_path):
-    calls: list[str] = []
+    calls: list[list[str]] = []
 
-    def fake_run_module(name, *a, **k):
-        calls.append(name)
+    def fake_run(cmd, *a, **k):
+        calls.append(cmd)
 
-    monkeypatch.setattr(runpy, "run_module", fake_run_module)
+    monkeypatch.setattr(subprocess, "run", fake_run)
     cfg = tmp_path / "user_config.yaml"
     cfg.write_text("dummy: 1")
     monkeypatch.setattr(main, "USER_CONFIG_PATH", cfg)
