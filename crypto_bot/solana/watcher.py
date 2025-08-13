@@ -103,6 +103,7 @@ class PoolWatcher:
             return
 
         self._running = True
+        ClientError = getattr(aiohttp, "ClientError", Exception)
         async with aiohttp.ClientSession() as session:
             while self._running:
                 try:
@@ -135,7 +136,7 @@ class PoolWatcher:
                     logger.error("PoolWatcher error: %s", e)
                     await asyncio.sleep(self.interval)
                     continue
-                except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as e:
+                except (ClientError, asyncio.TimeoutError, ValueError) as e:
                     logger.error("PoolWatcher error: %s", e)
                     await asyncio.sleep(self.interval)
                     continue
@@ -177,7 +178,8 @@ class PoolWatcher:
     async def _watch_ws(self) -> AsyncGenerator[NewPoolEvent, None]:
         """Yield events from a websocket subscription."""
         self._running = True
-        backoff = 0
+        backoff = 1
+        last_log = 0
         async with aiohttp.ClientSession() as session:
             while self._running:
                 reconnect = False
@@ -191,7 +193,8 @@ class PoolWatcher:
                                 "params": [self.raydium_program_id, {"encoding": "jsonParsed"}],
                             }
                         )
-                        backoff = 0
+                        backoff = 1
+                        last_log = 0
                         async for msg in ws:
                             if not self._running:
                                 break
@@ -229,14 +232,27 @@ class PoolWatcher:
                         )
                         self._running = False
                         return
-                    logger.error("WebSocket handshake failed with status %s", e.status)
+                    if backoff != last_log:
+                        logger.error(
+                            "WebSocket handshake failed with status %s; retrying in %ss",
+                            e.status,
+                            backoff,
+                        )
+                        last_log = backoff
+                except (ClientError, asyncio.TimeoutError, OSError) as e:
+                    reconnect = True
+                    if backoff != last_log:
+                        logger.error("WS error: %s; retrying in %ss", e, backoff)
+                        last_log = backoff
                 except Exception as e:  # pragma: no cover - generic catch for stability
                     reconnect = True
-                    logger.error("WS error: %s", e)
+                    if backoff != last_log:
+                        logger.error("WS error: %s; retrying in %ss", e, backoff)
+                        last_log = backoff
 
                 if self._running and reconnect:
-                    backoff += 1
-                    await asyncio.sleep(2 ** backoff)
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, 60)
 
 
     def stop(self) -> None:

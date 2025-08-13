@@ -5,6 +5,7 @@ import threading
 import time
 import json
 import yaml
+import contextlib
 from pathlib import Path
 from typing import Dict
 
@@ -12,7 +13,7 @@ from typing import Dict
 import schedule
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.error import BadRequest
+from telegram.error import BadRequest, NetworkError
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -166,16 +167,55 @@ class TelegramBotUI:
 
         self.task: asyncio.Task | None = None
 
-    def run_async(self) -> None:
-        """Start polling within the current event loop."""
+    def run_async(self) -> asyncio.Task:
+        """Start polling within the current event loop with retry/backoff."""
 
         async def run() -> None:
             await self.app.initialize()
             self.notifier.notify(MENU_TEXT)
-            await self.app.start()
-            await self.app.updater.start_polling()
+            backoff = 1
+            last_log = 0
+            try:
+                while True:
+                    try:
+                        await self.app.start()
+                        await self.app.updater.start_polling()
+                        await self.app.updater.wait_closed()
+                        backoff = 1
+                        last_log = 0
+                    except (NetworkError, OSError) as exc:
+                        if backoff != last_log:
+                            self.logger.error(
+                                "Telegram polling error: %s; retrying in %ss",
+                                exc,
+                                backoff,
+                            )
+                            last_log = backoff
+                        await asyncio.sleep(backoff)
+                        backoff = min(backoff * 2, 60)
+                    except Exception as exc:  # pragma: no cover - unexpected
+                        if backoff != last_log:
+                            self.logger.error(
+                                "Telegram poller failed: %s; retrying in %ss",
+                                exc,
+                                backoff,
+                            )
+                            last_log = backoff
+                        await asyncio.sleep(backoff)
+                        backoff = min(backoff * 2, 60)
+                    finally:
+                        with contextlib.suppress(Exception):
+                            await self.app.updater.stop()
+                        with contextlib.suppress(Exception):
+                            await self.app.stop()
+            except asyncio.CancelledError:
+                pass
+            finally:
+                with contextlib.suppress(Exception):
+                    await self.app.shutdown()
 
         self.task = asyncio.create_task(run())
+        return self.task
 
     def _get_chat_id(self, update: Update) -> str:
         if getattr(update, "effective_chat", None):

@@ -5,6 +5,7 @@ import aiohttp
 from typing import AsyncGenerator, Any, Dict
 import json
 import os
+import logging
 
 
 async def watch_pool(
@@ -27,8 +28,11 @@ async def watch_pool(
         raise RuntimeError("HELIUS API key is required; set api_key or HELIUS_KEY env var")
 
     url = f"wss://atlas-mainnet.helius-rpc.com/?api-key={api_key}"
+    logger = logging.getLogger(__name__)
+    ClientError = getattr(aiohttp, "ClientError", Exception)
     async with aiohttp.ClientSession() as session:
-        backoff = 0
+        backoff = 1
+        last_log = 0
         while True:
             reconnect = False
             try:
@@ -48,7 +52,8 @@ async def watch_pool(
                         ],
                     }
                     await ws.send_json(sub)
-                    backoff = 0
+                    backoff = 1
+                    last_log = 0
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             try:
@@ -63,11 +68,17 @@ async def watch_pool(
                         elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
                             reconnect = True
                             break
-            except aiohttp.WSServerHandshakeError:
+            except (aiohttp.WSServerHandshakeError, ClientError, asyncio.TimeoutError, OSError) as exc:
                 reconnect = True
-            except Exception:
+                if backoff != last_log:
+                    logger.error("Helius pool monitor error: %s; retrying in %ss", exc, backoff)
+                    last_log = backoff
+            except Exception as exc:
                 reconnect = True
+                if backoff != last_log:
+                    logger.error("Helius pool monitor error: %s; retrying in %ss", exc, backoff)
+                    last_log = backoff
 
             if reconnect:
-                backoff += 1
-                await asyncio.sleep(2 ** backoff)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 60)
