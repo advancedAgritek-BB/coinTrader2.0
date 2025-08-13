@@ -12,6 +12,7 @@ from collections import deque, OrderedDict
 from dataclasses import dataclass, field
 import inspect
 import re
+import logging
 
 import aiohttp
 
@@ -28,83 +29,128 @@ import yaml
 from dotenv import dotenv_values
 from pydantic import ValidationError
 
-from schema.scanner import (
-    ScannerConfig,
-    SolanaScannerConfig,
-    PythConfig,
-)
+# Internal project modules are imported lazily in `_import_internal_modules()`
 
-from crypto_bot.utils.telegram import TelegramNotifier, send_test_message
-from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from crypto_bot.portfolio_rotator import PortfolioRotator
-from crypto_bot.wallet_manager import load_or_create
-from crypto_bot.utils.market_analyzer import analyze_symbol
-from crypto_bot.strategy import dca_bot
-from crypto_bot.cooldown_manager import (
-    configure as cooldown_configure,
-)
-from crypto_bot.phase_runner import BotContext, PhaseRunner
-from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
-from crypto_bot.risk.exit_manager import (
-    calculate_trailing_stop,
-    should_exit,
-)
-from crypto_bot.execution.cex_executor import (
-    execute_trade_async as cex_trade_async,
-    get_exchange,
-    get_exchanges,
-)
-from crypto_bot.open_position_guard import OpenPositionGuard
-from crypto_bot import console_monitor, console_control
-from crypto_bot.utils.position_logger import log_position, log_balance
-from crypto_bot.utils.market_loader import (
-    load_kraken_symbols,
-    update_ohlcv_cache,
-    update_multi_tf_ohlcv_cache,
-    update_regime_tf_cache,
-    timeframe_seconds,
-    configure as market_loader_configure,
-    fetch_order_book_async,
-    WS_OHLCV_TIMEOUT,
-)
-from crypto_bot.utils.pair_cache import PAIR_FILE, load_liquid_pairs
-from tasks.refresh_pairs import (
-    DEFAULT_MIN_VOLUME_USD,
-    DEFAULT_TOP_K,
-    refresh_pairs_async,
-)
-from crypto_bot.utils.eval_queue import build_priority_queue
-from crypto_bot.solana import get_solana_new_tokens
-from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
-from crypto_bot.utils import symbol_utils
-from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
-from crypto_bot.paper_wallet import PaperWallet  # backward compatibility
-from wallet import Wallet
-from crypto_bot.utils.strategy_utils import compute_strategy_weights
-from crypto_bot.auto_optimizer import optimize_strategies
-from crypto_bot.utils.telemetry import write_cycle_metrics
-from crypto_bot.utils.token_registry import (
-    TOKEN_MINTS,
-    monitor_pump_raydium,
-    refresh_mints,
-    periodic_mint_sanity_check,
-)
-from crypto_bot.utils import pnl_logger, regime_pnl_tracker
-from crypto_bot.utils.ml_utils import ML_AVAILABLE
 
-from crypto_bot.monitoring import record_sol_scanner_metrics
-from crypto_bot.fund_manager import (
-    auto_convert_funds,
-    check_wallet_balances,
-    detect_non_trade_tokens,
-)
-from crypto_bot.regime.regime_classifier import (
-    classify_regime_async,
-    classify_regime_cached,
-)
-from crypto_bot.volatility_filter import calc_atr
-from crypto_bot.solana.exit import monitor_price
-from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
+logger = logging.getLogger("bot")
+
+
+def _import_internal_modules() -> None:
+    """Import project modules after environment setup."""
+
+    global ScannerConfig, SolanaScannerConfig, PythConfig
+    global TelegramNotifier, send_test_message, LOG_DIR, setup_logger
+    global PortfolioRotator, load_or_create, analyze_symbol, dca_bot, cooldown_configure
+    global BotContext, PhaseRunner, RiskManager, RiskConfig, calculate_trailing_stop, should_exit
+    global cex_trade_async, get_exchange, get_exchanges, OpenPositionGuard
+    global console_monitor, console_control, log_position, log_balance
+    global load_kraken_symbols, update_ohlcv_cache, update_multi_tf_ohlcv_cache, update_regime_tf_cache
+    global timeframe_seconds, market_loader_configure, fetch_order_book_async, WS_OHLCV_TIMEOUT
+    global PAIR_FILE, load_liquid_pairs, DEFAULT_MIN_VOLUME_USD, DEFAULT_TOP_K, refresh_pairs_async
+    global build_priority_queue, get_solana_new_tokens, get_filtered_symbols, fix_symbol, symbol_utils
+    global log_cycle_metrics, PaperWallet, Wallet, compute_strategy_weights, optimize_strategies
+    global write_cycle_metrics, TOKEN_MINTS, monitor_pump_raydium, refresh_mints, periodic_mint_sanity_check
+    global pnl_logger, regime_pnl_tracker, ML_AVAILABLE, record_sol_scanner_metrics
+    global auto_convert_funds, check_wallet_balances, detect_non_trade_tokens
+    global classify_regime_async, classify_regime_cached, calc_atr, monitor_price, SolanaMempoolMonitor
+    global logger, _TRAINER_AVAILABLE, trainer_version, MIN_CT2_INTEGRATION
+
+    from schema.scanner import (
+        ScannerConfig,
+        SolanaScannerConfig,
+        PythConfig,
+    )
+    from crypto_bot.utils.telegram import TelegramNotifier, send_test_message
+    from crypto_bot.utils.logger import LOG_DIR, setup_logger
+    from crypto_bot.portfolio_rotator import PortfolioRotator
+    from crypto_bot.wallet_manager import load_or_create
+    from crypto_bot.utils.market_analyzer import analyze_symbol
+    from crypto_bot.strategy import dca_bot
+    from crypto_bot.cooldown_manager import (
+        configure as cooldown_configure,
+    )
+    from crypto_bot.phase_runner import BotContext, PhaseRunner
+    from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
+    from crypto_bot.risk.exit_manager import (
+        calculate_trailing_stop,
+        should_exit,
+    )
+    from crypto_bot.execution.cex_executor import (
+        execute_trade_async as cex_trade_async,
+        get_exchange,
+        get_exchanges,
+    )
+    from crypto_bot.open_position_guard import OpenPositionGuard
+    from crypto_bot import console_monitor, console_control
+    from crypto_bot.utils.position_logger import log_position, log_balance
+    from crypto_bot.utils.market_loader import (
+        load_kraken_symbols,
+        update_ohlcv_cache,
+        update_multi_tf_ohlcv_cache,
+        update_regime_tf_cache,
+        timeframe_seconds,
+        configure as market_loader_configure,
+        fetch_order_book_async,
+        WS_OHLCV_TIMEOUT,
+    )
+    from crypto_bot.utils.pair_cache import PAIR_FILE, load_liquid_pairs
+    from tasks.refresh_pairs import (
+        DEFAULT_MIN_VOLUME_USD,
+        DEFAULT_TOP_K,
+        refresh_pairs_async,
+    )
+    from crypto_bot.utils.eval_queue import build_priority_queue
+    from crypto_bot.solana import get_solana_new_tokens
+    from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
+    from crypto_bot.utils import symbol_utils
+    from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
+    from crypto_bot.paper_wallet import PaperWallet  # backward compatibility
+    from wallet import Wallet
+    from crypto_bot.utils.strategy_utils import compute_strategy_weights
+    from crypto_bot.auto_optimizer import optimize_strategies
+    from crypto_bot.utils.telemetry import write_cycle_metrics
+    from crypto_bot.utils.token_registry import (
+        TOKEN_MINTS,
+        monitor_pump_raydium,
+        refresh_mints,
+        periodic_mint_sanity_check,
+    )
+    from crypto_bot.utils import pnl_logger, regime_pnl_tracker
+    from crypto_bot.utils.ml_utils import ML_AVAILABLE
+    from crypto_bot.monitoring import record_sol_scanner_metrics
+    from crypto_bot.fund_manager import (
+        auto_convert_funds,
+        check_wallet_balances,
+        detect_non_trade_tokens,
+    )
+    from crypto_bot.regime.regime_classifier import (
+        classify_regime_async,
+        classify_regime_cached,
+    )
+    from crypto_bot.volatility_filter import calc_atr
+    from crypto_bot.solana.exit import monitor_price
+    from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
+    try:  # pragma: no cover - optional dependency
+        from crypto_bot.version import __version__ as trainer_version, MIN_CT2_INTEGRATION
+        _TRAINER_AVAILABLE = True
+    except Exception:  # pragma: no cover - trainer not installed
+        trainer_version, MIN_CT2_INTEGRATION = "0.0.0", "0.1.0"
+        _TRAINER_AVAILABLE = False
+
+    logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
+
+    if _TRAINER_AVAILABLE and _parse_version(trainer_version) < _parse_version(
+        MIN_CT2_INTEGRATION
+    ):
+        logger.warning(
+            "cointrader-trainer %s is below required integration level %s",
+            trainer_version,
+            MIN_CT2_INTEGRATION,
+        )
+
+    if not _TRAINER_AVAILABLE:
+        logger.info("cointrader-trainer package not installed; ML features disabled")
+
 
 # _fix_symbol is defined below for backward compatibility
 
@@ -116,31 +162,11 @@ REQUIRED_ENV_VARS = {
 }
 
 
-logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
-
-
 def _parse_version(ver: str) -> tuple[int, ...]:
     return tuple(int(p) for p in ver.split(".") if p.isdigit())
 
-
-try:  # pragma: no cover - optional dependency
-    from crypto_bot.version import __version__ as trainer_version, MIN_CT2_INTEGRATION
-    _TRAINER_AVAILABLE = True
-except Exception:  # pragma: no cover - trainer not installed
-    trainer_version, MIN_CT2_INTEGRATION = "0.0.0", "0.1.0"
-    _TRAINER_AVAILABLE = False
-
-if _TRAINER_AVAILABLE and _parse_version(trainer_version) < _parse_version(
-    MIN_CT2_INTEGRATION
-):
-    logger.warning(
-        "cointrader-trainer %s is below required integration level %s",
-        trainer_version,
-        MIN_CT2_INTEGRATION,
-    )
-
-if not _TRAINER_AVAILABLE:
-    logger.info("cointrader-trainer package not installed; ML features disabled")
+trainer_version, MIN_CT2_INTEGRATION = "0.0.0", "0.1.0"
+_TRAINER_AVAILABLE = False
 
 CONFIG_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = CONFIG_DIR / "config.yaml"
@@ -191,6 +217,7 @@ def _run_wallet_manager() -> None:
             file=sys.stderr,
         )
         sys.exit(2)
+    subprocess.run([sys.executable, "-m", "crypto_bot.wallet_manager"], check=True)
     code = subprocess.call([sys.executable, "-m", "crypto_bot.wallet_manager"])
     if code not in (0, None):
         sys.exit(code)
@@ -2826,6 +2853,7 @@ def _reload_modules() -> None:
 async def main() -> None:
     """Entry point for running the trading bot with error handling."""
     _ensure_user_setup()
+    _import_internal_modules()
     _reload_modules()
 
     logger.info("ML components available: %s", ML_AVAILABLE)

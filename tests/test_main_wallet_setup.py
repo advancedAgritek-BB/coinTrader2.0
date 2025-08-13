@@ -11,6 +11,10 @@ def test_wizard_launch(monkeypatch, tmp_path):
     calls: list[list[str]] = []
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
 
+    def fake_run(cmd, *a, **k):
+        calls.append(cmd)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
     cfg = tmp_path / "user_config.yaml"
     monkeypatch.setattr(main, "USER_CONFIG_PATH", cfg)
     for var in main.REQUIRED_ENV_VARS:
@@ -29,12 +33,18 @@ def test_wizard_launch(monkeypatch, tmp_path):
 
     main._ensure_user_setup()
 
+    expected = [sys.executable, "-m", "crypto_bot.wallet_manager"]
+    assert calls and calls[0] == expected
     assert calls and calls[0] == [sys.executable, "-m", "crypto_bot.wallet_manager"]
 
 
 def test_no_launch_when_configured(monkeypatch, tmp_path):
     calls: list[list[str]] = []
 
+    def fake_run(cmd, *a, **k):
+        calls.append(cmd)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
     def fake_call(cmd):
         calls.append(cmd)
         return 0
