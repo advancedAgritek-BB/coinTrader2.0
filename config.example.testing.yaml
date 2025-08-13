@@ -1,0 +1,11 @@
+mode: paper
+exchange: kraken
+timeframes: ["1h", "4h", "1d"]
+filters:
+  min_ticker_volume: 10000
+features:
+  ml: false
+  helius: false
+  pump_monitor: false
+  telegram: false
+
