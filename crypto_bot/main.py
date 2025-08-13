@@ -211,11 +211,16 @@ def _run_wallet_manager() -> None:
     """Execute the wallet manager or guide the user in non-interactive mode."""
     if not sys.stdin.isatty():
         print(
-            "Wallet setup required: run `python -m crypto_bot.wallet_manager` in an interactive terminal.",
-            flush=True,
+            "Interactive setup required but no TTY is attached.\n"
+            "Run `python -m crypto_bot.wallet_manager` once to create credentials, "
+            "or set them in crypto_bot/.env.",
+            file=sys.stderr,
         )
         sys.exit(2)
     subprocess.run([sys.executable, "-m", "crypto_bot.wallet_manager"], check=True)
+    code = subprocess.call([sys.executable, "-m", "crypto_bot.wallet_manager"])
+    if code not in (0, None):
+        sys.exit(code)
 
 
 def _ensure_user_setup() -> None:
