@@ -421,7 +421,6 @@ class KrakenWSClient:
         api_key: Optional[str] = None,
         api_secret: Optional[str] = None,
         ws_token: Optional[str] = None,
-        api_token: Optional[str] = None,
     ):
         if api_key is None:
             api_key = keyring.get_password("kraken", "api_key")
@@ -440,7 +439,6 @@ class KrakenWSClient:
 
         # Tokens can be supplied via environment variables to avoid repeated REST calls
         self.ws_token = ws_token or os.getenv("KRAKEN_WS_TOKEN")
-        self.api_token = api_token or os.getenv("KRAKEN_API_TOKEN")
 
         self.exchange = None
         if self.api_key and self.api_secret:
@@ -521,8 +519,9 @@ class KrakenWSClient:
             raise ValueError("API keys required for private websocket")
 
         params = {}
-        if self.api_token:
-            params["otp"] = self.api_token
+        otp = os.getenv("KRAKEN_OTP")
+        if otp:
+            params["otp"] = otp
 
         resp = self.exchange.privatePostGetWebSocketsToken(params)
         self.token = resp["token"]

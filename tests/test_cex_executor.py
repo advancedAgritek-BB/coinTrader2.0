@@ -233,14 +233,11 @@ def test_get_exchange_websocket(monkeypatch):
 
     monkeypatch.setenv("API_KEY", "key")
     monkeypatch.setenv("API_SECRET", "sec")
-    monkeypatch.setenv("KRAKEN_API_TOKEN", "apitoken")
 
     kraken.use_private_ws = True
     monkeypatch.setattr(cex_executor.kraken, "get_ws_token", lambda *a, **k: "token")
 
     def fake_env_or_prompt(name, prompt):
-        if name == "KRAKEN_WS_TOKEN":
-            return None
         return os.getenv(name, "")
 
     monkeypatch.setattr(cex_executor, "env_or_prompt", fake_env_or_prompt)
@@ -248,10 +245,8 @@ def test_get_exchange_websocket(monkeypatch):
     created = {}
 
     class DummyWSClient:
-        def __init__(
-            self, api_key=None, api_secret=None, ws_token=None, api_token=None
-        ):
-            created["args"] = (api_key, api_secret, ws_token, api_token)
+        def __init__(self, api_key=None, api_secret=None, ws_token=None):
+            created["args"] = (api_key, api_secret, ws_token)
 
     monkeypatch.setattr(cex_executor, "KrakenWSClient", DummyWSClient)
 
@@ -269,7 +264,7 @@ def test_get_exchange_websocket(monkeypatch):
 
     exchange, ws = cex_executor.get_exchange(config)
     assert isinstance(ws, DummyWSClient)
-    expected = ("key", "sec", "token", "apitoken")
+    expected = ("key", "sec", "token")
     assert created["args"] == expected
 
 
