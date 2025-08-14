@@ -1366,10 +1366,34 @@ async def analyse_batch(ctx: BotContext) -> None:
 async def _analyse_batch_impl(ctx: BotContext) -> None:
     """Run signal analysis on the current batch."""
     batch = ctx.current_batch
+    trading_cfg = ctx.config.get("trading", {})
+    hft_enabled = bool(trading_cfg.get("hft_enabled", False))
+    hft_symbols = set(trading_cfg.get("hft_symbols", []))
+
+    allowed_quotes = set(
+        trading_cfg.get("allowed_quotes")
+        or ctx.config.get("allowed_quote_currencies", [])
+    )
+    exclude_symbols = set(
+        trading_cfg.get("exclude_symbols", ctx.config.get("excluded_symbols", []))
+    )
+
+    # Apply symbol filters before evaluation
+    filtered: list[str] = []
+    for sym in batch:
+        base, _, quote = sym.partition("/")
+        if allowed_quotes and quote not in allowed_quotes:
+            continue
+        if sym in exclude_symbols:
+            continue
+        filtered.append(sym)
+    batch = filtered
+
     logger.info(
-        "Strategy evaluation starting with %d symbols (mode=%s)",
-        len(getattr(ctx, "active_universe", [])),
+        "Strategy evaluation starting with %d symbols (mode=%s, hft=%s)",
+        len(batch),
         getattr(ctx, "resolved_mode", ctx.config.get("mode", "auto")),
+        hft_enabled,
     )
     if not batch:
         logger.info("analyse_batch called with empty batch")
@@ -1388,6 +1412,10 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
     )
 
     base_tf = ctx.config.get("timeframe", "1h")
+    try:
+        base_minutes = int(pd.Timedelta(base_tf).total_seconds() // 60)
+    except Exception:  # pragma: no cover - invalid timeframe
+        base_minutes = 0
     ctx.analysis_errors = 0
     ctx.analysis_timeouts = 0
 
@@ -1406,6 +1434,17 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
         for tf, cache in ctx.regime_cache.items():
             df_map[tf] = cache.get(symbol)
         df = df_map.get(base_tf)
+
+        if hft_enabled and (base_minutes <= 1 or sym in hft_symbols):
+            from crypto_bot.hft import HFTEngine, maker_spread
+
+            engine = getattr(ctx, "hft_engine", None)
+            if engine is None:
+                engine = HFTEngine()
+                ctx.hft_engine = engine
+            engine.attach(sym, maker_spread)
+            continue
+
         logger.info(
             "DF len for %s: %d",
             symbol,
@@ -1495,6 +1534,12 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
         "strategy_eval_done signals=%d",
         sum(1 for r in ctx.analysis_results if not r.get("skip")),
     )
+    try:
+        from crypto_bot.utils.telemetry import dump as telemetry_dump
+
+        telemetry_dump()
+    except Exception:  # pragma: no cover - telemetry optional
+        pass
 
 
 async def execute_signals(ctx: BotContext) -> None:
