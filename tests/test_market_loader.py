@@ -342,7 +342,7 @@ def test_load_ohlcv_parallel_skips_unsupported_symbol(monkeypatch, caplog):
     assert result == {"AIBTC/EUR": []}
     assert called is False
     assert any(
-        "Skipping unsupported symbol AIBTC/EUR" in r.getMessage()
+        "Unsupported symbol (kraken doesn't list it): AIBTC/EUR" in r.getMessage()
         for r in caplog.records
     )
 
@@ -1689,7 +1689,8 @@ def test_invalid_symbol_skipped(caplog):
     assert ex.calls == ["BTC/USD"]
     assert result == {"BTC/USD": [[0] * 6]}
     assert any(
-        "Skipping unsupported symbol ETH/USD" in r.getMessage() for r in caplog.records
+        "Unsupported symbol (kraken doesn't list it): ETH/USD" in r.getMessage()
+        for r in caplog.records
     )
 
 
@@ -1760,7 +1761,7 @@ def test_fetch_ohlcv_async_skips_unsupported_symbol(caplog):
     assert data == []
     assert ex.called is False
     assert any(
-        "Skipping unsupported symbol AIBTC/EUR" in r.getMessage()
+        "Unsupported symbol (kraken doesn't list it): AIBTC/EUR" in r.getMessage()
         for r in caplog.records
     )
 

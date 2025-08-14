@@ -65,5 +65,5 @@ def test_load_ohlcv_skips_missing_symbol(caplog):
     assert data == []
     messages = [r.getMessage() for r in caplog.records if r.name == ml_logger.name]
     assert any(
-        "Skipping unsupported symbol ETH/USD: not in markets" in m for m in messages
+        "Unsupported symbol (kraken doesn't list it): ETH/USD" in m for m in messages
     )

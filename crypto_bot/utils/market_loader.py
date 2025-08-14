@@ -70,6 +70,16 @@ Extend this set to skip additional markets without making network
 requests.
 """
 
+_UNSUPPORTED_LOGGED: set[str] = set()
+
+
+def _log_unsupported(symbol: str) -> None:
+    if symbol not in _UNSUPPORTED_LOGGED:
+        logger.info(
+            "Unsupported symbol (kraken doesn't list it): %s", symbol
+        )
+        _UNSUPPORTED_LOGGED.add(symbol)
+
 # Base suffixes that indicate a synthetic or index pair when appended to
 # another asset (e.g. ``AIBTC/USD`` represents the AI/BTC index).
 _SYNTH_SUFFIXES = {"BTC", "ETH", "USD", "EUR", "USDT"}
@@ -647,10 +657,7 @@ async def _fetch_ohlcv_async_inner(
                 except Exception as exc:
                     logger.warning("load_markets failed: %s", exc)
             if markets and symbol not in markets:
-                logger.debug(
-                    "Skipping unsupported symbol %s: not in markets",
-                    symbol,
-                )
+                _log_unsupported(symbol)
                 return []
             market_id = markets.get(symbol, {}).get("id", symbol)
         else:
@@ -874,7 +881,7 @@ async def fetch_ohlcv_async(
     """Return OHLCV data for ``symbol`` with simple retries."""
 
     if not is_supported_symbol(symbol):
-        logger.info("Skipping unsupported symbol %s", symbol)
+        _log_unsupported(symbol)
         return []
 
     for attempt in range(3):
@@ -1019,7 +1026,7 @@ async def load_ohlcv(
             except Exception as exc:  # pragma: no cover - best effort
                 logger.warning("load_markets failed: %s", exc)
         if markets and symbol not in markets:
-            logger.debug("Skipping unsupported symbol %s: not in markets", symbol)
+            _log_unsupported(symbol)
             return []
         market_id = markets.get(symbol, {}).get("id", symbol)
     else:
@@ -1069,7 +1076,7 @@ async def load_ohlcv_parallel(
     symbols = list(symbols)
     unsupported = [s for s in symbols if not is_supported_symbol(s)]
     for s in unsupported:
-        logger.info("Skipping unsupported symbol %s", s)
+        _log_unsupported(s)
         data[s] = []
     symbols = [s for s in symbols if is_supported_symbol(s)]
 
@@ -1085,7 +1092,7 @@ async def load_ohlcv_parallel(
                 logger.warning("load_markets failed: %s", exc)
         missing = [s for s in symbols if s not in markets]
         for s in missing:
-            logger.info("Skipping unsupported symbol %s: not in markets", s)
+            _log_unsupported(s)
             data[s] = []
         symbols = [s for s in symbols if s in markets]
 
