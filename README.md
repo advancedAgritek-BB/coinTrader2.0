@@ -146,7 +146,7 @@ Configure the loader with the following environment variables:
 
 ```ini
 SUPABASE_URL=
-SUPABASE_SERVICE_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 CT_MODELS_BUCKET=models
 CT_REGIME_PREFIX=models/regime
 CT_SYMBOL=BTCUSDT
