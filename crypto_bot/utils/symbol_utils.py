@@ -31,8 +31,9 @@ _last_refresh: float = 0.0
 _CACHE_INVALIDATION_LOCK = Lock()
 _INVALIDATION_GUARD = asyncio.Lock()
 _LAST_INVALIDATION_TS = 0.0
+_INVALIDATION_DEBOUNCE_SEC = 10.0
+_AUTO_FALLBACK_WARNED = False
 _PENDING_INVALIDATION = False
-_INVALIDATION_DEBOUNCE_SEC = 300.0
 
 
 def _apply_invalidation(ts: float | None = None) -> None:
@@ -212,5 +213,20 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         quote_whitelist,
         min_vol,
     )
+
+    mode = config.get("mode", "cex")
+    cex_candidates = [s for s, _ in scored]
+    active_universe = cex_candidates if mode == "cex" else list(onchain_syms)
+    if not active_universe:
+        if mode == "auto" and cex_candidates:
+            global _AUTO_FALLBACK_WARNED
+            if not _AUTO_FALLBACK_WARNED:
+                logger.warning("Universe empty; falling back to CEX mode")
+                _AUTO_FALLBACK_WARNED = True
+            config["mode"] = "cex"
+        else:
+            raise RuntimeError(
+                f"Universe is empty (mode={mode}). Check on-chain metadata provider and liquidity filters."
+            )
 
     return scored, onchain_syms
