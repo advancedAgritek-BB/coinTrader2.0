@@ -18,8 +18,9 @@ class DummyErr(Exception):
 
 
 def _load_module(monkeypatch, tmp_path):
-    import importlib.util, pathlib
+    import importlib.util, pathlib, sys
 
+    sys.modules.pop("crypto_bot.solana.helius_client", None)
     spec = importlib.util.spec_from_file_location(
         "crypto_bot.utils.token_registry",
         pathlib.Path(__file__).resolve().parents[1]
@@ -188,6 +189,14 @@ def test_fetch_from_helius_full(monkeypatch, tmp_path):
     assert mapping == {"AAA": {"mint": "mmm", "decimals": 5, "supply": 10}}
 
 
+def test_fetch_from_helius_sol(monkeypatch, tmp_path):
+    monkeypatch.setenv("HELIUS_API_KEY", "KEY")
+    mod = _load_module(monkeypatch, tmp_path)
+
+    mapping = asyncio.run(mod.fetch_from_helius(["SOL"], full=True))
+    assert mapping == {"SOL": {"mint": mod.WSOL_MINT, "decimals": 9, "supply": None}}
+
+
 def test_fetch_from_helius_4xx(monkeypatch, tmp_path, caplog):
     class DummyResp:
         def __init__(self, status=401):
@@ -238,7 +247,7 @@ def test_fetch_from_helius_4xx(monkeypatch, tmp_path, caplog):
 
 
 def test_fetch_from_helius_no_api_key(monkeypatch, tmp_path, caplog):
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.WARNING)
     monkeypatch.delenv("HELIUS_API_KEY", raising=False)
     monkeypatch.delenv("HELIUS_KEY", raising=False)
     mod = _load_module(monkeypatch, tmp_path)
@@ -252,8 +261,8 @@ def test_fetch_from_helius_no_api_key(monkeypatch, tmp_path, caplog):
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
-    assert mapping == {}
-    assert "Helius disabled (no API key)" in caplog.text
+    assert mapping == {"AAA": "metadata_unknown"}
+    assert "Helius unavailable; on-chain metadata checks skipped." in caplog.text
 
 
 def test_periodic_mint_sanity_check(monkeypatch, tmp_path):
@@ -284,6 +293,34 @@ def test_periodic_mint_sanity_check(monkeypatch, tmp_path):
 
     assert mod.TOKEN_MINTS["AAA"] == "new"
     assert called
+
+
+def test_periodic_mint_sanity_check_sol(monkeypatch, tmp_path, caplog):
+    mod = _load_module(monkeypatch, tmp_path)
+    mod.MANUAL_OVERRIDES.clear()
+    mod.MANUAL_OVERRIDES.update({"SOL": mod.WSOL_MINT})
+    mod.TOKEN_MINTS.update(mod.MANUAL_OVERRIDES)
+
+    async def fake_fetch(_symbols, *, full=False):
+        return {"SOL": {"mint": "", "decimals": 9, "supply": None}}
+
+    monkeypatch.setattr(mod, "fetch_from_helius", fake_fetch)
+    monkeypatch.setattr(mod, "_write_cache", lambda: None)
+
+    async def fast_sleep(_):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fast_sleep)
+    caplog.set_level(logging.INFO)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(mod.periodic_mint_sanity_check(interval_hours=0))
+
+    assert any(
+        r.getMessage() == "SOL: using WSOL mint; skipping supply check." and r.levelno == logging.INFO
+        for r in caplog.records
+    )
+    assert mod.TOKEN_MINTS["SOL"] == mod.WSOL_MINT
 
 
 def test_load_token_mints(monkeypatch, tmp_path):

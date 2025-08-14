@@ -29,6 +29,8 @@ class BotContext:
     volatility_factor: float = 1.0
     mempool_monitor: object | None = None
     mempool_cfg: dict | None = None
+    active_universe: list[str] = field(default_factory=list)
+    resolved_mode: str = "auto"
 
 
 class PhaseRunner:

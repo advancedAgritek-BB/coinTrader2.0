@@ -151,7 +151,7 @@ class TelegramBotUI:
                 EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_config_value)]
             },
             fallbacks=[],
-            per_message=True,
+            per_message=False,
         )
         self.app.add_handler(conv)
         self.app.add_handler(

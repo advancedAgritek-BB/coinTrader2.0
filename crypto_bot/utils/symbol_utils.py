@@ -1,6 +1,9 @@
 import asyncio
 import time
 from threading import Lock
+import logging
+from typing import AsyncIterator
+import contextlib
 
 from .logger import LOG_DIR, setup_logger
 try:
@@ -20,28 +23,54 @@ def fix_symbol(sym: str) -> str:
     return sym.replace("XBT/", "BTC/").replace("XBT", "BTC")
 
 logger = setup_logger("bot", LOG_DIR / "bot.log")
+pipeline_logger = logging.getLogger("pipeline")
 
 
 _cached_symbols: tuple[list[tuple[str, float]], list[str]] | None = None
 _last_refresh: float = 0.0
 _CACHE_INVALIDATION_LOCK = Lock()
+_INVALIDATION_GUARD = asyncio.Lock()
 _LAST_INVALIDATION_TS = 0.0
 _INVALIDATION_DEBOUNCE_SEC = 10.0
 _AUTO_FALLBACK_WARNED = False
+_PENDING_INVALIDATION = False
+
+
+def _apply_invalidation(ts: float | None = None) -> None:
+    """Apply the symbol cache invalidation."""
+    global _cached_symbols, _last_refresh, _LAST_INVALIDATION_TS, _PENDING_INVALIDATION
+    _LAST_INVALIDATION_TS = ts if ts is not None else time.time()
+    _cached_symbols = None
+    _last_refresh = 0.0
+    _PENDING_INVALIDATION = False
+    logger.info("Symbol cache invalidated")
 
 
 def invalidate_symbol_cache() -> None:
     """Clear cached symbols and reset refresh timestamp."""
-    global _cached_symbols, _last_refresh, _LAST_INVALIDATION_TS
+    global _PENDING_INVALIDATION
     with _CACHE_INVALIDATION_LOCK:
         now = time.time()
         if now - _LAST_INVALIDATION_TS < _INVALIDATION_DEBOUNCE_SEC:
             logger.debug("Symbol cache invalidation suppressed (debounced).")
             return
-        _LAST_INVALIDATION_TS = now
-        _cached_symbols = None
-        _last_refresh = 0.0
-        logger.info("Symbol cache invalidated")
+        if _INVALIDATION_GUARD.locked():
+            _PENDING_INVALIDATION = True
+            logger.info("Deferring cache invalidation until after evaluation.")
+            return
+        _apply_invalidation(now)
+
+
+@contextlib.asynccontextmanager
+async def symbol_cache_guard() -> AsyncIterator[None]:
+    """Guard operations that should block cache invalidation."""
+    await _INVALIDATION_GUARD.acquire()
+    try:
+        yield
+    finally:
+        _INVALIDATION_GUARD.release()
+        if _PENDING_INVALIDATION:
+            invalidate_symbol_cache()
 
 
 async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]], list[str]]:
@@ -60,6 +89,14 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         _cached_symbols is not None
         and now - _last_refresh < refresh_m * 60
     ):
+        pipeline_logger.info(
+            "discovered_cex=%d discovered_onchain=%d",
+            len(_cached_symbols[0]),
+            len(_cached_symbols[1]),
+        )
+        pipeline_logger.info(
+            "filtered_liquidity=%d", len(_cached_symbols[0]) + len(_cached_symbols[1])
+        )
         return _cached_symbols
 
     logger.info("Refreshing symbol cache")
@@ -73,6 +110,11 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
 
     symbols = config.get("symbols", [config.get("symbol")])
     onchain = list(config.get("onchain_symbols", []))
+    pipeline_logger.info(
+        "discovered_cex=%d discovered_onchain=%d",
+        len(symbols),
+        len(onchain),
+    )
     if not symbols:
         _cached_symbols = []
         _last_refresh = now
@@ -104,6 +146,10 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         scored, extra_onchain = await asyncio.to_thread(
             filter_symbols, exchange, symbols, config
         )
+    pipeline_logger.info(
+        "filtered_liquidity=%d",
+        len(scored) + len(extra_onchain),
+    )
     onchain_syms.extend([s for s, _ in extra_onchain])
     skipped_main = telemetry.snapshot().get("scan.symbols_skipped", 0) - skipped_before
     if not scored:

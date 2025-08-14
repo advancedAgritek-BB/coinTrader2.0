@@ -14,6 +14,8 @@ import ccxt.async_support as ccxt
 import yaml
 from urllib.parse import urlencode, urlparse
 
+from crypto_bot.solana.helius_client import HELIUS_API_KEY, helius_available
+
 from crypto_bot.strategy import cross_chain_arb_bot
 from .gecko import gecko_request
 
@@ -48,6 +50,9 @@ TOKEN_DECIMALS: Dict[str, int] = {}
 
 _LOADED = False
 
+# Canonical mint address for wrapped SOL
+WSOL_MINT = "So11111111111111111111111111111111111111112"
+
 PUMP_URL = "https://api.pump.fun/tokens?limit=50&offset=0"
 RAYDIUM_URL = "https://api.raydium.io/v2/main/pairs"
 
@@ -58,6 +63,7 @@ POLL_INTERVAL = 10
 __all__ = [
     "TOKEN_MINTS",
     "TOKEN_DECIMALS",
+    "WSOL_MINT",
     "load_token_mints",
     "fetch_from_jupiter",
     "get_decimals",
@@ -69,19 +75,7 @@ __all__ = [
 ]
 
 
-_HELIUS_DISABLED_LOGGED = False
 _MISSING_MINT_LOGGED: set[str] = set()
-
-
-def _helius_api_key() -> str:
-    """Return configured Helius API key and log once if missing."""
-
-    key = os.getenv("HELIUS_API_KEY") or os.getenv("HELIUS_KEY") or ""
-    global _HELIUS_DISABLED_LOGGED
-    if not key and not _HELIUS_DISABLED_LOGGED:
-        logger.info("Helius disabled (no API key)")
-        _HELIUS_DISABLED_LOGGED = True
-    return key
 
 
 def _build_helius_url(params: Dict[str, str]) -> str | None:
@@ -97,8 +91,7 @@ def _build_helius_url(params: Dict[str, str]) -> str | None:
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{urlencode(params)}"
 
 
-# Prime startup log if no key is configured
-_helius_api_key()
+# Prime startup log handled in helius_client
 
 
 def to_base_units(amount_tokens: float, decimals: int) -> int:
@@ -426,9 +419,9 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     provided.
     """
 
-    api_key = _helius_api_key()
-    if not api_key:
-        return {}
+    if not helius_available:
+        return {str(s).upper(): "metadata_unknown" for s in symbols if s}
+    api_key = HELIUS_API_KEY
 
     symbols_list = [str(s).upper() for s in symbols if s]
     if not symbols_list:
@@ -438,11 +431,11 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     mints: List[str] = []
     mint_to_symbol: Dict[str, str] = {}
     for sym in symbols_list:
-        if sym == "SOL":  # Native SOL has no mint
+        if sym == "SOL":  # Native SOL has no mint; use WSOL mint instead
             if full:
-                result[sym] = {"mint": "", "decimals": 9, "supply": None}
+                result[sym] = {"mint": WSOL_MINT, "decimals": 9, "supply": None}
             else:
-                result[sym] = ""
+                result[sym] = WSOL_MINT
             continue
         mint = TOKEN_MINTS.get(sym)
         if mint:
@@ -512,9 +505,9 @@ async def get_decimals(mint: str) -> int:
     if cached is not None:
         return cached
 
-    api_key = _helius_api_key()
-    if not api_key:
+    if not helius_available:
         return 0
+    api_key = HELIUS_API_KEY
 
     params = {"mint": mint, "api-key": api_key}
     url = _build_helius_url(params)
@@ -564,6 +557,16 @@ async def periodic_mint_sanity_check(interval_hours: float = 24.0) -> None:
                     helius_mint = meta.get("mint")
                     decimals = meta.get("decimals")
                     supply = meta.get("supply")
+                    if sym == "SOL":
+                        if not helius_mint:
+                            helius_mint = WSOL_MINT
+                        TOKEN_MINTS[sym] = WSOL_MINT
+                        MANUAL_OVERRIDES[sym] = WSOL_MINT
+                        _write_cache()
+                        if not isinstance(decimals, int) or decimals <= 0:
+                            logger.warning("Unexpected decimals for %s: %s", sym, decimals)
+                        logger.info("SOL: using WSOL mint; skipping supply check.")
+                        continue
                     if isinstance(helius_mint, str) and helius_mint != expected_mint:
                         logger.warning(
                             "Mint mismatch for %s: cache=%s helius=%s",
