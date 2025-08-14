@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
+from dotenv import load_dotenv
+
 import sys
 import asyncio
 import contextlib
 import time
 import subprocess
-import os
 from pathlib import Path
 from datetime import datetime
 from collections import deque, OrderedDict
@@ -27,7 +29,6 @@ except Exception:  # pragma: no cover - optional dependency
 import pandas as pd
 import numpy as np
 import yaml
-from dotenv import dotenv_values
 from pydantic import ValidationError
 
 from crypto_bot.ml.selfcheck import log_ml_status_once
@@ -222,6 +223,8 @@ USER_CONFIG_PATH = CONFIG_DIR / "user_config.yaml"
 
 def _load_env(path: Path = ENV_PATH) -> dict[str, str]:
     """Load environment variables from ``path`` into ``os.environ``."""
+    from dotenv import dotenv_values
+
     env = dotenv_values(path)
     for key, value in env.items():
         if key not in os.environ and value is not None:
@@ -3006,9 +3009,11 @@ def _reload_modules() -> None:
 
 async def main() -> None:
     """Entry point for running the trading bot with error handling."""
+    load_dotenv()
     _ensure_user_setup()
-    from crypto_bot.utils.ml_utils import init_ml_components
+    load_dotenv(override=True)
 
+    from crypto_bot.utils.ml_utils import init_ml_components
     init_ml_components()
     _import_internal_modules()
     _reload_modules()
