@@ -28,9 +28,11 @@ import pandas as pd
 import numpy as np
 import yaml
 from pydantic import ValidationError
+from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 
 # Internal project modules are imported lazily inside `main()` after env setup
 from crypto_bot.ml.selfcheck import log_ml_status_once
+from crypto_bot.strategy.evaluator import StreamEvaluator
 
 # Internal project modules are imported lazily in `_import_internal_modules()`
 
@@ -39,14 +41,19 @@ logger = logging.getLogger("bot")
 pipeline_logger = logging.getLogger("pipeline")
 
 # Module-level placeholders populated once internal modules are loaded in ``main``
-build_priority_queue = None  # type: ignore
+from collections import deque
+
+build_priority_queue = lambda scores: deque(
+    sym for sym, _ in sorted(scores, key=lambda x: x[1], reverse=True)
+)  # type: ignore
 get_solana_new_tokens = None  # type: ignore
 get_filtered_symbols = None  # type: ignore
-fetch_from_helius = None  # type: ignore
+async def fetch_from_helius(*_a, **_k):
+    return {}
 fix_symbol = None  # type: ignore
 symbol_utils = None  # type: ignore
 calc_atr = None  # type: ignore
-timeframe_seconds = None  # type: ignore
+timeframe_seconds = lambda *_a, **_k: 0  # type: ignore
 maybe_refresh_model = None  # type: ignore
 registry = None  # type: ignore
 fetch_geckoterminal_ohlcv = None  # type: ignore
@@ -60,6 +67,13 @@ TelegramBotUI = None  # type: ignore
 start_runner = None  # type: ignore
 sniper_run = None  # type: ignore
 cooldown_configure = None  # type: ignore
+update_ohlcv_cache = None  # type: ignore
+update_multi_tf_ohlcv_cache = None  # type: ignore
+update_regime_tf_cache = None  # type: ignore
+market_loader_configure = None  # type: ignore
+fetch_order_book_async = None  # type: ignore
+WS_OHLCV_TIMEOUT = None  # type: ignore
+stream_evaluator: StreamEvaluator | None = None
 
 
 @contextlib.asynccontextmanager
@@ -1352,28 +1366,26 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
 
     tasks = {}
     mode = ctx.config.get("mode", "cex")
-    for sym in batch:
-        df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
+
+    async def eval_fn(symbol: str):
+        df_map = {tf: c.get(symbol) for tf, c in ctx.df_cache.items()}
         for tf, cache in ctx.regime_cache.items():
-            df_map[tf] = cache.get(sym)
+            df_map[tf] = cache.get(symbol)
         df = df_map.get(base_tf)
         logger.info(
             "DF len for %s: %d",
-            sym,
+            symbol,
             len(df) if isinstance(df, pd.DataFrame) else 0,
         )
-        task = asyncio.create_task(
-            analyze_symbol(
-                sym,
-                df_map,
-                mode,
-                ctx.config,
-                ctx.notifier,
-                mempool_monitor=ctx.mempool_monitor,
-                mempool_cfg=ctx.mempool_cfg,
-            )
+        return await analyze_symbol(
+            symbol,
+            df_map,
+            mode,
+            ctx.config,
+            ctx.notifier,
+            mempool_monitor=ctx.mempool_monitor,
+            mempool_cfg=ctx.mempool_cfg,
         )
-        tasks[task] = sym
 
     results_map: dict[str, Any] = {}
     total = len(tasks)
@@ -1396,13 +1408,14 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
             completed,
             total,
         )
+    ctx.eval_fn = eval_fn
+    from crypto_bot.evaluator import evaluate_batch
 
-    ctx.analysis_results = []
-    for sym in batch:
-        res = results_map.get(sym)
-        if isinstance(res, Exception):
-            continue
-        ctx.analysis_results.append(res)
+    results_map = await evaluate_batch(batch, ctx)
+
+    ctx.analysis_results = [
+        res for sym in batch if (res := results_map.get(sym)) is not None
+    ]
 
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     for res in ctx.analysis_results:
@@ -1430,11 +1443,6 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
 
 
 async def execute_signals(ctx: BotContext) -> None:
-    async with symbol_cache_guard():
-        await _execute_signals_impl(ctx)
-
-
-async def _execute_signals_impl(ctx: BotContext) -> None:
     """Open trades for qualified analysis results."""
     results = getattr(ctx, "analysis_results", [])
     if not results:
@@ -2619,14 +2627,48 @@ async def _main_impl() -> TelegramNotifier:
     ctx.position_guard = position_guard
     ctx.balance = await fetch_and_log_balance(exchange, wallet, config)
     last_balance = ctx.balance
+    eval_lock = asyncio.Lock()
+
+    async def eval_fn(symbol: str, _info: dict) -> None:
+        async with eval_lock:
+            ctx.current_batch = [symbol]
+            await _analyse_batch_impl(ctx)
+            await execute_signals(ctx)
+
+    stream_evaluator = StreamEvaluator(eval_fn)
+    set_stream_evaluator(stream_evaluator)
+    await stream_evaluator.start()
+    async def _eval_symbol(symbol: str, data: dict) -> None:
+        df_map = {tf: ctx.df_cache.get(tf, {}).get(symbol) for tf in data.get("timeframes", [])}
+        res = await analyze_symbol(
+            symbol,
+            df_map,
+            ctx.config.get("mode", "cex"),
+            ctx.config,
+            ctx.notifier,
+            mempool_monitor=ctx.mempool_monitor,
+            mempool_cfg=ctx.mempool_cfg,
+        )
+        if not res.get("skip"):
+            ctx.analysis_results = [res]
+            ctx.current_batch = [symbol]
+            await _execute_signals_impl(ctx)
+
+    async def _eval_wrapper(symbol: str, data: dict) -> None:
+        await asyncio.wait_for(_eval_symbol(symbol, data), timeout=8)
+
+    stream_eval = StreamEvaluator(_eval_wrapper)
+    await stream_eval.start()
+    set_stream_evaluator(stream_eval)
+    global stream_evaluator
+    stream_evaluator = stream_eval
+
     runner = PhaseRunner(
         [
             fetch_candidates,
             update_caches,
             enrich_with_pyth,
-            analyse_batch,
             refresh_balance,
-            execute_signals,
             handle_exits,
         ]
     )
@@ -2869,6 +2911,11 @@ async def _main_impl() -> TelegramNotifier:
             await wait_or_event(delay * 60)
 
     finally:
+        await stream_evaluator.drain()
+        await stream_evaluator.stop()
+        if 'stream_eval' in locals() and stream_eval:
+            await stream_eval.drain()
+            await stream_eval.stop()
         for task in listener_tasks:
             task.cancel()
             with contextlib.suppress(Exception):
@@ -2970,6 +3017,7 @@ async def main() -> None:
         fetch_order_book_async,
         WS_OHLCV_TIMEOUT,
         fetch_geckoterminal_ohlcv,
+        set_stream_evaluator,
     )
     from crypto_bot.utils.pair_cache import PAIR_FILE, load_liquid_pairs
     from tasks.refresh_pairs import (
