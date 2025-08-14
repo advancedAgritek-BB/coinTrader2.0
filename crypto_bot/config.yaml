@@ -307,6 +307,7 @@ regime_timeframes:
 - 1m
 - 5m
 - 15m
+# === risk & sizing ===
 risk:
   atr_long_window: 40
   atr_period: 10
@@ -323,6 +324,11 @@ risk:
   volume_threshold_ratio: 0.01
   win_rate_threshold: 0.7
   win_rate_boost_factor: 1.5
+  vol_horizon_secs: 600           # realized vol window ~10m
+  target_sigma_notional_usd: 150  # $ risk per trade equalized by vol
+  daily_loss_limit_pct: 3.0       # halt for the day after -3%
+  max_consecutive_losses: 3       # cooldown symbol after 3 losses
+  symbol_cooldown_min: 20
 rl_selector:
   enabled: true
 rsi_overbought_pct: 80
@@ -575,3 +581,68 @@ voting_strategies:
 wallet_address: your_wallet
 ws_failures_before_disable: 1
 ws_ping_interval: 5
+
+# === trading/base ===
+trading:
+  mode: dry_run           # cex | onchain | auto | dry_run
+  exchange: kraken
+  allowed_quotes: [USD, USDT, USDC, EUR]
+  min_ticker_volume: 10000
+  timeframes: ["1m","5m"]
+  backfill:
+    warmup_high_tf: ["1h","4h","1d"]
+    deep_low_tf: true        # backfill 1m/5m history for strategies
+    deep_days: 30
+  hft_enabled: true
+  hft_symbols: ["BTC/USD","ETH/USD","SOL/USDC","BONK/USDC"]   # seed list, can expand
+  exclude_symbols: ["AIBTC/USD"]   # remove noisy/synthetic pairs
+
+# === strategies and params ===
+strategies:
+  maker_spread:
+    enabled: true
+    max_spread_bp: 8              # don’t quote if spread > 8 bps
+    edge_margin_bp: 3             # required extra edge beyond maker fee
+    max_live_quotes: 2
+    queue_timeout_ms: 1500        # cancel if sitting too long
+    cancel_on_obi_flip: true
+
+  breakout:
+    enabled: true
+    tf: "5m"
+    donchian_len: 40
+    keltner_len: 20
+    bbw_pct_max: 15               # BB width in bottom 15th percentile
+    volume_z_min: 1.0
+    atr_mult_stop: 1.2
+    atr_mult_tp: 1.2
+    max_spread_bp: 10
+    time_exit_bars: 12
+
+  mean_revert:
+    enabled: true
+    tf: "1m"
+    ema_len: 50
+    z_entry: 2.0
+    z_exit: 0.5
+    adx_max: 18
+    atr_stop_mult: 1.0
+    max_spread_bp: 8
+    time_exit_bars: 6
+
+# === fees ===
+fees:
+  kraken:
+    taker_bp: 26    # example 0.26%
+    maker_bp: 16    # example 0.16%
+
+# === features ===
+features:
+  ml: false
+  helius: false
+  pump_monitor: false
+  telegram: true
+
+# === telemetry / metrics ===
+telemetry:
+  batch_summary_secs: 60

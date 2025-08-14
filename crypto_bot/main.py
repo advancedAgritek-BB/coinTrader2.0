@@ -502,15 +502,59 @@ def _load_config_file() -> dict:
     with open(CONFIG_PATH) as f:
         logger.info("Loading config from %s", CONFIG_PATH)
         data = yaml.safe_load(f) or {}
-    exchange_id = data.get("exchange") or os.getenv("EXCHANGE")
-    timeframes = data.get("timeframes")
-    trading_mode = data.get("execution_mode")
+    trading_cfg = data.get("trading", {}) or {}
+    exchange_id = data.get("exchange") or trading_cfg.get("exchange") or os.getenv("EXCHANGE")
+    timeframes = data.get("timeframes") or trading_cfg.get("timeframes")
+    trading_mode = data.get("execution_mode") or trading_cfg.get("mode")
+    allowed_quotes = trading_cfg.get("allowed_quotes", [])
     logger.info(
-        "Exchange=%s timeframes=%s mode=%s",
+        "Exchange=%s timeframes=%s mode=%s allowed_quotes=%s hft=%s",
         exchange_id,
         timeframes,
         trading_mode,
+        allowed_quotes,
+        trading_cfg.get("hft_enabled", False),
     )
+    trading_cfg.setdefault("allowed_quotes", [])
+    trading_cfg.setdefault("min_ticker_volume", 0)
+    backfill_cfg = trading_cfg.get("backfill", {}) or {}
+    backfill_cfg.setdefault("warmup_high_tf", [])
+    backfill_cfg.setdefault("deep_low_tf", False)
+    backfill_cfg.setdefault("deep_days", 0)
+    trading_cfg["backfill"] = backfill_cfg
+    trading_cfg.setdefault("hft_enabled", False)
+    trading_cfg.setdefault("hft_symbols", [])
+    trading_cfg.setdefault("exclude_symbols", [])
+    data["trading"] = trading_cfg
+    data.setdefault("exchange", exchange_id)
+    data.setdefault("timeframes", timeframes)
+    data.setdefault("execution_mode", trading_mode)
+
+    risk_cfg = data.get("risk", {}) or {}
+    risk_cfg.setdefault("vol_horizon_secs", 0)
+    risk_cfg.setdefault("target_sigma_notional_usd", 0)
+    risk_cfg.setdefault("daily_loss_limit_pct", 0)
+    risk_cfg.setdefault("max_consecutive_losses", 0)
+    risk_cfg.setdefault("symbol_cooldown_min", 0)
+    data["risk"] = risk_cfg
+
+    fees_cfg = data.get("fees", {}) or {}
+    kraken_cfg = fees_cfg.get("kraken", {}) or {}
+    kraken_cfg.setdefault("taker_bp", 0)
+    kraken_cfg.setdefault("maker_bp", 0)
+    fees_cfg["kraken"] = kraken_cfg
+    data["fees"] = fees_cfg
+
+    feat_cfg = data.get("features", {}) or {}
+    feat_cfg.setdefault("ml", False)
+    feat_cfg.setdefault("helius", False)
+    feat_cfg.setdefault("pump_monitor", False)
+    feat_cfg.setdefault("telegram", False)
+    data["features"] = feat_cfg
+
+    tele_cfg = data.get("telemetry", {}) or {}
+    tele_cfg.setdefault("batch_summary_secs", 0)
+    data["telemetry"] = tele_cfg
 
     data = replace_placeholders(data)
 
