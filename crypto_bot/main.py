@@ -50,7 +50,6 @@ async def fetch_from_helius(*_a, **_k):
     return {}
 fix_symbol = None  # type: ignore
 symbol_utils = None  # type: ignore
-compute_batches = None  # type: ignore
 calc_atr = None  # type: ignore
 timeframe_seconds = lambda *_a, **_k: 0  # type: ignore
 maybe_refresh_model = None  # type: ignore
@@ -1055,7 +1054,10 @@ async def fetch_candidates(ctx: BotContext) -> None:
                 seeds = symbol_utils.select_seed_symbols(symbols, ctx.exchange, ctx.config)
                 rest_scores = [(s, sc) for s, sc in symbols if s not in seeds]
                 rest_queue = list(build_priority_queue(rest_scores))
-                ctx._fast_start_batches = compute_batches(rest_queue, follow_size)
+                ctx._fast_start_batches = [
+                    rest_queue[i : i + follow_size]
+                    for i in range(0, len(rest_queue), follow_size)
+                ]
                 symbol_priority_queue = deque(seeds)
                 for sym in seeds:
                     logger.info("OHLCV[1m] warmup met for %s → enqueue", sym)
@@ -1474,6 +1476,8 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
                 ctx.hft_engine = engine
             engine.attach(symbol, maker_spread)
             return {"symbol": symbol, "skip": True}
+            engine.attach(sym, maker_spread)
+            return
 
         logger.info(
             "DF len for %s: %d",
@@ -2739,6 +2743,10 @@ async def _main_impl() -> TelegramNotifier:
     stream_evaluator = StreamEvaluator(_eval_wrapper)
     await stream_evaluator.start()
     set_stream_evaluator(stream_evaluator)
+    stream_eval = StreamEvaluator(_eval_wrapper)
+    await stream_eval.start()
+    set_stream_evaluator(stream_eval)
+    stream_evaluator = stream_eval
 
     runner = PhaseRunner(
         [
@@ -3051,6 +3059,7 @@ async def main() -> None:
     global classify_regime_async, classify_regime_cached, calc_atr, monitor_price, SolanaMempoolMonitor, maybe_refresh_model
     global fetch_geckoterminal_ohlcv, fetch_solana_prices, cross_chain_trade, sniper_solana, sniper_trade
     global load_token_mints, set_token_mints, TelegramBotUI, start_runner, sniper_run
+    global stream_evaluator
     global _TRAINER_AVAILABLE, trainer_version, MIN_CT2_INTEGRATION
 
     from schema.scanner import (
@@ -3091,7 +3100,6 @@ async def main() -> None:
         fetch_order_book_async,
         WS_OHLCV_TIMEOUT,
         fetch_geckoterminal_ohlcv,
-        set_stream_evaluator,
     )
     from crypto_bot.utils.pair_cache import PAIR_FILE, load_liquid_pairs
     from tasks.refresh_pairs import (
@@ -3099,7 +3107,7 @@ async def main() -> None:
         DEFAULT_TOP_K,
         refresh_pairs_async,
     )
-    from crypto_bot.utils.eval_queue import build_priority_queue, compute_batches
+    from crypto_bot.utils.eval_queue import build_priority_queue
     from crypto_bot.solana import (
         get_solana_new_tokens,
         fetch_solana_prices,

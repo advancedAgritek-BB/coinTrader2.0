@@ -29,7 +29,6 @@ class StreamEvaluator:
                 return
             try:
                 await asyncio.wait_for(self.eval_fn(symbol, ctx), timeout=8)
-                await self.eval_fn(symbol, ctx)
                 logger.debug(f"[EVAL OK] {symbol}")
             except asyncio.TimeoutError:
                 logger.warning(f"[EVAL TIMEOUT] {symbol}")

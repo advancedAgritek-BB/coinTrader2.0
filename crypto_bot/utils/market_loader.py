@@ -718,6 +718,12 @@ async def _fetch_ohlcv_async_inner(
         logger.debug("Skipping %s: OHLCV not supported", symbol)
         return []
 
+    if use_websocket or force_websocket_history:
+        logger.debug(
+            "Websocket flags set for %s but functionality is disabled; using REST",
+            symbol,
+        )
+
     if timeframe in ("4h", "1d"):
         use_websocket = False
 
@@ -971,6 +977,8 @@ async def fetch_ohlcv_async(
                 timeframe=timeframe,
                 limit=limit,
                 since=since,
+                use_websocket=use_websocket,
+                force_websocket_history=force_websocket_history,
             )
         except Exception as exc:
             if attempt == 2:
@@ -1053,8 +1061,8 @@ async def fetch_ohlcv_from_trades(
 
     ohlcv: list[list] = []
     bucket = trades[0][0] - trades[0][0] % tf_ms
-    o = h = l = c = float(trades[0][1])
-    vol = float(trades[0][2]) if len(trades[0]) > 2 else 0.0
+    open_price = high = low = close = float(trades[0][1])
+    volume = float(trades[0][2]) if len(trades[0]) > 2 else 0.0
 
     for t in trades[1:]:
         ts = int(t[0])
@@ -1062,19 +1070,19 @@ async def fetch_ohlcv_from_trades(
         amount = float(t[2]) if len(t) > 2 else 0.0
         b = ts - ts % tf_ms
         if b != bucket:
-            ohlcv.append([bucket, o, h, l, c, vol])
+            ohlcv.append([bucket, open_price, high, low, close, volume])
             if len(ohlcv) >= limit:
                 return ohlcv[:limit]
             bucket = b
-            o = h = l = c = price
-            vol = amount
+            open_price = high = low = close = price
+            volume = amount
         else:
-            h = max(h, price)
-            l = min(l, price)
-            c = price
-            vol += amount
+            high = max(high, price)
+            low = min(low, price)
+            close = price
+            volume += amount
 
-    ohlcv.append([bucket, o, h, l, c, vol])
+    ohlcv.append([bucket, open_price, high, low, close, volume])
     return ohlcv[:limit]
 
 
@@ -1148,6 +1156,10 @@ async def load_ohlcv_parallel(
     notifier : TelegramNotifier | None, optional
         If provided, failures will be sent using this notifier.
     """
+    if use_websocket or force_websocket_history:
+        logger.debug(
+            "Websocket parameters ignored in load_ohlcv_parallel; using REST"
+        )
 
     since_map = since_map or {}
 
@@ -1593,6 +1605,78 @@ async def _update_ohlcv_cache_inner(
                     pass
     logger.info("Completed OHLCV update for timeframe %s", timeframe)
     return cache
+
+
+# --- Additional helpers ----------------------------------------------------
+
+
+async def fetch_coingecko_ohlc(symbol: str, days: int = 1) -> List[List[float]] | None:
+    """Return OHLC data from CoinGecko for ``symbol``.
+
+    The returned rows follow the CCXT OHLCV format with volume set to ``0`` as
+    the CoinGecko endpoint does not provide volume information.
+    """
+
+    base, _, quote = symbol.partition("/")
+    coin_id = COINGECKO_IDS.get(base.upper())
+    if not coin_id:
+        return None
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/ohlc"
+    params = {"vs_currency": quote.lower(), "days": days}
+    try:
+        data = await gecko_request(url, params=params)
+        return [
+            [int(row[0]), float(row[1]), float(row[2]), float(row[3]), float(row[4]), 0.0]
+            for row in data
+        ]
+    except Exception:
+        return None
+
+
+async def fetch_dex_ohlcv(
+    exchange,
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+    min_volume_usd: float | int = 0,
+    gecko_res: Any | None = None,
+    use_gecko: bool = True,
+) -> List[List[float]] | None:
+    """Fetch OHLCV data for DEX tokens with several fallbacks."""
+
+    if min_volume_usd:
+        logger.debug(
+            "min_volume_usd parameter is deprecated and ignored (value=%s)",
+            min_volume_usd,
+        )
+
+    if gecko_res:
+        return gecko_res[0] if isinstance(gecko_res, tuple) else gecko_res
+
+    base, _, quote = symbol.partition("/")
+    quote = quote.upper()
+
+    # Try CoinGecko for known USD-quoted pairs
+    if use_gecko and quote in SUPPORTED_USD_QUOTES:
+        data = await fetch_coingecko_ohlc(symbol)
+        if data:
+            return data
+
+        # Fallback to Coinbase if available
+        try:
+            if hasattr(ccxt, "coinbase"):
+                cb = ccxt.coinbase()
+                return await load_ohlcv(cb, symbol, timeframe=timeframe, limit=limit)
+        except Exception:
+            pass
+
+    # Final fallback: use the provided exchange
+    try:
+        return await load_ohlcv(
+            exchange, symbol, timeframe=timeframe, limit=limit
+        )
+    except Exception:
+        return None
 
 
 # --- Back-compat: GeckoTerminal OHLCV wrapper using CCXT (real fetch, no stubs) ---
