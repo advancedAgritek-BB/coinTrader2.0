@@ -9,14 +9,15 @@ import re
 import subprocess
 import sys
 import time
-from collections import OrderedDict, deque, Counter
+from collections import Counter, OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv, dotenv_values
 import aiohttp
+from dotenv import dotenv_values, load_dotenv
+
 try:
     import ccxt  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
@@ -32,7 +33,6 @@ from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 
 # Internal project modules are imported lazily inside `main()` after env setup
 from crypto_bot.ml.selfcheck import log_ml_status_once
-from crypto_bot.strategy.evaluator import StreamEvaluator
 
 # Internal project modules are imported lazily in `_import_internal_modules()`
 
@@ -41,11 +41,11 @@ logger = logging.getLogger("bot")
 pipeline_logger = logging.getLogger("pipeline")
 
 # Module-level placeholders populated once internal modules are loaded in ``main``
-from collections import deque
 
-build_priority_queue = lambda scores: deque(
-    sym for sym, _ in sorted(scores, key=lambda x: x[1], reverse=True)
-)  # type: ignore
+def build_priority_queue(scores):
+    return deque(
+        sym for sym, _ in sorted(scores, key=lambda x: x[1], reverse=True)
+    )  # type: ignore
 get_solana_new_tokens = None  # type: ignore
 get_filtered_symbols = None  # type: ignore
 async def fetch_from_helius(*_a, **_k):
@@ -54,7 +54,9 @@ fix_symbol = None  # type: ignore
 symbol_utils = None  # type: ignore
 compute_batches = None  # type: ignore
 calc_atr = None  # type: ignore
-timeframe_seconds = lambda *_a, **_k: 0  # type: ignore
+
+def timeframe_seconds(*_a, **_k) -> int:
+    return 0  # type: ignore
 maybe_refresh_model = None  # type: ignore
 registry = None  # type: ignore
 fetch_geckoterminal_ohlcv = None  # type: ignore
@@ -3221,7 +3223,6 @@ async def main() -> None:
         _TRAINER_AVAILABLE = False
 
 
-    from crypto_bot.utils.ml_utils import init_ml_components
     init_ml_components()
     _reload_modules()
 
