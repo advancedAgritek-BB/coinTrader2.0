@@ -33,6 +33,29 @@ from pydantic import ValidationError
 
 
 logger = logging.getLogger("bot")
+pipeline_logger = logging.getLogger("pipeline")
+
+
+# Placeholder implementations overridden by `_import_internal_modules`
+def build_priority_queue(items):
+    ordered = sorted(items, key=lambda x: x[1], reverse=True)
+    return deque(sym for sym, _ in ordered)
+
+
+async def get_filtered_symbols(*_a, **_k):
+    return [], []
+
+
+async def fetch_from_helius(*_a, **_k):
+    return {}
+
+
+def calc_atr(_df, window=14):
+    return 0.0
+
+
+def timeframe_seconds(_ex, _tf):
+    return 0
 
 
 def _import_internal_modules() -> None:
@@ -53,7 +76,7 @@ def _import_internal_modules() -> None:
     global pnl_logger, regime_pnl_tracker, ML_AVAILABLE, record_sol_scanner_metrics
     global auto_convert_funds, check_wallet_balances, detect_non_trade_tokens
     global classify_regime_async, classify_regime_cached, calc_atr, monitor_price, SolanaMempoolMonitor
-    global logger, _TRAINER_AVAILABLE, trainer_version, MIN_CT2_INTEGRATION
+    global logger, pipeline_logger, _TRAINER_AVAILABLE, trainer_version, MIN_CT2_INTEGRATION
 
     from schema.scanner import (
         ScannerConfig,
@@ -114,6 +137,7 @@ def _import_internal_modules() -> None:
         monitor_pump_raydium,
         refresh_mints,
         periodic_mint_sanity_check,
+        fetch_from_helius,
     )
     from crypto_bot.utils import pnl_logger, regime_pnl_tracker
     from crypto_bot.utils.ml_utils import ML_AVAILABLE
@@ -138,6 +162,7 @@ def _import_internal_modules() -> None:
         _TRAINER_AVAILABLE = False
 
     logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
+    pipeline_logger = setup_logger("pipeline", LOG_DIR / "pipeline.log", to_console=False)
 
     if _TRAINER_AVAILABLE and _parse_version(trainer_version) < _parse_version(
         MIN_CT2_INTEGRATION
@@ -980,6 +1005,25 @@ async def fetch_candidates(ctx: BotContext) -> None:
             sf["min_volume_usd"] = orig_min_volume
             sf["volume_percentile"] = orig_volume_pct
 
+    bases = [s.split("/")[0] for s in onchain_syms]
+    meta_kept = 0
+    meta_drop = 0
+    if bases:
+        try:
+            meta = await fetch_from_helius(bases)
+            meta_kept = sum(1 for b in bases if b.upper() in meta)
+            meta_drop = len(bases) - meta_kept
+        except Exception as exc:  # pragma: no cover - metadata optional
+            pipeline_logger.debug("metadata lookup failed: %s", exc)
+            meta_kept = len(bases)
+            meta_drop = 0
+    pipeline_logger.info(
+        "metadata_kept=%d metadata_dropped=%d (mode=%s)",
+        meta_kept,
+        meta_drop,
+        ctx.config.get("mode"),
+    )
+
     # Always include major benchmark pairs
     symbols.extend([("BTC/USDT", 10.0), ("SOL/USDC", 10.0)])
 
@@ -1065,6 +1109,8 @@ async def fetch_candidates(ctx: BotContext) -> None:
                     recent_solana_tokens.remove(sym)
                 except ValueError:
                     pass
+
+    logger.info("Current batch: %s", ctx.current_batch)
 
 
 async def scan_arbitrage(exchange: object, config: dict) -> list[str]:
@@ -1378,6 +1424,11 @@ async def analyse_batch(ctx: BotContext) -> None:
         len(batch),
         batch,
     )
+    pipeline_logger.info(
+        "strategy_eval_start=%d timeframes=%s",
+        len(batch),
+        sorted(ctx.df_cache.keys()),
+    )
 
     base_tf = ctx.config.get("timeframe", "1h")
 
@@ -1432,6 +1483,10 @@ async def analyse_batch(ctx: BotContext) -> None:
         "analyse_batch produced %d results (%d skipped)",
         len(ctx.analysis_results),
         sum(1 for r in ctx.analysis_results if r.get("skip")),
+    )
+    pipeline_logger.info(
+        "strategy_eval_done signals=%d",
+        sum(1 for r in ctx.analysis_results if not r.get("skip")),
     )
 
 

@@ -1,6 +1,7 @@
 import asyncio
 import time
 from threading import Lock
+import logging
 
 from .logger import LOG_DIR, setup_logger
 try:
@@ -20,6 +21,7 @@ def fix_symbol(sym: str) -> str:
     return sym.replace("XBT/", "BTC/").replace("XBT", "BTC")
 
 logger = setup_logger("bot", LOG_DIR / "bot.log")
+pipeline_logger = logging.getLogger("pipeline")
 
 
 _cached_symbols: tuple[list[tuple[str, float]], list[str]] | None = None
@@ -59,6 +61,14 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         _cached_symbols is not None
         and now - _last_refresh < refresh_m * 60
     ):
+        pipeline_logger.info(
+            "discovered_cex=%d discovered_onchain=%d",
+            len(_cached_symbols[0]),
+            len(_cached_symbols[1]),
+        )
+        pipeline_logger.info(
+            "filtered_liquidity=%d", len(_cached_symbols[0]) + len(_cached_symbols[1])
+        )
         return _cached_symbols
 
     logger.info("Refreshing symbol cache")
@@ -72,6 +82,11 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
 
     symbols = config.get("symbols", [config.get("symbol")])
     onchain = list(config.get("onchain_symbols", []))
+    pipeline_logger.info(
+        "discovered_cex=%d discovered_onchain=%d",
+        len(symbols),
+        len(onchain),
+    )
     if not symbols:
         _cached_symbols = []
         _last_refresh = now
@@ -103,6 +118,10 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         scored, extra_onchain = await asyncio.to_thread(
             filter_symbols, exchange, symbols, config
         )
+    pipeline_logger.info(
+        "filtered_liquidity=%d",
+        len(scored) + len(extra_onchain),
+    )
     onchain_syms.extend([s for s, _ in extra_onchain])
     skipped_main = telemetry.snapshot().get("scan.symbols_skipped", 0) - skipped_before
     if not scored:
