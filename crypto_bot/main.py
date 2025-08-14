@@ -68,6 +68,13 @@ set_token_mints = None  # type: ignore
 TelegramBotUI = None  # type: ignore
 start_runner = None  # type: ignore
 sniper_run = None  # type: ignore
+load_or_create = None  # type: ignore
+send_test_message = None  # type: ignore
+log_balance = None  # type: ignore
+RiskConfig = None  # type: ignore
+get_exchange = None  # type: ignore
+load_kraken_symbols = None  # type: ignore
+RiskManager = None  # type: ignore
 cooldown_configure = None  # type: ignore
 update_ohlcv_cache = None  # type: ignore
 update_multi_tf_ohlcv_cache = None  # type: ignore
@@ -2307,12 +2314,13 @@ async def _main_impl() -> TelegramNotifier:
         set_token_mints({**TOKEN_MINTS, **mapping})
     onchain_syms = [fix_symbol(s) for s in config.get("onchain_symbols", [])]
     onchain_syms = [f"{s}/USDC" if "/" not in s else s for s in onchain_syms]
-    if onchain_syms:
-        config["onchain_symbols"] = onchain_syms
     sol_syms = [fix_symbol(s) for s in config.get("solana_symbols", [])]
     sol_syms = [f"{s}/USDC" if "/" not in s else s for s in sol_syms]
     if sol_syms:
-        config["onchain_symbols"] = sol_syms
+        config["solana_symbols"] = sol_syms
+    merged_syms = list(dict.fromkeys(onchain_syms + sol_syms))
+    if merged_syms:
+        config["onchain_symbols"] = merged_syms
     global _LAST_CONFIG_MTIME
     try:
         _LAST_CONFIG_MTIME = CONFIG_PATH.stat().st_mtime

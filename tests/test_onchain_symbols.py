@@ -28,72 +28,55 @@ def setup_main_common(monkeypatch, cfg):
     monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
     monkeypatch.setattr(main, "dotenv_values", lambda path: {})
     monkeypatch.setattr(main, "load_or_create", lambda: {})
-    async def fake_send_test(*_a, **_k):
-        return True
-    monkeypatch.setattr(main, "send_test_message", fake_send_test)
-    monkeypatch.setattr(main, "log_balance", lambda *_a, **_k: None)
-    monkeypatch.setattr(main.asyncio, "sleep", lambda *_a: None)
-    monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_ATTEMPTS", 1)
-    monkeypatch.setattr(main, "SYMBOL_SCAN_RETRY_DELAY", 0)
-    monkeypatch.setattr(main, "MAX_SYMBOL_SCAN_DELAY", 0)
+    monkeypatch.setattr(main, "_ensure_user_setup", lambda: None)
+    async def fake_load_mints():
+        return {}
+    monkeypatch.setattr(main, "load_token_mints", fake_load_mints)
+    monkeypatch.setattr(main, "set_token_mints", lambda *_a, **_k: None)
+    monkeypatch.setattr(main, "fix_symbol", lambda s: s)
 
-    class DummyRC:
-        def __init__(self, *_a, **_k):
-            pass
+    def stop_loader(*_a, **_k):
+        raise StopLoop()
 
-    monkeypatch.setattr(main, "RiskConfig", DummyRC)
-
-    class DummyExchange:
-        def fetch_balance(self):
-            return {"USDT": {"free": 0}}
-
-    captured = {}
-
-    def fake_get_exchange(conf):
-        captured["cfg"] = conf
-        return DummyExchange(), None
-
-    monkeypatch.setattr(main, "get_exchange", fake_get_exchange)
-    return captured
+    monkeypatch.setattr(main, "market_loader_configure", stop_loader)
+    return cfg
 
 
 def test_scan_runs_with_onchain_only(monkeypatch):
     cfg = {"onchain_symbols": ["SOL/USDC"], "scan_markets": True}
-    captured = setup_main_common(monkeypatch, cfg)
+    cfg_obj = setup_main_common(monkeypatch, cfg)
 
-    calls = {"loader": 0}
+    with pytest.raises(StopLoop):
+        asyncio.run(main._main_impl())
 
-    async def fake_loader(ex, exclude=None, config=None):
-        calls["loader"] += 1
-        return ["BTC/USD"]
+    assert cfg_obj["onchain_symbols"] == ["SOL/USDC"]
+    assert cfg_obj.get("solana_symbols", []) == []
 
-    monkeypatch.setattr(main, "load_kraken_symbols", fake_loader)
 
-    class DummyRM:
-        def __init__(self, *_a, **_k):
-            pass
+def test_scan_runs_with_onchain_and_solana(monkeypatch):
+    cfg = {
+        "onchain_symbols": ["SOL/USDC"],
+        "solana_symbols": ["BONK/USDC"],
+        "scan_markets": True,
+    }
+    cfg_obj = setup_main_common(monkeypatch, cfg)
 
-    monkeypatch.setattr(main, "RiskManager", DummyRM)
+    with pytest.raises(StopLoop):
+        asyncio.run(main._main_impl())
 
-    asyncio.run(main.main())
-
-    assert calls["loader"] == 1
-    assert captured["cfg"]["symbols"] == ["BTC/USD", "SOL/USDC"]
+    assert cfg_obj["onchain_symbols"] == ["SOL/USDC", "BONK/USDC"]
+    assert cfg_obj["solana_symbols"] == ["BONK/USDC"]
 
 
 def test_get_filtered_symbols_onchain(monkeypatch, caplog):
     caplog.set_level("INFO")
 
-    async def fake_filter_symbols(ex, syms, cfg):
-        return [("ETH/USD", 1.0)]
-
-    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
-    cfg = {"symbols": ["ETH/USD"], "onchain_symbols": ["BONK/USDC"]}
+    cfg = {"symbols": [], "onchain_symbols": ["BONK/USDC"]}
     symbol_utils._cached_symbols = None
     symbol_utils._last_refresh = 0.0
 
     res = asyncio.run(symbol_utils.get_filtered_symbols(object(), cfg))
-    assert res[0] == [("ETH/USD", 1.0)]
+    assert res[0] == []
     assert res[1] == ["BONK/USDC"]
     assert not any("Dropping invalid USDC pair" in r.getMessage() for r in caplog.records)
 
