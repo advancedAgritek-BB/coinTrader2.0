@@ -17,6 +17,7 @@ def _optional_import(name: str):
 bounce_scalper = _optional_import("bounce_scalper")
 dca_bot = _optional_import("dca_bot")
 breakout_bot = _optional_import("breakout_bot")
+breakout = _optional_import("breakout")
 dex_scalper = _optional_import("dex_scalper")
 grid_bot = _optional_import("grid_bot")
 mean_bot = _optional_import("mean_bot")
@@ -52,6 +53,7 @@ __all__ = [
     for name in [
         "bounce_scalper",
         "breakout_bot",
+        "breakout",
         "dex_scalper",
         "dca_bot",
         "grid_bot",
