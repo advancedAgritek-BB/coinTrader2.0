@@ -127,6 +127,31 @@ export HFT_RSI_MEAN_REV_MAX=75
 export HFT_ML_BLEND_WEIGHT=0.9
 ```
 
+#### Model Loader Environment
+
+Trained LightGBM models may be stored in Supabase using a stable layout:
+
+```
+bucket: models
+prefix: models/regime/{SYMBOL}/…
+```
+
+The loader searches this path for a `LATEST.json` manifest to resolve the
+current model. When the optional `cointrader-trainer` package is installed and
+`LATEST.json` exists, the runtime downloads the referenced file, verifies its
+hash and loads it. Otherwise, the embedded base64 model bundled with the bot is
+used.
+
+Configure the loader with the following environment variables:
+
+```ini
+SUPABASE_URL=
+SUPABASE_SERVICE_KEY=
+CT_MODELS_BUCKET=models
+CT_REGIME_PREFIX=models/regime
+CT_SYMBOL=BTCUSDT
+```
+
 ## Fast-Path Checks
 
 The router performs quick checks for exceptionally strong setups before running
