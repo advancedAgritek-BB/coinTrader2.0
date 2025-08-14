@@ -6,6 +6,8 @@ from typing import List, Dict, Any
 
 import aiohttp
 
+from crypto_bot.solana.helius_client import HELIUS_API_KEY, helius_available
+
 logger = logging.getLogger(__name__)
 
 MIN_BALANCE_THRESHOLD = float(os.getenv("MIN_BALANCE_THRESHOLD", "0.0"))
@@ -22,11 +24,10 @@ async def get_token_accounts(wallet_address: str, threshold: float | None = None
         Minimum balance required. Defaults to ``MIN_BALANCE_THRESHOLD``.
     """
 
-    api_key = os.getenv("HELIUS_KEY")
-    if not api_key:
-        raise ValueError("HELIUS_KEY environment variable not set")
-
-    url = f"https://mainnet.helius-rpc.com/v1/?api-key={api_key}"
+    if helius_available:
+        url = f"https://mainnet.helius-rpc.com/v1/?api-key={HELIUS_API_KEY}"
+    else:
+        url = "https://api.mainnet-beta.solana.com"
     payload = {
         "jsonrpc": "2.0",
         "id": 1,

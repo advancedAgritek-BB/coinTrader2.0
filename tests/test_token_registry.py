@@ -18,8 +18,9 @@ class DummyErr(Exception):
 
 
 def _load_module(monkeypatch, tmp_path):
-    import importlib.util, pathlib
+    import importlib.util, pathlib, sys
 
+    sys.modules.pop("crypto_bot.solana.helius_client", None)
     spec = importlib.util.spec_from_file_location(
         "crypto_bot.utils.token_registry",
         pathlib.Path(__file__).resolve().parents[1]
@@ -246,7 +247,7 @@ def test_fetch_from_helius_4xx(monkeypatch, tmp_path, caplog):
 
 
 def test_fetch_from_helius_no_api_key(monkeypatch, tmp_path, caplog):
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.WARNING)
     monkeypatch.delenv("HELIUS_API_KEY", raising=False)
     monkeypatch.delenv("HELIUS_KEY", raising=False)
     mod = _load_module(monkeypatch, tmp_path)
@@ -260,8 +261,8 @@ def test_fetch_from_helius_no_api_key(monkeypatch, tmp_path, caplog):
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
-    assert mapping == {}
-    assert "Helius disabled (no API key)" in caplog.text
+    assert mapping == {"AAA": "metadata_unknown"}
+    assert "Helius unavailable; on-chain metadata checks skipped." in caplog.text
 
 
 def test_periodic_mint_sanity_check(monkeypatch, tmp_path):
