@@ -45,15 +45,6 @@ strategies:
     atr_stop_mult: 1.0
     max_spread_bp: 8
     time_exit_bars: 6
-
-# === risk & sizing ===
-risk:
-  vol_horizon_secs: 600           # realized vol window ~10m
-  target_sigma_notional_usd: 150  # $ risk per trade equalized by vol
-  daily_loss_limit_pct: 3.0       # halt for the day after -3%
-  max_consecutive_losses: 3       # cooldown symbol after 3 losses
-  symbol_cooldown_min: 20
-
 # === fees ===
 fees:
   kraken:
@@ -397,11 +388,6 @@ risk:
   volume_threshold_ratio: 0.01
   win_rate_threshold: 0.7
   win_rate_boost_factor: 1.5
-  vol_horizon_secs: 600           # realized vol window ~10m
-  target_sigma_notional_usd: 150  # $ risk per trade equalized by vol
-  daily_loss_limit_pct: 3.0       # halt for the day after -3%
-  max_consecutive_losses: 3       # cooldown symbol after 3 losses
-  symbol_cooldown_min: 20
 rl_selector:
   enabled: true
 rsi_overbought_pct: 80
