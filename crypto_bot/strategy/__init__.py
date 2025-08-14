@@ -31,6 +31,7 @@ meme_wave_bot = _optional_import("meme_wave_bot")
 cross_chain_arb_bot = _optional_import("cross_chain_arb_bot")
 flash_crash_bot = _optional_import("flash_crash_bot")
 range_arb_bot = _optional_import("range_arb_bot")
+maker_spread = _optional_import("maker_spread")
 
 # Export Solana sniper strategy modules under a unified name
 try:  # pragma: no cover - optional dependency
@@ -65,6 +66,7 @@ __all__ = [
         "cross_chain_arb_bot",
         "flash_crash_bot",
         "range_arb_bot",
+        "maker_spread",
         "sniper_bot",
         "trend_bot",
         "sniper_solana",
