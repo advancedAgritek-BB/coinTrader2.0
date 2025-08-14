@@ -5,24 +5,14 @@ from dataclasses import dataclass
 import asyncio
 import inspect
 import time
+import os
 from pathlib import Path
 from datetime import datetime, timezone
 import yaml
 import pandas as pd
 import numpy as np
-from collections import defaultdict
-try:  # pragma: no cover - optional dependency
-    import ccxt.pro as ccxt  # type: ignore
-except Exception:  # pragma: no cover - fall back to standard ccxt
-    import ccxt  # type: ignore
 import aiohttp
-
-try:  # optional redis for caching
-    import redis  # type: ignore
-except Exception:  # pragma: no cover - redis optional
-    redis = None
 import base58
-from .gecko import gecko_request
 import contextlib
 import logging
 from tenacity import (
@@ -33,6 +23,32 @@ from tenacity import (
     before_sleep_log,
 )
 
+try:  # pragma: no cover - optional dependency
+    import ccxt.pro as ccxt  # type: ignore
+except Exception:  # pragma: no cover - fall back to standard ccxt
+    import ccxt  # type: ignore
+
+try:  # optional redis for caching
+    import redis  # type: ignore
+except Exception:  # pragma: no cover - redis optional
+    redis = None
+
+from .gecko import gecko_request
+from .token_registry import (
+    TOKEN_MINTS,
+    get_mint_from_gecko,
+    fetch_from_helius,
+)
+from crypto_bot.strategy.evaluator import get_stream_evaluator, StreamEvaluator
+from crypto_bot.strategy.registry import load_enabled
+from .logger import LOG_DIR, setup_logger
+from .constants import NON_SOLANA_BASES
+
+try:  # optional dependency
+    from .telegram import TelegramNotifier
+except Exception:  # pragma: no cover - optional
+    TelegramNotifier = Any
+
 
 def utc_now_ms() -> int:
     """Return current UTC time in milliseconds."""
@@ -42,17 +58,8 @@ def utc_now_ms() -> int:
 def iso_utc(ms: int) -> str:
     """Return an ISO 8601 UTC timestamp for ``ms`` milliseconds."""
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat()
-
-from .token_registry import (
-    TOKEN_MINTS,
-    get_mint_from_gecko,
-    fetch_from_helius,
-)
-from crypto_bot.strategy.evaluator import get_stream_evaluator
-
-from crypto_bot.strategy.registry import load_enabled
-
-
+ 
+ 
 async def get_kraken_listing_date(symbol: str) -> Optional[int]:
     """Return Kraken listing timestamp for *symbol*.
 
@@ -60,15 +67,6 @@ async def get_kraken_listing_date(symbol: str) -> Optional[int]:
     provide a more complete implementation elsewhere."""
 
     return None
-
-from .logger import LOG_DIR, setup_logger
-from .constants import NON_SOLANA_BASES
-from crypto_bot.strategy.evaluator import StreamEvaluator
-
-try:  # optional dependency
-    from .telegram import TelegramNotifier
-except Exception:  # pragma: no cover - optional
-    TelegramNotifier = Any
 
 
 _last_snapshot_time = 0
@@ -113,34 +111,11 @@ def is_supported_symbol(symbol: str) -> bool:
 
     return symbol not in UNSUPPORTED_SYMBOLS and not is_synthetic_symbol(symbol)
 
-# Track symbols that have met warmup requirements per timeframe
-_WARMED: Dict[str, set[str]] = defaultdict(set)
-
-
-def warmup_reached_for(symbol: str, timeframe: str, cache: Dict[str, Dict[str, pd.DataFrame]], warmup_map: Dict[str, int]) -> bool:
-    """Return ``True`` when both 1m and 5m warmup candles are available for ``symbol``."""
-
-    need = warmup_map.get(timeframe)
-    if need is None:
-        return False
-    df = cache.get(timeframe, {}).get(symbol)
-    if df is None or len(df) < int(need):
-        return False
-    _WARMED[symbol].add(timeframe)
-    other_tf = "5m" if timeframe == "1m" else "1m"
-    other_need = warmup_map.get(other_tf)
-    if other_need is None:
-        return True
-    other_df = cache.get(other_tf, {}).get(symbol)
-    return bool(other_df is not None and len(other_df) >= int(other_need))
-
-
 async def _maybe_enqueue_eval(symbol: str, timeframe: str, cache: Dict[str, Dict[str, pd.DataFrame]], config: Dict[str, Any]) -> None:
-    warmup_map = config.get("warmup_candles", {}) or {}
     if timeframe not in ("1m", "5m"):
         return
     try:
-        if warmup_reached_for(symbol, timeframe, cache, warmup_map):
+        if warmup_reached_for(symbol, timeframe, cache, config):
             logger.info("OHLCV[%s] warmup met for %s \u2192 enqueue for evaluation", timeframe, symbol)
             ctx = {"timeframes": ["1m", "5m"], "symbol": symbol}
             try:
@@ -1360,7 +1335,10 @@ async def _update_ohlcv_cache_inner(
         When provided, fetch data starting from this timestamp in milliseconds.
     """
 
-    from crypto_bot.regime.regime_classifier import clear_regime_cache
+    try:  # pragma: no cover - optional regime dependency
+        from crypto_bot.regime.regime_classifier import clear_regime_cache
+    except Exception:  # pragma: no cover - optional
+        clear_regime_cache = lambda *_a, **_k: None
 
     # Redis warm cache
     redis_conn = _get_redis_conn((config or {}).get("redis_url"))
@@ -1755,7 +1733,10 @@ async def update_multi_tf_ohlcv_cache(
         When provided, fetch historical data starting from this timestamp
         in milliseconds when no cached data is available.
     """
-    from crypto_bot.regime.regime_classifier import clear_regime_cache
+    try:  # pragma: no cover - optional regime dependency
+        from crypto_bot.regime.regime_classifier import clear_regime_cache
+    except Exception:  # pragma: no cover - optional
+        clear_regime_cache = lambda *_a, **_k: None
 
     limit = int(limit)
     # Use the limit provided by the caller
