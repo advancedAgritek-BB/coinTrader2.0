@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 import pandas as pd
 import numpy as np
+from collections import defaultdict
 try:  # pragma: no cover - optional dependency
     import ccxt.pro as ccxt  # type: ignore
 except Exception:  # pragma: no cover - fall back to standard ccxt
@@ -37,6 +38,7 @@ from .token_registry import (
     get_mint_from_gecko,
     fetch_from_helius,
 )
+from crypto_bot.strategy.evaluator import get_stream_evaluator
 
 
 async def get_kraken_listing_date(symbol: str) -> Optional[int]:
@@ -87,6 +89,44 @@ def is_supported_symbol(symbol: str) -> bool:
     """Return ``True`` if *symbol* should be processed for OHLCV."""
 
     return symbol not in UNSUPPORTED_SYMBOLS and not is_synthetic_symbol(symbol)
+
+# Track symbols that have met warmup requirements per timeframe
+_WARMED: Dict[str, set[str]] = defaultdict(set)
+
+
+def warmup_reached_for(symbol: str, timeframe: str, cache: Dict[str, Dict[str, pd.DataFrame]], warmup_map: Dict[str, int]) -> bool:
+    """Return ``True`` when both 1m and 5m warmup candles are available for ``symbol``."""
+
+    need = warmup_map.get(timeframe)
+    if need is None:
+        return False
+    df = cache.get(timeframe, {}).get(symbol)
+    if df is None or len(df) < int(need):
+        return False
+    _WARMED[symbol].add(timeframe)
+    other_tf = "5m" if timeframe == "1m" else "1m"
+    other_need = warmup_map.get(other_tf)
+    if other_need is None:
+        return True
+    other_df = cache.get(other_tf, {}).get(symbol)
+    return bool(other_df is not None and len(other_df) >= int(other_need))
+
+
+async def _maybe_enqueue_eval(symbol: str, timeframe: str, cache: Dict[str, Dict[str, pd.DataFrame]], config: Dict[str, Any]) -> None:
+    warmup_map = config.get("warmup_candles", {}) or {}
+    if timeframe not in ("1m", "5m"):
+        return
+    try:
+        if warmup_reached_for(symbol, timeframe, cache, warmup_map):
+            logger.info("OHLCV[%s] warmup met for %s \u2192 enqueue for evaluation", timeframe, symbol)
+            ctx = {"timeframes": ["1m", "5m"], "symbol": symbol}
+            try:
+                evaluator = get_stream_evaluator()
+            except Exception:
+                return
+            await evaluator.enqueue(symbol, ctx)
+    except Exception:
+        pass
 
 failed_symbols: Dict[str, Dict[str, Any]] = {}
 # Track WebSocket OHLCV failures per symbol
@@ -1976,6 +2016,7 @@ async def update_multi_tf_ohlcv_cache(
                         tf_cache = cache.get(tf, {})
                         tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
                         clear_regime_cache(sym, tf)
+                        await _maybe_enqueue_eval(sym, tf, cache, config)
 
             for sym in dex_symbols:
                 data = None
@@ -2054,7 +2095,8 @@ async def update_multi_tf_ohlcv_cache(
                 if changed:
                     tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
                     clear_regime_cache(sym, tf)
-
+                    cache[tf] = tf_cache
+                    await _maybe_enqueue_eval(sym, tf, cache, config)
             cache[tf] = tf_cache
             logger.info("Finished update for timeframe %s", tf)
 
