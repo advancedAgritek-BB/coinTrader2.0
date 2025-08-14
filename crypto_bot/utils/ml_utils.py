@@ -1,6 +1,6 @@
 """Utility helpers for optional machine learning dependencies."""
-import importlib
 import base64
+import importlib.util
 import json
 import logging
 import os
