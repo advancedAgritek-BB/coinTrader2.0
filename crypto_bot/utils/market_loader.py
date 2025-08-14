@@ -70,6 +70,24 @@ Extend this set to skip additional markets without making network
 requests.
 """
 
+# Base suffixes that indicate a synthetic or index pair when appended to
+# another asset (e.g. ``AIBTC/USD`` represents the AI/BTC index).
+_SYNTH_SUFFIXES = {"BTC", "ETH", "USD", "EUR", "USDT"}
+
+
+def is_synthetic_symbol(symbol: str) -> bool:
+    """Return ``True`` if *symbol* appears to be a synthetic/index pair."""
+
+    base, _, _ = symbol.partition("/")
+    base = base.upper()
+    return any(base.endswith(sfx) and base != sfx for sfx in _SYNTH_SUFFIXES)
+
+
+def is_supported_symbol(symbol: str) -> bool:
+    """Return ``True`` if *symbol* should be processed for OHLCV."""
+
+    return symbol not in UNSUPPORTED_SYMBOLS and not is_synthetic_symbol(symbol)
+
 failed_symbols: Dict[str, Dict[str, Any]] = {}
 # Track WebSocket OHLCV failures per symbol
 WS_FAIL_COUNTS: Dict[str, int] = {}
@@ -562,6 +580,10 @@ async def load_kraken_symbols(
 
     df.loc[df["reason"].isna() & df["symbol"].isin(exclude_set), "reason"] = "excluded"
 
+    mask_synth = df["symbol"].apply(is_synthetic_symbol)
+    df.loc[df["reason"].isna() & mask_synth, "reason"] = "synthetic"
+    synth_count = int((df["reason"] == "synthetic").sum())
+
     symbols: List[str] = []
     for row in df.itertuples():
         if row.reason:
@@ -575,6 +597,8 @@ async def load_kraken_symbols(
         return None
 
     logger.info("%d active Kraken pairs discovered", len(symbols))
+    if synth_count:
+        logger.info("Excluded %d synthetic/index pairs", synth_count)
 
     return symbols
 
@@ -601,7 +625,7 @@ async def _fetch_ohlcv_async_inner(
         logger.warning("Timeframe %s not supported on %s", timeframe, ex_id)
         return []
 
-    if symbol in UNSUPPORTED_SYMBOLS:
+    if not is_supported_symbol(symbol):
         logger.debug("Skipping %s: OHLCV not supported", symbol)
         return []
 
@@ -849,7 +873,7 @@ async def fetch_ohlcv_async(
 ) -> list | Exception:
     """Return OHLCV data for ``symbol`` with simple retries."""
 
-    if symbol in UNSUPPORTED_SYMBOLS:
+    if not is_supported_symbol(symbol):
         logger.info("Skipping unsupported symbol %s", symbol)
         return []
 
@@ -1043,11 +1067,11 @@ async def load_ohlcv_parallel(
 
     data: Dict[str, list] = {}
     symbols = list(symbols)
-    unsupported = [s for s in symbols if s in UNSUPPORTED_SYMBOLS]
+    unsupported = [s for s in symbols if not is_supported_symbol(s)]
     for s in unsupported:
         logger.info("Skipping unsupported symbol %s", s)
         data[s] = []
-    symbols = [s for s in symbols if s not in UNSUPPORTED_SYMBOLS]
+    symbols = [s for s in symbols if is_supported_symbol(s)]
 
     markets = getattr(exchange, "markets", None)
     if markets is not None:

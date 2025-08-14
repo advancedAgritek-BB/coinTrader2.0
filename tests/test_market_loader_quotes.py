@@ -22,6 +22,26 @@ def test_load_kraken_symbols_filters_quotes():
     assert set(symbols) == {"BTC/USD", "BTC/EUR", "BTC/USDT"}
 
 
+class SyntheticExchange:
+    exchange_market_types = {"spot"}
+
+    def load_markets(self):
+        return {
+            "BTC/USD": {"active": True, "type": "spot", "quote": "USD"},
+            "AIBTC/USD": {"active": True, "type": "spot", "quote": "USD"},
+            "ETH/EUR": {"active": True, "type": "spot", "quote": "EUR"},
+        }
+
+
+def test_load_kraken_symbols_excludes_synthetic(caplog):
+    ex = SyntheticExchange()
+    with caplog.at_level(logging.INFO, logger=ml_logger.name):
+        symbols = asyncio.run(load_kraken_symbols(ex))
+    assert set(symbols) == {"BTC/USD", "ETH/EUR"}
+    messages = [r.getMessage() for r in caplog.records if r.name == ml_logger.name]
+    assert any("Excluded 1 synthetic/index pairs" in m for m in messages)
+
+
 class DummyFetchExchange:
     def __init__(self):
         self.markets = {"BTC/USD": {"id": "BTC/USD"}}
