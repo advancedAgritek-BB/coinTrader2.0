@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 import aiohttp
 try:
     import ccxt  # type: ignore
@@ -92,8 +92,6 @@ USER_CONFIG_PATH = CONFIG_DIR / "user_config.yaml"
 
 def _load_env(path: Path = ENV_PATH) -> dict[str, str]:
     """Load environment variables from ``path`` into ``os.environ``."""
-    from dotenv import dotenv_values
-
     env = dotenv_values(path)
     for key, value in env.items():
         if key not in os.environ and value is not None:
