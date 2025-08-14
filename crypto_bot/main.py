@@ -1349,55 +1349,36 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
     )
 
     base_tf = ctx.config.get("timeframe", "1h")
-
-    tasks = {}
     mode = ctx.config.get("mode", "cex")
-    for sym in batch:
-        df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
+
+    async def eval_fn(symbol: str):
+        df_map = {tf: c.get(symbol) for tf, c in ctx.df_cache.items()}
         for tf, cache in ctx.regime_cache.items():
-            df_map[tf] = cache.get(sym)
+            df_map[tf] = cache.get(symbol)
         df = df_map.get(base_tf)
         logger.info(
             "DF len for %s: %d",
-            sym,
+            symbol,
             len(df) if isinstance(df, pd.DataFrame) else 0,
         )
-        task = asyncio.create_task(
-            analyze_symbol(
-                sym,
-                df_map,
-                mode,
-                ctx.config,
-                ctx.notifier,
-                mempool_monitor=ctx.mempool_monitor,
-                mempool_cfg=ctx.mempool_cfg,
-            )
-        )
-        tasks[task] = sym
-
-    results_map: dict[str, Any] = {}
-    total = len(tasks)
-    completed = 0
-    for task in asyncio.as_completed(tasks):
-        sym = tasks[task]
-        try:
-            results_map[sym] = await task
-        except Exception as exc:  # pragma: no cover - log and continue
-            logger.error("Analysis failed for %s: %s", sym, exc)
-            results_map[sym] = exc
-        completed += 1
-        logger.info(
-            "Strategy evaluation progress: %d/%d symbols processed",
-            completed,
-            total,
+        return await analyze_symbol(
+            symbol,
+            df_map,
+            mode,
+            ctx.config,
+            ctx.notifier,
+            mempool_monitor=ctx.mempool_monitor,
+            mempool_cfg=ctx.mempool_cfg,
         )
 
-    ctx.analysis_results = []
-    for sym in batch:
-        res = results_map.get(sym)
-        if isinstance(res, Exception):
-            continue
-        ctx.analysis_results.append(res)
+    ctx.eval_fn = eval_fn
+    from crypto_bot.evaluator import evaluate_batch
+
+    results_map = await evaluate_batch(batch, ctx)
+
+    ctx.analysis_results = [
+        res for sym in batch if (res := results_map.get(sym)) is not None
+    ]
 
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     for res in ctx.analysis_results:
