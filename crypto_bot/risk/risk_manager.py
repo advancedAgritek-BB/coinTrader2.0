@@ -33,7 +33,7 @@ class RiskConfig:
     symbol: str = ""
     trade_size_pct: float = 0.1
     risk_pct: float = 0.01
-    slippage_factor: float = 0.001
+    slippage_factor: float = 0.0
     min_volume: float = 0.0
     volume_threshold_ratio: float = 0.05
     strategy_allocation: dict | None = None

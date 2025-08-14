@@ -11,6 +11,7 @@ import sys
 import time
 from collections import Counter, OrderedDict, deque
 from dataclasses import dataclass, field
+import dataclasses
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ import numpy as np
 import yaml
 from pydantic import ValidationError
 from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
+from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 
 # Internal project modules are imported lazily inside `main()` after env setup
 from crypto_bot.ml.selfcheck import log_ml_status_once
@@ -50,8 +52,8 @@ get_solana_new_tokens = None  # type: ignore
 get_filtered_symbols = None  # type: ignore
 async def fetch_from_helius(*_a, **_k):
     return {}
-fix_symbol = None  # type: ignore
-symbol_utils = None  # type: ignore
+from crypto_bot.utils import symbol_utils
+fix_symbol = symbol_utils.fix_symbol
 calc_atr = None  # type: ignore
 
 def timeframe_seconds(*_a, **_k) -> int:
@@ -71,18 +73,39 @@ sniper_run = None  # type: ignore
 load_or_create = None  # type: ignore
 send_test_message = None  # type: ignore
 log_balance = None  # type: ignore
-RiskConfig = None  # type: ignore
 get_exchange = None  # type: ignore
 load_kraken_symbols = None  # type: ignore
-RiskManager = None  # type: ignore
-cooldown_configure = None  # type: ignore
+def cooldown_configure(*_a, **_k) -> None:  # pragma: no cover - placeholder
+    pass
+
 update_ohlcv_cache = None  # type: ignore
 update_multi_tf_ohlcv_cache = None  # type: ignore
 update_regime_tf_cache = None  # type: ignore
-market_loader_configure = None  # type: ignore
+
+def market_loader_configure(*_a, **_k) -> None:  # pragma: no cover - placeholder
+    pass
+
 fetch_order_book_async = None  # type: ignore
 WS_OHLCV_TIMEOUT = None  # type: ignore
+ScannerConfig = None  # type: ignore
+SolanaScannerConfig = None  # type: ignore
+PythConfig = None  # type: ignore
 stream_evaluator: StreamEvaluator | None = None
+
+
+class BotContext:
+    def __init__(self, _a=None, _b=None, _c=None, config=None):
+        self.config = config or {}
+
+
+class OpenPositionGuard:
+    def __init__(self, max_open_trades: int):
+        self.max_open_trades = max_open_trades
+
+
+PhaseRunner = None  # type: ignore
+calculate_trailing_stop = None  # type: ignore
+should_exit = None  # type: ignore
 
 
 @contextlib.asynccontextmanager
@@ -537,11 +560,6 @@ def _load_config_file() -> dict:
     data.setdefault("execution_mode", trading_mode)
 
     risk_cfg = data.get("risk", {}) or {}
-    risk_cfg.setdefault("vol_horizon_secs", 0)
-    risk_cfg.setdefault("target_sigma_notional_usd", 0)
-    risk_cfg.setdefault("daily_loss_limit_pct", 0)
-    risk_cfg.setdefault("max_consecutive_losses", 0)
-    risk_cfg.setdefault("symbol_cooldown_min", 0)
     data["risk"] = risk_cfg
 
     fees_cfg = data.get("fees", {}) or {}
@@ -590,32 +608,35 @@ def _load_config_file() -> dict:
     if onchain_syms is not None:
         data["onchain_symbols"] = [fix_symbol(s) for s in onchain_syms or []]
     try:
-        if hasattr(ScannerConfig, "model_validate"):
-            ScannerConfig.model_validate(data)
-        else:  # pragma: no cover - for Pydantic < 2
-            ScannerConfig.parse_obj(data)
+        if ScannerConfig is not None:
+            if hasattr(ScannerConfig, "model_validate"):
+                ScannerConfig.model_validate(data)
+            else:  # pragma: no cover - for Pydantic < 2
+                ScannerConfig.parse_obj(data)
     except ValidationError as exc:
         print("Invalid configuration:\n", exc)
         raise SystemExit(1)
 
     try:
         raw_scanner = data.get("solana_scanner", {}) or {}
-        if hasattr(SolanaScannerConfig, "model_validate"):
-            scanner = SolanaScannerConfig.model_validate(raw_scanner)
-        else:  # pragma: no cover - for Pydantic < 2
-            scanner = SolanaScannerConfig.parse_obj(raw_scanner)
-        data["solana_scanner"] = scanner.dict()
+        if SolanaScannerConfig is not None:
+            if hasattr(SolanaScannerConfig, "model_validate"):
+                scanner = SolanaScannerConfig.model_validate(raw_scanner)
+            else:  # pragma: no cover - for Pydantic < 2
+                scanner = SolanaScannerConfig.parse_obj(raw_scanner)
+            data["solana_scanner"] = scanner.dict()
     except ValidationError as exc:
         print("Invalid configuration (solana_scanner):\n", exc)
         raise SystemExit(1)
 
     try:
         raw_pyth = data.get("pyth", {}) or {}
-        if hasattr(PythConfig, "model_validate"):
-            pyth_cfg = PythConfig.model_validate(raw_pyth)
-        else:  # pragma: no cover - for Pydantic < 2
-            pyth_cfg = PythConfig.parse_obj(raw_pyth)
-        data["pyth"] = pyth_cfg.dict()
+        if PythConfig is not None:
+            if hasattr(PythConfig, "model_validate"):
+                pyth_cfg = PythConfig.model_validate(raw_pyth)
+            else:  # pragma: no cover - for Pydantic < 2
+                pyth_cfg = PythConfig.parse_obj(raw_pyth)
+            data["pyth"] = pyth_cfg.dict()
     except ValidationError as exc:
         print("Invalid configuration (pyth):\n", exc)
         raise SystemExit(1)
@@ -772,6 +793,8 @@ async def reload_config(
         "take_profit_atr_mult", 4.0
     )
     risk_params["volume_ratio"] = volume_ratio
+    fields = {f.name for f in dataclasses.fields(RiskConfig)}
+    risk_params = {k: v for k, v in risk_params.items() if k in fields}
     risk_manager.config = RiskConfig(**risk_params)
 
 
@@ -2601,6 +2624,8 @@ async def _main_impl() -> TelegramNotifier:
         "take_profit_atr_mult", 4.0
     )
     risk_params["volume_ratio"] = volume_ratio
+    fields = {f.name for f in dataclasses.fields(RiskConfig)}
+    risk_params = {k: v for k, v in risk_params.items() if k in fields}
     risk_config = RiskConfig(**risk_params)
     risk_manager = RiskManager(risk_config)
 
