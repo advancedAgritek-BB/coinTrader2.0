@@ -25,6 +25,9 @@ class BotContext:
     balance: float = 0.0
     current_batch: list[str] = field(default_factory=list)
     analysis_results: list | None = field(default_factory=list)
+    analysis_errors: int = 0
+    analysis_timeouts: int = 0
+    reject_reasons: dict | None = field(default_factory=dict)
     timing: dict | None = field(default_factory=dict)
     volatility_factor: float = 1.0
     mempool_monitor: object | None = None

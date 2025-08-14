@@ -73,3 +73,17 @@ __all__ = [
     if globals().get(name) is not None
 ]
 
+
+def _default_required_lookback() -> dict[str, int]:
+    """Fallback lookback requirement for strategies lacking one."""
+    return {"1m": 250}
+
+
+# Ensure all strategies expose a ``required_lookback`` function so the
+# warmup guard can introspect their needs even when individual strategy
+# modules haven't implemented it explicitly.
+for _name in list(__all__):
+    _mod = globals().get(_name)
+    if _mod is not None and not hasattr(_mod, "required_lookback"):
+        setattr(_mod, "required_lookback", _default_required_lookback)
+
