@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 import inspect
 import re
 import logging
+from typing import Any
 
 import aiohttp
 
@@ -1487,7 +1488,7 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
 
     base_tf = ctx.config.get("timeframe", "1h")
 
-    tasks = []
+    tasks = {}
     mode = ctx.config.get("mode", "cex")
     for sym in batch:
         df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
@@ -1499,7 +1500,7 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
             sym,
             len(df) if isinstance(df, pd.DataFrame) else 0,
         )
-        tasks.append(
+        task = asyncio.create_task(
             analyze_symbol(
                 sym,
                 df_map,
@@ -1510,15 +1511,31 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
                 mempool_cfg=ctx.mempool_cfg,
             )
         )
+        tasks[task] = sym
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    results_map: dict[str, Any] = {}
+    total = len(tasks)
+    completed = 0
+    for task in asyncio.as_completed(tasks):
+        sym = tasks[task]
+        try:
+            results_map[sym] = await task
+        except Exception as exc:  # pragma: no cover - log and continue
+            logger.error("Analysis failed for %s: %s", sym, exc)
+            results_map[sym] = exc
+        completed += 1
+        logger.info(
+            "Strategy evaluation progress: %d/%d symbols processed",
+            completed,
+            total,
+        )
 
     ctx.analysis_results = []
-    for sym, res in zip(batch, results):
+    for sym in batch:
+        res = results_map.get(sym)
         if isinstance(res, Exception):
-            logger.error("Analysis failed for %s: %s", sym, res)
-        else:
-            ctx.analysis_results.append(res)
+            continue
+        ctx.analysis_results.append(res)
 
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     for res in ctx.analysis_results:
