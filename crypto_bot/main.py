@@ -34,6 +34,15 @@ from pydantic import ValidationError
 
 logger = logging.getLogger("bot")
 
+# Provide module-level placeholders for lazy-imported functions to ease testing
+build_priority_queue = None  # type: ignore
+get_solana_new_tokens = None  # type: ignore
+get_filtered_symbols = None  # type: ignore
+fix_symbol = None  # type: ignore
+symbol_utils = None  # type: ignore
+calc_atr = None  # type: ignore
+is_market_pumping = None  # type: ignore
+
 
 def _import_internal_modules() -> None:
     """Import project modules after environment setup."""
@@ -979,12 +988,33 @@ async def fetch_candidates(ctx: BotContext) -> None:
         if pump:
             sf["min_volume_usd"] = orig_min_volume
             sf["volume_percentile"] = orig_volume_pct
+    cex_candidates = list(symbols)
+    onchain_candidates = [(s, 0.0) for s in onchain_syms]
+
+    mode = ctx.config.get("mode", "auto")
+    resolved_mode = mode
+    if mode == "cex":
+        active_candidates = cex_candidates
+    elif mode == "onchain":
+        active_candidates = onchain_candidates
+    else:
+        if not onchain_candidates:
+            active_candidates = cex_candidates
+            resolved_mode = "cex"
+            if not getattr(fetch_candidates, "_onchain_fallback_logged", False):
+                logger.info(
+                    "Auto mode: falling back to CEX because 0 onchain candidates after metadata checks."
+                )
+                fetch_candidates._onchain_fallback_logged = True
+        else:
+            active_candidates = cex_candidates + onchain_candidates
 
     # Always include major benchmark pairs
-    symbols.extend([("BTC/USDT", 10.0), ("SOL/USDC", 10.0)])
+    active_candidates.extend([("BTC/USDT", 10.0), ("SOL/USDC", 10.0)])
 
     ctx.timing["symbol_time"] = time.perf_counter() - t0
 
+    symbols = active_candidates
     solana_tokens: list[str] = list(onchain_syms)
     sol_cfg = ctx.config.get("solana_scanner", {})
 
@@ -1017,6 +1047,9 @@ async def fetch_candidates(ctx: BotContext) -> None:
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("Solana scanner failed: %s", exc)
 
+    ctx.active_universe = [s for s, _ in symbols]
+    ctx.resolved_mode = resolved_mode
+
     symbol_names = [s for s, _ in symbols]
     avg_atr = compute_average_atr(
         symbol_names, ctx.df_cache, ctx.config.get("timeframe", "1h")
@@ -1042,17 +1075,15 @@ async def fetch_candidates(ctx: BotContext) -> None:
     batch_size = int(base_size * volatility_factor)
     async with QUEUE_LOCK:
         if not symbol_priority_queue:
-            all_scores = symbols + [(s, 0.0) for s in onchain_syms]
-            symbol_priority_queue = build_priority_queue(all_scores)
+            symbol_priority_queue = build_priority_queue(symbols)
         if onchain_syms:
             for sym in reversed(onchain_syms):
-                symbol_priority_queue.appendleft(sym)
+                if sym not in symbol_priority_queue:
+                    symbol_priority_queue.appendleft(sym)
         if solana_tokens:
             enqueue_solana_tokens(solana_tokens)
         if len(symbol_priority_queue) < batch_size:
-            symbol_priority_queue.extend(
-                build_priority_queue(symbols + [(s, 0.0) for s in onchain_syms])
-            )
+            symbol_priority_queue.extend(build_priority_queue(symbols))
         ctx.current_batch = [
             symbol_priority_queue.popleft()
             for _ in range(min(batch_size, len(symbol_priority_queue)))
@@ -1368,6 +1399,11 @@ async def enrich_with_pyth(ctx: BotContext) -> None:
 async def analyse_batch(ctx: BotContext) -> None:
     """Run signal analysis on the current batch."""
     batch = ctx.current_batch
+    logger.info(
+        "Strategy evaluation starting with %d symbols (mode=%s)",
+        len(getattr(ctx, "active_universe", [])),
+        getattr(ctx, "resolved_mode", ctx.config.get("mode", "auto")),
+    )
     if not batch:
         logger.info("analyse_batch called with empty batch")
         ctx.analysis_results = []

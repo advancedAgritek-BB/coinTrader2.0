@@ -113,9 +113,37 @@ def test_fetch_candidates_adds_onchain(monkeypatch):
 
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
+    monkeypatch.setattr(main, "build_priority_queue", lambda pairs: deque([s for s, _ in pairs]))
     monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.01)
     monkeypatch.setattr(main, "is_market_pumping", lambda *a, **k: False)
 
     asyncio.run(main.fetch_candidates(ctx))
 
     assert set(ctx.current_batch) == {"BTC/USD", "BONK/USDC"}
+
+
+def test_auto_mode_falls_back_to_cex(monkeypatch, caplog):
+    caplog.set_level("INFO")
+    df = pd.DataFrame({"high": [1, 2], "low": [0, 1], "close": [1, 2]})
+    ctx = BotContext(
+        positions={},
+        df_cache={"1h": {"BTC/USD": df}},
+        regime_cache={},
+        config={"timeframe": "1h", "symbol_batch_size": 2, "mode": "auto"},
+    )
+    ctx.exchange = object()
+
+    async def fake_get_filtered_symbols(ex, cfg):
+        return [("BTC/USD", 1.0)], []
+
+    monkeypatch.setattr(main, "symbol_priority_queue", deque())
+    monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
+    monkeypatch.setattr(main, "build_priority_queue", lambda pairs: deque([s for s, _ in pairs]))
+    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.01)
+    monkeypatch.setattr(main, "is_market_pumping", lambda *a, **k: False)
+
+    asyncio.run(main.fetch_candidates(ctx))
+
+    assert ctx.resolved_mode == "cex"
+    assert "falling back to CEX" in caplog.text
+    assert "BTC/USD" in ctx.active_universe
