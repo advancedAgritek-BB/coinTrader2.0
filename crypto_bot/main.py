@@ -65,6 +65,7 @@ fix_symbol = None  # type: ignore
 symbol_utils = None  # type: ignore
 calc_atr = None  # type: ignore
 is_market_pumping = None  # type: ignore
+maybe_refresh_model = None  # type: ignore
 
 
 @contextlib.asynccontextmanager
@@ -90,7 +91,7 @@ def _import_internal_modules() -> None:
     global write_cycle_metrics, TOKEN_MINTS, monitor_pump_raydium, refresh_mints, periodic_mint_sanity_check
     global pnl_logger, regime_pnl_tracker, ML_AVAILABLE, record_sol_scanner_metrics
     global auto_convert_funds, check_wallet_balances, detect_non_trade_tokens
-    global classify_regime_async, classify_regime_cached, calc_atr, monitor_price, SolanaMempoolMonitor
+    global classify_regime_async, classify_regime_cached, calc_atr, monitor_price, SolanaMempoolMonitor, maybe_refresh_model
     global logger, pipeline_logger, _TRAINER_AVAILABLE, trainer_version, MIN_CT2_INTEGRATION
 
     from schema.scanner import (
@@ -166,6 +167,7 @@ def _import_internal_modules() -> None:
         classify_regime_async,
         classify_regime_cached,
     )
+    from crypto_bot.regime.reloader import maybe_refresh_model
     from crypto_bot.volatility_filter import calc_atr
     from crypto_bot.solana.exit import monitor_price
     from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
@@ -2764,6 +2766,7 @@ async def _main_impl() -> TelegramNotifier:
 
     loop_count = 0
     last_weight_update = last_optimize = 0.0
+    last_model_refresh = 0.0
 
     try:
         while True:
@@ -2777,6 +2780,13 @@ async def _main_impl() -> TelegramNotifier:
                 force=state.get("reload", False),
             )
             state["reload"] = False
+
+            if time.time() - last_model_refresh >= config.get("model_refresh_minutes", 5) * 60:
+                try:
+                    maybe_refresh_model(config.get("symbol", ""))
+                except Exception:
+                    logger.exception("Model refresh failed")
+                last_model_refresh = time.time()
 
             if state.get("liquidate_all"):
                 await force_exit_all(ctx)
