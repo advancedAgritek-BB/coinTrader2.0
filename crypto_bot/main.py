@@ -28,6 +28,7 @@ import pandas as pd
 import numpy as np
 import yaml
 from pydantic import ValidationError
+from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 
 # Internal project modules are imported lazily inside `main()` after env setup
 from crypto_bot.ml.selfcheck import log_ml_status_once
@@ -72,6 +73,7 @@ update_regime_tf_cache = None  # type: ignore
 market_loader_configure = None  # type: ignore
 fetch_order_book_async = None  # type: ignore
 WS_OHLCV_TIMEOUT = None  # type: ignore
+stream_evaluator: StreamEvaluator | None = None
 
 
 @contextlib.asynccontextmanager
@@ -1359,55 +1361,36 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
     )
 
     base_tf = ctx.config.get("timeframe", "1h")
-
-    tasks = {}
     mode = ctx.config.get("mode", "cex")
-    for sym in batch:
-        df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
+
+    async def eval_fn(symbol: str):
+        df_map = {tf: c.get(symbol) for tf, c in ctx.df_cache.items()}
         for tf, cache in ctx.regime_cache.items():
-            df_map[tf] = cache.get(sym)
+            df_map[tf] = cache.get(symbol)
         df = df_map.get(base_tf)
         logger.info(
             "DF len for %s: %d",
-            sym,
+            symbol,
             len(df) if isinstance(df, pd.DataFrame) else 0,
         )
-        task = asyncio.create_task(
-            analyze_symbol(
-                sym,
-                df_map,
-                mode,
-                ctx.config,
-                ctx.notifier,
-                mempool_monitor=ctx.mempool_monitor,
-                mempool_cfg=ctx.mempool_cfg,
-            )
-        )
-        tasks[task] = sym
-
-    results_map: dict[str, Any] = {}
-    total = len(tasks)
-    completed = 0
-    for task in asyncio.as_completed(tasks):
-        sym = tasks[task]
-        try:
-            results_map[sym] = await task
-        except Exception as exc:  # pragma: no cover - log and continue
-            logger.error("Analysis failed for %s: %s", sym, exc)
-            results_map[sym] = exc
-        completed += 1
-        logger.info(
-            "Strategy evaluation progress: %d/%d symbols processed",
-            completed,
-            total,
+        return await analyze_symbol(
+            symbol,
+            df_map,
+            mode,
+            ctx.config,
+            ctx.notifier,
+            mempool_monitor=ctx.mempool_monitor,
+            mempool_cfg=ctx.mempool_cfg,
         )
 
-    ctx.analysis_results = []
-    for sym in batch:
-        res = results_map.get(sym)
-        if isinstance(res, Exception):
-            continue
-        ctx.analysis_results.append(res)
+    ctx.eval_fn = eval_fn
+    from crypto_bot.evaluator import evaluate_batch
+
+    results_map = await evaluate_batch(batch, ctx)
+
+    ctx.analysis_results = [
+        res for sym in batch if (res := results_map.get(sym)) is not None
+    ]
 
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     for res in ctx.analysis_results:
@@ -2593,6 +2576,30 @@ async def _main_impl() -> TelegramNotifier:
     stream_evaluator = StreamEvaluator(eval_fn)
     set_stream_evaluator(stream_evaluator)
     await stream_evaluator.start()
+    async def _eval_symbol(symbol: str, data: dict) -> None:
+        df_map = {tf: ctx.df_cache.get(tf, {}).get(symbol) for tf in data.get("timeframes", [])}
+        res = await analyze_symbol(
+            symbol,
+            df_map,
+            ctx.config.get("mode", "cex"),
+            ctx.config,
+            ctx.notifier,
+            mempool_monitor=ctx.mempool_monitor,
+            mempool_cfg=ctx.mempool_cfg,
+        )
+        if not res.get("skip"):
+            ctx.analysis_results = [res]
+            ctx.current_batch = [symbol]
+            await _execute_signals_impl(ctx)
+
+    async def _eval_wrapper(symbol: str, data: dict) -> None:
+        await asyncio.wait_for(_eval_symbol(symbol, data), timeout=8)
+
+    stream_eval = StreamEvaluator(_eval_wrapper)
+    await stream_eval.start()
+    set_stream_evaluator(stream_eval)
+    global stream_evaluator
+    stream_evaluator = stream_eval
 
     runner = PhaseRunner(
         [
@@ -2827,6 +2834,9 @@ async def _main_impl() -> TelegramNotifier:
     finally:
         await stream_evaluator.drain()
         await stream_evaluator.stop()
+        if 'stream_eval' in locals() and stream_eval:
+            await stream_eval.drain()
+            await stream_eval.stop()
         for task in listener_tasks:
             task.cancel()
             with contextlib.suppress(Exception):

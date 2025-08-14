@@ -29,6 +29,7 @@ class StreamEvaluator:
                 return
             try:
                 await asyncio.wait_for(self.eval_fn(symbol, ctx), timeout=8)
+                await self.eval_fn(symbol, ctx)
                 logger.debug(f"[EVAL OK] {symbol}")
             except asyncio.TimeoutError:
                 logger.warning(f"[EVAL TIMEOUT] {symbol}")
@@ -48,3 +49,14 @@ class StreamEvaluator:
         for w in self._workers:
             w.cancel()
         await asyncio.gather(*self._workers, return_exceptions=True)
+
+STREAM_EVALUATOR: StreamEvaluator | None = None
+
+def set_stream_evaluator(evaluator: StreamEvaluator) -> None:
+    global STREAM_EVALUATOR
+    STREAM_EVALUATOR = evaluator
+
+def get_stream_evaluator() -> StreamEvaluator:
+    if STREAM_EVALUATOR is None:
+        raise RuntimeError("StreamEvaluator not initialized")
+    return STREAM_EVALUATOR
