@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import time
 from pathlib import Path
+from datetime import datetime, timezone
 import yaml
 import pandas as pd
 import numpy as np
@@ -20,7 +21,6 @@ try:  # optional redis for caching
     import redis  # type: ignore
 except Exception:  # pragma: no cover - redis optional
     redis = None
-import datetime
 import base58
 from .gecko import gecko_request
 import contextlib
@@ -32,6 +32,16 @@ from tenacity import (
     before_log,
     before_sleep_log,
 )
+
+
+def utc_now_ms() -> int:
+    """Return current UTC time in milliseconds."""
+    return int(time.time() * 1000)
+
+
+def iso_utc(ms: int) -> str:
+    """Return an ISO 8601 UTC timestamp for ``ms`` milliseconds."""
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat()
 
 from .token_registry import (
     TOKEN_MINTS,
@@ -806,7 +816,7 @@ async def _fetch_ohlcv_async_inner(
             if since is not None:
                 try:
                     tf_sec = timeframe_seconds(exchange, timeframe)
-                    now_ms = int(time.time() * 1000)
+                    now_ms = utc_now_ms()
                     expected = min(limit, int((now_ms - since) // (tf_sec * 1000)) + 1)
                 except Exception:
                     pass
@@ -871,7 +881,7 @@ async def _fetch_ohlcv_async_inner(
         if since is not None:
             try:
                 tf_sec = timeframe_seconds(exchange, timeframe)
-                now_ms = int(time.time() * 1000)
+                now_ms = utc_now_ms()
                 expected = min(limit, int((now_ms - since) // (tf_sec * 1000)) + 1)
             except Exception:
                 pass
@@ -1387,7 +1397,7 @@ async def _update_ohlcv_cache_inner(
     since_map: Dict[str, int | None] = {}
     if start_since is not None:
         tf_sec = timeframe_seconds(exchange, timeframe)
-        needed = int((time.time() * 1000 - start_since) // (tf_sec * 1000)) + 1
+        needed = int((utc_now_ms() - start_since) // (tf_sec * 1000)) + 1
         limit = max(limit, needed)
         since_map = {sym: start_since for sym in symbols}
         snapshot_due = False
@@ -1642,7 +1652,7 @@ async def update_ohlcv_cache(
     config = config or {}
     backfill_map = config.get("timeframe_backfill_days", {}) or {}
     warmup_map = config.get("warmup_candles", {}) or {}
-    now_ms = int(time.time() * 1000)
+    now_ms = utc_now_ms()
     if start_since is not None:
         bf_days = backfill_map.get(timeframe)
         if bf_days is not None:
@@ -1652,7 +1662,7 @@ async def update_ohlcv_cache(
                     "Clamping backfill for %s to %d days (%s)",
                     timeframe,
                     bf_days,
-                    datetime.datetime.utcfromtimestamp(cutoff / 1000).isoformat(),
+                    iso_utc(cutoff),
                 )
                 start_since = cutoff
     warmup = warmup_map.get(timeframe)
@@ -1808,7 +1818,7 @@ async def update_multi_tf_ohlcv_cache(
             logger.info("Starting update for timeframe %s", tf)
             tf_cache = cache.get(tf, {})
 
-            now_ms = int(time.time() * 1000)
+            now_ms = utc_now_ms()
             tf_sec = timeframe_seconds(exchange, tf)
             dynamic_limits: dict[str, int] = {}
             snapshot_cap = int(config.get("ohlcv_snapshot_limit", limit))
@@ -1825,7 +1835,7 @@ async def update_multi_tf_ohlcv_cache(
                         "Clamping backfill for %s to %d days (%s)",
                         tf,
                         bf_days,
-                        datetime.datetime.utcfromtimestamp(cutoff / 1000).isoformat(),
+                        iso_utc(cutoff),
                     )
                     tf_start = cutoff
             tf_limit = int(limit)
