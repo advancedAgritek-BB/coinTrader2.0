@@ -4,7 +4,11 @@ from supabase import create_client
 
 def _client():
     url = os.environ["SUPABASE_URL"]
-    key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ["SUPABASE_KEY"]
+    key = (
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        or os.environ.get("SUPABASE_SERVICE_KEY")
+        or os.environ["SUPABASE_KEY"]
+    )
     return create_client(url, key)
 
 

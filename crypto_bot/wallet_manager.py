@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import yaml
+from dotenv import set_key
 
 from crypto_bot.utils.env import env_or_prompt
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
@@ -18,6 +19,7 @@ except Exception:
 logger = setup_logger(__name__, LOG_DIR / "wallet.log")
 
 CONFIG_FILE = Path(__file__).resolve().parent / 'user_config.yaml'
+ENV_FILE = Path(__file__).resolve().parent / '.env'
 
 FERNET_KEY = os.getenv("FERNET_KEY")
 _fernet = Fernet(FERNET_KEY) if FERNET_KEY and Fernet else None
@@ -49,6 +51,27 @@ def _sanitize_secret(secret: str) -> str:
     except Exception:
         logger.warning("API secret does not look base64 encoded")
     return secret
+
+
+def _persist_supabase_env(url: str, key: str) -> None:
+    """Store Supabase credentials in ``.env`` and log without leaking secrets."""
+    if not url and not key:
+        return
+    try:
+        if url:
+            set_key(str(ENV_FILE), "SUPABASE_URL", url)
+        if key:
+            set_key(str(ENV_FILE), "SUPABASE_SERVICE_ROLE_KEY", key)
+            set_key(str(ENV_FILE), "SUPABASE_API_KEY", key)
+            set_key(str(ENV_FILE), "SUPABASE_KEY", key)
+        logger.info(
+            "Wrote Supabase creds to %s (url=%s, key_len=%d)",
+            ENV_FILE,
+            bool(url),
+            len(key),
+        )
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.error("Failed to write Supabase creds to %s: %s", ENV_FILE, exc)
 
 
 def load_external_secrets(provider: str, path: str) -> Dict[str, str]:
@@ -126,9 +149,21 @@ def prompt_user() -> dict:
     data["supabase_url"] = env_or_prompt(
         "SUPABASE_URL", "Enter Supabase URL: "
     )
-    data["supabase_key"] = env_or_prompt(
-        "SUPABASE_KEY", "Enter Supabase API key: "
+    existing_key = (
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        or os.getenv("SUPABASE_API_KEY")
+        or os.getenv("SUPABASE_KEY")
     )
+    if existing_key:
+        os.environ["SUPABASE_SERVICE_ROLE_KEY"] = existing_key
+    data["supabase_key"] = env_or_prompt(
+        "SUPABASE_SERVICE_ROLE_KEY", "Enter Supabase API key: "
+    )
+    key = data["supabase_key"]
+    os.environ["SUPABASE_SERVICE_ROLE_KEY"] = key
+    os.environ["SUPABASE_API_KEY"] = key
+    os.environ["SUPABASE_KEY"] = key
+    _persist_supabase_env(data["supabase_url"], key)
     data["lunarcrush_api_key"] = env_or_prompt(
         "LUNARCRUSH_API_KEY", "Enter LunarCrush API key: "
     )
@@ -198,6 +233,11 @@ def load_or_create(interactive: bool = False) -> dict:
         "kraken_api_key": ["API_KEY"],
         "kraken_api_secret": ["API_SECRET"],
         "helius_api_key": ["HELIUS_API_KEY", "HELIUS_KEY"],
+        "supabase_key": [
+            "SUPABASE_SERVICE_ROLE_KEY",
+            "SUPABASE_API_KEY",
+            "SUPABASE_KEY",
+        ],
     }
 
     for key, env_keys in aliases.items():
@@ -229,6 +269,7 @@ def load_or_create(interactive: bool = False) -> dict:
     os.environ["SUPABASE_URL"] = creds.get("supabase_url", "")
     supabase_key = creds.get("supabase_key", "")
     os.environ["SUPABASE_KEY"] = supabase_key
+    os.environ["SUPABASE_API_KEY"] = supabase_key
     os.environ["SUPABASE_SERVICE_ROLE_KEY"] = supabase_key
     try:  # refresh ML availability after setting credentials
         from crypto_bot.utils.ml_utils import init_ml_components
