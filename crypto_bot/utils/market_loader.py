@@ -6,9 +6,11 @@ import asyncio
 import inspect
 import time
 from pathlib import Path
+from datetime import datetime, timezone
 import yaml
 import pandas as pd
 import numpy as np
+from collections import defaultdict
 try:  # pragma: no cover - optional dependency
     import ccxt.pro as ccxt  # type: ignore
 except Exception:  # pragma: no cover - fall back to standard ccxt
@@ -19,7 +21,6 @@ try:  # optional redis for caching
     import redis  # type: ignore
 except Exception:  # pragma: no cover - redis optional
     redis = None
-import datetime
 import base58
 from .gecko import gecko_request
 import contextlib
@@ -32,11 +33,24 @@ from tenacity import (
     before_sleep_log,
 )
 
+
+def utc_now_ms() -> int:
+    """Return current UTC time in milliseconds."""
+    return int(time.time() * 1000)
+
+
+def iso_utc(ms: int) -> str:
+    """Return an ISO 8601 UTC timestamp for ``ms`` milliseconds."""
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat()
+
 from .token_registry import (
     TOKEN_MINTS,
     get_mint_from_gecko,
     fetch_from_helius,
 )
+from crypto_bot.strategy.evaluator import get_stream_evaluator
+
+from crypto_bot.strategy.registry import load_enabled
 
 
 async def get_kraken_listing_date(symbol: str) -> Optional[int]:
@@ -49,6 +63,7 @@ async def get_kraken_listing_date(symbol: str) -> Optional[int]:
 
 from .logger import LOG_DIR, setup_logger
 from .constants import NON_SOLANA_BASES
+from crypto_bot.strategy.evaluator import StreamEvaluator
 
 try:  # optional dependency
     from .telegram import TelegramNotifier
@@ -70,6 +85,16 @@ Extend this set to skip additional markets without making network
 requests.
 """
 
+_UNSUPPORTED_LOGGED: set[str] = set()
+
+
+def _log_unsupported(symbol: str) -> None:
+    if symbol not in _UNSUPPORTED_LOGGED:
+        logger.info(
+            "Unsupported symbol (kraken doesn't list it): %s", symbol
+        )
+        _UNSUPPORTED_LOGGED.add(symbol)
+
 # Base suffixes that indicate a synthetic or index pair when appended to
 # another asset (e.g. ``AIBTC/USD`` represents the AI/BTC index).
 _SYNTH_SUFFIXES = {"BTC", "ETH", "USD", "EUR", "USDT"}
@@ -87,6 +112,44 @@ def is_supported_symbol(symbol: str) -> bool:
     """Return ``True`` if *symbol* should be processed for OHLCV."""
 
     return symbol not in UNSUPPORTED_SYMBOLS and not is_synthetic_symbol(symbol)
+
+# Track symbols that have met warmup requirements per timeframe
+_WARMED: Dict[str, set[str]] = defaultdict(set)
+
+
+def warmup_reached_for(symbol: str, timeframe: str, cache: Dict[str, Dict[str, pd.DataFrame]], warmup_map: Dict[str, int]) -> bool:
+    """Return ``True`` when both 1m and 5m warmup candles are available for ``symbol``."""
+
+    need = warmup_map.get(timeframe)
+    if need is None:
+        return False
+    df = cache.get(timeframe, {}).get(symbol)
+    if df is None or len(df) < int(need):
+        return False
+    _WARMED[symbol].add(timeframe)
+    other_tf = "5m" if timeframe == "1m" else "1m"
+    other_need = warmup_map.get(other_tf)
+    if other_need is None:
+        return True
+    other_df = cache.get(other_tf, {}).get(symbol)
+    return bool(other_df is not None and len(other_df) >= int(other_need))
+
+
+async def _maybe_enqueue_eval(symbol: str, timeframe: str, cache: Dict[str, Dict[str, pd.DataFrame]], config: Dict[str, Any]) -> None:
+    warmup_map = config.get("warmup_candles", {}) or {}
+    if timeframe not in ("1m", "5m"):
+        return
+    try:
+        if warmup_reached_for(symbol, timeframe, cache, warmup_map):
+            logger.info("OHLCV[%s] warmup met for %s \u2192 enqueue for evaluation", timeframe, symbol)
+            ctx = {"timeframes": ["1m", "5m"], "symbol": symbol}
+            try:
+                evaluator = get_stream_evaluator()
+            except Exception:
+                return
+            await evaluator.enqueue(symbol, ctx)
+    except Exception:
+        pass
 
 failed_symbols: Dict[str, Dict[str, Any]] = {}
 # Track WebSocket OHLCV failures per symbol
@@ -108,6 +171,10 @@ SEMA: asyncio.Semaphore | None = None
 # Per-timeframe locks to prevent concurrent updates of the same timeframe
 _TF_LOCKS: Dict[str, asyncio.Lock] = {}
 
+# Shared StreamEvaluator instance set by main
+STREAM_EVALUATOR: StreamEvaluator | None = None
+_WARMED_UP: set[str] = set()
+
 # Redis settings
 REDIS_TTL = 3600  # cache expiry in seconds
 _REDIS_URL: str | None = None
@@ -128,6 +195,28 @@ def _get_redis_conn(url: str | None):
         except Exception:
             _REDIS_CONN = None
     return _REDIS_CONN
+
+
+def set_stream_evaluator(ev: StreamEvaluator | None) -> None:
+    """Assign global StreamEvaluator used for streaming symbol evaluation."""
+    global STREAM_EVALUATOR
+    STREAM_EVALUATOR = ev
+
+
+def warmup_reached_for(
+    symbol: str,
+    timeframe: str,
+    cache: Dict[str, Dict[str, pd.DataFrame]],
+    config: Dict,
+) -> bool:
+    """Return ``True`` if 1m and 5m warmup requirements are met for ``symbol``."""
+    warmup_map = config.get("warmup_candles", {}) or {}
+    for tf in ("1m", "5m"):
+        required = int(warmup_map.get(tf, 1))
+        df = cache.get(tf, {}).get(symbol)
+        if df is None or len(df) < required:
+            return False
+    return True
 
 # Mapping of common symbols to CoinGecko IDs for OHLC fallback
 COINGECKO_IDS = {
@@ -647,10 +736,7 @@ async def _fetch_ohlcv_async_inner(
                 except Exception as exc:
                     logger.warning("load_markets failed: %s", exc)
             if markets and symbol not in markets:
-                logger.debug(
-                    "Skipping unsupported symbol %s: not in markets",
-                    symbol,
-                )
+                _log_unsupported(symbol)
                 return []
             market_id = markets.get(symbol, {}).get("id", symbol)
         else:
@@ -730,7 +816,7 @@ async def _fetch_ohlcv_async_inner(
             if since is not None:
                 try:
                     tf_sec = timeframe_seconds(exchange, timeframe)
-                    now_ms = int(time.time() * 1000)
+                    now_ms = utc_now_ms()
                     expected = min(limit, int((now_ms - since) // (tf_sec * 1000)) + 1)
                 except Exception:
                     pass
@@ -795,7 +881,7 @@ async def _fetch_ohlcv_async_inner(
         if since is not None:
             try:
                 tf_sec = timeframe_seconds(exchange, timeframe)
-                now_ms = int(time.time() * 1000)
+                now_ms = utc_now_ms()
                 expected = min(limit, int((now_ms - since) // (tf_sec * 1000)) + 1)
             except Exception:
                 pass
@@ -874,7 +960,7 @@ async def fetch_ohlcv_async(
     """Return OHLCV data for ``symbol`` with simple retries."""
 
     if not is_supported_symbol(symbol):
-        logger.info("Skipping unsupported symbol %s", symbol)
+        _log_unsupported(symbol)
         return []
 
     for attempt in range(3):
@@ -1019,7 +1105,7 @@ async def load_ohlcv(
             except Exception as exc:  # pragma: no cover - best effort
                 logger.warning("load_markets failed: %s", exc)
         if markets and symbol not in markets:
-            logger.debug("Skipping unsupported symbol %s: not in markets", symbol)
+            _log_unsupported(symbol)
             return []
         market_id = markets.get(symbol, {}).get("id", symbol)
     else:
@@ -1069,7 +1155,7 @@ async def load_ohlcv_parallel(
     symbols = list(symbols)
     unsupported = [s for s in symbols if not is_supported_symbol(s)]
     for s in unsupported:
-        logger.info("Skipping unsupported symbol %s", s)
+        _log_unsupported(s)
         data[s] = []
     symbols = [s for s in symbols if is_supported_symbol(s)]
 
@@ -1085,7 +1171,7 @@ async def load_ohlcv_parallel(
                 logger.warning("load_markets failed: %s", exc)
         missing = [s for s in symbols if s not in markets]
         for s in missing:
-            logger.info("Skipping unsupported symbol %s: not in markets", s)
+            _log_unsupported(s)
             data[s] = []
         symbols = [s for s in symbols if s in markets]
 
@@ -1311,7 +1397,7 @@ async def _update_ohlcv_cache_inner(
     since_map: Dict[str, int | None] = {}
     if start_since is not None:
         tf_sec = timeframe_seconds(exchange, timeframe)
-        needed = int((time.time() * 1000 - start_since) // (tf_sec * 1000)) + 1
+        needed = int((utc_now_ms() - start_since) // (tf_sec * 1000)) + 1
         limit = max(limit, needed)
         since_map = {sym: start_since for sym in symbols}
         snapshot_due = False
@@ -1564,6 +1650,30 @@ async def update_ohlcv_cache(
     """Batch OHLCV updates for multiple calls."""
 
     config = config or {}
+    backfill_map = config.get("timeframe_backfill_days", {}) or {}
+    warmup_map = config.get("warmup_candles", {}) or {}
+    now_ms = utc_now_ms()
+    if start_since is not None:
+        bf_days = backfill_map.get(timeframe)
+        if bf_days is not None:
+            cutoff = now_ms - int(float(bf_days) * 86400000)
+            if start_since < cutoff:
+                logger.info(
+                    "Clamping backfill for %s to %d days (%s)",
+                    timeframe,
+                    bf_days,
+                    iso_utc(cutoff),
+                )
+                start_since = cutoff
+    warmup = warmup_map.get(timeframe)
+    if warmup is not None and limit > int(warmup):
+        logger.info(
+            "Clamping warmup candles for %s to %d (was %d)",
+            timeframe,
+            warmup,
+            limit,
+        )
+        limit = int(warmup)
     delay = 0.5
     size = (
         batch_size
@@ -1650,6 +1760,11 @@ async def update_multi_tf_ohlcv_cache(
     limit = int(limit)
     # Use the limit provided by the caller
 
+    # Ensure warmup candles satisfy strategy indicator lookbacks. This will
+    # either raise the configured warmup or disable strategies requiring more
+    # history, depending on ``data.auto_raise_warmup``.
+    load_enabled(config)
+
     def add_priority(data: list, symbol: str) -> None:
         """Push ``symbol`` to ``priority_queue`` if volume spike detected."""
         if priority_queue is None or vol_thresh is None or not data:
@@ -1703,10 +1818,49 @@ async def update_multi_tf_ohlcv_cache(
             logger.info("Starting update for timeframe %s", tf)
             tf_cache = cache.get(tf, {})
 
-            now_ms = int(time.time() * 1000)
+            now_ms = utc_now_ms()
+            tf_sec = timeframe_seconds(exchange, tf)
             dynamic_limits: dict[str, int] = {}
             snapshot_cap = int(config.get("ohlcv_snapshot_limit", limit))
             max_cap = min(snapshot_cap, 720)
+
+            backfill_map = config.get("timeframe_backfill_days", {}) or {}
+            warmup_map = config.get("warmup_candles", {}) or {}
+            tf_start = start_since
+            bf_days = backfill_map.get(tf)
+            if tf_start is not None and bf_days is not None:
+                cutoff = now_ms - int(float(bf_days) * 86400000)
+                if tf_start < cutoff:
+                    logger.info(
+                        "Clamping backfill for %s to %d days (%s)",
+                        tf,
+                        bf_days,
+                        iso_utc(cutoff),
+                    )
+                    tf_start = cutoff
+            tf_limit = int(limit)
+            needed: int | None = None
+            if tf_start is not None:
+                needed = int((now_ms - tf_start) // (tf_sec * 1000)) + 1
+                tf_limit = max(tf_limit, needed)
+            warmup = warmup_map.get(tf)
+            if warmup is not None and tf_limit > int(warmup):
+                logger.info(
+                    "Clamping warmup candles for %s to %d (was %d)",
+                    tf,
+                    warmup,
+                    tf_limit,
+                )
+                tf_limit = int(warmup)
+            tf_start_since = tf_start
+            if needed is not None and tf_limit < needed:
+                logger.info(
+                    "Warmup limit %d smaller than requested range %d for %s; dropping start_since",
+                    tf_limit,
+                    needed,
+                    tf,
+                )
+                tf_start_since = None
 
             concurrency = int(config.get("listing_date_concurrency", 5) or 0)
             semaphore = asyncio.Semaphore(concurrency) if concurrency > 0 else None
@@ -1774,14 +1928,8 @@ async def update_multi_tf_ohlcv_cache(
                 cex_symbols = [s for s in priority_syms if s in cex_symbols] + [s for s in cex_symbols if s not in prio_set]
                 dex_symbols = [s for s in priority_syms if s in dex_symbols] + [s for s in dex_symbols if s not in prio_set]
 
-            tf_sec = timeframe_seconds(exchange, tf)
-            tf_limit = limit
-            if start_since is not None:
-                needed = int((time.time() * 1000 - start_since) // (tf_sec * 1000)) + 1
-                tf_limit = max(limit, needed)
-
             if cex_symbols:
-                if start_since is None:
+                if tf_start_since is None:
                     groups: Dict[int, list[str]] = {}
                     for sym in cex_symbols:
                         sym_limit = dynamic_limits.get(sym, tf_limit)
@@ -1805,7 +1953,7 @@ async def update_multi_tf_ohlcv_cache(
                                 "ohlcv_batch_size": config.get("ohlcv_batch_size"),
                             },
                             batch_size=batch_size,
-                            start_since=start_since,
+                            start_since=tf_start_since,
                             use_websocket=use_websocket,
                             force_websocket_history=force_websocket_history,
                             max_concurrent=max_concurrent,
@@ -1817,7 +1965,7 @@ async def update_multi_tf_ohlcv_cache(
 
                     for sym in cex_symbols:
                         batches: list = []
-                        current_since = start_since
+                        current_since = tf_start_since
                         sym_total = min(tf_limit, dynamic_limits.get(sym, tf_limit))
                         if sym_total < tf_limit:
                             logger.info(
@@ -1919,6 +2067,22 @@ async def update_multi_tf_ohlcv_cache(
                         tf_cache = cache.get(tf, {})
                         tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
                         clear_regime_cache(sym, tf)
+                        if (
+                            STREAM_EVALUATOR
+                            and tf in ("1m", "5m")
+                            and warmup_reached_for(sym, tf, cache, config)
+                        ):
+                            if sym not in _WARMED_UP:
+                                logger.info(
+                                    "OHLCV[%s] warmup met for %s → enqueue for evaluation",
+                                    tf,
+                                    sym,
+                                )
+                                _WARMED_UP.add(sym)
+                            await STREAM_EVALUATOR.enqueue(
+                                sym, {"df_cache": cache, "symbol": sym}
+                            )
+                        await _maybe_enqueue_eval(sym, tf, cache, config)
 
             for sym in dex_symbols:
                 data = None
@@ -1997,7 +2161,24 @@ async def update_multi_tf_ohlcv_cache(
                 if changed:
                     tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
                     clear_regime_cache(sym, tf)
+                    if (
+                        STREAM_EVALUATOR
+                        and tf in ("1m", "5m")
+                        and warmup_reached_for(sym, tf, cache, config)
+                    ):
+                        if sym not in _WARMED_UP:
+                            logger.info(
+                                "OHLCV[%s] warmup met for %s → enqueue for evaluation",
+                                tf,
+                                sym,
+                            )
+                            _WARMED_UP.add(sym)
+                        await STREAM_EVALUATOR.enqueue(
+                            sym, {"df_cache": cache, "symbol": sym}
+                        )
 
+                    cache[tf] = tf_cache
+                    await _maybe_enqueue_eval(sym, tf, cache, config)
             cache[tf] = tf_cache
             logger.info("Finished update for timeframe %s", tf)
 

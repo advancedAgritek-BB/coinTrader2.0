@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 import time
-from collections import OrderedDict, deque
+from collections import OrderedDict, deque, Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -28,9 +28,11 @@ import pandas as pd
 import numpy as np
 import yaml
 from pydantic import ValidationError
+from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 
 # Internal project modules are imported lazily inside `main()` after env setup
 from crypto_bot.ml.selfcheck import log_ml_status_once
+from crypto_bot.strategy.evaluator import StreamEvaluator
 
 # Internal project modules are imported lazily in `_import_internal_modules()`
 
@@ -39,14 +41,20 @@ logger = logging.getLogger("bot")
 pipeline_logger = logging.getLogger("pipeline")
 
 # Module-level placeholders populated once internal modules are loaded in ``main``
-build_priority_queue = None  # type: ignore
+from collections import deque
+
+build_priority_queue = lambda scores: deque(
+    sym for sym, _ in sorted(scores, key=lambda x: x[1], reverse=True)
+)  # type: ignore
 get_solana_new_tokens = None  # type: ignore
 get_filtered_symbols = None  # type: ignore
-fetch_from_helius = None  # type: ignore
+async def fetch_from_helius(*_a, **_k):
+    return {}
 fix_symbol = None  # type: ignore
 symbol_utils = None  # type: ignore
+compute_batches = None  # type: ignore
 calc_atr = None  # type: ignore
-timeframe_seconds = None  # type: ignore
+timeframe_seconds = lambda *_a, **_k: 0  # type: ignore
 maybe_refresh_model = None  # type: ignore
 registry = None  # type: ignore
 fetch_geckoterminal_ohlcv = None  # type: ignore
@@ -60,6 +68,13 @@ TelegramBotUI = None  # type: ignore
 start_runner = None  # type: ignore
 sniper_run = None  # type: ignore
 cooldown_configure = None  # type: ignore
+update_ohlcv_cache = None  # type: ignore
+update_multi_tf_ohlcv_cache = None  # type: ignore
+update_regime_tf_cache = None  # type: ignore
+market_loader_configure = None  # type: ignore
+fetch_order_book_async = None  # type: ignore
+WS_OHLCV_TIMEOUT = None  # type: ignore
+stream_evaluator: StreamEvaluator | None = None
 
 
 @contextlib.asynccontextmanager
@@ -995,18 +1010,44 @@ async def fetch_candidates(ctx: BotContext) -> None:
         len(symbols) / total_available if total_available else 1.0
     )
 
-    base_size = ctx.config.get("symbol_batch_size", 10)
-    batch_size = int(base_size * volatility_factor)
+    fs_cfg = ctx.config.get("runtime", {}).get("fast_start", {})
+    base_size_cfg = ctx.config.get("symbol_batch_size", 10)
     async with QUEUE_LOCK:
-        if not symbol_priority_queue:
-            symbol_priority_queue = build_priority_queue(symbols)
+        if fs_cfg.get("enabled"):
+            follow_size = fs_cfg.get("followup_batch_size", base_size_cfg)
+            if not symbol_priority_queue:
+                seeds = symbol_utils.select_seed_symbols(symbols, ctx.exchange, ctx.config)
+                rest_scores = [(s, sc) for s, sc in symbols if s not in seeds]
+                rest_queue = list(build_priority_queue(rest_scores))
+                ctx._fast_start_batches = compute_batches(rest_queue, follow_size)
+                symbol_priority_queue = deque(seeds)
+                for sym in seeds:
+                    logger.info("OHLCV[1m] warmup met for %s → enqueue", sym)
+                base_size = len(seeds) if seeds else follow_size
+            else:
+                if (
+                    len(symbol_priority_queue) < follow_size
+                    and getattr(ctx, "_fast_start_batches", [])
+                ):
+                    symbol_priority_queue.extend(ctx._fast_start_batches.pop(0))
+                base_size = follow_size
+        else:
+            if not symbol_priority_queue:
+                symbol_priority_queue = build_priority_queue(symbols)
+            base_size = base_size_cfg
+
         if onchain_syms:
             for sym in reversed(onchain_syms):
                 if sym not in symbol_priority_queue:
                     symbol_priority_queue.appendleft(sym)
         if solana_tokens:
             enqueue_solana_tokens(solana_tokens)
-        if len(symbol_priority_queue) < batch_size:
+
+        batch_size = int(base_size * volatility_factor)
+        if (
+            len(symbol_priority_queue) < batch_size
+            and (not fs_cfg.get("enabled") or not getattr(ctx, "_fast_start_batches", []))
+        ):
             symbol_priority_queue.extend(build_priority_queue(symbols))
         ctx.current_batch = [
             symbol_priority_queue.popleft()
@@ -1375,13 +1416,23 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
         base_minutes = int(pd.Timedelta(base_tf).total_seconds() // 60)
     except Exception:  # pragma: no cover - invalid timeframe
         base_minutes = 0
+    ctx.analysis_errors = 0
+    ctx.analysis_timeouts = 0
+
+    eval_cfg = ctx.config.get("runtime", {}).get("evaluation", {})
+    concurrency = int(eval_cfg.get("concurrency", len(batch)))
+    timeout = eval_cfg.get("per_symbol_timeout_s")
+    sem = asyncio.Semaphore(concurrency)
 
     tasks = {}
     mode = ctx.config.get("mode", "cex")
-    for sym in batch:
+
+    async def run_symbol(sym: str) -> Any:
         df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
+    async def eval_fn(symbol: str):
+        df_map = {tf: c.get(symbol) for tf, c in ctx.df_cache.items()}
         for tf, cache in ctx.regime_cache.items():
-            df_map[tf] = cache.get(sym)
+            df_map[tf] = cache.get(symbol)
         df = df_map.get(base_tf)
 
         if hft_enabled and (base_minutes <= 1 or sym in hft_symbols):
@@ -1396,21 +1447,39 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
 
         logger.info(
             "DF len for %s: %d",
-            sym,
+            symbol,
             len(df) if isinstance(df, pd.DataFrame) else 0,
         )
-        task = asyncio.create_task(
-            analyze_symbol(
-                sym,
-                df_map,
-                mode,
-                ctx.config,
-                ctx.notifier,
-                mempool_monitor=ctx.mempool_monitor,
-                mempool_cfg=ctx.mempool_cfg,
-            )
-        )
+        async with sem:
+            try:
+                coro = analyze_symbol(
+                    sym,
+                    df_map,
+                    mode,
+                    ctx.config,
+                    ctx.notifier,
+                    mempool_monitor=ctx.mempool_monitor,
+                    mempool_cfg=ctx.mempool_cfg,
+                )
+                if timeout:
+                    return await asyncio.wait_for(coro, timeout)
+                return await coro
+            except asyncio.TimeoutError:
+                logger.error("Analysis timeout for %s", sym)
+                return {"symbol": sym, "skip": True}
+
+    for sym in batch:
+        task = asyncio.create_task(run_symbol(sym))
         tasks[task] = sym
+        return await analyze_symbol(
+            symbol,
+            df_map,
+            mode,
+            ctx.config,
+            ctx.notifier,
+            mempool_monitor=ctx.mempool_monitor,
+            mempool_cfg=ctx.mempool_cfg,
+        )
 
     results_map: dict[str, Any] = {}
     total = len(tasks)
@@ -1419,8 +1488,13 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
         sym = tasks[task]
         try:
             results_map[sym] = await task
+        except asyncio.TimeoutError:
+            logger.error("Analysis timeout for %s", sym)
+            ctx.analysis_timeouts += 1
+            results_map[sym] = Exception("timeout")
         except Exception as exc:  # pragma: no cover - log and continue
             logger.error("Analysis failed for %s: %s", sym, exc)
+            ctx.analysis_errors += 1
             results_map[sym] = exc
         completed += 1
         logger.info(
@@ -1428,13 +1502,14 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
             completed,
             total,
         )
+    ctx.eval_fn = eval_fn
+    from crypto_bot.evaluator import evaluate_batch
 
-    ctx.analysis_results = []
-    for sym in batch:
-        res = results_map.get(sym)
-        if isinstance(res, Exception):
-            continue
-        ctx.analysis_results.append(res)
+    results_map = await evaluate_batch(batch, ctx)
+
+    ctx.analysis_results = [
+        res for sym in batch if (res := results_map.get(sym)) is not None
+    ]
 
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     for res in ctx.analysis_results:
@@ -1468,16 +1543,13 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
 
 
 async def execute_signals(ctx: BotContext) -> None:
-    async with symbol_cache_guard():
-        await _execute_signals_impl(ctx)
-
-
-async def _execute_signals_impl(ctx: BotContext) -> None:
     """Open trades for qualified analysis results."""
     results = getattr(ctx, "analysis_results", [])
     if not results:
         logger.info("No analysis results to act on")
         return
+    ctx.reject_reasons = {}
+    reject_counts = Counter()
 
     # Filter and prioritize by score
     orig_results = results
@@ -1554,6 +1626,8 @@ async def _execute_signals_impl(ctx: BotContext) -> None:
         if not allowed:
             outcome_reason = f"blocked: {reason}"
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
+            key = reason.lower().replace(" ", "_")
+            reject_counts[key] += 1
             continue
 
         probs = candidate.get("probabilities", {})
@@ -1604,7 +1678,19 @@ async def _execute_signals_impl(ctx: BotContext) -> None:
         start_exec = time.perf_counter()
         executed_via_sniper = False
         executed_via_cross = False
+        mode_str = (
+            "dry_run" if ctx.config.get("execution_mode") == "dry_run" else "live"
+        )
+        trade_reason = candidate.get("reason") or strategy
         if strategy == "cross_chain_arb_bot":
+            logger.info(
+                "TRADE (%s) %s %s qty=%.4f price=spot reason='%s'",
+                mode_str,
+                side.upper(),
+                sym,
+                amount,
+                trade_reason,
+            )
             task = register_task(
                 asyncio.create_task(
                     cross_chain_trade(
@@ -1639,6 +1725,14 @@ async def _execute_signals_impl(ctx: BotContext) -> None:
                 NEW_SOLANA_TOKENS.discard(sym)
             if sol_score > 0.7:
                 base, quote = sym.split("/")
+                logger.info(
+                    "TRADE (%s) %s %s qty=%.4f price=spot reason='%s'",
+                    mode_str,
+                    side.upper(),
+                    sym,
+                    amount,
+                    trade_reason,
+                )
                 task = register_task(
                     asyncio.create_task(
                         sniper_trade(
@@ -1657,6 +1751,14 @@ async def _execute_signals_impl(ctx: BotContext) -> None:
                 executed_via_sniper = True
 
         if not executed_via_sniper and not executed_via_cross:
+            logger.info(
+                "TRADE (%s) %s %s qty=%.4f price=spot reason='%s'",
+                mode_str,
+                side.upper(),
+                sym,
+                amount,
+                trade_reason,
+            )
             order = await cex_trade_async(
                 ctx.exchange,
                 ctx.ws_client,
@@ -1747,6 +1849,11 @@ async def _execute_signals_impl(ctx: BotContext) -> None:
         logger.info(
             "No trades executed from %d candidate signals", len(results[:top_n])
         )
+
+    if reject_counts:
+        ctx.reject_reasons = dict(reject_counts)
+        top = ", ".join(f"{k}={v}" for k, v in reject_counts.most_common())
+        pipeline_logger.info("Reject reasons (top): %s", top)
 
 
 async def handle_exits(ctx: BotContext) -> None:
@@ -2620,14 +2727,48 @@ async def _main_impl() -> TelegramNotifier:
     ctx.position_guard = position_guard
     ctx.balance = await fetch_and_log_balance(exchange, wallet, config)
     last_balance = ctx.balance
+    eval_lock = asyncio.Lock()
+
+    async def eval_fn(symbol: str, _info: dict) -> None:
+        async with eval_lock:
+            ctx.current_batch = [symbol]
+            await _analyse_batch_impl(ctx)
+            await execute_signals(ctx)
+
+    stream_evaluator = StreamEvaluator(eval_fn)
+    set_stream_evaluator(stream_evaluator)
+    await stream_evaluator.start()
+    async def _eval_symbol(symbol: str, data: dict) -> None:
+        df_map = {tf: ctx.df_cache.get(tf, {}).get(symbol) for tf in data.get("timeframes", [])}
+        res = await analyze_symbol(
+            symbol,
+            df_map,
+            ctx.config.get("mode", "cex"),
+            ctx.config,
+            ctx.notifier,
+            mempool_monitor=ctx.mempool_monitor,
+            mempool_cfg=ctx.mempool_cfg,
+        )
+        if not res.get("skip"):
+            ctx.analysis_results = [res]
+            ctx.current_batch = [symbol]
+            await _execute_signals_impl(ctx)
+
+    async def _eval_wrapper(symbol: str, data: dict) -> None:
+        await asyncio.wait_for(_eval_symbol(symbol, data), timeout=8)
+
+    stream_eval = StreamEvaluator(_eval_wrapper)
+    await stream_eval.start()
+    set_stream_evaluator(stream_eval)
+    global stream_evaluator
+    stream_evaluator = stream_eval
+
     runner = PhaseRunner(
         [
             fetch_candidates,
             update_caches,
             enrich_with_pyth,
-            analyse_batch,
             refresh_balance,
-            execute_signals,
             handle_exits,
         ]
     )
@@ -2716,6 +2857,23 @@ async def _main_impl() -> TelegramNotifier:
             cycle_start = time.perf_counter()
             ctx.timing = await runner.run(ctx)
             loop_count += 1
+            long_signals = sum(
+                1 for r in ctx.analysis_results if r.get("direction") == "long"
+            )
+            short_signals = sum(
+                1 for r in ctx.analysis_results if r.get("direction") == "short"
+            )
+            pipeline_logger.info(
+                "Eval summary: candidates=%d, queued=%d, evaluated=%d, signals=%d (long=%d, short=%d), errors=%d, timeouts=%d",
+                len(ctx.active_universe),
+                len(ctx.current_batch),
+                len(ctx.analysis_results),
+                long_signals + short_signals,
+                long_signals,
+                short_signals,
+                ctx.analysis_errors,
+                ctx.analysis_timeouts,
+            )
 
             if time.time() - last_weight_update >= 86400:
                 weights = compute_strategy_weights()
@@ -2853,6 +3011,11 @@ async def _main_impl() -> TelegramNotifier:
             await wait_or_event(delay * 60)
 
     finally:
+        await stream_evaluator.drain()
+        await stream_evaluator.stop()
+        if 'stream_eval' in locals() and stream_eval:
+            await stream_eval.drain()
+            await stream_eval.stop()
         for task in listener_tasks:
             task.cancel()
             with contextlib.suppress(Exception):
@@ -2954,6 +3117,7 @@ async def main() -> None:
         fetch_order_book_async,
         WS_OHLCV_TIMEOUT,
         fetch_geckoterminal_ohlcv,
+        set_stream_evaluator,
     )
     from crypto_bot.utils.pair_cache import PAIR_FILE, load_liquid_pairs
     from tasks.refresh_pairs import (
@@ -2961,7 +3125,7 @@ async def main() -> None:
         DEFAULT_TOP_K,
         refresh_pairs_async,
     )
-    from crypto_bot.utils.eval_queue import build_priority_queue
+    from crypto_bot.utils.eval_queue import build_priority_queue, compute_batches
     from crypto_bot.solana import (
         get_solana_new_tokens,
         fetch_solana_prices,

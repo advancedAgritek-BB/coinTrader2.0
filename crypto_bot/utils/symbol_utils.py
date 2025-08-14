@@ -6,6 +6,7 @@ from typing import AsyncIterator
 import contextlib
 
 from .logger import LOG_DIR, setup_logger
+from crypto_bot.utils.eval_guard import eval_gate
 try:
     from .symbol_pre_filter import filter_symbols  # legacy dependency
 except Exception:
@@ -29,48 +30,53 @@ pipeline_logger = logging.getLogger("pipeline")
 _cached_symbols: tuple[list[tuple[str, float]], list[str]] | None = None
 _last_refresh: float = 0.0
 _CACHE_INVALIDATION_LOCK = Lock()
-_INVALIDATION_GUARD = asyncio.Lock()
 _LAST_INVALIDATION_TS = 0.0
 _INVALIDATION_DEBOUNCE_SEC = 10.0
 _AUTO_FALLBACK_WARNED = False
-_PENDING_INVALIDATION = False
+_INVALIDATION_TASK: asyncio.Task | None = None
 
 
 def _apply_invalidation(ts: float | None = None) -> None:
     """Apply the symbol cache invalidation."""
-    global _cached_symbols, _last_refresh, _LAST_INVALIDATION_TS, _PENDING_INVALIDATION
+    global _cached_symbols, _last_refresh, _LAST_INVALIDATION_TS
     _LAST_INVALIDATION_TS = ts if ts is not None else time.time()
     _cached_symbols = None
     _last_refresh = 0.0
-    _PENDING_INVALIDATION = False
     logger.info("Symbol cache invalidated")
 
 
 def invalidate_symbol_cache() -> None:
     """Clear cached symbols and reset refresh timestamp."""
-    global _PENDING_INVALIDATION
+    global _INVALIDATION_TASK
     with _CACHE_INVALIDATION_LOCK:
         now = time.time()
         if now - _LAST_INVALIDATION_TS < _INVALIDATION_DEBOUNCE_SEC:
             logger.debug("Symbol cache invalidation suppressed (debounced).")
             return
-        if _INVALIDATION_GUARD.locked():
-            _PENDING_INVALIDATION = True
+        if eval_gate.is_busy():
             logger.info("Deferring cache invalidation until after evaluation.")
+            if _INVALIDATION_TASK is None or _INVALIDATION_TASK.done():
+                _INVALIDATION_TASK = asyncio.create_task(_deferred_invalidation(now))
             return
         _apply_invalidation(now)
 
 
 @contextlib.asynccontextmanager
-async def symbol_cache_guard() -> AsyncIterator[None]:
+async def symbol_cache_guard(note: str = "symbol-cache") -> AsyncIterator[None]:
     """Guard operations that should block cache invalidation."""
-    await _INVALIDATION_GUARD.acquire()
-    try:
+    with eval_gate.hold(note):
         yield
-    finally:
-        _INVALIDATION_GUARD.release()
-        if _PENDING_INVALIDATION:
-            invalidate_symbol_cache()
+
+
+async def _deferred_invalidation(ts: float, timeout: float = 30.0, interval: float = 5.0) -> None:
+    """Retry cache invalidation until the eval gate is free or timeout is reached."""
+    deadline = time.monotonic() + timeout
+    while eval_gate.is_busy():
+        if time.monotonic() > deadline:
+            logger.warning("Cache invalidation timed out waiting for evaluation gate.")
+            return
+        await asyncio.sleep(interval)
+    _apply_invalidation(ts)
 
 
 async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]], list[str]]:
@@ -227,6 +233,36 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         else:
             raise RuntimeError(
                 f"Universe is empty (mode={mode}). Check on-chain metadata provider and liquidity filters."
-            )
+    )
 
     return scored, onchain_syms
+
+
+def select_seed_symbols(
+    scored: list[tuple[str, float]], exchange, config: dict
+) -> list[str]:
+    """Return initial evaluation symbols for fast-start mode."""
+
+    fs_cfg = config.get("runtime", {}).get("fast_start", {})
+    if not fs_cfg.get("enabled"):
+        return [s for s, _ in scored]
+
+    markets = getattr(exchange, "markets", {}) or {}
+    seeds_cfg = fs_cfg.get("seed_symbols") or []
+    available = [s for s, _ in scored]
+    if seeds_cfg:
+        seeds = [s for s in seeds_cfg if s in markets and s in available]
+    else:
+        seed_n = int(fs_cfg.get("seed_batch_size", 15))
+        seeds = sorted(
+            available,
+            key=lambda s: float(markets.get(s, {}).get("quoteVolume") or 0),
+            reverse=True,
+        )[:seed_n]
+
+    if seeds:
+        preview = ", ".join(seeds[:2])
+        if len(seeds) > 2:
+            preview += ", ..."
+        logger.info("Fast-start: seeding %d symbols (%s)", len(seeds), preview)
+    return seeds

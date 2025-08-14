@@ -8,6 +8,15 @@ arbitrage_enabled: true
 arbitrage_threshold: 0.005
 atr_normalization: true
 auto_convert_quote: USDC
+runtime:
+  fast_start:
+    enabled: true
+    seed_symbols: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "DOGE/USDT"]
+    seed_batch_size: 15
+    followup_batch_size: 25
+  evaluation:
+    concurrency: 8
+    per_symbol_timeout_s: 8
 balance_poll_mod: 1
 bandit:
   alpha0: 1
@@ -533,6 +542,12 @@ timeframe: 15m
 timeframes:
 - 1m
 - 5m
+timeframe_backfill_days:
+  1m: 2
+  5m: 14
+warmup_candles:
+  1m: 1000
+  5m: 1000
 token_registry:
   refresh_interval_minutes: 15
 top_n_symbols: 20
