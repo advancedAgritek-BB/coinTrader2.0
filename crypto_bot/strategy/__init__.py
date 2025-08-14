@@ -20,6 +20,7 @@ breakout_bot = _optional_import("breakout_bot")
 dex_scalper = _optional_import("dex_scalper")
 grid_bot = _optional_import("grid_bot")
 mean_bot = _optional_import("mean_bot")
+mean_revert = _optional_import("mean_revert")
 stat_arb_bot = _optional_import("stat_arb_bot")
 micro_scalp_bot = _optional_import("micro_scalp_bot")
 momentum_bot = _optional_import("momentum_bot")
@@ -56,6 +57,7 @@ __all__ = [
         "dca_bot",
         "grid_bot",
         "mean_bot",
+        "mean_revert",
         "stat_arb_bot",
         "dip_hunter",
         "micro_scalp_bot",
