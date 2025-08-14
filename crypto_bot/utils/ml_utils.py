@@ -1,6 +1,7 @@
 """Utility helpers for optional machine learning dependencies."""
-
 import importlib
+import base64
+import json
 import logging
 import os
 from pathlib import Path
@@ -10,7 +11,11 @@ logger = logging.getLogger(__name__)
 
 _REQUIRED_PACKAGES: Iterable[str] = ("sklearn", "joblib", "ta")
 
-_LOGGER_ONCE = {"ml_unavailable": False}
+_LOGGER_ONCE = {
+    "ml_unavailable": False,
+    "missing_supabase_creds": False,
+    "anon_key_role": False,
+}
 
 
 def warn_ml_unavailable_once() -> None:
@@ -28,15 +33,37 @@ def _check_packages(pkgs: Iterable[str]) -> bool:
 
 
 def _get_supabase_creds() -> tuple[str | None, str | None]:
-    """Return Supabase URL and service key from the environment."""
+    """Return Supabase URL and key from canonical or legacy env names."""
     url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+    key = (
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        or os.getenv("SUPABASE_KEY")
+        or os.getenv("SUPABASE_API_KEY")
+        or os.getenv("SUPABASE_ANON_KEY")
+    )
     logger.debug(
         "Supabase configured: url=%s key_len=%d",
         bool(url),
         len(key or ""),
     )
     return url, key
+
+
+def _warn_if_anon_key(key: str) -> None:
+    """Warn once if ``key`` appears to be an anon key."""
+    if _LOGGER_ONCE["anon_key_role"]:
+        return
+    try:  # pragma: no cover - best effort
+        payload_b64 = key.split(".")[1]
+        padding = "=" * (-len(payload_b64) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64 + padding))
+        role = payload.get("role")
+        if role and role != "service_role":
+            logger.warning("Supabase key has non-service role: %s", role)
+            _LOGGER_ONCE["anon_key_role"] = True
+    except Exception:
+        # Ignore malformed keys or decoding issues
+        pass
 
 
 def is_ml_available() -> bool:
@@ -47,7 +74,16 @@ def is_ml_available() -> bool:
 
         url, key = _get_supabase_creds()
         if not url or not key:
-            raise ValueError("Missing Supabase credentials")
+            if not _LOGGER_ONCE["missing_supabase_creds"]:
+                logger.info(
+                    "ML unavailable: Missing Supabase credentials (url=%s, key_present=%s)",
+                    bool(url),
+                    bool(key),
+                )
+                _LOGGER_ONCE["missing_supabase_creds"] = True
+            return False
+
+        _warn_if_anon_key(key)
 
         model_path = (
             Path(__file__).resolve().parent.parent / "models" / "meta_selector_lgbm.txt"
