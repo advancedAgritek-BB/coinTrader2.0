@@ -188,6 +188,14 @@ def test_fetch_from_helius_full(monkeypatch, tmp_path):
     assert mapping == {"AAA": {"mint": "mmm", "decimals": 5, "supply": 10}}
 
 
+def test_fetch_from_helius_sol(monkeypatch, tmp_path):
+    monkeypatch.setenv("HELIUS_API_KEY", "KEY")
+    mod = _load_module(monkeypatch, tmp_path)
+
+    mapping = asyncio.run(mod.fetch_from_helius(["SOL"], full=True))
+    assert mapping == {"SOL": {"mint": mod.WSOL_MINT, "decimals": 9, "supply": None}}
+
+
 def test_fetch_from_helius_4xx(monkeypatch, tmp_path, caplog):
     class DummyResp:
         def __init__(self, status=401):
@@ -284,6 +292,34 @@ def test_periodic_mint_sanity_check(monkeypatch, tmp_path):
 
     assert mod.TOKEN_MINTS["AAA"] == "new"
     assert called
+
+
+def test_periodic_mint_sanity_check_sol(monkeypatch, tmp_path, caplog):
+    mod = _load_module(monkeypatch, tmp_path)
+    mod.MANUAL_OVERRIDES.clear()
+    mod.MANUAL_OVERRIDES.update({"SOL": mod.WSOL_MINT})
+    mod.TOKEN_MINTS.update(mod.MANUAL_OVERRIDES)
+
+    async def fake_fetch(_symbols, *, full=False):
+        return {"SOL": {"mint": "", "decimals": 9, "supply": None}}
+
+    monkeypatch.setattr(mod, "fetch_from_helius", fake_fetch)
+    monkeypatch.setattr(mod, "_write_cache", lambda: None)
+
+    async def fast_sleep(_):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fast_sleep)
+    caplog.set_level(logging.INFO)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(mod.periodic_mint_sanity_check(interval_hours=0))
+
+    assert any(
+        r.getMessage() == "SOL: using WSOL mint; skipping supply check." and r.levelno == logging.INFO
+        for r in caplog.records
+    )
+    assert mod.TOKEN_MINTS["SOL"] == mod.WSOL_MINT
 
 
 def test_load_token_mints(monkeypatch, tmp_path):

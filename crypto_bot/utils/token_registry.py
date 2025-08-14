@@ -48,6 +48,9 @@ TOKEN_DECIMALS: Dict[str, int] = {}
 
 _LOADED = False
 
+# Canonical mint address for wrapped SOL
+WSOL_MINT = "So11111111111111111111111111111111111111112"
+
 PUMP_URL = "https://api.pump.fun/tokens?limit=50&offset=0"
 RAYDIUM_URL = "https://api.raydium.io/v2/main/pairs"
 
@@ -58,6 +61,7 @@ POLL_INTERVAL = 10
 __all__ = [
     "TOKEN_MINTS",
     "TOKEN_DECIMALS",
+    "WSOL_MINT",
     "load_token_mints",
     "fetch_from_jupiter",
     "get_decimals",
@@ -438,11 +442,11 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     mints: List[str] = []
     mint_to_symbol: Dict[str, str] = {}
     for sym in symbols_list:
-        if sym == "SOL":  # Native SOL has no mint
+        if sym == "SOL":  # Native SOL has no mint; use WSOL mint instead
             if full:
-                result[sym] = {"mint": "", "decimals": 9, "supply": None}
+                result[sym] = {"mint": WSOL_MINT, "decimals": 9, "supply": None}
             else:
-                result[sym] = ""
+                result[sym] = WSOL_MINT
             continue
         mint = TOKEN_MINTS.get(sym)
         if mint:
@@ -564,6 +568,16 @@ async def periodic_mint_sanity_check(interval_hours: float = 24.0) -> None:
                     helius_mint = meta.get("mint")
                     decimals = meta.get("decimals")
                     supply = meta.get("supply")
+                    if sym == "SOL":
+                        if not helius_mint:
+                            helius_mint = WSOL_MINT
+                        TOKEN_MINTS[sym] = WSOL_MINT
+                        MANUAL_OVERRIDES[sym] = WSOL_MINT
+                        _write_cache()
+                        if not isinstance(decimals, int) or decimals <= 0:
+                            logger.warning("Unexpected decimals for %s: %s", sym, decimals)
+                        logger.info("SOL: using WSOL mint; skipping supply check.")
+                        continue
                     if isinstance(helius_mint, str) and helius_mint != expected_mint:
                         logger.warning(
                             "Mint mismatch for %s: cache=%s helius=%s",
