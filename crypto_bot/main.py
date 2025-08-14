@@ -30,6 +30,8 @@ import yaml
 from dotenv import dotenv_values
 from pydantic import ValidationError
 
+from crypto_bot.ml.selfcheck import log_ml_status_once
+
 # Internal project modules are imported lazily in `_import_internal_modules()`
 
 
@@ -67,6 +69,7 @@ symbol_utils = None  # type: ignore
 calc_atr = None  # type: ignore
 is_market_pumping = None  # type: ignore
 maybe_refresh_model = None  # type: ignore
+cooldown_configure = None  # type: ignore
 
 
 @contextlib.asynccontextmanager
@@ -2627,6 +2630,7 @@ async def _main_impl() -> TelegramNotifier:
 
     max_open_trades = config.get("max_open_trades", 1)
     position_guard = OpenPositionGuard(max_open_trades)
+    log_ml_status_once()
     rotator = PortfolioRotator()
 
     mode = user.get("mode", config.get("mode", "auto"))
