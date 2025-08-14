@@ -14,6 +14,8 @@ import ccxt.async_support as ccxt
 import yaml
 from urllib.parse import urlencode, urlparse
 
+from crypto_bot.solana.helius_client import HELIUS_API_KEY, helius_available
+
 from crypto_bot.strategy import cross_chain_arb_bot
 from .gecko import gecko_request
 
@@ -69,19 +71,7 @@ __all__ = [
 ]
 
 
-_HELIUS_DISABLED_LOGGED = False
 _MISSING_MINT_LOGGED: set[str] = set()
-
-
-def _helius_api_key() -> str:
-    """Return configured Helius API key and log once if missing."""
-
-    key = os.getenv("HELIUS_API_KEY") or os.getenv("HELIUS_KEY") or ""
-    global _HELIUS_DISABLED_LOGGED
-    if not key and not _HELIUS_DISABLED_LOGGED:
-        logger.info("Helius disabled (no API key)")
-        _HELIUS_DISABLED_LOGGED = True
-    return key
 
 
 def _build_helius_url(params: Dict[str, str]) -> str | None:
@@ -97,8 +87,7 @@ def _build_helius_url(params: Dict[str, str]) -> str | None:
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{urlencode(params)}"
 
 
-# Prime startup log if no key is configured
-_helius_api_key()
+# Prime startup log handled in helius_client
 
 
 def to_base_units(amount_tokens: float, decimals: int) -> int:
@@ -426,9 +415,9 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     provided.
     """
 
-    api_key = _helius_api_key()
-    if not api_key:
-        return {}
+    if not helius_available:
+        return {str(s).upper(): "metadata_unknown" for s in symbols if s}
+    api_key = HELIUS_API_KEY
 
     symbols_list = [str(s).upper() for s in symbols if s]
     if not symbols_list:
@@ -512,9 +501,9 @@ async def get_decimals(mint: str) -> int:
     if cached is not None:
         return cached
 
-    api_key = _helius_api_key()
-    if not api_key:
+    if not helius_available:
         return 0
+    api_key = HELIUS_API_KEY
 
     params = {"mint": mint, "api-key": api_key}
     url = _build_helius_url(params)

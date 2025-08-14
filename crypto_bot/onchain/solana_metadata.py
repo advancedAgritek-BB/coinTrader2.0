@@ -6,8 +6,9 @@ from typing import Dict, List
 
 import requests
 
+from crypto_bot.solana.helius_client import HELIUS_API_KEY, helius_available
+
 FEATURE_ENABLE_HELIUS = os.getenv("FEATURE_ENABLE_HELIUS", "0") in ("1", "true", "True")
-HELIUS_API_KEY = os.getenv("HELIUS_API_KEY")
 
 logger = logging.getLogger(__name__)
 _missing_meta_seen = defaultdict(int)
@@ -37,14 +38,10 @@ def _do_helius_request(mint_addresses: List[str], *, api_key: str):
 
 def fetch_token_metadata(mint_addresses: List[str]) -> Dict[str, Dict]:
     """Return token metadata for ``mint_addresses`` via Helius."""
-    if not FEATURE_ENABLE_HELIUS:
-        logger.debug("Helius metadata disabled by FEATURE_ENABLE_HELIUS.")
-        return {}
-    if not HELIUS_API_KEY:
-        logger.warning("Helius disabled: HELIUS_API_KEY not set.")
-        return {}
     if not mint_addresses:
         return {}
+    if not FEATURE_ENABLE_HELIUS or not helius_available:
+        return {m: {"metadata_unknown": True} for m in mint_addresses if m}
 
     # Filter out addresses previously marked as not-found and blank entries
     mint_addresses = [m for m in mint_addresses if m and m not in _NOT_FOUND_CACHE]
@@ -68,7 +65,7 @@ def fetch_token_metadata(mint_addresses: List[str]) -> Dict[str, Dict]:
         logger.warning(
             "Helius metadata fetch failed (%s). Proceeding without metadata.", e
         )
-        return {}
+        return {m: {"metadata_unknown": True} for m in mint_addresses}
 
     items = data if isinstance(data, list) else data.get("tokens") or data.get("data") or []
     if isinstance(items, dict):
