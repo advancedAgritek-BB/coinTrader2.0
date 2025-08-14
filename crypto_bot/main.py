@@ -45,6 +45,7 @@ get_filtered_symbols = None  # type: ignore
 fetch_from_helius = None  # type: ignore
 fix_symbol = None  # type: ignore
 symbol_utils = None  # type: ignore
+compute_batches = None  # type: ignore
 calc_atr = None  # type: ignore
 timeframe_seconds = None  # type: ignore
 maybe_refresh_model = None  # type: ignore
@@ -995,18 +996,44 @@ async def fetch_candidates(ctx: BotContext) -> None:
         len(symbols) / total_available if total_available else 1.0
     )
 
-    base_size = ctx.config.get("symbol_batch_size", 10)
-    batch_size = int(base_size * volatility_factor)
+    fs_cfg = ctx.config.get("runtime", {}).get("fast_start", {})
+    base_size_cfg = ctx.config.get("symbol_batch_size", 10)
     async with QUEUE_LOCK:
-        if not symbol_priority_queue:
-            symbol_priority_queue = build_priority_queue(symbols)
+        if fs_cfg.get("enabled"):
+            follow_size = fs_cfg.get("followup_batch_size", base_size_cfg)
+            if not symbol_priority_queue:
+                seeds = symbol_utils.select_seed_symbols(symbols, ctx.exchange, ctx.config)
+                rest_scores = [(s, sc) for s, sc in symbols if s not in seeds]
+                rest_queue = list(build_priority_queue(rest_scores))
+                ctx._fast_start_batches = compute_batches(rest_queue, follow_size)
+                symbol_priority_queue = deque(seeds)
+                for sym in seeds:
+                    logger.info("OHLCV[1m] warmup met for %s → enqueue", sym)
+                base_size = len(seeds) if seeds else follow_size
+            else:
+                if (
+                    len(symbol_priority_queue) < follow_size
+                    and getattr(ctx, "_fast_start_batches", [])
+                ):
+                    symbol_priority_queue.extend(ctx._fast_start_batches.pop(0))
+                base_size = follow_size
+        else:
+            if not symbol_priority_queue:
+                symbol_priority_queue = build_priority_queue(symbols)
+            base_size = base_size_cfg
+
         if onchain_syms:
             for sym in reversed(onchain_syms):
                 if sym not in symbol_priority_queue:
                     symbol_priority_queue.appendleft(sym)
         if solana_tokens:
             enqueue_solana_tokens(solana_tokens)
-        if len(symbol_priority_queue) < batch_size:
+
+        batch_size = int(base_size * volatility_factor)
+        if (
+            len(symbol_priority_queue) < batch_size
+            and (not fs_cfg.get("enabled") or not getattr(ctx, "_fast_start_batches", []))
+        ):
             symbol_priority_queue.extend(build_priority_queue(symbols))
         ctx.current_batch = [
             symbol_priority_queue.popleft()
@@ -1348,9 +1375,15 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
 
     base_tf = ctx.config.get("timeframe", "1h")
 
+    eval_cfg = ctx.config.get("runtime", {}).get("evaluation", {})
+    concurrency = int(eval_cfg.get("concurrency", len(batch)))
+    timeout = eval_cfg.get("per_symbol_timeout_s")
+    sem = asyncio.Semaphore(concurrency)
+
     tasks = {}
     mode = ctx.config.get("mode", "cex")
-    for sym in batch:
+
+    async def run_symbol(sym: str) -> Any:
         df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
         for tf, cache in ctx.regime_cache.items():
             df_map[tf] = cache.get(sym)
@@ -1360,17 +1393,26 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
             sym,
             len(df) if isinstance(df, pd.DataFrame) else 0,
         )
-        task = asyncio.create_task(
-            analyze_symbol(
-                sym,
-                df_map,
-                mode,
-                ctx.config,
-                ctx.notifier,
-                mempool_monitor=ctx.mempool_monitor,
-                mempool_cfg=ctx.mempool_cfg,
-            )
-        )
+        async with sem:
+            try:
+                coro = analyze_symbol(
+                    sym,
+                    df_map,
+                    mode,
+                    ctx.config,
+                    ctx.notifier,
+                    mempool_monitor=ctx.mempool_monitor,
+                    mempool_cfg=ctx.mempool_cfg,
+                )
+                if timeout:
+                    return await asyncio.wait_for(coro, timeout)
+                return await coro
+            except asyncio.TimeoutError:
+                logger.error("Analysis timeout for %s", sym)
+                return {"symbol": sym, "skip": True}
+
+    for sym in batch:
+        task = asyncio.create_task(run_symbol(sym))
         tasks[task] = sym
 
     results_map: dict[str, Any] = {}
@@ -2916,7 +2958,7 @@ async def main() -> None:
         DEFAULT_TOP_K,
         refresh_pairs_async,
     )
-    from crypto_bot.utils.eval_queue import build_priority_queue
+    from crypto_bot.utils.eval_queue import build_priority_queue, compute_batches
     from crypto_bot.solana import (
         get_solana_new_tokens,
         fetch_solana_prices,
