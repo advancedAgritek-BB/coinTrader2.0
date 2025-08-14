@@ -8,6 +8,8 @@ import asyncio
 import contextlib
 import time
 import subprocess
+import os
+from dotenv import load_dotenv
 from pathlib import Path
 from datetime import datetime
 from collections import deque, OrderedDict
@@ -31,6 +33,7 @@ import numpy as np
 import yaml
 from pydantic import ValidationError
 
+# Internal project modules are imported lazily inside `main()` after env setup
 from crypto_bot.ml.selfcheck import log_ml_status_once
 
 # Internal project modules are imported lazily in `_import_internal_modules()`
@@ -40,7 +43,7 @@ logger = logging.getLogger("bot")
 pipeline_logger = logging.getLogger("pipeline")
 
 
-# Placeholder implementations overridden by `_import_internal_modules`
+# Placeholder implementations overridden once internal modules are loaded in `main`
 def build_priority_queue(items):
     ordered = sorted(items, key=lambda x: x[1], reverse=True)
     return deque(sym for sym, _ in ordered)
@@ -70,6 +73,17 @@ symbol_utils = None  # type: ignore
 calc_atr = None  # type: ignore
 is_market_pumping = None  # type: ignore
 maybe_refresh_model = None  # type: ignore
+registry = None  # type: ignore
+fetch_geckoterminal_ohlcv = None  # type: ignore
+fetch_solana_prices = None  # type: ignore
+cross_chain_trade = None  # type: ignore
+sniper_solana = None  # type: ignore
+sniper_trade = None  # type: ignore
+load_token_mints = None  # type: ignore
+set_token_mints = None  # type: ignore
+TelegramBotUI = None  # type: ignore
+start_runner = None  # type: ignore
+sniper_run = None  # type: ignore
 cooldown_configure = None  # type: ignore
 
 
@@ -77,126 +91,6 @@ cooldown_configure = None  # type: ignore
 async def symbol_cache_guard():
     """Fallback cache guard before internal modules are loaded."""
     yield
-
-
-def _import_internal_modules() -> None:
-    """Import project modules after environment setup."""
-
-    global ScannerConfig, SolanaScannerConfig, PythConfig
-    global TelegramNotifier, send_test_message, LOG_DIR, setup_logger
-    global PortfolioRotator, load_or_create, analyze_symbol, dca_bot, cooldown_configure
-    global BotContext, PhaseRunner, RiskManager, RiskConfig, calculate_trailing_stop, should_exit
-    global cex_trade_async, get_exchange, get_exchanges, OpenPositionGuard
-    global console_monitor, console_control, log_position, log_balance
-    global load_kraken_symbols, update_ohlcv_cache, update_multi_tf_ohlcv_cache, update_regime_tf_cache
-    global timeframe_seconds, market_loader_configure, fetch_order_book_async, WS_OHLCV_TIMEOUT
-    global PAIR_FILE, load_liquid_pairs, DEFAULT_MIN_VOLUME_USD, DEFAULT_TOP_K, refresh_pairs_async
-    global build_priority_queue, get_solana_new_tokens, get_filtered_symbols, fix_symbol, symbol_utils, symbol_cache_guard
-    global log_cycle_metrics, PaperWallet, Wallet, compute_strategy_weights, optimize_strategies
-    global write_cycle_metrics, TOKEN_MINTS, monitor_pump_raydium, refresh_mints, periodic_mint_sanity_check
-    global pnl_logger, regime_pnl_tracker, ML_AVAILABLE, record_sol_scanner_metrics
-    global auto_convert_funds, check_wallet_balances, detect_non_trade_tokens
-    global classify_regime_async, classify_regime_cached, calc_atr, monitor_price, SolanaMempoolMonitor, maybe_refresh_model
-    global logger, pipeline_logger, _TRAINER_AVAILABLE, trainer_version, MIN_CT2_INTEGRATION
-
-    from schema.scanner import (
-        ScannerConfig,
-        SolanaScannerConfig,
-        PythConfig,
-    )
-    from crypto_bot.utils.telegram import TelegramNotifier, send_test_message
-    from crypto_bot.utils.logger import LOG_DIR, setup_logger
-    from crypto_bot.portfolio_rotator import PortfolioRotator
-    from crypto_bot.wallet_manager import load_or_create
-    from crypto_bot.utils.market_analyzer import analyze_symbol
-    from crypto_bot.strategy import dca_bot
-    from crypto_bot.cooldown_manager import (
-        configure as cooldown_configure,
-    )
-    from crypto_bot.phase_runner import BotContext, PhaseRunner
-    from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
-    from crypto_bot.risk.exit_manager import (
-        calculate_trailing_stop,
-        should_exit,
-    )
-    from crypto_bot.execution.cex_executor import (
-        execute_trade_async as cex_trade_async,
-        get_exchange,
-        get_exchanges,
-    )
-    from crypto_bot.open_position_guard import OpenPositionGuard
-    from crypto_bot import console_monitor, console_control
-    from crypto_bot.utils.position_logger import log_position, log_balance
-    from crypto_bot.utils.market_loader import (
-        load_kraken_symbols,
-        update_ohlcv_cache,
-        update_multi_tf_ohlcv_cache,
-        update_regime_tf_cache,
-        timeframe_seconds,
-        configure as market_loader_configure,
-        fetch_order_book_async,
-        WS_OHLCV_TIMEOUT,
-    )
-    from crypto_bot.utils.pair_cache import PAIR_FILE, load_liquid_pairs
-    from tasks.refresh_pairs import (
-        DEFAULT_MIN_VOLUME_USD,
-        DEFAULT_TOP_K,
-        refresh_pairs_async,
-    )
-    from crypto_bot.utils.eval_queue import build_priority_queue
-    from crypto_bot.solana import get_solana_new_tokens
-    from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol, symbol_cache_guard
-    from crypto_bot.utils import symbol_utils
-    from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
-    from crypto_bot.paper_wallet import PaperWallet  # backward compatibility
-    from wallet import Wallet
-    from crypto_bot.utils.strategy_utils import compute_strategy_weights
-    from crypto_bot.auto_optimizer import optimize_strategies
-    from crypto_bot.utils.telemetry import write_cycle_metrics
-    from crypto_bot.utils.token_registry import (
-        TOKEN_MINTS,
-        monitor_pump_raydium,
-        refresh_mints,
-        periodic_mint_sanity_check,
-        fetch_from_helius,
-    )
-    from crypto_bot.utils import pnl_logger, regime_pnl_tracker
-    from crypto_bot.utils.ml_utils import ML_AVAILABLE
-    from crypto_bot.monitoring import record_sol_scanner_metrics
-    from crypto_bot.fund_manager import (
-        auto_convert_funds,
-        check_wallet_balances,
-        detect_non_trade_tokens,
-    )
-    from crypto_bot.regime.regime_classifier import (
-        classify_regime_async,
-        classify_regime_cached,
-    )
-    from crypto_bot.regime.reloader import maybe_refresh_model
-    from crypto_bot.volatility_filter import calc_atr
-    from crypto_bot.solana.exit import monitor_price
-    from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
-    try:  # pragma: no cover - optional dependency
-        from crypto_bot.version import __version__ as trainer_version, MIN_CT2_INTEGRATION
-        _TRAINER_AVAILABLE = True
-    except Exception:  # pragma: no cover - trainer not installed
-        trainer_version, MIN_CT2_INTEGRATION = "0.0.0", "0.1.0"
-        _TRAINER_AVAILABLE = False
-
-    logger = setup_logger("bot", LOG_DIR / "bot.log", to_console=False)
-    pipeline_logger = setup_logger("pipeline", LOG_DIR / "pipeline.log", to_console=False)
-
-    if _TRAINER_AVAILABLE and _parse_version(trainer_version) < _parse_version(
-        MIN_CT2_INTEGRATION
-    ):
-        logger.warning(
-            "cointrader-trainer %s is below required integration level %s",
-            trainer_version,
-            MIN_CT2_INTEGRATION,
-        )
-
-    if not _TRAINER_AVAILABLE:
-        logger.info("cointrader-trainer package not installed; ML features disabled")
 
 
 # _fix_symbol is defined below for backward compatibility
@@ -293,9 +187,9 @@ def _ensure_user_setup() -> None:
 
 def _fix_symbol(symbol: str) -> str:
     """Backward compatible wrapper around :func:`fix_symbol`."""
-    from crypto_bot.utils.symbol_utils import fix_symbol as _fix
-
-    return _fix(symbol)
+    if fix_symbol is None:  # pragma: no cover - should be loaded in main
+        raise RuntimeError("fix_symbol not loaded")
+    return fix_symbol(symbol)
 
 
 # In-memory cache of configuration and file mtimes
@@ -881,8 +775,6 @@ async def _ws_ping_loop(exchange: object, interval: float) -> None:
 
 async def registry_update_loop(interval_minutes: float) -> None:
     """Periodically refresh the Solana token registry."""
-    from crypto_bot.utils import token_registry as registry
-
     while True:
         try:
             mapping = await registry.load_token_mints(force_refresh=True)
@@ -1166,11 +1058,6 @@ async def scan_arbitrage(exchange: object, config: dict) -> list[str]:
     if not pairs:
         return []
 
-    try:
-        from crypto_bot.utils.market_loader import fetch_geckoterminal_ohlcv
-    except Exception:
-        fetch_geckoterminal_ohlcv = None
-
     gecko_prices: dict[str, float] = {}
     if fetch_geckoterminal_ohlcv:
         for sym in pairs:
@@ -1184,13 +1071,8 @@ async def scan_arbitrage(exchange: object, config: dict) -> list[str]:
 
     remaining = [s for s in pairs if s not in gecko_prices]
     dex_prices: dict[str, float] = gecko_prices.copy()
-    if remaining:
-        try:
-            from crypto_bot.solana import fetch_solana_prices
-        except Exception:
-            fetch_solana_prices = None
-        if fetch_solana_prices:
-            dex_prices.update(await fetch_solana_prices(remaining))
+    if remaining and fetch_solana_prices:
+        dex_prices.update(await fetch_solana_prices(remaining))
     results: list[str] = []
     threshold = float(
         config.get(
@@ -1706,8 +1588,6 @@ async def _execute_signals_impl(ctx: BotContext) -> None:
         executed_via_sniper = False
         executed_via_cross = False
         if strategy == "cross_chain_arb_bot":
-            from crypto_bot.solana_trading import cross_chain_trade
-
             task = register_task(
                 asyncio.create_task(
                     cross_chain_trade(
@@ -1730,8 +1610,6 @@ async def _execute_signals_impl(ctx: BotContext) -> None:
             task.add_done_callback(CROSS_ARB_TASKS.discard)
             executed_via_cross = True
         elif sym.endswith("/USDC"):
-            from crypto_bot.solana import sniper_solana
-
             if sym in NEW_SOLANA_TOKENS:
                 reg = candidate.get("regime")
                 if reg not in {"volatile", "breakout"}:
@@ -1743,8 +1621,6 @@ async def _execute_signals_impl(ctx: BotContext) -> None:
             if sym in NEW_SOLANA_TOKENS:
                 NEW_SOLANA_TOKENS.discard(sym)
             if sol_score > 0.7:
-                from crypto_bot.solana_trading import sniper_trade
-
                 base, quote = sym.split("/")
                 task = register_task(
                     asyncio.create_task(
@@ -2298,11 +2174,6 @@ async def _main_impl() -> TelegramNotifier:
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config = load_config()
-    from crypto_bot.utils.token_registry import (
-        TOKEN_MINTS,
-        load_token_mints,
-        set_token_mints,
-    )
 
     mapping = await load_token_mints()
     if mapping:
@@ -2669,8 +2540,6 @@ async def _main_impl() -> TelegramNotifier:
     )
     print("Bot running. Type 'stop' to pause, 'start' to resume, 'quit' to exit.")
 
-    from crypto_bot.telegram_bot_ui import TelegramBotUI
-
     telegram_bot = (
         TelegramBotUI(
             notifier,
@@ -2690,14 +2559,10 @@ async def _main_impl() -> TelegramNotifier:
 
     meme_wave_task = None
     if config.get("meme_wave_sniper", {}).get("enabled"):
-        from crypto_bot.solana import start_runner
-
         meme_wave_task = register_task(start_runner(config.get("meme_wave_sniper", {})))
     sniper_cfg = config.get("meme_wave_sniper", {})
     sniper_task = None
     if sniper_cfg.get("enabled"):
-        from crypto_bot.solana.runner import run as sniper_run
-
         sniper_task = register_task(asyncio.create_task(sniper_run(sniper_cfg)))
 
     if config.get("scan_in_background", True):
@@ -3014,8 +2879,125 @@ async def main() -> None:
     load_dotenv(override=True)
 
     from crypto_bot.utils.ml_utils import init_ml_components
+
+    global ScannerConfig, SolanaScannerConfig, PythConfig
+    global TelegramNotifier, send_test_message, LOG_DIR, setup_logger
+    global PortfolioRotator, load_or_create, analyze_symbol, dca_bot, cooldown_configure
+    global BotContext, PhaseRunner, RiskManager, RiskConfig, calculate_trailing_stop, should_exit
+    global cex_trade_async, get_exchange, get_exchanges, OpenPositionGuard
+    global console_monitor, console_control, log_position, log_balance
+    global load_kraken_symbols, update_ohlcv_cache, update_multi_tf_ohlcv_cache, update_regime_tf_cache
+    global timeframe_seconds, market_loader_configure, fetch_order_book_async, WS_OHLCV_TIMEOUT
+    global PAIR_FILE, load_liquid_pairs, DEFAULT_MIN_VOLUME_USD, DEFAULT_TOP_K, refresh_pairs_async
+    global build_priority_queue, get_solana_new_tokens, get_filtered_symbols, fix_symbol, symbol_utils, symbol_cache_guard
+    global log_cycle_metrics, PaperWallet, Wallet, compute_strategy_weights, optimize_strategies
+    global write_cycle_metrics, TOKEN_MINTS, monitor_pump_raydium, refresh_mints, periodic_mint_sanity_check, fetch_from_helius
+    global pnl_logger, regime_pnl_tracker, ML_AVAILABLE, record_sol_scanner_metrics, registry
+    global auto_convert_funds, check_wallet_balances, detect_non_trade_tokens
+    global classify_regime_async, classify_regime_cached, calc_atr, monitor_price, SolanaMempoolMonitor, maybe_refresh_model
+    global fetch_geckoterminal_ohlcv, fetch_solana_prices, cross_chain_trade, sniper_solana, sniper_trade
+    global load_token_mints, set_token_mints, TelegramBotUI, start_runner, sniper_run
+    global _TRAINER_AVAILABLE, trainer_version, MIN_CT2_INTEGRATION
+
+    from schema.scanner import (
+        ScannerConfig,
+        SolanaScannerConfig,
+        PythConfig,
+    )
+    from crypto_bot.utils.telegram import TelegramNotifier, send_test_message
+    from crypto_bot.utils.logger import LOG_DIR, setup_logger
+    from crypto_bot.portfolio_rotator import PortfolioRotator
+    from crypto_bot.wallet_manager import load_or_create
+    from crypto_bot.utils.market_analyzer import analyze_symbol
+    from crypto_bot.strategy import dca_bot
+    from crypto_bot.cooldown_manager import (
+        configure as cooldown_configure,
+    )
+    from crypto_bot.phase_runner import BotContext, PhaseRunner
+    from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
+    from crypto_bot.risk.exit_manager import (
+        calculate_trailing_stop,
+        should_exit,
+    )
+    from crypto_bot.execution.cex_executor import (
+        execute_trade_async as cex_trade_async,
+        get_exchange,
+        get_exchanges,
+    )
+    from crypto_bot.open_position_guard import OpenPositionGuard
+    from crypto_bot import console_monitor, console_control
+    from crypto_bot.utils.position_logger import log_position, log_balance
+    from crypto_bot.utils.market_loader import (
+        load_kraken_symbols,
+        update_ohlcv_cache,
+        update_multi_tf_ohlcv_cache,
+        update_regime_tf_cache,
+        timeframe_seconds,
+        configure as market_loader_configure,
+        fetch_order_book_async,
+        WS_OHLCV_TIMEOUT,
+        fetch_geckoterminal_ohlcv,
+    )
+    from crypto_bot.utils.pair_cache import PAIR_FILE, load_liquid_pairs
+    from tasks.refresh_pairs import (
+        DEFAULT_MIN_VOLUME_USD,
+        DEFAULT_TOP_K,
+        refresh_pairs_async,
+    )
+    from crypto_bot.utils.eval_queue import build_priority_queue
+    from crypto_bot.solana import (
+        get_solana_new_tokens,
+        fetch_solana_prices,
+        sniper_solana,
+        start_runner,
+    )
+    from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol, symbol_cache_guard
+    from crypto_bot.utils import symbol_utils
+    from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
+    from crypto_bot.paper_wallet import PaperWallet  # backward compatibility
+    from wallet import Wallet
+    from crypto_bot.utils.strategy_utils import compute_strategy_weights
+    from crypto_bot.auto_optimizer import optimize_strategies
+    from crypto_bot.utils.telemetry import write_cycle_metrics
+    from crypto_bot.utils.token_registry import (
+        TOKEN_MINTS,
+        monitor_pump_raydium,
+        refresh_mints,
+        periodic_mint_sanity_check,
+        fetch_from_helius,
+        load_token_mints,
+        set_token_mints,
+    )
+    from crypto_bot.utils import token_registry as registry
+    from crypto_bot.utils import pnl_logger, regime_pnl_tracker
+    from crypto_bot.utils.ml_utils import ML_AVAILABLE
+    from crypto_bot.solana_trading import cross_chain_trade, sniper_trade
+    from crypto_bot.telegram_bot_ui import TelegramBotUI
+    from crypto_bot.solana.runner import run as sniper_run
+    from crypto_bot.monitoring import record_sol_scanner_metrics
+    from crypto_bot.fund_manager import (
+        auto_convert_funds,
+        check_wallet_balances,
+        detect_non_trade_tokens,
+    )
+    from crypto_bot.regime.regime_classifier import (
+        classify_regime_async,
+        classify_regime_cached,
+    )
+    from crypto_bot.regime.reloader import maybe_refresh_model
+    from crypto_bot.volatility_filter import calc_atr
+    from crypto_bot.solana.exit import monitor_price
+    from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
+    try:  # pragma: no cover - optional dependency
+        from crypto_bot.version import __version__ as trainer_version, MIN_CT2_INTEGRATION
+        _TRAINER_AVAILABLE = True
+    except Exception:  # pragma: no cover - trainer not installed
+        trainer_version, MIN_CT2_INTEGRATION = "0.0.0", "0.1.0"
+        _TRAINER_AVAILABLE = False
+
+
+    from crypto_bot.utils.ml_utils import init_ml_components
     init_ml_components()
-    _import_internal_modules()
     _reload_modules()
 
     notifier: TelegramNotifier | None = None
