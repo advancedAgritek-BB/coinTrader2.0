@@ -160,10 +160,9 @@ def _run_wallet_manager() -> None:
             file=sys.stderr,
         )
         sys.exit(2)
-    subprocess.run([sys.executable, "-m", "crypto_bot.wallet_manager"], check=True)
-    code = subprocess.call([sys.executable, "-m", "crypto_bot.wallet_manager"])
-    if code not in (0, None):
-        sys.exit(code)
+    result = subprocess.run([sys.executable, "-m", "crypto_bot.wallet_manager"])
+    if result.returncode not in (0, None):
+        sys.exit(result.returncode)
 
 
 def _ensure_user_setup() -> None:
