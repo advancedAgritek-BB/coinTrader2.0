@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from dotenv import load_dotenv
+
 import sys
 import asyncio
 import contextlib
@@ -28,10 +31,12 @@ except Exception:  # pragma: no cover - optional dependency
 import pandas as pd
 import numpy as np
 import yaml
-from dotenv import dotenv_values
 from pydantic import ValidationError
 
 # Internal project modules are imported lazily inside `main()` after env setup
+from crypto_bot.ml.selfcheck import log_ml_status_once
+
+# Internal project modules are imported lazily in `_import_internal_modules()`
 
 
 logger = logging.getLogger("bot")
@@ -79,6 +84,7 @@ set_token_mints = None  # type: ignore
 TelegramBotUI = None  # type: ignore
 start_runner = None  # type: ignore
 sniper_run = None  # type: ignore
+cooldown_configure = None  # type: ignore
 
 
 @contextlib.asynccontextmanager
@@ -111,6 +117,8 @@ USER_CONFIG_PATH = CONFIG_DIR / "user_config.yaml"
 
 def _load_env(path: Path = ENV_PATH) -> dict[str, str]:
     """Load environment variables from ``path`` into ``os.environ``."""
+    from dotenv import dotenv_values
+
     env = dotenv_values(path)
     for key, value in env.items():
         if key not in os.environ and value is not None:
@@ -2496,6 +2504,7 @@ async def _main_impl() -> TelegramNotifier:
 
     max_open_trades = config.get("max_open_trades", 1)
     position_guard = OpenPositionGuard(max_open_trades)
+    log_ml_status_once()
     rotator = PortfolioRotator()
 
     mode = user.get("mode", config.get("mode", "auto"))
@@ -2986,10 +2995,10 @@ async def main() -> None:
         trainer_version, MIN_CT2_INTEGRATION = "0.0.0", "0.1.0"
         _TRAINER_AVAILABLE = False
 
+
+    from crypto_bot.utils.ml_utils import init_ml_components
     init_ml_components()
     _reload_modules()
-
-    logger.info("ML components available: %s", ML_AVAILABLE)
 
     notifier: TelegramNotifier | None = None
     try:
