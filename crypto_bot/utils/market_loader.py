@@ -51,6 +51,7 @@ async def get_kraken_listing_date(symbol: str) -> Optional[int]:
 
 from .logger import LOG_DIR, setup_logger
 from .constants import NON_SOLANA_BASES
+from crypto_bot.strategy.evaluator import StreamEvaluator
 
 try:  # optional dependency
     from .telegram import TelegramNotifier
@@ -148,6 +149,10 @@ SEMA: asyncio.Semaphore | None = None
 # Per-timeframe locks to prevent concurrent updates of the same timeframe
 _TF_LOCKS: Dict[str, asyncio.Lock] = {}
 
+# Shared StreamEvaluator instance set by main
+STREAM_EVALUATOR: StreamEvaluator | None = None
+_WARMED_UP: set[str] = set()
+
 # Redis settings
 REDIS_TTL = 3600  # cache expiry in seconds
 _REDIS_URL: str | None = None
@@ -168,6 +173,28 @@ def _get_redis_conn(url: str | None):
         except Exception:
             _REDIS_CONN = None
     return _REDIS_CONN
+
+
+def set_stream_evaluator(ev: StreamEvaluator | None) -> None:
+    """Assign global StreamEvaluator used for streaming symbol evaluation."""
+    global STREAM_EVALUATOR
+    STREAM_EVALUATOR = ev
+
+
+def warmup_reached_for(
+    symbol: str,
+    timeframe: str,
+    cache: Dict[str, Dict[str, pd.DataFrame]],
+    config: Dict,
+) -> bool:
+    """Return ``True`` if 1m and 5m warmup requirements are met for ``symbol``."""
+    warmup_map = config.get("warmup_candles", {}) or {}
+    for tf in ("1m", "5m"):
+        required = int(warmup_map.get(tf, 1))
+        df = cache.get(tf, {}).get(symbol)
+        if df is None or len(df) < required:
+            return False
+    return True
 
 # Mapping of common symbols to CoinGecko IDs for OHLC fallback
 COINGECKO_IDS = {
@@ -2016,6 +2043,21 @@ async def update_multi_tf_ohlcv_cache(
                         tf_cache = cache.get(tf, {})
                         tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
                         clear_regime_cache(sym, tf)
+                        if (
+                            STREAM_EVALUATOR
+                            and tf in ("1m", "5m")
+                            and warmup_reached_for(sym, tf, cache, config)
+                        ):
+                            if sym not in _WARMED_UP:
+                                logger.info(
+                                    "OHLCV[%s] warmup met for %s → enqueue for evaluation",
+                                    tf,
+                                    sym,
+                                )
+                                _WARMED_UP.add(sym)
+                            await STREAM_EVALUATOR.enqueue(
+                                sym, {"df_cache": cache, "symbol": sym}
+                            )
                         await _maybe_enqueue_eval(sym, tf, cache, config)
 
             for sym in dex_symbols:
@@ -2095,6 +2137,22 @@ async def update_multi_tf_ohlcv_cache(
                 if changed:
                     tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
                     clear_regime_cache(sym, tf)
+                    if (
+                        STREAM_EVALUATOR
+                        and tf in ("1m", "5m")
+                        and warmup_reached_for(sym, tf, cache, config)
+                    ):
+                        if sym not in _WARMED_UP:
+                            logger.info(
+                                "OHLCV[%s] warmup met for %s → enqueue for evaluation",
+                                tf,
+                                sym,
+                            )
+                            _WARMED_UP.add(sym)
+                        await STREAM_EVALUATOR.enqueue(
+                            sym, {"df_cache": cache, "symbol": sym}
+                        )
+
                     cache[tf] = tf_cache
                     await _maybe_enqueue_eval(sym, tf, cache, config)
             cache[tf] = tf_cache
