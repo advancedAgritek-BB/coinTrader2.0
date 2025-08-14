@@ -1,26 +1,22 @@
 from __future__ import annotations
 
-import os
-from dotenv import load_dotenv
-
-import sys
 import asyncio
 import contextlib
-import time
-import subprocess
-import os
-from dotenv import load_dotenv
-from pathlib import Path
-from datetime import datetime
-from collections import deque, OrderedDict
-from dataclasses import dataclass, field
 import inspect
-import re
 import logging
+import os
+import re
+import subprocess
+import sys
+import time
+from collections import OrderedDict, deque
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 import aiohttp
-
 try:
     import ccxt  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
