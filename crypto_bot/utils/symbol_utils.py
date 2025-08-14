@@ -233,6 +233,36 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         else:
             raise RuntimeError(
                 f"Universe is empty (mode={mode}). Check on-chain metadata provider and liquidity filters."
-            )
+    )
 
     return scored, onchain_syms
+
+
+def select_seed_symbols(
+    scored: list[tuple[str, float]], exchange, config: dict
+) -> list[str]:
+    """Return initial evaluation symbols for fast-start mode."""
+
+    fs_cfg = config.get("runtime", {}).get("fast_start", {})
+    if not fs_cfg.get("enabled"):
+        return [s for s, _ in scored]
+
+    markets = getattr(exchange, "markets", {}) or {}
+    seeds_cfg = fs_cfg.get("seed_symbols") or []
+    available = [s for s, _ in scored]
+    if seeds_cfg:
+        seeds = [s for s in seeds_cfg if s in markets and s in available]
+    else:
+        seed_n = int(fs_cfg.get("seed_batch_size", 15))
+        seeds = sorted(
+            available,
+            key=lambda s: float(markets.get(s, {}).get("quoteVolume") or 0),
+            reverse=True,
+        )[:seed_n]
+
+    if seeds:
+        preview = ", ".join(seeds[:2])
+        if len(seeds) > 2:
+            preview += ", ..."
+        logger.info("Fast-start: seeding %d symbols (%s)", len(seeds), preview)
+    return seeds
