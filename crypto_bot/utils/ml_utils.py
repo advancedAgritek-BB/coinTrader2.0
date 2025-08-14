@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 _REQUIRED_PACKAGES: Iterable[str] = ("sklearn", "joblib", "ta")
 
+_LOGGER_ONCE = {"ml_unavailable": False}
+_ml_checked = False
 _LOGGER_ONCE = {
     "ml_unavailable": False,
     "missing_supabase_creds": False,
@@ -68,7 +70,19 @@ def _warn_if_anon_key(key: str) -> None:
 
 def is_ml_available() -> bool:
     """Return ``True`` if optional ML dependencies and model are available."""
+    global _ml_checked, ML_AVAILABLE
+    if _ml_checked:
+        return ML_AVAILABLE
+    _ml_checked = True
+
     try:
+        try:  # optional training utilities
+            import cointrader_trainer  # noqa: F401
+        except ImportError:
+            logger.info("ML disabled: cointrader-trainer not installed")
+            ML_AVAILABLE = False
+            return False
+
         if not _check_packages(_REQUIRED_PACKAGES):
             raise ImportError("Missing required ML packages")
 
@@ -86,14 +100,18 @@ def is_ml_available() -> bool:
         _warn_if_anon_key(key)
 
         model_path = (
-            Path(__file__).resolve().parent.parent / "models" / "meta_selector_lgbm.txt"
+            Path(__file__).resolve().parent.parent
+            / "models"
+            / "meta_selector_lgbm.txt"
         )
         if not model_path.exists():
             raise FileNotFoundError(f"Model file not found: {model_path}")
 
+        ML_AVAILABLE = True
         return True
     except Exception as exc:  # pragma: no cover - best effort
         logger.error("ML unavailable: %s", exc)
+        ML_AVAILABLE = False
         return False
 
 

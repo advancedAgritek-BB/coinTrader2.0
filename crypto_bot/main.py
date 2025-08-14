@@ -3018,8 +3018,6 @@ async def main() -> None:
     _import_internal_modules()
     _reload_modules()
 
-    logger.info("ML components available: %s", ML_AVAILABLE)
-
     notifier: TelegramNotifier | None = None
     try:
         await refresh_mints()
