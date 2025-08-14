@@ -1672,6 +1672,9 @@ async def update_multi_tf_ohlcv_cache(
 
     for tf in tfs:
         lock = _TF_LOCKS.setdefault(tf, asyncio.Lock())
+        if lock.locked():
+            logger.info("Skip: %s update already running.", tf)
+            continue
         async with lock:
             logger.info("Starting update for timeframe %s", tf)
             tf_cache = cache.get(tf, {})
