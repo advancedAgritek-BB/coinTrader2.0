@@ -42,36 +42,15 @@ from crypto_bot.ml.selfcheck import log_ml_status_once
 logger = logging.getLogger("bot")
 pipeline_logger = logging.getLogger("pipeline")
 
-
-# Placeholder implementations overridden once internal modules are loaded in `main`
-def build_priority_queue(items):
-    ordered = sorted(items, key=lambda x: x[1], reverse=True)
-    return deque(sym for sym, _ in ordered)
-
-
-async def get_filtered_symbols(*_a, **_k):
-    return [], []
-
-
-async def fetch_from_helius(*_a, **_k):
-    return {}
-
-
-def calc_atr(_df, window=14):
-    return 0.0
-
-
-def timeframe_seconds(_ex, _tf):
-    return 0
-
-# Provide module-level placeholders for lazy-imported functions to ease testing
+# Module-level placeholders populated once internal modules are loaded in ``main``
 build_priority_queue = None  # type: ignore
 get_solana_new_tokens = None  # type: ignore
 get_filtered_symbols = None  # type: ignore
+fetch_from_helius = None  # type: ignore
 fix_symbol = None  # type: ignore
 symbol_utils = None  # type: ignore
 calc_atr = None  # type: ignore
-is_market_pumping = None  # type: ignore
+timeframe_seconds = None  # type: ignore
 maybe_refresh_model = None  # type: ignore
 registry = None  # type: ignore
 fetch_geckoterminal_ohlcv = None  # type: ignore
