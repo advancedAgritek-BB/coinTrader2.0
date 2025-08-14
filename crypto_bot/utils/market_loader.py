@@ -1564,6 +1564,30 @@ async def update_ohlcv_cache(
     """Batch OHLCV updates for multiple calls."""
 
     config = config or {}
+    backfill_map = config.get("timeframe_backfill_days", {}) or {}
+    warmup_map = config.get("warmup_candles", {}) or {}
+    now_ms = int(time.time() * 1000)
+    if start_since is not None:
+        bf_days = backfill_map.get(timeframe)
+        if bf_days is not None:
+            cutoff = now_ms - int(float(bf_days) * 86400000)
+            if start_since < cutoff:
+                logger.info(
+                    "Clamping backfill for %s to %d days (%s)",
+                    timeframe,
+                    bf_days,
+                    datetime.datetime.utcfromtimestamp(cutoff / 1000).isoformat(),
+                )
+                start_since = cutoff
+    warmup = warmup_map.get(timeframe)
+    if warmup is not None and limit > int(warmup):
+        logger.info(
+            "Clamping warmup candles for %s to %d (was %d)",
+            timeframe,
+            warmup,
+            limit,
+        )
+        limit = int(warmup)
     delay = 0.5
     size = (
         batch_size
@@ -1704,9 +1728,48 @@ async def update_multi_tf_ohlcv_cache(
             tf_cache = cache.get(tf, {})
 
             now_ms = int(time.time() * 1000)
+            tf_sec = timeframe_seconds(exchange, tf)
             dynamic_limits: dict[str, int] = {}
             snapshot_cap = int(config.get("ohlcv_snapshot_limit", limit))
             max_cap = min(snapshot_cap, 720)
+
+            backfill_map = config.get("timeframe_backfill_days", {}) or {}
+            warmup_map = config.get("warmup_candles", {}) or {}
+            tf_start = start_since
+            bf_days = backfill_map.get(tf)
+            if tf_start is not None and bf_days is not None:
+                cutoff = now_ms - int(float(bf_days) * 86400000)
+                if tf_start < cutoff:
+                    logger.info(
+                        "Clamping backfill for %s to %d days (%s)",
+                        tf,
+                        bf_days,
+                        datetime.datetime.utcfromtimestamp(cutoff / 1000).isoformat(),
+                    )
+                    tf_start = cutoff
+            tf_limit = int(limit)
+            needed: int | None = None
+            if tf_start is not None:
+                needed = int((now_ms - tf_start) // (tf_sec * 1000)) + 1
+                tf_limit = max(tf_limit, needed)
+            warmup = warmup_map.get(tf)
+            if warmup is not None and tf_limit > int(warmup):
+                logger.info(
+                    "Clamping warmup candles for %s to %d (was %d)",
+                    tf,
+                    warmup,
+                    tf_limit,
+                )
+                tf_limit = int(warmup)
+            tf_start_since = tf_start
+            if needed is not None and tf_limit < needed:
+                logger.info(
+                    "Warmup limit %d smaller than requested range %d for %s; dropping start_since",
+                    tf_limit,
+                    needed,
+                    tf,
+                )
+                tf_start_since = None
 
             concurrency = int(config.get("listing_date_concurrency", 5) or 0)
             semaphore = asyncio.Semaphore(concurrency) if concurrency > 0 else None
@@ -1774,14 +1837,8 @@ async def update_multi_tf_ohlcv_cache(
                 cex_symbols = [s for s in priority_syms if s in cex_symbols] + [s for s in cex_symbols if s not in prio_set]
                 dex_symbols = [s for s in priority_syms if s in dex_symbols] + [s for s in dex_symbols if s not in prio_set]
 
-            tf_sec = timeframe_seconds(exchange, tf)
-            tf_limit = limit
-            if start_since is not None:
-                needed = int((time.time() * 1000 - start_since) // (tf_sec * 1000)) + 1
-                tf_limit = max(limit, needed)
-
             if cex_symbols:
-                if start_since is None:
+                if tf_start_since is None:
                     groups: Dict[int, list[str]] = {}
                     for sym in cex_symbols:
                         sym_limit = dynamic_limits.get(sym, tf_limit)
@@ -1805,7 +1862,7 @@ async def update_multi_tf_ohlcv_cache(
                                 "ohlcv_batch_size": config.get("ohlcv_batch_size"),
                             },
                             batch_size=batch_size,
-                            start_since=start_since,
+                            start_since=tf_start_since,
                             use_websocket=use_websocket,
                             force_websocket_history=force_websocket_history,
                             max_concurrent=max_concurrent,
@@ -1817,7 +1874,7 @@ async def update_multi_tf_ohlcv_cache(
 
                     for sym in cex_symbols:
                         batches: list = []
-                        current_since = start_since
+                        current_since = tf_start_since
                         sym_total = min(tf_limit, dynamic_limits.get(sym, tf_limit))
                         if sym_total < tf_limit:
                             logger.info(

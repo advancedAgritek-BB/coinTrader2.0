@@ -533,6 +533,12 @@ timeframe: 15m
 timeframes:
 - 1m
 - 5m
+timeframe_backfill_days:
+  1m: 2
+  5m: 14
+warmup_candles:
+  1m: 1000
+  5m: 1000
 token_registry:
   refresh_interval_minutes: 15
 top_n_symbols: 20
