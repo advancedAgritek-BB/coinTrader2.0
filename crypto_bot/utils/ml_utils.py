@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 _REQUIRED_PACKAGES: Iterable[str] = ("sklearn", "joblib", "ta")
 
-_LOGGER_ONCE = {"ml_unavailable": False}
 _ml_checked = False
 _LOGGER_ONCE = {
     "ml_unavailable": False,
