@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 import time
-from collections import OrderedDict, deque
+from collections import OrderedDict, deque, Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -1361,6 +1361,10 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
     )
 
     base_tf = ctx.config.get("timeframe", "1h")
+    ctx.analysis_errors = 0
+    ctx.analysis_timeouts = 0
+
+    tasks = {}
     mode = ctx.config.get("mode", "cex")
 
     async def eval_fn(symbol: str):
@@ -1383,6 +1387,27 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
             mempool_cfg=ctx.mempool_cfg,
         )
 
+    results_map: dict[str, Any] = {}
+    total = len(tasks)
+    completed = 0
+    for task in asyncio.as_completed(tasks):
+        sym = tasks[task]
+        try:
+            results_map[sym] = await task
+        except asyncio.TimeoutError:
+            logger.error("Analysis timeout for %s", sym)
+            ctx.analysis_timeouts += 1
+            results_map[sym] = Exception("timeout")
+        except Exception as exc:  # pragma: no cover - log and continue
+            logger.error("Analysis failed for %s: %s", sym, exc)
+            ctx.analysis_errors += 1
+            results_map[sym] = exc
+        completed += 1
+        logger.info(
+            "Strategy evaluation progress: %d/%d symbols processed",
+            completed,
+            total,
+        )
     ctx.eval_fn = eval_fn
     from crypto_bot.evaluator import evaluate_batch
 
@@ -1423,6 +1448,8 @@ async def execute_signals(ctx: BotContext) -> None:
     if not results:
         logger.info("No analysis results to act on")
         return
+    ctx.reject_reasons = {}
+    reject_counts = Counter()
 
     # Filter and prioritize by score
     orig_results = results
@@ -1499,6 +1526,8 @@ async def execute_signals(ctx: BotContext) -> None:
         if not allowed:
             outcome_reason = f"blocked: {reason}"
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
+            key = reason.lower().replace(" ", "_")
+            reject_counts[key] += 1
             continue
 
         probs = candidate.get("probabilities", {})
@@ -1549,7 +1578,19 @@ async def execute_signals(ctx: BotContext) -> None:
         start_exec = time.perf_counter()
         executed_via_sniper = False
         executed_via_cross = False
+        mode_str = (
+            "dry_run" if ctx.config.get("execution_mode") == "dry_run" else "live"
+        )
+        trade_reason = candidate.get("reason") or strategy
         if strategy == "cross_chain_arb_bot":
+            logger.info(
+                "TRADE (%s) %s %s qty=%.4f price=spot reason='%s'",
+                mode_str,
+                side.upper(),
+                sym,
+                amount,
+                trade_reason,
+            )
             task = register_task(
                 asyncio.create_task(
                     cross_chain_trade(
@@ -1584,6 +1625,14 @@ async def execute_signals(ctx: BotContext) -> None:
                 NEW_SOLANA_TOKENS.discard(sym)
             if sol_score > 0.7:
                 base, quote = sym.split("/")
+                logger.info(
+                    "TRADE (%s) %s %s qty=%.4f price=spot reason='%s'",
+                    mode_str,
+                    side.upper(),
+                    sym,
+                    amount,
+                    trade_reason,
+                )
                 task = register_task(
                     asyncio.create_task(
                         sniper_trade(
@@ -1602,6 +1651,14 @@ async def execute_signals(ctx: BotContext) -> None:
                 executed_via_sniper = True
 
         if not executed_via_sniper and not executed_via_cross:
+            logger.info(
+                "TRADE (%s) %s %s qty=%.4f price=spot reason='%s'",
+                mode_str,
+                side.upper(),
+                sym,
+                amount,
+                trade_reason,
+            )
             order = await cex_trade_async(
                 ctx.exchange,
                 ctx.ws_client,
@@ -1692,6 +1749,11 @@ async def execute_signals(ctx: BotContext) -> None:
         logger.info(
             "No trades executed from %d candidate signals", len(results[:top_n])
         )
+
+    if reject_counts:
+        ctx.reject_reasons = dict(reject_counts)
+        top = ", ".join(f"{k}={v}" for k, v in reject_counts.most_common())
+        pipeline_logger.info("Reject reasons (top): %s", top)
 
 
 async def handle_exits(ctx: BotContext) -> None:
@@ -2695,6 +2757,23 @@ async def _main_impl() -> TelegramNotifier:
             cycle_start = time.perf_counter()
             ctx.timing = await runner.run(ctx)
             loop_count += 1
+            long_signals = sum(
+                1 for r in ctx.analysis_results if r.get("direction") == "long"
+            )
+            short_signals = sum(
+                1 for r in ctx.analysis_results if r.get("direction") == "short"
+            )
+            pipeline_logger.info(
+                "Eval summary: candidates=%d, queued=%d, evaluated=%d, signals=%d (long=%d, short=%d), errors=%d, timeouts=%d",
+                len(ctx.active_universe),
+                len(ctx.current_batch),
+                len(ctx.analysis_results),
+                long_signals + short_signals,
+                long_signals,
+                short_signals,
+                ctx.analysis_errors,
+                ctx.analysis_timeouts,
+            )
 
             if time.time() - last_weight_update >= 86400:
                 weights = compute_strategy_weights()
