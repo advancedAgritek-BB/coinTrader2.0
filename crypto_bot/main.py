@@ -28,6 +28,7 @@ import pandas as pd
 import numpy as np
 import yaml
 from pydantic import ValidationError
+from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 
 # Internal project modules are imported lazily inside `main()` after env setup
 from crypto_bot.ml.selfcheck import log_ml_status_once
@@ -60,6 +61,7 @@ TelegramBotUI = None  # type: ignore
 start_runner = None  # type: ignore
 sniper_run = None  # type: ignore
 cooldown_configure = None  # type: ignore
+stream_evaluator: StreamEvaluator | None = None
 
 
 @contextlib.asynccontextmanager
@@ -2575,14 +2577,37 @@ async def _main_impl() -> TelegramNotifier:
     ctx.position_guard = position_guard
     ctx.balance = await fetch_and_log_balance(exchange, wallet, config)
     last_balance = ctx.balance
+    async def _eval_symbol(symbol: str, data: dict) -> None:
+        df_map = {tf: ctx.df_cache.get(tf, {}).get(symbol) for tf in data.get("timeframes", [])}
+        res = await analyze_symbol(
+            symbol,
+            df_map,
+            ctx.config.get("mode", "cex"),
+            ctx.config,
+            ctx.notifier,
+            mempool_monitor=ctx.mempool_monitor,
+            mempool_cfg=ctx.mempool_cfg,
+        )
+        if not res.get("skip"):
+            ctx.analysis_results = [res]
+            ctx.current_batch = [symbol]
+            await _execute_signals_impl(ctx)
+
+    async def _eval_wrapper(symbol: str, data: dict) -> None:
+        await asyncio.wait_for(_eval_symbol(symbol, data), timeout=8)
+
+    stream_eval = StreamEvaluator(_eval_wrapper)
+    await stream_eval.start()
+    set_stream_evaluator(stream_eval)
+    global stream_evaluator
+    stream_evaluator = stream_eval
+
     runner = PhaseRunner(
         [
             fetch_candidates,
             update_caches,
             enrich_with_pyth,
-            analyse_batch,
             refresh_balance,
-            execute_signals,
             handle_exits,
         ]
     )
@@ -2808,6 +2833,9 @@ async def _main_impl() -> TelegramNotifier:
             await wait_or_event(delay * 60)
 
     finally:
+        if 'stream_eval' in locals() and stream_eval:
+            await stream_eval.drain()
+            await stream_eval.stop()
         for task in listener_tasks:
             task.cancel()
             with contextlib.suppress(Exception):
