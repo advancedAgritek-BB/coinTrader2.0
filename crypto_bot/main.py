@@ -40,7 +40,6 @@ logger = logging.getLogger("bot")
 pipeline_logger = logging.getLogger("pipeline")
 
 # Module-level placeholders populated once internal modules are loaded in ``main``
-from collections import deque
 
 build_priority_queue = lambda scores: deque(
     sym for sym, _ in sorted(scores, key=lambda x: x[1], reverse=True)
@@ -280,8 +279,6 @@ def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> f
 
 def enqueue_solana_tokens(tokens: list[str]) -> None:
     """Add Solana ``tokens`` to the priority queue skipping recently queued ones."""
-
-    global recent_solana_tokens, recent_solana_set
 
     for sym in reversed(tokens):
         if sym in recent_solana_set:
@@ -617,7 +614,7 @@ def _load_config_file() -> dict:
 
 def _load_config_internal() -> tuple[dict, set[str]]:
     """Load config if underlying files changed and track updates."""
-    global _CONFIG_CACHE, _CONFIG_MTIMES
+    global _CONFIG_CACHE
 
     main_mtime = CONFIG_PATH.stat().st_mtime if CONFIG_PATH.exists() else 0.0
     strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
@@ -913,8 +910,6 @@ async def initial_scan(
 
 async def fetch_candidates(ctx: BotContext) -> None:
     """Gather symbols for this cycle and build the evaluation batch."""
-    t0 = time.perf_counter()
-
     global symbol_priority_queue
 
     sf = ctx.config.setdefault("symbol_filter", {})
@@ -992,8 +987,6 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     # Always include major benchmark pairs
     active_candidates.extend([("BTC/USDT", 10.0), ("SOL/USDC", 10.0)])
-
-    ctx.timing["symbol_time"] = time.perf_counter() - t0
 
     symbols = active_candidates
     solana_tokens: list[str] = list(onchain_syms)
@@ -1465,28 +1458,24 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
     ctx.analysis_timeouts = 0
 
     eval_cfg = ctx.config.get("runtime", {}).get("evaluation", {})
-    concurrency = int(eval_cfg.get("concurrency", len(batch)))
     timeout = eval_cfg.get("per_symbol_timeout_s")
-    sem = asyncio.Semaphore(concurrency)
-
-    tasks = {}
     mode = ctx.config.get("mode", "cex")
 
-    async def run_symbol(sym: str) -> Any:
-        df_map = {tf: c.get(sym) for tf, c in ctx.df_cache.items()}
-    async def eval_fn(symbol: str):
+    async def eval_fn(symbol: str) -> Any:
         df_map = {tf: c.get(symbol) for tf, c in ctx.df_cache.items()}
         for tf, cache in ctx.regime_cache.items():
             df_map[tf] = cache.get(symbol)
         df = df_map.get(base_tf)
 
-        if hft_enabled and (base_minutes <= 1 or sym in hft_symbols):
+        if hft_enabled and (base_minutes <= 1 or symbol in hft_symbols):
             from crypto_bot.hft import HFTEngine, maker_spread
 
             engine = getattr(ctx, "hft_engine", None)
             if engine is None:
                 engine = HFTEngine()
                 ctx.hft_engine = engine
+            engine.attach(symbol, maker_spread)
+            return {"symbol": symbol, "skip": True}
             engine.attach(sym, maker_spread)
             return
 
@@ -1495,58 +1484,23 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
             symbol,
             len(df) if isinstance(df, pd.DataFrame) else 0,
         )
-        async with sem:
-            try:
-                coro = analyze_symbol(
-                    sym,
-                    df_map,
-                    mode,
-                    ctx.config,
-                    ctx.notifier,
-                    mempool_monitor=ctx.mempool_monitor,
-                    mempool_cfg=ctx.mempool_cfg,
-                )
-                if timeout:
-                    return await asyncio.wait_for(coro, timeout)
-                return await coro
-            except asyncio.TimeoutError:
-                logger.error("Analysis timeout for %s", sym)
-                return {"symbol": sym, "skip": True}
-
-    for sym in batch:
-        task = asyncio.create_task(run_symbol(sym))
-        tasks[task] = sym
-        return await analyze_symbol(
-            symbol,
-            df_map,
-            mode,
-            ctx.config,
-            ctx.notifier,
-            mempool_monitor=ctx.mempool_monitor,
-            mempool_cfg=ctx.mempool_cfg,
-        )
-
-    results_map: dict[str, Any] = {}
-    total = len(tasks)
-    completed = 0
-    for task in asyncio.as_completed(tasks):
-        sym = tasks[task]
         try:
-            results_map[sym] = await task
+            coro = analyze_symbol(
+                symbol,
+                df_map,
+                mode,
+                ctx.config,
+                ctx.notifier,
+                mempool_monitor=ctx.mempool_monitor,
+                mempool_cfg=ctx.mempool_cfg,
+            )
+            if timeout:
+                return await asyncio.wait_for(coro, timeout)
+            return await coro
         except asyncio.TimeoutError:
-            logger.error("Analysis timeout for %s", sym)
-            ctx.analysis_timeouts += 1
-            results_map[sym] = Exception("timeout")
-        except Exception as exc:  # pragma: no cover - log and continue
-            logger.error("Analysis failed for %s: %s", sym, exc)
-            ctx.analysis_errors += 1
-            results_map[sym] = exc
-        completed += 1
-        logger.info(
-            "Strategy evaluation progress: %d/%d symbols processed",
-            completed,
-            total,
-        )
+            logger.error("Analysis timeout for %s", symbol)
+            return {"symbol": symbol, "skip": True}
+
     ctx.eval_fn = eval_fn
     from crypto_bot.evaluator import evaluate_batch
 
@@ -2660,7 +2614,7 @@ async def _main_impl() -> TelegramNotifier:
     register_task(asyncio.create_task(monitor_pump_raydium()))
     register_task(asyncio.create_task(periodic_mint_sanity_check()))
 
-    monitor_task = register_task(
+    register_task(
         asyncio.create_task(
             console_monitor.monitor_loop(
                 exchange,
@@ -2682,10 +2636,8 @@ async def _main_impl() -> TelegramNotifier:
     session_state = SessionState(last_balance=last_balance)
     last_candle_ts: dict[str, int] = {}
 
-    control_task = register_task(
-        asyncio.create_task(console_control.control_loop(state))
-    )
-    rotation_task = register_task(
+    register_task(asyncio.create_task(console_control.control_loop(state)))
+    register_task(
         asyncio.create_task(
             _rotation_loop(
                 rotator,
@@ -2697,10 +2649,9 @@ async def _main_impl() -> TelegramNotifier:
             )
         )
     )
-    solana_scan_task: asyncio.Task | None = None
     if config.get("solana_scanner", {}).get("enabled"):
-        solana_scan_task = register_task(asyncio.create_task(solana_scan_loop()))
-    registry_task = register_task(
+        register_task(asyncio.create_task(solana_scan_loop()))
+    register_task(
         asyncio.create_task(
             registry_update_loop(
                 config.get("token_registry", {}).get("refresh_interval_minutes", 15)
@@ -2726,13 +2677,11 @@ async def _main_impl() -> TelegramNotifier:
     if telegram_bot:
         register_task(telegram_bot.run_async())
 
-    meme_wave_task = None
     if config.get("meme_wave_sniper", {}).get("enabled"):
-        meme_wave_task = register_task(start_runner(config.get("meme_wave_sniper", {})))
+        register_task(start_runner(config.get("meme_wave_sniper", {})))
     sniper_cfg = config.get("meme_wave_sniper", {})
-    sniper_task = None
     if sniper_cfg.get("enabled"):
-        sniper_task = register_task(asyncio.create_task(sniper_run(sniper_cfg)))
+        register_task(asyncio.create_task(sniper_run(sniper_cfg)))
 
     if config.get("scan_in_background", True):
         session_state.scan_task = register_task(
@@ -2771,18 +2720,6 @@ async def _main_impl() -> TelegramNotifier:
     ctx.paper_wallet = wallet
     ctx.position_guard = position_guard
     ctx.balance = await fetch_and_log_balance(exchange, wallet, config)
-    last_balance = ctx.balance
-    eval_lock = asyncio.Lock()
-
-    async def eval_fn(symbol: str, _info: dict) -> None:
-        async with eval_lock:
-            ctx.current_batch = [symbol]
-            await _analyse_batch_impl(ctx)
-            await execute_signals(ctx)
-
-    stream_evaluator = StreamEvaluator(eval_fn)
-    set_stream_evaluator(stream_evaluator)
-    await stream_evaluator.start()
     async def _eval_symbol(symbol: str, data: dict) -> None:
         df_map = {tf: ctx.df_cache.get(tf, {}).get(symbol) for tf in data.get("timeframes", [])}
         res = await analyze_symbol(
@@ -2797,11 +2734,15 @@ async def _main_impl() -> TelegramNotifier:
         if not res.get("skip"):
             ctx.analysis_results = [res]
             ctx.current_batch = [symbol]
-            await _execute_signals_impl(ctx)
+            await execute_signals(ctx)
 
     async def _eval_wrapper(symbol: str, data: dict) -> None:
         await asyncio.wait_for(_eval_symbol(symbol, data), timeout=8)
 
+    global stream_evaluator
+    stream_evaluator = StreamEvaluator(_eval_wrapper)
+    await stream_evaluator.start()
+    set_stream_evaluator(stream_evaluator)
     stream_eval = StreamEvaluator(_eval_wrapper)
     await stream_eval.start()
     set_stream_evaluator(stream_eval)
@@ -3057,9 +2998,6 @@ async def _main_impl() -> TelegramNotifier:
     finally:
         await stream_evaluator.drain()
         await stream_evaluator.stop()
-        if 'stream_eval' in locals() and stream_eval:
-            await stream_eval.drain()
-            await stream_eval.stop()
         for task in listener_tasks:
             task.cancel()
             with contextlib.suppress(Exception):
