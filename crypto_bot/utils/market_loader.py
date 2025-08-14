@@ -38,6 +38,8 @@ from .token_registry import (
     fetch_from_helius,
 )
 
+from crypto_bot.strategy.registry import load_enabled
+
 
 async def get_kraken_listing_date(symbol: str) -> Optional[int]:
     """Return Kraken listing timestamp for *symbol*.
@@ -1673,6 +1675,11 @@ async def update_multi_tf_ohlcv_cache(
 
     limit = int(limit)
     # Use the limit provided by the caller
+
+    # Ensure warmup candles satisfy strategy indicator lookbacks. This will
+    # either raise the configured warmup or disable strategies requiring more
+    # history, depending on ``data.auto_raise_warmup``.
+    load_enabled(config)
 
     def add_priority(data: list, symbol: str) -> None:
         """Push ``symbol`` to ``priority_queue`` if volume spike detected."""
