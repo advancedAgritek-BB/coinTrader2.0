@@ -35,6 +35,12 @@ from pydantic import ValidationError
 logger = logging.getLogger("bot")
 
 
+@contextlib.asynccontextmanager
+async def symbol_cache_guard():
+    """Fallback cache guard before internal modules are loaded."""
+    yield
+
+
 def _import_internal_modules() -> None:
     """Import project modules after environment setup."""
 
@@ -47,7 +53,7 @@ def _import_internal_modules() -> None:
     global load_kraken_symbols, update_ohlcv_cache, update_multi_tf_ohlcv_cache, update_regime_tf_cache
     global timeframe_seconds, market_loader_configure, fetch_order_book_async, WS_OHLCV_TIMEOUT
     global PAIR_FILE, load_liquid_pairs, DEFAULT_MIN_VOLUME_USD, DEFAULT_TOP_K, refresh_pairs_async
-    global build_priority_queue, get_solana_new_tokens, get_filtered_symbols, fix_symbol, symbol_utils
+    global build_priority_queue, get_solana_new_tokens, get_filtered_symbols, fix_symbol, symbol_utils, symbol_cache_guard
     global log_cycle_metrics, PaperWallet, Wallet, compute_strategy_weights, optimize_strategies
     global write_cycle_metrics, TOKEN_MINTS, monitor_pump_raydium, refresh_mints, periodic_mint_sanity_check
     global pnl_logger, regime_pnl_tracker, ML_AVAILABLE, record_sol_scanner_metrics
@@ -101,7 +107,7 @@ def _import_internal_modules() -> None:
     )
     from crypto_bot.utils.eval_queue import build_priority_queue
     from crypto_bot.solana import get_solana_new_tokens
-    from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol
+    from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol, symbol_cache_guard
     from crypto_bot.utils import symbol_utils
     from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
     from crypto_bot.paper_wallet import PaperWallet  # backward compatibility
@@ -899,36 +905,37 @@ async def initial_scan(
     for i in range(0, len(symbols), batch_size):
         batch = symbols[i : i + batch_size]
 
-        async with OHLCV_LOCK:
-            state.df_cache = await update_multi_tf_ohlcv_cache(
-                exchange,
-                state.df_cache,
-                batch,
-                {**config, "timeframes": tfs},
-                limit=deep_limit,
-                start_since=history_since,
-                use_websocket=False,
-                force_websocket_history=config.get("force_websocket_history", False),
-                max_concurrent=config.get("max_concurrent_ohlcv"),
-                notifier=notifier,
-                priority_queue=symbol_priority_queue,
-                batch_size=ohlcv_batch_size,
-            )
+        async with symbol_cache_guard():
+            async with OHLCV_LOCK:
+                state.df_cache = await update_multi_tf_ohlcv_cache(
+                    exchange,
+                    state.df_cache,
+                    batch,
+                    {**config, "timeframes": tfs},
+                    limit=deep_limit,
+                    start_since=history_since,
+                    use_websocket=False,
+                    force_websocket_history=config.get("force_websocket_history", False),
+                    max_concurrent=config.get("max_concurrent_ohlcv"),
+                    notifier=notifier,
+                    priority_queue=symbol_priority_queue,
+                    batch_size=ohlcv_batch_size,
+                )
 
-            state.regime_cache = await update_regime_tf_cache(
-                exchange,
-                state.regime_cache,
-                batch,
-                {**config, "timeframes": tfs},
-                limit=scan_limit,
-                start_since=lookback_since,
-                use_websocket=False,
-                force_websocket_history=config.get("force_websocket_history", False),
-                max_concurrent=config.get("max_concurrent_ohlcv"),
-                notifier=notifier,
-                df_map=state.df_cache,
-                batch_size=ohlcv_batch_size,
-            )
+                state.regime_cache = await update_regime_tf_cache(
+                    exchange,
+                    state.regime_cache,
+                    batch,
+                    {**config, "timeframes": tfs},
+                    limit=scan_limit,
+                    start_since=lookback_since,
+                    use_websocket=False,
+                    force_websocket_history=config.get("force_websocket_history", False),
+                    max_concurrent=config.get("max_concurrent_ohlcv"),
+                    notifier=notifier,
+                    df_map=state.df_cache,
+                    batch_size=ohlcv_batch_size,
+                )
         logger.info("Deep historical OHLCV loaded for %d symbols", len(batch))
 
         processed += len(batch)
@@ -1173,6 +1180,11 @@ async def scan_cex_arbitrage(
 
 
 async def update_caches(ctx: BotContext) -> None:
+    async with symbol_cache_guard():
+        await _update_caches_impl(ctx)
+
+
+async def _update_caches_impl(ctx: BotContext) -> None:
     """Update OHLCV and regime caches for the current symbol batch."""
     batch = ctx.current_batch
     if not batch:
@@ -1313,59 +1325,64 @@ async def enrich_with_pyth(ctx: BotContext) -> None:
     batch = ctx.current_batch
     if not batch:
         return
+    async with symbol_cache_guard():
+        async with aiohttp.ClientSession() as session:
+            for sym in batch:
+                quote = sym.split("/")[-1]
+                allowed = ctx.config.get("pyth_quotes", ["USDC"])
+                if quote not in allowed:
+                    continue
+                base = sym.split("/")[0]
+                try:
+                    url = f"https://hermes.pyth.network/v2/price_feeds?query={base}"
+                    async with session.get(url, timeout=10) as resp:
+                        feeds = await resp.json()
+                except Exception:
+                    continue
 
-    async with aiohttp.ClientSession() as session:
-        for sym in batch:
-            quote = sym.split("/")[-1]
-            allowed = ctx.config.get("pyth_quotes", ["USDC"])
-            if quote not in allowed:
-                continue
-            base = sym.split("/")[0]
-            try:
-                url = f"https://hermes.pyth.network/v2/price_feeds?query={base}"
-                async with session.get(url, timeout=10) as resp:
-                    feeds = await resp.json()
-            except Exception:
-                continue
+                feed_id = None
+                for item in feeds:
+                    attrs = item.get("attributes", {})
+                    if attrs.get("base") == base and attrs.get("quote_currency") == "USD":
+                        feed_id = item.get("id")
+                        break
+                if not feed_id:
+                    continue
 
-            feed_id = None
-            for item in feeds:
-                attrs = item.get("attributes", {})
-                if attrs.get("base") == base and attrs.get("quote_currency") == "USD":
-                    feed_id = item.get("id")
-                    break
-            if not feed_id:
-                continue
+                try:
+                    url = (
+                        "https://hermes.pyth.network/api/latest_price_feeds?ids[]="
+                        f"{feed_id}"
+                    )
+                    async with session.get(url, timeout=10) as resp:
+                        data = await resp.json()
+                except Exception:
+                    continue
 
-            try:
-                url = (
-                    "https://hermes.pyth.network/api/latest_price_feeds?ids[]="
-                    f"{feed_id}"
+                if not data:
+                    continue
+
+                price_info = data[0].get("price")
+                if not price_info:
+                    continue
+
+                price = float(price_info.get("price", 0)) * (
+                    10 ** price_info.get("expo", 0)
                 )
-                async with session.get(url, timeout=10) as resp:
-                    data = await resp.json()
-            except Exception:
-                continue
 
-            if not data:
-                continue
-
-            price_info = data[0].get("price")
-            if not price_info:
-                continue
-
-            price = float(price_info.get("price", 0)) * (
-                10 ** price_info.get("expo", 0)
-            )
-
-            async with OHLCV_LOCK:
-                for cache in ctx.df_cache.values():
-                    df = cache.get(sym)
-                    if df is not None and not df.empty:
-                        df.loc[df.index[-1], "close"] = price
+                async with OHLCV_LOCK:
+                    for cache in ctx.df_cache.values():
+                        df = cache.get(sym)
+                        if df is not None and not df.empty:
+                            df.loc[df.index[-1], "close"] = price
 
 
 async def analyse_batch(ctx: BotContext) -> None:
+    async with symbol_cache_guard():
+        await _analyse_batch_impl(ctx)
+
+
+async def _analyse_batch_impl(ctx: BotContext) -> None:
     """Run signal analysis on the current batch."""
     batch = ctx.current_batch
     if not batch:
@@ -1436,6 +1453,11 @@ async def analyse_batch(ctx: BotContext) -> None:
 
 
 async def execute_signals(ctx: BotContext) -> None:
+    async with symbol_cache_guard():
+        await _execute_signals_impl(ctx)
+
+
+async def _execute_signals_impl(ctx: BotContext) -> None:
     """Open trades for qualified analysis results."""
     results = getattr(ctx, "analysis_results", [])
     if not results:
@@ -2753,24 +2775,25 @@ async def _main_impl() -> TelegramNotifier:
                     ohlcv_batch_size = config.get("symbol_filter", {}).get(
                         "ohlcv_batch_size"
                     )
-                async with OHLCV_LOCK:
-                    tf_cache = ctx.df_cache.get(tf, {})
-                    tf_cache = await update_ohlcv_cache(
-                        exchange,
-                        tf_cache,
-                        open_syms,
-                        timeframe=tf,
-                        limit=2,
-                        use_websocket=config.get("use_websocket", False),
-                        force_websocket_history=config.get(
-                            "force_websocket_history", False
-                        ),
-                        max_concurrent=config.get("max_concurrent_ohlcv"),
-                        config=config,
-                        batch_size=ohlcv_batch_size,
-                    )
-                    ctx.df_cache[tf] = tf_cache
-                    session_state.df_cache[tf] = tf_cache
+                async with symbol_cache_guard():
+                    async with OHLCV_LOCK:
+                        tf_cache = ctx.df_cache.get(tf, {})
+                        tf_cache = await update_ohlcv_cache(
+                            exchange,
+                            tf_cache,
+                            open_syms,
+                            timeframe=tf,
+                            limit=2,
+                            use_websocket=config.get("use_websocket", False),
+                            force_websocket_history=config.get(
+                                "force_websocket_history", False
+                            ),
+                            max_concurrent=config.get("max_concurrent_ohlcv"),
+                            config=config,
+                            batch_size=ohlcv_batch_size,
+                        )
+                        ctx.df_cache[tf] = tf_cache
+                        session_state.df_cache[tf] = tf_cache
                 for sym in open_syms:
                     df = tf_cache.get(sym)
                     if df is not None and not df.empty:
