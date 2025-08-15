@@ -21,10 +21,7 @@ class OHLCVCache:
     async def update_intraday(self, timeframes: list[str]):
         """Run per-timeframe updates concurrently."""
         self.logger.info("Updating OHLCV cache for timeframes: %s", timeframes)
-        tasks: list[asyncio.Task] = []
-        for tf in timeframes:
-            tasks.append(asyncio.create_task(self._update_tf(tf)))
-        await asyncio.gather(*tasks)
+        await asyncio.gather(*(self._update_tf(tf) for tf in timeframes))
 
     async def _update_tf(self, tf: str) -> None:
         lock = self._get_timeframe_lock(tf)
@@ -35,20 +32,20 @@ class OHLCVCache:
         async with lock:
             self.logger.info("Starting OHLCV update for timeframe %s", tf)
             warmup = self.cfg.warmup_candles.get(tf)
-            backfill = self.cfg.backfill_days.get(tf)
+            backfill_days = self.cfg.backfill_days.get(tf)
             start = None
-            if backfill:
-                start = utc_now() - timedelta(days=backfill)
+            if backfill_days:
+                start = utc_now() - timedelta(days=backfill_days)
                 self.logger.info(
                     "Clamping backfill for %s to %s days (%s)",
                     tf,
-                    backfill,
+                    backfill_days,
                     start.isoformat(),
                 )
             if warmup:
                 self.logger.info("Clamping warmup candles for %s to %s", tf, warmup)
 
-            await self._fetch_and_store(tf, warmup=warmup, start=start if backfill else None)
+            await self._fetch_and_store(tf, warmup=warmup, start=start)
             self.logger.info("Completed OHLCV update for timeframe %s", tf)
 
     def _get_timeframe_lock(self, tf: str) -> asyncio.Lock:
