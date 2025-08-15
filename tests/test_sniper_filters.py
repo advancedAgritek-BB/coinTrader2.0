@@ -34,9 +34,12 @@ def test_volume_spike_filter(tmp_path, monkeypatch):
     event = make_event()
     cfg = {"safety": {}, "risk": {}, "scoring": {}}
 
+    async def fake_gecko(*a, **k):
+        return [[0, 1, 1, 1, 1, 10]], 0.0, 0.0
+
     monkeypatch.setattr(
         "crypto_bot.solana.sniper_solana.fetch_geckoterminal_ohlcv",
-        lambda *a, **k: ([[0, 1, 1, 1, 1, 10]], 0.0, 0.0),
+        fake_gecko,
     )
     monkeypatch.setattr(
         "crypto_bot.solana.sniper_solana.detect_patterns",
@@ -67,9 +70,12 @@ def test_ml_confidence_filter(tmp_path, monkeypatch):
     event = make_event()
     cfg = {"safety": {}, "risk": {}, "scoring": {}}
 
+    async def fake_gecko2(*a, **k):
+        return [[0, 1, 1, 1, 1, 10]], 0.0, 0.0
+
     monkeypatch.setattr(
         "crypto_bot.solana.sniper_solana.fetch_geckoterminal_ohlcv",
-        lambda *a, **k: ([[0, 1, 1, 1, 1, 10]], 0.0, 0.0),
+        fake_gecko2,
     )
     monkeypatch.setattr(
         "crypto_bot.solana.sniper_solana.detect_patterns",

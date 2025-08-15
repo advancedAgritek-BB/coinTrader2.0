@@ -1169,7 +1169,7 @@ async def scan_arbitrage(exchange: object, config: dict) -> list[str]:
     if fetch_geckoterminal_ohlcv:
         for sym in pairs:
             try:
-                data = fetch_geckoterminal_ohlcv(sym, limit=1)
+                data = await fetch_geckoterminal_ohlcv(sym, limit=1)
             except Exception:
                 data = None
             if data:

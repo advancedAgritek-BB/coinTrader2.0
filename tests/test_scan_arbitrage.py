@@ -14,7 +14,7 @@ def test_scan_arbitrage_profitable(monkeypatch):
     cex_prices = {"SOL/USDC": 10.0}
     dex_prices = {"SOL/USDC": 11.0}
 
-    def fake_gecko(*_a, **_k):
+    async def fake_gecko(*_a, **_k):
         price = dex_prices["SOL/USDC"]
         return [[0, price, price, price, price, 0]]
 
@@ -31,7 +31,7 @@ def test_scan_arbitrage_not_profitable(monkeypatch):
     cex_prices = {"SOL/USDC": 10.0}
     dex_prices = {"SOL/USDC": 10.04}
 
-    def fake_gecko2(*_a, **_k):
+    async def fake_gecko2(*_a, **_k):
         price = dex_prices["SOL/USDC"]
         return [[0, price, price, price, price, 0]]
 

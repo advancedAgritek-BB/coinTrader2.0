@@ -18,7 +18,9 @@ ml_mod.fetch_order_book_async = lambda *_a, **_k: None
 ml_mod.load_ohlcv_parallel = lambda *_a, **_k: None
 ml_mod.update_ohlcv_cache = lambda *_a, **_k: None
 ml_mod.update_multi_tf_ohlcv_cache = lambda *_a, **_k: None
-ml_mod.fetch_geckoterminal_ohlcv = lambda *_a, **_k: None
+async def _dummy_gecko(*_a, **_k):
+    return None
+ml_mod.fetch_geckoterminal_ohlcv = _dummy_gecko
 ml_mod.get_kraken_listing_date = lambda *_a, **_k: None
 sys.modules.setdefault("crypto_bot.utils.market_loader", ml_mod)
 

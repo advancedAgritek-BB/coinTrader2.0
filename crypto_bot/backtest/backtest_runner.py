@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Dict, Iterable, List, Optional
 
+import asyncio
 import logging
 import os
 from crypto_bot.utils.market_loader import fetch_geckoterminal_ohlcv, timeframe_seconds
@@ -130,7 +131,9 @@ class BacktestRunner:
     @lru_cache(maxsize=None)
     def _cached_fetch(symbol: str, timeframe: str, since: int, limit: int) -> pd.DataFrame:
         if symbol.endswith("/USDC"):
-            data = fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
+            data = asyncio.run(
+                fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
+            )
             df = pd.DataFrame(
                 data or [],
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
@@ -146,10 +149,12 @@ class BacktestRunner:
 
     def _fetch_data(self) -> pd.DataFrame:
         if self.config.symbol.endswith("/USDC"):
-            data = fetch_geckoterminal_ohlcv(
-                self.config.symbol,
-                timeframe=self.config.timeframe,
-                limit=self.config.limit,
+            data = asyncio.run(
+                fetch_geckoterminal_ohlcv(
+                    self.config.symbol,
+                    timeframe=self.config.timeframe,
+                    limit=self.config.limit,
+                )
             )
             df = pd.DataFrame(
                 data or [],
