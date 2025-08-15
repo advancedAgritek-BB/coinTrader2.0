@@ -23,6 +23,7 @@ from tenacity import (
     before_sleep_log,
 )
 
+# ensure we are using async ccxt
 import ccxt.async_support as ccxt  # type: ignore
 
 try:  # optional redis for caching
@@ -200,6 +201,14 @@ COINGECKO_IDS = {
 def resolve_listed_symbol(exchange, base: str, allowed_quotes: list[str]) -> str | None:
     """Return the first listed symbol for *base* across ``allowed_quotes``."""
     markets = getattr(exchange, "markets", {}) or {}
+# --- NEW: resolve markets only to what the exchange actually lists ---
+def resolve_listed_symbol(exchange, base: str, allowed_quotes: list[str]) -> str | None:
+    """
+    Given an exchange instance with markets loaded, return the first listed
+    symbol for ``base`` across ``allowed_quotes`` (in order), or ``None`` if not found.
+    Works with normalized ccxt symbols.
+    """
+    markets = exchange.markets or {}
     for q in allowed_quotes:
         sym = f"{base}/{q}"
         if sym in markets:
@@ -233,6 +242,20 @@ async def _safe_exchange_close(exchange, where: str = ""):
 async def fetch_ohlcv_block(exchange_id: str, bases: list[str], timeframe: str, limit: int,
                             allowed_quotes: list[str]):
     """Fetch OHLCV for ``bases`` on ``exchange_id`` over ``timeframe``."""
+    try:
+        await exchange.close()
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # pragma: no cover - cleanup best effort
+        logger.warning(f"Exchange.close() failed {where}: {e!r}")
+
+
+# Example usage template for fetching OHLCV blocks
+async def fetch_ohlcv_block(exchange_id: str, bases: list[str], timeframe: str, limit: int,
+                            allowed_quotes: list[str]):
+    """
+    Template function demonstrating proper exchange lifecycle management.
+    """
     ex = getattr(ccxt, exchange_id)({"enableRateLimit": True})
     try:
         await ex.load_markets()
@@ -254,6 +277,7 @@ async def fetch_ohlcv_block(exchange_id: str, bases: list[str], timeframe: str, 
             except asyncio.CancelledError:
                 raise
             except Exception as e:
+            except Exception as e:  # pragma: no cover - network errors
                 logger.warning(
                     f"fetch_ohlcv failed for {symbol} @ {timeframe}: {e!r}"
                 )
@@ -1739,6 +1763,9 @@ async def fetch_dex_ohlcv(
 
 # --- Back-compat: GeckoTerminal OHLCV wrapper using CCXT (real fetch, no stubs) ---
 async def fetch_geckoterminal_ohlcv(
+
+
+def fetch_geckoterminal_ohlcv(
     symbol: str,
     timeframe: str = "1h",
     since: Optional[int] = None,
@@ -1776,6 +1803,43 @@ async def fetch_geckoterminal_ohlcv(
         )
     finally:
         await _safe_exchange_close(ex, where=f"{ex_name}:{timeframe}")
+    """
+    Compatibility wrapper for older code paths that expected a GeckoTerminal OHLCV loader.
+    This uses CCXT to fetch OHLCV from the active exchange (or the provided `exchange`).
+    Returns CCXT-standard rows: [timestamp_ms, open, high, low, close, volume].
+    """
+
+    async def _run() -> List[List[float]]:
+        if exchange is not None and hasattr(exchange, "fetch_ohlcv"):
+            if inspect.iscoroutinefunction(exchange.fetch_ohlcv):
+                return await exchange.fetch_ohlcv(
+                    symbol, timeframe=timeframe, since=since, limit=limit
+                )
+            return await asyncio.to_thread(
+                exchange.fetch_ohlcv, symbol, timeframe, since, limit
+            )
+
+        if ccxt is None:
+            raise RuntimeError(
+                "ccxt is required for OHLCV fetching. Install ccxt or pass an exchange instance."
+            )
+
+        ex_name = os.environ.get("EXCHANGE", "kraken").lower()
+        ex_cls = getattr(ccxt, ex_name, None) or getattr(ccxt, "kraken")
+        ex = ex_cls({"enableRateLimit": True})
+        try:
+            return await ex.fetch_ohlcv(
+                symbol, timeframe=timeframe, since=since, limit=limit
+            )
+        finally:
+            await _safe_exchange_close(ex, where=f"{ex_name}:{timeframe}")
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_run())
+    else:
+        return loop.create_task(_run())
 
 
 async def update_ohlcv_cache(
@@ -2245,21 +2309,21 @@ async def update_multi_tf_ohlcv_cache(
                     logger.info("Adjusting limit for %s on %s to %d", sym, tf, sym_l)
                 if is_solana:
                     try:
-                        try:
-                            res = fetch_geckoterminal_ohlcv(
-                                sym,
-                                timeframe=tf,
-                                limit=sym_l,
-                                min_24h_volume=min_volume_usd,
-                            )
-                        except TypeError:
-                            res = fetch_geckoterminal_ohlcv(
-                                sym,
-                                timeframe=tf,
-                                limit=sym_l,
-                            )
+                        res = fetch_geckoterminal_ohlcv(
+                            sym,
+                            timeframe=tf,
+                            limit=sym_l,
+                        )
                         if inspect.isawaitable(res):
                             res = await res
+                        if res:
+                            vol_24h = None
+                            if isinstance(res, tuple):
+                                vol_24h = res[1]
+                            else:
+                                vol_24h = getattr(res, "vol_24h_usd", None)
+                            if vol_24h is not None and vol_24h < min_volume_usd:
+                                res = None
                     except Exception as e:  # pragma: no cover - network
                         logger.warning(
                             f"Gecko failed for {sym}: {e} - using exchange data"
@@ -2273,7 +2337,7 @@ async def update_multi_tf_ohlcv_cache(
                         data, vol, *_ = res
                     else:
                         data = res
-                        vol = min_volume_usd
+                        vol = getattr(res, "vol_24h_usd", min_volume_usd)
                     add_priority(data, sym)
 
                 if gecko_failed or not data or vol < min_volume_usd:
