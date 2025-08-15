@@ -1,11 +1,14 @@
 import math
 import pandas as pd
 import ta
-from crypto_bot.volatility_filter import calc_atr
 
 
-def atr_percent(df: pd.DataFrame, window: int = 14) -> float:
-    """Return ATR as a percentage of the latest close price."""
+def _atr(df: pd.DataFrame, window: int) -> float:
+    """Return the latest ATR value for ``df`` using TA library.
+
+    A lightweight helper to avoid importing :mod:`crypto_bot.volatility_filter`,
+    which would otherwise create a circular dependency during module import.
+    """
     if df.empty or not {"high", "low", "close"}.issubset(df.columns):
         return 0.0
 
@@ -15,9 +18,18 @@ def atr_percent(df: pd.DataFrame, window: int = 14) -> float:
     if series.empty:
         return 0.0
 
-    atr = float(series.iloc[-1])
+    value = float(series.iloc[-1])
+    return 0.0 if math.isnan(value) else value
+
+
+def atr_percent(df: pd.DataFrame, window: int = 14) -> float:
+    """Return ATR as a percentage of the latest close price."""
+    atr = _atr(df, window)
+    if atr == 0:
+        return 0.0
+
     price = float(df["close"].iloc[-1])
-    if price == 0 or math.isnan(atr) or math.isnan(price):
+    if price == 0 or math.isnan(price):
         return 0.0
     return atr / price * 100
 
@@ -40,8 +52,8 @@ def normalize_score_by_volatility(
     if not {"high", "low", "close"}.issubset(df.columns):
         return raw_score
 
-    current_atr = calc_atr(df, window=current_window)
-    long_term_atr = calc_atr(df, window=long_term_window)
+    current_atr = _atr(df, window=current_window)
+    long_term_atr = _atr(df, window=long_term_window)
     if any(
         math.isnan(x) or x == 0 for x in [current_atr, long_term_atr]
     ):
