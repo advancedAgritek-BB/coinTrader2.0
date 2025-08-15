@@ -15,10 +15,10 @@ def _dummy_df():
 
 def test_normalize_low_high(monkeypatch):
     def fake_atr_low(df, period=14):
-        return df["close"] * 0.001
+        return float(df["close"].iloc[-1]) * 0.001
 
     def fake_atr_high(df, period=14):
-        return df["close"] * 0.03
+        return float(df["close"].iloc[-1]) * 0.03
 
     df = _dummy_df()
     monkeypatch.setattr(vol, "calc_atr", fake_atr_low)
@@ -29,8 +29,9 @@ def test_normalize_low_high(monkeypatch):
 
 def test_accepts_legacy_order(monkeypatch):
     def fake_atr(df, period=14):
-        return df["close"] * 0.01
+        return float(df["close"].iloc[-1]) * 0.01
 
     monkeypatch.setattr(vol, "calc_atr", fake_atr)
     df = _dummy_df()
-    assert vol.normalize_score_by_volatility(df, 1.0) == pytest.approx(1.0)
+    expected = vol.normalize_score_by_volatility(1.0, df)
+    assert vol.normalize_score_by_volatility(df, 1.0) == pytest.approx(expected)
