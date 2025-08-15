@@ -89,8 +89,10 @@ class StreamEvaluationEngine:
         self.strategies: list[Any] = []
 
     async def start(self) -> None:
-        # discover and instantiate all available strategies
-        self.strategies = load_strategies()
+        # discover and instantiate strategies based on mode
+        mode = getattr(getattr(self.cfg, "trading", None), "mode", "auto")
+        enabled = getattr(getattr(self.cfg, "strategies", None), "enabled", [])
+        self.strategies = load_strategies(mode, enabled)
         if not self.strategies:
             logger.error(
                 "Aborting evaluator start: 0 strategies loaded."
