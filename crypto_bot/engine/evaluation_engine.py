@@ -1,5 +1,9 @@
 import asyncio
 import logging
+import threading
+from typing import Any, Awaitable, Callable
+
+from crypto_bot.utils.eval_guard import eval_gate
 import time
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -68,6 +72,17 @@ class StreamEvaluationEngine:
         self.queue: asyncio.Queue[tuple[str, dict]] = asyncio.Queue()
         self.eval_fn = eval_fn
         self.concurrency = concurrency
+        self.cfg = cfg
+        self._running = False
+        self._tasks: list[asyncio.Task] = []
+
+    async def start(self) -> None:
+        self._running = True
+        workers = getattr(getattr(self.cfg, "evaluation", None), "workers", self.concurrency)
+        for _ in range(workers):
+            t = asyncio.create_task(self._worker(), name=f"eval-worker-{_}")
+            self._tasks.append(t)
+        logger.info("Evaluation workers online: %d", len(self._tasks))
         self._workers: list[asyncio.Task] = []
         self._closed = asyncio.Event()
         self.data = data or SimpleNamespace(ready=lambda symbol, tf: True)
@@ -115,6 +130,7 @@ class StreamEvaluationEngine:
         logger.debug("[EVAL OK] %s", symbol)
 
     async def _worker(self) -> None:
+        while self._running:
         logger.info("Evaluation worker online")
         while not self._closed.is_set():
             try:
@@ -145,10 +161,16 @@ class StreamEvaluationEngine:
         await self.queue.join()
 
     async def stop(self) -> None:
-        self._closed.set()
-        for w in self._workers:
-            w.cancel()
-        await asyncio.gather(*self._workers, return_exceptions=True)
+        self._running = False
+        for t in self._tasks:
+            t.cancel()
+        for t in self._tasks:
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+        self._tasks.clear()
+        logger.info("Evaluation workers stopped")
 
 
 _STREAM_EVAL: StreamEvaluationEngine | None = None
