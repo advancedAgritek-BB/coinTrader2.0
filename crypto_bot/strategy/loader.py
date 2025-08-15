@@ -2,7 +2,10 @@ import importlib, pkgutil, traceback, logging
 from typing import Any, Dict, Iterable, List, Optional
 
 logger = logging.getLogger(__name__)
-DEFAULT_ENABLED = {"grid", "trend", "micro_scalp", "sniper_solana"}
+# Default strategy modules enabled when ``load_strategies`` is called without
+# an explicit ``enabled`` list.  These names must match the actual module names
+# within :mod:`crypto_bot.strategy`.
+DEFAULT_ENABLED = {"grid_bot", "trend_bot", "micro_scalp_bot", "sniper_solana"}
 
 class _SimpleRegistry:
     def __init__(self):
