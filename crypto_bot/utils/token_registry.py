@@ -217,9 +217,9 @@ async def load_token_mints(
             mapping = await fetch_from_jupiter()
             if mapping:
                 break
-        except Exception as exc:  # pragma: no cover - network failures
-            logger.error(
-                "Failed to fetch Jupiter tokens (attempt %d/3): %s", attempt + 1, exc
+        except Exception:  # pragma: no cover - network failures
+            logger.exception(
+                "Failed to fetch Jupiter tokens (attempt %d/3)", attempt + 1
             )
         if attempt < 2:
             await asyncio.sleep(0.5 * 2**attempt)
