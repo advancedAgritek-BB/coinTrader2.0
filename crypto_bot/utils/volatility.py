@@ -1,7 +1,6 @@
 import math
 import pandas as pd
-import ta
-from crypto_bot.volatility_filter import calc_atr
+from crypto_bot.indicators.atr import calc_atr
 
 
 def atr_percent(df: pd.DataFrame, window: int = 14) -> float:
@@ -9,13 +8,13 @@ def atr_percent(df: pd.DataFrame, window: int = 14) -> float:
     if df.empty or not {"high", "low", "close"}.issubset(df.columns):
         return 0.0
 
-    series = ta.volatility.average_true_range(
-        df["high"], df["low"], df["close"], window=window
-    )
-    if series.empty:
-        return 0.0
-
-    atr = float(series.iloc[-1])
+    result = calc_atr(df, window)
+    if isinstance(result, pd.Series):
+        if result.empty:
+            return 0.0
+        atr = float(result.iloc[-1])
+    else:
+        atr = float(result)
     price = float(df["close"].iloc[-1])
     if price == 0 or math.isnan(atr) or math.isnan(price):
         return 0.0
@@ -40,11 +39,11 @@ def normalize_score_by_volatility(
     if not {"high", "low", "close"}.issubset(df.columns):
         return raw_score
 
-    current_atr = calc_atr(df, window=current_window)
-    long_term_atr = calc_atr(df, window=long_term_window)
-    if any(
-        math.isnan(x) or x == 0 for x in [current_atr, long_term_atr]
-    ):
+    cur_res = calc_atr(df, current_window)
+    long_res = calc_atr(df, long_term_window)
+    current_atr = float(cur_res.iloc[-1] if isinstance(cur_res, pd.Series) else cur_res)
+    long_term_atr = float(long_res.iloc[-1] if isinstance(long_res, pd.Series) else long_res)
+    if any(math.isnan(x) or x == 0 for x in [current_atr, long_term_atr]):
         return raw_score
 
     scale = min(current_atr / long_term_atr, 2.0)
