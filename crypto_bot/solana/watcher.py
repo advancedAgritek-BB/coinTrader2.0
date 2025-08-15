@@ -180,6 +180,7 @@ class PoolWatcher:
         self._running = True
         backoff = 1
         last_log = 0
+        ClientError = getattr(aiohttp, "ClientError", Exception)
         async with aiohttp.ClientSession() as session:
             while self._running:
                 reconnect = False
