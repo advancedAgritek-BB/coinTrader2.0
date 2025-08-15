@@ -54,6 +54,21 @@ def invalidate_symbol_cache() -> None:
         if now - _LAST_INVALIDATION_TS < _INVALIDATION_DEBOUNCE_SEC:
             logger.debug("Symbol cache invalidation suppressed (debounced).")
             return
+        evaluator = None
+        try:
+            from crypto_bot.engine.evaluation_engine import get_stream_evaluator
+
+            evaluator = get_stream_evaluator()
+        except Exception:
+            evaluator = None
+
+        if evaluator is None or not getattr(evaluator, "strategies", None):
+            logger.info(
+                "No strategies loaded; proceeding with cache invalidation immediately."
+            )
+            _apply_invalidation(now)
+            return
+
         if eval_gate.is_busy():
             logger.info("Deferring cache invalidation until after evaluation.")
             if _INVALIDATION_TASK is None or _INVALIDATION_TASK.done():
