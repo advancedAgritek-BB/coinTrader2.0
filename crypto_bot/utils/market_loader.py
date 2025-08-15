@@ -2159,12 +2159,19 @@ async def update_multi_tf_ohlcv_cache(
                     logger.info("Adjusting limit for %s on %s to %d", sym, tf, sym_l)
                 if is_solana:
                     try:
-                        res = await fetch_geckoterminal_ohlcv(
-                            sym,
-                            timeframe=tf,
-                            limit=sym_l,
-                            min_24h_volume=min_volume_usd,
-                        )
+                        try:
+                            res = await fetch_geckoterminal_ohlcv(
+                                sym,
+                                timeframe=tf,
+                                limit=sym_l,
+                            )
+                        except TypeError:
+                            res = await fetch_geckoterminal_ohlcv(
+                                sym,
+                                timeframe=tf,
+                                limit=sym_l,
+                                min_24h_volume=min_volume_usd,
+                            )
                     except Exception as e:  # pragma: no cover - network
                         logger.warning(
                             f"Gecko failed for {sym}: {e} - using exchange data"

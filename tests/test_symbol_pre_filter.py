@@ -320,7 +320,7 @@ def test_onchain_volume_above_threshold(monkeypatch):
     monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
 
     res = asyncio.run(
-        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000})
+        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 1_000_000})
     )
 
     assert res == ([], [("AAA/USDC", 2.0)])
@@ -349,7 +349,7 @@ def test_onchain_lookup_via_helius(monkeypatch):
     monkeypatch.setattr(sp, "fetch_geckoterminal_ohlcv", fake_gecko)
 
     res = asyncio.run(
-        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 10_000_000})
+        sp.filter_symbols(DummyOnchainEx(), ["AAA/USDC"], {"onchain_min_volume_usd": 1_000_000})
     )
 
     assert res == ([], [("AAA/USDC", 1.5)])
