@@ -1,128 +1,80 @@
-from __future__ import annotations
-
 import os
-import time
-from dataclasses import dataclass
-from typing import Any, Dict, Optional
+import aiohttp
+import asyncio
+from typing import Any, Dict, List, Optional
+from loguru import logger
 
-import httpx
-
-HELIUS_API_KEY = (
-    os.getenv("HELIUS_API_KEY") or os.getenv("HELIUS_KEY") or os.getenv("HELIUS") or ""
-)
-
-_HELIUS_BASE = "https://api.helius.xyz"
-_TIMEOUT = httpx.Timeout(10.0, connect=10.0, read=10.0, write=10.0)
-_RETRIES = 3
-_BACKOFF = 0.75
-
-
-@dataclass
-class TokenMetadata:
-    mint: str
-    symbol: Optional[str] = None
-    name: Optional[str] = None
-    decimals: Optional[int] = None
-    image: Optional[str] = None
-    freeze_authority: Optional[str] = None
-    mint_authority: Optional[str] = None
-    program: Optional[str] = None
-
-
-def helius_available() -> bool:
-    """Return ``True`` if a Helius key is set and the service responds.
-
-    Avoid false negatives by retrying transient network errors.
-    """
-    if not HELIUS_API_KEY:
-        return False
-    url = f"{_HELIUS_BASE}/v0/addresses?api-key={HELIUS_API_KEY}"
-    for i in range(_RETRIES):
-        try:
-            r = httpx.get(url, timeout=_TIMEOUT)
-            if r.status_code in (200, 404, 400):
-                return True
-        except Exception:
-            pass
-        if i < _RETRIES - 1:
-            time.sleep(_BACKOFF * (2**i))
-    return False
+HELIUS_API_KEY = os.getenv("HELIUS_API_KEY", "")
+HELIUS_BASE = "https://api.helius.xyz"
 
 
 class HeliusClient:
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        *,
-        client: Optional[httpx.Client] = None,
-    ) -> None:
+    def __init__(self, api_key: Optional[str] = None, session: Optional[aiohttp.ClientSession] = None):
         self.api_key = api_key or HELIUS_API_KEY
         if not self.api_key:
-            raise RuntimeError("HELIUS_API_KEY missing in environment.")
-        self._client = client or httpx.Client(
-            timeout=_TIMEOUT, headers={"User-Agent": "coinTrader/helius"}
-        )
+            logger.warning("HELIUS_API_KEY not set; on-chain metadata will be unavailable.")
+        self._ext_session = session
+        self._session: Optional[aiohttp.ClientSession] = None
 
-    def close(self) -> None:
+    async def __aenter__(self):
+        if self._ext_session:
+            self._session = self._ext_session
+        else:
+            self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15))
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        if not self._ext_session and self._session:
+            await self._session.close()
+
+    @property
+    def session(self) -> aiohttp.ClientSession:
+        assert self._session is not None, "HeliusClient used outside of async context manager"
+        return self._session
+
+    async def get_token_metadata(self, mints: List[str]) -> Dict[str, Dict[str, Any]]:
+        """
+        Batch fetch token metadata. Returns {mint: metadata}.
+        """
+        if not self.api_key:
+            return {}
+        url = f"{HELIUS_BASE}/v0/tokens/metadata?api-key={self.api_key}"
+        payload = {"mintAccounts": mints, "includeOffChain": True}
         try:
-            self._client.close()
+            async with self.session.post(url, json=payload) as r:
+                if r.status != 200:
+                    txt = await r.text()
+                    logger.warning(f"Helius metadata HTTP {r.status}: {txt[:200]}")
+                    return {}
+                data = await r.json()
+                out: Dict[str, Dict[str, Any]] = {}
+                for meta in data or []:
+                    mint = meta.get("mint")
+                    if mint:
+                        out[mint] = meta
+                return out
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning(f"Helius.get_token_metadata failed: {e!r}")
+            return {}
+
+
+def helius_available() -> bool:
+    """Lightweight check that the Helius API key is set and service responds."""
+    if not HELIUS_API_KEY:
+        return False
+    url = f"{HELIUS_BASE}/v0/addresses?api-key={HELIUS_API_KEY}"
+
+    async def _check() -> bool:
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+                async with session.get(url) as resp:
+                    return resp.status in (200, 400, 404)
         except Exception:
-            pass
+            return False
 
-    def _url(self, path: str) -> str:
-        return f"{_HELIUS_BASE}{path}?api-key={self.api_key}"
-
-    def get_token_metadata(self, mint: str) -> Optional[TokenMetadata]:
-        """Return token metadata for ``mint`` from Helius."""
-
-        """
-        Helius token metadata API: /v0/token-metadata?mint=...
-        Fallback to /v0/tokens/metadata if needed.
-        """
-        # Primary
-        url = self._url("/v0/token-metadata") + f"&mint={mint}"
-        r = self._client.get(url)
-        if r.status_code == 200:
-            try:
-                data = r.json() or {}
-                return _parse_token_metadata(mint, data)
-            except Exception:
-                pass
-
-        # Fallback (batch style endpoint)
-        url2 = self._url("/v0/tokens/metadata")
-        r2 = self._client.post(url2, json={"mintAccounts": [mint]})
-        if r2.status_code == 200:
-            try:
-                arr = r2.json() or []
-                if arr:
-                    return _parse_token_metadata(mint, arr[0])
-            except Exception:
-                pass
-        return None
-
-
-def _parse_token_metadata(mint: str, payload: Dict[str, Any]) -> TokenMetadata:
-    attrs = (
-        payload.get("onChainMetadata", {})
-        .get("metadata", {})
-        .get("data", {})
-        .get("attrs", {})
-    )
-    symbol = payload.get("symbol") or payload.get("token", {}).get("symbol")
-    name = payload.get("name") or payload.get("token", {}).get("name")
-    decimals = payload.get("decimals") or payload.get("token", {}).get("decimals")
-    image = payload.get("image")
-    freeze_authority = attrs.get("freezeAuthority") or payload.get("freezeAuthority")
-    mint_authority = attrs.get("mintAuthority") or payload.get("mintAuthority")
-    program = payload.get("program") or payload.get("programId")
-    return TokenMetadata(
-        mint=mint,
-        symbol=symbol,
-        name=name,
-        decimals=decimals,
-        image=image,
-        freeze_authority=freeze_authority,
-        mint_authority=mint_authority,
-        program=program,
-    )
+    try:
+        return asyncio.run(_check())
+    except Exception:
+        return False
