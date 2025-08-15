@@ -8,8 +8,7 @@ import pandas as pd
 import requests
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from crypto_bot.utils.indicator_cache import cache_series
-from pathlib import Path
+from crypto_bot.indicators.atr import calc_atr
 
 
 logger = setup_logger(__name__, LOG_DIR / "volatility.log")
@@ -46,19 +45,6 @@ def fetch_funding_rate(symbol: str) -> float:
     except Exception as exc:
         logger.error("Failed to fetch funding rate: %s", exc)
     return 0.0
-
-
-def calc_atr(df: pd.DataFrame, window: int = 14) -> float:
-    """Calculate the Average True Range using cached values."""
-    lookback = window
-    recent = df.iloc[-(lookback + 1) :]
-    high_low = recent["high"] - recent["low"]
-    high_close = (recent["high"] - recent["close"].shift()).abs()
-    low_close = (recent["low"] - recent["close"].shift()).abs()
-    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-    atr_series = tr.rolling(window).mean()
-    cached = cache_series(f"atr_{window}", df, atr_series, lookback)
-    return float(cached.iloc[-1])
 
 
 def too_flat(df: pd.DataFrame, min_atr_pct: float) -> bool:
