@@ -8,10 +8,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 HELIUS_API_KEY = (
-    os.getenv("HELIUS_API_KEY")
-    or os.getenv("HELIUS_KEY")
-    or os.getenv("HELIUS")
-    or ""
+    os.getenv("HELIUS_API_KEY") or os.getenv("HELIUS_KEY") or os.getenv("HELIUS") or ""
 )
 
 _HELIUS_BASE = "https://api.helius.xyz"
@@ -33,11 +30,9 @@ class TokenMetadata:
 
 
 def helius_available() -> bool:
-    """Return ``True`` if a Helius key is set and the service responds."""
+    """Return ``True`` if a Helius key is set and the service responds.
 
-    """
-    True if we have a key AND Helius responds to a trivial request.
-    We avoid false negatives by retrying transient network errors.
+    Avoid false negatives by retrying transient network errors.
     """
     if not HELIUS_API_KEY:
         return False
@@ -48,10 +43,8 @@ def helius_available() -> bool:
             if r.status_code in (200, 404, 400):
                 return True
         except Exception:
-            time.sleep(_BACKOFF * (2 ** i))
-            if r.status_code in (200, 404, 400):  # 404/400 still proves reachability
-                return True
-        except Exception:
+            pass
+        if i < _RETRIES - 1:
             time.sleep(_BACKOFF * (2**i))
     return False
 
@@ -64,14 +57,11 @@ class HeliusClient:
         client: Optional[httpx.Client] = None,
     ) -> None:
         self.api_key = api_key or HELIUS_API_KEY
+        if not self.api_key:
+            raise RuntimeError("HELIUS_API_KEY missing in environment.")
         self._client = client or httpx.Client(
             timeout=_TIMEOUT, headers={"User-Agent": "coinTrader/helius"}
         )
-    def __init__(self, api_key: Optional[str] = None, *, client: Optional[httpx.Client] = None) -> None:
-        self.api_key = api_key or HELIUS_API_KEY
-        self._client = client or httpx.Client(timeout=_TIMEOUT, headers={"User-Agent": "coinTrader/helius"})
-        if not self.api_key:
-            raise RuntimeError("HELIUS_API_KEY missing in environment.")
 
     def close(self) -> None:
         try:
@@ -119,7 +109,6 @@ def _parse_token_metadata(mint: str, payload: Dict[str, Any]) -> TokenMetadata:
         .get("data", {})
         .get("attrs", {})
     )
-    attrs = payload.get("onChainMetadata", {}).get("metadata", {}).get("data", {}).get("attrs", {})
     symbol = payload.get("symbol") or payload.get("token", {}).get("symbol")
     name = payload.get("name") or payload.get("token", {}).get("name")
     decimals = payload.get("decimals") or payload.get("token", {}).get("decimals")
@@ -137,4 +126,3 @@ def _parse_token_metadata(mint: str, payload: Dict[str, Any]) -> TokenMetadata:
         mint_authority=mint_authority,
         program=program,
     )
-
