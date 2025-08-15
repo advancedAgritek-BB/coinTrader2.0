@@ -354,6 +354,8 @@ def test_onchain_lookup_via_helius(monkeypatch):
 
     assert res == ([], [("AAA/USDC", 1.5)])
     assert token_registry.TOKEN_MINTS["AAA"] == "mint"
+
+
 def test_blacklisted_base_omitted(monkeypatch, caplog):
     caplog.set_level("WARNING")
     import crypto_bot.utils.token_registry as tr
@@ -1171,6 +1173,8 @@ def test_fetch_ticker_async_timeout(monkeypatch):
     asyncio.run(sp._fetch_ticker_async(["XBTUSD"], timeout=5))
 
     assert calls == [5]
+
+
 def test_ticker_retry_attempts(monkeypatch):
     class RetryExchange(DummyExchange):
         def __init__(self):
@@ -1342,6 +1346,8 @@ def test_unknown_pair_not_cached(monkeypatch):
     result = asyncio.run(sp.filter_symbols(MarketIDExchange(), ["BTC/USDT"], CONFIG))
     assert result == []
     assert "BTC/USDT" not in sp.liq_cache
+
+
 def test_refresh_tickers_empty_result(monkeypatch, caplog):
     caplog.set_level("WARNING")
 
