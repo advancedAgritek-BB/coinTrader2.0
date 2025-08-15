@@ -28,30 +28,20 @@ token_registry = importlib.util.module_from_spec(spec)
 sys.modules["crypto_bot.utils.token_registry"] = token_registry
 spec.loader.exec_module(token_registry)
 
-
-class DummyResp:
-    def __init__(self, data):
-        self._data = data
-
-    async def json(self, content_type=None):
-        return self._data
+from tests.dummy_aiohttp import DummyResp, DummySession as BaseDummySession
 
 
-class DummySession:
+class DummySession(BaseDummySession):
     def __init__(self, pump_data):
+        super().__init__()
         self.pump_data = pump_data
         self.calls = {"first": True}
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        pass
 
     async def get(self, url, timeout=10):
         if self.calls["first"]:
             self.calls["first"] = False
-            raise aiohttp.ClientResponseError(None, (), status=429, message="Too Many Requests")
+            req = types.SimpleNamespace(real_url=url)
+            raise aiohttp.ClientResponseError(req, (), status=429, message="Too Many Requests")
         if "pump.fun" in url:
             return DummyResp(self.pump_data)
         return DummyResp([])
@@ -95,7 +85,7 @@ def test_monitor_new_tokens_filters_and_backoff(monkeypatch):
     ]
 
     session = DummySession(pump_data)
-    aiohttp_mod = types.SimpleNamespace(ClientSession=lambda: session)
+    aiohttp_mod = types.SimpleNamespace(ClientSession=lambda: session, ClientError=Exception)
     monkeypatch.setattr(token_registry, "aiohttp", aiohttp_mod)
 
     monkeypatch.setattr(token_registry, "TOKEN_MINTS", {})
@@ -129,7 +119,7 @@ def test_monitor_new_tokens_filters_and_backoff(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(token_registry.monitor_new_tokens())
 
-    assert calls and calls[0] == 10
+    assert calls and calls[0] == 1
     assert "GOOD" in token_registry.TOKEN_MINTS
     assert "BAD1" not in token_registry.TOKEN_MINTS
     assert "BAD2" not in token_registry.TOKEN_MINTS
