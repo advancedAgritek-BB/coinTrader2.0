@@ -1,9 +1,5 @@
 import asyncio
 import logging
-import threading
-from typing import Any, Awaitable, Callable
-
-from crypto_bot.utils.eval_guard import eval_gate
 import time
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -73,18 +69,12 @@ class StreamEvaluationEngine:
         self.eval_fn = eval_fn
         self.concurrency = concurrency
         self.cfg = cfg
+        self.data = data
         self._running = False
-        self._tasks: list[asyncio.Task] = []
-
-    async def start(self) -> None:
-        self._running = True
-        workers = getattr(getattr(self.cfg, "evaluation", None), "workers", self.concurrency)
-        for _ in range(workers):
-            t = asyncio.create_task(self._worker(), name=f"eval-worker-{_}")
-            self._tasks.append(t)
-        logger.info("Evaluation workers online: %d", len(self._tasks))
         self._workers: list[asyncio.Task] = []
-        self._closed = asyncio.Event()
+        self._tasks: list[asyncio.Task] = []
+        self._closed: asyncio.Event | None = None
+        self.gate: EvalGate | None = None
         self.strategies: dict[str, Any] = {}
         self.strategy_import_errors: dict[str, str] = {}
 
@@ -97,32 +87,34 @@ class StreamEvaluationEngine:
                 "Aborting evaluator start: 0 strategies loaded. See above import errors."
             )
             return
-        self.data = data or SimpleNamespace(ready=lambda symbol, tf: True)
-        ttl = 120
-        if cfg is not None and getattr(cfg, "evaluation", None) is not None:
-            ttl = getattr(cfg.evaluation, "gate_ttl_sec", ttl)
-        self.gate = EvalGate(logger, ttl_sec=ttl)
 
-    async def start(self) -> None:
+        if self.data is None:
+            self.data = SimpleNamespace(ready=lambda symbol, tf: True)
+
+        ttl = 120
+        if self.cfg is not None and getattr(self.cfg, "evaluation", None) is not None:
+            ttl = getattr(self.cfg.evaluation, "gate_ttl_sec", ttl)
+        self.gate = EvalGate(logger, ttl_sec=ttl)
         await self.gate.start_watchdog()
-       for _ in range(self.concurrency):
-            self._workers.append(asyncio.create_task(self._worker()))
-        logger.info(
-            "Evaluation workers online: %d; queue=%d",
-            self.concurrency,
-            self.queue.qsize(),
+
+        self._running = True
+        self._closed = asyncio.Event()
+        self._workers = []
+        self._tasks = []
+        workers = getattr(
+            getattr(self.cfg, "evaluation", None), "workers", self.concurrency
         )
+        for idx in range(workers):
+            task = asyncio.create_task(self._worker(), name=f"eval-worker-{idx}")
+            self._workers.append(task)
+        logger.info("Evaluation workers online: %d", len(self._workers))
 
     def _symbol_requires_5m(self, ctx: dict) -> bool:
-        timeframes = []
         if isinstance(ctx, dict):
-            timeframes = ctx.get("timeframes", [])
-        return "5m" in timeframes
+            return "5m" in ctx.get("timeframes", [])
+        return False
 
     async def _evaluate_symbol(self, symbol: str, ctx: dict) -> None:
-        timeframes = []
-        if isinstance(ctx, dict):
-            timeframes = ctx.get("timeframes", [])
         res = await asyncio.wait_for(self.eval_fn(symbol, ctx), timeout=8)
         if isinstance(res, dict):
             direction = res.get("direction", "none")
@@ -142,29 +134,33 @@ class StreamEvaluationEngine:
         logger.debug("[EVAL OK] %s", symbol)
 
     async def _worker(self) -> None:
+        if self.gate is None or self._closed is None or self.data is None:
+            logger.error("Evaluation worker started before engine initialization")
+            return
         while self._running:
-        logger.info("Evaluation worker online")
-        while not self._closed.is_set():
-            try:
-                symbol, ctx = await self.queue.get()
-            except asyncio.CancelledError:  # pragma: no cover - shutdown
-                return
-            try:
-                needs_5m = self._symbol_requires_5m(ctx)
-                if not self.data.ready(symbol, "1m"):
-                    logger.debug("EVAL SKIP %s: 1m warmup not met", symbol)
-                    continue
-                if needs_5m and not self.data.ready(symbol, "5m"):
-                    logger.debug("EVAL SKIP %s: 5m warmup not met", symbol)
-                    continue
+            logger.info("Evaluation worker online")
+            while self._running and not self._closed.is_set():
+                try:
+                    symbol, ctx = await self.queue.get()
+                except asyncio.CancelledError:  # pragma: no cover - shutdown
+                    return
+                try:
+                    needs_5m = self._symbol_requires_5m(ctx)
+                    if not self.data.ready(symbol, "1m"):
+                        logger.debug("EVAL SKIP %s: 1m warmup not met", symbol)
+                        continue
+                    if needs_5m and not self.data.ready(symbol, "5m"):
+                        logger.debug("EVAL SKIP %s: 5m warmup not met", symbol)
+                        continue
 
-                async with self.gate.hold(f"{symbol}"):
-                    logger.info("EVAL START %s", symbol)
-                    await self._evaluate_symbol(symbol, ctx)
-            except Exception:
-                logger.exception("Evaluator crashed on %s", symbol)
-            finally:
-                self.queue.task_done()
+                    async with self.gate.hold(f"{symbol}"):
+                        logger.info("EVAL START %s", symbol)
+                        await self._evaluate_symbol(symbol, ctx)
+                except Exception:
+                    logger.exception("Evaluator crashed on %s", symbol)
+                finally:
+                    self.queue.task_done()
+            await asyncio.sleep(0)
 
     async def enqueue(self, symbol: str, ctx: dict) -> None:
         await self.queue.put((symbol, ctx))
@@ -174,13 +170,16 @@ class StreamEvaluationEngine:
 
     async def stop(self) -> None:
         self._running = False
-        for t in self._tasks:
+        if self._closed:
+            self._closed.set()
+        for t in self._workers + self._tasks:
             t.cancel()
-        for t in self._tasks:
+        for t in self._workers + self._tasks:
             try:
                 await t
             except asyncio.CancelledError:
                 pass
+        self._workers.clear()
         self._tasks.clear()
         logger.info("Evaluation workers stopped")
 
