@@ -7,14 +7,12 @@ import os
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_DOWN
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
 
 import aiohttp
 import ccxt.async_support as ccxt
 import yaml
-from urllib.parse import urlencode, urlparse
-
-from crypto_bot.solana.helius_client import HELIUS_API_KEY, helius_available
+from crypto_bot.solana.helius_client import HELIUS_API_KEY, HeliusClient, helius_available
 
 from crypto_bot.strategy import cross_chain_arb_bot
 from .gecko import gecko_request
@@ -76,21 +74,6 @@ __all__ = [
 
 
 _MISSING_MINT_LOGGED: set[str] = set()
-
-
-def _build_helius_url(params: Dict[str, str]) -> str | None:
-    """Return a validated Helius metadata URL for ``params``."""
-
-    parsed = urlparse(HELIUS_TOKEN_API)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc or not parsed.path:
-        logger.warning("Invalid Helius API URL: %s", HELIUS_TOKEN_API)
-        return None
-    if "token-metadata" not in parsed.path:
-        logger.warning("Invalid Helius API path: %s", HELIUS_TOKEN_API)
-        return None
-    return f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{urlencode(params)}"
-
-
 # Prime startup log handled in helius_client
 
 
@@ -419,7 +402,7 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     provided.
     """
 
-    if not helius_available:
+    if not helius_available():
         return {str(s).upper(): "metadata_unknown" for s in symbols if s}
     api_key = HELIUS_API_KEY
 
@@ -505,39 +488,26 @@ async def get_decimals(mint: str) -> int:
     if cached is not None:
         return cached
 
-    if not helius_available:
+    if not helius_available():
         return 0
-    api_key = HELIUS_API_KEY
 
-    params = {"mint": mint, "api-key": api_key}
-    url = _build_helius_url(params)
-    if not url:
-        return 0
+    def _fetch() -> Optional[int]:
+        hc = HeliusClient()
+        try:
+            md = hc.get_token_metadata(mint)
+        finally:  # pragma: no cover - defensive
+            hc.close()
+        return md.decimals if md and md.decimals is not None else None
+
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=10) as resp:
-                if 400 <= resp.status < 500:
-                    logger.warning(
-                        "Helius decimals lookup failed for %s [%s]", mint, resp.status
-                    )
-                    return 0
-                resp.raise_for_status()
-                data = await resp.json(content_type=None)
+        decimals = await asyncio.to_thread(_fetch)
     except Exception as exc:  # pragma: no cover - network
         logger.error("Helius decimals lookup failed for %s: %s", mint, exc)
         return 0
 
-    items = data if isinstance(data, list) else data.get("tokens") or data.get("data") or []
-    if isinstance(items, dict):
-        items = list(items.values())
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        mint_addr = item.get("mint") or item.get("address") or item.get("tokenMint")
-        dec = item.get("decimals")
-        if isinstance(mint_addr, str) and mint_addr == mint and isinstance(dec, int):
-            TOKEN_DECIMALS[mint] = dec
-            return dec
+    if isinstance(decimals, int):
+        TOKEN_DECIMALS[mint] = decimals
+        return decimals
     return 0
 
 
