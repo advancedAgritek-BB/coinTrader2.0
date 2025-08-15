@@ -27,4 +27,16 @@ class Config:
         default_factory=lambda: ["USD", "USDT", "USDC", "EUR"]
     )
     hft: bool = True
+    strict_cex: bool = False
+    denylist_symbols: List[str] = field(default_factory=list)
+
+
+# Default global configuration used by modules that expect a ``cfg`` object.
+#
+# Individual applications may override or replace this instance at runtime,
+# but providing it here keeps optional modules decoupled from the loader while
+# still allowing them to reference configuration values such as
+# ``denylist_symbols`` or ``strict_cex``.
+cfg = Config()
+
 
