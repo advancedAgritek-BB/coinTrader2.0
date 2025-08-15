@@ -15,7 +15,7 @@ from crypto_bot.utils.telegram import TelegramNotifier
 from .pattern_detector import detect_patterns
 from crypto_bot.utils.pattern_logger import log_patterns
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from crypto_bot.utils import timeframe_seconds
+from crypto_bot.utils.market_loader import timeframe_seconds
 from crypto_bot.utils.telemetry import telemetry
 from crypto_bot.utils.telegram import TelegramNotifier
 
