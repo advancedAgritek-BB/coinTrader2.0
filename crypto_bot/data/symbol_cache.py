@@ -29,15 +29,16 @@ def purge_denylisted(container: Any) -> Any:
     if not deny:
         return container
     if isinstance(container, MutableSequence):
-        restored = [s for s in container if s not in deny]
-        for s in set(container).intersection(deny):
+        purged = [s for s in container if s in deny]
+        container[:] = [s for s in container if s not in deny]
+        for s in sorted(purged):
             logger.info("Purged denylisted symbol from cache: %s", s)
-        container[:] = restored
     elif isinstance(container, MutableMapping):
-        for key in list(container.keys()):
-            if key in deny:
-                container.pop(key, None)
-                logger.info("Purged denylisted symbol from cache: %s", key)
+        purged = [k for k in list(container.keys()) if k in deny]
+        for key in purged:
+            container.pop(key, None)
+        for s in sorted(purged):
+            logger.info("Purged denylisted symbol from cache: %s", s)
     return container
 
 def load_cache() -> Dict[str, float]:
