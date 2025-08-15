@@ -2211,27 +2211,20 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
     async def fake_fetch(*_a, **_k):
         return [[0, 1, 2, 3, 4, 5]], 50.0, 1000.0
 
-    calls: list[float] = []
+    load_calls = {"count": 0}
 
-    async def fake_fetch(*_a, min_24h_volume=0, **_k):
-        calls.append(min_24h_volume)
-        if min_24h_volume > 50:
-            return None
-        return [[0, 1, 2, 3, 4, 5]]
+    async def fake_ohlcv2(*a, **k):
+        load_calls["count"] += 1
+        return [[1, 1, 1, 1, 1, 1]]
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", lambda *a, **k: None)
-
-    async def fake_ohlcv2(*a, **k):
-        return [[1, 1, 1, 1, 1, 1]]
-
     monkeypatch.setattr(market_loader, "load_ohlcv", fake_ohlcv2)
 
     ex = DummyMultiTFExchange()
     cache = {}
-    config = {"timeframes": ["1h"]}
+    config = {"timeframes": ["1h"], "min_volume_usd": 100}
 
-    config["min_volume_usd"] = 100
     cache = asyncio.run(
         update_multi_tf_ohlcv_cache(
             ex,
@@ -2241,10 +2234,10 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
             limit=1,
         )
     )
-    assert calls[-1] == 100
+    assert load_calls["count"] == 1
     assert f"{VALID_MINT}/USDC" in cache["1h"]
-    assert f"{VALID_MINT}/USDC" in cache.get("1h", {})
 
+    load_calls["count"] = 0
     config["min_volume_usd"] = 10
     cache = asyncio.run(
         update_multi_tf_ohlcv_cache(
@@ -2255,7 +2248,7 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
             limit=1,
         )
     )
-    assert calls[-1] == 10
+    assert load_calls["count"] == 0
     assert f"{VALID_MINT}/USDC" in cache["1h"]
 
 

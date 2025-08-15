@@ -18,6 +18,7 @@ def test_scan_arbitrage_profitable(monkeypatch):
         return [], 0.0, dex_prices["SOL/USDC"]
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
+    monkeypatch.setattr(main, "fetch_geckoterminal_ohlcv", fake_gecko)
     exchange = types.SimpleNamespace(fetch_ticker=lambda sym: dummy_fetch_ticker(cex_prices, sym))
 
     cfg = {"arbitrage_pairs": ["SOL/USDC"], "arbitrage_threshold": 0.005}
@@ -33,6 +34,7 @@ def test_scan_arbitrage_not_profitable(monkeypatch):
         return [], 0.0, dex_prices["SOL/USDC"]
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko2)
+    monkeypatch.setattr(main, "fetch_geckoterminal_ohlcv", fake_gecko2)
     exchange = types.SimpleNamespace(fetch_ticker=lambda sym: dummy_fetch_ticker(cex_prices, sym))
 
     cfg = {"arbitrage_pairs": ["SOL/USDC"], "arbitrage_threshold": 0.005}
