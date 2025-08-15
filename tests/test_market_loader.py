@@ -340,6 +340,22 @@ class DummyBookExchange:
         return {"bids": [[1, 1], [0.9, 2]], "asks": [[1.1, 1], [1.2, 3]]}
 
 
+class DummyBookExchangeMarkets:
+    has = {"fetchOrderBook": True}
+
+    def __init__(self):
+        self.called = False
+        self.markets: dict = {}
+
+    async def load_markets(self):
+        self.markets = {"BTC/USD": {}}
+        return self.markets
+
+    async def fetch_order_book(self, symbol, limit=2):
+        self.called = True
+        return {"bids": [], "asks": []}
+
+
 class PagingExchange:
     has = {"fetchOHLCV": True}
 
@@ -363,6 +379,19 @@ def test_fetch_order_book_async():
     data = asyncio.run(fetch_order_book_async(ex, "BTC/USD", depth=2))
     assert data["bids"] == [[1, 1], [0.9, 2]]
     assert data["asks"] == [[1.1, 1], [1.2, 3]]
+
+
+def test_fetch_order_book_async_skips_unsupported_symbol():
+    from crypto_bot.utils.market_loader import _UNSUPPORTED_LOGGED
+
+    ex = DummyBookExchangeMarkets()
+    _UNSUPPORTED_LOGGED.clear()
+    data1 = asyncio.run(fetch_order_book_async(ex, "ETH/USD", depth=2))
+    data2 = asyncio.run(fetch_order_book_async(ex, "ETH/USD", depth=2))
+    assert data1 == {}
+    assert data2 == {}
+    assert ex.called is False
+    assert _UNSUPPORTED_LOGGED == {"ETH/USD"}
 
 
 def test_load_ohlcv_parallel():
