@@ -31,6 +31,11 @@ def true_range(high: pd.Series, low: pd.Series, close: pd.Series) -> pd.Series:
     tr1 = high_s - low_s
     tr2 = (high_s - prev_close).abs()
     tr3 = (low_s - prev_close).abs()
+    h, low_series, c = map(_to_series, (high, low, close))
+    prev_close = c.shift(1)
+    tr1 = h - low_series
+    tr2 = (h - prev_close).abs()
+    tr3 = (low_series - prev_close).abs()
     return pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
 
 
@@ -41,6 +46,8 @@ def atr(
 
     tr = true_range(high, low, close)
     # Wilder's smoothing uses an ``alpha`` of ``1/period``
+    tr = true_range(high, low, close)
+    # Wilder's smoothing
     return tr.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
 
 
@@ -51,6 +58,13 @@ def calc_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     if not cols.issubset(df.columns):
         msg = f"calc_atr expects columns {cols}, got {list(df.columns)}"
         raise ValueError(msg)
+    cols = {"high", "low", "close"}
+    if not cols.issubset(df.columns):
+        message = "calc_atr expects columns {}, got {}".format(
+            cols,
+            list(df.columns),
+        )
+        raise ValueError(message)
     return atr(df["high"], df["low"], df["close"], period=period)
 
 
