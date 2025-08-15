@@ -15,6 +15,7 @@ except Exception:
         return symbols
 from .telemetry import telemetry
 from .token_registry import TOKEN_MINTS
+from .market_loader import _is_valid_base_token
 
 
 def fix_symbol(sym: str) -> str:
@@ -114,8 +115,36 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         _last_refresh = now
         return result, []
 
-    symbols = config.get("symbols", [config.get("symbol")])
-    onchain = list(config.get("onchain_symbols", []))
+    mode = config.get("mode", "cex")
+    sf = config.get("symbol_filter", {})
+    allowed_quotes = {
+        str(q).upper() for q in (config.get("allowed_quotes") or [])
+    }
+    markets: dict[str, dict] = {}
+    if mode == "cex" and hasattr(exchange, "list_markets"):
+        markets = exchange.list_markets()
+        if asyncio.iscoroutine(markets):
+            markets = await markets
+        if isinstance(markets, list):
+            markets = {m: {} for m in markets}
+        symbols = []
+        min_vol = float(sf.get("min_volume_usd", 0) or 0)
+        for sym, info in markets.items():
+            quote = str(info.get("quote") or sym.split("/")[1]).upper()
+            vol = float(info.get("quoteVolume") or info.get("baseVolume") or 0)
+            if allowed_quotes and quote not in allowed_quotes:
+                continue
+            if min_vol and vol < min_vol:
+                continue
+            symbols.append(sym)
+        cfg_syms = config.get("symbols") or [config.get("symbol")]
+        if cfg_syms:
+            symbols = [s for s in symbols if s in cfg_syms]
+        onchain = []
+    else:
+        symbols = config.get("symbols", [config.get("symbol")])
+        onchain = list(config.get("onchain_symbols", []))
+        markets = getattr(exchange, "markets", {}) or {}
     pipeline_logger.info(
         "discovered_cex=%d discovered_onchain=%d",
         len(symbols),
@@ -127,14 +156,13 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         return [], onchain
     cleaned_symbols = []
     onchain_syms: list[str] = []
-    markets = getattr(exchange, "markets", {}) or {}
     for sym in symbols:
         if not isinstance(sym, str):
             cleaned_symbols.append(sym)
             continue
         base, _, quote = sym.partition("/")
         if quote.upper() == "USDC":
-            if base.upper() in TOKEN_MINTS:
+            if base.upper() in TOKEN_MINTS and mode != "cex":
                 onchain_syms.append(sym)
                 continue
             if markets is not None and sym in markets:
