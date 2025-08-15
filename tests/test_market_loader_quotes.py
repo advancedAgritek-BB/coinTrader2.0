@@ -64,6 +64,4 @@ def test_load_ohlcv_skips_missing_symbol(caplog):
         data = asyncio.run(run())
     assert data == []
     messages = [r.getMessage() for r in caplog.records if r.name == ml_logger.name]
-    assert any(
-        "Unsupported symbol (kraken doesn't list it): ETH/USD" in m for m in messages
-    )
+    assert all("Unsupported symbol" not in m for m in messages)

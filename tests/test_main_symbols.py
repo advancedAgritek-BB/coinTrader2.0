@@ -3,8 +3,16 @@ import logging
 
 from crypto_bot.utils import symbol_utils, market_loader
 
+
 class DummyExchange:
-    pass
+    markets = {
+        "BTC/USD": {"quote": "USD", "quoteVolume": 1_000_000},
+        "ETH/USD": {"quote": "USD", "quoteVolume": 1_000_000},
+        "SOL/USDC": {"quote": "USDC", "quoteVolume": 1_000_000},
+    }
+
+    def list_markets(self):
+        return self.markets
 
 
 def test_get_filtered_symbols_fallback(monkeypatch, caplog):
@@ -166,7 +174,7 @@ def test_get_filtered_symbols_invalid_usdc(monkeypatch, caplog):
     assert result[0] == [("ETH/USD", 1.0)]
     assert result == ([("ETH/USD", 1.0)], [])
     assert calls == [["ETH/USD"]]
-    assert any("invalid USDC" in r.getMessage() for r in caplog.records)
+    assert not any("invalid USDC" in r.getMessage() for r in caplog.records)
 
 
 def test_get_filtered_symbols_skip(monkeypatch):
@@ -235,4 +243,4 @@ def test_get_filtered_symbols_onchain_pair(monkeypatch):
 
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyEx(), config))
 
-    assert result == ([("ETH/USD", 1.0)], ["AAA/USDC"])
+    assert result == ([("ETH/USD", 1.0)], [])

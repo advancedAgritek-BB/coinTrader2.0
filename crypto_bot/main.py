@@ -1125,6 +1125,20 @@ async def fetch_candidates(ctx: BotContext) -> None:
             symbol_priority_queue.popleft()
             for _ in range(min(batch_size, len(symbol_priority_queue)))
         ]
+        if ctx.config.get("mode") == "cex" and hasattr(ctx.exchange, "list_markets"):
+            markets = ctx.exchange.list_markets()
+            if isinstance(markets, dict):
+                listed = set(markets)
+            else:
+                listed = set(markets or [])
+            dropped = [s for s in ctx.current_batch if s not in listed]
+            if dropped:
+                ctx.current_batch = [s for s in ctx.current_batch if s in listed]
+                for sym in dropped:
+                    logger.info(
+                        "Dropped non-exchange pair %s (strict_cex=true)",
+                        sym,
+                    )
 
         for sym in ctx.current_batch:
             if sym in recent_solana_set:

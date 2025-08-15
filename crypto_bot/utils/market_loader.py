@@ -88,9 +88,7 @@ _UNSUPPORTED_LOGGED: set[str] = set()
 
 def _log_unsupported(symbol: str) -> None:
     if symbol not in _UNSUPPORTED_LOGGED:
-        logger.info(
-            "Unsupported symbol (kraken doesn't list it): %s", symbol
-        )
+        logger.debug("Skipping unsupported symbol %s", symbol)
         _UNSUPPORTED_LOGGED.add(symbol)
 
 # Base suffixes that indicate a synthetic or index pair when appended to
