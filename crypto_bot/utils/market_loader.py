@@ -975,6 +975,23 @@ async def fetch_order_book_async(
     if hasattr(exchange, "has") and not exchange.has.get("fetchOrderBook"):
         return {}
 
+    if not is_supported_symbol(symbol):
+        _log_unsupported(symbol)
+        return {}
+
+    markets = getattr(exchange, "markets", {})
+    if not markets and hasattr(exchange, "load_markets"):
+        try:
+            if asyncio.iscoroutinefunction(getattr(exchange, "load_markets", None)):
+                markets = await exchange.load_markets()
+            else:
+                markets = await asyncio.to_thread(exchange.load_markets)
+        except Exception as exc:
+            logger.warning("load_markets failed: %s", exc)
+    if markets and symbol not in markets:
+        _log_unsupported(symbol)
+        return {}
+
     try:
         if asyncio.iscoroutinefunction(getattr(exchange, "fetch_order_book", None)):
             return await asyncio.wait_for(
