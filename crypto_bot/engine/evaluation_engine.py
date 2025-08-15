@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any, Awaitable, Callable
 
-from crypto_bot.strategy import load_strategies
+from crypto_bot.strategies.loader import load_strategies
 
 logger = logging.getLogger(__name__)
 
@@ -80,18 +80,14 @@ class StreamEvaluationEngine:
         self._tasks: list[asyncio.Task] = []
         self._closed: asyncio.Event | None = None
         self.gate: EvalGate | None = None
-        self.strategies: dict[str, Any] = {}
-        self.strategy_import_errors: dict[str, str] = {}
+        self.strategies: list[Any] = []
 
     async def start(self) -> None:
-        # read enabled list from config if available
-        enabled = set(getattr(self.cfg, "strategies", {}).get("enabled", [])) or None
-        self.strategies, self.strategy_import_errors = load_strategies(
-            enabled=enabled
-        )
+        # discover and instantiate all available strategies
+        self.strategies = load_strategies()
         if not self.strategies:
             logger.error(
-                "Aborting evaluator start: 0 strategies loaded. See above import errors."
+                "Aborting evaluator start: 0 strategies loaded."
             )
             return
 
