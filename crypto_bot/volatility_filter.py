@@ -1,17 +1,17 @@
-"""Volatility helpers and funding‑rate checks.
+"""Volatility helpers and funding-rate checks.
 
-This module exposes small utilities used by various strategies when filtering
-symbols based on recent volatility.  It intentionally contains only a minimal
-set of dependencies so it can be imported without triggering heavy modules or
-network calls which previously caused import cycles during test collection.
+This module exposes lightweight utilities used by various strategies to filter
+symbols based on recent volatility and funding rates.  It deliberately keeps its
+dependencies minimal so importing it does not trigger heavy modules or network
+calls during test collection.
 
 Two categories of helpers are provided:
 
-``atr_pct`` and ``too_flat`` operate on OHLCV data frames using the lightweight
-indicator functions from :mod:`crypto_bot.utils.indicators`.
+``atr_pct`` and ``too_flat`` operate on OHLCV data frames using indicator
+functions from :mod:`crypto_bot.utils.indicators`.
 
 ``fetch_funding_rate`` and ``too_hot`` query (or mock) funding rates for a
-symbol which is used by some tests to emulate external services.
+symbol which some tests use to emulate external services.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from crypto_bot.utils.indicators import calc_atr as _calc_atr
 # performed.
 DEFAULT_FUNDING_URL = (
     "https://futures.kraken.com/derivatives/api/v3/"
-    + "historical-funding-rates?symbol="
+    "historical-funding-rates?symbol="
 )
 
 
@@ -61,15 +61,11 @@ def too_flat(
         threshold = atr_period
         atr_period = 14
 
-    if len(df) < max(atr_period, 20):
+    if len(df) < atr_period:
         return True
     ap = atr_pct(df, period=atr_period).iloc[-atr_period:].median()
     return float(ap) < threshold
-from __future__ import annotations
 
-import pandas as pd
-
-from crypto_bot.utils.indicators import calc_atr as _calc_atr
 
 def fetch_funding_rate(symbol: str) -> float:
     """Return the current funding rate for ``symbol``.
@@ -127,9 +123,6 @@ def fetch_funding_rate(symbol: str) -> float:
 
     return 0.0
 
-def atr_pct(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    atr = _calc_atr(df, period=period)
-    return (atr / df["close"]).fillna(0.0)
 
 def too_hot(symbol: str, max_funding_rate: float) -> bool:
     """Return ``True`` when the funding rate exceeds ``max_funding_rate``."""
@@ -137,36 +130,12 @@ def too_hot(symbol: str, max_funding_rate: float) -> bool:
     return float(fetch_funding_rate(symbol)) > max_funding_rate
 
 
+# Keep legacy import path working for existing callers
 def calc_atr(df: pd.DataFrame, period: int = 14):
     """Compatibility wrapper exposing :func:`calc_atr` under the old import."""
 
     return _calc_atr(df, period=period)
 
 
-__all__ = [
-    "atr_pct",
-    "too_flat",
-    "fetch_funding_rate",
-    "too_hot",
-    "calc_atr",
-]
+__all__ = ["atr_pct", "too_flat", "fetch_funding_rate", "too_hot", "calc_atr"]
 
-def too_flat(
-    df: pd.DataFrame,
-    atr_period: int = 14,
-    threshold: float = 0.004,
-) -> bool:
-    """
-    Heuristic: return True if ATR% (median of the last ``atr_period``) is below
-    ``threshold``. ``threshold`` is ATR divided by close (e.g., ``0.004`` =
-    ``0.4%``).
-    """
-    if len(df) < max(atr_period, 20):
-        return True
-    ap = atr_pct(df, period=atr_period).iloc[-atr_period:].median()
-    return float(ap) < threshold
-
-
-# Keep legacy import path working for existing callers
-def calc_atr(df: pd.DataFrame, period: int = 14):
-    return _calc_atr(df, period=period)
