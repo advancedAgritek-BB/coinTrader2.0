@@ -3099,6 +3099,13 @@ async def _main_impl() -> TelegramNotifier:
             else:
                 with contextlib.suppress(Exception):
                     await asyncio.to_thread(exchange.close)
+        if ws_client and hasattr(ws_client, "close"):
+            if asyncio.iscoroutinefunction(getattr(ws_client, "close")):
+                with contextlib.suppress(Exception):
+                    await ws_client.close()
+            else:
+                with contextlib.suppress(Exception):
+                    await asyncio.to_thread(ws_client.close)
         if telegram_bot:
             telegram_bot.stop()
         for task in list(BACKGROUND_TASKS):
