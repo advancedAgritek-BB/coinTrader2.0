@@ -32,6 +32,10 @@ class EvalGate:
             self._since = 0.0
             self._lock.release()
 
+    def is_busy(self) -> bool:
+        """Return whether the gate is currently held."""
+        return self._lock.locked()
+
     async def start_watchdog(self) -> None:
         async def _watch() -> None:
             while True:
