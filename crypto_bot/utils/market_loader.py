@@ -1634,7 +1634,9 @@ async def fetch_dex_ohlcv(
 
     # Try CoinGecko for known USD-quoted pairs
     if use_gecko and quote in SUPPORTED_USD_QUOTES:
-        data = await fetch_coingecko_ohlc(symbol)
+        data = fetch_coingecko_ohlc(symbol)
+        if inspect.isawaitable(data):
+            data = await data
         if data:
             return data
 
@@ -2150,24 +2152,21 @@ async def update_multi_tf_ohlcv_cache(
                     logger.info("Adjusting limit for %s on %s to %d", sym, tf, sym_l)
                 if is_solana:
                     try:
-                        res = fetch_geckoterminal_ohlcv(
-                            sym,
-                            timeframe=tf,
-                            limit=sym_l,
-                        )
                         try:
-                            res = await fetch_geckoterminal_ohlcv(
-                                sym,
-                                timeframe=tf,
-                                limit=sym_l,
-                            )
-                        except TypeError:
-                            res = await fetch_geckoterminal_ohlcv(
+                            res = fetch_geckoterminal_ohlcv(
                                 sym,
                                 timeframe=tf,
                                 limit=sym_l,
                                 min_24h_volume=min_volume_usd,
                             )
+                        except TypeError:
+                            res = fetch_geckoterminal_ohlcv(
+                                sym,
+                                timeframe=tf,
+                                limit=sym_l,
+                            )
+                        if inspect.isawaitable(res):
+                            res = await res
                     except Exception as e:  # pragma: no cover - network
                         logger.warning(
                             f"Gecko failed for {sym}: {e} - using exchange data"
@@ -2177,8 +2176,11 @@ async def update_multi_tf_ohlcv_cache(
                     gecko_failed = True
 
                 if res and not gecko_failed:
-                    data = res
-                    vol = min_volume_usd
+                    if isinstance(res, tuple):
+                        data, vol, *_ = res
+                    else:
+                        data = res
+                        vol = min_volume_usd
                     add_priority(data, sym)
 
                 if gecko_failed or not data or vol < min_volume_usd:
@@ -2188,7 +2190,7 @@ async def update_multi_tf_ohlcv_cache(
                         timeframe=tf,
                         limit=sym_l,
                         min_volume_usd=min_volume_usd,
-                        gecko_res=res,
+                        gecko_res=None,
                         use_gecko=is_solana,
                     )
                     if isinstance(data, Exception) or not data:
