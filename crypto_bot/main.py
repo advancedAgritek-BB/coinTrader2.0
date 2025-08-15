@@ -2688,8 +2688,21 @@ async def _main_impl() -> TelegramNotifier:
             balance_updates,
         )
 
-    register_task(asyncio.create_task(monitor_pump_raydium()))
-    register_task(asyncio.create_task(periodic_mint_sanity_check()))
+    mode = user.get("mode", config.get("mode", "auto"))
+    onchain_cfg = config.get("evaluation", {}).get("onchain_watchers", {})
+
+    def start_onchain_watchers() -> None:
+        register_task(asyncio.create_task(monitor_pump_raydium()))
+        register_task(asyncio.create_task(periodic_mint_sanity_check()))
+
+    if mode != "cex" and onchain_cfg.get("enabled", True):
+        start_onchain_watchers()
+    else:
+        logger.info(
+            "On-chain watchers disabled (mode=%s, enabled=%s)",
+            mode,
+            onchain_cfg.get("enabled", True),
+        )
 
     register_task(
         asyncio.create_task(
@@ -2707,7 +2720,6 @@ async def _main_impl() -> TelegramNotifier:
     log_ml_status_once()
     rotator = PortfolioRotator()
 
-    mode = user.get("mode", config.get("mode", "auto"))
     state = {"running": True, "mode": mode}
     # Caches for OHLCV and regime data are stored on the session_state
     session_state = SessionState(last_balance=last_balance)
