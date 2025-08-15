@@ -15,4 +15,15 @@ except Exception:  # noqa: BLE001 - fallback stub for tests
         """Fallback no-op when the full implementation is unavailable."""
         return {}
 
-__all__ = ["generate_signal", "on_trade_filled", "regime_filter"]
+
+class Strategy:
+    """Strategy wrapper so :func:`load_strategies` can auto-register it."""
+
+    def __init__(self):
+        self.name = "sniper_solana"
+        self.generate_signal = generate_signal
+        self.regime_filter = regime_filter
+        self.on_trade_filled = on_trade_filled
+
+
+__all__ = ["generate_signal", "on_trade_filled", "regime_filter", "Strategy"]
