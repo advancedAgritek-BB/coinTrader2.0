@@ -1,1 +1,2 @@
-"""Data cache utilities."""
+"""Data utilities package for cache management and synchronization."""
+
