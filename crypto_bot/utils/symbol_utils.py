@@ -71,8 +71,15 @@ def invalidate_symbol_cache() -> None:
 
         if eval_gate.is_busy():
             logger.info("Deferring cache invalidation until after evaluation.")
+            ttl = getattr(
+                getattr(getattr(evaluator, "cfg", None), "evaluation", None),
+                "gate_ttl_sec",
+                30.0,
+            )
             if _INVALIDATION_TASK is None or _INVALIDATION_TASK.done():
-                _INVALIDATION_TASK = asyncio.create_task(_deferred_invalidation(now))
+                _INVALIDATION_TASK = asyncio.create_task(
+                    _deferred_invalidation(now, timeout=ttl)
+                )
             return
         _apply_invalidation(now)
 
@@ -84,14 +91,20 @@ async def symbol_cache_guard(note: str = "symbol-cache") -> AsyncIterator[None]:
         yield
 
 
-async def _deferred_invalidation(ts: float, timeout: float = 30.0, interval: float = 5.0) -> None:
-    """Retry cache invalidation until the eval gate is free or timeout is reached."""
-    deadline = time.monotonic() + timeout
+async def _wait_for_gate(interval: float) -> None:
     while eval_gate.is_busy():
-        if time.monotonic() > deadline:
-            logger.warning("Cache invalidation timed out waiting for evaluation gate.")
-            return
         await asyncio.sleep(interval)
+
+
+async def _deferred_invalidation(
+    ts: float, timeout: float = 30.0, interval: float = 5.0
+) -> None:
+    """Retry cache invalidation until the eval gate is free or timeout is reached."""
+    try:
+        await asyncio.wait_for(_wait_for_gate(interval), timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.warning("Cache invalidation timed out waiting for evaluation gate.")
+        return
     _apply_invalidation(ts)
 
 
