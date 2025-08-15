@@ -1,6 +1,9 @@
 import asyncio
 import logging
-from typing import Awaitable, Callable, Any
+import threading
+from typing import Any, Awaitable, Callable
+
+from crypto_bot.utils.eval_guard import eval_gate
 
 logger = logging.getLogger(__name__)
 
@@ -8,24 +11,29 @@ logger = logging.getLogger(__name__)
 class StreamEvaluationEngine:
     """Queue based evaluation engine with worker pool logging."""
 
-    def __init__(self, eval_fn: Callable[[str, dict], Awaitable[Any]], concurrency: int = 8):
+    def __init__(
+        self,
+        eval_fn: Callable[[str, dict], Awaitable[Any]],
+        concurrency: int = 8,
+        cfg: Any | None = None,
+    ) -> None:
         self.queue: asyncio.Queue[tuple[str, dict]] = asyncio.Queue()
         self.eval_fn = eval_fn
         self.concurrency = concurrency
-        self._workers: list[asyncio.Task] = []
-        self._closed = asyncio.Event()
+        self.cfg = cfg
+        self._running = False
+        self._tasks: list[asyncio.Task] = []
 
     async def start(self) -> None:
-        for _ in range(self.concurrency):
-            self._workers.append(asyncio.create_task(self._worker()))
-        logger.info(
-            "Evaluation workers online: %d; queue=%d",
-            self.concurrency,
-            self.queue.qsize(),
-        )
+        self._running = True
+        workers = getattr(getattr(self.cfg, "evaluation", None), "workers", self.concurrency)
+        for _ in range(workers):
+            t = asyncio.create_task(self._worker(), name=f"eval-worker-{_}")
+            self._tasks.append(t)
+        logger.info("Evaluation workers online: %d", len(self._tasks))
 
     async def _worker(self) -> None:
-        while not self._closed.is_set():
+        while self._running:
             try:
                 symbol, ctx = await self.queue.get()
             except asyncio.CancelledError:  # pragma: no cover - shutdown
@@ -66,10 +74,16 @@ class StreamEvaluationEngine:
         await self.queue.join()
 
     async def stop(self) -> None:
-        self._closed.set()
-        for w in self._workers:
-            w.cancel()
-        await asyncio.gather(*self._workers, return_exceptions=True)
+        self._running = False
+        for t in self._tasks:
+            t.cancel()
+        for t in self._tasks:
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+        self._tasks.clear()
+        logger.info("Evaluation workers stopped")
 
 
 _STREAM_EVAL: StreamEvaluationEngine | None = None
@@ -84,12 +98,6 @@ def get_stream_evaluator() -> StreamEvaluationEngine:
     if _STREAM_EVAL is None:
         raise RuntimeError("EvaluationEngine not initialized")
     return _STREAM_EVAL
-import threading
-from typing import Any, Awaitable, Callable
-
-from crypto_bot.utils.eval_guard import eval_gate
-
-logger = logging.getLogger(__name__)
 
 
 def _has_ohlcv(ctx: Any, symbol: str, timeframe: str, warmup_met: bool = True) -> bool:
