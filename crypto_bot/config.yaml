@@ -650,8 +650,12 @@ evaluation:
     enabled: true
     seed_symbols: ['BTC/USDT','ETH/USDT','SOL/USDT','XRP/USDT','DOGE/USDT']
     immediate: true
-  onchain_watchers:
-    enabled: false  # silence Helius/pump/raydium in pure CEX mode
+
+onchain_watchers:
+  enabled: false   # hard off in CEX mode
+
+strict_cex: true   # only symbols the exchange actually lists
+denylist_symbols: ['AIBTC/USD','AIBTC:USD']
 
 # === trading/base ===
 trading:
