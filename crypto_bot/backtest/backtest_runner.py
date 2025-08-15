@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from functools import lru_cache
-import asyncio
 from typing import Dict, Iterable, List, Optional
 
 import logging
@@ -131,10 +130,7 @@ class BacktestRunner:
     @lru_cache(maxsize=None)
     def _cached_fetch(symbol: str, timeframe: str, since: int, limit: int) -> pd.DataFrame:
         if symbol.endswith("/USDC"):
-            res = asyncio.run(
-                fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
-            )
-            data = res[0] if isinstance(res, tuple) else res
+            data = fetch_geckoterminal_ohlcv(symbol, timeframe=timeframe, limit=limit)
             df = pd.DataFrame(
                 data or [],
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
@@ -150,14 +146,11 @@ class BacktestRunner:
 
     def _fetch_data(self) -> pd.DataFrame:
         if self.config.symbol.endswith("/USDC"):
-            res = asyncio.run(
-                fetch_geckoterminal_ohlcv(
-                    self.config.symbol,
-                    timeframe=self.config.timeframe,
-                    limit=self.config.limit,
-                )
+            data = fetch_geckoterminal_ohlcv(
+                self.config.symbol,
+                timeframe=self.config.timeframe,
+                limit=self.config.limit,
             )
-            data = res[0] if isinstance(res, tuple) else res
             df = pd.DataFrame(
                 data or [],
                 columns=["timestamp", "open", "high", "low", "close", "volume"],
