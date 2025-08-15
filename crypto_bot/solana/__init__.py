@@ -9,6 +9,8 @@ from .scanner import get_solana_new_tokens
 from .token_utils import get_token_accounts
 from .pyth_utils import get_pyth_price
 from .prices import fetch_solana_prices
+from .raydium_client import RaydiumClient
+from .pump_fun_client import PumpFunClient
 
 __all__ = [
     "NewPoolEvent",
@@ -23,4 +25,6 @@ __all__ = [
     "get_token_accounts",
     "get_pyth_price",
     "fetch_solana_prices",
+    "RaydiumClient",
+    "PumpFunClient",
 ]
