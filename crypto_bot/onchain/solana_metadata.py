@@ -40,7 +40,7 @@ def fetch_token_metadata(mint_addresses: List[str]) -> Dict[str, Dict]:
     """Return token metadata for ``mint_addresses`` via Helius."""
     if not mint_addresses:
         return {}
-    if not FEATURE_ENABLE_HELIUS or not helius_available:
+    if not FEATURE_ENABLE_HELIUS or not helius_available():
         return {m: {"metadata_unknown": True} for m in mint_addresses if m}
 
     # Filter out addresses previously marked as not-found and blank entries

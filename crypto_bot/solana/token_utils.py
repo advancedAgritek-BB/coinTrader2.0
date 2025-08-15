@@ -24,7 +24,7 @@ async def get_token_accounts(wallet_address: str, threshold: float | None = None
         Minimum balance required. Defaults to ``MIN_BALANCE_THRESHOLD``.
     """
 
-    if helius_available:
+    if helius_available():
         url = f"https://mainnet.helius-rpc.com/v1/?api-key={HELIUS_API_KEY}"
     else:
         url = "https://api.mainnet-beta.solana.com"
