@@ -5,7 +5,7 @@ import pandas as pd
 import ta
 
 try:  # pragma: no cover - optional dependency
-    from crypto_bot.indicators.atr import calc_atr  # type: ignore
+    from crypto_bot.utils.indicators import calc_atr  # type: ignore
 except Exception:  # pragma: no cover - best effort
     calc_atr = None
 
@@ -22,9 +22,10 @@ def _atr(df: pd.DataFrame, window: int) -> float:
     if df.empty or not {"high", "low", "close"}.issubset(df.columns):
         return 0.0
 
-    result = (
-        calc_atr(df, window) if calc_atr is not None else _fallback_atr(df, window)
-    )
+    if calc_atr is not None:
+        result = calc_atr(df, window)
+    else:
+        result = _fallback_atr(df, window)
     if isinstance(result, pd.Series):
         if result.empty:
             return 0.0
