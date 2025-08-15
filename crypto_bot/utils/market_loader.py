@@ -1656,15 +1656,6 @@ async def fetch_dex_ohlcv(
 
 
 # --- Back-compat: GeckoTerminal OHLCV wrapper using CCXT (real fetch, no stubs) ---
-from typing import Optional, Any, List
-import os
-
-try:
-    import ccxt  # type: ignore
-except Exception:
-    ccxt = None
-
-
 def fetch_geckoterminal_ohlcv(
     symbol: str,
     timeframe: str = "1h",
