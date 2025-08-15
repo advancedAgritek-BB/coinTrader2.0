@@ -5,7 +5,7 @@ from typing import Awaitable, Callable, Any
 logger = logging.getLogger(__name__)
 
 
-class EvaluationEngine:
+class StreamEvaluationEngine:
     """Queue based evaluation engine with worker pool logging."""
 
     def __init__(self, eval_fn: Callable[[str, dict], Awaitable[Any]], concurrency: int = 8):
@@ -72,15 +72,15 @@ class EvaluationEngine:
         await asyncio.gather(*self._workers, return_exceptions=True)
 
 
-_STREAM_EVAL: EvaluationEngine | None = None
+_STREAM_EVAL: StreamEvaluationEngine | None = None
 
 
-def set_stream_evaluator(evaluator: EvaluationEngine) -> None:
+def set_stream_evaluator(evaluator: StreamEvaluationEngine) -> None:
     global _STREAM_EVAL
     _STREAM_EVAL = evaluator
 
 
-def get_stream_evaluator() -> EvaluationEngine:
+def get_stream_evaluator() -> StreamEvaluationEngine:
     if _STREAM_EVAL is None:
         raise RuntimeError("EvaluationEngine not initialized")
     return _STREAM_EVAL
@@ -107,7 +107,7 @@ def _has_ohlcv(ctx: Any, symbol: str, timeframe: str, warmup_met: bool = True) -
     return True
 
 
-class EvaluationEngine:
+class GatedEvaluationEngine:
     """Evaluate strategies with gate protection and warmup checks."""
 
     def __init__(self, ttl: float = 120.0):
