@@ -1802,6 +1802,9 @@ async def execute_signals(ctx: BotContext) -> None:
                 dry_run=ctx.config.get("execution_mode") == "dry_run",
                 use_websocket=ctx.config.get("use_websocket", False),
                 config=ctx.config,
+                score=candidate.get("score", 0.0),
+                reason=trade_reason,
+                trading_paused=not state.get("running", True),
             )
             if order:
                 executed += 1
@@ -1935,6 +1938,9 @@ async def handle_exits(ctx: BotContext) -> None:
                     dry_run=ctx.config.get("execution_mode") == "dry_run",
                     use_websocket=ctx.config.get("use_websocket", False),
                     config=ctx.config,
+                    score=0.0,
+                    reason=pos.get("strategy", ""),
+                    trading_paused=not state.get("running", True),
                 )
                 if ctx.config.get("execution_mode") == "dry_run" and ctx.wallet:
                     try:
@@ -1973,6 +1979,9 @@ async def handle_exits(ctx: BotContext) -> None:
                 dry_run=ctx.config.get("execution_mode") == "dry_run",
                 use_websocket=ctx.config.get("use_websocket", False),
                 config=ctx.config,
+                score=0.0,
+                reason=pos.get("strategy", ""),
+                trading_paused=not state.get("running", True),
             )
             if ctx.config.get("execution_mode") == "dry_run" and ctx.wallet:
                 try:
@@ -2051,6 +2060,9 @@ async def handle_exits(ctx: BotContext) -> None:
                     dry_run=ctx.config.get("execution_mode") == "dry_run",
                     use_websocket=ctx.config.get("use_websocket", False),
                     config=ctx.config,
+                    score=0.0,
+                    reason=pos.get("strategy", ""),
+                    trading_paused=not state.get("running", True),
                 )
                 if ctx.config.get("execution_mode") == "dry_run" and ctx.wallet:
                     try:
@@ -2106,6 +2118,9 @@ async def force_exit_all(ctx: BotContext) -> None:
             dry_run=ctx.config.get("execution_mode") == "dry_run",
             use_websocket=ctx.config.get("use_websocket", False),
             config=ctx.config,
+            score=0.0,
+            reason=pos.get("strategy", ""),
+            trading_paused=not state.get("running", True),
         )
 
         if ctx.config.get("execution_mode") == "dry_run" and ctx.wallet:
@@ -2231,6 +2246,9 @@ async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
         dry_run=ctx.config.get("execution_mode") == "dry_run",
         use_websocket=ctx.config.get("use_websocket", False),
         config=ctx.config,
+        score=0.0,
+        reason=pos.get("strategy", ""),
+        trading_paused=not state.get("running", True),
     )
 
     if ctx.config.get("execution_mode") == "dry_run" and ctx.wallet:
@@ -2757,7 +2775,7 @@ async def _main_impl() -> TelegramNotifier:
     ctx.paper_wallet = wallet
     ctx.position_guard = position_guard
     ctx.balance = await fetch_and_log_balance(exchange, wallet, config)
-    async def _eval_symbol(symbol: str, data: dict) -> None:
+    async def _eval_symbol(symbol: str, data: dict) -> dict:
         df_map = {tf: ctx.df_cache.get(tf, {}).get(symbol) for tf in data.get("timeframes", [])}
         res = await analyze_symbol(
             symbol,
@@ -2772,9 +2790,10 @@ async def _main_impl() -> TelegramNotifier:
             ctx.analysis_results = [res]
             ctx.current_batch = [symbol]
             await execute_signals(ctx)
+        return res
 
-    async def _eval_wrapper(symbol: str, data: dict) -> None:
-        await asyncio.wait_for(_eval_symbol(symbol, data), timeout=8)
+    async def _eval_wrapper(symbol: str, data: dict) -> dict:
+        return await asyncio.wait_for(_eval_symbol(symbol, data), timeout=8)
 
     global stream_evaluator
     stream_evaluator = StreamEvaluator(_eval_wrapper)
@@ -3119,8 +3138,10 @@ async def main() -> None:
         calculate_trailing_stop,
         should_exit,
     )
-    from crypto_bot.execution.cex_executor import (
+    from crypto_bot.execution.order_executor import (
         execute_trade_async as cex_trade_async,
+    )
+    from crypto_bot.execution.cex_executor import (
         get_exchange,
         get_exchanges,
     )
