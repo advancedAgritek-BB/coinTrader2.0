@@ -83,6 +83,13 @@ class StreamEvaluationEngine:
         # read enabled list from config if available
         enabled = set(getattr(self.cfg, "strategies", {}).get("enabled", [])) or None
         self.strategies, self.strategy_import_errors = load_strategies(enabled=enabled)
+        from crypto_bot.strategy import load_strategies
+
+        # read enabled list from config if available
+        enabled = set(getattr(self.cfg, "strategies", {}).get("enabled", [])) or None
+        self.strategies, self.strategy_import_errors = load_strategies(
+            enabled=enabled
+        )
         if not self.strategies:
             logger.error(
                 "Aborting evaluator start: 0 strategies loaded. See above import errors."
