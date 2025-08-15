@@ -607,12 +607,14 @@ timeframe: 15m
 timeframes:
 - 1m
 - 5m
-timeframe_backfill_days:
+backfill_days:
   1m: 2
-  5m: 14
+  5m: 3
 warmup_candles:
   1m: 1000
-  5m: 1000
+  5m: 600
+allowed_quotes: [USD, USDT, USDC, EUR]
+hft: true
 token_registry:
   refresh_interval_minutes: 15
 top_n_symbols: 20
@@ -640,6 +642,16 @@ voting_strategies:
 wallet_address: your_wallet
 ws_failures_before_disable: 1
 ws_ping_interval: 5
+
+evaluation:
+  workers: 4
+  gate_ttl_sec: 120
+  fast_start:
+    enabled: true
+    seed_symbols: ['BTC/USDT','ETH/USDT','SOL/USDT','XRP/USDT','DOGE/USDT']
+    immediate: true
+  onchain_watchers:
+    enabled: false  # silence Helius/pump/raydium in pure CEX mode
 
 # === trading/base ===
 trading:

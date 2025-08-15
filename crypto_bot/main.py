@@ -212,7 +212,7 @@ def _fix_symbol(symbol: str) -> str:
 
 # In-memory cache of configuration and file mtimes
 _CONFIG_CACHE: dict[str, object] = {}
-_CONFIG_MTIMES: dict[Path, float] = {}
+_CONFIG_MTIMES: dict[Path, tuple[float, int]] = {}
 # Track ML-related settings to avoid re-loading the model unnecessarily
 _LAST_ML_CFG: dict[str, object] | None = None
 
@@ -648,24 +648,32 @@ def _load_config_internal() -> tuple[dict, set[str]]:
     """Load config if underlying files changed and track updates."""
     global _CONFIG_CACHE
 
-    main_mtime = CONFIG_PATH.stat().st_mtime if CONFIG_PATH.exists() else 0.0
+    main_stat = CONFIG_PATH.stat() if CONFIG_PATH.exists() else None
+    main_mtime = main_stat.st_mtime if main_stat else 0.0
+    main_size = main_stat.st_size if main_stat else 0
     strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
     trend_file = strat_dir / "trend_bot.yaml"
-    trend_mtime = trend_file.stat().st_mtime if trend_file.exists() else None
+    if trend_file.exists():
+        trend_stat = trend_file.stat()
+        trend_mtime = trend_stat.st_mtime
+        trend_size = trend_stat.st_size
+    else:
+        trend_mtime = None
+        trend_size = None
 
     if (
         _CONFIG_CACHE
-        and _CONFIG_MTIMES.get(CONFIG_PATH) == main_mtime
-        and _CONFIG_MTIMES.get(trend_file) == trend_mtime
+        and _CONFIG_MTIMES.get(CONFIG_PATH) == (main_mtime, main_size)
+        and _CONFIG_MTIMES.get(trend_file) == (trend_mtime, trend_size)
     ):
         return _CONFIG_CACHE, set()
 
     new_data = _load_config_file()
     changed = _diff_keys(_CONFIG_CACHE, new_data)
     _CONFIG_CACHE = new_data
-    _CONFIG_MTIMES[CONFIG_PATH] = main_mtime
+    _CONFIG_MTIMES[CONFIG_PATH] = (main_mtime, main_size)
     if trend_mtime is not None:
-        _CONFIG_MTIMES[trend_file] = trend_mtime
+        _CONFIG_MTIMES[trend_file] = (trend_mtime, trend_size)
     else:
         _CONFIG_MTIMES.pop(trend_file, None)
 

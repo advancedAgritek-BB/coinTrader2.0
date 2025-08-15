@@ -1712,7 +1712,7 @@ async def update_ohlcv_cache(
     """Batch OHLCV updates for multiple calls."""
 
     config = config or {}
-    backfill_map = config.get("timeframe_backfill_days", {}) or {}
+    backfill_map = config.get("backfill_days", {}) or {}
     warmup_map = config.get("warmup_candles", {}) or {}
     now_ms = utc_now_ms()
     if start_since is not None:
@@ -1889,7 +1889,7 @@ async def update_multi_tf_ohlcv_cache(
             snapshot_cap = int(config.get("ohlcv_snapshot_limit", limit))
             max_cap = min(snapshot_cap, 720)
 
-            backfill_map = config.get("timeframe_backfill_days", {}) or {}
+            backfill_map = config.get("backfill_days", {}) or {}
             warmup_map = config.get("warmup_candles", {}) or {}
             tf_start = start_since
             bf_days = backfill_map.get(tf)
