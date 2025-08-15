@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from .logger import LOG_DIR, setup_logger
+from crypto_bot.data.symbol_cache import purge_denylisted
 
 PAIR_FILE = Path(__file__).resolve().parents[2] / "cache" / "liquid_pairs.json"
 logger = setup_logger(__name__, LOG_DIR / "pair_cache.log")
@@ -18,6 +19,7 @@ def load_liquid_map() -> dict[str, float] | None:
                 data = {str(k): float(v) for k, v in data.items()}
             else:
                 data = {}
+            purge_denylisted(data)
             if not data:
                 logger.warning(
                     "%s is empty. Run tasks/refresh_pairs.py or adjust symbol_filter.uncached_volume_multiplier",
