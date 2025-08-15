@@ -37,8 +37,16 @@ from crypto_bot.strategy import (
     lstm_bot,
     bounce_scalper,
     flash_crash_bot,
-    range_arb_bot,
 )
+
+# ``range_arb_bot`` pulls in heavy scientific dependencies (scikit-learn).
+# Importing it unconditionally makes test environments that stub out
+# ``sklearn`` fail during module import.  Treat it as optional so the router
+# can still be imported even when that strategy is unavailable.
+try:  # pragma: no cover - optional strategy
+    from crypto_bot.strategy import range_arb_bot
+except Exception:  # noqa: BLE001 - dependency missing in tests
+    range_arb_bot = None  # type: ignore[misc]
 
 try:
     import crypto_bot.ml_signal_model  # noqa: F401
