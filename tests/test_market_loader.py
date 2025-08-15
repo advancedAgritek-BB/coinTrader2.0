@@ -2043,8 +2043,10 @@ def test_fetch_geckoterminal_ohlcv_uses_exchange():
             assert limit == 1
             return [[1, 1, 1, 1, 1, 1]]
 
-    data = market_loader.fetch_geckoterminal_ohlcv(
-        "BTC/USD", timeframe="1h", limit=1, exchange=DummyEx()
+    data = asyncio.run(
+        market_loader.fetch_geckoterminal_ohlcv(
+            "BTC/USD", timeframe="1h", limit=1, exchange=DummyEx()
+        )
     )
     assert data == [[1, 1, 1, 1, 1, 1]]
 
@@ -2052,7 +2054,7 @@ def test_fetch_geckoterminal_ohlcv_uses_exchange():
 def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    def fake_fetch(*_a, **_k):
+    async def fake_fetch(*_a, **_k):
         return None
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
@@ -2081,6 +2083,19 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
 def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
     from crypto_bot.utils import market_loader
 
+    calls: list[float] = []
+
+    async def fake_fetch(*_a, min_24h_volume=0, **_k):
+        calls.append(min_24h_volume)
+        if min_24h_volume > 50:
+            return None
+        return [[0, 1, 2, 3, 4, 5]]
+
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
+    monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", lambda *a, **k: None)
+
+    async def fake_fetch2(*_a, **_k):
+        return [[0, 1, 2, 3, 4, 5]], 50.0, 1000.0
     class GeckoData(list):
         pass
 
@@ -2095,6 +2110,7 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
         load_calls["count"] += 1
         return [[1, 1, 1, 1, 1, 1]]
 
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch2)
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", lambda *a, **k: None)
     monkeypatch.setattr(market_loader, "load_ohlcv", fake_ohlcv)
@@ -2133,7 +2149,7 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
 def test_dex_fetch_fallback_coingecko(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    def fail_gecko(*_a, **_k):
+    async def fail_gecko(*_a, **_k):
         raise Exception("boom")
 
     async def fake_coingecko(*_a, **_k):
@@ -2169,7 +2185,7 @@ def test_dex_fetch_fallback_coingecko(monkeypatch):
 def test_dex_fetch_fallback_coinbase(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    def fail_gecko(*_a, **_k):
+    async def fail_gecko(*_a, **_k):
         return None
 
     async def fail_coingecko(*_a, **_k):
@@ -2204,7 +2220,7 @@ def test_dex_fetch_fallback_coinbase(monkeypatch):
 def test_dex_fetch_fallback_kraken(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    def fail_gecko(*_a, **_k):
+    async def fail_gecko(*_a, **_k):
         return None
 
     async def fail_coingecko(*_a, **_k):
@@ -2239,7 +2255,7 @@ def test_dex_fetch_fallback_kraken(monkeypatch):
 def test_update_multi_tf_ohlcv_cache_fallback_exchange(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    def fail_gecko(*_a, **_k):
+    async def fail_gecko(*_a, **_k):
         raise Exception("boom")
 
     calls = {"fetch": 0}
@@ -2342,7 +2358,7 @@ def test_coinbase_usdc_pair_skip(monkeypatch):
         calls["ohlcv"] += 1
         return []
 
-    def fake_gecko(*_a, **_k):
+    async def fake_gecko(*_a, **_k):
         calls["gecko"] += 1
         return None
 

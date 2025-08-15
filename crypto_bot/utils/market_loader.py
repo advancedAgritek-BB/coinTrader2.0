@@ -196,6 +196,11 @@ COINGECKO_IDS = {
     "SOL": "solana",
 }
 
+
+# --- NEW: resolve markets only to what the exchange actually lists ---
+def resolve_listed_symbol(exchange, base: str, allowed_quotes: list[str]) -> str | None:
+    """Return the first listed symbol for *base* across ``allowed_quotes``."""
+    markets = getattr(exchange, "markets", {}) or {}
 # --- NEW: resolve markets only to what the exchange actually lists ---
 def resolve_listed_symbol(exchange, base: str, allowed_quotes: list[str]) -> str | None:
     """
@@ -219,6 +224,24 @@ def resolve_listed_symbol(exchange, base: str, allowed_quotes: list[str]) -> str
 
 # --- NEW: safe closing helpers for ccxt / aiohttp ---
 async def _safe_exchange_close(exchange, where: str = ""):
+    """Attempt to close ``exchange`` without raising."""
+    close = getattr(exchange, "close", None)
+    if not close:
+        return
+    try:
+        if inspect.iscoroutinefunction(close):
+            await close()
+        else:
+            close()
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # pragma: no cover - best effort
+        logger.warning(f"Exchange.close() failed {where}: {e!r}")
+
+
+async def fetch_ohlcv_block(exchange_id: str, bases: list[str], timeframe: str, limit: int,
+                            allowed_quotes: list[str]):
+    """Fetch OHLCV for ``bases`` on ``exchange_id`` over ``timeframe``."""
     try:
         await exchange.close()
     except asyncio.CancelledError:
@@ -253,6 +276,7 @@ async def fetch_ohlcv_block(exchange_id: str, bases: list[str], timeframe: str, 
                     logger.debug(f"No candles returned for {symbol} @ {timeframe}")
             except asyncio.CancelledError:
                 raise
+            except Exception as e:
             except Exception as e:  # pragma: no cover - network errors
                 logger.warning(
                     f"fetch_ohlcv failed for {symbol} @ {timeframe}: {e!r}"
@@ -1738,6 +1762,7 @@ async def fetch_dex_ohlcv(
 
 
 # --- Back-compat: GeckoTerminal OHLCV wrapper using CCXT (real fetch, no stubs) ---
+async def fetch_geckoterminal_ohlcv(
 
 
 def fetch_geckoterminal_ohlcv(
@@ -1747,6 +1772,37 @@ def fetch_geckoterminal_ohlcv(
     limit: int = 500,
     exchange: Any = None,
 ) -> List[List[float]]:
+    """Fetch OHLCV using CCXT, resolving symbols to listed markets."""
+    if exchange is not None and hasattr(exchange, "fetch_ohlcv"):
+        fetch_fn = getattr(exchange, "fetch_ohlcv")
+        if asyncio.iscoroutinefunction(fetch_fn):
+            return await fetch_fn(symbol, timeframe=timeframe, since=since, limit=limit)
+        return await asyncio.to_thread(
+            fetch_fn, symbol, timeframe, since, limit
+        )
+
+    ex_name = os.environ.get("EXCHANGE", "kraken").lower()
+    ex_cls = getattr(ccxt, ex_name, None) or getattr(ccxt, "kraken")
+    ex = ex_cls({"enableRateLimit": True})
+    try:
+        await ex.load_markets()
+        base, _, quote = symbol.partition("/")
+        allowed = [quote, "USD", "USDT", "EUR"]
+        allowed = [q for i, q in enumerate(allowed) if q and q not in allowed[:i]]
+        resolved = resolve_listed_symbol(ex, base, allowed)
+        if not resolved:
+            logger.debug(
+                f"Skipping {base}: no listed market on {ex_name} for quotes {allowed}"
+            )
+            return []
+        symbol = resolved
+        if asyncio.iscoroutinefunction(ex.fetch_ohlcv):
+            return await ex.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
+        return await asyncio.to_thread(
+            ex.fetch_ohlcv, symbol, timeframe, since, limit
+        )
+    finally:
+        await _safe_exchange_close(ex, where=f"{ex_name}:{timeframe}")
     """
     Compatibility wrapper for older code paths that expected a GeckoTerminal OHLCV loader.
     This uses CCXT to fetch OHLCV from the active exchange (or the provided `exchange`).
