@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib
 
+from .loader import load_strategies
+
 
 def _optional_import(name: str):
     """Import ``name`` from this package, returning ``None`` on failure."""
@@ -92,4 +94,6 @@ for _name in list(__all__):
     _mod = globals().get(_name)
     if _mod is not None and not hasattr(_mod, "required_lookback"):
         setattr(_mod, "required_lookback", _default_required_lookback)
+
+__all__.append("load_strategies")
 

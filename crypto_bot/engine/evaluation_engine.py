@@ -14,8 +14,18 @@ class StreamEvaluationEngine:
         self.concurrency = concurrency
         self._workers: list[asyncio.Task] = []
         self._closed = asyncio.Event()
+        self.strategies: dict[str, Any] = {}
+        self.strategy_import_errors: dict[str, str] = {}
 
     async def start(self) -> None:
+        from crypto_bot.strategy import load_strategies
+
+        self.strategies, self.strategy_import_errors = load_strategies()
+        if not self.strategies:
+            logger.error(
+                "Aborting evaluator start: 0 strategies loaded. See above import errors."
+            )
+            return
         for _ in range(self.concurrency):
             self._workers.append(asyncio.create_task(self._worker()))
         logger.info(
