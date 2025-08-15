@@ -32,7 +32,7 @@ from crypto_bot.strategy import micro_scalp_bot
 from crypto_bot.volatility_filter import calc_atr
 from ta.volatility import BollingerBands
 from ta.trend import ADXIndicator
-from crypto_bot.utils import zscore
+from crypto_bot.utils.stats import zscore
 from crypto_bot.utils.telemetry import telemetry
 from .ml_utils import ML_AVAILABLE
 

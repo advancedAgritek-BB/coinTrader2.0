@@ -13,7 +13,8 @@ import yaml
 import json
 from functools import lru_cache
 
-from crypto_bot.utils import timeframe_seconds, commit_lock
+from crypto_bot.utils import commit_lock
+from crypto_bot.utils.market_loader import timeframe_seconds
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
