@@ -33,6 +33,8 @@ class TokenMetadata:
 
 
 def helius_available() -> bool:
+    """Return ``True`` if a Helius key is set and the service responds."""
+
     """
     True if we have a key AND Helius responds to a trivial request.
     We avoid false negatives by retrying transient network errors.
@@ -43,6 +45,10 @@ def helius_available() -> bool:
     for i in range(_RETRIES):
         try:
             r = httpx.get(url, timeout=_TIMEOUT)
+            if r.status_code in (200, 404, 400):
+                return True
+        except Exception:
+            time.sleep(_BACKOFF * (2 ** i))
             if r.status_code in (200, 404, 400):  # 404/400 still proves reachability
                 return True
         except Exception:
@@ -51,6 +57,16 @@ def helius_available() -> bool:
 
 
 class HeliusClient:
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        *,
+        client: Optional[httpx.Client] = None,
+    ) -> None:
+        self.api_key = api_key or HELIUS_API_KEY
+        self._client = client or httpx.Client(
+            timeout=_TIMEOUT, headers={"User-Agent": "coinTrader/helius"}
+        )
     def __init__(self, api_key: Optional[str] = None, *, client: Optional[httpx.Client] = None) -> None:
         self.api_key = api_key or HELIUS_API_KEY
         self._client = client or httpx.Client(timeout=_TIMEOUT, headers={"User-Agent": "coinTrader/helius"})
@@ -67,6 +83,8 @@ class HeliusClient:
         return f"{_HELIUS_BASE}{path}?api-key={self.api_key}"
 
     def get_token_metadata(self, mint: str) -> Optional[TokenMetadata]:
+        """Return token metadata for ``mint`` from Helius."""
+
         """
         Helius token metadata API: /v0/token-metadata?mint=...
         Fallback to /v0/tokens/metadata if needed.
@@ -95,6 +113,12 @@ class HeliusClient:
 
 
 def _parse_token_metadata(mint: str, payload: Dict[str, Any]) -> TokenMetadata:
+    attrs = (
+        payload.get("onChainMetadata", {})
+        .get("metadata", {})
+        .get("data", {})
+        .get("attrs", {})
+    )
     attrs = payload.get("onChainMetadata", {}).get("metadata", {}).get("data", {}).get("attrs", {})
     symbol = payload.get("symbol") or payload.get("token", {}).get("symbol")
     name = payload.get("name") or payload.get("token", {}).get("name")

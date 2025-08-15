@@ -87,7 +87,10 @@ def test_fetch_from_jupiter(monkeypatch, tmp_path):
 
 def test_fetch_from_helius(monkeypatch, tmp_path):
     data = [
-        {"onChainAccountInfo": {"mint": "mmm", "decimals": 5, "supply": 10}}
+        {
+            "mint": "mmm",
+            "onChainAccountInfo": {"decimals": 5, "supply": 10},
+        }
     ]
 
     class DummyResp:
@@ -125,6 +128,9 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
             return DummyResp(self.d)
 
     monkeypatch.setenv("HELIUS_API_KEY", "KEY")
+    monkeypatch.setattr(
+        "crypto_bot.solana.helius_client.helius_available", lambda: True
+    )
     session = DummySession(data)
 
     mod = _load_module(monkeypatch, tmp_path)
@@ -143,7 +149,10 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
 
 def test_fetch_from_helius_full(monkeypatch, tmp_path):
     data = [
-        {"onChainAccountInfo": {"mint": "mmm", "decimals": 5, "supply": 10}}
+        {
+            "mint": "mmm",
+            "onChainAccountInfo": {"decimals": 5, "supply": 10},
+        }
     ]
 
     class DummyResp:
@@ -177,6 +186,9 @@ def test_fetch_from_helius_full(monkeypatch, tmp_path):
             return DummyResp(self.d)
 
     monkeypatch.setenv("HELIUS_API_KEY", "KEY")
+    monkeypatch.setattr(
+        "crypto_bot.solana.helius_client.helius_available", lambda: True
+    )
     session = DummySession(data)
 
     mod = _load_module(monkeypatch, tmp_path)
@@ -193,6 +205,9 @@ def test_fetch_from_helius_full(monkeypatch, tmp_path):
 
 def test_fetch_from_helius_sol(monkeypatch, tmp_path):
     monkeypatch.setenv("HELIUS_API_KEY", "KEY")
+    monkeypatch.setattr(
+        "crypto_bot.solana.helius_client.helius_available", lambda: True
+    )
     mod = _load_module(monkeypatch, tmp_path)
     monkeypatch.setattr(mod, "helius_available", lambda: True)
 
@@ -235,6 +250,9 @@ def test_fetch_from_helius_4xx(monkeypatch, tmp_path, caplog):
             return DummyResp()
 
     monkeypatch.setenv("HELIUS_API_KEY", "KEY")
+    monkeypatch.setattr(
+        "crypto_bot.solana.helius_client.helius_available", lambda: True
+    )
     session = DummySession()
     mod = _load_module(monkeypatch, tmp_path)
     mod.TOKEN_MINTS["AAA"] = "mmm"
@@ -254,6 +272,10 @@ def test_fetch_from_helius_no_api_key(monkeypatch, tmp_path, caplog):
     caplog.set_level(logging.WARNING)
     monkeypatch.delenv("HELIUS_API_KEY", raising=False)
     monkeypatch.delenv("HELIUS_KEY", raising=False)
+    monkeypatch.setattr("crypto_bot.solana.helius_client.HELIUS_API_KEY", "")
+    monkeypatch.setattr(
+        "crypto_bot.solana.helius_client.helius_available", lambda: False
+    )
     mod = _load_module(monkeypatch, tmp_path)
 
     def raising_session(*_a, **_k):
@@ -906,36 +928,26 @@ def test_to_base_units(monkeypatch, tmp_path):
 
 
 def test_get_decimals_cache_and_fallback(monkeypatch, tmp_path):
+    monkeypatch.setenv("HELIUS_KEY", "KEY")
+    monkeypatch.setattr(
+        "crypto_bot.solana.helius_client.helius_available", lambda: True
+    )
+
     mod = _load_module(monkeypatch, tmp_path)
     mod.TOKEN_DECIMALS["So111"] = 9
     assert asyncio.run(mod.get_decimals("So111")) == 9
 
-    class DummyResp:
+    class DummyHeliusClient:
         def __init__(self):
-            self.status = 200
-
-        async def json(self, content_type=None):
-            return [{"mint": "m2", "decimals": 6}]
-
-        def raise_for_status(self):
             pass
 
-        async def __aenter__(self):
-            return self
+        def get_token_metadata(self, mint):  # pragma: no cover - simple
+            return type("M", (), {"decimals": 6})()
 
-        async def __aexit__(self, exc_type, exc, tb):
+        def close(self):  # pragma: no cover - simple
             pass
 
-    class DummySession:
-        def __init__(self):
-            self.url = None
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
+    monkeypatch.setattr(mod, "HeliusClient", DummyHeliusClient)
         def get(self, url, timeout=10):
             self.url = url
             return DummyResp()
