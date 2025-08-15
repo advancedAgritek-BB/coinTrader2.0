@@ -2081,28 +2081,23 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
 def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    calls: list[float] = []
+    class GeckoData(list):
+        pass
 
-    def fake_fetch(*_a, min_24h_volume=0, **_k):
-        calls.append(min_24h_volume)
-        if min_24h_volume > 50:
-            return None
-        return [[0, 1, 2, 3, 4, 5]]
-
-    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
-    monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", lambda *a, **k: None)
-    async def fake_fetch(*_a, **_k):
-        return [[0, 1, 2, 3, 4, 5]], 50.0, 1000.0
+    def fake_gecko(*_a, **_k):
+        data = GeckoData([[0, 1, 2, 3, 4, 5]])
+        data.vol_24h_usd = 50
+        return data
 
     load_calls = {"count": 0}
 
-    async def fake_ohlcv2(*a, **k):
+    async def fake_ohlcv(*a, **k):
         load_calls["count"] += 1
         return [[1, 1, 1, 1, 1, 1]]
 
-    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", lambda *a, **k: None)
-    monkeypatch.setattr(market_loader, "load_ohlcv", fake_ohlcv2)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_ohlcv)
 
     ex = DummyMultiTFExchange()
     cache = {}

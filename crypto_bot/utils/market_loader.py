@@ -2187,21 +2187,21 @@ async def update_multi_tf_ohlcv_cache(
                     logger.info("Adjusting limit for %s on %s to %d", sym, tf, sym_l)
                 if is_solana:
                     try:
-                        try:
-                            res = fetch_geckoterminal_ohlcv(
-                                sym,
-                                timeframe=tf,
-                                limit=sym_l,
-                                min_24h_volume=min_volume_usd,
-                            )
-                        except TypeError:
-                            res = fetch_geckoterminal_ohlcv(
-                                sym,
-                                timeframe=tf,
-                                limit=sym_l,
-                            )
+                        res = fetch_geckoterminal_ohlcv(
+                            sym,
+                            timeframe=tf,
+                            limit=sym_l,
+                        )
                         if inspect.isawaitable(res):
                             res = await res
+                        if res:
+                            vol_24h = None
+                            if isinstance(res, tuple):
+                                vol_24h = res[1]
+                            else:
+                                vol_24h = getattr(res, "vol_24h_usd", None)
+                            if vol_24h is not None and vol_24h < min_volume_usd:
+                                res = None
                     except Exception as e:  # pragma: no cover - network
                         logger.warning(
                             f"Gecko failed for {sym}: {e} - using exchange data"
@@ -2215,7 +2215,7 @@ async def update_multi_tf_ohlcv_cache(
                         data, vol, *_ = res
                     else:
                         data = res
-                        vol = min_volume_usd
+                        vol = getattr(res, "vol_24h_usd", min_volume_usd)
                     add_priority(data, sym)
 
                 if gecko_failed or not data or vol < min_volume_usd:
