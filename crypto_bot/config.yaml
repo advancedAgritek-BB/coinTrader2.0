@@ -15,6 +15,7 @@ trading:
 
 # === strategies and params ===
 strategies:
+  enabled: ['grid', 'trend', 'micro_scalp', 'sniper_solana']
   maker_spread:
     enabled: true
     max_spread_bp: 8              # don’t quote if spread > 8 bps
@@ -671,6 +672,7 @@ trading:
 
 # === strategies and params ===
 strategies:
+  enabled: ['grid', 'trend', 'micro_scalp', 'sniper_solana']
   maker_spread:
     enabled: true
     max_spread_bp: 8              # don’t quote if spread > 8 bps
