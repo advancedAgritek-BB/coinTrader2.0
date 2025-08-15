@@ -39,7 +39,8 @@ def test_skip_overlapping_tf_updates(monkeypatch, caplog):
         asyncio.run(runner())
 
     assert any(
-        "Starting update for timeframe 1h" in r.getMessage() for r in caplog.records
+        "Starting OHLCV update for timeframe 1h" in r.getMessage()
+        for r in caplog.records
     )
     assert any(
         "Skip: 1h update already running." in r.getMessage() for r in caplog.records

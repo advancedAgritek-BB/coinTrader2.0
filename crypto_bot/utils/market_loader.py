@@ -43,6 +43,7 @@ from crypto_bot.strategy.evaluator import get_stream_evaluator, StreamEvaluator
 from crypto_bot.strategy.registry import load_enabled
 from .logger import LOG_DIR, setup_logger
 from .constants import NON_SOLANA_BASES
+from crypto_bot.data.locks import timeframe_lock, TF_LOCKS as _TF_LOCKS
 
 try:  # optional dependency
     from .telegram import TelegramNotifier
@@ -143,8 +144,7 @@ MAX_WS_LIMIT = 500
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 STATUS_UPDATES = True
 SEMA: asyncio.Semaphore | None = None
-# Per-timeframe locks to prevent concurrent updates of the same timeframe
-_TF_LOCKS: Dict[str, asyncio.Lock] = {}
+# Per-timeframe locks are provided by crypto_bot.data.locks
 
 # Shared StreamEvaluator instance set by main
 STREAM_EVALUATOR: StreamEvaluator | None = None
@@ -1875,12 +1875,12 @@ async def update_multi_tf_ohlcv_cache(
                 seen.add(sym)
 
     for tf in tfs:
-        lock = _TF_LOCKS.setdefault(tf, asyncio.Lock())
+        lock = timeframe_lock(tf)
         if lock.locked():
             logger.info("Skip: %s update already running.", tf)
             continue
         async with lock:
-            logger.info("Starting update for timeframe %s", tf)
+            logger.info("Starting OHLCV update for timeframe %s", tf)
             tf_cache = cache.get(tf, {})
 
             now_ms = utc_now_ms()
@@ -2245,7 +2245,7 @@ async def update_multi_tf_ohlcv_cache(
                     cache[tf] = tf_cache
                     await _maybe_enqueue_eval(sym, tf, cache, config)
             cache[tf] = tf_cache
-            logger.info("Finished update for timeframe %s", tf)
+            logger.info("Completed OHLCV update for timeframe %s", tf)
 
     return cache
 

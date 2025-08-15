@@ -1,5 +1,9 @@
-import os
 import argparse
+import os
+import shutil
+from pathlib import Path
+
+CACHE_DIR = Path(__file__).resolve().parents[1] / "cache"
 
 
 def select_exchange(args):
@@ -9,8 +13,23 @@ def select_exchange(args):
     return os.getenv("EXCHANGE", "coinbase")
 
 
+def cache_purge(_args):
+    if CACHE_DIR.exists():
+        shutil.rmtree(CACHE_DIR)
+        print(f"Purged cache directory {CACHE_DIR}")
+    else:
+        print("No cache directory found")
+
+
 def build_parser():
     p = argparse.ArgumentParser()
+    sub = p.add_subparsers(dest="command")
+
+    cache_p = sub.add_parser("cache", help="Cache utilities")
+    cache_sub = cache_p.add_subparsers(dest="cache_command")
+    purge_p = cache_sub.add_parser("purge", help="Delete cache files")
+    purge_p.set_defaults(func=cache_purge)
+
     p.add_argument("--exchange", choices=["coinbase", "kraken"], help="Exchange to use")
     p.add_argument("--paper", action="store_true", help="Run in paper trading mode")
     p.add_argument(
@@ -24,6 +43,9 @@ def build_parser():
 def main():
     parser = build_parser()
     args = parser.parse_args()
+    if getattr(args, "func", None):
+        args.func(args)
+        return
     exchange = select_exchange(args)
     os.environ["EXCHANGE"] = exchange
     if args.paper:
@@ -40,4 +62,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
