@@ -1,67 +1,35 @@
 import pandas as pd
-from crypto_bot.volatility_filter import too_flat, too_hot, fetch_funding_rate
+from crypto_bot.volatility_filter import atr_pct, too_flat
 
 
-def test_too_flat_returns_true():
+def _dummy_df() -> pd.DataFrame:
     data = {
-        "high": [1]*15,
-        "low": [1]*15,
-        "close": [1]*15,
+        "high": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+        "low": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        "close": [1] * 15,
     }
-    df = pd.DataFrame(data)
-    assert too_flat(df, 0.01) is True
+    return pd.DataFrame(data)
 
 
-def test_too_hot(monkeypatch):
-    monkeypatch.setenv("MOCK_FUNDING_RATE", "0.06")
-    assert too_hot("BTCUSDT", 0.05) is True
+def test_atr_pct(monkeypatch):
+    def fake_atr(df, period=14):
+        return pd.Series([0.01] * len(df))
+
+    monkeypatch.setattr("crypto_bot.volatility_filter._calc_atr", fake_atr)
+    result = atr_pct(_dummy_df(), period=14)
+    assert float(result.iloc[-1]) == 0.01
 
 
-def test_funding_url_env(monkeypatch):
-    base = (
-        "https://futures.kraken.com/derivatives/api/v3/"
-        "historical-funding-rates?symbol="
+def test_too_flat(monkeypatch):
+    def fake_atr(df, period=14):
+        return df["close"] * 0.003  # 0.3%
+
+    monkeypatch.setattr("crypto_bot.volatility_filter._calc_atr", fake_atr)
+    df = _dummy_df()
+    assert too_flat(df, atr_period=14, threshold=0.004) is True
+    # now higher volatility
+    monkeypatch.setattr(
+        "crypto_bot.volatility_filter._calc_atr",
+        lambda d, period=14: d["close"] * 0.01,
     )
-    monkeypatch.setenv("FUNDING_RATE_URL", base)
-    called = {}
-
-    def fake_get(url, timeout=5):
-        called["url"] = url
-
-        class FakeResp:
-            def raise_for_status(self):
-                pass
-
-            def json(self):
-                return {"rates": [{"relativeFundingRate": 0.01}, {"relativeFundingRate": 0.02}]}
-
-        return FakeResp()
-
-    monkeypatch.setattr("crypto_bot.volatility_filter.requests.get", fake_get)
-    rate = fetch_funding_rate("ETHUSD")
-    assert rate == 0.02
-    assert called["url"] == base + "ETHUSD"
-
-
-def test_fetch_funding_rate_symbol_param(monkeypatch):
-    monkeypatch.setenv("FUNDING_RATE_URL", "https://api.example.com?symbol=")
-    called = {}
-
-    def fake_get(url, timeout=5):
-        called["url"] = url
-
-        class Resp:
-            def raise_for_status(self):
-                pass
-
-            def json(self):
-                return {"rates": [{"timestamp": "1", "relativeFundingRate": 0.01}]}
-
-        return Resp()
-
-    monkeypatch.setattr("crypto_bot.volatility_filter.requests.get", fake_get)
-    rate = fetch_funding_rate("ETHUSD")
-    assert rate == 0.01
-    assert called["url"] == "https://api.example.com?symbol=ETHUSD"
-
-
+    assert too_flat(df, atr_period=14, threshold=0.004) is False
