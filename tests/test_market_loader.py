@@ -18,18 +18,36 @@ from crypto_bot.utils.market_loader import (
     update_regime_tf_cache,
 )
 
-pytest.skip("Websocket support removed; skipping market_loader tests", allow_module_level=True)
-
 
 class DummyExchange:
     exchange_market_types = {"spot"}
 
     def load_markets(self):
         return {
-            "BTC/USD": {"active": True, "type": "spot"},
-            "ETH/USD": {"active": True, "type": "margin"},
-            "XBT/USD-PERP": {"active": True, "type": "futures"},
-            "XRP/USD": {"active": False, "type": "spot"},
+            "BTC/USD": {
+                "active": True,
+                "type": "spot",
+                "base": "BTC",
+                "quote": "USD",
+            },
+            "ETH/USD": {
+                "active": True,
+                "type": "margin",
+                "base": "ETH",
+                "quote": "USD",
+            },
+            "XBT/USD-PERP": {
+                "active": True,
+                "type": "futures",
+                "base": "XBT",
+                "quote": "USD",
+            },
+            "XRP/USD": {
+                "active": False,
+                "type": "spot",
+                "base": "XRP",
+                "quote": "USD",
+            },
         }
 
 
@@ -70,8 +88,18 @@ def test_load_kraken_symbols_market_type_filter():
 class DummyTypeExchange:
     def load_markets(self):
         return {
-            "BTC/USD": {"active": True, "type": "spot"},
-            "ETH/USD": {"active": True, "type": "future"},
+            "BTC/USD": {
+                "active": True,
+                "type": "spot",
+                "base": "BTC",
+                "quote": "USD",
+            },
+            "ETH/USD": {
+                "active": True,
+                "type": "future",
+                "base": "ETH",
+                "quote": "USD",
+            },
         }
 
 
@@ -92,10 +120,22 @@ class DummySliceExchange:
         self.called.append(market_type)
         data = {
             "spot": [
-                {"symbol": "BTC/USD", "active": True, "type": "spot"},
+                {
+                    "symbol": "BTC/USD",
+                    "active": True,
+                    "type": "spot",
+                    "base": "BTC",
+                    "quote": "USD",
+                },
             ],
             "future": [
-                {"symbol": "XBT/USD-PERP", "active": True, "type": "future"},
+                {
+                    "symbol": "XBT/USD-PERP",
+                    "active": True,
+                    "type": "future",
+                    "base": "XBT",
+                    "quote": "USD",
+                },
             ],
         }
         return data.get(market_type, [])
@@ -114,8 +154,20 @@ class DummySymbolFieldExchange:
 
     def load_markets(self):
         return {
-            "BTC/USD": {"symbol": "BTC/USD", "active": True, "type": "spot"},
-            "ETH/USD": {"symbol": "ETH/USD", "active": False, "type": "spot"},
+            "BTC/USD": {
+                "symbol": "BTC/USD",
+                "active": True,
+                "type": "spot",
+                "base": "BTC",
+                "quote": "USD",
+            },
+            "ETH/USD": {
+                "symbol": "ETH/USD",
+                "active": False,
+                "type": "spot",
+                "base": "ETH",
+                "quote": "USD",
+            },
         }
 
 
@@ -177,6 +229,7 @@ def test_watchOHLCV_fallback_to_fetch():
     assert ex.fetch_thread == main_thread
 
 
+@pytest.mark.skip(reason="Websocket support removed")
 def test_watchOHLCV_no_fallback_when_enough():
     ex = DummyWSExchangeEnough()
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
@@ -211,6 +264,7 @@ class DummyWSExchangeNoTimeout:
         return [[1] * 6 for _ in range(limit)]
 
 
+@pytest.mark.skip(reason="Websocket support removed")
 def test_watchOHLCV_skips_timeout_when_unsupported():
     ex = DummyWSExchangeNoTimeout()
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
@@ -386,6 +440,7 @@ def test_load_ohlcv_parallel_websocket_overrides_fetch():
     assert len(result["BTC/USD"]) == 3
 
 
+@pytest.mark.skip(reason="Websocket support removed")
 def test_load_ohlcv_parallel_websocket_force_history():
     ex = DummyWSEchange()
     result = asyncio.run(
@@ -490,6 +545,7 @@ class LimitCaptureExchange:
         return [[1] * 6 for _ in range(limit)]
 
 
+@pytest.mark.skip(reason="Websocket support removed")
 def test_watchOHLCV_since_limit_reduction():
     ex = LimitCaptureExchange()
     since = int(time.time() * 1000) - 2 * 3600 * 1000
@@ -522,6 +578,7 @@ class SkipLargeLimitExchange:
         return [[1] * 6 for _ in range(limit)]
 
 
+@pytest.mark.skip(reason="Websocket support removed")
 def test_watchOHLCV_skipped_when_limit_exceeds(monkeypatch):
     from crypto_bot.utils import market_loader
 
@@ -541,6 +598,7 @@ def test_watchOHLCV_skipped_when_limit_exceeds(monkeypatch):
     assert len(data) == 50
 
 
+@pytest.mark.skip(reason="Websocket support removed")
 def test_force_websocket_history_ignores_max_ws_limit(monkeypatch):
     from crypto_bot.utils import market_loader
 
