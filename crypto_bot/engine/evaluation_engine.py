@@ -85,6 +85,18 @@ class StreamEvaluationEngine:
         logger.info("Evaluation workers online: %d", len(self._tasks))
         self._workers: list[asyncio.Task] = []
         self._closed = asyncio.Event()
+        self.strategies: dict[str, Any] = {}
+        self.strategy_import_errors: dict[str, str] = {}
+
+    async def start(self) -> None:
+        from crypto_bot.strategy import load_strategies
+
+        self.strategies, self.strategy_import_errors = load_strategies()
+        if not self.strategies:
+            logger.error(
+                "Aborting evaluator start: 0 strategies loaded. See above import errors."
+            )
+            return
         self.data = data or SimpleNamespace(ready=lambda symbol, tf: True)
         ttl = 120
         if cfg is not None and getattr(cfg, "evaluation", None) is not None:
@@ -93,7 +105,7 @@ class StreamEvaluationEngine:
 
     async def start(self) -> None:
         await self.gate.start_watchdog()
-        for _ in range(self.concurrency):
+       for _ in range(self.concurrency):
             self._workers.append(asyncio.create_task(self._worker()))
         logger.info(
             "Evaluation workers online: %d; queue=%d",
