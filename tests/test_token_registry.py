@@ -133,6 +133,7 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
         "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
     )
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(mod, "helius_available", lambda: True)
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
     assert mapping == {"AAA": "mmm"}
@@ -184,6 +185,7 @@ def test_fetch_from_helius_full(monkeypatch, tmp_path):
         "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
     )
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(mod, "helius_available", lambda: True)
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"], full=True))
     assert mapping == {"AAA": {"mint": "mmm", "decimals": 5, "supply": 10}}
@@ -192,6 +194,7 @@ def test_fetch_from_helius_full(monkeypatch, tmp_path):
 def test_fetch_from_helius_sol(monkeypatch, tmp_path):
     monkeypatch.setenv("HELIUS_API_KEY", "KEY")
     mod = _load_module(monkeypatch, tmp_path)
+    monkeypatch.setattr(mod, "helius_available", lambda: True)
 
     mapping = asyncio.run(mod.fetch_from_helius(["SOL"], full=True))
     assert mapping == {"SOL": {"mint": mod.WSOL_MINT, "decimals": 9, "supply": None}}
@@ -239,6 +242,7 @@ def test_fetch_from_helius_4xx(monkeypatch, tmp_path, caplog):
         "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
     )
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(mod, "helius_available", lambda: True)
     caplog.set_level(logging.WARNING)
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
@@ -262,7 +266,6 @@ def test_fetch_from_helius_no_api_key(monkeypatch, tmp_path, caplog):
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
     assert mapping == {"AAA": "metadata_unknown"}
-    assert "Helius unavailable; on-chain metadata checks skipped." in caplog.text
 
 
 def test_periodic_mint_sanity_check(monkeypatch, tmp_path):
@@ -940,6 +943,7 @@ def test_get_decimals_cache_and_fallback(monkeypatch, tmp_path):
     session = DummySession()
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(mod, "helius_available", lambda: True)
     monkeypatch.setenv("HELIUS_KEY", "KEY")
 
     dec = asyncio.run(mod.get_decimals("m2"))

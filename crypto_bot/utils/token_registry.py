@@ -419,7 +419,7 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     provided.
     """
 
-    if not helius_available:
+    if not helius_available():
         return {str(s).upper(): "metadata_unknown" for s in symbols if s}
     api_key = HELIUS_API_KEY
 
@@ -478,7 +478,12 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict):
             continue
-        mint = item.get("mint") or item.get("address") or item.get("tokenMint")
+        mint = (
+            item.get("onChainAccountInfo", {}).get("mint")
+            or item.get("mint")
+            or item.get("address")
+            or item.get("tokenMint")
+        )
         if not isinstance(mint, str):
             continue
         sym = mint_to_symbol.get(mint)
@@ -505,7 +510,7 @@ async def get_decimals(mint: str) -> int:
     if cached is not None:
         return cached
 
-    if not helius_available:
+    if not helius_available():
         return 0
     api_key = HELIUS_API_KEY
 
