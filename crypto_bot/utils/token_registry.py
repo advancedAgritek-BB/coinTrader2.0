@@ -461,7 +461,12 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict):
             continue
-        mint = item.get("mint") or item.get("address") or item.get("tokenMint")
+        mint = (
+            item.get("onChainAccountInfo", {}).get("mint")
+            or item.get("mint")
+            or item.get("address")
+            or item.get("tokenMint")
+        )
         if not isinstance(mint, str):
             continue
         sym = mint_to_symbol.get(mint)

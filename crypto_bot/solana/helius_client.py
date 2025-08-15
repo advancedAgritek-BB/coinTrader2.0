@@ -35,6 +35,10 @@ class TokenMetadata:
 def helius_available() -> bool:
     """Return ``True`` if a Helius key is set and the service responds."""
 
+    """
+    True if we have a key AND Helius responds to a trivial request.
+    We avoid false negatives by retrying transient network errors.
+    """
     if not HELIUS_API_KEY:
         return False
     url = f"{_HELIUS_BASE}/v0/addresses?api-key={HELIUS_API_KEY}"
@@ -45,6 +49,10 @@ def helius_available() -> bool:
                 return True
         except Exception:
             time.sleep(_BACKOFF * (2 ** i))
+            if r.status_code in (200, 404, 400):  # 404/400 still proves reachability
+                return True
+        except Exception:
+            time.sleep(_BACKOFF * (2**i))
     return False
 
 
@@ -59,6 +67,9 @@ class HeliusClient:
         self._client = client or httpx.Client(
             timeout=_TIMEOUT, headers={"User-Agent": "coinTrader/helius"}
         )
+    def __init__(self, api_key: Optional[str] = None, *, client: Optional[httpx.Client] = None) -> None:
+        self.api_key = api_key or HELIUS_API_KEY
+        self._client = client or httpx.Client(timeout=_TIMEOUT, headers={"User-Agent": "coinTrader/helius"})
         if not self.api_key:
             raise RuntimeError("HELIUS_API_KEY missing in environment.")
 
@@ -74,6 +85,11 @@ class HeliusClient:
     def get_token_metadata(self, mint: str) -> Optional[TokenMetadata]:
         """Return token metadata for ``mint`` from Helius."""
 
+        """
+        Helius token metadata API: /v0/token-metadata?mint=...
+        Fallback to /v0/tokens/metadata if needed.
+        """
+        # Primary
         url = self._url("/v0/token-metadata") + f"&mint={mint}"
         r = self._client.get(url)
         if r.status_code == 200:
@@ -83,6 +99,7 @@ class HeliusClient:
             except Exception:
                 pass
 
+        # Fallback (batch style endpoint)
         url2 = self._url("/v0/tokens/metadata")
         r2 = self._client.post(url2, json={"mintAccounts": [mint]})
         if r2.status_code == 200:
@@ -102,6 +119,7 @@ def _parse_token_metadata(mint: str, payload: Dict[str, Any]) -> TokenMetadata:
         .get("data", {})
         .get("attrs", {})
     )
+    attrs = payload.get("onChainMetadata", {}).get("metadata", {}).get("data", {}).get("attrs", {})
     symbol = payload.get("symbol") or payload.get("token", {}).get("symbol")
     name = payload.get("name") or payload.get("token", {}).get("name")
     decimals = payload.get("decimals") or payload.get("token", {}).get("decimals")

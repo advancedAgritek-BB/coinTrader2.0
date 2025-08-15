@@ -139,6 +139,7 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
         "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
     )
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(mod, "helius_available", lambda: True)
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
     assert mapping == {"AAA": "mmm"}
@@ -196,6 +197,7 @@ def test_fetch_from_helius_full(monkeypatch, tmp_path):
         "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
     )
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(mod, "helius_available", lambda: True)
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"], full=True))
     assert mapping == {"AAA": {"mint": "mmm", "decimals": 5, "supply": 10}}
@@ -207,6 +209,7 @@ def test_fetch_from_helius_sol(monkeypatch, tmp_path):
         "crypto_bot.solana.helius_client.helius_available", lambda: True
     )
     mod = _load_module(monkeypatch, tmp_path)
+    monkeypatch.setattr(mod, "helius_available", lambda: True)
 
     mapping = asyncio.run(mod.fetch_from_helius(["SOL"], full=True))
     assert mapping == {"SOL": {"mint": mod.WSOL_MINT, "decimals": 9, "supply": None}}
@@ -257,6 +260,7 @@ def test_fetch_from_helius_4xx(monkeypatch, tmp_path, caplog):
         "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
     )
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(mod, "helius_available", lambda: True)
     caplog.set_level(logging.WARNING)
 
     mapping = asyncio.run(mod.fetch_from_helius(["AAA"]))
@@ -944,6 +948,15 @@ def test_get_decimals_cache_and_fallback(monkeypatch, tmp_path):
             pass
 
     monkeypatch.setattr(mod, "HeliusClient", DummyHeliusClient)
+        def get(self, url, timeout=10):
+            self.url = url
+            return DummyResp()
+
+    session = DummySession()
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
+    monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(mod, "helius_available", lambda: True)
+    monkeypatch.setenv("HELIUS_KEY", "KEY")
 
     dec = asyncio.run(mod.get_decimals("m2"))
     assert dec == 6
