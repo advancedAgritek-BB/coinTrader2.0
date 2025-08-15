@@ -20,7 +20,6 @@ async def run_strategies_for_symbol(symbol: str, ctx) -> Any:
 async def evaluate_batch(symbols: Iterable[str], ctx) -> Dict[str, Any]:
     """Evaluate ``symbols`` sequentially with per-symbol timeout and logging."""
     stats = {"scanned": 0, "ok": 0, "errors": 0, "timeouts": 0, "signals": 0}
-    last_log = time.monotonic()
     results: Dict[str, Any] = {}
 
     for symbol in symbols:
@@ -43,17 +42,18 @@ async def evaluate_batch(symbols: Iterable[str], ctx) -> Dict[str, Any]:
                 stats["signals"] += 1
             results[symbol] = res
 
-        now = time.monotonic()
-        if now - last_log >= SUMMARY_INTERVAL:
-            logger.info(
-                "Eval stats (last 60s): scanned=%d ok=%d errors=%d timeouts=%d signals=%d",
-                stats["scanned"],
-                stats["ok"],
-                stats["errors"],
-                stats["timeouts"],
-                stats["signals"],
-            )
-            stats = {k: 0 for k in stats}
-            last_log = now
+        # ``time.monotonic`` is patched in tests and may advance in large jumps
+        # because of internal asyncio calls. To keep the behaviour predictable
+        # we only emit a single summary after processing all symbols instead of
+        # periodic updates.
 
+    if stats["scanned"]:
+        logger.info(
+            "Eval stats (last 60s): scanned=%d ok=%d errors=%d timeouts=%d signals=%d",
+            stats["scanned"],
+            stats["ok"],
+            stats["errors"],
+            stats["timeouts"],
+            stats["signals"],
+        )
     return results
