@@ -8,9 +8,6 @@ import pandas as pd
 import requests
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from crypto_bot.utils.indicator_cache import cache_series
-from pathlib import Path
-from crypto_bot.indicators.atr import calc_atr as _calc_atr_series
 from crypto_bot.indicators.atr import calc_atr
 
 
@@ -48,15 +45,6 @@ def fetch_funding_rate(symbol: str) -> float:
     except Exception as exc:
         logger.error("Failed to fetch funding rate: %s", exc)
     return 0.0
-
-
-def calc_atr(df: pd.DataFrame, window: int = 14) -> float:
-    """Calculate the Average True Range using cached values."""
-    lookback = window
-    series = _calc_atr_series(df, period=window)
-    cached = cache_series(f"atr_{window}", df, series, lookback)
-    return float(cached.iloc[-1])
-
 
 def too_flat(df: pd.DataFrame, min_atr_pct: float) -> bool:
     """Return True if ATR is below ``min_atr_pct`` of price."""
