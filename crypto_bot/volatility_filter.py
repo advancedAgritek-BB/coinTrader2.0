@@ -9,6 +9,8 @@ import requests
 from crypto_bot.indicators.atr import calc_atr as _calc_atr_series
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.indicators.atr import calc_atr
 
 
 logger = setup_logger(__name__, LOG_DIR / "volatility.log")
