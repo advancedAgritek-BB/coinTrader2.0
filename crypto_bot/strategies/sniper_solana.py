@@ -1,160 +1,111 @@
-from __future__ import annotations
-
+import os
 import asyncio
-from typing import Any, Optional
-
+from typing import Any, Dict, Optional
 from loguru import logger
 
-try:  # pragma: no cover - optional dependency
-    from crypto_bot.solana.pump_fun_client import PumpFunClient
-except Exception:  # pragma: no cover - fallback stub
-    class PumpFunClient:  # type: ignore[override]
-        async def trending(self) -> list[dict]:
-            return []
+from crypto_bot.solana.helius_client import HeliusClient
+from crypto_bot.solana.jupiter_client import JupiterClient
+from crypto_bot.solana.raydium_client import RaydiumClient
 
-        async def aclose(self) -> None:
-            pass
+# Simple config (could be moved to YAML)
+SLIPPAGE_BPS = int(os.getenv("SNIPER_SLIPPAGE_BPS", "200"))     # 2%
+MAX_PRICE_IMPACT_BPS = int(os.getenv("SNIPER_MAX_IMPACT_BPS", "250"))  # 2.5%
+MIN_LP_USD = float(os.getenv("SNIPER_MIN_LP_USD", "10000"))
+MIN_TOKEN_AGE_SEC = int(os.getenv("SNIPER_MIN_AGE_SEC", "60"))
+BUY_AMOUNT_USD = float(os.getenv("SNIPER_BUY_USD", "50"))
 
-
-try:  # pragma: no cover - optional dependency
-    from crypto_bot.solana.sniper.selector import TokenSelector, TokenScore
-except Exception:  # pragma: no cover - fallback stubs
-    class TokenScore:  # minimal placeholder
-        def __init__(
-            self,
-            mint: str = "",
-            symbol: str | None = None,
-            liquidity_usd: float = 0.0,
-            volume24h_usd: float = 0.0,
-            score: float = 0.0,
-        ) -> None:
-            self.mint = mint
-            self.symbol = symbol
-            self.liquidity_usd = liquidity_usd
-            self.volume24h_usd = volume24h_usd
-            self.score = score
-
-class TokenSelector:  # type: ignore[override]
-        def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
-            pass
-
-        def score_mint(self, mint: str, created_unix: int | None = None) -> Optional[TokenScore]:
-            return None
-
-        def close(self) -> None:
-            pass
+USDC_MINT = os.getenv("USDC_MINT", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
+SOL_MINT  = os.getenv("SOL_MINT",  "So11111111111111111111111111111111111111112")
 
 
-class Signal:
-    def __init__(self, symbol: str, side: str, qty: float, reason: str) -> None:
-        self.symbol = symbol
-        self.side = side
-        self.qty = qty
-        self.reason = reason
+class Strategy:
+    """
+    Wraps an on-chain runner. The evaluation engine will instantiate this Strategy,
+    but there is no OHLCV 'evaluate'. We spawn our own task in start() and stop it on shutdown.
+    """
 
+    def __init__(self):
+        self._task: Optional[asyncio.Task] = None
+        self._stop = asyncio.Event()
 
-class Strategy:  # <-- the loader will find this
-    name = "sniper_solana"
-    timeframes = ["1m"]
+    async def start(self):
+        if self._task and not self._task.done():
+            return
+        self._stop.clear()
+        self._task = asyncio.create_task(self._runner(), name="sniper-solana-runner")
+        logger.info("sniper_solana runner started.")
 
-    def __init__(
-        self,
-        *,
-        base_quote_mint: str = "So11111111111111111111111111111111111111112",  # SOL
-        buy_notional_usd: float = 50.0,
-        max_open_positions: int = 3,
-        **_: Any,
-    ) -> None:
-        self.base_quote_mint = base_quote_mint
-        self.buy_notional_usd = buy_notional_usd
-        self.max_open_positions = max_open_positions
-        self._pump = PumpFunClient()
-        self._selector = TokenSelector(
-            min_liquidity_usd=10_000.0,
-            min_volume24h_usd=15_000.0,
-            prefer_age_minutes=30.0,
-            hard_min_age_sec=90,
-        )
+    async def stop(self):
+        self._stop.set()
+        if self._task:
+            self._task.cancel()
+            await asyncio.gather(self._task, return_exceptions=True)
+            self._task = None
+        logger.info("sniper_solana runner stopped.")
 
-    async def aclose(self) -> None:
-        await self._pump.aclose()
-        self._selector.close()
+    # --- POLICY / SCORING ---
 
-    # ---- Integration contract (lightweight & forgiving) ---------------------
-    # The evaluator should call one of these periodically with context:
-    async def evaluate(self, context: Any) -> list[Signal]:
+    def _passes_risk_gates(self, meta: Dict[str, Any], pool_info: Dict[str, Any]) -> bool:
         """
-        Pull trending/new tokens from Pump.fun, filter via Helius+Raydium,
-        and return buy signals.
+        Very conservative gates: min LP USD, token age, no obvious mint authority risks.
+        Expand with renounced checks, freeze authority checks (requires RPC read).
         """
-        try:
-            trending = await self._pump.trending()
-        except Exception as e:
-            logger.warning(f"pump.fun trending fetch failed: {e}")
-            return []
+        age_ok = (meta.get("createdAt", 0) or 0) <= (int(asyncio.get_event_loop().time()) - MIN_TOKEN_AGE_SEC)
+        lp_ok = float(pool_info.get("liquidityUsd", 0) or 0) >= MIN_LP_USD
+        return age_ok and lp_ok
 
-        scored: list[TokenScore] = []
-        for it in trending[:30]:  # cap requests
-            mint = (it.get("mint") or it.get("address") or "").strip()
-            if not mint:
-                continue
-            created_unix = it.get("createdTimestamp") or it.get("created_at") or it.get("timestamp")
-            try:
-                ts = int(created_unix) if created_unix is not None else None
-            except Exception:
-                ts = None
-            try:
-                sc = self._selector.score_mint(mint, created_unix=ts)
-                if sc:
-                    scored.append(sc)
-            except Exception as e:
-                logger.debug(f"score_mint error for {mint}: {e}")
+    # --- RUNNER ---
 
-        scored.sort(key=lambda s: s.score, reverse=True)
-        take = scored[: self.max_open_positions]
+    async def _runner(self):
+        """
+        Poll-based example (replace with Helius webhook/WebSocket if you prefer).
+        For brevity, demonstrate a simple loop that:
+          - discovers candidate mints from a source you already have in repo (or Raydium)
+          - fetches metadata via Helius
+          - quotes and tries to build a swap via Jupiter (fallback Raydium)
+        """
+        async with HeliusClient() as helius, JupiterClient() as jup, RaydiumClient() as ray:
+            # You likely already have a scanner in your repo; worst case use Raydium new pools:
+            async def discover_new_mints() -> list[str]:
+                # TODO: wire to your scanner; this is a stub returning []
+                return []
 
-        signals: list[Signal] = []
-        for s in take:
-            # Place a BUY signal using USD notional; executor will translate to qty.
-            sym = f"{s.symbol or s.mint}/SOL"
-            reason = f"score={s.score:.2f}; liq={s.liquidity_usd:.0f}; vol24h={s.volume24h_usd:.0f}"
-            signals.append(Signal(symbol=sym, side="buy", qty=self.buy_notional_usd, reason=reason))
-            logger.info(f"[sniper] BUY {sym} ({s.mint}) -> {reason}")
+            while not self._stop.is_set():
+                try:
+                    mints = await discover_new_mints()
+                    if not mints:
+                        await asyncio.sleep(2.0)
+                        continue
 
-        return signals
+                    meta_map = await helius.get_token_metadata(mints)
+                    for mint in mints:
+                        meta = meta_map.get(mint) or {}
+                        # Minimal pool info (if you have your own source, use that data instead)
+                        pools = await ray.pools_by_mint(mint)
+                        pool = pools[0] if pools else {}
+                        if not pool or not self._passes_risk_gates(meta, pool):
+                            continue
 
+                        # Attempt Jupiter route USDC -> mint
+                        # For demo purposes, compute a nominal USDC amount in base units (6 decimals)
+                        usdc_amount = int(BUY_AMOUNT_USD * 1_000_000)
+                        route = await jup.quote(USDC_MINT, mint, usdc_amount, SLIPPAGE_BPS)
+                        if not route:
+                            # Fallback or skip; you can build a Raydium Tx here if desired
+                            continue
 
-# ---------------------------------------------------------------------------
-# Legacy API used by some tests: lightweight ATR-like spike detector
+                        # (Optional) check price impact in bps if route has that info
+                        # if route.get("priceImpactPct", 0) * 10000 > MAX_PRICE_IMPACT_BPS: continue
 
-def get_pyth_price(symbol: str, cfg: Optional[dict] = None) -> float:
-    """Placeholder Pyth price fetcher (patched in tests)."""
-    return 0.0
+                        # At this point call your wallet/tx builder to submit the trade using
+                        # Jupiter swap instructions or your own Raydium instruction builder.
+                        # This repo-specific part isn’t shown here because your signer stack
+                        # and account abstraction isn’t in the logs. Hook here:
+                        logger.info(f"[SNIPER] would buy mint {mint} via Jupiter route id={route.get('id')}")
 
-
-def generate_signal(df, config: Optional[dict] = None) -> tuple[float, str]:
-    """Simplified jump-based signal used for backward compatibility."""
-    if df is None or len(df) < 2:
-        return 0.0, "none"
-
-    params = config or {}
-    if not bool(params.get("is_trading", True)) or float(params.get("conf_pct", 0.0)) > 0.5:
-        return 0.0, "none"
-
-    token = params.get("token")
-    jump_mult = float(params.get("jump_mult", 4.0))
-
-    df = df.copy()
-    if token:
-        try:
-            df.loc[df.index[-1], "close"] = float(get_pyth_price(f"Crypto.{token}/USD", config))
-        except Exception:
-            pass
-
-    prev_close = float(df["close"].iloc[-2])
-    curr_close = float(df["close"].iloc[-1])
-    price_change = curr_close - prev_close
-
-    if abs(price_change) >= jump_mult:
-        return 1.0, ("long" if price_change > 0 else "short")
-    return 0.0, "none"
+                    await asyncio.sleep(1.0)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.exception(f"sniper runner error: {e!r}")
+                    await asyncio.sleep(1.0)
