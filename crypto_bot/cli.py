@@ -30,8 +30,12 @@ def build_parser():
     purge_p = cache_sub.add_parser("purge", help="Delete cache files")
     purge_p.set_defaults(func=cache_purge)
 
-    p.add_argument("--exchange", choices=["coinbase", "kraken"], help="Exchange to use")
-    p.add_argument("--paper", action="store_true", help="Run in paper trading mode")
+    p.add_argument(
+        "--exchange", choices=["coinbase", "kraken"], help="Exchange to use"
+    )
+    p.add_argument(
+        "--paper", action="store_true", help="Run in paper trading mode"
+    )
     p.add_argument(
         "--smoke-test",
         action="store_true",
@@ -54,7 +58,7 @@ def main():
         # In smoke test just output selection and exit quickly
         print(f"Selected exchange {exchange} (paper={args.paper})")
         return
-    from .main import main as bot_main
+    from crypto_bot.main import main as bot_main
     import asyncio
 
     asyncio.run(bot_main())
