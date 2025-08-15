@@ -23,10 +23,8 @@ from tenacity import (
     before_sleep_log,
 )
 
-try:  # pragma: no cover - optional dependency
-    import ccxt.pro as ccxt  # type: ignore
-except Exception:  # pragma: no cover - fall back to standard ccxt
-    import ccxt  # type: ignore
+# ensure we are using async ccxt
+import ccxt.async_support as ccxt  # type: ignore
 
 try:  # optional redis for caching
     import redis  # type: ignore
@@ -197,6 +195,71 @@ COINGECKO_IDS = {
     "ETH": "ethereum",
     "SOL": "solana",
 }
+
+# --- NEW: resolve markets only to what the exchange actually lists ---
+def resolve_listed_symbol(exchange, base: str, allowed_quotes: list[str]) -> str | None:
+    """
+    Given an exchange instance with markets loaded, return the first listed
+    symbol for ``base`` across ``allowed_quotes`` (in order), or ``None`` if not found.
+    Works with normalized ccxt symbols.
+    """
+    markets = exchange.markets or {}
+    for q in allowed_quotes:
+        sym = f"{base}/{q}"
+        if sym in markets:
+            return sym
+    for m in markets.values():
+        try:
+            if m.get("base") == base and m.get("quote") in allowed_quotes:
+                return m.get("symbol")
+        except Exception:
+            continue
+    return None
+
+
+# --- NEW: safe closing helpers for ccxt / aiohttp ---
+async def _safe_exchange_close(exchange, where: str = ""):
+    try:
+        await exchange.close()
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:  # pragma: no cover - cleanup best effort
+        logger.warning(f"Exchange.close() failed {where}: {e!r}")
+
+
+# Example usage template for fetching OHLCV blocks
+async def fetch_ohlcv_block(exchange_id: str, bases: list[str], timeframe: str, limit: int,
+                            allowed_quotes: list[str]):
+    """
+    Template function demonstrating proper exchange lifecycle management.
+    """
+    ex = getattr(ccxt, exchange_id)({"enableRateLimit": True})
+    try:
+        await ex.load_markets()
+        results = {}
+        bases_dedup = list(dict.fromkeys(bases))
+        for base in bases_dedup:
+            symbol = resolve_listed_symbol(ex, base, allowed_quotes)
+            if not symbol:
+                logger.debug(
+                    f"Skipping {base}: no listed market on {exchange_id} for quotes {allowed_quotes}"
+                )
+                continue
+            try:
+                candles = await ex.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+                if candles:
+                    results[symbol] = candles
+                else:
+                    logger.debug(f"No candles returned for {symbol} @ {timeframe}")
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # pragma: no cover - network errors
+                logger.warning(
+                    f"fetch_ohlcv failed for {symbol} @ {timeframe}: {e!r}"
+                )
+        return results
+    finally:
+        await _safe_exchange_close(ex, where=f"{exchange_id}:{timeframe}")
 
 # Cache GeckoTerminal pool addresses and metadata per symbol
 # Mapping: symbol -> (pool_addr, volume, reserve, price, limit)
@@ -1675,6 +1738,8 @@ async def fetch_dex_ohlcv(
 
 
 # --- Back-compat: GeckoTerminal OHLCV wrapper using CCXT (real fetch, no stubs) ---
+
+
 def fetch_geckoterminal_ohlcv(
     symbol: str,
     timeframe: str = "1h",
@@ -1687,37 +1752,38 @@ def fetch_geckoterminal_ohlcv(
     This uses CCXT to fetch OHLCV from the active exchange (or the provided `exchange`).
     Returns CCXT-standard rows: [timestamp_ms, open, high, low, close, volume].
     """
-    if exchange is not None and hasattr(exchange, "fetch_ohlcv"):
-        return exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
 
-    if ccxt is None:
-        raise RuntimeError(
-            "ccxt is required for OHLCV fetching. Install ccxt or pass an exchange instance."
-        )
+    async def _run() -> List[List[float]]:
+        if exchange is not None and hasattr(exchange, "fetch_ohlcv"):
+            if inspect.iscoroutinefunction(exchange.fetch_ohlcv):
+                return await exchange.fetch_ohlcv(
+                    symbol, timeframe=timeframe, since=since, limit=limit
+                )
+            return await asyncio.to_thread(
+                exchange.fetch_ohlcv, symbol, timeframe, since, limit
+            )
 
-    # Choose exchange from ENV (fallback to kraken, which supports OHLCV for many pairs)
-    ex_name = os.environ.get("EXCHANGE", "kraken").lower()
-    ex_cls = getattr(ccxt, ex_name, None) or getattr(ccxt, "kraken")
-    ex = ex_cls({"enableRateLimit": True})
+        if ccxt is None:
+            raise RuntimeError(
+                "ccxt is required for OHLCV fetching. Install ccxt or pass an exchange instance."
+            )
+
+        ex_name = os.environ.get("EXCHANGE", "kraken").lower()
+        ex_cls = getattr(ccxt, ex_name, None) or getattr(ccxt, "kraken")
+        ex = ex_cls({"enableRateLimit": True})
+        try:
+            return await ex.fetch_ohlcv(
+                symbol, timeframe=timeframe, since=since, limit=limit
+            )
+        finally:
+            await _safe_exchange_close(ex, where=f"{ex_name}:{timeframe}")
+
     try:
-        return ex.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
-    finally:
-        close = getattr(ex, "close", None)
-        if close:
-            if inspect.iscoroutinefunction(close):
-                try:
-                    asyncio.run(close())
-                except RuntimeError:
-                    # Event loop already running; schedule close and let it cleanup later
-                    try:
-                        asyncio.get_running_loop().create_task(close())
-                    except RuntimeError:
-                        pass
-            else:
-                try:
-                    close()
-                except Exception:
-                    pass
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_run())
+    else:
+        return loop.create_task(_run())
 
 
 async def update_ohlcv_cache(
