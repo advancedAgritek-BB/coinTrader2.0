@@ -148,10 +148,14 @@ class TelegramBotUI:
                 CallbackQueryHandler(self.edit_max_trades, pattern=f"^{EDIT_MAX_TRADES}$"),
             ],
             states={
-                EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_config_value)]
+                EDIT_VALUE: [
+                    MessageHandler(
+                        filters.TEXT & ~filters.COMMAND, self.set_config_value
+                    )
+                ]
             },
             fallbacks=[],
-            per_message=True,  # eliminate PTBUserWarning
+            per_message=False,
         )
         self.app.add_handler(conv)
         self.app.add_handler(
