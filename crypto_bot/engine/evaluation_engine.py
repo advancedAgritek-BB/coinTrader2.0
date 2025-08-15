@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any, Awaitable, Callable
 
+from crypto_bot.strategy import load_strategies
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,10 @@ class EvalGate:
             self._owner = None
             self._since = 0.0
             self._lock.release()
+
+    def is_busy(self) -> bool:
+        """Return whether the gate is currently held."""
+        return self._lock.locked()
 
     async def start_watchdog(self) -> None:
         async def _watch() -> None:
@@ -79,9 +84,16 @@ class StreamEvaluationEngine:
         self.strategy_import_errors: dict[str, str] = {}
 
     async def start(self) -> None:
+        # read enabled list from config if available
+        enabled = set(getattr(self.cfg, "strategies", {}).get("enabled", [])) or None
+        self.strategies, self.strategy_import_errors = load_strategies(enabled=enabled)
         from crypto_bot.strategy import load_strategies
 
-        self.strategies, self.strategy_import_errors = load_strategies()
+        # read enabled list from config if available
+        enabled = set(getattr(self.cfg, "strategies", {}).get("enabled", [])) or None
+        self.strategies, self.strategy_import_errors = load_strategies(
+            enabled=enabled
+        )
         if not self.strategies:
             logger.error(
                 "Aborting evaluator start: 0 strategies loaded. See above import errors."

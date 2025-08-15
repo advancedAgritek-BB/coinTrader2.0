@@ -2164,6 +2164,19 @@ async def update_multi_tf_ohlcv_cache(
                             timeframe=tf,
                             limit=sym_l,
                         )
+                        try:
+                            res = await fetch_geckoterminal_ohlcv(
+                                sym,
+                                timeframe=tf,
+                                limit=sym_l,
+                            )
+                        except TypeError:
+                            res = await fetch_geckoterminal_ohlcv(
+                                sym,
+                                timeframe=tf,
+                                limit=sym_l,
+                                min_24h_volume=min_volume_usd,
+                            )
                     except Exception as e:  # pragma: no cover - network
                         logger.warning(
                             f"Gecko failed for {sym}: {e} - using exchange data"
