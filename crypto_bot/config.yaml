@@ -603,17 +603,14 @@ enable_token_overrides: true
 ticker_backoff_initial: 2
 ticker_backoff_max: 60
 ticker_rate_limit: null
-timeframe: 15m
-timeframes:
-- 1m
-- 5m
+timeframes: ['1m','5m']
 backfill_days:
-  1m: 2
-  5m: 3
+  '1m': 2
+  '5m': 3
 warmup_candles:
-  1m: 1000
-  5m: 600
-allowed_quotes: [USD, USDT, USDC, EUR]
+  '1m': 1000
+  '5m': 600
+allowed_quotes: ['USD','USDT','USDC','EUR']
 hft: true
 token_registry:
   refresh_interval_minutes: 15
@@ -650,8 +647,12 @@ evaluation:
     enabled: true
     seed_symbols: ['BTC/USDT','ETH/USDT','SOL/USDT','XRP/USDT','DOGE/USDT']
     immediate: true
-  onchain_watchers:
-    enabled: false  # silence Helius/pump/raydium in pure CEX mode
+
+onchain_watchers:
+  enabled: false   # hard off in CEX mode
+
+strict_cex: true   # only symbols the exchange actually lists
+denylist_symbols: ['AIBTC/USD','AIBTC:USD']
 
 # === trading/base ===
 trading:
