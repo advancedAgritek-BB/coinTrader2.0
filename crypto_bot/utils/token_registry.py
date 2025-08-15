@@ -520,6 +520,7 @@ async def periodic_mint_sanity_check(interval_hours: float = 24.0) -> None:
     """Periodically verify manual mint overrides via Helius metadata."""
 
     symbols = list(MANUAL_OVERRIDES.keys())
+    reported_missing: set[str] = set()
     while True:
         try:
             if symbols:
@@ -527,7 +528,11 @@ async def periodic_mint_sanity_check(interval_hours: float = 24.0) -> None:
                 for sym, expected_mint in MANUAL_OVERRIDES.items():
                     meta = metadata.get(sym)
                     if not isinstance(meta, dict):
-                        logger.warning("No metadata for %s", sym)
+                        if sym in reported_missing:
+                            logger.debug("No metadata for %s", sym)
+                        else:
+                            logger.warning("No metadata for %s", sym)
+                            reported_missing.add(sym)
                         continue
                     helius_mint = meta.get("mint")
                     decimals = meta.get("decimals")

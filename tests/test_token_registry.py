@@ -348,6 +348,41 @@ def test_periodic_mint_sanity_check_sol(monkeypatch, tmp_path, caplog):
     assert mod.TOKEN_MINTS["SOL"] == mod.WSOL_MINT
 
 
+def test_periodic_mint_sanity_check_missing_logged_once(monkeypatch, tmp_path, caplog):
+    mod = _load_module(monkeypatch, tmp_path)
+    mod.MANUAL_OVERRIDES.clear()
+    mod.MANUAL_OVERRIDES.update({"AAA": "mint"})
+    mod.TOKEN_MINTS.update(mod.MANUAL_OVERRIDES)
+
+    async def fake_fetch(_symbols, *, full=False):
+        return {}
+
+    monkeypatch.setattr(mod, "fetch_from_helius", fake_fetch)
+    monkeypatch.setattr(mod, "_write_cache", lambda: None)
+
+    calls = {"count": 0}
+
+    async def fast_sleep(_):
+        calls["count"] += 1
+        if calls["count"] >= 2:
+            raise asyncio.CancelledError()
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fast_sleep)
+    caplog.set_level(logging.DEBUG)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(mod.periodic_mint_sanity_check(interval_hours=0))
+
+    warnings = [
+        r for r in caplog.records if r.levelno == logging.WARNING and r.getMessage() == "No metadata for AAA"
+    ]
+    debugs = [
+        r for r in caplog.records if r.levelno == logging.DEBUG and r.getMessage() == "No metadata for AAA"
+    ]
+    assert len(warnings) == 1
+    assert len(debugs) == 1
+
+
 def test_load_token_mints(monkeypatch, tmp_path):
     mod = _load_module(monkeypatch, tmp_path)
 
