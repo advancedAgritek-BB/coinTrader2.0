@@ -1682,7 +1682,25 @@ def fetch_geckoterminal_ohlcv(
     ex_name = os.environ.get("EXCHANGE", "kraken").lower()
     ex_cls = getattr(ccxt, ex_name, None) or getattr(ccxt, "kraken")
     ex = ex_cls({"enableRateLimit": True})
-    return ex.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
+    try:
+        return ex.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
+    finally:
+        close = getattr(ex, "close", None)
+        if close:
+            if inspect.iscoroutinefunction(close):
+                try:
+                    asyncio.run(close())
+                except RuntimeError:
+                    # Event loop already running; schedule close and let it cleanup later
+                    try:
+                        asyncio.get_running_loop().create_task(close())
+                    except RuntimeError:
+                        pass
+            else:
+                try:
+                    close()
+                except Exception:
+                    pass
 
 
 async def update_ohlcv_cache(
