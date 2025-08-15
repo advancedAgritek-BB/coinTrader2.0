@@ -1169,12 +1169,12 @@ async def scan_arbitrage(exchange: object, config: dict) -> list[str]:
     if fetch_geckoterminal_ohlcv:
         for sym in pairs:
             try:
-                res = await fetch_geckoterminal_ohlcv(sym, limit=1, return_price=True)
+                data = fetch_geckoterminal_ohlcv(sym, limit=1)
             except Exception:
-                res = None
-            if res:
-                _data, _vol, price = res
-                gecko_prices[sym] = price
+                data = None
+            if data:
+                # close price of latest candle
+                gecko_prices[sym] = data[-1][4]
 
     remaining = [s for s in pairs if s not in gecko_prices]
     dex_prices: dict[str, float] = gecko_prices.copy()

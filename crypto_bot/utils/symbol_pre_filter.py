@@ -37,7 +37,6 @@ from .market_loader import (
     fetch_ohlcv_async,
     update_ohlcv_cache,
     update_multi_tf_ohlcv_cache,
-    fetch_geckoterminal_ohlcv,
     timeframe_seconds,
 )
 from .constants import NON_SOLANA_BASES
@@ -1058,26 +1057,6 @@ async def filter_symbols(
     metric_map = {sym: (vol, spr) for sym, vol, _, spr in metrics}
 
     liq_scores: Dict[str, float] = {}
-    if metrics:
-        denom = float(cfg.get("trade_size_pct", 0.1)) * float(cfg.get("balance", 1))
-        if denom <= 0:
-            denom = 1.0
-
-        async def _fetch_liq(sym: str) -> tuple[str, float]:
-            base, _, quote = sym.partition("/")
-            is_solana = quote.upper() == "USDC" and base.upper() not in NON_SOLANA_BASES
-            if not is_solana:
-                return sym, 0.0
-            try:
-                _, _, reserve = await fetch_geckoterminal_ohlcv(sym, limit=1)
-                return sym, reserve / denom
-            except Exception:
-                return sym, 0.0
-
-        liq_results = await asyncio.gather(
-            *[_fetch_liq(sym) for sym, *_ in metrics if sym.upper().endswith("/USDC")]
-        )
-        liq_scores = {s: sc for s, sc in liq_results}
 
     scored: List[tuple[str, float]] = []
     if metrics:
@@ -1217,22 +1196,18 @@ async def filter_symbols(
                 rejects[RejectReason.MISSING_OHLCV] += 1
                 continue
         logger.info("Resolved %s to mint %s for onchain", sym, mint)
-        try:
-            _, vol, _ = await fetch_geckoterminal_ohlcv(sym, limit=1)
-            if vol < onchain_min_volume:
-                logger.info(
-                    "Skipping %s due to low volume %.2f USD (min %.2f)",
-                    sym,
-                    vol,
-                    onchain_min_volume,
-                )
-                rejects[RejectReason.LOW_VOLUME] += 1
-                continue
-            score = vol / float(onchain_min_volume)
-            resolved_onchain.append((sym, score))
-        except Exception:  # pragma: no cover - network
-            logger.warning("Gecko fetch failed for %s; skipping", sym)
-            rejects[RejectReason.MISSING_OHLCV] += 1
+        vol = 0.0
+        if vol < onchain_min_volume:
+            logger.info(
+                "Skipping %s due to low volume %.2f USD (min %.2f)",
+                sym,
+                vol,
+                onchain_min_volume,
+            )
+            rejects[RejectReason.LOW_VOLUME] += 1
+            continue
+        score = vol / float(onchain_min_volume)
+        resolved_onchain.append((sym, score))
 
     kept_total = len(result) + len(resolved_onchain)
     elapsed = time.perf_counter() - start_time

@@ -2159,6 +2159,11 @@ async def update_multi_tf_ohlcv_cache(
                     logger.info("Adjusting limit for %s on %s to %d", sym, tf, sym_l)
                 if is_solana:
                     try:
+                        res = fetch_geckoterminal_ohlcv(
+                            sym,
+                            timeframe=tf,
+                            limit=sym_l,
+                        )
                         try:
                             res = await fetch_geckoterminal_ohlcv(
                                 sym,
@@ -2181,11 +2186,8 @@ async def update_multi_tf_ohlcv_cache(
                     gecko_failed = True
 
                 if res and not gecko_failed:
-                    if isinstance(res, tuple):
-                        data, vol, *_ = res
-                    else:
-                        data = res
-                        vol = min_volume_usd
+                    data = res
+                    vol = min_volume_usd
                     add_priority(data, sym)
 
                 if gecko_failed or not data or vol < min_volume_usd:

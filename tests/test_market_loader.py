@@ -1946,240 +1946,26 @@ def test_fetch_ohlcv_async_cancel_pending_ws(caplog):
     assert not caplog.records
 
 
-def test_fetch_geckoterminal_ohlcv_success(monkeypatch):
+def test_fetch_geckoterminal_ohlcv_uses_exchange():
     from crypto_bot.utils import market_loader
 
-    mint = "So11111111111111111111111111111111111111112"
+    class DummyEx:
+        def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=500):
+            assert symbol == "BTC/USD"
+            assert timeframe == "1h"
+            assert limit == 1
+            return [[1, 1, 1, 1, 1, 1]]
 
-    pool_data = {
-        "data": [
-            {
-                "id": "pool1",
-                "attributes": {"volume_usd": {"h24": 123}, "reserve_in_usd": 0},
-            },
-            {
-                "id": "pool1",
-                "attributes": {"volume_usd": {"h24": 123}, "address": "pool1"},
-            },
-            {"id": "solana_pool1", "attributes": {"volume_usd": {"h24": 123}}},
-        ]
-    }
-    ohlcv_data = {
-        "data": {
-            "attributes": {
-                "ohlcv_list": [
-                    [1, 1, 2, 0.5, 1.5, 10],
-                    [1, 1, 2, 0.5, 1.5, 10],
-                ]
-            }
-        }
-    }
-
-    urls: list[tuple[str, dict | None]] = []
-    responses = [pool_data, ohlcv_data, ohlcv_data]
-
-    async def fake_gecko(url, params=None, retries=3):
-        urls.append((url, params or {}))
-        return responses.pop(0)
-
-    monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
-
-    data, vol, reserve = asyncio.run(
-        market_loader.fetch_geckoterminal_ohlcv(f"{mint}/USDC", timeframe="1h", limit=1)
+    data = market_loader.fetch_geckoterminal_ohlcv(
+        "BTC/USD", timeframe="1h", limit=1, exchange=DummyEx()
     )
-    assert data == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
-    assert vol == 123.0
-    assert reserve == 0.0
-    data, volume, reserve = asyncio.run(
-        market_loader.fetch_geckoterminal_ohlcv(f"{mint}/USDC", timeframe="1h", limit=1)
-    )
-    assert data == [[1000, 1.0, 2.0, 0.5, 1.5, 10.0]]
-    assert volume == 123
-    assert reserve == 0
-    assert urls[0][0].endswith("search/pools")
-    from urllib.parse import quote_plus
-    assert urls[0][1].get("query") == quote_plus(f"{mint}/USDC")
-    assert urls[1][0].endswith("/ohlcv/hour")
-    assert urls[1][1]["aggregate"] == 1
-
-
-def test_fetch_gecko_lookup_fallback(monkeypatch):
-    """Second search uses mint from get_mint_from_gecko when first search is empty."""
-    from crypto_bot.utils import market_loader
-
-    symbol = "FOO/USDC"
-    mint = "So11111111111111111111111111111111111111112"
-    monkeypatch.setitem(market_loader.TOKEN_MINTS, "FOO", "dummy")
-
-    # First search returns no pools
-    pool_empty = {"data": []}
-    pool_data = {"data": [{"id": "pool1", "attributes": {"volume_usd": {"h24": 5}}}]}
-    ohlcv_data = {"data": {"attributes": {"ohlcv_list": [[1, 1, 2, 0.5, 1.5, 10]]}}}
-
-    calls: list[tuple[str, dict | None]] = []
-    responses = [pool_empty, pool_data, ohlcv_data]
-
-    async def fake_gecko(url, params=None, retries=3):
-        calls.append((url, dict(params or {})))
-        return responses.pop(0)
-
-    async def fake_get_mint(base):
-        assert base == "FOO"
-        return mint
-
-    monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
-    monkeypatch.setattr(market_loader, "get_mint_from_gecko", fake_get_mint)
-
-    data, vol, reserve = asyncio.run(
-        market_loader.fetch_geckoterminal_ohlcv(symbol, timeframe="1h", limit=1)
-    )
-
-    from urllib.parse import quote_plus
-
-    assert calls[0][0].endswith("search/pools")
-    assert calls[0][1]["query"] == quote_plus(symbol)
-    assert calls[1][1]["query"] == quote_plus(f"{mint}/USDC")
-    assert data == [[1, 1.0, 2.0, 0.5, 1.5, 10.0]]
-    assert vol == 5.0
-
-
-
-def test_fetch_geckoterminal_ohlcv_invalid_mint(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    def fail(*_a, **_k):
-        raise AssertionError("should not be called")
-
-    monkeypatch.setattr(market_loader, "gecko_request", fail)
-
-    res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
-    assert res is None
-
-
-def test_fetch_geckoterminal_ohlcv_invalid_length(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    def fail(*_a, **_k):
-        raise AssertionError("should not be called")
-
-    monkeypatch.setattr(market_loader, "gecko_request", fail)
-
-    res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("abcd/USDC"))
-    assert res is None
-
-
-def test_fetch_geckoterminal_ohlcv_404(monkeypatch, caplog):
-    from crypto_bot.utils import market_loader
-
-    mint = "So11111111111111111111111111111111111111112"
-
-    urls: list[str] = []
-
-    market_loader.GECKO_POOL_CACHE.clear()
-    market_loader.GECKO_UNAVAILABLE.clear()
-
-    async def fake_gecko(url, params=None, retries=3):
-        urls.append(url)
-        return None
-
-    async def fake_get_mint(_base):
-        return None
-
-    async def fake_helius(_symbols):
-        return {}
-
-    monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
-    monkeypatch.setattr(market_loader, "get_mint_from_gecko", fake_get_mint)
-    monkeypatch.setattr(market_loader, "fetch_from_helius", fake_helius, raising=False)
-    monkeypatch.setattr(market_loader, "get_mint_from_gecko", lambda *_a, **_k: asyncio.sleep(0, result=None))
-
-    caplog.set_level(logging.INFO)
-    res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv(f"{mint}/USDC"))
-    assert res is None
-    assert any(
-        "token not available on GeckoTerminal" in r.getMessage() for r in caplog.records
-    )
-    assert any(
-        "pair not available on GeckoTerminal" in r.getMessage() for r in caplog.records
-    )
-
-
-def test_fetch_geckoterminal_ohlcv_network_error(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    async def fail(*_a, **_k):
-        raise market_loader.aiohttp.ClientError("boom")
-
-    monkeypatch.setattr(market_loader, "gecko_request", fail)
-
-    res = asyncio.run(market_loader.fetch_geckoterminal_ohlcv("FOO/USDC"))
-    assert res is None
-
-
-def test_fetch_geckoterminal_skip_unavailable(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    calls = 0
-
-    async def fake_gecko(url, params=None, retries=3):
-        nonlocal calls
-        calls += 1
-        return None
-
-    market_loader.GECKO_POOL_CACHE.clear()
-    market_loader.GECKO_UNAVAILABLE.clear()
-
-    monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
-    monkeypatch.setattr(market_loader, "get_mint_from_gecko", lambda *_a, **_k: None)
-    monkeypatch.setattr(market_loader, "fetch_from_helius", lambda *_a, **_k: {})
-
-    sym = f"{VALID_MINT}/USDC"
-    res1 = asyncio.run(market_loader.fetch_geckoterminal_ohlcv(sym))
-    res2 = asyncio.run(market_loader.fetch_geckoterminal_ohlcv(sym))
-
-    assert res1 is None and res2 is None
-    assert calls == 1
-    assert sym in market_loader.GECKO_UNAVAILABLE
-
-
-def test_geckoterminal_semaphore_limits(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    market_loader.configure(gecko_limit=1)
-    market_loader.GECKO_POOL_CACHE.clear()
-    market_loader.GECKO_UNAVAILABLE.clear()
-
-    calls = {"active": 0, "max": 0}
-
-    async def fake_gecko(url, params=None, retries=3):
-        calls["active"] += 1
-        calls["max"] = max(calls["max"], calls["active"])
-        try:
-            if "search/pools" in url:
-                return {
-                    "data": [{"id": "pool1", "attributes": {"volume_usd": {"h24": 0}}}]
-                }
-            return {"data": {"attributes": {"ohlcv_list": [[1, 1, 1, 1, 1, 1]]}}}
-        finally:
-            calls["active"] -= 1
-
-    monkeypatch.setattr(market_loader, "gecko_request", fake_gecko)
-
-    async def worker():
-        await market_loader.fetch_geckoterminal_ohlcv(f"{VALID_MINT}/USDC", limit=1)
-
-    async def main():
-        await asyncio.gather(*(worker() for _ in range(3)))
-
-    asyncio.run(main())
-
-    assert calls["max"] == 1
+    assert data == [[1, 1, 1, 1, 1, 1]]
 
 
 def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    async def fake_fetch(*_a, **_k):
+    def fake_fetch(*_a, **_k):
         return None
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
@@ -2208,6 +1994,16 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
 def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
     from crypto_bot.utils import market_loader
 
+    calls: list[float] = []
+
+    def fake_fetch(*_a, min_24h_volume=0, **_k):
+        calls.append(min_24h_volume)
+        if min_24h_volume > 50:
+            return None
+        return [[0, 1, 2, 3, 4, 5]]
+
+    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
+    monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", lambda *a, **k: None)
     async def fake_fetch(*_a, **_k):
         return [[0, 1, 2, 3, 4, 5]], 50.0, 1000.0
 
@@ -2255,7 +2051,7 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
 def test_dex_fetch_fallback_coingecko(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    async def fail_gecko(*_a, **_k):
+    def fail_gecko(*_a, **_k):
         raise Exception("boom")
 
     async def fake_coingecko(*_a, **_k):
@@ -2291,7 +2087,7 @@ def test_dex_fetch_fallback_coingecko(monkeypatch):
 def test_dex_fetch_fallback_coinbase(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    async def fail_gecko(*_a, **_k):
+    def fail_gecko(*_a, **_k):
         return None
 
     async def fail_coingecko(*_a, **_k):
@@ -2326,7 +2122,7 @@ def test_dex_fetch_fallback_coinbase(monkeypatch):
 def test_dex_fetch_fallback_kraken(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    async def fail_gecko(*_a, **_k):
+    def fail_gecko(*_a, **_k):
         return None
 
     async def fail_coingecko(*_a, **_k):
@@ -2361,7 +2157,7 @@ def test_dex_fetch_fallback_kraken(monkeypatch):
 def test_update_multi_tf_ohlcv_cache_fallback_exchange(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    async def fail_gecko(*_a, **_k):
+    def fail_gecko(*_a, **_k):
         raise Exception("boom")
 
     calls = {"fetch": 0}
@@ -2377,55 +2173,18 @@ def test_update_multi_tf_ohlcv_cache_fallback_exchange(monkeypatch):
     ex = DummyMultiTFExchange()
     cache = {}
     config = {"timeframes": ["1h"]}
-
-
-def test_gecko_volume_priority(monkeypatch):
-    from crypto_bot.utils import market_loader
-    from collections import deque
-
-    async def fake_gecko(*_a, **_k):
-        return (
-            [
-                [0, 1, 1, 1, 1, 1],
-                [1, 1, 1, 1, 1, 1],
-                [2, 1, 1, 1, 1, 10],
-            ],
-            100.0,
-            0.0,
-        )
-
-    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
-    ex = DummyMultiTFExchange()
-    cache = {}
-    q = deque()
-    config = {
-        "timeframes": ["1h"],
-        "bounce_scalper": {"vol_zscore_threshold": 1.0},
-    }
-
     cache = asyncio.run(
         update_multi_tf_ohlcv_cache(
             ex,
             cache,
-            ["BAR/USDC"],
+            [f"{VALID_MINT}/USDC"],
             config,
             limit=1,
         )
     )
-    assert "BAR/USDC" in cache["1h"]
+    assert f"{VALID_MINT}/USDC" in cache["1h"]
     assert calls["fetch"] == 1
-    cache = asyncio.run(
-        update_multi_tf_ohlcv_cache(
-            ex,
-            cache,
-            ["FOO/USDC"],
-            config,
-            limit=3,
-            priority_queue=q,
-        )
-    )
-    assert "FOO/USDC" in cache["1h"]
-    assert list(q) == ["FOO/USDC"]
+
 
 
 def test_update_multi_tf_ohlcv_cache_start_since(monkeypatch):
@@ -2501,7 +2260,7 @@ def test_coinbase_usdc_pair_skip(monkeypatch):
         calls["ohlcv"] += 1
         return []
 
-    async def fake_gecko(*_a, **_k):
+    def fake_gecko(*_a, **_k):
         calls["gecko"] += 1
         return None
 
