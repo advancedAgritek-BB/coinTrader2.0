@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any, Awaitable, Callable
 
+from crypto_bot.strategy import load_strategies
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,9 @@ class StreamEvaluationEngine:
         self.strategy_import_errors: dict[str, str] = {}
 
     async def start(self) -> None:
+        # read enabled list from config if available
+        enabled = set(getattr(self.cfg, "strategies", {}).get("enabled", [])) or None
+        self.strategies, self.strategy_import_errors = load_strategies(enabled=enabled)
         from crypto_bot.strategy import load_strategies
 
         # read enabled list from config if available
