@@ -1,7 +1,4 @@
 import logging
-from typing import Iterable
-
-logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - the global cfg may not exist in tests
     from crypto_bot.config import cfg  # type: ignore
@@ -20,6 +17,8 @@ class SymbolService:
 
     def __init__(self, exchange):
         self.exchange = exchange
+        # local logger per instance for consistency with other services
+        self.logger = logging.getLogger(__name__)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -52,12 +51,21 @@ class SymbolService:
             allowed = set(
                 m for m in markets if self._quote_ok(m) and self._volume_ok(m)
             )
-            for bad in getattr(cfg, "denylist_symbols", []) or []:
-                if bad in allowed:
-                    allowed.remove(bad)
-                    logger.info(
+            deny = set(getattr(cfg, "denylist_symbols", []) or [])
+            before = len(allowed)
+            allowed.difference_update(deny)
+            for bad in sorted(deny):
+                if bad not in markets:
+                    self.logger.info(
+                        "Denylisted symbol not in exchange markets (ok): %s", bad
+                    )
+                else:
+                    self.logger.info(
                         "Purged denylisted symbol from candidates: %s", bad
                     )
+            self.logger.info(
+                "CEX candidates: %d → %d after denylist", before, len(allowed)
+            )
             return sorted(allowed)
 
         # Non-strict mode falls back to whatever the exchange already knows
