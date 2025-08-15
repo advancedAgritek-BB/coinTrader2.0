@@ -1,51 +1,47 @@
-"""Compatibility wrappers for volatility helpers.
-
-This module exposes :func:`calc_atr`, :func:`atr_percent` and
-:func:`normalize_score_by_volatility` while allowing tests to monkeypatch
-``calc_atr`` directly on this module.
-"""
+"""Utility helpers for dealing with volatility values."""
 
 from __future__ import annotations
 
 import math
 import pandas as pd
 
-from crypto_bot.volatility import atr_percent as _atr_percent, calc_atr as _base_calc_atr
-
-# ``calc_atr`` is defined at module scope so tests can monkeypatch it.
-calc_atr = _base_calc_atr
-
-
-def atr_percent(df: pd.DataFrame, window: int = 14) -> float:
-    """Proxy for :func:`crypto_bot.volatility.atr_percent`."""
-    return _atr_percent(df, window)
+from crypto_bot.utils.indicators import calc_atr
 
 
 def normalize_score_by_volatility(
-    df: pd.DataFrame,
-    raw_score: float,
-    current_window: int = 5,
-    long_term_window: int = 20,
+    score: float | pd.DataFrame,
+    df: pd.DataFrame | float,
+    atr_period: int = 14,
+    floor: float = 0.25,
+    ceil: float = 2.0,
 ) -> float:
-    """Scale ``raw_score`` based on market volatility.
+    """Scale ``score`` by the recent volatility of ``df``.
 
-    This mirrors :func:`crypto_bot.volatility.normalize_score_by_volatility` but
-    references ``calc_atr`` from this module so it can be patched in tests.
+    ``atr_period`` determines the look‑back window for the ATR calculation. The
+    resulting ATR percentage is mapped to the range ``[floor, ceil]`` and the
+    ``score`` is multiplied by this factor. When insufficient data is supplied
+    the ``floor`` multiplier is applied.
     """
 
-    if raw_score == 0 or df.empty:
-        return raw_score
-    if not {"high", "low", "close"}.issubset(df.columns):
-        return raw_score
+    if isinstance(score, pd.DataFrame):
+        df, score = score, float(df)
+        current_window, long_term_window = 5, 20
+        current_atr = calc_atr(df, current_window)
+        long_term_atr = calc_atr(df, long_term_window)
+        if any(math.isnan(x) or x == 0 for x in (current_atr, long_term_atr)):
+            return score
+        scale = min(current_atr / long_term_atr, 2.0)
+        return score * scale
 
-    current_atr = calc_atr(df, current_window)
-    long_term_atr = calc_atr(df, long_term_window)
-    if any(math.isnan(x) or x == 0 for x in (current_atr, long_term_atr)):
-        return raw_score
+    if len(df) < atr_period + 1:
+        return floor * score
 
-    scale = min(current_atr / long_term_atr, 2.0)
-    return raw_score * scale
+    atr_pct = (calc_atr(df, period=atr_period) / df["close"]).iloc[-1]
+    low, high = 0.001, 0.03  # 0.1% .. 3% daily-ish
+    x = max(min(float(atr_pct), high), low)
+    k = (x - low) / (high - low)
+    factor = floor + k * (ceil - floor)
+    return score * factor
 
 
-__all__ = ["atr_percent", "normalize_score_by_volatility", "calc_atr"]
-
+__all__ = ["normalize_score_by_volatility", "calc_atr"]
