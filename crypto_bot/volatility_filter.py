@@ -1,5 +1,4 @@
 """Helpers for evaluating market volatility."""
-
 from __future__ import annotations
 
 import os
@@ -7,11 +6,9 @@ import os
 import pandas as pd
 import requests
 
-from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from crypto_bot.utils.indicator_cache import cache_series
-from pathlib import Path
 from crypto_bot.indicators.atr import calc_atr as _calc_atr_series
-from crypto_bot.indicators.atr import calc_atr
+from crypto_bot.utils.indicator_cache import cache_series
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 
 logger = setup_logger(__name__, LOG_DIR / "volatility.log")
@@ -50,7 +47,7 @@ def fetch_funding_rate(symbol: str) -> float:
     return 0.0
 
 
-def calc_atr(df: pd.DataFrame, window: int = 14) -> float:
+def calc_atr_cached(df: pd.DataFrame, window: int = 14) -> float:
     """Calculate the Average True Range using cached values."""
     lookback = window
     series = _calc_atr_series(df, period=window)
@@ -58,9 +55,13 @@ def calc_atr(df: pd.DataFrame, window: int = 14) -> float:
     return float(cached.iloc[-1])
 
 
+# Backwards compatibility: external code may still import ``calc_atr``
+calc_atr = calc_atr_cached
+
+
 def too_flat(df: pd.DataFrame, min_atr_pct: float) -> bool:
     """Return True if ATR is below ``min_atr_pct`` of price."""
-    atr = calc_atr(df)
+    atr = calc_atr_cached(df)
     price = df["close"].iloc[-1]
     if price == 0:
         return True
