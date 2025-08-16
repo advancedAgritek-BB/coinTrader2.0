@@ -2649,7 +2649,7 @@ async def _main_impl() -> MainResult:
                         notifier.notify(
                             f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
                         )
-                    return notifier
+                    return MainResult(notifier, stop_reason)
         else:
             logger.error(
                 "No symbols discovered after %d attempts; aborting startup",
@@ -2659,7 +2659,7 @@ async def _main_impl() -> MainResult:
                 notifier.notify(
                     f"❌ Startup aborted after {MAX_SYMBOL_SCAN_ATTEMPTS} symbol scan attempts"
                 )
-            return notifier
+            return MainResult(notifier, stop_reason)
 
     balance_threshold = config.get("balance_change_threshold", 0.01)
     previous_balance = 0.0
@@ -2690,7 +2690,7 @@ async def _main_impl() -> MainResult:
             err = notifier.notify(f"API error: {exc}")
             if err:
                 logger.error("Failed to notify user: %s", err)
-        return notifier
+        return MainResult(notifier, stop_reason)
     risk_params = {**config.get("risk", {})}
     risk_params.update(config.get("sentiment_filter", {}))
     risk_params.update(config.get("volatility_filter", {}))
