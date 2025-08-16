@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 from crypto_bot.regime import api
 
+"""Tests for Supabase-backed model loading in regime API."""
+
 
 class _DummyModel:
     def predict_proba(self, _):
