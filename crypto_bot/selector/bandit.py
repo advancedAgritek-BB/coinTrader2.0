@@ -53,8 +53,9 @@ class Bandit:
             stats["beta"] += 1
         stats["trades"] = stats.get("trades", 0) + 1
         self.update_count += 1
-        if self.update_count % 50 == 0:
-            self._save_state()
+        # Persist state on every update so historical performance carries
+        # across application restarts.
+        self._save_state()
 
     def select(self, context: Any, arms: Iterable[str], symbol: str) -> str:
         """Return a strategy name chosen via Thompson sampling."""

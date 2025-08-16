@@ -1,6 +1,7 @@
 import json
 import pandas as pd
 from crypto_bot.utils import pnl_logger
+from crypto_bot.selector import bandit
 
 
 def test_log_pnl_creates_csv_and_json(tmp_path, monkeypatch):
@@ -9,6 +10,14 @@ def test_log_pnl_creates_csv_and_json(tmp_path, monkeypatch):
     monkeypatch.setattr(pnl_logger, "LOG_FILE", log_file)
     monkeypatch.setattr(pnl_logger, "PERFORMANCE_FILE", perf_file)
 
+    calls = {}
+
+    def fake_update(symbol, strategy, win):
+        calls["args"] = (symbol, strategy, win)
+
+    monkeypatch.setattr(bandit, "update", fake_update)
+
+    pnl_logger.log_pnl("trend_bot", "XBT/USDT", 100.0, 110.0, 10.0, 0.8, "buy")
     pnl_logger.log_pnl(
         "bull",
         "trend_bot",
@@ -33,6 +42,7 @@ def test_log_pnl_creates_csv_and_json(tmp_path, monkeypatch):
         "direction",
     }
     assert expected_cols.issubset(df.columns)
+    assert calls["args"] == ("XBT/USDT", "trend_bot", True)
 
     assert perf_file.exists()
     data = json.loads(perf_file.read_text())

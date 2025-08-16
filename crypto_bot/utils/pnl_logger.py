@@ -1,9 +1,9 @@
 import json
 import pandas as pd
-from pathlib import Path
 from datetime import datetime
 
 from .logger import LOG_DIR
+from crypto_bot.selector import bandit
 
 
 LOG_FILE = LOG_DIR / "strategy_pnl.csv"
@@ -36,6 +36,12 @@ def log_pnl(
     header = not LOG_FILE.exists()
     df.to_csv(LOG_FILE, mode="a", header=header, index=False)
 
+    # Update bandit with trade outcome so strategy selection learns
+    # across runs.  A positive PnL is treated as a win.
+    try:  # pragma: no cover - defensive in case bandit is disabled
+        bandit.update(symbol, strategy, pnl > 0)
+    except Exception:  # noqa: BLE001
+        pass
     # Append simplified record to strategy_performance.json
     perf_rec = {"timestamp": record["timestamp"], "pnl": float(pnl)}
     try:
