@@ -1,5 +1,6 @@
+"""Tests ML self-check logging for Supabase credentials."""
+
 import importlib
-import sys
 import logging
 
 import pytest
