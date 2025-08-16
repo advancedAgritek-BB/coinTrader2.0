@@ -29,6 +29,7 @@ except Exception:  # pragma: no cover - optional dependency
 import pandas as pd
 import numpy as np
 import yaml
+from types import SimpleNamespace
 from pydantic import ValidationError
 from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
@@ -2874,13 +2875,13 @@ async def _main_impl() -> MainResult:
         return await asyncio.wait_for(_eval_symbol(symbol, data), timeout=8)
 
     global stream_evaluator
-    stream_evaluator = StreamEvaluator(_eval_wrapper)
+    eval_cfg = SimpleNamespace(
+        trading=SimpleNamespace(**config.get("trading", {})),
+        evaluation=SimpleNamespace(**config.get("runtime", {}).get("evaluation", {})),
+    )
+    stream_evaluator = StreamEvaluator(_eval_wrapper, cfg=eval_cfg)
     await stream_evaluator.start()
     set_stream_evaluator(stream_evaluator)
-    stream_eval = StreamEvaluator(_eval_wrapper)
-    await stream_eval.start()
-    set_stream_evaluator(stream_eval)
-    stream_evaluator = stream_eval
 
     runner = PhaseRunner(
         [
