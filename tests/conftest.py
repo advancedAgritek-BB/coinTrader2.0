@@ -598,6 +598,8 @@ def regime_pnl_file(tmp_path, monkeypatch):
     from crypto_bot.utils import regime_pnl_tracker as rpt
 
     log = tmp_path / "regime_pnl.csv"
+    perf = tmp_path / "perf.json"
     monkeypatch.setattr(rpt, "LOG_FILE", log)
+    monkeypatch.setattr(rpt, "PERF_FILE", perf)
     monkeypatch.setattr(rpt, "_seed_fake_trades", lambda *a, **k: None)
     return log
