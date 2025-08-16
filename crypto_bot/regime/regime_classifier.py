@@ -9,6 +9,8 @@ import pandas as pd
 import numpy as np
 import ta
 import yaml
+import json
+import pickle
 
 from crypto_bot.utils.telegram import TelegramNotifier
 
@@ -222,32 +224,8 @@ def _ml_fallback(
 async def _download_supabase_model():
     """Download LightGBM model from Supabase and return a Booster."""
     async with _supabase_model_lock:
-        url = os.getenv("SUPABASE_URL")
-        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
-        if not url or not key:
-            logger.error("Missing Supabase credentials")
-            return None
-        try:  # pragma: no cover - optional dependency
-            from supabase import create_client
-        except Exception as exc:  # pragma: no cover - log import failure
-            logger.error("Supabase client unavailable: %s", exc)
-            return None
-
-        try:
-            client = await asyncio.to_thread(create_client, url, key)
-            file_name = os.getenv("SUPABASE_MODEL_FILE", "regime_lgbm.pkl")
-            bucket = client.storage.from_("models")
-            data = await asyncio.to_thread(bucket.download, file_name)
-            path = Path(__file__).with_name(file_name)
-            await asyncio.to_thread(path.write_bytes, data)
-            import lightgbm as lgb  # pragma: no cover - optional dependency
-
-            model = await asyncio.to_thread(lgb.Booster, model_file=str(path))
-            logger.info("Downloaded %s from Supabase", file_name)
-            return model
-        except Exception as exc:
-            logger.error("Failed to download Supabase model: %s", exc)
-            return None
+        model = await load_regime_model(os.getenv("SYMBOL", "BTCUSDT"))
+        return model
 
 
 async def _get_supabase_model() -> object | None:
@@ -255,8 +233,37 @@ async def _get_supabase_model() -> object | None:
     global _supabase_model
     async with _model_lock:
         if _supabase_model is None:
-            _supabase_model = await asyncio.to_thread(_download_supabase_model)
+            _supabase_model = await _download_supabase_model()
         return _supabase_model
+
+
+async def load_regime_model(symbol: str) -> object | None:
+    try:
+        from supabase import create_client
+    except Exception as exc:  # pragma: no cover - optional dependency
+        logger.warning("Supabase client unavailable: %s", exc)
+        return None
+
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_KEY")
+    bucket = os.getenv("CT_MODELS_BUCKET", "models")
+    if not url or not key:
+        logger.warning("No model in Supabase; using heuristic")
+        return None
+
+    client = create_client(url, key)
+    latest_path = f"regime/{symbol}/LATEST.json"
+    try:
+        latest_bytes = client.storage.from_(bucket).download(latest_path)
+        if latest_bytes:
+            data = json.loads(latest_bytes.decode("utf-8"))
+            model_bytes = client.storage.from_(bucket).download(data["key"])
+            return pickle.loads(model_bytes)
+    except Exception as exc:
+        logger.error("Failed to load regime model: %s", exc)
+
+    logger.warning("No model in Supabase; using heuristic")
+    return None
 
 
 async def _ml_recovery_loop(notifier: TelegramNotifier | None) -> None:
@@ -302,7 +309,6 @@ def _classify_ml(
         _supabase_model = asyncio.run(_download_supabase_model())
 
     model = _supabase_model
-    model = asyncio.run(_get_supabase_model())
     if model is None:
         try:
             return _ml_fallback(df, notifier)
