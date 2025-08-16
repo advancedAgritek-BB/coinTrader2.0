@@ -132,13 +132,6 @@ REQUIRED_ENV_VARS = {
     "TELEGRAM_CHAT_ID",
 }
 
-
-def _parse_version(ver: str) -> tuple[int, ...]:
-    return tuple(int(p) for p in ver.split(".") if p.isdigit())
-
-trainer_version, MIN_CT2_INTEGRATION = "0.0.0", "0.1.0"
-_TRAINER_AVAILABLE = False
-
 CONFIG_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = CONFIG_DIR / "config.yaml"
 ENV_PATH = CONFIG_DIR / ".env"
@@ -510,6 +503,20 @@ async def refresh_balance(ctx: BotContext) -> float:
 def _ensure_ml(cfg: dict) -> None:
     """Ensure ML components are ready when enabled."""
 
+    Raises
+    ------
+    MLUnavailableError
+        If the Supabase model cannot be loaded.
+    """
+    if not cfg.get("ml_enabled", True):
+        return
+    try:  # pragma: no cover - best effort
+        from crypto_bot.regime.regime_classifier import load_regime_model
+
+        asyncio.run(load_regime_model("BTCUSDT"))
+    except Exception as exc:  # pragma: no cover - model load failure
+        logger.error("Machine learning initialization failed: %s", exc)
+        raise MLUnavailableError("model load failure", cfg) from exc
     if not cfg.get("ml_enabled", True):
         return
     if not ML_AVAILABLE:
@@ -3088,7 +3095,6 @@ async def main() -> None:
     global fetch_geckoterminal_ohlcv, fetch_solana_prices, cross_chain_trade, sniper_solana, sniper_trade
     global load_token_mints, set_token_mints, TelegramBotUI, start_runner, sniper_run
     global stream_evaluator
-    global _TRAINER_AVAILABLE, trainer_version, MIN_CT2_INTEGRATION
 
     from schema.scanner import (
         ScannerConfig,
@@ -3181,13 +3187,6 @@ async def main() -> None:
     from crypto_bot.volatility_filter import calc_atr
     from crypto_bot.solana.exit import monitor_price
     from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
-    try:  # pragma: no cover - optional dependency
-        from crypto_bot.version import __version__ as trainer_version, MIN_CT2_INTEGRATION
-        _TRAINER_AVAILABLE = True
-    except Exception:  # pragma: no cover - trainer not installed
-        trainer_version, MIN_CT2_INTEGRATION = "0.0.0", "0.1.0"
-        _TRAINER_AVAILABLE = False
-
 
     init_ml_components()
     _reload_modules()

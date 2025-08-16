@@ -81,6 +81,8 @@ def is_ml_available() -> bool:
     _ml_checked = True
 
     try:
+        if not _check_packages(_REQUIRED_PACKAGES):
+            raise ImportError("Missing required ML packages")
         try:  # cointrader-trainer is optional and only used for training
             import cointrader_trainer  # noqa: F401
         except ImportError:

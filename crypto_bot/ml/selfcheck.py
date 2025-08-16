@@ -8,7 +8,7 @@ _REQUIRED_PACKAGES = ("sklearn", "joblib", "ta")
 
 
 def log_ml_status_once() -> None:
-    """Log ML package and Supabase environment status once."""
+    """Log Supabase ML environment status once."""
     global _logged
     if _logged:
         return
@@ -24,6 +24,7 @@ def log_ml_status_once() -> None:
         or os.getenv("SUPABASE_API_KEY")
         or os.getenv("SUPABASE_ANON_KEY")
     )
+    log.info("ML status: supabase_url=%s key_present=%s", url_ok, key_ok)
     log.info(
         "ML status: packages=%s supabase_url=%s key_present=%s",
         pkgs_ok,

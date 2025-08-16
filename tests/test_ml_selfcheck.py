@@ -20,6 +20,10 @@ def test_log_ml_status_once_logs_once(monkeypatch, caplog):
         "SUPABASE_ANON_KEY",
     ]:
         monkeypatch.delenv(var, raising=False)
+    caplog.set_level(logging.INFO, logger="crypto_bot.ml")
+
+    selfcheck.log_ml_status_once()
+    assert "ML status: supabase_url=False key_present=False" in caplog.text
     monkeypatch.setattr(selfcheck.importlib.util, "find_spec", lambda name: None)
     caplog.set_level(logging.INFO, logger="crypto_bot.ml")
 
