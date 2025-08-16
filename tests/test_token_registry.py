@@ -593,6 +593,38 @@ def test_get_mint_from_gecko_empty_attrs(monkeypatch):
     assert called["symbols"] == ["AAA"]
 
 
+def test_unknown_token_warns_once(monkeypatch, caplog, tmp_path):
+    """Unknown tokens trigger a single warning and subsequent lookups are cached."""
+
+    tr = _load_module(monkeypatch, tmp_path)
+
+    counts = {"gecko": 0, "helius": 0}
+
+    async def fake_req(url, params=None, retries=3):
+        counts["gecko"] += 1
+        return {}
+
+    async def fake_hel(symbols, *, full=False):
+        counts["helius"] += 1
+        for sym in symbols:
+            tr._WARNED_TOKENS.add(sym)
+            tr.logger.warning("No mint mapping for %s", sym)
+        return {}
+
+    monkeypatch.setattr(tr, "gecko_request", fake_req)
+    monkeypatch.setattr(tr, "fetch_from_helius", fake_hel)
+
+    caplog.set_level(logging.WARNING)
+
+    assert asyncio.run(tr.get_mint_from_gecko("AAA")) is None
+    assert asyncio.run(tr.get_mint_from_gecko("AAA")) is None
+
+    assert counts == {"gecko": 1, "helius": 1}
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert warnings[0].getMessage() == "No mint mapping for AAA"
+
+
 def test_refresh_mints(monkeypatch, tmp_path):
     mod = _load_module(monkeypatch, tmp_path)
 
