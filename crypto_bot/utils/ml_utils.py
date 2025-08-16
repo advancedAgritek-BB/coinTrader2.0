@@ -81,16 +81,6 @@ def is_ml_available() -> bool:
     _ml_checked = True
 
     try:
-        if not _check_packages(_REQUIRED_PACKAGES):
-            raise ImportError("Missing required ML packages")
-        try:  # cointrader-trainer is optional and only used for training
-            import cointrader_trainer  # noqa: F401
-        except ImportError:
-            logger.debug(
-                "cointrader-trainer not installed; proceeding with runtime model download"
-            )
-        if not _check_packages(_REQUIRED_PACKAGES):
-            logger.info("ML unavailable: missing required packages")
         missing = _check_packages(_REQUIRED_PACKAGES)
         if missing:
             logger.info(
@@ -99,6 +89,13 @@ def is_ml_available() -> bool:
             )
             ML_AVAILABLE = False
             return False
+
+        try:  # cointrader-trainer is optional and only used for training
+            import cointrader_trainer  # noqa: F401
+        except ImportError:
+            logger.debug(
+                "cointrader-trainer not installed; proceeding with runtime model download",
+            )
 
         url, key = _get_supabase_creds()
         if not url or not key:
@@ -130,8 +127,6 @@ def is_ml_available() -> bool:
         logger.error("ML unavailable: %s", exc)
         ML_AVAILABLE = False
         return False
-
-
 ML_AVAILABLE = False
 
 
