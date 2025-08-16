@@ -3146,10 +3146,9 @@ async def main() -> None:
         if notifier:
             notifier.notify(f"❌ Bot stopped: {exc}")
     finally:
-        if notifier:
-            notifier.notify("Bot shutting down")
         logger.info("Bot shutting down")
         await shutdown()
+        if notifier:
             notifier.notify(f"Bot shutting down: {reason}")
         logger.info("Bot shutting down: %s", reason)
 
