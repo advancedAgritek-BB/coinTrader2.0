@@ -85,6 +85,11 @@ def _register(module, *names: str) -> None:
 
 _register(trend_bot, "trend_bot")
 _register(grid_bot, "grid_bot")
+_register(sniper_bot, "sniper_bot")
+_register(dex_scalper, "dex_scalper")
+_register(mean_bot, "mean_bot")
+_register(breakout_bot, "breakout_bot")
+_register(micro_scalp_bot, "micro_scalp_bot")
 _register(sniper_bot, "sniper", "sniper_bot")
 _register(dex_scalper, "dex_scalper", "dex_scalper_bot")
 _register(mean_bot, "mean_bot")

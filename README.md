@@ -6,8 +6,8 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 
 * Regime detection using EMA, ADX, RSI and Bollinger Band width
 * Strategy router that picks the best approach for trending, sideways, breakout or volatile markets
-* Fast-path dispatcher that jumps straight to the breakout or trend bot on strong signals
-* Trend and grid bots for CEXs plus sniper and DEX scalper strategies on Solana
+* Fast-path dispatcher that jumps straight to the breakout or trend_bot on strong signals
+* trend_bot and grid_bot for CEXs plus sniper_bot and dex_scalper strategies on Solana
 * Portfolio rotation and auto optimizer utilities
 * Risk management with drawdown limits, cooldown management and volume/volatility filters
 * Telegram notifications and optional Google Sheets logging

@@ -211,7 +211,7 @@ async def test_monitor_micro_scalp_exit_logs_pnl():
                 "entry_price": 100.0,
                 "entry_time": "t",
                 "regime": "scalp",
-                "strategy": "micro",
+                "strategy": "micro_scalp_bot",
                 "confidence": 0.5,
                 "pnl": 0.0,
                 "size": 2.0,
@@ -233,7 +233,7 @@ async def test_monitor_micro_scalp_exit_logs_pnl():
     await monitor_exit(ctx, "SOL/USDC")
 
     assert calls.get("pnl") is not None
-    assert calls.get("trade") == ("scalp", "micro", 10.0)
+    assert calls.get("trade") == ("scalp", "micro_scalp_bot", 10.0)
 
 
 @pytest.mark.asyncio
