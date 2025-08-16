@@ -1489,8 +1489,6 @@ async def _update_ohlcv_cache_inner(
     now = time.time()
     snapshot_due = now - _last_snapshot_time >= snapshot_interval
 
-    logger.info("Starting OHLCV update for timeframe %s", timeframe)
-
     since_map: Dict[str, int | None] = {}
     if start_since is not None:
         tf_sec = timeframe_seconds(exchange, timeframe)
@@ -1688,7 +1686,6 @@ async def _update_ohlcv_cache_inner(
                     )
                 except Exception:
                     pass
-    logger.info("Completed OHLCV update for timeframe %s", timeframe)
     return cache
 
 
