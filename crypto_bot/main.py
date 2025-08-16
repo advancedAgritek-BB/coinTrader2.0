@@ -537,7 +537,8 @@ def _ensure_ml(cfg: dict) -> None:
     try:  # pragma: no cover - best effort
         from crypto_bot.regime.regime_classifier import load_regime_model
 
-        asyncio.run(load_regime_model("BTCUSDT"))
+        _, model_path = asyncio.run(load_regime_model("BTCUSDT"))
+        logger.info("Loaded global regime model from Supabase: %s", model_path)
     except Exception as exc:  # pragma: no cover - model load failure
         logger.error("Machine learning initialization failed: %s", exc)
         raise MLUnavailableError("model load failure", cfg) from exc
