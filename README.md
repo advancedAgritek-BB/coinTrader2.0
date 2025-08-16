@@ -403,6 +403,8 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   `onchain_default_quote` (defaults to `USDC`). If a ticker isn't found in the
   registry, the base value must be a valid mint address. If your configuration
   still contains `solana_symbols`, rename that section to `onchain_symbols`.
+  On-chain OHLCV candles are sourced from Jupiter's public price API with a
+  fallback to the latest spot quote when historical data is unavailable.
 * **onchain_default_quote** – quote currency used when appending to entries in
   `onchain_symbols`. Defaults to `USDC`.
 * **allow_short** – enable short selling. Set to `true` only when your exchange account supports short selling.
@@ -450,6 +452,8 @@ symbol_score_weights:
 * **use_numba_scoring** – enable numba acceleration for symbol scoring when available.
 * **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle. See
   `scan_cex_arbitrage` in `crypto_bot/main.py` for multi-exchange support.
+* **solana_scanner.enabled** – continuously discover new Solana pools (enabled by
+  default in `config.example.yaml`).
 * **solana_scanner.gecko_search** – query GeckoTerminal to verify volume for new Solana tokens.
 * **gecko_limit** – maximum simultaneous requests to GeckoTerminal. Reduce this if you encounter HTTP 429 errors.
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.

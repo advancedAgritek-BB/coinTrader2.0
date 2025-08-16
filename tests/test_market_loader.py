@@ -5,6 +5,7 @@ import logging
 import time
 import threading
 import ccxt
+import types
 
 VALID_MINT = "So11111111111111111111111111111111111111112"
 
@@ -1921,6 +1922,36 @@ def test_fetch_geckoterminal_ohlcv_uses_exchange():
     assert data == [[1, 1, 1, 1, 1, 1]]
 
 
+def test_fetch_onchain_ohlcv_fallback(monkeypatch):
+    from crypto_bot.solana import prices
+
+    async def fake_prices(symbols):
+        return {symbols[0]: 42.0}
+
+    class DummyResp:
+        async def __aenter__(self):
+            raise Exception("boom")
+
+        async def __aexit__(self, *args):
+            return False
+
+    class DummySession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        def get(self, *a, **k):
+            return DummyResp()
+
+    monkeypatch.setattr(prices, "aiohttp", types.SimpleNamespace(ClientSession=lambda: DummySession()))
+    monkeypatch.setattr(prices, "fetch_solana_prices", fake_prices)
+
+    data = asyncio.run(prices.fetch_onchain_ohlcv("SOL/USDC", limit=1))
+    assert data and data[0][1] == 42.0
+
+
 def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
     from crypto_bot.utils import market_loader
 
@@ -1929,6 +1960,7 @@ def test_update_multi_tf_ohlcv_cache_skips_404(monkeypatch):
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", lambda *a, **k: None)
+    monkeypatch.setattr(market_loader, "fetch_onchain_ohlcv", lambda *a, **k: None)
 
     async def fake_ohlcv(*a, **k):
         return [[1, 1, 1, 1, 1, 1]]
@@ -1983,6 +2015,7 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_fetch2)
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", lambda *a, **k: None)
+    monkeypatch.setattr(market_loader, "fetch_onchain_ohlcv", lambda *a, **k: None)
     monkeypatch.setattr(market_loader, "load_ohlcv", fake_ohlcv)
 
     ex = DummyMultiTFExchange()
@@ -2033,6 +2066,7 @@ def test_dex_fetch_fallback_coingecko(monkeypatch):
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", fake_coingecko)
+    monkeypatch.setattr(market_loader, "fetch_onchain_ohlcv", lambda *a, **k: None)
     monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
 
     ex = DummyMultiTFExchange()
@@ -2077,6 +2111,7 @@ def test_dex_fetch_fallback_coinbase(monkeypatch):
     monkeypatch.setattr(market_loader.ccxt, "coinbase", lambda params=None: DummyCB())
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", fail_coingecko)
+    monkeypatch.setattr(market_loader, "fetch_onchain_ohlcv", lambda *a, **k: None)
     monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
 
     ex = DummyMultiTFExchange()
@@ -2112,6 +2147,7 @@ def test_dex_fetch_fallback_kraken(monkeypatch):
     monkeypatch.setattr(market_loader.ccxt, "coinbase", lambda params=None: DummyCB())
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
     monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", fail_coingecko)
+    monkeypatch.setattr(market_loader, "fetch_onchain_ohlcv", lambda *a, **k: None)
     monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
 
     ex = DummyMultiTFExchange()
@@ -2136,6 +2172,7 @@ def test_update_multi_tf_ohlcv_cache_fallback_exchange(monkeypatch):
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
     monkeypatch.setattr(market_loader, "fetch_dex_ohlcv", lambda *a, **k: None)
+    monkeypatch.setattr(market_loader, "fetch_onchain_ohlcv", lambda *a, **k: None)
     monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
 
     ex = DummyMultiTFExchange()
@@ -2222,7 +2259,7 @@ def test_coinbase_usdc_pair_mapping(monkeypatch):
 def test_coinbase_usdc_pair_skip(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    calls = {"gecko": 0, "dex": 0, "ohlcv": 0}
+    calls = {"gecko": 0, "dex": 0, "ohlcv": 0, "onchain": 0}
 
     async def fake_ohlcv(*_a, **_k):
         calls["ohlcv"] += 1
@@ -2236,9 +2273,14 @@ def test_coinbase_usdc_pair_skip(monkeypatch):
         calls["dex"] += 1
         return []
 
+    async def fake_onchain(*_a, **_k):
+        calls["onchain"] += 1
+        return []
+
     monkeypatch.setattr(market_loader, "load_ohlcv", fake_ohlcv)
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fake_gecko)
     monkeypatch.setattr(market_loader, "fetch_dex_ohlcv", fake_dex)
+    monkeypatch.setattr(market_loader, "fetch_onchain_ohlcv", fake_onchain)
 
     class DummyCB:
         id = "coinbase"
@@ -2257,6 +2299,8 @@ def test_coinbase_usdc_pair_skip(monkeypatch):
     )
 
     assert calls["gecko"] == 1
+    assert calls["gecko"] == 1
+    assert calls["onchain"] == 1
     assert calls["dex"] == 1
     assert calls["ohlcv"] == 0
 

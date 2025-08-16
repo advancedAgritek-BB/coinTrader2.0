@@ -37,6 +37,7 @@ from .token_registry import (
     get_mint_from_gecko,
     fetch_from_helius,
 )
+from crypto_bot.solana.prices import fetch_onchain_ohlcv
 from crypto_bot.strategy.evaluator import get_stream_evaluator, StreamEvaluator
 from crypto_bot.strategy.registry import load_enabled
 from .logger import LOG_DIR, setup_logger
@@ -1877,9 +1878,55 @@ async def update_ohlcv_cache(
             else:
                 logger.warning("ohlcv_batch_size not set; defaulting to 3")
             size = 3
+
+    # Normalize symbols to their exchange-listed forms before enqueueing.
+    allowed_quotes = config.get("allowed_quotes", ["USD", "USDT", "EUR"])
+    symbols = list(symbols)
+    priority_list = list(priority_symbols) if priority_symbols else None
+
+    markets = getattr(exchange, "markets", None)
+    if markets is not None and not markets and hasattr(exchange, "load_markets"):
+        try:
+            if asyncio.iscoroutinefunction(exchange.load_markets):
+                await exchange.load_markets()
+            else:
+                await asyncio.to_thread(exchange.load_markets)
+        except Exception as exc:  # pragma: no cover - best effort
+            logger.debug(
+                "load_markets failed during symbol resolution: %s", exc
+            )
+
+    resolved: list[str] = []
+    for sym in symbols:
+        base, *_ = sym.partition("/")
+        listed = resolve_listed_symbol(exchange, base, allowed_quotes)
+        if listed:
+            resolved.append(listed)
+        else:
+            logger.debug(
+                "Skipping %s: no listed market on %s for quotes %s",
+                sym,
+                getattr(exchange, "id", "exchange"),
+                allowed_quotes,
+            )
+    symbols = resolved
+
+    if priority_list:
+        resolved_prio: list[str] = []
+        for sym in priority_list:
+            base, *_ = sym.partition("/")
+            listed = resolve_listed_symbol(exchange, base, allowed_quotes)
+            if listed and listed in symbols:
+                resolved_prio.append(listed)
+        priority_symbols = resolved_prio if resolved_prio else None
+    else:
+        priority_symbols = None
+
+    if not symbols:
+        return cache
     key = (
         timeframe,
-        limit,
+       limit,
         start_since,
         use_websocket,
         force_websocket_history,
@@ -2313,17 +2360,22 @@ async def update_multi_tf_ohlcv_cache(
                     add_priority(data, sym)
 
                 if gecko_failed or not data or vol < min_volume_usd:
-                    data = await fetch_dex_ohlcv(
-                        exchange,
-                        sym,
-                        timeframe=tf,
-                        limit=sym_l,
-                        min_volume_usd=min_volume_usd,
-                        gecko_res=None,
-                        use_gecko=is_solana,
+                    data = await fetch_onchain_ohlcv(
+                        sym, timeframe=tf, limit=sym_l
                     )
-                    if isinstance(data, Exception) or not data:
-                        continue
+                    if not data:
+                        data = await fetch_dex_ohlcv(
+                            exchange,
+                            sym,
+                            timeframe=tf,
+                            limit=sym_l,
+                            min_volume_usd=min_volume_usd,
+                            gecko_res=None,
+                            use_gecko=is_solana,
+                        )
+                        if isinstance(data, Exception) or not data:
+                            continue
+                    add_priority(data, sym)
 
                 if not data:
                     continue
