@@ -77,6 +77,15 @@ _MISSING_MINT_LOGGED: set[str] = set()
 # Prime startup log handled in helius_client
 
 
+def _exc_str(exc: BaseException) -> str:
+    """Return a non-empty string for exception ``exc``."""
+    msg = str(exc)
+    if msg:
+        return msg
+    rep = repr(exc)
+    return rep if rep else exc.__class__.__name__
+
+
 def to_base_units(amount_tokens: float, decimals: int) -> int:
     """Convert human readable ``amount_tokens`` to integer base units."""
     factor = Decimal(10) ** decimals
@@ -591,7 +600,7 @@ async def monitor_pump_raydium() -> None:
             if isinstance(cached, dict):
                 TOKEN_MINTS.update({str(k).upper(): str(v) for k, v in cached.items()})
         except Exception as exc:  # pragma: no cover - best effort
-            logger.error("Failed to load cache: %s", exc)
+            logger.error("Failed to load cache: %s", _exc_str(exc))
 
     last_pump_ts = datetime.utcnow() - timedelta(minutes=5)
     last_ray_ts = datetime.utcnow() - timedelta(minutes=5)
@@ -647,7 +656,7 @@ async def monitor_pump_raydium() -> None:
                                 try:
                                     enqueue_solana_tokens([f"{key}/{mint}"])
                                 except Exception as exc:  # pragma: no cover - best effort
-                                    logger.error("enqueue_solana_tokens failed: %s", exc)
+                                    logger.error("enqueue_solana_tokens failed: %s", _exc_str(exc))
                             _write_cache()
                             try:
                                 from .symbol_utils import invalidate_symbol_cache
@@ -691,7 +700,7 @@ async def monitor_pump_raydium() -> None:
                                 try:
                                     enqueue_solana_tokens([f"{key}/{mint}"])
                                 except Exception as exc:  # pragma: no cover - best effort
-                                    logger.error("enqueue_solana_tokens failed: %s", exc)
+                                    logger.error("enqueue_solana_tokens failed: %s", _exc_str(exc))
                             _write_cache()
                             try:
                                 from .symbol_utils import invalidate_symbol_cache
@@ -711,7 +720,7 @@ async def monitor_pump_raydium() -> None:
                 if backoff != last_log:
                     logger.error(
                         "monitor_pump_raydium network error: %s; retrying in %ss",
-                        exc,
+                        _exc_str(exc),
                         backoff,
                     )
                     last_log = backoff
@@ -721,7 +730,7 @@ async def monitor_pump_raydium() -> None:
                 if backoff != last_log:
                     logger.error(
                         "monitor_pump_raydium error: %s; retrying in %ss",
-                        exc,
+                        _exc_str(exc),
                         backoff,
                     )
                     last_log = backoff

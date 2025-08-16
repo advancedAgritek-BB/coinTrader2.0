@@ -783,6 +783,38 @@ def test_monitor_pump_raydium(monkeypatch, tmp_path):
     assert len(writes) == 2
 
 
+def test_monitor_pump_raydium_empty_exception(monkeypatch, tmp_path, caplog):
+    class NoMsgError(Exception):
+        def __str__(self):
+            return ""
+
+    mod = _load_module(monkeypatch, tmp_path)
+
+    class ErrorSession(DummySession):
+        def get(self, url, timeout=10):  # pragma: no cover - simple
+            raise NoMsgError()
+
+    aiohttp_mod = type(
+        "M", (), {"ClientSession": lambda: ErrorSession(), "ClientError": NoMsgError}
+    )
+    monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+
+    orig_sleep = asyncio.sleep
+
+    async def fake_sleep(_):
+        await orig_sleep(0)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fake_sleep)
+
+    caplog.set_level(logging.ERROR)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(mod.monitor_pump_raydium())
+
+    assert "NoMsgError" in caplog.text
+
+
 def test_to_base_units(monkeypatch, tmp_path):
     mod = _load_module(monkeypatch, tmp_path)
     assert mod.to_base_units(1, 9) == 1_000_000_000
