@@ -475,7 +475,9 @@ def _ensure_ml(cfg: dict) -> None:
     if not cfg.get("ml_enabled", True):
         return
     if not _TRAINER_AVAILABLE:
-        logger.info("cointrader-trainer not installed; skipping ML initialization")
+        logger.info(
+            "cointrader-trainer not installed; install with 'pip install cointrader-trainer' to enable ML features"
+        )
         return
     try:  # pragma: no cover - best effort
         from coinTrader_Trainer.ml_trainer import load_model
