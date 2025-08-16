@@ -366,3 +366,15 @@ class regime_filter:
     @staticmethod
     def matches(regime: str) -> bool:
         return regime == "sideways"
+
+
+class Strategy:
+    """Strategy wrapper so :func:`load_strategies` can auto-register it."""
+
+    def __init__(self) -> None:
+        self.name = "grid_bot"
+        self.generate_signal = generate_signal
+        self.regime_filter = regime_filter
+
+
+__all__ = ["generate_signal", "regime_filter", "Strategy"]

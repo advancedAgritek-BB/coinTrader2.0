@@ -1,11 +1,36 @@
-import importlib, pkgutil, traceback, logging
-from typing import Any, Dict, Iterable, List, Optional
+import importlib
+import pkgutil
+import traceback
+import logging
+from types import SimpleNamespace
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 logger = logging.getLogger(__name__)
-# Default strategy modules enabled when ``load_strategies`` is called without
-# an explicit ``enabled`` list.  These names must match the actual module names
-# within :mod:`crypto_bot.strategy`.
-DEFAULT_ENABLED = {"grid_bot", "trend_bot", "micro_scalp_bot", "sniper_solana"}
+
+# Modules inside ``crypto_bot.strategy`` that are not actual strategy
+# implementations and should be ignored when auto-discovering available
+# strategies.
+_NON_STRATEGY_MODS = {
+    "loader",
+    "registry",
+    "evaluator",
+    "hft_engine",
+    "maker_spread",
+}
+
+
+def _default_module_names(package_name: str) -> Set[str]:
+    """Return all importable strategy module names under ``package_name``.
+
+    Any modules listed in :data:`_NON_STRATEGY_MODS` are skipped.
+    """
+
+    pkg = importlib.import_module(package_name)
+    return {
+        m.name
+        for m in pkgutil.iter_modules(pkg.__path__)
+        if m.name not in _NON_STRATEGY_MODS
+    }
 
 class _SimpleRegistry:
     def __init__(self):
@@ -65,19 +90,58 @@ def _discover(mod) -> Dict[str, Any]:
                 if inst: out[name] = inst
         except Exception:
             logger.error("register() failed:\n%s", traceback.format_exc())
+    # 5) Fallback: plain modules exposing ``generate_signal``
+    sig = getattr(mod, "generate_signal", None)
+    if callable(sig):
+        filt = getattr(mod, "regime_filter", None)
+
+        if filt is None:
+            class _DefaultFilter:
+                """Regime filter that matches any regime."""
+
+                @staticmethod
+                def matches(_regime: str) -> bool:  # pragma: no cover - trivial
+                    return True
+
+            filt = _DefaultFilter
+
+        name = getattr(mod, "NAME", mod.__name__.split(".")[-1])
+        out[name] = SimpleNamespace(
+            name=name,
+            generate_signal=sig,
+            regime_filter=filt,
+        )
     return out
 
 def load_strategies(package_name: str = "crypto_bot.strategy",
                     enabled: Optional[Iterable[str]] = None):
-    enabled = set(enabled or DEFAULT_ENABLED)
+    enabled = set(enabled or _default_module_names(package_name))
     loaded, errors = {}, {}
     pkg = importlib.import_module(package_name)
 
+    seen_mods: Set[str] = set()
     for m in pkgutil.iter_modules(pkg.__path__):
         mod_name = m.name
+        seen_mods.add(mod_name)
         if mod_name not in enabled:
             logger.debug("Strategy module %s not enabled; skipping.", mod_name)
             continue
+        try:
+            mod = importlib.import_module(f"{package_name}.{mod_name}")
+        except Exception as e:
+            tb = traceback.format_exc()
+            logger.error("Failed to import module %s: %s\n%s", mod_name, e, tb)
+            errors[mod_name] = tb
+            continue
+        found = _discover(mod)
+        if not found:
+            logger.warning("No strategies discovered in module %s.", mod_name)
+        for name, inst in found.items():
+            loaded[name] = inst
+            logger.info("Loaded strategy %s from module %s", name, mod_name)
+
+    # Handle explicitly requested modules that aren't discoverable via pkgutil
+    for mod_name in enabled - seen_mods:
         try:
             mod = importlib.import_module(f"{package_name}.{mod_name}")
         except Exception as e:
