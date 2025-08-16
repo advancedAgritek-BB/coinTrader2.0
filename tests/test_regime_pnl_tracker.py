@@ -22,14 +22,14 @@ def test_compute_weights_normalizes(tmp_path, monkeypatch):
     log = tmp_path / "pnl.csv"
     monkeypatch.setattr(rpt, "LOG_FILE", log)
 
-    rpt.log_trade("breakout", "scalper", 1.0)
-    rpt.log_trade("breakout", "scalper", 1.5)
+    rpt.log_trade("breakout", "dex_scalper", 1.0)
+    rpt.log_trade("breakout", "dex_scalper", 1.5)
     rpt.log_trade("breakout", "grid_bot", 0.5)
 
     weights = rpt.compute_weights("breakout", log)
-    assert set(weights.keys()) == {"scalper", "grid_bot"}
+    assert set(weights.keys()) == {"dex_scalper", "grid_bot"}
     assert abs(sum(weights.values()) - 1.0) < 1e-6
-    assert weights["scalper"] > weights["grid_bot"]
+    assert weights["dex_scalper"] > weights["grid_bot"]
 
 
 def test_recent_win_rate(tmp_path, monkeypatch):
