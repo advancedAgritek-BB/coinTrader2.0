@@ -561,6 +561,7 @@ def strategy_name(regime: str, mode: str) -> str:
         return "micro_scalp_bot"
     if regime in {"breakout", "volatile"}:
         return "sniper_bot"
+        return "sniper"
     return "grid_bot"
 
 

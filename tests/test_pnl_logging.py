@@ -68,6 +68,7 @@ def load_handle_exits_exit():
         "refresh_balance": _refresh,
         "pnl_logger": types.SimpleNamespace(log_pnl=_log_pnl),
         "regime_pnl_tracker": types.SimpleNamespace(log_trade=_log_trade),
+        "state": {},
     }
 
     exec(funcs["opposite_side"], ns)
@@ -112,6 +113,7 @@ def load_monitor_exit():
         "refresh_balance": _refresh,
         "pnl_logger": types.SimpleNamespace(log_pnl=_log_pnl),
         "regime_pnl_tracker": types.SimpleNamespace(log_trade=_log_trade),
+        "state": {},
     }
 
     exec(funcs["opposite_side"], ns)
@@ -153,6 +155,7 @@ def load_force_exit_all():
         "pnl_logger": types.SimpleNamespace(log_pnl=_log_pnl),
         "regime_pnl_tracker": types.SimpleNamespace(log_trade=_log_trade),
         "logger": __import__("logging").getLogger("test"),
+        "state": {},
     }
 
     exec(funcs["opposite_side"], ns)

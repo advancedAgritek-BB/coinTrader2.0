@@ -44,6 +44,11 @@ def test_strategy_map_contains_micro_scalp_bot():
     )
 
 
+def test_strategy_map_has_no_aliases():
+    assert "grid" not in meta_selector._STRATEGY_FN_MAP
+    assert "trend" not in meta_selector._STRATEGY_FN_MAP
+
+
 def test_strategy_map_contains_dca_bot():
     from crypto_bot.strategy import dca_bot
 

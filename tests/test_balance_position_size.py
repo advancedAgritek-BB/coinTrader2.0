@@ -58,6 +58,7 @@ def load_execute_signals():
         "_monitor_micro_scalp_exit": lambda *a, **k: None,
         "BotContext": BotContext,
         "refresh_balance": lambda ctx: asyncio.sleep(0),
+        "Counter": __import__("collections").Counter,
     }
 
     exec(funcs["direction_to_side"], ns)

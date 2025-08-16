@@ -28,7 +28,7 @@ def test_positive_values_enforced():
 
 def test_solana_scanner_defaults():
     cfg = SolanaScannerConfig()
-    assert cfg.enabled is False
+    assert cfg.enabled is True
     assert cfg.interval_minutes == 0.1
     assert cfg.max_tokens_per_scan == 200
     assert cfg.min_volume_usd == 10.0
