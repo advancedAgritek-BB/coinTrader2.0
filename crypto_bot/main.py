@@ -2879,6 +2879,7 @@ async def _main_impl() -> MainResult:
         trading=SimpleNamespace(**config.get("trading", {})),
         evaluation=SimpleNamespace(**config.get("runtime", {}).get("evaluation", {})),
     )
+    # Initialize the stream evaluator once
     stream_evaluator = StreamEvaluator(_eval_wrapper, cfg=eval_cfg)
     await stream_evaluator.start()
     set_stream_evaluator(stream_evaluator)
