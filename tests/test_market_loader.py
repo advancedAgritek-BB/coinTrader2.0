@@ -200,11 +200,6 @@ class DummyWSExchange:
         return [[1] * 6 for _ in range(limit)]
 
 
-class DummyWSExchangeEnough(DummyWSExchange):
-    async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
-        return [[2] * 6 for _ in range(limit)]
-
-
 class DummyWSSyncExchange(DummyWSExchange):
     def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
         self.fetch_called = True
@@ -228,16 +223,6 @@ def test_watchOHLCV_fallback_to_fetch():
     assert data[0][0] == 1
     assert ex.fetch_thread == main_thread
 
-
-@pytest.mark.skip(reason="Websocket support removed")
-def test_watchOHLCV_no_fallback_when_enough():
-    ex = DummyWSExchangeEnough()
-    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
-    assert ex.fetch_called is False
-    assert len(data) == 2
-    assert data[0][0] == 2
-
-
 def test_watchOHLCV_sync_fallback_runs_in_thread():
     ex = DummyWSSyncExchange()
     main_thread = threading.get_ident()
@@ -246,31 +231,6 @@ def test_watchOHLCV_sync_fallback_runs_in_thread():
     assert len(data) == 2
     assert data[0][0] == 1
     assert ex.fetch_thread != main_thread
-
-
-class DummyWSExchangeNoTimeout:
-    has = {"fetchOHLCV": True}
-
-    def __init__(self):
-        self.ws_called = False
-        self.fetch_called = False
-
-    async def watchOHLCV(self, symbol, timeframe="1h", limit=100):
-        self.ws_called = True
-        return [[2] * 6 for _ in range(limit)]
-
-    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
-        self.fetch_called = True
-        return [[1] * 6 for _ in range(limit)]
-
-
-@pytest.mark.skip(reason="Websocket support removed")
-def test_watchOHLCV_skips_timeout_when_unsupported():
-    ex = DummyWSExchangeNoTimeout()
-    data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
-    assert ex.ws_called is True
-    assert ex.fetch_called is False
-    assert len(data) == 2
 
 
 class IncompleteExchange:
@@ -468,25 +428,6 @@ def test_load_ohlcv_parallel_websocket_overrides_fetch():
     assert list(result.keys()) == ["BTC/USD"]
     assert len(result["BTC/USD"]) == 3
 
-
-@pytest.mark.skip(reason="Websocket support removed")
-def test_load_ohlcv_parallel_websocket_force_history():
-    ex = DummyWSEchange()
-    result = asyncio.run(
-        load_ohlcv_parallel(
-            ex,
-            ["BTC/USD"],
-            timeframe="1h",
-            limit=3,
-            use_websocket=True,
-            force_websocket_history=True,
-            max_concurrent=2,
-        )
-    )
-    assert list(result.keys()) == ["BTC/USD"]
-    assert len(result["BTC/USD"]) == 1
-
-
 def test_watchOHLCV_exception_falls_back_to_fetch():
     ex = DummyWSExceptionExchange()
     data = asyncio.run(fetch_ohlcv_async(ex, "BTC/USD", limit=2, use_websocket=True))
@@ -556,96 +497,6 @@ def test_load_ohlcv_backoff_429(monkeypatch):
     assert calls["count"] == 2
     assert sleeps[0] == 60
     assert sleeps[1] == 1
-
-
-class LimitCaptureExchange:
-    has = {"fetchOHLCV": True}
-
-    def __init__(self):
-        self.watch_limit = None
-        self.fetch_called = False
-
-    async def watchOHLCV(self, symbol, timeframe="1h", since=None, limit=100, **kwargs):
-        self.watch_limit = limit
-        return [[0] * 6 for _ in range(limit)]
-
-    async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
-        self.fetch_called = True
-        return [[1] * 6 for _ in range(limit)]
-
-
-@pytest.mark.skip(reason="Websocket support removed")
-def test_watchOHLCV_since_limit_reduction():
-    ex = LimitCaptureExchange()
-    since = int(time.time() * 1000) - 2 * 3600 * 1000
-    data = asyncio.run(
-        fetch_ohlcv_async(
-            ex,
-            "BTC/USD",
-            timeframe="1h",
-            limit=50,
-            since=since,
-            use_websocket=True,
-        )
-    )
-    assert ex.fetch_called is False
-    assert ex.watch_limit == 1
-    assert len(data) == 1
-
-
-class SkipLargeLimitExchange:
-    def __init__(self):
-        self.ws_called = False
-        self.fetch_called = False
-
-    async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
-        self.ws_called = True
-        return [[0] * 6 for _ in range(limit)]
-
-    async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
-        self.fetch_called = True
-        return [[1] * 6 for _ in range(limit)]
-
-
-@pytest.mark.skip(reason="Websocket support removed")
-def test_watchOHLCV_skipped_when_limit_exceeds(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    ex = SkipLargeLimitExchange()
-    monkeypatch.setattr(market_loader, "MAX_WS_LIMIT", 50)
-    data = asyncio.run(
-        market_loader.fetch_ohlcv_async(
-            ex,
-            "BTC/USD",
-            timeframe="1m",
-            limit=100,
-            use_websocket=True,
-        )
-    )
-    assert ex.ws_called is False
-    assert ex.fetch_called is True
-    assert len(data) == 50
-
-
-@pytest.mark.skip(reason="Websocket support removed")
-def test_force_websocket_history_ignores_max_ws_limit(monkeypatch):
-    from crypto_bot.utils import market_loader
-
-    ex = SkipLargeLimitExchange()
-    monkeypatch.setattr(market_loader, "MAX_WS_LIMIT", 50)
-    data = asyncio.run(
-        market_loader.fetch_ohlcv_async(
-            ex,
-            "BTC/USD",
-            timeframe="1m",
-            limit=100,
-            use_websocket=True,
-            force_websocket_history=True,
-        )
-    )
-    assert ex.ws_called is True
-    assert ex.fetch_called is False
-    assert len(data) == 100
 
 
 class DummyIncExchange:

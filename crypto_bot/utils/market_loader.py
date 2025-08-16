@@ -1806,6 +1806,7 @@ async def fetch_geckoterminal_ohlcv(
     finally:
         await _safe_exchange_close(ex, where=f"{ex_name}:{timeframe}")
 
+
 async def update_ohlcv_cache(
     exchange,
     cache: Dict[str, pd.DataFrame],
