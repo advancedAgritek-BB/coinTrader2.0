@@ -103,6 +103,14 @@ class OpenPositionGuard:
         self.max_open_trades = max_open_trades
 
 
+@dataclass
+class MainResult:
+    """Result returned from ``_main_impl`` summarizing shutdown state."""
+
+    notifier: "TelegramNotifier"
+    reason: str
+
+
 PhaseRunner = None  # type: ignore
 calculate_trailing_stop = None  # type: ignore
 should_exit = None  # type: ignore
@@ -2370,12 +2378,13 @@ async def _rotation_loop(
                 break
 
 
-async def _main_impl() -> TelegramNotifier:
+async def _main_impl() -> MainResult:
     """Implementation for running the trading bot."""
 
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config = load_config()
+    stop_reason = "completed"
 
     mapping = await load_token_mints()
     if mapping:
@@ -3090,6 +3099,9 @@ async def _main_impl() -> TelegramNotifier:
             logger.info("Sleeping for %.2f minutes", delay)
             await wait_or_event(delay * 60)
 
+    except asyncio.CancelledError:
+        stop_reason = "external signal"
+        raise
     finally:
         await stream_evaluator.drain()
         await stream_evaluator.stop()
@@ -3122,7 +3134,10 @@ async def _main_impl() -> TelegramNotifier:
         CROSS_ARB_TASKS.clear()
         NEW_SOLANA_TOKENS.clear()
 
-    return notifier
+    if not state.get("running", True) and stop_reason == "completed":
+        stop_reason = "state['running'] set to False"
+
+    return MainResult(notifier, stop_reason)
 
 
 def _reload_modules() -> None:
@@ -3267,17 +3282,24 @@ async def main() -> None:
     _reload_modules()
 
     notifier: TelegramNotifier | None = None
+    reason = "completed"
     try:
         await refresh_mints()
-        notifier = await _main_impl()
+        result = await _main_impl()
+        notifier = result.notifier
+        reason = result.reason
+    except asyncio.CancelledError:
+        reason = "external signal"
+        raise
     except Exception as exc:  # pragma: no cover - error path
+        reason = f"exception: {exc}"
         logger.exception("Unhandled error in main: %s", exc)
         if notifier:
             notifier.notify(f"❌ Bot stopped: {exc}")
     finally:
         if notifier:
-            notifier.notify("Bot shutting down")
-        logger.info("Bot shutting down")
+            notifier.notify(f"Bot shutting down: {reason}")
+        logger.info("Bot shutting down: %s", reason)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution
