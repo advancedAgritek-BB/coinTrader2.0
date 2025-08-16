@@ -21,7 +21,7 @@ This project provides a modular hybrid cryptocurrency trading bot capable of ope
 * Trade history page highlighting buys in green and sells in red
 * Backtesting module with PnL, drawdown and Sharpe metrics
 * Utility functions automatically handle synchronous or asynchronous exchange clients
-* Optional machine learning features available when the separate `cointrader-trainer` package is installed
+* Optional machine learning features download pretrained models from Supabase; install `cointrader-trainer` only if you plan to train new models
 * Trade execution helpers poll for order status on CEXs or transaction confirmation on Solana with a 60s timeout. Partial fills are handled automatically via the optional `poll_timeout` parameter.
 
 On-chain DEX execution submits real transactions when not running in dry-run mode.
@@ -138,10 +138,10 @@ prefix: models/regime/{SYMBOL}/…
 ```
 
 The loader searches this path for a `LATEST.json` manifest to resolve the
-current model. When the optional `cointrader-trainer` package is installed and
-`LATEST.json` exists, the runtime downloads the referenced file, verifies its
-hash and loads it. Otherwise, the embedded base64 model bundled with the bot is
-used.
+current model. Models are fetched automatically from Supabase when
+`LATEST.json` exists. The `cointrader-trainer` package is only required if you
+intend to train and upload new models; otherwise, the embedded base64 model
+bundled with the bot is used as a fallback.
 
 Configure the loader with the following environment variables:
 
@@ -179,10 +179,10 @@ needed.
    Install them with `pip install -r requirements.txt` when `rl_selector.enabled`
    is set to `true` in `crypto_bot/config.yaml`. Set `rl_selector.enabled: false`
    if you prefer not to install these extra dependencies.
-   Machine learning integrations such as the mean reversion model or regime
-   trainer also rely on the optional `cointrader-trainer` package. Install it
-   separately with `pip install cointrader-trainer` if you plan to use those
-   features; otherwise the bot will simply skip them.
+   Machine learning integrations download pretrained models from Supabase.
+   The `cointrader-trainer` package is only needed when training new models;
+   runtime usage pulls models automatically as long as `SUPABASE_URL` and
+   `SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_KEY`) are configured.
 2. (Optional) Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius API key.
    `python -m crypto_bot.main` will launch this setup wizard automatically when credentials or `user_config.yaml` are missing.
 2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius and Supabase API keys.
@@ -778,6 +778,8 @@ cap.
    # COINBASE_API_PASSPHRASE=your_coinbase_passphrase
    # KRAKEN_API_KEY=your_kraken_key
    # KRAKEN_API_SECRET=your_kraken_secret
+   # SUPABASE_URL=your_supabase_project_url
+   # SUPABASE_SERVICE_ROLE_KEY=your_service_role_key  # or SUPABASE_KEY
    # FERNET_KEY=your_generated_fernet_key
    ```
 
@@ -1646,19 +1648,18 @@ and caps the result between 0 and 1.
 
 ## ML Regime Trainer
 
-The optional `coinTrader_Trainer` package (install separately with
-`pip install cointrader-trainer`) can bootstrap machine learning models used by
-the regime classifier. After generating trade logs, run the trainer to upload a
-LightGBM model to Supabase:
+Use the optional `cointrader-trainer` package only when you need to train and
+upload new models for the regime classifier. After generating trade logs, run
+the trainer to upload a LightGBM model to Supabase:
 
 ```bash
 python ml_trainer.py train regime --use-gpu --federated
 ```
 
-Ensure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set in `crypto_bot/.env` so the
-upload succeeds. Set `use_ml_regime_classifier: true` in
-`crypto_bot/regime/regime_config.yaml` to enable downloads of the trained model
-when the bot starts.
+Ensure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_KEY` are set
+in `crypto_bot/.env` so the upload succeeds. Set
+`use_ml_regime_classifier: true` in `crypto_bot/regime/regime_config.yaml` to
+enable automatic downloads of the trained model when the bot starts.
 
 ### Ingest a 7-column minute CSV (CSV7) and train locally
 
@@ -1683,9 +1684,10 @@ virtual environment and install the dependencies:
 
 2. **Install dependencies**
 
-   `requirements.txt` references an optional `cointrader-trainer` package. If
-   the package is unavailable, install it from its source or comment out the
-   line before running the command below:
+   `requirements.txt` references the optional `cointrader-trainer` package. It
+   is only needed if you plan to train new models; runtime model downloads from
+   Supabase do not require it. If you wish to train models, install it from its
+   source or uncomment the line before running the command below:
 
    ```bash
    pip install -r requirements.txt

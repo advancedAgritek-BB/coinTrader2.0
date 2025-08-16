@@ -1,5 +1,4 @@
 import importlib
-import sys
 import logging
 
 import pytest
@@ -25,6 +24,13 @@ def test_log_ml_status_once_logs_once(monkeypatch, caplog):
 
     selfcheck.log_ml_status_once()
     assert "ML status: supabase_url=False key_present=False" in caplog.text
+    monkeypatch.setattr(selfcheck.importlib.util, "find_spec", lambda name: None)
+    caplog.set_level(logging.INFO, logger="crypto_bot.ml")
+
+    selfcheck.log_ml_status_once()
+    assert (
+        "ML status: packages=False supabase_url=False key_present=False" in caplog.text
+    )
 
     caplog.clear()
     selfcheck.log_ml_status_once()
