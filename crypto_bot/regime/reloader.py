@@ -5,12 +5,7 @@ import json
 import logging
 from typing import Dict, Optional
 
-try:  # registry may be unavailable in some environments
-    from cointrainer import registry as _registry  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    _registry = None
-
-from .api import _load_model_from_bytes
+from crypto_bot.regime import registry as _registry
 
 logger = logging.getLogger(__name__)
 
@@ -20,32 +15,40 @@ _hashes: Dict[str, str] = {}
 
 
 def load_latest_regime(symbol: str) -> Optional[object]:
-    """Load the latest regime model for ``symbol`` from the registry."""
-    if _registry is None:  # pragma: no cover - registry optional
+    """Load the latest regime model for ``symbol`` using the registry helpers."""
+
+    try:
+        model, _meta = _registry.load_latest_regime(symbol)
+        return model
+    except Exception:  # pragma: no cover - registry failure
         return None
-    prefix = f"models/regime/{symbol}/" if symbol else "models/regime/"
-    blob = _registry.load_latest(prefix, allow_fallback=False)  # type: ignore[attr-defined]
-    return _load_model_from_bytes(blob)
 
 
 def maybe_refresh_model(symbol: str) -> None:
-    """Reload model if the registry pointer has changed."""
-    if _registry is None:  # pragma: no cover - registry optional
-        return
-    prefix = f"models/regime/{symbol}/" if symbol else "models/regime/"
+    """Reload model if the ``LATEST.json`` metadata has changed."""
+
     try:
-        meta = _registry.load_pointer(prefix)  # type: ignore[attr-defined]
-    except Exception as exc:  # pragma: no cover - registry failure
+        meta = _registry.resolve_latest(symbol)
+    except Exception as exc:  # pragma: no cover - Supabase failure
         logger.debug("Pointer fetch failed for %s: %s", symbol, exc)
+        try:
+            model, meta = _registry.load_latest_regime(symbol)
+            _cache[symbol] = model
+            _hashes[symbol] = hashlib.sha256(
+                json.dumps(meta, sort_keys=True).encode()
+            ).hexdigest()
+        except Exception as exc2:  # pragma: no cover - fallback failure
+            logger.error("Failed to load regime model for %s: %s", symbol, exc2)
         return
+
     meta_hash = hashlib.sha256(json.dumps(meta, sort_keys=True).encode()).hexdigest()
     if _hashes.get(symbol) == meta_hash:
         return
-    _hashes[symbol] = meta_hash
+
     try:
-        model = load_latest_regime(symbol)
-        if model is not None:
-            _cache[symbol] = model
-            logger.info("Regime model refreshed for %s", symbol or "default")
+        model, _ = _registry.load_latest_regime(symbol)
+        _cache[symbol] = model
+        _hashes[symbol] = meta_hash
+        logger.info("Regime model refreshed for %s", symbol or "default")
     except Exception as exc:  # pragma: no cover - model load failure
         logger.error("Failed to reload regime model for %s: %s", symbol, exc)
