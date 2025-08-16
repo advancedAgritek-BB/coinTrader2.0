@@ -1,48 +1,40 @@
-from importlib import import_module
+"""Backward compatible loader that delegates to :mod:`crypto_bot.strategy`."""
+
 from loguru import logger
 
+from crypto_bot.strategy.loader import load_strategies as _load_strategies
 
-def load_strategies(mode: str, names: list[str]) -> list:
-    """
-    mode: 'cex' | 'onchain' | 'auto'
-    names: strategy module names to attempt import
-    """
-    loaded = []
-    seen = set()
-    for mod_name in names:
-        if mod_name in seen:
-            continue
-        seen.add(mod_name)
 
-        # Mode gating
-        if mod_name == "sniper_solana" and mode == "cex":
+def load_strategies(mode: str, names: list[str] | None = None) -> list:
+    """Return a list of instantiated strategy objects.
+
+    Parameters
+    ----------
+    mode:
+        Execution mode, e.g. ``'cex'`` or ``'onchain'``.  The parameter is kept
+        for API compatibility; currently it only gates the Solana sniper when
+        running in CEX mode.
+    names:
+        Optional iterable of module names.  When omitted, all strategies under
+        :mod:`crypto_bot.strategy` are loaded.
+    """
+
+    loaded, errors = _load_strategies(enabled=names)
+    strategies = []
+    for name, inst in loaded.items():
+        if name == "sniper_solana" and mode == "cex":
             logger.info("Skipping sniper_solana in CEX mode.")
             continue
-        if mod_name != "sniper_solana" and mode == "onchain":
+        if name != "sniper_solana" and mode == "onchain":
             # Only the on-chain sniper is relevant in onchain mode
             continue
+        strategies.append(inst)
 
-        try:
-            m = import_module(f"crypto_bot.strategies.{mod_name}")
-        except ModuleNotFoundError:
-            try:
-                m = import_module(f"crypto_bot.strategy.{mod_name}")
-            except ModuleNotFoundError:
-                logger.error("Strategy %s not found", mod_name)
-                continue
-            except Exception as e:
-                logger.error(f"Failed to import strategy {mod_name}: {e!r}")
-                continue
-        except Exception as e:
-            logger.error(f"Failed to import strategy {mod_name}: {e!r}")
-            continue
+    for mod_name, err in errors.items():
+        logger.error("Failed to load strategy %s: %s", mod_name, err)
 
-        Strategy = getattr(m, "Strategy", None)
-        if Strategy is None:
-            logger.warning(
-                f"Strategy module {mod_name} has no `Strategy` class; skipping."
-            )
-            continue
-        loaded.append(Strategy())
-        logger.info(f"Loaded strategy: {mod_name}")
-    return loaded
+    return strategies
+
+
+__all__ = ["load_strategies"]
+

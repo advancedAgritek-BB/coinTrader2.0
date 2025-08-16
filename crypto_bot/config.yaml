@@ -15,7 +15,7 @@ trading:
 
 # === strategies and params ===
 strategies:
-  enabled: ['grid', 'trend', 'micro_scalp', 'sniper_solana']
+  enabled: ['bounce_scalper', 'breakout', 'breakout_bot', 'cross_chain_arb_bot', 'dca_bot', 'dex_scalper', 'dip_hunter', 'flash_crash_bot', 'grid_bot', 'lstm_bot', 'mean_bot', 'mean_revert', 'meme_wave_bot', 'micro_scalp_bot', 'momentum_bot', 'range_arb_bot', 'sniper_bot', 'sniper_solana', 'solana_scalping', 'stat_arb_bot', 'trend_bot']
   maker_spread:
     enabled: true
     max_spread_bp: 8              # don’t quote if spread > 8 bps
@@ -339,7 +339,7 @@ optimization:
   enabled: true
   interval_days: 0.1
   parameter_ranges:
-    trend:
+    trend_bot:
       stop_loss:
       - 0.01
       take_profit:
@@ -423,11 +423,11 @@ signal_fusion:
   fusion_method: weight
   min_confidence: 0.01
   strategies:
-  - - trend
+  - - trend_bot
     - 0.5
-  - - micro_scalp
+  - - micro_scalp_bot
     - 0.3
-  - - sniper_bot
+  - - sniper_solana
     - 0.2
 signal_threshold: 0.0001
 signal_weight_optimizer:
@@ -437,7 +437,7 @@ signal_weight_optimizer:
 skip_symbol_filters: false
 sl_mult: 1.0
 sl_pct: 0.015
-sniper_bot:
+sniper_solana:
   atr_window: 10
   breakout_pct: 0.01
   fallback_atr_mult: 1.2
@@ -497,9 +497,9 @@ stat_arb_bot:
   window: 50
   z_threshold: 2.0
 strategy_allocation:
-  grid: 0.2
+  grid_bot: 0.2
   sniper_solana: 0.6
-  trend: 0.2
+  trend_bot: 0.2
 strategy_evaluation_mode: ensemble
 strategy_router:
   # range_arb_bot runs globally and is appended automatically; no need to list it under regimes
@@ -533,18 +533,17 @@ strategy_router:
     - flash_crash_bot
     - lstm_bot
     scalp:
-    - micro_scalp
+    - micro_scalp_bot
     - lstm_bot
     sideways:
-    - grid
+    - grid_bot
     - cross_chain_arb_bot
     - lstm_bot
     trending:
-    - trend
+    - trend_bot
     - momentum_bot
     - lstm_bot
     volatile:
-    - sniper_bot
     - sniper_solana
     - momentum_bot
     - meme_wave_bot
@@ -619,7 +618,7 @@ top_n_symbols: 20
 tp_mult: 2.0
 tp_pct: 0.1
 trade_size_pct: 0.3
-trend:
+trend_bot:
   atr_period: 10
   k: 0.8
   trend_ema_fast: 15
@@ -633,10 +632,10 @@ volatility_filter:
   max_funding_rate: 0.1
   min_atr_pct: 0
 voting_strategies:
-- trend
-- momentum
-- mean_reversion
-- sniper_bot
+- trend_bot
+- momentum_bot
+- mean_revert
+- sniper_solana
 wallet_address: your_wallet
 ws_failures_before_disable: 1
 ws_ping_interval: 5
@@ -655,68 +654,3 @@ onchain_watchers:
 strict_cex: true   # only symbols the exchange actually lists
 denylist_symbols: ['AIBTC/USD','AIBTC:USD']
 
-# === trading/base ===
-trading:
-  mode: dry_run           # cex | onchain | auto | dry_run
-  exchange: kraken
-  allowed_quotes: [USD, USDT, USDC, EUR]
-  min_ticker_volume: 10000
-  timeframes: ["1m","5m"]
-  backfill:
-    warmup_high_tf: ["1h","4h","1d"]
-    deep_low_tf: true        # backfill 1m/5m history for strategies
-    deep_days: 30
-  hft_enabled: true
-  hft_symbols: ["BTC/USD","ETH/USD","SOL/USDC","BONK/USDC"]   # seed list, can expand
-  exclude_symbols: ["AIBTC/USD"]   # remove noisy/synthetic pairs
-
-# === strategies and params ===
-strategies:
-  enabled: ['grid', 'trend', 'micro_scalp', 'sniper_solana']
-  maker_spread:
-    enabled: true
-    max_spread_bp: 8              # don’t quote if spread > 8 bps
-    edge_margin_bp: 3             # required extra edge beyond maker fee
-    max_live_quotes: 2
-    queue_timeout_ms: 1500        # cancel if sitting too long
-    cancel_on_obi_flip: true
-
-  breakout:
-    enabled: true
-    tf: "5m"
-    donchian_len: 40
-    keltner_len: 20
-    bbw_pct_max: 15               # BB width in bottom 15th percentile
-    volume_z_min: 1.0
-    atr_mult_stop: 1.2
-    atr_mult_tp: 1.2
-    max_spread_bp: 10
-    time_exit_bars: 12
-
-  mean_revert:
-    enabled: true
-    tf: "1m"
-    ema_len: 50
-    z_entry: 2.0
-    z_exit: 0.5
-    adx_max: 18
-    atr_stop_mult: 1.0
-    max_spread_bp: 8
-    time_exit_bars: 6
-
-# === fees ===
-fees:
-  kraken:
-    taker_bp: 26    # example 0.26%
-    maker_bp: 16    # example 0.16%
-
-# === features ===
-features:
-  ml: false
-  helius: false
-  pump_monitor: false
-  telegram: true
-
-# === telemetry / metrics ===
-telemetry:
-  batch_summary_secs: 60
