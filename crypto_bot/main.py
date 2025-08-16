@@ -508,29 +508,16 @@ async def refresh_balance(ctx: BotContext) -> float:
 
 
 def _ensure_ml(cfg: dict) -> None:
-    """Attempt to load the mean_bot ML model if available.
+    """Ensure ML components are ready when enabled."""
 
-    Raises
-    ------
-    MLUnavailableError
-        If the trainer package is installed but the model cannot be loaded.
-    """
     if not cfg.get("ml_enabled", True):
         return
-    if not _TRAINER_AVAILABLE:
+    if not ML_AVAILABLE:
         logger.info(
-            "cointrader-trainer not installed; install with 'pip install cointrader-trainer' to enable ML features"
+            "ML model unavailable; ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY are set. "
+            "Install cointrader-trainer only when training new models."
         )
         return
-    try:  # pragma: no cover - best effort
-        from coinTrader_Trainer.ml_trainer import load_model
-
-        load_model("mean_bot")
-    except Exception as exc:  # pragma: no cover - missing trainer or model
-        logger.error("Machine learning initialization failed: %s", exc)
-        raise MLUnavailableError(
-            "coinTrader_Trainer model load failure", cfg
-        ) from exc
 
 
 def _ensure_ml_if_needed(cfg: dict) -> None:
