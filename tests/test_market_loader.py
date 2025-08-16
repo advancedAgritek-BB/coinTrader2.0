@@ -389,7 +389,7 @@ def test_load_ohlcv_parallel_skips_unsupported_symbol(monkeypatch, caplog):
     )
 
 
-class DummyWSEchange:
+class DummyWSOverrideExchange:
     has = {"fetchOHLCV": True}
 
     async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
@@ -414,7 +414,7 @@ class DummyWSExceptionExchange:
 
 
 def test_load_ohlcv_parallel_websocket_overrides_fetch():
-    ex = DummyWSEchange()
+    ex = DummyWSOverrideExchange()
     result = asyncio.run(
         load_ohlcv_parallel(
             ex,
@@ -427,6 +427,25 @@ def test_load_ohlcv_parallel_websocket_overrides_fetch():
     )
     assert list(result.keys()) == ["BTC/USD"]
     assert len(result["BTC/USD"]) == 3
+
+
+@pytest.mark.skip(reason="Websocket support removed")
+def test_load_ohlcv_parallel_websocket_force_history():
+    ex = DummyWSOverrideExchange()
+    result = asyncio.run(
+        load_ohlcv_parallel(
+            ex,
+            ["BTC/USD"],
+            timeframe="1h",
+            limit=3,
+            use_websocket=True,
+            force_websocket_history=True,
+            max_concurrent=2,
+        )
+    )
+    assert list(result.keys()) == ["BTC/USD"]
+    assert len(result["BTC/USD"]) == 1
+
 
 def test_watchOHLCV_exception_falls_back_to_fetch():
     ex = DummyWSExceptionExchange()

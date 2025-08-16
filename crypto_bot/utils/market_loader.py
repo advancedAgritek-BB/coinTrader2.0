@@ -1765,7 +1765,6 @@ async def fetch_dex_ohlcv(
         return None
 
 
-# --- Back-compat: GeckoTerminal OHLCV wrapper using CCXT (real fetch, no stubs) ---
 async def fetch_geckoterminal_ohlcv(
     symbol: str,
     timeframe: str = "1h",
@@ -1785,6 +1784,11 @@ async def fetch_geckoterminal_ohlcv(
             return await fetch_fn(symbol, timeframe=timeframe, since=since, limit=limit)
         return await asyncio.to_thread(fetch_fn, symbol, timeframe, since, limit)
 
+    if ccxt is None:
+        raise RuntimeError(
+            "ccxt is required for OHLCV fetching. Install ccxt or pass an exchange instance."
+        )
+
     ex_name = os.environ.get("EXCHANGE", "kraken").lower()
     ex_cls = getattr(ccxt, ex_name, None) or getattr(ccxt, "kraken")
     ex = ex_cls({"enableRateLimit": True})
@@ -1799,6 +1803,9 @@ async def fetch_geckoterminal_ohlcv(
                 f"Skipping {base}: no listed market on {ex_name} for quotes {allowed}"
             )
             return []
+        return await ex.fetch_ohlcv(
+            resolved, timeframe=timeframe, since=since, limit=limit
+        )
         symbol = resolved
         if asyncio.iscoroutinefunction(ex.fetch_ohlcv):
             return await ex.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
