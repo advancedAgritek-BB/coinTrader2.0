@@ -605,12 +605,12 @@ def _load_config_file() -> dict:
     if trend_file.exists():
         with open(trend_file) as sf:
             overrides = yaml.safe_load(sf) or {}
-        trend_cfg = data.get("trend", {})
+        trend_cfg = data.get("trend_bot", {})
         if isinstance(trend_cfg, dict):
             trend_cfg.update(overrides)
         else:
             trend_cfg = overrides
-        data["trend"] = trend_cfg
+        data["trend_bot"] = trend_cfg
 
     if "symbol" in data:
         data["symbol"] = fix_symbol(data["symbol"])
@@ -1940,7 +1940,7 @@ async def execute_signals(ctx: BotContext) -> None:
 
         await refresh_balance(ctx)
 
-        if strategy == "micro_scalp":
+        if strategy == "micro_scalp_bot":
             register_task(asyncio.create_task(_monitor_micro_scalp_exit(ctx, sym)))
 
     if executed == 0:
