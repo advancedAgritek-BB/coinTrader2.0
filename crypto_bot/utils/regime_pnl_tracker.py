@@ -1,4 +1,5 @@
 import pandas as pd
+import json
 import numpy as np
 from pathlib import Path
 from datetime import datetime
@@ -7,6 +8,8 @@ from typing import Dict, Any
 from .logger import LOG_DIR
 
 LOG_FILE = LOG_DIR / "regime_pnl.csv"
+# JSON log used by meta_selector for historical strategy performance
+PERF_FILE = LOG_DIR / "strategy_performance.json"
 
 
 def _seed_fake_trades(path: str | Path = LOG_FILE) -> None:
@@ -44,17 +47,29 @@ def _seed_fake_trades(path: str | Path = LOG_FILE) -> None:
 
 
 def log_trade(regime: str, strategy: str, pnl: float) -> None:
-    """Append realized PnL for ``strategy`` in ``regime`` to the CSV log."""
+    """Append realized PnL for ``strategy`` in ``regime`` to the logs."""
     record = {
         "timestamp": datetime.utcnow().isoformat(),
         "regime": regime,
         "strategy": strategy,
         "pnl": float(pnl),
     }
+    # Write to the CSV file used for quick metric calculations
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame([record])
     header = not LOG_FILE.exists()
     df.to_csv(LOG_FILE, mode="a", header=header, index=False)
+
+    # Maintain JSON log grouped by regime and strategy for meta_selector
+    PERF_FILE.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        data = json.loads(PERF_FILE.read_text()) if PERF_FILE.exists() else {}
+    except Exception:
+        data = {}
+    entry = {"timestamp": record["timestamp"], "pnl": float(pnl)}
+    regime_block = data.setdefault(regime, {})
+    regime_block.setdefault(strategy, []).append(entry)
+    PERF_FILE.write_text(json.dumps(data))
 
 
 def _calc_metrics(pnls: pd.Series) -> Dict[str, float]:
