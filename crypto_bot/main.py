@@ -12,6 +12,7 @@ import time
 from collections import Counter, OrderedDict, deque
 from dataclasses import dataclass, field
 import dataclasses
+import types
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,25 @@ from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.ml.selfcheck import log_ml_status_once
 
 # Internal project modules are imported lazily in `_import_internal_modules()`
+
+try:  # pragma: no cover - optional strategies module
+    from crypto_bot import strategies
+except Exception:  # pragma: no cover - fallback if strategies module missing
+    strategies = types.SimpleNamespace(
+        initialize=lambda *_a, **_k: asyncio.sleep(0),
+        score=lambda *_a, **_k: {},
+    )
+
+shutdown_event = asyncio.Event()
+
+
+def format_top(scores, n: int = 25) -> str:
+    """Return formatted top-N entries from a score mapping."""
+    try:
+        items = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:n]
+        return "\n".join(f"{sym}: {val}" for sym, val in items)
+    except Exception:
+        return str(scores)
 
 
 logger = logging.getLogger("bot")
@@ -1221,7 +1241,22 @@ async def fetch_candidates(ctx: BotContext) -> None:
                 base_size = follow_size
         else:
             if not symbol_priority_queue:
-                symbol_priority_queue = build_priority_queue(symbols)
+                from crypto_bot.utils.symbol_pre_filter import liq_cache
+
+                selected_symbols = [s for s, _ in symbols]
+                volume_24h = {
+                    s: (liq_cache.get(s) or (0.0, 0.0, 0.0))[0]
+                    for s in selected_symbols
+                }
+                liquid = sorted(
+                    selected_symbols,
+                    key=lambda s: volume_24h.get(s, 0.0),
+                    reverse=True,
+                )[:150]
+                liquid_scores = [(s, sc) for s, sc in symbols if s in liquid]
+                rest_scores = [(s, sc) for s, sc in symbols if s not in liquid]
+                symbol_priority_queue = build_priority_queue(liquid_scores)
+                symbol_priority_queue.extend(build_priority_queue(rest_scores))
             base_size = base_size_cfg
 
         if onchain_syms and resolved_mode != "cex":
@@ -2148,6 +2183,7 @@ async def handle_exits(ctx: BotContext) -> None:
             if pos["side"] == "sell":
                 realized_pnl = -realized_pnl
             pnl_logger.log_pnl(
+                pos.get("regime", ""),
                 pos.get("strategy", ""),
                 sym,
                 pos["entry_price"],
@@ -2289,6 +2325,7 @@ async def force_exit_all(ctx: BotContext) -> None:
         if pos["side"] == "sell":
             realized_pnl = -realized_pnl
         pnl_logger.log_pnl(
+            pos.get("regime", ""),
             pos.get("strategy", ""),
             sym,
             pos["entry_price"],
@@ -2338,6 +2375,7 @@ async def force_exit_all(ctx: BotContext) -> None:
             if wpos.get("side") == "sell":
                 realized_pnl = -realized_pnl
             pnl_logger.log_pnl(
+                wpos.get("regime", ""),
                 wpos.get("strategy", ""),
                 sym,
                 wpos.get("entry_price", 0.0),
@@ -2417,6 +2455,7 @@ async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
     if pos["side"] == "sell":
         realized_pnl = -realized_pnl
     pnl_logger.log_pnl(
+        pos.get("regime", ""),
         pos.get("strategy", ""),
         sym,
         pos["entry_price"],
@@ -2568,30 +2607,16 @@ async def _main_impl() -> MainResult:
         else:
             logger.info("Setting %s from .env", key)
 
-    # Apply secrets into the environment safely (skip None; coerce to str)
-    def _safe_env_update(mapping, logger):
-        if not isinstance(mapping, dict):
-            logger.warning(
-                "Unexpected secrets type %s; ignoring.", type(mapping).__name__
-            )
-            return
-        skipped = []
-        applied = 0
-        for k, v in mapping.items():
-            if v is None:
-                skipped.append(k)
-                continue
+    # Export secrets into the process env for downstream libs (skip None, coerce to str)
+    for k, v in (secrets or {}).items():
+        # Guard against None values that would crash os.environ
+        if v is None:
+            logger.warning("Skipping env var %s because its value is None", k)
+            continue
+        try:
             os.environ[str(k)] = str(v)
-            applied += 1
-        if skipped:
-            logger.warning(
-                "Skipping %d env vars with None values: %s",
-                len(skipped),
-                ", ".join(skipped),
-            )
-        logger.info("Applied %d env vars from secrets.", applied)
-
-    _safe_env_update(secrets, logger)
+        except Exception:
+            logger.exception("Failed to set env var %r", k)
 
     user = load_or_create(interactive=False)
 
@@ -2924,6 +2949,38 @@ async def _main_impl() -> MainResult:
             session_state,
             notifier if status_updates else None,
         )
+
+    exit_when_idle = config.get("exit_when_idle", False)
+    if exit_when_idle and not config.get("hft", False):
+        return MainResult(notifier, stop_reason)
+
+    if config.get("hft", False):
+        selected_symbols = list(dict.fromkeys(config.get("symbols", [])))
+
+        async def strategy_loop() -> None:
+            await strategies.initialize(selected_symbols)
+            logger.info(
+                "Strategy engine initialized for %d symbols; starting scoring loop...",
+                len(selected_symbols),
+            )
+            scan_secs = int(config.get("scan_interval_seconds", 10))
+            while not shutdown_event.is_set():
+                try:
+                    scores = await strategies.score(
+                        symbols=selected_symbols,
+                        timeframes=["1m", "5m"],
+                    )
+                    logger.info(
+                        "Top strategy scores:\n%s",
+                        format_top(scores, n=25),
+                    )
+                except Exception:
+                    logger.exception("Strategy scoring step failed")
+                await asyncio.sleep(scan_secs)
+
+        strategy_task = asyncio.create_task(strategy_loop(), name="strategy-loop")
+        await strategy_task
+        return MainResult(notifier, stop_reason)
 
     ctx = BotContext(
         positions=session_state.positions,

@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 from datetime import datetime
 
@@ -6,9 +7,11 @@ from crypto_bot.selector import bandit
 
 
 LOG_FILE = LOG_DIR / "strategy_pnl.csv"
+PERFORMANCE_FILE = LOG_DIR / "strategy_performance.json"
 
 
 def log_pnl(
+    regime: str,
     strategy: str,
     symbol: str,
     entry_price: float,
@@ -17,7 +20,7 @@ def log_pnl(
     confidence: float,
     direction: str,
 ) -> None:
-    """Append realized PnL information to CSV."""
+    """Append realized PnL information to CSV and JSON logs."""
     record = {
         "timestamp": datetime.utcnow().isoformat(),
         "strategy": strategy,
@@ -39,3 +42,17 @@ def log_pnl(
         bandit.update(symbol, strategy, pnl > 0)
     except Exception:  # noqa: BLE001
         pass
+    # Append simplified record to strategy_performance.json
+    perf_rec = {"timestamp": record["timestamp"], "pnl": float(pnl)}
+    try:
+        data = (
+            json.loads(PERFORMANCE_FILE.read_text())
+            if PERFORMANCE_FILE.exists()
+            else {}
+        )
+    except Exception:
+        data = {}
+    trades = data.setdefault(regime, {}).setdefault(strategy, [])
+    trades.append(perf_rec)
+    PERFORMANCE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PERFORMANCE_FILE.write_text(json.dumps(data, indent=2, sort_keys=True))

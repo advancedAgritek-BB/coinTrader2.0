@@ -340,7 +340,7 @@ async def _parse_metrics(
     liq_cache[symbol] = (volume_usd, spread_pct, 1.0)
 
     cached_vol, cached_spread, _ = liq_cache[symbol]
-    logger.info("%s: vol=%.2f chg=%.2f%% spr=%.2f%%", symbol, cached_vol, change_pct, cached_spread)
+    logger.debug("%s: vol=%.2f chg=%.2f%% spr=%.2f%%", symbol, cached_vol, change_pct, cached_spread)
     return cached_vol, change_pct, cached_spread
 
 
@@ -951,7 +951,7 @@ async def filter_symbols(
         seen.add(symbol)
         local_min_volume = min_volume * 0.5 if symbol.endswith("/USDC") else min_volume
         if vol_usd < local_min_volume:
-            logger.warning(
+            logger.debug(
                 "Skipping %s due to low ticker volume %.2f < %.2f",
                 symbol,
                 vol_usd,
@@ -961,7 +961,7 @@ async def filter_symbols(
             rejects[RejectReason.LOW_VOLUME] += 1
             continue
         if spread_pct > max_spread:
-            logger.warning(
+            logger.debug(
                 "Skipping %s due to high spread %.2f%% > %.2f%%",
                 symbol,
                 spread_pct,
@@ -1198,7 +1198,7 @@ async def filter_symbols(
         logger.info("Resolved %s to mint %s for onchain", sym, mint)
         vol = 0.0
         if vol < onchain_min_volume:
-            logger.info(
+            logger.debug(
                 "Skipping %s due to low volume %.2f USD (min %.2f)",
                 sym,
                 vol,
