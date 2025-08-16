@@ -81,6 +81,8 @@ def is_ml_available() -> bool:
     _ml_checked = True
 
     try:
+        if not _check_packages(_REQUIRED_PACKAGES):
+            logger.info("ML unavailable: missing required packages")
         missing = _check_packages(_REQUIRED_PACKAGES)
         if missing:
             logger.info(
