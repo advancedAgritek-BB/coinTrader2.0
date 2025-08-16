@@ -3,6 +3,7 @@ from __future__ import annotations
 """Console utilities for starting and stopping the trading bot."""
 
 import asyncio
+import logging
 from typing import Dict, Any
 
 
@@ -11,7 +12,11 @@ async def control_loop(state: Dict[str, Any]) -> None:
     print("Commands: start | stop | reload | panic sell | quit")
     try:
         while True:
-            cmd = (await asyncio.to_thread(input, "> ")).strip().lower()
+            try:
+                cmd = (await asyncio.to_thread(input, "> ")).strip().lower()
+            except EOFError:
+                logging.warning("EOF on console input; exiting control loop")
+                break
             if cmd == "start":
                 state["running"] = True
                 print("Trading started")
