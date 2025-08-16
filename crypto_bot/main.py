@@ -3141,6 +3141,15 @@ def _reload_modules() -> None:
             importlib.reload(module)
 
 
+async def shutdown() -> None:
+    """Cancel and gather all running asyncio tasks."""
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
 async def main() -> None:
     """Entry point for running the trading bot with error handling."""
     load_dotenv()
@@ -3283,6 +3292,7 @@ async def main() -> None:
         if notifier:
             notifier.notify("Bot shutting down")
         logger.info("Bot shutting down")
+        await shutdown()
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution
