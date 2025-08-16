@@ -2568,30 +2568,16 @@ async def _main_impl() -> MainResult:
         else:
             logger.info("Setting %s from .env", key)
 
-    # Apply secrets into the environment safely (skip None; coerce to str)
-    def _safe_env_update(mapping, logger):
-        if not isinstance(mapping, dict):
-            logger.warning(
-                "Unexpected secrets type %s; ignoring.", type(mapping).__name__
-            )
-            return
-        skipped = []
-        applied = 0
-        for k, v in mapping.items():
-            if v is None:
-                skipped.append(k)
-                continue
+    # Export secrets into the process env for downstream libs (skip None, coerce to str)
+    for k, v in (secrets or {}).items():
+        # Guard against None values that would crash os.environ
+        if v is None:
+            logger.warning("Skipping env var %s because its value is None", k)
+            continue
+        try:
             os.environ[str(k)] = str(v)
-            applied += 1
-        if skipped:
-            logger.warning(
-                "Skipping %d env vars with None values: %s",
-                len(skipped),
-                ", ".join(skipped),
-            )
-        logger.info("Applied %d env vars from secrets.", applied)
-
-    _safe_env_update(secrets, logger)
+        except Exception:
+            logger.exception("Failed to set env var %r", k)
 
     user = load_or_create(interactive=False)
 
