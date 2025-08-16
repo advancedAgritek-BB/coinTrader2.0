@@ -2935,8 +2935,14 @@ async def _main_impl() -> MainResult:
         ctx.timing = await runner.run(ctx)
 
     try:
+        logger.info("Continuous evaluation loop started")
         while True:
             await run_evaluation_cycle()
+            logger.info(
+                "Active universe: %d symbols, current batch: %d symbols",
+                len(getattr(ctx, "active_universe", []) or []),
+                len(getattr(ctx, "current_batch", []) or []),
+            )
             await asyncio.sleep(config.get("loop_interval_minutes", 1) * 60)
 
 
