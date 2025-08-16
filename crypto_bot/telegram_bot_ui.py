@@ -147,17 +147,14 @@ class TelegramBotUI:
                 CallbackQueryHandler(self.edit_trade_size, pattern=f"^{EDIT_TRADE_SIZE}$"),
                 CallbackQueryHandler(self.edit_max_trades, pattern=f"^{EDIT_MAX_TRADES}$"),
             ],
-            states={
-                EDIT_VALUE: [
-                    MessageHandler(
-                        filters.TEXT & ~filters.COMMAND, self.set_config_value
-                    )
-                ]
-            },
+            states={},
             fallbacks=[],
-            per_message=False,
+            per_message=True,
         )
         self.app.add_handler(conv)
+        self.app.add_handler(
+            MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_config_value)
+        )
         self.app.add_handler(
             CallbackQueryHandler(self.show_pnl_stats, pattern=f"^{PNL_STATS}$")
         )
@@ -521,21 +518,21 @@ class TelegramBotUI:
             return ConversationHandler.END
         context.user_data["config_key"] = "trade_size_pct"
         await self._reply(update, "Enter trade size percentage (0-1):")
-        return EDIT_VALUE
+        return ConversationHandler.END
 
     async def edit_max_trades(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         if not await self._check_admin(update):
             return ConversationHandler.END
         context.user_data["config_key"] = "max_open_trades"
         await self._reply(update, "Enter max open trades (integer):")
-        return EDIT_VALUE
+        return ConversationHandler.END
 
-    async def set_config_value(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    async def set_config_value(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_admin(update):
-            return ConversationHandler.END
+            return
         key = context.user_data.get("config_key")
         if not key:
-            return ConversationHandler.END
+            return
         value_text = update.message.text if update.message else ""
         try:
             if key == "trade_size_pct":
@@ -548,7 +545,7 @@ class TelegramBotUI:
                     raise ValueError
         except ValueError:
             await self._reply(update, "Invalid value, try again:")
-            return EDIT_VALUE
+            return
         cfg = {}
         if CONFIG_FILE.exists():
             try:
@@ -559,7 +556,7 @@ class TelegramBotUI:
         CONFIG_FILE.write_text(json.dumps(cfg))
         await self.controller.reload_config()
         await self._reply(update, f"{key} updated to {val}")
-        return ConversationHandler.END
+        context.user_data.pop("config_key", None)
     async def show_pnl_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._check_cooldown(update, "pnl_stats"):
             return
