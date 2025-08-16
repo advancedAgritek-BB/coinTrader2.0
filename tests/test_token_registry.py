@@ -3,6 +3,7 @@ import json
 import sys
 import logging
 import pytest
+from tests.dummy_aiohttp import DummyResp as BaseDummyResp, DummySession as BaseDummySession
 
 
 @pytest.fixture(autouse=True)
@@ -13,6 +14,28 @@ def _mock_listing_date(monkeypatch):
 
 class DummyErr(Exception):
     """Minimal exception class for simulating aiohttp errors in tests."""
+
+    pass
+
+
+class DummyResp(BaseDummyResp):
+    """Shared dummy response with optional text support."""
+
+    def __init__(self, data=None, status=200, text_data="", *, raise_for_status=False):
+        super().__init__(data=data, status=status)
+        self._text_data = text_data
+        self._raise = raise_for_status
+
+    async def text(self):
+        return self._text_data
+
+    def raise_for_status(self):  # pragma: no cover - simple
+        if self._raise:
+            raise AssertionError("should not be called")
+
+
+class DummySession(BaseDummySession):
+    """Shared dummy session for token registry tests."""
 
     pass
 
@@ -40,39 +63,6 @@ def _load_module(monkeypatch, tmp_path):
 
 def test_fetch_from_jupiter(monkeypatch, tmp_path):
     data = [{"symbol": "SOL", "address": "So111", "decimals": 9}]
-
-    class DummyResp:
-        def __init__(self, d):
-            self._d = d
-            self.status = 200
-
-        async def json(self, content_type=None):
-            return self._d
-
-        def raise_for_status(self):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-    class DummySession:
-        def __init__(self, d):
-            self.d = d
-            self.url = None
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def get(self, url, timeout=10):
-            self.url = url
-            return DummyResp(self.d)
-
     session = DummySession(data)
 
     mod = _load_module(monkeypatch, tmp_path)
@@ -93,45 +83,12 @@ def test_fetch_from_helius(monkeypatch, tmp_path):
         }
     ]
 
-    class DummyResp:
-        def __init__(self, d):
-            self._d = d
-            self.status = 200
-
-        async def json(self, content_type=None):
-            return self._d
-
-        def raise_for_status(self):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-    class DummySession:
-        def __init__(self, d):
-            self.d = d
-            self.url = None
-            self.payload = None
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def post(self, url, json=None, timeout=10):
-            self.url = url
-            self.payload = json
-            return DummyResp(self.d)
+    session = DummySession(data)
 
     monkeypatch.setenv("HELIUS_API_KEY", "KEY")
     monkeypatch.setattr(
         "crypto_bot.solana.helius_client.helius_available", lambda: True
     )
-    session = DummySession(data)
 
     mod = _load_module(monkeypatch, tmp_path)
     mod.TOKEN_MINTS["AAA"] = "mmm"
@@ -155,41 +112,11 @@ def test_fetch_from_helius_full(monkeypatch, tmp_path):
         }
     ]
 
-    class DummyResp:
-        def __init__(self, d):
-            self._d = d
-            self.status = 200
-
-        async def json(self, content_type=None):
-            return self._d
-
-        def raise_for_status(self):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-    class DummySession:
-        def __init__(self, d):
-            self.d = d
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def post(self, url, json=None, timeout=10):
-            return DummyResp(self.d)
-
+    session = DummySession(data)
     monkeypatch.setenv("HELIUS_API_KEY", "KEY")
     monkeypatch.setattr(
         "crypto_bot.solana.helius_client.helius_available", lambda: True
     )
-    session = DummySession(data)
 
     mod = _load_module(monkeypatch, tmp_path)
     mod.TOKEN_MINTS["AAA"] = "mmm"
@@ -216,44 +143,16 @@ def test_fetch_from_helius_sol(monkeypatch, tmp_path):
 
 
 def test_fetch_from_helius_4xx(monkeypatch, tmp_path, caplog):
-    class DummyResp:
-        def __init__(self, status=401):
-            self.status = status
-
-        async def text(self):
-            return "nope"
-
-        async def json(self, content_type=None):
-            return {}
-
-        def raise_for_status(self):
-            raise AssertionError("should not be called")
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-    class DummySession:
-        def __init__(self):
-            self.url = None
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
+    class Dummy401Session(DummySession):
         def post(self, url, json=None, timeout=10):
             self.url = url
-            return DummyResp()
+            return DummyResp(status=401, text_data="nope", raise_for_status=True)
 
+    session = Dummy401Session()
     monkeypatch.setenv("HELIUS_API_KEY", "KEY")
     monkeypatch.setattr(
         "crypto_bot.solana.helius_client.helius_available", lambda: True
     )
-    session = DummySession()
     mod = _load_module(monkeypatch, tmp_path)
     mod.TOKEN_MINTS["AAA"] = "mmm"
     aiohttp_mod = type(
@@ -488,38 +387,9 @@ def test_load_token_mints_empty(monkeypatch, tmp_path, caplog):
 
 def test_load_token_mints_force_refresh_creates_dir(monkeypatch, tmp_path):
     data = {"tokens": [{"symbol": "Z", "address": "ZZZ"}]}
-
-    class DummyResp:
-        def __init__(self, d):
-            self._d = d
-
-        async def json(self, content_type=None):
-            return self._d
-
-        def raise_for_status(self):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-    class DummySession:
-        def __init__(self, d):
-            self.d = d
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def get(self, url, timeout=10):
-            return DummyResp(self.d)
-
+    session = DummySession(data)
     aiohttp_mod = type(
-        "M", (), {"ClientSession": lambda: DummySession(data), "ClientError": Exception}
+        "M", (), {"ClientSession": lambda: session, "ClientError": Exception}
     )
 
     import importlib.util, pathlib, shutil
@@ -567,37 +437,6 @@ def test_get_mint_from_gecko(monkeypatch):
             }
         ]
     }
-
-    class DummyResp:
-        def __init__(self, d):
-            self._d = d
-
-        async def json(self):
-            return self._d
-
-        def raise_for_status(self):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-    class DummySession:
-        def __init__(self, d):
-            self.d = d
-            self.url = None
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        def get(self, url, timeout=10):
-            self.url = url
-            return DummyResp(self.d)
 
     session = DummySession(data)
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
@@ -890,30 +729,18 @@ def test_monitor_pump_raydium(monkeypatch, tmp_path):
         }
     ]
 
-    class DummyResp:
-        def __init__(self, data):
-            self._data = data
-
-        async def json(self, content_type=None):
-            return self._data
-
-    class DummySession:
+    class DummyPumpSession(DummySession):
         def __init__(self):
+            super().__init__()
             self.calls = []
 
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            pass
-
-        async def get(self, url, timeout=10):
+        def get(self, url, timeout=10):
             self.calls.append(url)
             if url == mod.PUMP_URL:
                 return DummyResp(pump_data)
             return DummyResp(ray_data)
 
-    session = DummySession()
+    session = DummyPumpSession()
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
     monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
 
@@ -983,13 +810,6 @@ def test_get_decimals_cache_and_fallback(monkeypatch, tmp_path):
             pass
 
     monkeypatch.setattr(mod, "HeliusClient", DummyHeliusClient)
-        def get(self, url, timeout=10):
-            self.url = url
-            return DummyResp()
-
-    session = DummySession()
-    aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
-    monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
     monkeypatch.setattr(mod, "helius_available", lambda: True)
     monkeypatch.setenv("HELIUS_KEY", "KEY")
 
