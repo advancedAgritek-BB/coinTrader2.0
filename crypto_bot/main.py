@@ -2936,8 +2936,16 @@ async def _main_impl() -> MainResult:
 
     try:
         while True:
-            await run_evaluation_cycle()
-            await asyncio.sleep(config.get("loop_interval_minutes", 1) * 60)
+            try:
+                await run_evaluation_cycle()
+                await asyncio.sleep(config.get("loop_interval_minutes", 1) * 60)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # pragma: no cover - runtime safety
+                logger.exception("Evaluation cycle failed: %s", exc)
+                if stop_reason == "completed":
+                    stop_reason = f"evaluation cycle failed: {exc}"
+                continue
 
 
     except asyncio.CancelledError:
