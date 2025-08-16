@@ -1096,9 +1096,18 @@ async def fetch_candidates(ctx: BotContext) -> None:
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("Solana scanner failed: %s", exc)
 
+    total_candidates = len(symbols)
     symbols = [(s, sc) for s, sc in symbols if s not in no_data_symbols]
     ctx.active_universe = [s for s, _ in symbols]
     ctx.resolved_mode = resolved_mode
+
+    logger.info(
+        "Symbol summary: total=%d selected=%d filtered=%d first=%s",
+        total_candidates,
+        len(symbols),
+        total_candidates - len(symbols),
+        [s for s, _ in symbols[:5]],
+    )
 
     symbol_names = [s for s, _ in symbols]
     avg_atr = compute_average_atr(
