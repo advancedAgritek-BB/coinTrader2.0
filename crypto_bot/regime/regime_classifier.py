@@ -226,6 +226,7 @@ async def _download_supabase_model(symbol: str | None = None):
     """Download LightGBM model from Supabase and return a Booster."""
     async with _supabase_model_lock:
         model = await load_regime_model(symbol)
+        model, _ = await load_regime_model(os.getenv("SYMBOL", "BTCUSDT"))
         return model
 
 
@@ -292,6 +293,37 @@ async def load_regime_model(symbol: str | None = None) -> object:
         import base64
 
         return pickle.loads(base64.b64decode(MODEL_B64))
+async def load_regime_model(symbol: str) -> tuple[object | None, str | None]:
+    try:
+        from supabase import create_client
+    except Exception as exc:  # pragma: no cover - optional dependency
+        logger.warning("Supabase client unavailable: %s", exc)
+        return None, None
+
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+    bucket = os.getenv("CT_MODELS_BUCKET", "models")
+    if not url or not key:
+        logger.warning("No model in Supabase; using heuristic")
+        return None, None
+
+    client = create_client(url, key)
+    latest_path = f"regime/{symbol}/LATEST.json"
+    model_path = None
+    try:
+        latest_bytes = client.storage.from_(bucket).download(latest_path)
+        if latest_bytes:
+            data = json.loads(latest_bytes.decode("utf-8"))
+            model_path = data["key"]
+            model_bytes = client.storage.from_(bucket).download(model_path)
+            model = pickle.loads(model_bytes)
+            logger.info("Loaded global regime model from Supabase: %s", model_path)
+            return model, model_path
+    except Exception as exc:
+        logger.error("Failed to load regime model: %s", exc)
+
+    logger.warning("No model in Supabase; using heuristic")
+    return None, model_path
 
 
 async def _ml_recovery_loop(notifier: TelegramNotifier | None) -> None:
