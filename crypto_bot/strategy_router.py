@@ -554,14 +554,13 @@ def strategy_name(regime: str, mode: str) -> str:
     if mode == "cex":
         return "trend_bot" if regime == "trending" else "grid_bot"
     if mode == "onchain":
-        return "sniper_bot" if regime in {"breakout", "volatile"} else "dex_scalper"
+        return "sniper_solana" if regime in {"breakout", "volatile"} else "dex_scalper"
     if regime == "trending":
         return "trend_bot"
     if regime == "scalp":
         return "micro_scalp_bot"
     if regime in {"breakout", "volatile"}:
         return "sniper_bot"
-        return "sniper"
     return "grid_bot"
 
 
