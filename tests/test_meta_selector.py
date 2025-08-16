@@ -37,11 +37,16 @@ def test_choose_best_fallback(tmp_path, monkeypatch):
     assert fn.__name__ == strategy_for("sideways").__name__
 
 
-def test_strategy_map_contains_micro_scalp():
+def test_strategy_map_contains_micro_scalp_bot():
     assert (
-        meta_selector._STRATEGY_FN_MAP.get("micro_scalp")
+        meta_selector._STRATEGY_FN_MAP.get("micro_scalp_bot")
         is micro_scalp_bot.generate_signal
     )
+
+
+def test_strategy_map_has_no_aliases():
+    assert "grid" not in meta_selector._STRATEGY_FN_MAP
+    assert "trend" not in meta_selector._STRATEGY_FN_MAP
 
 
 def test_strategy_map_contains_dca_bot():

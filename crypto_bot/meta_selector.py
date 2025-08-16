@@ -83,21 +83,21 @@ def _register(module, *names: str) -> None:
         _STRATEGY_FN_MAP[name] = fn
 
 
-_register(trend_bot, "trend", "trend_bot")
-_register(grid_bot, "grid", "grid_bot")
-_register(sniper_bot, "sniper", "sniper_bot")
-_register(dex_scalper, "dex_scalper", "dex_scalper_bot")
+_register(trend_bot, "trend_bot")
+_register(grid_bot, "grid_bot")
+_register(sniper_bot, "sniper_bot")
+_register(dex_scalper, "dex_scalper")
 _register(mean_bot, "mean_bot")
 _register(breakout_bot, "breakout_bot")
-_register(micro_scalp_bot, "micro_scalp", "micro_scalp_bot")
-_register(momentum_bot, "momentum", "momentum_bot")
+_register(micro_scalp_bot, "micro_scalp_bot")
+_register(momentum_bot, "momentum_bot")
 _register(lstm_bot, "lstm_bot")
-_register(bounce_scalper, "bounce_scalper", "bounce_scalper_bot")
+_register(bounce_scalper, "bounce_scalper")
 _register(flash_crash_bot, "flash_crash_bot")
 _register(dip_hunter, "dip_hunter")
-_register(solana_scalping, "solana_scalping", "solana_scalping_bot")
+_register(solana_scalping, "solana_scalping")
 _register(meme_wave_bot, "meme_wave_bot")
-_register(dca_bot, "dca", "dca_bot")
+_register(dca_bot, "dca_bot")
 _register(cross_chain_arb_bot, "cross_chain_arb_bot")
 
 

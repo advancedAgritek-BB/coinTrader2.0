@@ -28,7 +28,7 @@ def test_route_uses_bandit(monkeypatch):
 
     def fake_select(ctx, arms, symbol):
         calls["arms"] = list(arms)
-        return "grid"
+        return "grid_bot"
 
     from crypto_bot import selector
 
@@ -37,12 +37,12 @@ def test_route_uses_bandit(monkeypatch):
 
     cfg = {
         "timeframe": "1h",
-        "strategy_router": {"regimes": {"trending": ["trend", "grid"]}},
+        "strategy_router": {"regimes": {"trending": ["trend_bot", "grid_bot"]}},
         "bandit": {"enabled": True},
     }
     fn = route("trending", "cex", cfg)
 
-    assert calls.get("arms") == ["trend", "grid"]
+    assert calls.get("arms") == ["trend_bot", "grid_bot"]
     assert fn.__name__ == grid_bot.generate_signal.__name__
 
 
