@@ -1011,6 +1011,36 @@ def test_update_multi_tf_ohlcv_cache_skips_unsupported_tf(caplog):
     )
 
 
+class MixedTFExchange(DummyMultiTFExchange):
+    timeframes = {"1m": "1m", "5m": "5m"}
+
+    async def fetch_ohlcv(self, symbol, timeframe="1m", limit=100):
+        self.calls.append((symbol, timeframe))
+        if symbol == "FOO/USD" and timeframe == "1m":
+            raise ccxt.BadRequest("unsupported timeframe")
+        return [[0, 1, 2, 3, 4, 5]]
+
+
+def test_update_multi_tf_ohlcv_cache_falls_back_to_5m(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", lambda _s: 0)
+    ex = MixedTFExchange()
+    cache = asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["BTC/USD", "FOO/USD"],
+            {"timeframes": ["1m", "5m"]},
+            limit=1,
+        )
+    )
+    assert "BTC/USD" in cache.get("1m", {})
+    assert "FOO/USD" not in cache.get("1m", {})
+    assert set(cache.get("5m", {}).keys()) == {"BTC/USD", "FOO/USD"}
+    assert ("FOO/USD", "5m") in ex.calls
+
+
 class PagingMultiExchange:
     has = {"fetchOHLCV": True}
 

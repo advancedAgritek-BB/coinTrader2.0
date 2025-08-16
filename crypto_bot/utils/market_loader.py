@@ -622,6 +622,60 @@ def gecko_timeframe_parts(timeframe: str) -> tuple[str, int]:
     return timeframe, 1
 
 
+async def supports_timeframe(exchange, symbol: str, timeframe: str) -> bool:
+    """Return ``True`` if *symbol* supports *timeframe* on *exchange*.
+
+    The check first consults the exchange's ``timeframes`` map and then
+    performs a lightweight ``fetch_ohlcv`` request, returning ``False`` if the
+    exchange raises an error for the requested combination.
+    """
+
+    tfs = getattr(exchange, "timeframes", None)
+    if tfs and timeframe not in tfs:
+        return False
+    fetch = getattr(exchange, "fetch_ohlcv", None)
+    if fetch is None:
+        return False
+    try:
+        if asyncio.iscoroutinefunction(fetch):
+            await fetch(symbol, timeframe=timeframe, limit=1)
+        else:
+            await asyncio.to_thread(fetch, symbol, timeframe, 1)
+        return True
+    except Exception:
+        return False
+
+
+async def split_symbols_by_timeframe(
+    exchange, symbols: Iterable[str]
+) -> tuple[list[str], list[str]]:
+    """Split *symbols* into those supporting 1m and those falling back to 5m."""
+
+    symbols = list(symbols)
+    one_min: list[str] = []
+    missing: list[str] = []
+
+    checks = await asyncio.gather(
+        *[supports_timeframe(exchange, s, "1m") for s in symbols]
+    )
+    for sym, ok in zip(symbols, checks):
+        if ok:
+            one_min.append(sym)
+        else:
+            missing.append(sym)
+
+    five_min_only: list[str] = []
+    if missing:
+        checks5 = await asyncio.gather(
+            *[supports_timeframe(exchange, s, "5m") for s in missing]
+        )
+        for sym, ok in zip(missing, checks5):
+            if ok:
+                five_min_only.append(sym)
+
+    return one_min, five_min_only
+
+
 async def _call_with_retry(func, *args, timeout=None, **kwargs):
     """Call ``func`` with fixed back-off on 520/522 errors."""
 
@@ -2043,7 +2097,23 @@ async def update_multi_tf_ohlcv_cache(
                 priority_syms.append(sym)
                 seen.add(sym)
 
+    symbols_all = list(symbols)
+    one_min_syms: list[str] = []
+    five_min_only: list[str] = []
+    if "1m" in tfs or "5m" in tfs:
+        one_min_syms, five_min_only = await split_symbols_by_timeframe(
+            exchange, symbols_all
+        )
+
     for tf in tfs:
+        if tf == "1m":
+            symbols = one_min_syms
+        elif tf == "5m":
+            symbols = five_min_only
+        else:
+            symbols = symbols_all
+        if not symbols:
+            continue
         lock = timeframe_lock(tf)
         if lock.locked():
             logger.info("Skip: %s update already running.", tf)
