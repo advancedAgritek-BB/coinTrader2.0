@@ -4,8 +4,10 @@ from contextlib import asynccontextmanager, suppress
 from types import SimpleNamespace
 from typing import Any, Awaitable, Callable
 
-from loguru import logger
+import logging
 from crypto_bot.strategies.loader import load_strategies
+
+logger = logging.getLogger(__name__)
 
 
 class EvalGate:
@@ -43,7 +45,7 @@ class EvalGate:
                     held = time.monotonic() - self._since
                     if held > self._ttl:
                         self._logger.warning(
-                            "Gate held >{}s by {}; forcing release",
+                            "Gate held >%ss by %s; forcing release",
                             self._ttl,
                             self._owner,
                         )
@@ -92,9 +94,12 @@ class StreamEvaluationEngine:
         # discover and instantiate strategies based on mode
         mode = getattr(getattr(self.cfg, "trading", None), "mode", "auto")
         # auto-discover strategy modules without requiring an explicit list
-        self.strategies = load_strategies(mode)
+        self.strategies, errors = load_strategies(mode, return_errors=True)
         if not self.strategies:
-            msg = "Aborting evaluator start: 0 strategies loaded."
+            err_msg = "\n".join(f"{name}: {err}" for name, err in errors.items())
+            msg = "Aborting evaluator start: 0 strategies loaded." + (
+                f"\n{err_msg}" if err_msg else ""
+            )
             logger.error(msg)
             raise RuntimeError(msg)
 
@@ -116,7 +121,7 @@ class StreamEvaluationEngine:
         for idx in range(workers):
             task = asyncio.create_task(self._worker(), name=f"eval-worker-{idx}")
             self._workers.append(task)
-        logger.info("Evaluation workers online: {}", len(self._workers))
+        logger.info("Evaluation workers online: %s", len(self._workers))
 
     def _symbol_requires_5m(self, ctx: dict) -> bool:
         if isinstance(ctx, dict):
@@ -133,14 +138,14 @@ class StreamEvaluationEngine:
                 else "SELL" if direction == "short" else "NONE"
             )
             logger.info(
-                "STRAT {} on {}: signal={} score={} reason={}",
+                "STRAT %s on %s: signal=%s score=%s reason=%s",
                 res.get("name"),
                 symbol,
                 signal,
                 res.get("score"),
                 res.get("reason", ""),
             )
-        logger.debug("[EVAL OK] {}", symbol)
+        logger.debug("[EVAL OK] %s", symbol)
 
     async def _worker(self) -> None:
         if self.gate is None or self.data is None:
@@ -169,7 +174,7 @@ class StreamEvaluationEngine:
             except asyncio.CancelledError:  # pragma: no cover - shutdown
                 return
             except Exception as e:
-                logger.error(f"Worker error: {e}; restarting...")
+                logger.error("Worker error: %s; restarting...", e)
                 await asyncio.sleep(1)
         await asyncio.sleep(0)
 

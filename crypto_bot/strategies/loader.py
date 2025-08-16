@@ -5,7 +5,9 @@ from loguru import logger
 from crypto_bot.strategy.loader import load_strategies as _load_strategies
 
 
-def load_strategies(mode: str, names: list[str] | None = None) -> list:
+def load_strategies(
+    mode: str, names: list[str] | None = None, return_errors: bool = False
+) -> list | tuple[list, dict]:
     """Return a list of instantiated strategy objects.
 
     Parameters
@@ -33,6 +35,8 @@ def load_strategies(mode: str, names: list[str] | None = None) -> list:
     for mod_name, err in errors.items():
         logger.error("Failed to load strategy {}: {}", mod_name, err)
 
+    if return_errors:
+        return strategies, errors
     return strategies
 
 
