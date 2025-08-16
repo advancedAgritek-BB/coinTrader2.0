@@ -2992,9 +2992,10 @@ def _reload_modules() -> None:
             importlib.reload(module)
 
 
-async def shutdown() -> None:
-    """Cancel and gather all running asyncio tasks."""
-    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+async def shutdown(calling_task: asyncio.Task | None = None) -> None:
+    """Cancel and gather all running asyncio tasks except ``calling_task``."""
+    caller = calling_task or asyncio.current_task()
+    tasks = [t for t in asyncio.all_tasks() if t is not caller]
     for task in tasks:
         if not task.done():
             task.cancel()
@@ -3148,10 +3149,15 @@ async def main() -> None:
             notifier.notify(f"❌ Bot stopped: {exc}")
     finally:
         logger.info("Bot shutting down")
-        await shutdown()
-        if notifier:
-            notifier.notify(f"Bot shutting down: {reason}")
-        logger.info("Bot shutting down: %s", reason)
+        try:
+            await shutdown(asyncio.current_task())
+        except asyncio.CancelledError:
+            logger.info("Shutdown cancelled")
+            raise
+        finally:
+            if notifier:
+                notifier.notify(f"Bot shutting down: {reason}")
+            logger.info("Bot shutting down: %s", reason)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution
