@@ -103,6 +103,14 @@ class OpenPositionGuard:
         self.max_open_trades = max_open_trades
 
 
+@dataclass
+class MainResult:
+    """Result returned from ``_main_impl`` summarizing shutdown state."""
+
+    notifier: "TelegramNotifier"
+    reason: str
+
+
 PhaseRunner = None  # type: ignore
 calculate_trailing_stop = None  # type: ignore
 should_exit = None  # type: ignore
@@ -246,6 +254,9 @@ def register_task(task: asyncio.Task | None) -> asyncio.Task | None:
 
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
+
+# Symbols that produced no OHLCV data and should be skipped until refreshed
+no_data_symbols: set[str] = set()
 
 # Cache of recently queued Solana tokens to avoid duplicates
 SOLANA_CACHE_SIZE = 50
@@ -961,6 +972,15 @@ async def fetch_candidates(ctx: BotContext) -> None:
     """Gather symbols for this cycle and build the evaluation batch."""
     global symbol_priority_queue
 
+    if not ctx.df_cache:
+        no_data_symbols.clear()
+    else:
+        timeframe = ctx.config.get("timeframe", "1h")
+        for sym in list(no_data_symbols):
+            df = ctx.df_cache.get(timeframe, {}).get(sym)
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                no_data_symbols.discard(sym)
+
     sf = ctx.config.setdefault("symbol_filter", {})
 
     if (
@@ -994,6 +1014,8 @@ async def fetch_candidates(ctx: BotContext) -> None:
         if pump:
             sf["min_volume_usd"] = orig_min_volume
             sf["volume_percentile"] = orig_volume_pct
+    symbols = [(s, sc) for s, sc in symbols if s not in no_data_symbols]
+    onchain_syms = [s for s in onchain_syms if s not in no_data_symbols]
     cex_candidates = list(symbols)
     onchain_candidates = [(s, 0.0) for s in onchain_syms]
 
@@ -1070,6 +1092,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("Solana scanner failed: %s", exc)
 
+    symbols = [(s, sc) for s, sc in symbols if s not in no_data_symbols]
     ctx.active_universe = [s for s, _ in symbols]
     ctx.resolved_mode = resolved_mode
 
@@ -1360,7 +1383,14 @@ async def _update_caches_impl(ctx: BotContext) -> None:
         logger.info("%s OHLCV: %d candles", sym, count)
         if count == 0:
             logger.warning("No OHLCV data for %s; skipping analysis", sym)
+            async with QUEUE_LOCK:
+                try:
+                    symbol_priority_queue.remove(sym)
+                except ValueError:
+                    pass
+            no_data_symbols.add(sym)
             continue
+        no_data_symbols.discard(sym)
         filtered_batch.append(sym)
 
     ctx.current_batch = filtered_batch
@@ -2375,12 +2405,13 @@ async def _rotation_loop(
                 break
 
 
-async def _main_impl() -> TelegramNotifier:
+async def _main_impl() -> MainResult:
     """Implementation for running the trading bot."""
 
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config = load_config()
+    stop_reason = "completed"
 
     mapping = await load_token_mints()
     if mapping:
@@ -3095,6 +3126,9 @@ async def _main_impl() -> TelegramNotifier:
             logger.info("Sleeping for %.2f minutes", delay)
             await wait_or_event(delay * 60)
 
+    except asyncio.CancelledError:
+        stop_reason = "external signal"
+        raise
     finally:
         await stream_evaluator.drain()
         await stream_evaluator.stop()
@@ -3127,7 +3161,10 @@ async def _main_impl() -> TelegramNotifier:
         CROSS_ARB_TASKS.clear()
         NEW_SOLANA_TOKENS.clear()
 
-    return notifier
+    if not state.get("running", True) and stop_reason == "completed":
+        stop_reason = "state['running'] set to False"
+
+    return MainResult(notifier, stop_reason)
 
 
 def _reload_modules() -> None:
@@ -3281,10 +3318,17 @@ async def main() -> None:
     _reload_modules()
 
     notifier: TelegramNotifier | None = None
+    reason = "completed"
     try:
         await refresh_mints()
-        notifier = await _main_impl()
+        result = await _main_impl()
+        notifier = result.notifier
+        reason = result.reason
+    except asyncio.CancelledError:
+        reason = "external signal"
+        raise
     except Exception as exc:  # pragma: no cover - error path
+        reason = f"exception: {exc}"
         logger.exception("Unhandled error in main: %s", exc)
         if notifier:
             notifier.notify(f"❌ Bot stopped: {exc}")
@@ -3293,6 +3337,8 @@ async def main() -> None:
             notifier.notify("Bot shutting down")
         logger.info("Bot shutting down")
         await shutdown()
+            notifier.notify(f"Bot shutting down: {reason}")
+        logger.info("Bot shutting down: %s", reason)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution
