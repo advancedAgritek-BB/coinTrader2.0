@@ -885,9 +885,10 @@ async def initial_scan(
     symbols = [s for s, _ in ranked]
     top_n = int(config.get("scan_deep_top", 50))
     symbols = symbols[:top_n]
-    for sym in onchain_symbols:
-        if sym not in symbols:
-            symbols.append(sym)
+    if config.get("mode") != "cex":
+        for sym in onchain_symbols:
+            if sym not in symbols:
+                symbols.append(sym)
     symbols = list(dict.fromkeys(symbols))
     if not symbols:
         return
@@ -1040,7 +1041,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
     bases = [s.split("/")[0] for s in onchain_syms]
     meta_kept = 0
     meta_drop = 0
-    if bases:
+    if bases and resolved_mode != "cex":
         try:
             meta = await fetch_from_helius(bases)
             meta_kept = sum(1 for b in bases if b.upper() in meta)
@@ -1060,7 +1061,9 @@ async def fetch_candidates(ctx: BotContext) -> None:
     active_candidates.extend([("BTC/USDT", 10.0), ("SOL/USDC", 10.0)])
 
     symbols = active_candidates
-    solana_tokens: list[str] = list(onchain_syms)
+    solana_tokens: list[str] = (
+        list(onchain_syms) if resolved_mode != "cex" else []
+    )
     sol_cfg = ctx.config.get("solana_scanner", {})
 
     regime = "unknown"
@@ -1081,10 +1084,10 @@ async def fetch_candidates(ctx: BotContext) -> None:
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("Arbitrage scan error: %s", exc)
 
-    if regime == "volatile":
+    if regime == "volatile" and resolved_mode != "cex":
         symbols.extend((s, 0.0) for s in onchain_syms)
 
-    if regime == "volatile" and sol_cfg.get("enabled"):
+    if regime == "volatile" and sol_cfg.get("enabled") and resolved_mode != "cex":
         try:
             new_tokens = await get_solana_new_tokens(sol_cfg)
             solana_tokens.extend(new_tokens)
@@ -1146,7 +1149,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
                 symbol_priority_queue = build_priority_queue(symbols)
             base_size = base_size_cfg
 
-        if onchain_syms:
+        if onchain_syms and resolved_mode != "cex":
             for sym in reversed(onchain_syms):
                 if sym not in symbol_priority_queue:
                     symbol_priority_queue.appendleft(sym)

@@ -278,6 +278,11 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
     )
 
     mode = config.get("mode", "cex")
+    sol_enabled = config.get("solana_scanner", {}).get("enabled", True)
+    if mode == "auto" and (not sol_enabled or not onchain_syms):
+        logger.debug("Solana scanner disabled or no onchain symbols; using CEX mode")
+        config["mode"] = "cex"
+        mode = "cex"
     cex_candidates = [s for s, _ in scored]
     active_universe = cex_candidates if mode == "cex" else list(onchain_syms)
     if not active_universe:
