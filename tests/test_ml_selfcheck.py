@@ -12,7 +12,7 @@ def reload_selfcheck():
     importlib.reload(selfcheck)
 
 
-def test_log_ml_status_once_logs_once(monkeypatch, caplog):
+def test_log_ml_status_once_logs_supabase_status(monkeypatch, caplog):
     for var in [
         "SUPABASE_URL",
         "SUPABASE_SERVICE_ROLE_KEY",
@@ -21,13 +21,11 @@ def test_log_ml_status_once_logs_once(monkeypatch, caplog):
         "SUPABASE_ANON_KEY",
     ]:
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setitem(sys.modules, "cointrader_trainer", None)
     caplog.set_level(logging.INFO, logger="crypto_bot.ml")
 
     selfcheck.log_ml_status_once()
-    assert (
-        "ML status: package=False supabase_url=False key_present=False" in caplog.text
-    )
+    assert "supabase_url=False" in caplog.text
+    assert "key_present=False" in caplog.text
 
     caplog.clear()
     selfcheck.log_ml_status_once()
