@@ -12,6 +12,7 @@ import time
 from collections import Counter, OrderedDict, deque
 from dataclasses import dataclass, field
 import dataclasses
+import types
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,25 @@ from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.ml.selfcheck import log_ml_status_once
 
 # Internal project modules are imported lazily in `_import_internal_modules()`
+
+try:  # pragma: no cover - optional strategies module
+    from crypto_bot import strategies
+except Exception:  # pragma: no cover - fallback if strategies module missing
+    strategies = types.SimpleNamespace(
+        initialize=lambda *_a, **_k: asyncio.sleep(0),
+        score=lambda *_a, **_k: {},
+    )
+
+shutdown_event = asyncio.Event()
+
+
+def format_top(scores, n: int = 25) -> str:
+    """Return formatted top-N entries from a score mapping."""
+    try:
+        items = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:n]
+        return "\n".join(f"{sym}: {val}" for sym, val in items)
+    except Exception:
+        return str(scores)
 
 
 logger = logging.getLogger("bot")
@@ -2924,6 +2944,38 @@ async def _main_impl() -> MainResult:
             session_state,
             notifier if status_updates else None,
         )
+
+    exit_when_idle = config.get("exit_when_idle", False)
+    if exit_when_idle and not config.get("hft", False):
+        return MainResult(notifier, stop_reason)
+
+    if config.get("hft", False):
+        selected_symbols = list(dict.fromkeys(config.get("symbols", [])))
+
+        async def strategy_loop() -> None:
+            await strategies.initialize(selected_symbols)
+            logger.info(
+                "Strategy engine initialized for %d symbols; starting scoring loop...",
+                len(selected_symbols),
+            )
+            scan_secs = int(config.get("scan_interval_seconds", 10))
+            while not shutdown_event.is_set():
+                try:
+                    scores = await strategies.score(
+                        symbols=selected_symbols,
+                        timeframes=["1m", "5m"],
+                    )
+                    logger.info(
+                        "Top strategy scores:\n%s",
+                        format_top(scores, n=25),
+                    )
+                except Exception:
+                    logger.exception("Strategy scoring step failed")
+                await asyncio.sleep(scan_secs)
+
+        strategy_task = asyncio.create_task(strategy_loop(), name="strategy-loop")
+        await strategy_task
+        return MainResult(notifier, stop_reason)
 
     ctx = BotContext(
         positions=session_state.positions,
