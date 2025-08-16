@@ -182,9 +182,11 @@ class TelegramBotUI:
                     try:
                         await self.app.start()
                         await self.app.updater.start_polling()
-                        await self.app.updater.wait_closed()
                         backoff = 1
                         last_log = 0
+                        await asyncio.Future()
+                    except asyncio.CancelledError:
+                        raise
                     except (NetworkError, OSError) as exc:
                         if backoff != last_log:
                             self.logger.error(
