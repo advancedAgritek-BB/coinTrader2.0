@@ -248,7 +248,7 @@ async def analyze_symbol(
     if ML_AVAILABLE:
         try:
             regime, info = await classify_regime_async(
-                df, higher_df, notifier=notifier
+                df, higher_df, notifier=notifier, symbol=symbol
             )
         except Exception as exc:
             analysis_logger.error("classify_regime_async failed: %s", exc)
@@ -330,7 +330,7 @@ async def analyze_symbol(
         if ML_AVAILABLE:
             try:
                 labels = await classify_regime_async(
-                    df_map=vote_map, notifier=notifier
+                    df_map=vote_map, notifier=notifier, symbol=symbol
                 )
             except Exception as exc:
                 analysis_logger.error(
