@@ -7,12 +7,15 @@ import contextlib
 
 from .logger import LOG_DIR, setup_logger
 from crypto_bot.utils.eval_guard import eval_gate
+
 try:
     from .symbol_pre_filter import filter_symbols  # legacy dependency
 except Exception:
     # Safe default: return the list unchanged when pre-filter module isn't present
     def filter_symbols(symbols):
         return symbols
+
+
 from .telemetry import telemetry
 from .token_registry import TOKEN_MINTS
 from .market_loader import _is_valid_base_token
@@ -23,6 +26,7 @@ def fix_symbol(sym: str) -> str:
     if not isinstance(sym, str):
         return sym
     return sym.replace("XBT/", "BTC/").replace("XBT", "BTC")
+
 
 logger = setup_logger("bot", LOG_DIR / "bot.log")
 pipeline_logger = logging.getLogger("pipeline")
@@ -35,6 +39,7 @@ _LAST_INVALIDATION_TS = 0.0
 _INVALIDATION_DEBOUNCE_SEC = 10.0
 _AUTO_FALLBACK_WARNED = False
 _INVALIDATION_TASK: asyncio.Task | None = None
+_PREVIOUSLY_LOADED_STRATEGIES = False
 
 
 def _apply_invalidation(ts: float | None = None) -> None:
@@ -48,7 +53,7 @@ def _apply_invalidation(ts: float | None = None) -> None:
 
 def invalidate_symbol_cache() -> None:
     """Clear cached symbols and reset refresh timestamp."""
-    global _INVALIDATION_TASK
+    global _INVALIDATION_TASK, _PREVIOUSLY_LOADED_STRATEGIES
     with _CACHE_INVALIDATION_LOCK:
         now = time.time()
         if now - _LAST_INVALIDATION_TS < _INVALIDATION_DEBOUNCE_SEC:
@@ -63,11 +68,18 @@ def invalidate_symbol_cache() -> None:
             evaluator = None
 
         if evaluator is None or not getattr(evaluator, "strategies", None):
-            logger.info(
-                "No strategies loaded; proceeding with cache invalidation immediately."
-            )
+            if _PREVIOUSLY_LOADED_STRATEGIES:
+                logger.warning(
+                    "Strategies previously loaded but now missing; proceeding with cache invalidation immediately."
+                )
+            else:
+                logger.debug(
+                    "No strategies loaded yet; proceeding with cache invalidation immediately."
+                )
             _apply_invalidation(now)
             return
+
+        _PREVIOUSLY_LOADED_STRATEGIES = True
 
         if eval_gate.is_busy():
             logger.info("Deferring cache invalidation until after evaluation.")
@@ -108,7 +120,9 @@ async def _deferred_invalidation(
     _apply_invalidation(ts)
 
 
-async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]], list[str]]:
+async def get_filtered_symbols(
+    exchange, config
+) -> tuple[list[tuple[str, float]], list[str]]:
     """Return CEX symbols plus onchain symbols.
 
     Results are cached for ``symbol_refresh_minutes`` minutes to avoid
@@ -120,10 +134,7 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
     now = time.time()
     sf = config.get("symbol_filter", {})
 
-    if (
-        _cached_symbols is not None
-        and now - _last_refresh < refresh_m * 60
-    ):
+    if _cached_symbols is not None and now - _last_refresh < refresh_m * 60:
         pipeline_logger.info(
             "discovered_cex=%d discovered_onchain=%d",
             len(_cached_symbols[0]),
@@ -234,7 +245,9 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
                 filter_symbols, exchange, [fallback], config
             )
         onchain_syms.extend([s for s, _ in extra_onchain])
-        skipped_fb = telemetry.snapshot().get("scan.symbols_skipped", 0) - skipped_before
+        skipped_fb = (
+            telemetry.snapshot().get("scan.symbols_skipped", 0) - skipped_before
+        )
 
         if not check:
             logger.warning(
@@ -295,7 +308,7 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
         else:
             raise RuntimeError(
                 f"Universe is empty (mode={mode}). Check on-chain metadata provider and liquidity filters."
-    )
+            )
 
     return scored, onchain_syms
 
