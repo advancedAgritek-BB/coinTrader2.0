@@ -131,8 +131,12 @@ def too_hot(symbol: str, max_funding_rate: float) -> bool:
 
 
 # Keep legacy import path working for existing callers
-def calc_atr(df: pd.DataFrame, period: int = 14):
-    """Compatibility wrapper exposing :func:`calc_atr` under the old import."""
+def calc_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """Compatibility wrapper returning an ATR series for backward compatibility.
+
+    Exposes :func:`calc_atr` under the historical import while mirroring the
+    original return type.
+    """
 
     return _calc_atr(df, period=period)
 
