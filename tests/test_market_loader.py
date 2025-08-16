@@ -429,7 +429,7 @@ def test_load_ohlcv_parallel_skips_unsupported_symbol(monkeypatch, caplog):
     )
 
 
-class DummyWSEchange:
+class DummyWSOverrideExchange:
     has = {"fetchOHLCV": True}
 
     async def watchOHLCV(self, symbol, timeframe="1h", limit=100, **kwargs):
@@ -454,7 +454,7 @@ class DummyWSExceptionExchange:
 
 
 def test_load_ohlcv_parallel_websocket_overrides_fetch():
-    ex = DummyWSEchange()
+    ex = DummyWSOverrideExchange()
     result = asyncio.run(
         load_ohlcv_parallel(
             ex,
@@ -471,7 +471,7 @@ def test_load_ohlcv_parallel_websocket_overrides_fetch():
 
 @pytest.mark.skip(reason="Websocket support removed")
 def test_load_ohlcv_parallel_websocket_force_history():
-    ex = DummyWSEchange()
+    ex = DummyWSOverrideExchange()
     result = asyncio.run(
         load_ohlcv_parallel(
             ex,

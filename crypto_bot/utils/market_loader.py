@@ -276,7 +276,6 @@ async def fetch_ohlcv_block(exchange_id: str, bases: list[str], timeframe: str, 
                     logger.debug(f"No candles returned for {symbol} @ {timeframe}")
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
             except Exception as e:  # pragma: no cover - network errors
                 logger.warning(
                     f"fetch_ohlcv failed for {symbol} @ {timeframe}: {e!r}"
@@ -1761,11 +1760,7 @@ async def fetch_dex_ohlcv(
         return None
 
 
-# --- Back-compat: GeckoTerminal OHLCV wrapper using CCXT (real fetch, no stubs) ---
 async def fetch_geckoterminal_ohlcv(
-
-
-def fetch_geckoterminal_ohlcv(
     symbol: str,
     timeframe: str = "1h",
     since: Optional[int] = None,
@@ -1777,8 +1772,11 @@ def fetch_geckoterminal_ohlcv(
         fetch_fn = getattr(exchange, "fetch_ohlcv")
         if asyncio.iscoroutinefunction(fetch_fn):
             return await fetch_fn(symbol, timeframe=timeframe, since=since, limit=limit)
-        return await asyncio.to_thread(
-            fetch_fn, symbol, timeframe, since, limit
+        return await asyncio.to_thread(fetch_fn, symbol, timeframe, since, limit)
+
+    if ccxt is None:
+        raise RuntimeError(
+            "ccxt is required for OHLCV fetching. Install ccxt or pass an exchange instance."
         )
 
     ex_name = os.environ.get("EXCHANGE", "kraken").lower()
@@ -1795,51 +1793,11 @@ def fetch_geckoterminal_ohlcv(
                 f"Skipping {base}: no listed market on {ex_name} for quotes {allowed}"
             )
             return []
-        symbol = resolved
-        if asyncio.iscoroutinefunction(ex.fetch_ohlcv):
-            return await ex.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit)
-        return await asyncio.to_thread(
-            ex.fetch_ohlcv, symbol, timeframe, since, limit
+        return await ex.fetch_ohlcv(
+            resolved, timeframe=timeframe, since=since, limit=limit
         )
     finally:
         await _safe_exchange_close(ex, where=f"{ex_name}:{timeframe}")
-    """
-    Compatibility wrapper for older code paths that expected a GeckoTerminal OHLCV loader.
-    This uses CCXT to fetch OHLCV from the active exchange (or the provided `exchange`).
-    Returns CCXT-standard rows: [timestamp_ms, open, high, low, close, volume].
-    """
-
-    async def _run() -> List[List[float]]:
-        if exchange is not None and hasattr(exchange, "fetch_ohlcv"):
-            if inspect.iscoroutinefunction(exchange.fetch_ohlcv):
-                return await exchange.fetch_ohlcv(
-                    symbol, timeframe=timeframe, since=since, limit=limit
-                )
-            return await asyncio.to_thread(
-                exchange.fetch_ohlcv, symbol, timeframe, since, limit
-            )
-
-        if ccxt is None:
-            raise RuntimeError(
-                "ccxt is required for OHLCV fetching. Install ccxt or pass an exchange instance."
-            )
-
-        ex_name = os.environ.get("EXCHANGE", "kraken").lower()
-        ex_cls = getattr(ccxt, ex_name, None) or getattr(ccxt, "kraken")
-        ex = ex_cls({"enableRateLimit": True})
-        try:
-            return await ex.fetch_ohlcv(
-                symbol, timeframe=timeframe, since=since, limit=limit
-            )
-        finally:
-            await _safe_exchange_close(ex, where=f"{ex_name}:{timeframe}")
-
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(_run())
-    else:
-        return loop.create_task(_run())
 
 
 async def update_ohlcv_cache(
