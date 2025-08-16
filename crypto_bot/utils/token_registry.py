@@ -68,12 +68,16 @@ __all__ = [
     "to_base_units",
     "refresh_mints",
     "set_token_mints",
+    "add_manual_override",
     "get_mint_from_gecko",
     "fetch_from_helius",
 ]
 
 
-_MISSING_MINT_LOGGED: set[str] = set()
+# Track tokens that have already produced a missing mint warning so we do not
+# repeatedly log or re-query external services for them.  This avoids excessive
+# log spam and unnecessary network requests for permanently unknown symbols.
+_WARNED_TOKENS: set[str] = set()
 # Prime startup log handled in helius_client
 
 
@@ -343,6 +347,21 @@ def set_token_mints(mapping: dict[str, str]) -> None:
         pass
 
 
+def add_manual_override(symbol: str, mint: str) -> None:
+    """Add a manual mint override supplied by the user.
+
+    This updates :data:`MANUAL_OVERRIDES` and :data:`TOKEN_MINTS` and removes the
+    token from the warned cache so subsequent lookups will use the provided
+    mapping.
+    """
+
+    sym = str(symbol).upper()
+    TOKEN_MINTS[sym] = mint
+    MANUAL_OVERRIDES[sym] = mint
+    _WARNED_TOKENS.discard(sym)
+    _write_cache()
+
+
 async def get_mint_from_gecko(base: str) -> str | None:
     """Return Solana mint address for ``base`` using GeckoTerminal.
 
@@ -353,6 +372,8 @@ async def get_mint_from_gecko(base: str) -> str | None:
     base_upper = base.upper()
     if base_upper in TOKEN_MINTS:
         return TOKEN_MINTS[base_upper]
+    if base_upper in _WARNED_TOKENS:
+        return None
 
     from urllib.parse import quote_plus
 
@@ -425,9 +446,10 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
             mints.append(mint)
             mint_to_symbol[mint] = sym
         else:
-            if sym not in _MISSING_MINT_LOGGED:
-                logger.info("No mint mapping for %s", sym)
-                _MISSING_MINT_LOGGED.add(sym)
+            if sym in _WARNED_TOKENS:
+                continue
+            logger.warning("No mint mapping for %s", sym)
+            _WARNED_TOKENS.add(sym)
 
     if not mints:
         return result
