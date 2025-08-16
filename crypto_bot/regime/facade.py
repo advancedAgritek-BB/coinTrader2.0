@@ -4,18 +4,17 @@ from typing import Any
 
 from .registry import load_latest_regime
 
-# Cache loaded models keyed by trading symbol. This avoids repeated downloads
-# or deserialisation work for callers that invoke ``predict`` multiple times
-# for the same asset.
-_cache: dict[str, tuple[Any, dict]] = {}
+# Cache loaded models keyed by trading symbol to avoid repeated downloads or
+# deserialisation work for callers that invoke ``predict`` multiple times for
+# the same asset.
+_cache: dict[str, Any] = {}
 
 
-def _get_model(symbol: str):
+def _get_model(symbol: str) -> Any:
     """Return a cached model for ``symbol`` or load it if missing."""
     if symbol not in _cache:
-        model, meta = load_latest_regime(symbol)
-        _cache[symbol] = (model, meta)
-    return _cache[symbol][0]
+        _cache[symbol] = load_latest_regime(symbol)
+    return _cache[symbol]
 
 
 def predict(features_df, symbol: str = "BTCUSDT"):
