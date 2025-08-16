@@ -45,20 +45,31 @@ pipeline_logger = logging.getLogger("pipeline")
 
 # Module-level placeholders populated once internal modules are loaded in ``main``
 
+
 def build_priority_queue(scores):
     return deque(
         sym for sym, _ in sorted(scores, key=lambda x: x[1], reverse=True)
     )  # type: ignore
+
+
 get_solana_new_tokens = None  # type: ignore
 get_filtered_symbols = None  # type: ignore
+
+
 async def fetch_from_helius(*_a, **_k):
     return {}
+
+
 from crypto_bot.utils import symbol_utils
+
 fix_symbol = symbol_utils.fix_symbol
 calc_atr = None  # type: ignore
 
+
 def timeframe_seconds(*_a, **_k) -> int:
     return 0  # type: ignore
+
+
 maybe_refresh_model = None  # type: ignore
 registry = None  # type: ignore
 fetch_geckoterminal_ohlcv = None  # type: ignore
@@ -76,15 +87,20 @@ send_test_message = None  # type: ignore
 log_balance = None  # type: ignore
 get_exchange = None  # type: ignore
 load_kraken_symbols = None  # type: ignore
+
+
 def cooldown_configure(*_a, **_k) -> None:  # pragma: no cover - placeholder
     pass
+
 
 update_ohlcv_cache = None  # type: ignore
 update_multi_tf_ohlcv_cache = None  # type: ignore
 update_regime_tf_cache = None  # type: ignore
 
+
 def market_loader_configure(*_a, **_k) -> None:  # pragma: no cover - placeholder
     pass
+
 
 fetch_order_book_async = None  # type: ignore
 WS_OHLCV_TIMEOUT = None  # type: ignore
@@ -162,12 +178,20 @@ ENV_PATH = CONFIG_DIR / ".env"
 USER_CONFIG_PATH = CONFIG_DIR / "user_config.yaml"
 
 
-def _load_env(path: Path = ENV_PATH) -> dict[str, str]:
+def _norm(v: Any):
+    if v is None:
+        return None
+    if isinstance(v, str) and v.strip().lower() in {"", "none", "null"}:
+        return None
+    return v
+
+
+def _load_env(path: Path = ENV_PATH) -> dict[str, str | None]:
     """Load environment variables from ``path`` into ``os.environ``."""
-    env = dotenv_values(path)
+    env = {k: _norm(v) for k, v in dotenv_values(path).items()}
     for key, value in env.items():
         if key not in os.environ and value is not None:
-            os.environ[key] = value
+            os.environ[key] = str(value)
     return env
 
 
@@ -180,12 +204,14 @@ def _read_yaml(path: Path) -> dict:
         return {}
 
 
-def _has_env(env: dict[str, str], key: str) -> bool:
+def _has_env(env: dict[str, str | None], key: str) -> bool:
     """Return ``True`` if ``key`` exists in ``env`` or ``os.environ``."""
     return bool(env.get(key) or os.getenv(key))
 
 
-def _needs_wallet_setup(env: dict[str, str], cfg_path: Path = USER_CONFIG_PATH) -> bool:
+def _needs_wallet_setup(
+    env: dict[str, str | None], cfg_path: Path = USER_CONFIG_PATH
+) -> bool:
     """Determine whether wallet configuration is missing credentials."""
     cfg = _read_yaml(cfg_path) if cfg_path.exists() else {}
     has_api = any(
@@ -213,9 +239,7 @@ def _run_wallet_manager() -> None:
 def _ensure_user_setup() -> None:
     """Ensure required credentials exist or launch the wallet setup wizard."""
     _load_env()
-    if USER_CONFIG_PATH.exists() and all(
-        os.getenv(var) for var in REQUIRED_ENV_VARS
-    ):
+    if USER_CONFIG_PATH.exists() and all(os.getenv(var) for var in REQUIRED_ENV_VARS):
         return
     _run_wallet_manager()
     _load_env()
@@ -596,7 +620,9 @@ def _load_config_file() -> dict:
         logger.info("Loading config from %s", CONFIG_PATH)
         data = yaml.safe_load(f) or {}
     trading_cfg = data.get("trading", {}) or {}
-    exchange_id = data.get("exchange") or trading_cfg.get("exchange") or os.getenv("EXCHANGE")
+    exchange_id = (
+        data.get("exchange") or trading_cfg.get("exchange") or os.getenv("EXCHANGE")
+    )
     timeframes = data.get("timeframes") or trading_cfg.get("timeframes")
     trading_mode = data.get("execution_mode") or trading_cfg.get("mode")
     allowed_quotes = trading_cfg.get("allowed_quotes", [])
@@ -972,7 +998,9 @@ async def initial_scan(
                     limit=deep_limit,
                     start_since=history_since,
                     use_websocket=False,
-                    force_websocket_history=config.get("force_websocket_history", False),
+                    force_websocket_history=config.get(
+                        "force_websocket_history", False
+                    ),
                     max_concurrent=config.get("max_concurrent_ohlcv"),
                     notifier=notifier,
                     priority_queue=symbol_priority_queue,
@@ -987,7 +1015,9 @@ async def initial_scan(
                     limit=scan_limit,
                     start_since=lookback_since,
                     use_websocket=False,
-                    force_websocket_history=config.get("force_websocket_history", False),
+                    force_websocket_history=config.get(
+                        "force_websocket_history", False
+                    ),
                     max_concurrent=config.get("max_concurrent_ohlcv"),
                     notifier=notifier,
                     df_map=state.df_cache,
@@ -1098,9 +1128,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
     active_candidates.extend([("BTC/USDT", 10.0), ("SOL/USDC", 10.0)])
 
     symbols = active_candidates
-    solana_tokens: list[str] = (
-        list(onchain_syms) if resolved_mode != "cex" else []
-    )
+    solana_tokens: list[str] = list(onchain_syms) if resolved_mode != "cex" else []
     sol_cfg = ctx.config.get("solana_scanner", {})
 
     regime = "unknown"
@@ -1172,7 +1200,9 @@ async def fetch_candidates(ctx: BotContext) -> None:
         if fs_cfg.get("enabled"):
             follow_size = fs_cfg.get("followup_batch_size", base_size_cfg)
             if not symbol_priority_queue:
-                seeds = symbol_utils.select_seed_symbols(symbols, ctx.exchange, ctx.config)
+                seeds = symbol_utils.select_seed_symbols(
+                    symbols, ctx.exchange, ctx.config
+                )
                 rest_scores = [(s, sc) for s, sc in symbols if s not in seeds]
                 rest_queue = list(build_priority_queue(rest_scores))
                 ctx._fast_start_batches = [
@@ -1184,9 +1214,8 @@ async def fetch_candidates(ctx: BotContext) -> None:
                     logger.info("OHLCV[1m] warmup met for %s → enqueue", sym)
                 base_size = len(seeds) if seeds else follow_size
             else:
-                if (
-                    len(symbol_priority_queue) < follow_size
-                    and getattr(ctx, "_fast_start_batches", [])
+                if len(symbol_priority_queue) < follow_size and getattr(
+                    ctx, "_fast_start_batches", []
                 ):
                     symbol_priority_queue.extend(ctx._fast_start_batches.pop(0))
                 base_size = follow_size
@@ -1203,9 +1232,8 @@ async def fetch_candidates(ctx: BotContext) -> None:
             enqueue_solana_tokens(solana_tokens)
 
         batch_size = int(base_size * volatility_factor)
-        if (
-            len(symbol_priority_queue) < batch_size
-            and (not fs_cfg.get("enabled") or not getattr(ctx, "_fast_start_batches", []))
+        if len(symbol_priority_queue) < batch_size and (
+            not fs_cfg.get("enabled") or not getattr(ctx, "_fast_start_batches", [])
         ):
             symbol_priority_queue.extend(build_priority_queue(symbols))
 
@@ -1516,7 +1544,10 @@ async def enrich_with_pyth(ctx: BotContext) -> None:
                 feed_id = None
                 for item in feeds:
                     attrs = item.get("attributes", {})
-                    if attrs.get("base") == base and attrs.get("quote_currency") == "USD":
+                    if (
+                        attrs.get("base") == base
+                        and attrs.get("quote_currency") == "USD"
+                    ):
                         feed_id = item.get("id")
                         break
                 if not feed_id:
@@ -2522,7 +2553,7 @@ async def _main_impl() -> MainResult:
         max_concurrent=config.get("max_concurrent_ohlcv"),
         gecko_limit=config.get("gecko_limit"),
     )
-    secrets = dotenv_values(ENV_PATH)
+    secrets = {k: _norm(v) for k, v in (dotenv_values(ENV_PATH) or {}).items()}
     flat_cfg = _flatten_config(config)
     for key, val in secrets.items():
         if key in flat_cfg:
@@ -2536,7 +2567,31 @@ async def _main_impl() -> MainResult:
                 logger.info("Using %s from .env (matches config.yaml)", key)
         else:
             logger.info("Setting %s from .env", key)
-    os.environ.update(secrets)
+
+    # Apply secrets into the environment safely (skip None; coerce to str)
+    def _safe_env_update(mapping, logger):
+        if not isinstance(mapping, dict):
+            logger.warning(
+                "Unexpected secrets type %s; ignoring.", type(mapping).__name__
+            )
+            return
+        skipped = []
+        applied = 0
+        for k, v in mapping.items():
+            if v is None:
+                skipped.append(k)
+                continue
+            os.environ[str(k)] = str(v)
+            applied += 1
+        if skipped:
+            logger.warning(
+                "Skipping %d env vars with None values: %s",
+                len(skipped),
+                ", ".join(skipped),
+            )
+        logger.info("Applied %d env vars from secrets.", applied)
+
+    _safe_env_update(secrets, logger)
 
     user = load_or_create(interactive=False)
 
@@ -2584,9 +2639,7 @@ async def _main_impl() -> MainResult:
         try:
             await send_test_message(notifier.token, notifier.chat_id, "Bot started")
         except Exception:
-            logger.warning(
-                "Telegram test message failed; check your token and chat ID"
-            )
+            logger.warning("Telegram test message failed; check your token and chat ID")
 
     # allow user-configured exchange to override YAML setting
     if user.get("exchange"):
@@ -2754,8 +2807,7 @@ async def _main_impl() -> MainResult:
     wallet: Wallet | None = None
     if config.get("execution_mode") == "dry_run":
         start_bal = float(
-            os.getenv("PAPER_BALANCE")
-            or config.get("paper_balance", 1000.0)
+            os.getenv("PAPER_BALANCE") or config.get("paper_balance", 1000.0)
         )
         wallet = Wallet(
             start_bal,
@@ -2891,8 +2943,12 @@ async def _main_impl() -> MainResult:
     ctx.paper_wallet = wallet
     ctx.position_guard = position_guard
     ctx.balance = await fetch_and_log_balance(exchange, wallet, config)
+
     async def _eval_symbol(symbol: str, data: dict) -> dict:
-        df_map = {tf: ctx.df_cache.get(tf, {}).get(symbol) for tf in data.get("timeframes", [])}
+        df_map = {
+            tf: ctx.df_cache.get(tf, {}).get(symbol)
+            for tf in data.get("timeframes", [])
+        }
         res = await analyze_symbol(
             symbol,
             df_map,
@@ -2992,7 +3048,6 @@ async def _main_impl() -> MainResult:
                 len(getattr(ctx, "current_batch", []) or []),
             )
             await asyncio.sleep(config.get("loop_interval_minutes", 1) * 60)
-
 
     except asyncio.CancelledError:
         stop_reason = "external signal"
@@ -3137,7 +3192,11 @@ async def main() -> None:
         sniper_solana,
         start_runner,
     )
-    from crypto_bot.utils.symbol_utils import get_filtered_symbols, fix_symbol, symbol_cache_guard
+    from crypto_bot.utils.symbol_utils import (
+        get_filtered_symbols,
+        fix_symbol,
+        symbol_cache_guard,
+    )
     from crypto_bot.utils import symbol_utils
     from crypto_bot.utils.metrics_logger import log_cycle as log_cycle_metrics
     from crypto_bot.paper_wallet import PaperWallet  # backward compatibility
