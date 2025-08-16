@@ -41,7 +41,7 @@ def test_optimize_strategies_writes_best_params(tmp_path, monkeypatch):
         "optimization": {
             "enabled": True,
             "parameter_ranges": {
-                "trend": {"stop_loss": [0.01, 0.02], "take_profit": [0.02, 0.03]}
+                "trend_bot": {"stop_loss": [0.01, 0.02], "take_profit": [0.02, 0.03]}
             },
         },
     }
@@ -55,6 +55,6 @@ def test_optimize_strategies_writes_best_params(tmp_path, monkeypatch):
     saved = json.loads(out_file.read_text())
 
     assert params == saved
-    assert "trend" in saved
-    assert saved["trend"]["stop_loss_pct"] == 0.01
-    assert saved["trend"]["take_profit_pct"] == 0.02
+    assert "trend_bot" in saved
+    assert saved["trend_bot"]["stop_loss_pct"] == 0.01
+    assert saved["trend_bot"]["take_profit_pct"] == 0.02

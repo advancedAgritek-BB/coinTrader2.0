@@ -34,7 +34,7 @@ def test_positions_endpoint(tmp_path, monkeypatch):
 
 
 def test_strategy_performance_endpoint(tmp_path, monkeypatch):
-    data = {"trend": {"bot": [{"symbol": "BTC", "pnl": 1}]}}
+    data = {"trend_bot": {"bot": [{"symbol": "BTC", "pnl": 1}]}}
     f = tmp_path / "perf.json"
     f.write_text(json.dumps(data))
     monkeypatch.setattr(api, "PERFORMANCE_FILE", f)

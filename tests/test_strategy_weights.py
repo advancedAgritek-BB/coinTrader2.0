@@ -8,24 +8,24 @@ from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 def test_compute_strategy_weights_normalizes(tmp_path):
     file = tmp_path / "pnl.csv"
     data = [
-        {"strategy": "trend", "pnl": 1},
-        {"strategy": "trend", "pnl": -0.5},
-        {"strategy": "grid", "pnl": 2},
-        {"strategy": "grid", "pnl": 2},
+        {"strategy": "trend_bot", "pnl": 1},
+        {"strategy": "trend_bot", "pnl": -0.5},
+        {"strategy": "grid_bot", "pnl": 2},
+        {"strategy": "grid_bot", "pnl": 2},
     ]
     pd.DataFrame(data).to_csv(file, index=False)
     weights = compute_strategy_weights(file, scoring_method="sharpe")
-    assert set(weights.keys()) == {"trend", "grid"}
+    assert set(weights.keys()) == {"trend_bot", "grid_bot"}
     total = sum(weights.values())
     assert abs(total - 1.0) < 1e-6
-    assert weights["trend"] > weights["grid"]
+    assert weights["trend_bot"] > weights["grid_bot"]
 
 
 def test_risk_manager_updates_tracker():
     cfg = RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
     rm = RiskManager(cfg)
-    rm.update_allocation({"trend": 0.6, "grid": 0.4})
-    assert rm.capital_tracker.allocation == {"trend": 0.6, "grid": 0.4}
+    rm.update_allocation({"trend_bot": 0.6, "grid_bot": 0.4})
+    assert rm.capital_tracker.allocation == {"trend_bot": 0.6, "grid_bot": 0.4}
 
 
 def test_compute_drawdown_basic():
