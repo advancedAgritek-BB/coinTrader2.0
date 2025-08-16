@@ -1096,9 +1096,18 @@ async def fetch_candidates(ctx: BotContext) -> None:
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("Solana scanner failed: %s", exc)
 
+    total_candidates = len(symbols)
     symbols = [(s, sc) for s, sc in symbols if s not in no_data_symbols]
     ctx.active_universe = [s for s, _ in symbols]
     ctx.resolved_mode = resolved_mode
+
+    logger.info(
+        "Symbol summary: total=%d selected=%d filtered=%d first=%s",
+        total_candidates,
+        len(symbols),
+        total_candidates - len(symbols),
+        [s for s, _ in symbols[:5]],
+    )
 
     symbol_names = [s for s, _ in symbols]
     avg_atr = compute_average_atr(
@@ -2935,8 +2944,14 @@ async def _main_impl() -> MainResult:
         ctx.timing = await runner.run(ctx)
 
     try:
+        logger.info("Continuous evaluation loop started")
         while True:
             await run_evaluation_cycle()
+            logger.info(
+                "Active universe: %d symbols, current batch: %d symbols",
+                len(getattr(ctx, "active_universe", []) or []),
+                len(getattr(ctx, "current_batch", []) or []),
+            )
             await asyncio.sleep(config.get("loop_interval_minutes", 1) * 60)
 
 
@@ -3158,6 +3173,16 @@ async def main() -> None:
             if notifier:
                 notifier.notify(f"Bot shutting down: {reason}")
             logger.info("Bot shutting down: %s", reason)
+        msg = f"Bot shutting down: {reason}"
+        logger.info(msg)
+        if notifier:
+            notifier.notify(msg)
+        try:
+            await shutdown()
+        except Exception as exc:  # pragma: no cover - cleanup error
+            logger.exception("Error during shutdown: %s", exc)
+        finally:
+            logger.info("Shutdown complete")
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution
