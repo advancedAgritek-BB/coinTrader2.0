@@ -1,6 +1,6 @@
 # === trading/base ===
 trading:
-  mode: dry_run           # cex | onchain | auto | dry_run
+  mode: cex           # cex | onchain | auto | dry_run
   exchange: kraken
   allowed_quotes: [USD, USDT, USDC, EUR]
   min_ticker_volume: 10000
@@ -319,22 +319,7 @@ ohlcv_timeout: 5
 redis_url: null
 onchain_default_quote: USDC
 onchain_min_volume_usd: 5000
-onchain_symbols:
-- SOL/USDC
-- BONK/USDC
-- AI16Z/USDC
-- BERA/USDC
-- EUROP/USDC
-- FARTCOIN/USDC
-- RLUSD/USDC
-- USDG/USDC
-- VIRTUAL/USDC
-- XMR/USDC
-- MELANIA/USDC
-- PENGU/USDC
-- USDR/USDC
-- USTC/USDC
-- TRUMP/USDC
+onchain_symbols: []
 optimization:
   enabled: true
   interval_days: 0.1
@@ -485,7 +470,7 @@ solana_scanner:
     bitquery: YOUR_KEY
     moralis: YOUR_KEY
     lunarcrush_api_key: YOUR_KEY
-  enabled: true
+  enabled: false
   gecko_search: true
   interval_minutes: 0.1
   max_tokens_per_scan: 50
