@@ -21,6 +21,7 @@ from crypto_bot.strategy import (
     micro_scalp_bot,
     momentum_bot,
     sniper_bot,
+    sniper_solana,
     solana_scalping,
     trend_bot,
 )
@@ -82,34 +83,27 @@ def _register(module, *names: str) -> None:
     for name in names:
         _STRATEGY_FN_MAP[name] = fn
 
-
-_register(trend_bot, "trend_bot")
-_register(grid_bot, "grid_bot")
-_register(sniper_bot, "sniper_bot")
-_register(dex_scalper, "dex_scalper")
-_register(mean_bot, "mean_bot")
-_register(breakout_bot, "breakout_bot")
-_register(micro_scalp_bot, "micro_scalp_bot")
-_register(sniper_bot, "sniper", "sniper_bot")
-_register(dex_scalper, "dex_scalper", "dex_scalper_bot")
-_register(mean_bot, "mean_bot")
-_register(breakout_bot, "breakout_bot")
-_register(micro_scalp_bot, "micro_scalp_bot")
-_register(momentum_bot, "momentum", "momentum_bot")
-_register(sniper_bot, "sniper_bot")
-_register(dex_scalper, "dex_scalper")
-_register(mean_bot, "mean_bot")
-_register(breakout_bot, "breakout_bot")
-_register(micro_scalp_bot, "micro_scalp_bot")
-_register(momentum_bot, "momentum_bot")
-_register(lstm_bot, "lstm_bot")
-_register(bounce_scalper, "bounce_scalper")
-_register(flash_crash_bot, "flash_crash_bot")
-_register(dip_hunter, "dip_hunter")
-_register(solana_scalping, "solana_scalping")
-_register(meme_wave_bot, "meme_wave_bot")
-_register(dca_bot, "dca_bot")
-_register(cross_chain_arb_bot, "cross_chain_arb_bot")
+# Register each strategy once under its canonical name
+for module, name in [
+    (trend_bot, "trend_bot"),
+    (grid_bot, "grid_bot"),
+    (sniper_solana, "sniper_solana"),
+    (sniper_bot, "sniper_bot"),
+    (dex_scalper, "dex_scalper"),
+    (mean_bot, "mean_bot"),
+    (breakout_bot, "breakout_bot"),
+    (micro_scalp_bot, "micro_scalp_bot"),
+    (momentum_bot, "momentum_bot"),
+    (lstm_bot, "lstm_bot"),
+    (bounce_scalper, "bounce_scalper"),
+    (flash_crash_bot, "flash_crash_bot"),
+    (dip_hunter, "dip_hunter"),
+    (solana_scalping, "solana_scalping"),
+    (meme_wave_bot, "meme_wave_bot"),
+    (dca_bot, "dca_bot"),
+    (cross_chain_arb_bot, "cross_chain_arb_bot"),
+]:
+    _register(module, name)
 
 
 def get_strategy_by_name(
