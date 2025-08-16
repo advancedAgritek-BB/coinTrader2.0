@@ -94,10 +94,9 @@ class StreamEvaluationEngine:
         enabled = getattr(getattr(self.cfg, "strategies", None), "enabled", [])
         self.strategies = load_strategies(mode, enabled)
         if not self.strategies:
-            logger.error(
-                "Aborting evaluator start: 0 strategies loaded."
-            )
-            return
+            msg = "Aborting evaluator start: 0 strategies loaded."
+            logger.error(msg)
+            raise RuntimeError(msg)
 
         if self.data is None:
             self.data = SimpleNamespace(ready=lambda symbol, tf: True)

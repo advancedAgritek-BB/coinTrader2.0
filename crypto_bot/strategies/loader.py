@@ -24,12 +24,25 @@ def load_strategies(mode: str, names: list[str]) -> list:
 
         try:
             m = import_module(f"crypto_bot.strategies.{mod_name}")
-            Strategy = getattr(m, "Strategy", None)
-            if Strategy is None:
-                logger.warning(f"Strategy module {mod_name} has no `Strategy` class; skipping.")
+        except ModuleNotFoundError:
+            try:
+                m = import_module(f"crypto_bot.strategy.{mod_name}")
+            except ModuleNotFoundError:
+                logger.error("Strategy %s not found", mod_name)
                 continue
-            loaded.append(Strategy())
-            logger.info(f"Loaded strategy: {mod_name}")
+            except Exception as e:
+                logger.error(f"Failed to import strategy {mod_name}: {e!r}")
+                continue
         except Exception as e:
             logger.error(f"Failed to import strategy {mod_name}: {e!r}")
+            continue
+
+        Strategy = getattr(m, "Strategy", None)
+        if Strategy is None:
+            logger.warning(
+                f"Strategy module {mod_name} has no `Strategy` class; skipping."
+            )
+            continue
+        loaded.append(Strategy())
+        logger.info(f"Loaded strategy: {mod_name}")
     return loaded
