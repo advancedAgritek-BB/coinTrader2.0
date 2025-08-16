@@ -381,7 +381,7 @@ safety:
   max_error_count: 10
   restart_on_error: true
 scalp_timeframe: 1m
-scan_deep_top: 100
+scan_deep_top: 30
 scan_in_background: true
 scan_lookback_limit: 700
 scan_markets: true
@@ -592,8 +592,8 @@ backfill_days:
   '1m': 2
   '5m': 3
 warmup_candles:
-  '1m': 1000
-  '5m': 600
+  '1m': 600
+  '5m': 300
 allowed_quotes: ['USD','USDT','USDC','EUR']
 hft: true
 token_registry:

@@ -938,7 +938,8 @@ async def initial_scan(
     )
 
     tfs = sf.get("initial_timeframes", config.get("timeframes", ["1h"]))
-    tf_sec = timeframe_seconds(None, min(tfs, key=lambda t: timeframe_seconds(None, t)))
+    tfs = sorted(set(tfs) | {"1m", "5m"}, key=lambda t: timeframe_seconds(None, t))
+    tf_sec = timeframe_seconds(None, tfs[0])
     lookback_since = int(time.time() * 1000 - scan_limit * tf_sec * 1000)
 
     history_since = int((time.time() - 365 * 86400) * 1000)
@@ -961,6 +962,8 @@ async def initial_scan(
 
         async with symbol_cache_guard():
             async with OHLCV_LOCK:
+                for tf in tfs:
+                    logger.info("Starting OHLCV update for timeframe %s", tf)
                 state.df_cache = await update_multi_tf_ohlcv_cache(
                     exchange,
                     state.df_cache,
@@ -1361,13 +1364,20 @@ async def _update_caches_impl(ctx: BotContext) -> None:
         if ctx.volatility_factor > 5:
             max_concurrent = max(1, max_concurrent // 2)
 
+    tfs = sorted(
+        set(ctx.config.get("timeframes", [])) | {"1m", "5m"},
+        key=lambda t: timeframe_seconds(None, t),
+    )
+
     async with OHLCV_LOCK:
         try:
+            for tf in tfs:
+                logger.info("Starting OHLCV update for timeframe %s", tf)
             ctx.df_cache = await update_multi_tf_ohlcv_cache(
                 ctx.exchange,
                 ctx.df_cache,
                 batch,
-                ctx.config,
+                {**ctx.config, "timeframes": tfs},
                 limit=limit,
                 use_websocket=ctx.config.get("use_websocket", False),
                 force_websocket_history=ctx.config.get(
@@ -1384,11 +1394,13 @@ async def _update_caches_impl(ctx: BotContext) -> None:
             )
         except Exception as exc:
             logger.warning("WS OHLCV failed: %s - falling back to REST", exc)
+            for tf in tfs:
+                logger.info("Starting OHLCV update for timeframe %s", tf)
             ctx.df_cache = await update_multi_tf_ohlcv_cache(
                 ctx.exchange,
                 ctx.df_cache,
                 batch,
-                ctx.config,
+                {**ctx.config, "timeframes": tfs},
                 limit=limit,
                 start_since=start_since,
                 use_websocket=False,

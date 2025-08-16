@@ -45,4 +45,3 @@ torch
 stable-baselines3
 lunarcrush
 keyring
-# cointrader-trainer>=0.1.0  # optional trainer integration
