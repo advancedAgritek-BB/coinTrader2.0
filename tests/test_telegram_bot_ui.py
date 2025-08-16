@@ -2,10 +2,45 @@ import types
 import asyncio
 import json
 import pytest
-try:
-    import crypto_bot.telegram_bot_ui as telegram_bot_ui
-except Exception as exc:  # pragma: no cover - optional UI
-    pytest.skip(f"telegram bot UI unavailable: {exc}", allow_module_level=True)
+import sys
+import crypto_bot
+import crypto_bot.utils as utils_pkg
+
+# Provide a minimal stub for crypto_bot.utils.telegram to avoid optional deps
+telegram_utils = types.ModuleType("crypto_bot.utils.telegram")
+
+
+class TelegramNotifier:
+    def __init__(self, token: str, chat_id: str, *a, **k):
+        self.token = token
+        self.chat_id = chat_id
+
+    def notify(self, text: str):  # pragma: no cover - simple stub
+        return None
+
+
+def is_admin(chat_id: str) -> bool:
+    if not _admin_ids:
+        return True
+    return str(chat_id) in _admin_ids
+
+
+_admin_ids: set[str] = set()
+
+
+def set_admin_ids(admins):
+    global _admin_ids
+    _admin_ids = {str(a) for a in admins}
+
+
+telegram_utils.TelegramNotifier = TelegramNotifier
+telegram_utils.is_admin = is_admin
+telegram_utils.set_admin_ids = set_admin_ids
+
+utils_pkg.telegram = telegram_utils
+sys.modules["crypto_bot.utils.telegram"] = telegram_utils
+
+import crypto_bot.telegram_bot_ui as telegram_bot_ui
 import yaml
 from crypto_bot.telegram_bot_ui import (
     TelegramBotUI,
@@ -128,6 +163,12 @@ def make_ui(tmp_path, state, rotator=None, exchange=None, notifier=None):
         wallet="addr",
     )
     return ui, log_file
+
+
+def test_conversation_handler_no_warning(monkeypatch, tmp_path, recwarn):
+    monkeypatch.setattr("crypto_bot.telegram_bot_ui.ApplicationBuilder", DummyBuilder)
+    make_ui(tmp_path, {"running": False, "mode": "cex"})
+    assert not [w for w in recwarn if "ConversationHandler" in str(w.message)]
 
 
 def test_menu_sent_on_run(monkeypatch, tmp_path):
@@ -561,7 +602,7 @@ def test_back_to_menu_navigation(monkeypatch, tmp_path):
     ctx = DummyContext()
     cb = DummyCallbackUpdate(EDIT_TRADE_SIZE)
     r = asyncio.run(ui.edit_trade_size(cb, ctx))
-    assert r == telegram_bot_ui.EDIT_VALUE
+    assert r == telegram_bot_ui.ConversationHandler.END
 
     msg = DummyUpdate()
     msg.message.text = "0.2"
@@ -573,7 +614,7 @@ def test_back_to_menu_navigation(monkeypatch, tmp_path):
     ctx2 = DummyContext()
     cb = DummyCallbackUpdate(EDIT_MAX_TRADES)
     r = asyncio.run(ui.edit_max_trades(cb, ctx2))
-    assert r == telegram_bot_ui.EDIT_VALUE
+    assert r == telegram_bot_ui.ConversationHandler.END
 
     msg2 = DummyUpdate()
     msg2.message.text = "5"
