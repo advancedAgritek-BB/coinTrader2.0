@@ -94,6 +94,30 @@ PythConfig = None  # type: ignore
 stream_evaluator: StreamEvaluator | None = None
 
 
+def build_risk_config(config: dict, volume_ratio: float) -> RiskConfig:
+    """Construct a :class:`RiskConfig` from config sections."""
+    risk_params = {**config.get("risk", {})}
+    risk_params.update(config.get("sentiment_filter", {}))
+    risk_params.update(config.get("volatility_filter", {}))
+    risk_params["symbol"] = config.get("symbol", "")
+    risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
+    risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
+    risk_params["volume_threshold_ratio"] = config.get("risk", {}).get(
+        "volume_threshold_ratio", 0.05
+    )
+    risk_params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
+    risk_params["stop_loss_atr_mult"] = config.get("risk", {}).get(
+        "stop_loss_atr_mult", 2.0
+    )
+    risk_params["take_profit_atr_mult"] = config.get("risk", {}).get(
+        "take_profit_atr_mult", 4.0
+    )
+    risk_params["volume_ratio"] = volume_ratio
+    fields = {f.name for f in dataclasses.fields(RiskConfig)}
+    risk_params = {k: v for k, v in risk_params.items() if k in fields}
+    return RiskConfig(**risk_params)
+
+
 class BotContext:
     def __init__(self, _a=None, _b=None, _c=None, config=None):
         self.config = config or {}
@@ -501,7 +525,7 @@ async def refresh_balance(ctx: BotContext) -> float:
 
 
 def _ensure_ml(cfg: dict) -> None:
-    """Ensure ML components are ready when enabled."""
+    """Ensure ML components are ready when enabled.
 
     Raises
     ------
@@ -828,26 +852,7 @@ async def reload_config(
     )
 
     volume_ratio = 0.01 if config.get("testing_mode") else 1.0
-    risk_params = {**config.get("risk", {})}
-    risk_params.update(config.get("sentiment_filter", {}))
-    risk_params.update(config.get("volatility_filter", {}))
-    risk_params["symbol"] = config.get("symbol", "")
-    risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
-    risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
-    risk_params["volume_threshold_ratio"] = config.get("risk", {}).get(
-        "volume_threshold_ratio", 0.05
-    )
-    risk_params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
-    risk_params["stop_loss_atr_mult"] = config.get("risk", {}).get(
-        "stop_loss_atr_mult", 2.0
-    )
-    risk_params["take_profit_atr_mult"] = config.get("risk", {}).get(
-        "take_profit_atr_mult", 4.0
-    )
-    risk_params["volume_ratio"] = volume_ratio
-    fields = {f.name for f in dataclasses.fields(RiskConfig)}
-    risk_params = {k: v for k, v in risk_params.items() if k in fields}
-    risk_manager.config = RiskConfig(**risk_params)
+    risk_manager.config = build_risk_config(config, volume_ratio)
 
 
 async def _ws_ping_loop(exchange: object, interval: float) -> None:
@@ -2742,26 +2747,7 @@ async def _main_impl() -> MainResult:
             if err:
                 logger.error("Failed to notify user: %s", err)
         return MainResult(notifier, stop_reason)
-    risk_params = {**config.get("risk", {})}
-    risk_params.update(config.get("sentiment_filter", {}))
-    risk_params.update(config.get("volatility_filter", {}))
-    risk_params["symbol"] = config.get("symbol", "")
-    risk_params["trade_size_pct"] = config.get("trade_size_pct", 0.1)
-    risk_params["strategy_allocation"] = config.get("strategy_allocation", {})
-    risk_params["volume_threshold_ratio"] = config.get("risk", {}).get(
-        "volume_threshold_ratio", 0.05
-    )
-    risk_params["atr_period"] = config.get("risk", {}).get("atr_period", 14)
-    risk_params["stop_loss_atr_mult"] = config.get("risk", {}).get(
-        "stop_loss_atr_mult", 2.0
-    )
-    risk_params["take_profit_atr_mult"] = config.get("risk", {}).get(
-        "take_profit_atr_mult", 4.0
-    )
-    risk_params["volume_ratio"] = volume_ratio
-    fields = {f.name for f in dataclasses.fields(RiskConfig)}
-    risk_params = {k: v for k, v in risk_params.items() if k in fields}
-    risk_config = RiskConfig(**risk_params)
+    risk_config = build_risk_config(config, volume_ratio)
     risk_manager = RiskManager(risk_config)
 
     wallet: Wallet | None = None
