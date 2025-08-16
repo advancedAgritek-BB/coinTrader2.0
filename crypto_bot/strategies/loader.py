@@ -31,7 +31,7 @@ def load_strategies(mode: str, names: list[str] | None = None) -> list:
         strategies.append(inst)
 
     for mod_name, err in errors.items():
-        logger.error("Failed to load strategy %s: %s", mod_name, err)
+        logger.error("Failed to load strategy {}: {}", mod_name, err)
 
     return strategies
 
