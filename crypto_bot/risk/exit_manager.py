@@ -152,6 +152,7 @@ def should_exit(
                     from crypto_bot.utils.pnl_logger import log_pnl
 
                     log_pnl(
+                        order.get("regime", "unknown"),
                         strategy,
                         symbol,
                         entry,

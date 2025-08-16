@@ -190,14 +190,42 @@ class BotController:
         return f"Running: {running}, mode: {mode}"
 
     async def strategies(self) -> str:
-        if self.strategy_file.exists():
-            try:
-                data = json.loads(self.strategy_file.read_text())
-                lines = [f"{k}: {v}" for k, v in data.items()]
-                return "\n".join(lines) if lines else "(no strategies)"
-            except Exception:
-                return "Invalid strategy file"
-        return "No strategies found"
+        """Return summary of strategy performance metrics."""
+        try:
+            from .utils import perf
+
+            await _maybe_call(perf.recompute)
+        except Exception:
+            pass
+
+        if not self.strategy_file.exists():
+            return "No strategies found"
+        try:
+            data = json.loads(self.strategy_file.read_text())
+        except Exception:
+            return "Invalid strategy file"
+
+        lines = []
+        for strat, stats in data.items():
+            if isinstance(stats, dict):
+                parts = []
+                trades = stats.get("trades")
+                if trades is not None:
+                    parts.append(f"trades={trades}")
+                win = stats.get("win_rate")
+                if win is not None:
+                    parts.append(f"win_rate={win:.2f}")
+                sharpe = stats.get("sharpe")
+                if sharpe is not None:
+                    parts.append(f"sharpe={sharpe:.2f}")
+                dd = stats.get("drawdown")
+                if dd is not None:
+                    parts.append(f"drawdown={dd:.2f}")
+                line = f"{strat}: " + ", ".join(parts)
+            else:
+                line = f"{strat}: {stats}"
+            lines.append(line)
+        return "\n".join(lines) if lines else "(no strategies)"
 
     async def positions(self) -> str:
         lines = await console_monitor.trade_stats_lines(self.exchange, self.trades_file)
