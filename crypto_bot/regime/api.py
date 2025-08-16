@@ -1,5 +1,10 @@
 """Regime model API with resilient fallbacks.
 
+This module attempts to load the latest trained regime model from a
+Supabase-backed registry.  Should the registry be unavailable or the
+model fail to load/execute, a lightweight technical-analysis baseline is
+used instead.  The baseline relies solely on ``pandas``/``numpy`` and
+therefore works in minimal environments.
 This module attempts to load the latest trained regime model from Supabase via
 ``load_latest_regime``.  Should the remote retrieval or model inference fail, a
 lightweight technical-analysis baseline is used instead.  The baseline relies
@@ -9,12 +14,15 @@ solely on ``pandas``/``numpy`` and therefore works in minimal environments.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from io import BytesIO
 from typing import Literal, Optional
 
 import numpy as np
 import pandas as pd
 
+try:  # Import lazily guarded; registry may be unavailable in some envs
+    from crypto_bot.regime import registry as _registry
+except Exception:  # pragma: no cover - registry is optional
+    _registry = None
 # Regime models are retrieved from Supabase via ``load_latest_regime``.  This
 # import is intentionally lightweight; any networking or dependency issues are
 # handled within the prediction routine which falls back to the baseline
@@ -107,6 +115,11 @@ def predict(features: pd.DataFrame, symbol: str = "BTCUSDT") -> Prediction:
     returned instead.
     """
 
+    if _registry is None:  # Registry not imported or unavailable
+        return _baseline_action(features)
+
+    try:
+        model, meta = _registry.load_latest_regime(symbol)
     try:
         # ``load_latest_regime`` returns the raw model bytes and metadata that
         # includes the feature list used during training.
@@ -118,6 +131,7 @@ def predict(features: pd.DataFrame, symbol: str = "BTCUSDT") -> Prediction:
             if available:
                 features_df = features[available]
 
+        proba = model.predict_proba(features.tail(1))  # type: ignore[attr-defined]
         model = _load_model_from_bytes(blob)
         proba = model.predict_proba(features_df.tail(1))  # type: ignore[attr-defined]
         proba = getattr(proba, "ravel", lambda: proba)()
@@ -126,6 +140,11 @@ def predict(features: pd.DataFrame, symbol: str = "BTCUSDT") -> Prediction:
         mapping = {-1: "short", 0: "flat", 1: "long"}
         class_id = label_order[idx] if idx < len(label_order) else 0
         action = mapping.get(class_id, "flat")
+        score = (
+            float(proba[idx]) if hasattr(proba, "__len__") else float(proba)
+        )
+        return Prediction(action=action, score=score, meta=meta)
+    except Exception:  # pragma: no cover - registry or model issues
         score = float(proba[idx]) if hasattr(proba, "__len__") else float(proba)
         return Prediction(action=action, score=score, meta=meta)
     except Exception:  # pragma: no cover - network or model failure
