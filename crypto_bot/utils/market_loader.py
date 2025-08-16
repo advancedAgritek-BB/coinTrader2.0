@@ -7,7 +7,7 @@ import inspect
 import time
 import os
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import yaml
 import pandas as pd
 import numpy as np
@@ -132,7 +132,7 @@ MAX_RETRY_DELAY = 3600
 # Default timeout when fetching OHLCV data
 OHLCV_TIMEOUT = 60
 # Default timeout when fetching OHLCV data over WebSocket
-WS_OHLCV_TIMEOUT = 60
+WS_OHLCV_TIMEOUT = 120
 # REST requests occasionally face Cloudflare delays up to a minute
 REST_OHLCV_TIMEOUT = 90
 # Number of consecutive failures allowed before disabling a symbol
@@ -1990,6 +1990,8 @@ async def update_multi_tf_ohlcv_cache(
         clear_regime_cache = lambda *_a, **_k: None
 
     limit = int(limit)
+    if start_since is None:
+        start_since = int((datetime.utcnow() - timedelta(days=2)).timestamp() * 1000)
     # Use the limit provided by the caller
 
     # Ensure warmup candles satisfy strategy indicator lookbacks. This will

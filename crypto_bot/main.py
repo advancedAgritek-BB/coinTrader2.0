@@ -244,6 +244,8 @@ NEW_SOLANA_TOKENS: set[str] = set()
 CROSS_ARB_TASKS: set[asyncio.Task] = set()
 # Track all spawned background tasks for coordinated shutdown
 BACKGROUND_TASKS: list[asyncio.Task] = []
+# Track pending OHLCV tasks during startup
+pending_tasks: list[asyncio.Task] = []
 
 
 def register_task(task: asyncio.Task | None) -> asyncio.Task | None:
@@ -966,6 +968,8 @@ async def initial_scan(
         logger.info("Initial scan %.1f%% complete", pct)
         if notifier and config.get("telegram", {}).get("status_updates", True):
             notifier.notify(f"Initial scan {pct:.1f}% complete")
+    if pending_tasks:
+        await asyncio.gather(*pending_tasks, return_exceptions=True)
 
     return
 
@@ -1096,9 +1100,18 @@ async def fetch_candidates(ctx: BotContext) -> None:
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("Solana scanner failed: %s", exc)
 
+    total_candidates = len(symbols)
     symbols = [(s, sc) for s, sc in symbols if s not in no_data_symbols]
     ctx.active_universe = [s for s, _ in symbols]
     ctx.resolved_mode = resolved_mode
+
+    logger.info(
+        "Symbol summary: total=%d selected=%d filtered=%d first=%s",
+        total_candidates,
+        len(symbols),
+        total_candidates - len(symbols),
+        [s for s, _ in symbols[:5]],
+    )
 
     symbol_names = [s for s, _ in symbols]
     avg_atr = compute_average_atr(
@@ -2935,6 +2948,7 @@ async def _main_impl() -> MainResult:
         ctx.timing = await runner.run(ctx)
 
     try:
+        logger.info("Continuous evaluation loop started")
         while True:
             try:
                 await run_evaluation_cycle()
@@ -2946,6 +2960,13 @@ async def _main_impl() -> MainResult:
                 if stop_reason == "completed":
                     stop_reason = f"evaluation cycle failed: {exc}"
                 continue
+            await run_evaluation_cycle()
+            logger.info(
+                "Active universe: %d symbols, current batch: %d symbols",
+                len(getattr(ctx, "active_universe", []) or []),
+                len(getattr(ctx, "current_batch", []) or []),
+            )
+            await asyncio.sleep(config.get("loop_interval_minutes", 1) * 60)
 
 
     except asyncio.CancelledError:
@@ -3000,9 +3021,10 @@ def _reload_modules() -> None:
             importlib.reload(module)
 
 
-async def shutdown() -> None:
-    """Cancel and gather all running asyncio tasks."""
-    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+async def shutdown(calling_task: asyncio.Task | None = None) -> None:
+    """Cancel and gather all running asyncio tasks except ``calling_task``."""
+    caller = calling_task or asyncio.current_task()
+    tasks = [t for t in asyncio.all_tasks() if t is not caller]
     for task in tasks:
         if not task.done():
             task.cancel()
@@ -3156,10 +3178,25 @@ async def main() -> None:
             notifier.notify(f"❌ Bot stopped: {exc}")
     finally:
         logger.info("Bot shutting down")
-        await shutdown()
+        try:
+            await shutdown(asyncio.current_task())
+        except asyncio.CancelledError:
+            logger.info("Shutdown cancelled")
+            raise
+        finally:
+            if notifier:
+                notifier.notify(f"Bot shutting down: {reason}")
+            logger.info("Bot shutting down: %s", reason)
+        msg = f"Bot shutting down: {reason}"
+        logger.info(msg)
         if notifier:
-            notifier.notify(f"Bot shutting down: {reason}")
-        logger.info("Bot shutting down: %s", reason)
+            notifier.notify(msg)
+        try:
+            await shutdown()
+        except Exception as exc:  # pragma: no cover - cleanup error
+            logger.exception("Error during shutdown: %s", exc)
+        finally:
+            logger.info("Shutdown complete")
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution

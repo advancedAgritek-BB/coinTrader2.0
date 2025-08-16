@@ -42,6 +42,7 @@ def test_fetch_candidates_logs_batch(monkeypatch, caplog):
 
     assert ctx.current_batch == ["BTC/USDT"]
     assert "Current batch" in caplog.text
+    assert "Symbol summary" in caplog.text
 
 
 def test_fetch_candidates_dedupes_and_filters(monkeypatch):
