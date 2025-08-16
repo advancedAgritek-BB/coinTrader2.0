@@ -1241,7 +1241,22 @@ async def fetch_candidates(ctx: BotContext) -> None:
                 base_size = follow_size
         else:
             if not symbol_priority_queue:
-                symbol_priority_queue = build_priority_queue(symbols)
+                from crypto_bot.utils.symbol_pre_filter import liq_cache
+
+                selected_symbols = [s for s, _ in symbols]
+                volume_24h = {
+                    s: (liq_cache.get(s) or (0.0, 0.0, 0.0))[0]
+                    for s in selected_symbols
+                }
+                liquid = sorted(
+                    selected_symbols,
+                    key=lambda s: volume_24h.get(s, 0.0),
+                    reverse=True,
+                )[:150]
+                liquid_scores = [(s, sc) for s, sc in symbols if s in liquid]
+                rest_scores = [(s, sc) for s, sc in symbols if s not in liquid]
+                symbol_priority_queue = build_priority_queue(liquid_scores)
+                symbol_priority_queue.extend(build_priority_queue(rest_scores))
             base_size = base_size_cfg
 
         if onchain_syms and resolved_mode != "cex":
