@@ -5,6 +5,10 @@ Supabase-backed registry.  Should the registry be unavailable or the
 model fail to load/execute, a lightweight technical-analysis baseline is
 used instead.  The baseline relies solely on ``pandas``/``numpy`` and
 therefore works in minimal environments.
+This module attempts to load the latest trained regime model from Supabase via
+``load_latest_regime``.  Should the remote retrieval or model inference fail, a
+lightweight technical-analysis baseline is used instead.  The baseline relies
+solely on ``pandas``/``numpy`` and therefore works in minimal environments.
 """
 
 from __future__ import annotations
@@ -19,6 +23,11 @@ try:  # Import lazily guarded; registry may be unavailable in some envs
     from crypto_bot.regime import registry as _registry
 except Exception:  # pragma: no cover - registry is optional
     _registry = None
+# Regime models are retrieved from Supabase via ``load_latest_regime``.  This
+# import is intentionally lightweight; any networking or dependency issues are
+# handled within the prediction routine which falls back to the baseline
+# implementation on failure.
+from crypto_bot.regime.registry import load_latest_regime
 
 
 Action = Literal["long", "flat", "short"]
@@ -79,12 +88,30 @@ def _rsi(series: pd.Series, window: int = 14) -> pd.Series:
     return 100 - (100 / (1 + rs))
 
 
+def _load_model_from_bytes(blob: bytes):
+    """Deserialize a model from bytes.
+
+    Joblib is attempted first (if available) and falls back to the standard
+    ``pickle`` module.  Importing ``joblib`` lazily avoids mandatory
+    dependencies for callers who only rely on the baseline prediction.
+    """
+
+    try:
+        import joblib  # type: ignore
+
+        return joblib.load(BytesIO(blob))
+    except Exception:  # pragma: no cover - joblib may be missing or fail
+        import pickle
+
+        return pickle.loads(blob)
+
+
 def predict(features: pd.DataFrame, symbol: str = "BTCUSDT") -> Prediction:
     """Predict the trading regime for the provided ``features``.
 
-    Attempts to retrieve and execute the latest trained model from the
-    registry.  On any failure (registry unavailable, deserialisation issues or
-    runtime errors during prediction) a deterministic baseline action is
+    The function tries to fetch the latest trained model and its accompanying
+    metadata from Supabase via :func:`load_latest_regime`.  If any part of the
+    retrieval or model execution fails, a deterministic baseline action is
     returned instead.
     """
 
@@ -93,13 +120,20 @@ def predict(features: pd.DataFrame, symbol: str = "BTCUSDT") -> Prediction:
 
     try:
         model, meta = _registry.load_latest_regime(symbol)
+    try:
+        # ``load_latest_regime`` returns the raw model bytes and metadata that
+        # includes the feature list used during training.
+        blob, meta = load_latest_regime(symbol)
         feat_list = meta.get("feature_list")
+        features_df = features
         if feat_list:
             available = [c for c in feat_list if c in features.columns]
             if available:
-                features = features[available]
+                features_df = features[available]
 
         proba = model.predict_proba(features.tail(1))  # type: ignore[attr-defined]
+        model = _load_model_from_bytes(blob)
+        proba = model.predict_proba(features_df.tail(1))  # type: ignore[attr-defined]
         proba = getattr(proba, "ravel", lambda: proba)()
         idx = int(np.argmax(proba))
         label_order = meta.get("label_order", [-1, 0, 1])
@@ -111,5 +145,8 @@ def predict(features: pd.DataFrame, symbol: str = "BTCUSDT") -> Prediction:
         )
         return Prediction(action=action, score=score, meta=meta)
     except Exception:  # pragma: no cover - registry or model issues
+        score = float(proba[idx]) if hasattr(proba, "__len__") else float(proba)
+        return Prediction(action=action, score=score, meta=meta)
+    except Exception:  # pragma: no cover - network or model failure
         return _baseline_action(features)
 
