@@ -3147,11 +3147,16 @@ async def main() -> None:
         if notifier:
             notifier.notify(f"❌ Bot stopped: {exc}")
     finally:
-        logger.info("Bot shutting down")
-        await shutdown()
+        msg = f"Bot shutting down: {reason}"
+        logger.info(msg)
         if notifier:
-            notifier.notify(f"Bot shutting down: {reason}")
-        logger.info("Bot shutting down: %s", reason)
+            notifier.notify(msg)
+        try:
+            await shutdown()
+        except Exception as exc:  # pragma: no cover - cleanup error
+            logger.exception("Error during shutdown: %s", exc)
+        finally:
+            logger.info("Shutdown complete")
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution
