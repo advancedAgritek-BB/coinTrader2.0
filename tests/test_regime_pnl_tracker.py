@@ -24,12 +24,12 @@ def test_compute_weights_normalizes(tmp_path, monkeypatch):
 
     rpt.log_trade("breakout", "scalper", 1.0)
     rpt.log_trade("breakout", "scalper", 1.5)
-    rpt.log_trade("breakout", "grid", 0.5)
+    rpt.log_trade("breakout", "grid_bot", 0.5)
 
     weights = rpt.compute_weights("breakout", log)
-    assert set(weights.keys()) == {"scalper", "grid"}
+    assert set(weights.keys()) == {"scalper", "grid_bot"}
     assert abs(sum(weights.values()) - 1.0) < 1e-6
-    assert weights["scalper"] > weights["grid"]
+    assert weights["scalper"] > weights["grid_bot"]
 
 
 def test_recent_win_rate(tmp_path, monkeypatch):

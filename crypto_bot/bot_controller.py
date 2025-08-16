@@ -82,12 +82,12 @@ class TradingBotController:
         if trend_file.exists():
             with open(trend_file) as sf:
                 overrides = yaml.safe_load(sf) or {}
-            trend_cfg = data.get("trend", {})
+            trend_cfg = data.get("trend_bot", {})
             if isinstance(trend_cfg, dict):
                 trend_cfg.update(overrides)
             else:
                 trend_cfg = overrides
-            data["trend"] = trend_cfg
+            data["trend_bot"] = trend_cfg
 
         if "symbol" in data:
             data["symbol"] = fix_symbol(data["symbol"])
