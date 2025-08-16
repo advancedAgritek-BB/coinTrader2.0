@@ -2,5 +2,6 @@ __pycache__/
 
 crypto_bot/logs/
 crypto_bot/user_config.yaml
+crypto_bot/state/
 *.log
 cache/
