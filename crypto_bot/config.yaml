@@ -262,7 +262,7 @@ meta_selector:
 metrics_backend: csv
 metrics_enabled: true
 metrics_output_file: crypto_bot/logs/metrics.csv
-micro_scalp:
+micro_scalp_bot:
   atr_period: 10
   confirm_bars: 0
   ema_fast: 2

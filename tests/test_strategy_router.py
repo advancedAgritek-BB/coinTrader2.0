@@ -435,6 +435,7 @@ def test_route_mempool_blocks_signal(monkeypatch):
 
     cfg = {
         "strategy_router": {"regimes": {"scalp": ["micro_scalp_bot"]}},
+        "micro_scalp_bot": {"fresh_cross_only": False, "min_vol_z": 0},
         "micro_scalp": {"fresh_cross_only": False, "min_vol_z": 0},
         "mempool_monitor": {"enabled": True, "suspicious_fee_threshold": 1},
     }

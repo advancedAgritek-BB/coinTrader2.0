@@ -15,6 +15,10 @@ def _make_module(name: str) -> types.ModuleType:
 
 def test_load_strategies_fallback(monkeypatch):
     # ensure fallback imports from crypto_bot.strategy works
+    for name in ["grid_bot", "trend_bot", "micro_scalp_bot"]:
+        mod = _make_module(name)
+        monkeypatch.setitem(sys.modules, f"crypto_bot.strategy.{name}", mod)
+
     for name in ["grid_bot", "trend_bot", "micro_scalp"]:
         mod = _make_module(name)
         monkeypatch.setitem(sys.modules, f"crypto_bot.strategy.{name}", mod)
