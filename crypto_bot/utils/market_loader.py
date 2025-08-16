@@ -37,6 +37,7 @@ from .token_registry import (
     get_mint_from_gecko,
     fetch_from_helius,
 )
+from crypto_bot.solana.prices import fetch_onchain_ohlcv
 from crypto_bot.strategy.evaluator import get_stream_evaluator, StreamEvaluator
 from crypto_bot.strategy.registry import load_enabled
 from .logger import LOG_DIR, setup_logger
@@ -2359,17 +2360,22 @@ async def update_multi_tf_ohlcv_cache(
                     add_priority(data, sym)
 
                 if gecko_failed or not data or vol < min_volume_usd:
-                    data = await fetch_dex_ohlcv(
-                        exchange,
-                        sym,
-                        timeframe=tf,
-                        limit=sym_l,
-                        min_volume_usd=min_volume_usd,
-                        gecko_res=None,
-                        use_gecko=is_solana,
+                    data = await fetch_onchain_ohlcv(
+                        sym, timeframe=tf, limit=sym_l
                     )
-                    if isinstance(data, Exception) or not data:
-                        continue
+                    if not data:
+                        data = await fetch_dex_ohlcv(
+                            exchange,
+                            sym,
+                            timeframe=tf,
+                            limit=sym_l,
+                            min_volume_usd=min_volume_usd,
+                            gecko_res=None,
+                            use_gecko=is_solana,
+                        )
+                        if isinstance(data, Exception) or not data:
+                            continue
+                    add_priority(data, sym)
 
                 if not data:
                     continue
