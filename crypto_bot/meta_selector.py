@@ -21,6 +21,7 @@ from crypto_bot.strategy import (
     micro_scalp_bot,
     momentum_bot,
     sniper_bot,
+    sniper_solana,
     solana_scalping,
     trend_bot,
 )
@@ -82,6 +83,27 @@ def _register(module, *names: str) -> None:
     for name in names:
         _STRATEGY_FN_MAP[name] = fn
 
+# Register each strategy once under its canonical name
+for module, name in [
+    (trend_bot, "trend_bot"),
+    (grid_bot, "grid_bot"),
+    (sniper_solana, "sniper_solana"),
+    (sniper_bot, "sniper_bot"),
+    (dex_scalper, "dex_scalper"),
+    (mean_bot, "mean_bot"),
+    (breakout_bot, "breakout_bot"),
+    (micro_scalp_bot, "micro_scalp_bot"),
+    (momentum_bot, "momentum_bot"),
+    (lstm_bot, "lstm_bot"),
+    (bounce_scalper, "bounce_scalper"),
+    (flash_crash_bot, "flash_crash_bot"),
+    (dip_hunter, "dip_hunter"),
+    (solana_scalping, "solana_scalping"),
+    (meme_wave_bot, "meme_wave_bot"),
+    (dca_bot, "dca_bot"),
+    (cross_chain_arb_bot, "cross_chain_arb_bot"),
+]:
+    _register(module, name)
 
 _register(trend_bot, "trend_bot")
 _register(grid_bot, "grid_bot")

@@ -47,6 +47,18 @@ def test_strategy_map_contains_micro_scalp_bot():
 def test_strategy_map_has_no_aliases():
     assert "grid" not in meta_selector._STRATEGY_FN_MAP
     assert "trend" not in meta_selector._STRATEGY_FN_MAP
+    assert "sniper" not in meta_selector._STRATEGY_FN_MAP
+    assert "dex_scalper_bot" not in meta_selector._STRATEGY_FN_MAP
+    assert "momentum" not in meta_selector._STRATEGY_FN_MAP
+
+
+def test_strategy_map_contains_sniper_solana():
+    from crypto_bot.strategy import sniper_solana
+
+    assert (
+        meta_selector._STRATEGY_FN_MAP.get("sniper_solana")
+        is sniper_solana.generate_signal
+    )
 
 
 def test_strategy_map_contains_dca_bot():
