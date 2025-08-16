@@ -45,9 +45,7 @@ class EvalGate:
                     held = time.monotonic() - self._since
                     if held > self._ttl:
                         self._logger.warning(
-                            "Gate held >%ss by %s; forcing release",
-                            self._ttl,
-                            self._owner,
+                            f"Gate held >{self._ttl}s by {self._owner}; forcing release"
                         )
                         try:
                             self._lock.release()
@@ -121,7 +119,7 @@ class StreamEvaluationEngine:
         for idx in range(workers):
             task = asyncio.create_task(self._worker(), name=f"eval-worker-{idx}")
             self._workers.append(task)
-        logger.info("Evaluation workers online: %s", len(self._workers))
+        logger.info(f"Evaluation workers online: {len(self._workers)}")
 
     def _symbol_requires_5m(self, ctx: dict) -> bool:
         if isinstance(ctx, dict):
@@ -138,14 +136,9 @@ class StreamEvaluationEngine:
                 else "SELL" if direction == "short" else "NONE"
             )
             logger.info(
-                "STRAT %s on %s: signal=%s score=%s reason=%s",
-                res.get("name"),
-                symbol,
-                signal,
-                res.get("score"),
-                res.get("reason", ""),
+                f"STRAT {res.get('name')} on {symbol}: signal={signal} score={res.get('score')} reason={res.get('reason', '')}"
             )
-        logger.debug("[EVAL OK] %s", symbol)
+        logger.debug(f"[EVAL OK] {symbol}")
 
     async def _worker(self) -> None:
         if self.gate is None or self.data is None:
@@ -158,23 +151,23 @@ class StreamEvaluationEngine:
                 try:
                     needs_5m = self._symbol_requires_5m(ctx)
                     if not self.data.ready(symbol, "1m"):
-                        logger.debug("EVAL SKIP %s: 1m warmup not met", symbol)
+                        logger.debug(f"EVAL SKIP {symbol}: 1m warmup not met")
                         continue
                     if needs_5m and not self.data.ready(symbol, "5m"):
-                        logger.debug("EVAL SKIP %s: 5m warmup not met", symbol)
+                        logger.debug(f"EVAL SKIP {symbol}: 5m warmup not met")
                         continue
 
                     async with self.gate.hold(f"{symbol}"):
-                        logger.info("EVAL START %s", symbol)
+                        logger.info(f"EVAL START {symbol}")
                         await self._evaluate_symbol(symbol, ctx)
                 except Exception:
-                    logger.exception("Evaluator crashed on %s", symbol)
+                    logger.exception(f"Evaluator crashed on {symbol}")
                 finally:
                     self.queue.task_done()
             except asyncio.CancelledError:  # pragma: no cover - shutdown
                 return
             except Exception as e:
-                logger.error("Worker error: %s; restarting...", e)
+                logger.error(f"Worker error: {e}; restarting...")
                 await asyncio.sleep(1)
         await asyncio.sleep(0)
 
