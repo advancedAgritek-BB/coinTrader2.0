@@ -1,4 +1,4 @@
-import importlib
+import importlib  # needed for reload_selfcheck fixture
 import logging
 
 import pytest
