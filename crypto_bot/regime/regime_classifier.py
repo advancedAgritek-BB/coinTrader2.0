@@ -66,6 +66,7 @@ _supabase_model = None
 _supabase_model_lock = asyncio.Lock()
 _model_lock = asyncio.Lock()
 _ml_recovery_task: asyncio.Task | None = None
+_supabase_symbol: str | None = None
 
 _ALL_REGIMES = [
     "trending",
@@ -221,59 +222,86 @@ def _ml_fallback(
     return label, float(conf)
 
 
-async def _download_supabase_model():
+async def _download_supabase_model(symbol: str | None = None):
     """Download LightGBM model from Supabase and return a Booster."""
     async with _supabase_model_lock:
-        model = await load_regime_model(os.getenv("SYMBOL", "BTCUSDT"))
+        model = await load_regime_model(symbol)
         return model
 
 
-async def _get_supabase_model() -> object | None:
+async def _get_supabase_model(symbol: str | None = None) -> object | None:
     """Return the cached Supabase model, downloading it if needed."""
-    global _supabase_model
+    global _supabase_model, _supabase_symbol
     async with _model_lock:
-        if _supabase_model is None:
-            _supabase_model = await _download_supabase_model()
+        if _supabase_model is None or symbol != _supabase_symbol:
+            _supabase_model = await _download_supabase_model(symbol)
+            _supabase_symbol = symbol
         return _supabase_model
 
 
-async def load_regime_model(symbol: str) -> object | None:
-    try:
-        from supabase import create_client
-    except Exception as exc:  # pragma: no cover - optional dependency
-        logger.warning("Supabase client unavailable: %s", exc)
-        return None
+async def load_regime_model(symbol: str | None = None) -> object:
+    """Load pair-specific model if available, else fall back to global."""
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
 
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
-    bucket = os.getenv("CT_MODELS_BUCKET", "models")
-    if not url or not key:
-        logger.warning("No model in Supabase; using heuristic")
-        return None
-
-    client = create_client(url, key)
-    latest_path = f"regime/{symbol}/LATEST.json"
-    try:
-        latest_bytes = client.storage.from_(bucket).download(latest_path)
-        if latest_bytes:
-            data = json.loads(latest_bytes.decode("utf-8"))
-            model_bytes = client.storage.from_(bucket).download(data["key"])
-            return pickle.loads(model_bytes)
+    try:  # pragma: no cover - optional dependency
+        from supabase import create_client, Client
     except Exception as exc:
-        logger.error("Failed to load regime model: %s", exc)
+        logger.warning("Supabase client unavailable: %s", exc)
+        from .model_data import MODEL_B64
+        import base64
 
-    logger.warning("No model in Supabase; using heuristic")
-    return None
+        return pickle.loads(base64.b64decode(MODEL_B64))
+
+    client: Client = create_client(supabase_url, supabase_key)
+
+    bucket = os.getenv("CT_MODELS_BUCKET", "models")
+    prefix = os.getenv("CT_REGIME_PREFIX", "models/regime")
+
+    if symbol:
+        pair_prefix = f"{prefix}/{symbol.upper().replace('/', '')}/"
+        try:
+            manifest = client.storage.from_(bucket).download(f"{pair_prefix}LATEST.json")
+            manifest_data = json.loads(manifest)
+            model_path = manifest_data["path"]
+            model_data = client.storage.from_(bucket).download(model_path)
+            model = pickle.loads(model_data)
+            logger.info(
+                "Loaded pair-specific regime model for %s from Supabase", symbol
+            )
+            return model
+        except Exception as exc:  # pragma: no cover - model optional
+            logger.warning(
+                "No pair-specific model for %s: %s. Falling back to global.",
+                symbol,
+                exc,
+            )
+
+    try:
+        global_prefix = f"{prefix}/global/"
+        manifest = client.storage.from_(bucket).download(f"{global_prefix}LATEST.json")
+        manifest_data = json.loads(manifest)
+        model_path = manifest_data["path"]
+        model_data = client.storage.from_(bucket).download(model_path)
+        model = pickle.loads(model_data)
+        logger.info("Loaded global regime model from Supabase")
+        return model
+    except Exception as exc:  # pragma: no cover - model optional
+        logger.error("Failed to load global model: %s. Using embedded fallback.", exc)
+        from .model_data import MODEL_B64
+        import base64
+
+        return pickle.loads(base64.b64decode(MODEL_B64))
 
 
 async def _ml_recovery_loop(notifier: TelegramNotifier | None) -> None:
     """Periodically attempt to restore the Supabase ML model."""
-    global _supabase_model, _ml_recovery_task
+    global _supabase_model, _supabase_symbol, _ml_recovery_task
     while True:
         await asyncio.sleep(3600)
         if not is_ml_available():
             continue
-        model = await _download_supabase_model()
+        model = await _download_supabase_model(_supabase_symbol)
         if model is None:
             continue
         _supabase_model = model
@@ -288,7 +316,9 @@ async def _ml_recovery_loop(notifier: TelegramNotifier | None) -> None:
 
 
 def _classify_ml(
-    df: pd.DataFrame, notifier: TelegramNotifier | None = None
+    df: pd.DataFrame,
+    notifier: TelegramNotifier | None = None,
+    symbol: str | None = None,
 ) -> Tuple[str, float]:
     """Predict regime using the Supabase model with fallback."""
     try:  # pragma: no cover - optional dependency
@@ -303,10 +333,12 @@ def _classify_ml(
             return _ml_fallback(df)
         return _ml_fallback(df, notifier)
 
-    if _supabase_model is None:
+    global _supabase_model, _supabase_symbol
+    if _supabase_model is None or symbol != _supabase_symbol:
         # Running the async download in a blocking manner; callers should
         # prefer :func:`classify_regime_async` to avoid blocking the event loop.
-        _supabase_model = asyncio.run(_download_supabase_model())
+        _supabase_model = asyncio.run(_download_supabase_model(symbol))
+        _supabase_symbol = symbol
 
     model = _supabase_model
     if model is None:
@@ -554,6 +586,7 @@ def _classify_all(
     df_map: Optional[Dict[str, pd.DataFrame]] = None,
     cache_key: Optional[Tuple[str, str]] = None,
     notifier: TelegramNotifier | None = None,
+    symbol: str | None = None,
 ) -> Tuple[str, Dict[str, float], Dict[str, float]] | Dict[str, str] | Tuple[str, str]:
     """Return regime label, probability mapping and patterns or labels for ``df_map``."""
 
@@ -566,7 +599,7 @@ def _classify_all(
             if tf != cfg.get("higher_timeframe"):
                 h_df = df_map.get(cfg.get("higher_timeframe"))
             label, _, _ = _classify_all(
-                frame, h_df, cfg, cache_key=None, notifier=notifier
+                frame, h_df, cfg, cache_key=None, notifier=notifier, symbol=symbol
             )
             labels[tf] = label
         if len(df_map) == 2:
@@ -589,8 +622,11 @@ def _classify_all(
     regime = _classify_core(df, cfg, higher_df, cache_key=cache_key)
     if regime == "unknown":
         use_ml = cfg.get("use_ml_regime_classifier", False)
+        use_pair = cfg.get("use_per_pair_models", False)
         if use_ml and len(df) >= ml_min_bars:
-            label, conf = _classify_ml(df, notifier)
+            label, conf = _classify_ml(
+                df, notifier, symbol if use_pair else None
+            )
             log_patterns(label, patterns)
             return label, _probabilities(label, conf), patterns
         if len(df) >= ml_min_bars:
@@ -622,8 +658,11 @@ def _classify_all(
     ml_label = "unknown"
     ml_probs = {r: 0.0 for r in _ALL_REGIMES}
     use_ml = cfg.get("use_ml_regime_classifier", False)
+    use_pair = cfg.get("use_per_pair_models", False)
     if use_ml and len(df) >= ml_min_bars:
-        ml_label, conf = _classify_ml(df, notifier)
+        ml_label, conf = _classify_ml(
+            df, notifier, symbol if use_pair else None
+        )
         ml_probs = _probabilities(ml_label, conf)
         if regime == "unknown" and ml_label != "unknown":
             log_patterns(ml_label, patterns)
@@ -631,7 +670,9 @@ def _classify_all(
 
     if regime == "unknown":
         if cfg.get("use_ml_regime_classifier", False) and len(df) >= ml_min_bars:
-            label, conf = _classify_ml(df, notifier)
+            label, conf = _classify_ml(
+                df, notifier, symbol if use_pair else None
+            )
             log_patterns(label, patterns)
             return label, _normalize(_probabilities(label, conf)), patterns
         if len(df) >= ml_min_bars:
@@ -742,15 +783,14 @@ def classify_regime(
     if df_map is None and df is None:
         return "unknown", {"unknown": 0.0}
 
-    kwargs = dict(df_map=df_map)
-    if cache_key is not None:
-        kwargs["cache_key"] = cache_key
-    if notifier is not None:
-        kwargs["notifier"] = notifier
-    result = _classify_all(df, higher_df, cfg, **kwargs)
-    result = _classify_all(
-        df, higher_df, cfg, df_map=df_map, cache_key=cache_key, notifier=notifier
+    kwargs = dict(
+        df_map=df_map,
+        cache_key=cache_key,
+        notifier=notifier,
+        symbol=symbol,
     )
+    kwargs = {k: v for k, v in kwargs.items() if v is not None}
+    result = _classify_all(df, higher_df, cfg, **kwargs)
 
     if df_map is not None:
         return result
@@ -776,11 +816,9 @@ def classify_regime_with_patterns(
     _configure_logger(cfg)
     cfg = _apply_hft_overrides(cfg, timeframe)
     cfg = adaptive_thresholds(cfg, df, symbol)
-    kwargs = {}
-    if notifier is not None:
-        kwargs["notifier"] = notifier
+    kwargs = {"notifier": notifier, "symbol": symbol}
+    kwargs = {k: v for k, v in kwargs.items() if v is not None}
     label, _, patterns = _classify_all(df, higher_df, cfg, **kwargs)
-    label, _, patterns = _classify_all(df, higher_df, cfg, notifier=notifier)
     return label, patterns
 
 
@@ -796,6 +834,11 @@ async def classify_regime_async(
     notifier: TelegramNotifier | None = None,
 ) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Asynchronous wrapper around :func:`classify_regime`."""
+    if symbol and CONFIG.get("use_per_pair_models", False):
+        try:
+            await _get_supabase_model(symbol)
+        except Exception:
+            pass
     return await asyncio.to_thread(
         classify_regime,
         df,
