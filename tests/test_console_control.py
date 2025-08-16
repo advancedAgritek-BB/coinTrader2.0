@@ -103,3 +103,21 @@ def test_panic_sell_command(monkeypatch):
 
     assert state.get("liquidate_all") is True
     assert any("Liquidation" in p for p in printed)
+
+
+def test_control_loop_eof(monkeypatch, caplog):
+    def fake_input(prompt=""):
+        raise EOFError
+
+    async def fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    monkeypatch.setattr(console_control.asyncio, "to_thread", fake_to_thread)
+
+    state = {"running": True}
+    with caplog.at_level("WARNING"):
+        asyncio.run(console_control.control_loop(state))
+
+    assert state["running"] is True
+    assert any("EOF" in msg for msg in caplog.text.splitlines())
