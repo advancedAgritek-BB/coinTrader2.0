@@ -21,13 +21,10 @@ def test_log_ml_status_once_logs_once(monkeypatch, caplog):
         "SUPABASE_ANON_KEY",
     ]:
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setitem(sys.modules, "cointrader_trainer", None)
     caplog.set_level(logging.INFO, logger="crypto_bot.ml")
 
     selfcheck.log_ml_status_once()
-    assert (
-        "ML status: package=False supabase_url=False key_present=False" in caplog.text
-    )
+    assert "ML status: supabase_url=False key_present=False" in caplog.text
 
     caplog.clear()
     selfcheck.log_ml_status_once()

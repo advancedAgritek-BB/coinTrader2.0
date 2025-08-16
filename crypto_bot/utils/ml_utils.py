@@ -75,13 +75,6 @@ def is_ml_available() -> bool:
     _ml_checked = True
 
     try:
-        try:  # optional training utilities
-            import cointrader_trainer  # noqa: F401
-        except ImportError:
-            logger.info("ML disabled: cointrader-trainer not installed")
-            ML_AVAILABLE = False
-            return False
-
         if not _check_packages(_REQUIRED_PACKAGES):
             raise ImportError("Missing required ML packages")
 
