@@ -67,7 +67,7 @@ def generate_signal(
         Minute level OHLCV data.
     config : dict, optional
         Optional configuration overriding defaults located under
-        ``micro_scalp`` in ``config.yaml``.
+        ``micro_scalp_bot`` in ``config.yaml``.
         Supports ``wick_pct`` for a symmetric wick requirement or
         ``lower_wick_pct``/``upper_wick_pct`` for individual thresholds.
     higher_df : pd.DataFrame, optional
@@ -120,7 +120,7 @@ def generate_signal(
             ignore_index=True,
         )
 
-    params = config.get("micro_scalp", {}) if config else {}
+    params = config.get("micro_scalp_bot", {}) if config else {}
 
     cfg = mempool_cfg or {}
     if mempool_monitor and cfg.get("enabled"):

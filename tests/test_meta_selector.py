@@ -39,7 +39,7 @@ def test_choose_best_fallback(tmp_path, monkeypatch):
 
 def test_strategy_map_contains_micro_scalp():
     assert (
-        meta_selector._STRATEGY_FN_MAP.get("micro_scalp")
+        meta_selector._STRATEGY_FN_MAP.get("micro_scalp_bot")
         is micro_scalp_bot.generate_signal
     )
 

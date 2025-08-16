@@ -494,7 +494,7 @@ symbol_score_weights:
 * **ensemble_min_conf** – minimum confidence required for a strategy to
   participate in ensemble evaluation.
 * **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
-* **micro_scalp** – EMA settings plus volume z-score and ATR filters for the scalp bot.
+* **micro_scalp_bot** – EMA settings plus volume z-score and ATR filters for the scalp bot.
   Supports tick-level aggregation, optional mempool fee checks and order-book
   imbalance filtering with an optional penalty. Set `trend_filter` or
   `imbalance_filter` to `false` to bypass the trend or order book checks.
@@ -921,7 +921,7 @@ twap_enabled: false          # split large orders into slices
 twap_slices: 4               # number of slices when TWAP is enabled
 twap_interval_seconds: 10    # delay between TWAP slices
 timeframe: 15m               # candles for regime detection
-scalp_timeframe: 1m          # candles for micro_scalp/bounce_scalper
+scalp_timeframe: 1m          # candles for micro_scalp_bot/bounce_scalper
 loop_interval_minutes: 0.05  # wait time between trading cycles
 force_websocket_history: false  # set true to disable REST fallback
 max_ws_limit: 50             # skip WebSocket when request exceeds this
@@ -964,7 +964,7 @@ The bot caches the last candle timestamp for open positions and skips updating
 their history until a new bar appears.
 The `metrics` section enables recording of cycle summaries to the specified CSV
 file for later analysis.
-`scalp_timeframe` sets the candle interval specifically for the micro_scalp
+`scalp_timeframe` sets the candle interval specifically for the micro_scalp_bot
 and bounce_scalper strategies while `timeframe` covers all other analysis.
 
 When `use_websocket` is enabled the bot uses a dedicated Kraken WebSocket

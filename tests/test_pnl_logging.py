@@ -170,7 +170,7 @@ async def test_handle_exits_logs_pnl():
                 "entry_price": 100.0,
                 "entry_time": "t",
                 "regime": "bull",
-                "strategy": "trend",
+                "strategy": "trend_bot",
                 "confidence": 1.0,
                 "pnl": 0.0,
                 "size": 1.0,
@@ -195,7 +195,7 @@ async def test_handle_exits_logs_pnl():
     await handle_exits(ctx)
 
     assert calls.get("pnl") is not None
-    assert calls.get("trade") == ("bull", "trend", 10.0)
+    assert calls.get("trade") == ("bull", "trend_bot", 10.0)
 
 
 @pytest.mark.asyncio
@@ -241,7 +241,7 @@ async def test_force_exit_all_logs_pnl():
             "XBT/USDT": {
                 "side": "buy",
                 "entry_price": 100.0,
-                "strategy": "trend",
+                "strategy": "trend_bot",
                 "regime": "bull",
                 "confidence": 0.9,
                 "size": 1.0,
@@ -263,5 +263,5 @@ async def test_force_exit_all_logs_pnl():
     await force_exit(ctx)
 
     assert calls.get("pnl") is not None
-    assert calls.get("trade") == ("bull", "trend", 10.0)
+    assert calls.get("trade") == ("bull", "trend_bot", 10.0)
 

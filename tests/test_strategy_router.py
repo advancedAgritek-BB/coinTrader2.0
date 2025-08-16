@@ -57,12 +57,12 @@ from crypto_bot.strategy import (
 SAMPLE_CFG = {
     "strategy_router": {
         "regimes": {
-            "trending": ["trend", "momentum_bot"],
-            "sideways": ["grid"],
+            "trending": ["trend_bot", "momentum_bot"],
+            "sideways": ["grid_bot"],
             "mean-reverting": ["dip_hunter", "stat_arb_bot"],
             "breakout": ["breakout_bot"],
             "volatile": ["sniper_bot", "momentum_bot"],
-            "scalp": ["micro_scalp"],
+            "scalp": ["micro_scalp_bot"],
             "bounce": ["bounce_scalper"],
         }
     }
@@ -142,7 +142,7 @@ def test_route_returns_lstm_bot():
 
 
 def test_route_handles_none_df_map():
-    cfg = {"strategy_router": {"regimes": {"trending": ["trend"]}}}
+    cfg = {"strategy_router": {"regimes": {"trending": ["trend_bot"]}}}
     fn = route("trending", "cex", cfg, df_map=None)
     assert fn.__name__ == trend_bot.generate_signal.__name__
     score, direction = fn(None)
@@ -280,7 +280,7 @@ def test_fastpath_breakout(tmp_path, monkeypatch):
         "breakout_bandwidth_zscore": -0.84,
         "breakout_volume_multiplier": 2,
         "trend_adx_threshold": 1000
-    }}, "regime": {"sideways": ["grid"]}}
+    }}, "regime": {"sideways": ["grid_bot"]}}
 
     close = list(range(10))
     volume = [1] * 9 + [10]
@@ -295,7 +295,7 @@ def test_fastpath_trend(tmp_path):
         "breakout_max_bandwidth": 0,
         "breakout_volume_multiplier": 100,
         "trend_adx_threshold": 5
-    }}, "regime": {"trending": ["trend"]}}
+    }}, "regime": {"trending": ["trend_bot"]}}
     # create rising series so ADX > threshold
     vals = list(range(10))
     df = make_df(vals, [1]*10)
@@ -434,8 +434,8 @@ def test_route_mempool_blocks_signal(monkeypatch):
             return True
 
     cfg = {
-        "strategy_router": {"regimes": {"scalp": ["micro_scalp"]}},
-        "micro_scalp": {"fresh_cross_only": False, "min_vol_z": 0},
+        "strategy_router": {"regimes": {"scalp": ["micro_scalp_bot"]}},
+        "micro_scalp_bot": {"fresh_cross_only": False, "min_vol_z": 0},
         "mempool_monitor": {"enabled": True, "suspicious_fee_threshold": 1},
     }
     fn = route(
