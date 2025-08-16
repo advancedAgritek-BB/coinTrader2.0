@@ -247,11 +247,40 @@ BACKGROUND_TASKS: list[asyncio.Task] = []
 # Track pending OHLCV tasks during startup
 pending_tasks: list[asyncio.Task] = []
 
+# Track background task failures to surface repeated issues
+TASK_FAILURE_COUNTS: Counter[str] = Counter()
+TASK_FAILURE_NOTIFIER: "TelegramNotifier" | None = None
+TASK_FAILURE_NOTIFY_THRESHOLD = 3
+
 
 def register_task(task: asyncio.Task | None) -> asyncio.Task | None:
     """Add a task to the background task registry."""
-    if task:
-        BACKGROUND_TASKS.append(task)
+    if not task:
+        return None
+
+    BACKGROUND_TASKS.append(task)
+
+    def _handle_task_completion(t: asyncio.Task) -> None:
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc is None:
+            return
+        name = t.get_name()
+        logger.error("Background task %s raised an exception", name, exc_info=exc)
+        TASK_FAILURE_COUNTS[name] += 1
+        if (
+            TASK_FAILURE_NOTIFIER
+            and TASK_FAILURE_COUNTS[name] >= TASK_FAILURE_NOTIFY_THRESHOLD
+        ):
+            try:
+                TASK_FAILURE_NOTIFIER.notify(
+                    f"Task {name} failed {TASK_FAILURE_COUNTS[name]} times: {exc}"
+                )
+            except Exception:
+                logger.exception("Failed to send failure notification for %s", name)
+
+    task.add_done_callback(_handle_task_completion)
     return task
 
 
@@ -2513,6 +2542,8 @@ async def _main_impl() -> MainResult:
     balance_updates = tg_cfg.get("balance_updates", balance_updates)
 
     notifier = TelegramNotifier.from_config(tg_cfg)
+    global TASK_FAILURE_NOTIFIER
+    TASK_FAILURE_NOTIFIER = notifier
     if status_updates:
         notifier.notify("🤖 CoinTrader2.0 started")
 
