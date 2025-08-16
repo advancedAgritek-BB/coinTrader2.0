@@ -15,7 +15,6 @@ trading:
 
 # === strategies and params ===
 strategies:
-  enabled: ['bounce_scalper', 'breakout', 'breakout_bot', 'cross_chain_arb_bot', 'dca_bot', 'dex_scalper', 'dip_hunter', 'flash_crash_bot', 'grid_bot', 'lstm_bot', 'mean_bot', 'mean_revert', 'meme_wave_bot', 'micro_scalp_bot', 'momentum_bot', 'range_arb_bot', 'sniper_bot', 'sniper_solana', 'solana_scalping', 'stat_arb_bot', 'trend_bot']
   maker_spread:
     enabled: true
     max_spread_bp: 8              # don’t quote if spread > 8 bps
