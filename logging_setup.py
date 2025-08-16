@@ -3,7 +3,7 @@ import logging.config
 import sys
 
 
-def setup_logging(level="INFO", logfile="bot.log"):
+def setup_logging(level="INFO", logfile="bot.log", console_level=None):
     LOGGING = {
         "version": 1,
         "disable_existing_loggers": False,
@@ -16,7 +16,7 @@ def setup_logging(level="INFO", logfile="bot.log"):
         "handlers": {
             "stdout": {
                 "class": "logging.StreamHandler",
-                "level": level,
+                "level": console_level or level,
                 "formatter": "console",
                 "stream": sys.stdout,
             },
