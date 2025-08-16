@@ -62,7 +62,7 @@ SAMPLE_CFG = {
             "mean-reverting": ["dip_hunter", "stat_arb_bot"],
             "breakout": ["breakout_bot"],
             "volatile": ["sniper_bot", "momentum_bot"],
-            "scalp": ["micro_scalp"],
+            "scalp": ["micro_scalp_bot"],
             "bounce": ["bounce_scalper"],
         }
     }
@@ -434,7 +434,7 @@ def test_route_mempool_blocks_signal(monkeypatch):
             return True
 
     cfg = {
-        "strategy_router": {"regimes": {"scalp": ["micro_scalp"]}},
+        "strategy_router": {"regimes": {"scalp": ["micro_scalp_bot"]}},
         "micro_scalp": {"fresh_cross_only": False, "min_vol_z": 0},
         "mempool_monitor": {"enabled": True, "suspicious_fee_threshold": 1},
     }

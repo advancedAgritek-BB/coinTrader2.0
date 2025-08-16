@@ -66,7 +66,7 @@ class SolanaScannerConfig(BaseModel):
     """Configuration for scanning Solana tokens."""
 
     enabled: bool = Field(
-        default=False, description="Enable Solana token scanner"
+        default=True, description="Enable Solana token scanner"
     )
     interval_minutes: float = Field(
         default=0.1,

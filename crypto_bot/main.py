@@ -605,12 +605,12 @@ def _load_config_file() -> dict:
     if trend_file.exists():
         with open(trend_file) as sf:
             overrides = yaml.safe_load(sf) or {}
-        trend_cfg = data.get("trend", {})
+        trend_cfg = data.get("trend_bot", {})
         if isinstance(trend_cfg, dict):
             trend_cfg.update(overrides)
         else:
             trend_cfg = overrides
-        data["trend"] = trend_cfg
+        data["trend_bot"] = trend_cfg
 
     if "symbol" in data:
         data["symbol"] = fix_symbol(data["symbol"])
@@ -885,9 +885,10 @@ async def initial_scan(
     symbols = [s for s, _ in ranked]
     top_n = int(config.get("scan_deep_top", 50))
     symbols = symbols[:top_n]
-    for sym in onchain_symbols:
-        if sym not in symbols:
-            symbols.append(sym)
+    if config.get("mode") != "cex":
+        for sym in onchain_symbols:
+            if sym not in symbols:
+                symbols.append(sym)
     symbols = list(dict.fromkeys(symbols))
     if not symbols:
         return
@@ -1040,7 +1041,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
     bases = [s.split("/")[0] for s in onchain_syms]
     meta_kept = 0
     meta_drop = 0
-    if bases:
+    if bases and resolved_mode != "cex":
         try:
             meta = await fetch_from_helius(bases)
             meta_kept = sum(1 for b in bases if b.upper() in meta)
@@ -1060,7 +1061,9 @@ async def fetch_candidates(ctx: BotContext) -> None:
     active_candidates.extend([("BTC/USDT", 10.0), ("SOL/USDC", 10.0)])
 
     symbols = active_candidates
-    solana_tokens: list[str] = list(onchain_syms)
+    solana_tokens: list[str] = (
+        list(onchain_syms) if resolved_mode != "cex" else []
+    )
     sol_cfg = ctx.config.get("solana_scanner", {})
 
     regime = "unknown"
@@ -1081,10 +1084,10 @@ async def fetch_candidates(ctx: BotContext) -> None:
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("Arbitrage scan error: %s", exc)
 
-    if regime == "volatile":
+    if regime == "volatile" and resolved_mode != "cex":
         symbols.extend((s, 0.0) for s in onchain_syms)
 
-    if regime == "volatile" and sol_cfg.get("enabled"):
+    if regime == "volatile" and sol_cfg.get("enabled") and resolved_mode != "cex":
         try:
             new_tokens = await get_solana_new_tokens(sol_cfg)
             solana_tokens.extend(new_tokens)
@@ -1146,7 +1149,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
                 symbol_priority_queue = build_priority_queue(symbols)
             base_size = base_size_cfg
 
-        if onchain_syms:
+        if onchain_syms and resolved_mode != "cex":
             for sym in reversed(onchain_syms):
                 if sym not in symbol_priority_queue:
                     symbol_priority_queue.appendleft(sym)
@@ -1940,7 +1943,7 @@ async def execute_signals(ctx: BotContext) -> None:
 
         await refresh_balance(ctx)
 
-        if strategy == "micro_scalp":
+        if strategy == "micro_scalp_bot":
             register_task(asyncio.create_task(_monitor_micro_scalp_exit(ctx, sym)))
 
     if executed == 0:
@@ -2927,204 +2930,14 @@ async def _main_impl() -> MainResult:
     if mempool_monitor:
         listener_tasks.append(asyncio.create_task(_mempool_event_listener()))
 
-    loop_count = 0
-    last_weight_update = last_optimize = 0.0
-    last_model_refresh = 0.0
+    async def run_evaluation_cycle() -> None:
+        ctx.timing = await runner.run(ctx)
 
     try:
         while True:
-            maybe_reload_config(state, config)
-            await reload_config(
-                config,
-                ctx,
-                risk_manager,
-                rotator,
-                position_guard,
-                force=state.get("reload", False),
-            )
-            state["reload"] = False
+            await run_evaluation_cycle()
+            await asyncio.sleep(config.get("loop_interval_minutes", 1) * 60)
 
-            if time.time() - last_model_refresh >= config.get("model_refresh_minutes", 5) * 60:
-                try:
-                    maybe_refresh_model(config.get("symbol", ""))
-                except Exception:
-                    logger.exception("Model refresh failed")
-                last_model_refresh = time.time()
-
-            if state.get("liquidate_all"):
-                await force_exit_all(ctx)
-                state["liquidate_all"] = False
-
-            if config.get("arbitrage_enabled", True):
-                try:
-                    if ctx.secondary_exchange:
-                        arb_syms = await scan_cex_arbitrage(
-                            exchange, ctx.secondary_exchange, config
-                        )
-                    else:
-                        arb_syms = await scan_arbitrage(exchange, config)
-                    if arb_syms:
-                        async with QUEUE_LOCK:
-                            for sym in reversed(arb_syms):
-                                symbol_priority_queue.appendleft(sym)
-                except Exception as exc:  # pragma: no cover - best effort
-                    logger.error("Arbitrage scan error: %s", exc)
-
-            cycle_start = time.perf_counter()
-            ctx.timing = await runner.run(ctx)
-            loop_count += 1
-            long_signals = sum(
-                1 for r in ctx.analysis_results if r.get("direction") == "long"
-            )
-            short_signals = sum(
-                1 for r in ctx.analysis_results if r.get("direction") == "short"
-            )
-            pipeline_logger.info(
-                "Eval summary: candidates=%d, queued=%d, evaluated=%d, signals=%d (long=%d, short=%d), errors=%d, timeouts=%d",
-                len(ctx.active_universe),
-                len(ctx.current_batch),
-                len(ctx.analysis_results),
-                long_signals + short_signals,
-                long_signals,
-                short_signals,
-                ctx.analysis_errors,
-                ctx.analysis_timeouts,
-            )
-
-            if time.time() - last_weight_update >= 86400:
-                weights = compute_strategy_weights()
-                if weights:
-                    logger.info("Updating strategy allocation to %s", weights)
-                    risk_manager.update_allocation(weights)
-                    config["strategy_allocation"] = weights
-                last_weight_update = time.time()
-
-            if config.get("optimization", {}).get("enabled"):
-                if (
-                    time.time() - last_optimize
-                    >= config["optimization"].get("interval_days", 7) * 86400
-                ):
-                    optimize_strategies()
-                    last_optimize = time.time()
-
-            if not state.get("running"):
-                await wait_or_event(1)
-                continue
-
-            balances = await asyncio.to_thread(
-                check_wallet_balances, user.get("wallet_address", "")
-            )
-            quote_token = config.get("auto_convert_quote", "USDC")
-            for token in detect_non_trade_tokens(balances):
-                amount = balances[token]
-                logger.info("Converting %s %s to %s", amount, token, quote_token)
-                await auto_convert_funds(
-                    user.get("wallet_address", ""),
-                    token,
-                    quote_token,
-                    amount,
-                    dry_run=config["execution_mode"] == "dry_run",
-                    slippage_bps=config.get("solana_slippage_bps", 50),
-                    notifier=notifier,
-                    mempool_monitor=ctx.mempool_monitor,
-                    mempool_cfg=ctx.mempool_cfg,
-                )
-                if asyncio.iscoroutinefunction(
-                    getattr(exchange, "fetch_balance", None)
-                ):
-                    bal = await exchange.fetch_balance()
-                else:
-                    bal = await asyncio.to_thread(exchange.fetch_balance)
-                bal_val = (
-                    bal.get("USDT", {}).get("free", 0)
-                    if isinstance(bal.get("USDT"), dict)
-                    else bal.get("USDT", 0)
-                )
-                check_balance_change(float(bal_val), "funds converted")
-
-            # Refresh OHLCV for open positions if a new candle has formed
-            tf = config.get("timeframe", "1h")
-            tf_sec = timeframe_seconds(None, tf)
-            open_syms: list[str] = []
-            for sym in ctx.positions:
-                last_ts = last_candle_ts.get(sym, 0)
-                if time.time() - last_ts >= tf_sec:
-                    open_syms.append(sym)
-            if open_syms:
-                ohlcv_batch_size = config.get("ohlcv_batch_size")
-                if ohlcv_batch_size is None:
-                    ohlcv_batch_size = config.get("symbol_filter", {}).get(
-                        "ohlcv_batch_size"
-                    )
-                async with symbol_cache_guard():
-                    async with OHLCV_LOCK:
-                        tf_cache = ctx.df_cache.get(tf, {})
-                        tf_cache = await update_ohlcv_cache(
-                            exchange,
-                            tf_cache,
-                            open_syms,
-                            timeframe=tf,
-                            limit=2,
-                            use_websocket=config.get("use_websocket", False),
-                            force_websocket_history=config.get(
-                                "force_websocket_history", False
-                            ),
-                            max_concurrent=config.get("max_concurrent_ohlcv"),
-                            config=config,
-                            batch_size=ohlcv_batch_size,
-                        )
-                        ctx.df_cache[tf] = tf_cache
-                        session_state.df_cache[tf] = tf_cache
-                for sym in open_syms:
-                    df = tf_cache.get(sym)
-                    if df is not None and not df.empty:
-                        last_candle_ts[sym] = int(df["timestamp"].iloc[-1])
-                        higher_df = ctx.df_cache.get(
-                            config.get("higher_timeframe", "1d"), {}
-                        ).get(sym)
-                        regime, _ = await classify_regime_async(
-                            df, higher_df, notifier=ctx.notifier
-                        )
-                        ctx.positions[sym]["regime"] = regime
-                        TOTAL_ANALYSES += 1
-                        if regime == "unknown":
-                            UNKNOWN_COUNT += 1
-
-            total_time = time.perf_counter() - cycle_start
-            timing = getattr(ctx, "timing", {})
-            _emit_timing(
-                timing.get("fetch_candidates", 0.0),
-                timing.get("update_caches", 0.0),
-                timing.get("analyse_batch", 0.0),
-                total_time,
-                metrics_path,
-                timing.get("ohlcv_fetch_latency", 0.0),
-                timing.get("execution_latency", 0.0),
-            )
-
-            if config.get("metrics_enabled") and config.get("metrics_backend") == "csv":
-                metrics = {
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "ticker_fetch_time": timing.get("fetch_candidates", 0.0),
-                    "symbol_filter_ratio": timing.get("symbol_filter_ratio", 1.0),
-                    "ohlcv_fetch_latency": timing.get("ohlcv_fetch_latency", 0.0),
-                    "execution_latency": timing.get("execution_latency", 0.0),
-                    "unknown_regimes": sum(
-                        1
-                        for r in getattr(ctx, "analysis_results", [])
-                        if r.get("regime") == "unknown"
-                    ),
-                }
-                write_cycle_metrics(metrics, config)
-
-            unknown_rate = UNKNOWN_COUNT / max(TOTAL_ANALYSES, 1)
-            if unknown_rate > 0.2 and ctx.notifier:
-                ctx.notifier.notify(f"⚠️ Unknown regime rate {unknown_rate:.1%}")
-            delay = config.get("loop_interval_minutes", 1) / max(
-                ctx.volatility_factor, 1e-6
-            )
-            logger.info("Sleeping for %.2f minutes", delay)
-            await wait_or_event(delay * 60)
 
     except asyncio.CancelledError:
         stop_reason = "external signal"
@@ -3176,6 +2989,15 @@ def _reload_modules() -> None:
     for name, module in list(sys.modules.items()):
         if name.startswith("crypto_bot") or name.startswith("schema"):
             importlib.reload(module)
+
+
+async def shutdown() -> None:
+    """Cancel and gather all running asyncio tasks."""
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def main() -> None:
@@ -3325,6 +3147,9 @@ async def main() -> None:
             notifier.notify(f"❌ Bot stopped: {exc}")
     finally:
         if notifier:
+            notifier.notify("Bot shutting down")
+        logger.info("Bot shutting down")
+        await shutdown()
             notifier.notify(f"Bot shutting down: {reason}")
         logger.info("Bot shutting down: %s", reason)
 
