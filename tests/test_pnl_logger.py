@@ -17,7 +17,6 @@ def test_log_pnl_creates_csv_and_json(tmp_path, monkeypatch):
 
     monkeypatch.setattr(bandit, "update", fake_update)
 
-    pnl_logger.log_pnl("trend_bot", "XBT/USDT", 100.0, 110.0, 10.0, 0.8, "buy")
     pnl_logger.log_pnl(
         "bull",
         "trend_bot",
@@ -42,8 +41,10 @@ def test_log_pnl_creates_csv_and_json(tmp_path, monkeypatch):
         "direction",
     }
     assert expected_cols.issubset(df.columns)
+    assert len(df) == 1
     assert calls["args"] == ("XBT/USDT", "trend_bot", True)
 
     assert perf_file.exists()
     data = json.loads(perf_file.read_text())
+    assert len(data["bull"]["trend_bot"]) == 1
     assert data["bull"]["trend_bot"][0]["pnl"] == 10.0
