@@ -1129,24 +1129,27 @@ async def fetch_candidates(ctx: BotContext) -> None:
             and (not fs_cfg.get("enabled") or not getattr(ctx, "_fast_start_batches", []))
         ):
             symbol_priority_queue.extend(build_priority_queue(symbols))
-        ctx.current_batch = [
-            symbol_priority_queue.popleft()
-            for _ in range(min(batch_size, len(symbol_priority_queue)))
-        ]
-        if ctx.config.get("mode") == "cex" and hasattr(ctx.exchange, "list_markets"):
+
+        # Remove duplicates while preserving order
+        symbol_priority_queue = deque(dict.fromkeys(symbol_priority_queue))
+
+        # Keep only exchange-listed pairs if available
+        if hasattr(ctx.exchange, "list_markets"):
             markets = ctx.exchange.list_markets()
             if isinstance(markets, dict):
                 listed = set(markets)
             else:
                 listed = set(markets or [])
-            dropped = [s for s in ctx.current_batch if s not in listed]
-            if dropped:
-                ctx.current_batch = [s for s in ctx.current_batch if s in listed]
-                for sym in dropped:
-                    logger.info(
-                        "Dropped non-exchange pair %s (strict_cex=true)",
-                        sym,
-                    )
+            queue_list = list(symbol_priority_queue)
+            symbol_priority_queue = deque(s for s in queue_list if s in listed)
+            dropped = [s for s in queue_list if s not in listed]
+            for sym in dropped:
+                logger.info("Dropped non-exchange pair %s", sym)
+
+        ctx.current_batch = [
+            symbol_priority_queue.popleft()
+            for _ in range(min(batch_size, len(symbol_priority_queue)))
+        ]
 
         for sym in ctx.current_batch:
             if sym in recent_solana_set:
