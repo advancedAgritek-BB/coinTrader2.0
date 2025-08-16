@@ -15,10 +15,14 @@ def _make_module(name: str) -> types.ModuleType:
 
 def test_load_strategies_fallback(monkeypatch):
     # ensure fallback imports from crypto_bot.strategy works
-    for name in ["grid", "trend", "micro_scalp"]:
+    for name in ["grid_bot", "trend_bot", "micro_scalp_bot"]:
         mod = _make_module(name)
         monkeypatch.setitem(sys.modules, f"crypto_bot.strategy.{name}", mod)
 
-    strategies = load_strategies("cex", ["grid", "trend", "micro_scalp"])
+    strategies = load_strategies("cex", ["grid_bot", "trend_bot", "micro_scalp_bot"])
     assert len(strategies) == 3
-    assert all(hasattr(s, "name") for s in strategies)
+    assert sorted(s.name for s in strategies) == [
+        "grid_bot",
+        "micro_scalp_bot",
+        "trend_bot",
+    ]
