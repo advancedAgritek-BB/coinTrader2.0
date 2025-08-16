@@ -557,6 +557,11 @@ def _load_config_file() -> dict:
     trading_cfg.setdefault("hft_symbols", [])
     trading_cfg.setdefault("exclude_symbols", [])
     data["trading"] = trading_cfg
+    data.setdefault("allowed_quotes", allowed_quotes)
+    sf_cfg = data.get("symbol_filter", {}) or {}
+    if allowed_quotes:
+        sf_cfg.setdefault("quote_whitelist", allowed_quotes)
+    data["symbol_filter"] = sf_cfg
     data.setdefault("exchange", exchange_id)
     data.setdefault("timeframes", timeframes)
     data.setdefault("execution_mode", trading_mode)

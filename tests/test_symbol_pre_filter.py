@@ -1501,3 +1501,33 @@ def test_quote_volume_converted(monkeypatch):
     assert retry.stop.max_attempt_number == 5
     assert retry.wait.multiplier == 2
     assert retry.wait.max == 60
+
+
+def test_quote_whitelist(monkeypatch):
+    from crypto_bot.utils import symbol_utils as su
+
+    su.invalidate_symbol_cache()
+
+    async def fake_filter_symbols(_ex, symbols, _cfg):
+        return [(s, 0.0) for s in symbols], []
+
+    monkeypatch.setattr(su, "filter_symbols", fake_filter_symbols)
+
+    class DummyExchange:
+        id = "dummy"
+
+        def list_markets(self):
+            return {
+                "BTC/USD": {"quote": "USD", "quoteVolume": 1},
+                "ETH/EUR": {"quote": "EUR", "quoteVolume": 1},
+            }
+
+    cfg = {
+        "mode": "cex",
+        "trading": {"allowed_quotes": ["USD"]},
+        "symbol_filter": {},
+        "symbols": ["BTC/USD", "ETH/EUR"],
+    }
+
+    symbols, _ = asyncio.run(su.get_filtered_symbols(DummyExchange(), cfg))
+    assert symbols == [("BTC/USD", 0.0)]
