@@ -1,6 +1,6 @@
 """Utility helpers for optional machine learning dependencies."""
 import base64
-import importlib.util
+import importlib
 import json
 import logging
 import os
@@ -28,9 +28,15 @@ def warn_ml_unavailable_once() -> None:
         _LOGGER_ONCE["ml_unavailable"] = True
 
 
-def _check_packages(pkgs: Iterable[str]) -> bool:
-    """Return ``True`` if all packages in ``pkgs`` can be imported."""
-    return all(importlib.util.find_spec(name) is not None for name in pkgs)
+def _check_packages(pkgs: Iterable[str]) -> list[str]:
+    """Return a list of packages from ``pkgs`` that cannot be imported."""
+    missing = []
+    for name in pkgs:
+        try:  # pragma: no cover - optional dependency import
+            importlib.import_module(name)
+        except Exception:
+            missing.append(name)
+    return missing
 
 
 def _get_supabase_creds() -> tuple[str | None, str | None]:
@@ -75,15 +81,14 @@ def is_ml_available() -> bool:
     _ml_checked = True
 
     try:
-        try:  # optional training utilities
-            import cointrader_trainer  # noqa: F401
-        except ImportError:
-            logger.info("ML disabled: cointrader-trainer not installed")
+        missing = _check_packages(_REQUIRED_PACKAGES)
+        if missing:
+            logger.info(
+                "ML unavailable: Missing required ML packages (%s)",
+                ", ".join(missing),
+            )
             ML_AVAILABLE = False
             return False
-
-        if not _check_packages(_REQUIRED_PACKAGES):
-            raise ImportError("Missing required ML packages")
 
         url, key = _get_supabase_creds()
         if not url or not key:
@@ -94,6 +99,7 @@ def is_ml_available() -> bool:
                     bool(key),
                 )
                 _LOGGER_ONCE["missing_supabase_creds"] = True
+            ML_AVAILABLE = False
             return False
 
         _warn_if_anon_key(key)
@@ -104,7 +110,9 @@ def is_ml_available() -> bool:
             / "meta_selector_lgbm.txt"
         )
         if not model_path.exists():
-            raise FileNotFoundError(f"Model file not found: {model_path}")
+            logger.info("ML unavailable: Model file not found: %s", model_path)
+            ML_AVAILABLE = False
+            return False
 
         ML_AVAILABLE = True
         return True
