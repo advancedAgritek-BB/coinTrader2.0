@@ -28,7 +28,10 @@ def test_log_ml_status_once_logs_supabase_status(monkeypatch, caplog):
     caplog.set_level(logging.INFO, logger="crypto_bot.ml")
 
     selfcheck.log_ml_status_once()
-    assert "ML status: supabase_url=False key_present=False" in caplog.text
+    assert (
+        "ML status: packages=True supabase_url=False key_present=False"
+        in caplog.text
+    )
 
     caplog.clear()
     selfcheck.log_ml_status_once()
@@ -43,4 +46,7 @@ def test_log_ml_status_once_detects_credentials(monkeypatch, caplog):
     caplog.set_level(logging.INFO, logger="crypto_bot.ml")
 
     selfcheck.log_ml_status_once()
-    assert "ML status: supabase_url=True key_present=True" in caplog.text
+    assert (
+        "ML status: packages=True supabase_url=True key_present=True"
+        in caplog.text
+    )
