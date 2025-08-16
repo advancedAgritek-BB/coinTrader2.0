@@ -1,7 +1,7 @@
 import os
 import aiohttp
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Dict, List, Optional
 from loguru import logger
 
 HELIUS_API_KEY = os.getenv("HELIUS_API_KEY", "")
@@ -60,21 +60,34 @@ class HeliusClient:
             return {}
 
 
-def helius_available() -> bool:
-    """Lightweight check that the Helius API key is set and service responds."""
+async def _check_available(url: str) -> bool:
+    """Perform the actual availability request."""
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+            async with session.get(url) as resp:
+                return resp.status in (200, 400, 404)
+    except Exception:
+        return False
+
+
+def helius_available() -> bool | Awaitable[bool]:
+    """Lightweight check that the Helius API key is set and service responds.
+
+    When an event loop is already running this returns a coroutine that
+    should be awaited by the caller, avoiding any blocking behaviour.  If
+    no loop is active the check is executed immediately via
+    :func:`asyncio.run` and the boolean result is returned.
+    """
     if not HELIUS_API_KEY:
         return False
     url = f"{HELIUS_BASE}/v0/addresses?api-key={HELIUS_API_KEY}"
 
-    async def _check() -> bool:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-                async with session.get(url) as resp:
-                    return resp.status in (200, 400, 404)
+            return asyncio.run(_check_available(url))
         except Exception:
             return False
-
-    try:
-        return asyncio.run(_check())
-    except Exception:
-        return False
+    else:
+        return _check_available(url)
