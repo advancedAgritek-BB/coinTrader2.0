@@ -2468,7 +2468,7 @@ async def _main_impl() -> MainResult:
 
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
-    config = load_config()
+    config, _ = await load_config_async()
     stop_reason = "completed"
 
     mapping = await load_token_mints()
