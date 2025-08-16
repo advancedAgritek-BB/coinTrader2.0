@@ -145,9 +145,10 @@ async def get_filtered_symbols(exchange, config) -> tuple[list[tuple[str, float]
 
     mode = config.get("mode", "cex")
     sf = config.get("symbol_filter", {})
-    allowed_quotes = {
-        str(q).upper() for q in (config.get("allowed_quotes") or [])
-    }
+    allowed_quotes_cfg = config.get("allowed_quotes") or config.get("trading", {}).get(
+        "allowed_quotes"
+    )
+    allowed_quotes = {str(q).upper() for q in (allowed_quotes_cfg or [])}
     markets: dict[str, dict] = {}
     if mode == "cex" and hasattr(exchange, "list_markets"):
         markets = exchange.list_markets()
