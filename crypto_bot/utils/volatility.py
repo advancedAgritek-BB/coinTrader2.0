@@ -4,18 +4,7 @@ from __future__ import annotations
 import math
 import pandas as pd
 
-from crypto_bot.utils.indicators import calc_atr as _calc_atr
-
-
-def calc_atr(df: pd.DataFrame, period: int = 14) -> float:
-    """Return the latest ATR value as a float."""
-
-    result = _calc_atr(df, period=period)
-    if isinstance(result, pd.Series):
-        if result.empty:
-            return 0.0
-        return float(result.iloc[-1])
-    return float(result)
+from crypto_bot.indicators import calc_atr
 
 
 def atr_percent(df: pd.DataFrame, period: int = 14) -> float:
