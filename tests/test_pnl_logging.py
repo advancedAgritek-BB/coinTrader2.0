@@ -54,7 +54,7 @@ def load_handle_exits_exit():
         calls["pnl"] = a
 
     def _log_trade(*a, **k):
-        calls["trade"] = a
+        calls.setdefault("trade", a)
 
     ns = {
         "asyncio": asyncio,
@@ -99,7 +99,7 @@ def load_monitor_exit():
         calls["pnl"] = a
 
     def _log_trade(*a, **k):
-        calls["trade"] = a
+        calls.setdefault("trade", a)
 
     async def _monitor(feed, *a, **k):
         return {"exit_price": feed()}
@@ -144,7 +144,7 @@ def load_force_exit_all():
         calls["pnl"] = a
 
     def _log_trade(*a, **k):
-        calls["trade"] = a
+        calls.setdefault("trade", a)
 
     ns = {
         "asyncio": asyncio,

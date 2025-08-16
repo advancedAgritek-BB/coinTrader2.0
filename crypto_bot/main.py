@@ -2148,6 +2148,7 @@ async def handle_exits(ctx: BotContext) -> None:
             if pos["side"] == "sell":
                 realized_pnl = -realized_pnl
             pnl_logger.log_pnl(
+                pos.get("regime", ""),
                 pos.get("strategy", ""),
                 sym,
                 pos["entry_price"],
@@ -2289,6 +2290,7 @@ async def force_exit_all(ctx: BotContext) -> None:
         if pos["side"] == "sell":
             realized_pnl = -realized_pnl
         pnl_logger.log_pnl(
+            pos.get("regime", ""),
             pos.get("strategy", ""),
             sym,
             pos["entry_price"],
@@ -2338,6 +2340,7 @@ async def force_exit_all(ctx: BotContext) -> None:
             if wpos.get("side") == "sell":
                 realized_pnl = -realized_pnl
             pnl_logger.log_pnl(
+                wpos.get("regime", ""),
                 wpos.get("strategy", ""),
                 sym,
                 wpos.get("entry_price", 0.0),
@@ -2417,6 +2420,7 @@ async def _monitor_micro_scalp_exit(ctx: BotContext, sym: str) -> None:
     if pos["side"] == "sell":
         realized_pnl = -realized_pnl
     pnl_logger.log_pnl(
+        pos.get("regime", ""),
         pos.get("strategy", ""),
         sym,
         pos["entry_price"],
