@@ -147,12 +147,9 @@ class StreamEvaluationEngine:
             logger.error("Evaluation worker started before engine initialization")
             return
         logger.info("Evaluation worker online")
-        try:
-            while not self._stop.is_set():
-                try:
-                    symbol, ctx = await self.queue.get()
-                except asyncio.CancelledError:  # pragma: no cover - shutdown
-                    return
+        while not self._stop.is_set():
+            try:
+                symbol, ctx = await self.queue.get()
                 try:
                     needs_5m = self._symbol_requires_5m(ctx)
                     if not self.data.ready(symbol, "1m"):
@@ -169,31 +166,11 @@ class StreamEvaluationEngine:
                     logger.exception("Evaluator crashed on %s", symbol)
                 finally:
                     self.queue.task_done()
-        except Exception as e:
-            logger.error(f"Worker error: {e}; restarting...")
-        finally:
-            await asyncio.sleep(1)
-        while not self._stop.is_set():
-            try:
-                symbol, ctx = await self.queue.get()
             except asyncio.CancelledError:  # pragma: no cover - shutdown
                 return
-            try:
-                needs_5m = self._symbol_requires_5m(ctx)
-                if not self.data.ready(symbol, "1m"):
-                    logger.debug("EVAL SKIP {}: 1m warmup not met", symbol)
-                    continue
-                if needs_5m and not self.data.ready(symbol, "5m"):
-                    logger.debug("EVAL SKIP {}: 5m warmup not met", symbol)
-                    continue
-
-                async with self.gate.hold(f"{symbol}"):
-                    logger.info("EVAL START {}", symbol)
-                    await self._evaluate_symbol(symbol, ctx)
-            except Exception:
-                logger.exception("Evaluator crashed on {}", symbol)
-            finally:
-                self.queue.task_done()
+            except Exception as e:
+                logger.error(f"Worker error: {e}; restarting...")
+                await asyncio.sleep(1)
         await asyncio.sleep(0)
 
     async def enqueue(self, symbol: str, ctx: dict) -> None:
