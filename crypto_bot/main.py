@@ -244,6 +244,8 @@ NEW_SOLANA_TOKENS: set[str] = set()
 CROSS_ARB_TASKS: set[asyncio.Task] = set()
 # Track all spawned background tasks for coordinated shutdown
 BACKGROUND_TASKS: list[asyncio.Task] = []
+# Track pending OHLCV tasks during startup
+pending_tasks: list[asyncio.Task] = []
 
 
 def register_task(task: asyncio.Task | None) -> asyncio.Task | None:
@@ -966,6 +968,8 @@ async def initial_scan(
         logger.info("Initial scan %.1f%% complete", pct)
         if notifier and config.get("telegram", {}).get("status_updates", True):
             notifier.notify(f"Initial scan {pct:.1f}% complete")
+    if pending_tasks:
+        await asyncio.gather(*pending_tasks, return_exceptions=True)
 
     return
 
