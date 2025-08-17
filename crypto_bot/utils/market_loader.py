@@ -718,12 +718,36 @@ async def load_kraken_symbols(
     """
 
     exclude_set = set(exclude or [])
+    timeout = config.get("symbol_scan_timeout", 30) if config else 30
     if config and "exchange_market_types" in config:
         allowed_types = set(config["exchange_market_types"])
     else:
         allowed_types = set(getattr(exchange, "exchange_market_types", []))
         if not allowed_types:
             allowed_types = {"spot"}
+
+    async def _call_with_retry(func, *args, **kwargs):
+        delay = 1
+        for attempt in range(2):
+            try:
+                if asyncio.iscoroutinefunction(func):
+                    return await asyncio.wait_for(
+                        func(*args, **kwargs), timeout=timeout
+                    )
+                return await asyncio.wait_for(
+                    asyncio.to_thread(func, *args, **kwargs), timeout=timeout
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "%s timed out while loading markets (attempt %d/%d)",
+                    getattr(func, "__name__", "call"),
+                    attempt + 1,
+                    2,
+                )
+                if attempt + 1 >= 2:
+                    return None
+                await asyncio.sleep(delay)
+                delay *= 2
 
     markets = None
     if getattr(exchange, "has", {}).get("fetchMarketsByType"):
@@ -734,19 +758,12 @@ async def load_kraken_symbols(
             markets = {}
             for m_type in allowed_types:
                 try:
-                    if asyncio.iscoroutinefunction(fetcher):
-                        fetched = await fetcher(m_type)
-                    else:
-                        fetched = await asyncio.to_thread(fetcher, m_type)
+                    fetched = await _call_with_retry(fetcher, m_type)
                 except TypeError:
                     params = {"type": m_type}
-                    if asyncio.iscoroutinefunction(fetcher):
-                        fetched = await fetcher(params)
-                    else:
-                        fetched = await asyncio.to_thread(fetcher, params)
-                except Exception as exc:  # pragma: no cover - safety
-                    logger.warning("fetch_markets_by_type failed: %s", exc)
-                    continue
+                    fetched = await _call_with_retry(fetcher, params)
+                if fetched is None:
+                    return None
                 if isinstance(fetched, dict):
                     for sym, info in fetched.items():
                         info.setdefault("type", m_type)
@@ -758,10 +775,13 @@ async def load_kraken_symbols(
                             info.setdefault("type", m_type)
                             markets[sym] = info
     if markets is None:
-        if asyncio.iscoroutinefunction(getattr(exchange, "load_markets", None)):
-            markets = await exchange.load_markets()
+        load_fn = getattr(exchange, "load_markets", None)
+        if load_fn:
+            markets = await _call_with_retry(load_fn)
+            if markets is None:
+                return None
         else:
-            markets = await asyncio.to_thread(exchange.load_markets)
+            markets = {}
 
     df = pd.DataFrame.from_dict(markets, orient="index")
     df.index.name = "symbol"
