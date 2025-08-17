@@ -2958,11 +2958,20 @@ async def _main_impl() -> MainResult:
         selected_symbols = list(dict.fromkeys(config.get("symbols", [])))
 
         async def strategy_loop() -> None:
-            await strategies.initialize(selected_symbols)
+            try:
+                await strategies.initialize(
+                    selected_symbols,
+                    mode=config.get("mode", "cex"),
+                )
+            except Exception:
+                logger.exception("Strategy engine initialization failed")
+                return
+
             logger.info(
                 "Strategy engine initialized for %d symbols; starting scoring loop...",
                 len(selected_symbols),
             )
+
             scan_secs = int(config.get("scan_interval_seconds", 10))
             while not shutdown_event.is_set():
                 try:
