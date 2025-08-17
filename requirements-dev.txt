@@ -3,6 +3,7 @@ flask
 base58
 python-dotenv
 websocket-client
+websockets
 keyring
 tenacity
 fakeredis
