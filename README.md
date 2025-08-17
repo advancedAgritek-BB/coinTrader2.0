@@ -244,19 +244,19 @@ Run it with:
 python examples/wallet_demo.py
 ```
 
-Run `python crypto_bot/wallet_manager.py` if you want to create `user_config.yaml` and enter your exchange credentials and Helius API key manually. This step is optional—`python -m crypto_bot.main` launches the same wizard automatically whenever credentials or `user_config.yaml` are missing. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
-Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials and Helius and Supabase API keys. Values from `crypto_bot/.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
+Run `python crypto_bot/wallet_manager.py` if you want to create `user_config.yaml` and enter your exchange credentials and Helius API key manually. This step is optional—`python -m crypto_bot.main` launches the same wizard automatically whenever credentials or `user_config.yaml` are missing. Values from `.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
+Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials and Helius and Supabase API keys. Values from `.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
 
 ## Configuration Files
 
 The bot looks in two locations for settings:
 
-1. **`crypto_bot/.env`** – store API keys and other environment variables here. These values override entries loaded by `wallet_manager.py` if you choose to run it.
+1. **`.env`** – store API keys and other environment variables here. These values override entries loaded by `wallet_manager.py` if you choose to run it.
 2. **`crypto_bot/config.yaml`** – general runtime options controlling strategy behaviour and notifications.
 
 ### Environment Variables
 
-Create `crypto_bot/.env` and fill in your secrets. Example:
+Create `.env` and fill in your secrets. Example:
 
 ```env
 EXCHANGE=coinbase              # or kraken
@@ -295,7 +295,7 @@ token_registry.refresh_interval_minutes=720  # optional cache update interval
 
 Kraken WebSocket tokens are fetched automatically using your API key and secret. Set `KRAKEN_WS_TOKEN` in `.env` only if you need to override the fetched token.
 
-`FERNET_KEY` holds the encryption key used by wallet_manager.py when saving credentials. Generate it with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` and set in `crypto_bot/.env`.
+`FERNET_KEY` holds the encryption key used by wallet_manager.py when saving credentials. Generate it with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` and set in `.env`.
 
 Each credential can be supplied in `.env`, or if missing, will be requested interactively by the setup scripts.
 
@@ -767,10 +767,10 @@ cap.
 1. Create API keys on **Coinbase Advanced Trade** or **Kraken**.
 2. (Optional) Run `python crypto_bot/wallet_manager.py` to generate `user_config.yaml`. Any
    credentials found in the environment will be used automatically. `python -m crypto_bot.main` will start the same wizard when credentials or `user_config.yaml` are missing.
-3. Place your API keys in `crypto_bot/.env` as shown in the configuration
+3. Place your API keys in `.env` as shown in the configuration
    section above. Environment variables take precedence over values stored in
    `user_config.yaml`.
-3. Fill out `crypto_bot/.env` with your API keys and optional `FERNET_KEY`.
+3. Fill out `.env` with your API keys and optional `FERNET_KEY`.
    Environment variables take precedence over values stored in
    `user_config.yaml`. If you prefer to enter credentials interactively,
    leave the entries commented out.
@@ -868,19 +868,19 @@ If the call fails or you do not receive a message, check for these common issues
 
 ### Twitter Sentiment API
 
-Add `TWITTER_SENTIMENT_URL` to `crypto_bot/.env` to point at the sentiment
+Add `TWITTER_SENTIMENT_URL` to `.env` to point at the sentiment
 service used by `sentiment_filter.py`. If this variable is not provided, the bot
 defaults to the placeholder `https://api.example.com/twitter-sentiment`, so
 sentiment fetches will fail until a real URL is supplied.
 
 ### Funding Rate API
 
-Add `FUNDING_RATE_URL` to `crypto_bot/.env` to specify the endpoint used by
+Add `FUNDING_RATE_URL` to `.env` to specify the endpoint used by
 `volatility_filter.py` when fetching perpetual funding rates. Without this
 variable the bot falls back to the placeholder `https://funding.example.com`
 and will log errors until a real URL is supplied.
 
-For Kraken, add the following line to `crypto_bot/.env`:
+For Kraken, add the following line to `.env`:
 
 ```env
 FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
@@ -892,7 +892,7 @@ when requesting funding information.
 ### LunarCrush API
 
 Sign up at [LunarCrush](https://lunarcrush.com/developers) to generate an API
-key. Set `LUNARCRUSH_API_KEY` in `crypto_bot/.env` or export it in your
+key. Set `LUNARCRUSH_API_KEY` in `.env` or export it in your
 environment so the bot can retrieve social metrics. The free tier allows about
 100 requests per day.
 
@@ -907,7 +907,7 @@ environment so the bot can retrieve social metrics. The free tier allows about
    use_websocket: true      # enable when trading on Kraken via WebSocket
    ```
 
-For Kraken, a WebSocket token is requested automatically using your API key and secret. To override the fetched token, add it to `crypto_bot/.env`:
+For Kraken, a WebSocket token is requested automatically using your API key and secret. To override the fetched token, add it to `.env`:
 
 ```env
 # KRAKEN_WS_TOKEN=your_ws_token  # optional override
@@ -1484,7 +1484,7 @@ tweet volume is high.
 
 Add a `meme_wave_sniper` section to `crypto_bot/config.yaml`:
 
-Set `HELIUS_API_KEY` in `crypto_bot/.env` or as an environment variable. The pool
+Set `HELIUS_API_KEY` in `.env` or as an environment variable. The pool
 URL should reference this key so Helius can authorize the requests:
 
 ```yaml
@@ -1675,7 +1675,7 @@ python ml_trainer.py train regime --use-gpu --federated
 ```
 
 Ensure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_KEY`, or `SUPABASE_API_KEY` are set
-in `crypto_bot/.env` so the upload succeeds. Set
+in `.env` so the upload succeeds. Set
 `use_ml_regime_classifier: true` in `crypto_bot/regime/regime_config.yaml` to
 enable automatic downloads of the trained model when the bot starts.
 

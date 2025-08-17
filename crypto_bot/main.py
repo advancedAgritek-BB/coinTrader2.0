@@ -258,7 +258,7 @@ def _run_wallet_manager() -> None:
         print(
             "Interactive setup required but no TTY is attached.\n"
             "Run `python -m crypto_bot.wallet_manager` once to create credentials, "
-            "or set them in crypto_bot/.env.",
+            "or set them in the repository .env file.",
             file=sys.stderr,
         )
         sys.exit(2)
