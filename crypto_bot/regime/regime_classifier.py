@@ -205,9 +205,7 @@ def _ml_fallback(
         else:
             global _ml_recovery_task
             if _ml_recovery_task is None or _ml_recovery_task.done():
-                _ml_recovery_task = loop.create_task(
-                    _ml_recovery_loop(notifier)
-                )
+                _ml_recovery_task = loop.create_task(_ml_recovery_loop(notifier))
 
     try:  # pragma: no cover - optional dependency
         from .ml_fallback import predict_regime
@@ -222,11 +220,14 @@ def _ml_fallback(
     return label, float(conf)
 
 
-async def _download_supabase_model(symbol: str | None = None):
+async def _download_supabase_model(symbol: str | None = None) -> object | None:
     """Download LightGBM model from Supabase and return a Booster."""
     async with _supabase_model_lock:
-        model = await load_regime_model(symbol)
-        model, _ = await load_regime_model(os.getenv("SYMBOL", "BTCUSDT"))
+        target_symbol = symbol or os.getenv("SYMBOL", "BTCUSDT")
+        model, path = await load_regime_model(target_symbol)
+        if model is None:
+            logger.warning("No model in Supabase at %s", path)
+            return None
         return model
 
 
@@ -240,59 +241,6 @@ async def _get_supabase_model(symbol: str | None = None) -> object | None:
         return _supabase_model
 
 
-async def load_regime_model(symbol: str | None = None) -> object:
-    """Load pair-specific model if available, else fall back to global."""
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
-
-    try:  # pragma: no cover - optional dependency
-        from supabase import create_client, Client
-    except Exception as exc:
-        logger.warning("Supabase client unavailable: %s", exc)
-        from .model_data import MODEL_B64
-        import base64
-
-        return pickle.loads(base64.b64decode(MODEL_B64))
-
-    client: Client = create_client(supabase_url, supabase_key)
-
-    bucket = os.getenv("CT_MODELS_BUCKET", "models")
-    prefix = os.getenv("CT_REGIME_PREFIX", "models/regime")
-
-    if symbol:
-        pair_prefix = f"{prefix}/{symbol.upper().replace('/', '')}/"
-        try:
-            manifest = client.storage.from_(bucket).download(f"{pair_prefix}LATEST.json")
-            manifest_data = json.loads(manifest)
-            model_path = manifest_data["path"]
-            model_data = client.storage.from_(bucket).download(model_path)
-            model = pickle.loads(model_data)
-            logger.info(
-                "Loaded pair-specific regime model for %s from Supabase", symbol
-            )
-            return model
-        except Exception as exc:  # pragma: no cover - model optional
-            logger.warning(
-                "No pair-specific model for %s: %s. Falling back to global.",
-                symbol,
-                exc,
-            )
-
-    try:
-        global_prefix = f"{prefix}/global/"
-        manifest = client.storage.from_(bucket).download(f"{global_prefix}LATEST.json")
-        manifest_data = json.loads(manifest)
-        model_path = manifest_data["path"]
-        model_data = client.storage.from_(bucket).download(model_path)
-        model = pickle.loads(model_data)
-        logger.info("Loaded global regime model from Supabase")
-        return model
-    except Exception as exc:  # pragma: no cover - model optional
-        logger.error("Failed to load global model: %s. Using embedded fallback.", exc)
-        from .model_data import MODEL_B64
-        import base64
-
-        return pickle.loads(base64.b64decode(MODEL_B64))
 async def load_regime_model(symbol: str) -> tuple[object | None, str | None]:
     try:
         from supabase import create_client
@@ -656,9 +604,7 @@ def _classify_all(
         use_ml = cfg.get("use_ml_regime_classifier", False)
         use_pair = cfg.get("use_per_pair_models", False)
         if use_ml and len(df) >= ml_min_bars:
-            label, conf = _classify_ml(
-                df, notifier, symbol if use_pair else None
-            )
+            label, conf = _classify_ml(df, notifier, symbol if use_pair else None)
             log_patterns(label, patterns)
             return label, _probabilities(label, conf), patterns
         if len(df) >= ml_min_bars:
@@ -692,9 +638,7 @@ def _classify_all(
     use_ml = cfg.get("use_ml_regime_classifier", False)
     use_pair = cfg.get("use_per_pair_models", False)
     if use_ml and len(df) >= ml_min_bars:
-        ml_label, conf = _classify_ml(
-            df, notifier, symbol if use_pair else None
-        )
+        ml_label, conf = _classify_ml(df, notifier, symbol if use_pair else None)
         ml_probs = _probabilities(ml_label, conf)
         if regime == "unknown" and ml_label != "unknown":
             log_patterns(ml_label, patterns)
@@ -702,9 +646,7 @@ def _classify_all(
 
     if regime == "unknown":
         if cfg.get("use_ml_regime_classifier", False) and len(df) >= ml_min_bars:
-            label, conf = _classify_ml(
-                df, notifier, symbol if use_pair else None
-            )
+            label, conf = _classify_ml(df, notifier, symbol if use_pair else None)
             log_patterns(label, patterns)
             return label, _normalize(_probabilities(label, conf)), patterns
         if len(df) >= ml_min_bars:
