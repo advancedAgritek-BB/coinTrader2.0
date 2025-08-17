@@ -1,13 +1,8 @@
 import logging
 
-from logging_setup import setup_logging
+from crypto_bot.utils.logging_config import setup_logging
 
-# Disable console logging; only log to file so the monitor can display
-# the latest entry without a noisy stream in the terminal.
-setup_logging(level="INFO", logfile="bot.log", console_level=None)
-
-logger = logging.getLogger("crypto_bot.main")
-logger.info("Starting bot")
+setup_logging("logs/bot.log", level=logging.INFO)
 
 from .cli import main
 
