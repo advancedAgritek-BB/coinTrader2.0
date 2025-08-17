@@ -13,7 +13,8 @@ class DummyExchange:
         self.data = data
 
     def fetch_ohlcv(self, symbol, timeframe="1d", limit=30):
-        closes = self.data[symbol]
+        base = symbol.split("/")[0]
+        closes = self.data[base]
         return [[0, c, c, c, c, 1] for c in closes[-limit:]]
 
 
@@ -24,9 +25,11 @@ def test_score_assets_returns_scores():
     }
     ex = DummyExchange(data)
     rotator = PortfolioRotator()
-    scores = asyncio.run(rotator.score_assets(ex, ["BTC", "ETH"], 5, "momentum"))
-    assert set(scores.keys()) == {"BTC", "ETH"}
-    assert scores["BTC"] > scores["ETH"]
+    scores = asyncio.run(
+        rotator.score_assets(ex, ["BTC/USD", "ETH/USD"], 5, "momentum")
+    )
+    assert set(scores.keys()) == {"BTC/USD", "ETH/USD"}
+    assert scores["BTC/USD"] > scores["ETH/USD"]
 
 
 def test_rotate_calls_converter(monkeypatch):
@@ -98,7 +101,7 @@ def test_rotate_logs_scores(tmp_path, monkeypatch):
 
 class BadDataExchange(DummyExchange):
     def fetch_ohlcv(self, symbol, timeframe="1d", limit=30):
-        if symbol == "BAD":
+        if symbol.split("/")[0] == "BAD":
             raise ValueError("bad data")
         return super().fetch_ohlcv(symbol, timeframe, limit)
 
@@ -109,10 +112,12 @@ def test_score_assets_skips_invalid_ohlcv(caplog):
     rotator = PortfolioRotator()
 
     with caplog.at_level("ERROR"):
-        scores = asyncio.run(rotator.score_assets(ex, ["BTC", "BAD"], 3, "momentum"))
+        scores = asyncio.run(
+            rotator.score_assets(ex, ["BTC/USD", "BAD/USD"], 3, "momentum")
+        )
 
-    assert set(scores.keys()) == {"BTC"}
-    assert any("OHLCV fetch failed for BAD" in r.message for r in caplog.records)
+    assert set(scores.keys()) == {"BTC/USD"}
+    assert any("OHLCV fetch failed for BAD/USD" in r.message for r in caplog.records)
 
 
 def test_rotate_ignores_tokens_without_pair(monkeypatch):
@@ -170,7 +175,9 @@ def test_score_assets_handles_invalid_data(caplog):
     rotator = PortfolioRotator()
     caplog.set_level(logging.ERROR)
 
-    scores = asyncio.run(rotator.score_assets(BadExchange(), ["BTC"], 5, "momentum"))
+    scores = asyncio.run(
+        rotator.score_assets(BadExchange(), ["BTC/USD"], 5, "momentum")
+    )
 
     assert scores == {}
     assert any("Invalid OHLCV" in r.getMessage() for r in caplog.records)
