@@ -318,6 +318,7 @@ def test_reload_config_clears_symbol_cache(monkeypatch):
 
 def test_load_config_async_detects_section_changes(tmp_path, monkeypatch):
     main = _import_main(monkeypatch)
+    monkeypatch.setattr(main, "ML_AVAILABLE", True, raising=False)
 
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text("ml_enabled: true\nrisk:\n  max_drawdown: 1\n")

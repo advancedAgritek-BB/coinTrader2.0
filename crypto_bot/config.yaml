@@ -252,6 +252,12 @@ meme_wave_sniper:
     weight_liquidity: 0.8
     weight_social: 0.7
     weight_tx: 1.2
+yamlmeme_sniper:
+  min_pump_prob: 0.6  # Assessment threshold
+  max_dev_hold_pct: 20
+  min_liquidity_usd: 5000
+  twitter_sentiment_min: 70
+  helius_api_key: your_key_here  # For metadata
 mempool_monitor:
   action: reprice
   enabled: true
@@ -336,6 +342,7 @@ portfolio_rotation:
   top_assets: 20
 preferred_chain: solana
 primary_exchange: kraken
+solana_rpc: https://api.mainnet-beta.solana.com  # Custom endpoint
 pyth:
   enabled: true
   program_id: FsJ3A3u2vn5cTVofAjvy6qM3HrjTXg5Gs1Y8D6fCt3m
