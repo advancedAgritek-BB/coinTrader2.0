@@ -45,12 +45,18 @@ def _supports_mode(strategy: Any, mode: str) -> bool:
 
 
 async def _maybe_await(func: Callable[..., Any], *args, **kwargs) -> Any:
-    """Invoke ``func`` and await the result if it returns an awaitable."""
+    """Call a strategy function with only the kwargs it accepts.
 
-    result = func(*args, **kwargs)
-    if inspect.isawaitable(result):
-        return await result
-    return result
+    Works with both sync and async strategy functions.
+    """
+
+    sig = inspect.signature(func)
+    accepted = set(sig.parameters.keys())
+    filtered = {k: v for k, v in kwargs.items() if k in accepted}
+
+    if inspect.iscoroutinefunction(func):
+        return await func(*args, **filtered)
+    return func(*args, **filtered)
 
 
 async def initialize(symbols: list[str], mode: str = "cex") -> None:
