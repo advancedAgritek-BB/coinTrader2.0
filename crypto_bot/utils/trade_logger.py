@@ -1,6 +1,7 @@
 import pandas as pd
 from typing import Dict
 from datetime import datetime
+from pathlib import Path
 from dotenv import dotenv_values
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -37,7 +38,8 @@ def log_trade(order: Dict, is_stop: bool = False) -> None:
     msg = "Stop order placed: %s" if is_stop else "Logged trade: %s"
     logger.info(msg, record)
     try:
-        creds_path = dotenv_values('crypto_bot/.env').get('GOOGLE_CRED_JSON')
+        root_env = Path(__file__).resolve().parents[2] / '.env'
+        creds_path = dotenv_values(root_env).get('GOOGLE_CRED_JSON')
         if creds_path:
             scope = ['https://spreadsheets.google.com/feeds',
                      'https://www.googleapis.com/auth/drive']
