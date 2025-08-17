@@ -40,10 +40,12 @@ def test_trade_stats_lines(tmp_path):
     )
     ex = PriceExchange({"XBT/USDT": 110, "ETH/USDT": 55})
     lines = asyncio.run(console_monitor.trade_stats_lines(ex, trade_file))
-    assert sorted(lines) == [
-        "XBT/USDT -- 100.00 -- +10.00",
-        "ETH/USDT -- 60.00 -- +10.00",
-    ]
+    assert sorted(lines) == sorted(
+        [
+            "XBT/USDT -- 100.00 -- +10.00",
+            "ETH/USDT -- 60.00 -- +10.00",
+        ]
+    )
 
     joined = " | ".join(lines)
     assert "XBT/USDT -- 100.00 -- +10.00" in joined
