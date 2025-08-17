@@ -45,6 +45,7 @@ from crypto_bot.ml.selfcheck import log_ml_status_once
 try:  # pragma: no cover - optional strategies module
     from crypto_bot import strategies
     from crypto_bot.strategies import set_ohlcv_provider
+    from crypto_bot.strategies.loader import load_strategies
 except Exception:  # pragma: no cover - fallback if strategies module missing
     strategies = types.SimpleNamespace(
         initialize=lambda *_a, **_k: asyncio.sleep(0),
@@ -54,6 +55,9 @@ except Exception:  # pragma: no cover - fallback if strategies module missing
     def set_ohlcv_provider(*_a, **_k):
         """Fallback no-op when strategies module is unavailable."""
         return None
+
+    def load_strategies(*_a, **_k):
+        return []
 
 shutdown_event = asyncio.Event()
 
@@ -2995,26 +2999,39 @@ async def _main_impl() -> MainResult:
 
         async def strategy_loop() -> None:
             try:
-                await strategies.initialize(
-                    selected_symbols,
-                    mode=config.get("mode", "cex"),
+                loaded_strategies = load_strategies(
+                    mode=config.get("mode", "cex")
                 )
             except Exception:
                 logger.exception("Strategy engine initialization failed")
                 return
+            if not loaded_strategies:
+                logger.error("No strategies loaded; aborting HFT loop")
+                return
 
             logger.info(
-                "Strategy engine initialized for %d symbols; starting scoring loop...",
+                "Loaded %d strategies for %d symbols; starting scoring loop...",
+                len(loaded_strategies),
                 len(selected_symbols),
             )
 
             scan_secs = int(config.get("scan_interval_seconds", 10))
             while not shutdown_event.is_set():
                 try:
-                    scores = await strategies.score(
-                        symbols=selected_symbols,
-                        timeframes=["1m", "5m"],
-                    )
+                    scores: dict[str, float] = {}
+                    for strat in loaded_strategies:
+                        try:
+                            res = await strategies.score(
+                                strat,
+                                symbols=selected_symbols,
+                                timeframes=["1m", "5m"],
+                            )
+                            for (sym, tf), val in res.items():
+                                scores[f"{strat.name}:{sym}:{tf}"] = val
+                        except Exception:
+                            logger.exception(
+                                "Strategy %s scoring failed", getattr(strat, "name", str(strat))
+                            )
                     logger.info(
                         "Top strategy scores:\n%s",
                         format_top(scores, n=25),
