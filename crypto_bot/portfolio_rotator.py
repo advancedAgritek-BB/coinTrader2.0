@@ -77,7 +77,9 @@ class PortfolioRotator:
 
         scores: Dict[str, float] = {}
         fetch_fn = getattr(exchange, "fetch_ohlcv", None)
-        for sym in symbols:
+        # Only iterate valid market symbols (e.g. "BTC/USD")
+        safe_symbols = [s for s in symbols if isinstance(s, str) and "/" in s]
+        for sym in safe_symbols:
             try:
                 if asyncio.iscoroutinefunction(fetch_fn):
                     ohlcv = await fetch_fn(sym, timeframe="1d", limit=lookback_days)
@@ -151,7 +153,9 @@ class PortfolioRotator:
             if isinstance(v, (int, float)) and v > 0 and k in pair_map.values()
         }
 
-        scores_pairs = await self.score_assets(exchange, pair_map.keys(), lookback, method)
+        scores_pairs = await self.score_assets(
+            exchange, list(pair_map.keys()), lookback, method
+        )
         scores = {pair_map.get(p, p): s for p, s in scores_pairs.items()}
         self._log_scores(scores)
         if not scores:
