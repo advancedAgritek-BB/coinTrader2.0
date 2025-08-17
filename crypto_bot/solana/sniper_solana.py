@@ -328,3 +328,67 @@ async def rug_check(
                 "risk_score": risk_score,
                 "details": details,
             }
+
+
+async def _get_price_volume(mint: str) -> tuple[float, float]:
+    """Return current price and 24h volume for ``mint`` using DexScreener."""
+
+    url = DEXSCREENER_API_URL.format(token=mint)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as resp:
+                data = await resp.json()
+        pair = (data.get("pairs") or [{}])[0]
+        price = float(pair.get("priceUsd") or 0.0)
+        volume = float((pair.get("volume") or {}).get("h24") or 0.0)
+    except Exception:  # pragma: no cover - network errors
+        price, volume = 0.0, 0.0
+    return price, volume
+
+
+async def execute_snipe(
+    mint: str, cfg: Mapping[str, Any], exchange: object
+) -> Dict[str, Any]:
+    """Buy a token and exit on trailing stop or volume dump."""
+
+    from crypto_bot.execution.cex_executor import (
+        execute_trade_async as cex_trade_async,
+    )
+    from crypto_bot.fund_manager import auto_convert_funds
+
+    symbol = cfg.get("symbol", "")
+    market = symbol if "/" in symbol else f"{symbol}/USDC"
+    wallet_balance = float(cfg.get("wallet_balance", 0))
+    trade_size = float(cfg.get("trade_size_pct", 0)) * wallet_balance
+    if trade_size <= 0:
+        return {"error": "invalid_trade_size"}
+
+    await cex_trade_async(exchange, market, "buy", trade_size)
+
+    price, volume = await _get_price_volume(mint)
+    peak_price = price
+    peak_volume = volume
+    trailing_pct = float(cfg.get("trailing_stop_pct", 10))
+    volume_drop_pct = float(cfg.get("volume_drop_pct", 50))
+    poll = float(cfg.get("poll_interval", 1))
+
+    while True:
+        await asyncio.sleep(poll)
+        price, volume = await _get_price_volume(mint)
+        if price <= 0:
+            continue
+        if price > peak_price:
+            peak_price = price
+        if volume > peak_volume:
+            peak_volume = volume
+
+        price_drop = (peak_price - price) / peak_price if peak_price else 0.0
+        vol_drop = (peak_volume - volume) / peak_volume if peak_volume else 0.0
+        if trailing_pct and price_drop >= trailing_pct / 100:
+            await cex_trade_async(exchange, market, "sell", trade_size)
+            await auto_convert_funds("USDC", "BTC", exchange)
+            return {"exit": "trailing", "price": price}
+        if volume_drop_pct and vol_drop >= volume_drop_pct / 100:
+            await cex_trade_async(exchange, market, "sell", trade_size)
+            await auto_convert_funds("USDC", "BTC", exchange)
+            return {"exit": "volume", "price": price}
