@@ -13,6 +13,25 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 
 
+def kelly_fraction(win_prob: float, win_loss_ratio: float) -> float:
+    """Return the Kelly fraction for the given win probability and ratio.
+
+    Parameters
+    ----------
+    win_prob:
+        Probability of a winning trade expressed as a value between 0 and 1.
+    win_loss_ratio:
+        The ratio of average win amount to average loss amount.
+
+    Returns
+    -------
+    float
+        Fraction of capital to allocate according to the Kelly criterion.
+    """
+
+    return (win_prob * (win_loss_ratio + 1) - 1) / win_loss_ratio
+
+
 # Log to the main bot file so risk messages are consolidated
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
@@ -361,3 +380,24 @@ class RiskManager:
     def deallocate_capital(self, strategy: str, amount: float) -> None:
         """Release previously allocated capital."""
         self.capital_tracker.deallocate(strategy, amount)
+
+    def kelly_position_size(self, win_prob: float, win_loss_ratio: float, balance: float) -> float:
+        """Return position size suggested by the Kelly criterion.
+
+        Parameters
+        ----------
+        win_prob:
+            Probability of a winning trade.
+        win_loss_ratio:
+            Ratio of average win amount to average loss amount.
+        balance:
+            Current account balance.
+
+        Returns
+        -------
+        float
+            Recommended position size in notional terms.
+        """
+
+        fraction = kelly_fraction(win_prob, win_loss_ratio)
+        return max(fraction, 0.0) * balance

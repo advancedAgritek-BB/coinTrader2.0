@@ -1,8 +1,10 @@
 import json
-import pandas as pd
-from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
-from crypto_bot.volatility_filter import calc_atr
 import logging
+
+import pandas as pd
+
+from crypto_bot.risk.risk_manager import RiskManager, RiskConfig, kelly_fraction
+from crypto_bot.volatility_filter import calc_atr
 
 
 def volume_df(volumes: list[float]) -> pd.DataFrame:
@@ -14,6 +16,12 @@ def volume_df(volumes: list[float]) -> pd.DataFrame:
         "volume": volumes,
     }
     return pd.DataFrame(data)
+
+
+def test_kelly_fraction_basic() -> None:
+    """Ensure Kelly fraction computes expected sizing."""
+
+    assert round(kelly_fraction(0.6, 1.0), 2) == 0.20
 
 def test_allow_trade_rejects_below_min_volume():
     df = volume_df([1] * 19 + [0.5])
