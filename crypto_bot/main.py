@@ -2904,6 +2904,7 @@ async def _main_impl() -> MainResult:
         )
 
     async def status_loop() -> None:
+        last_line = ""
         while True:
             try:
                 balance = await fetch_balance(exchange, wallet, config)
@@ -2914,7 +2915,11 @@ async def _main_impl() -> MainResult:
             line = (
                 f"[Monitor] balance=${balance:,.2f} open={len(positions)} ({tickers})  last='{lastlog.last}'"
             )
-            print("\r" + line[:180].ljust(180), end="", flush=True)
+            out_line = line[:180]
+            if out_line != last_line:
+                sys.stdout.write("\r" + out_line.ljust(180))
+                sys.stdout.flush()
+                last_line = out_line
             await asyncio.sleep(5)
 
     register_task(asyncio.create_task(status_loop()))
