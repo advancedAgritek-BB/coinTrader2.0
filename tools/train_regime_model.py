@@ -12,7 +12,7 @@ LOG = logging.getLogger("train_regime_model")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 
 TRADES_PATH = Path("crypto_bot/logs/trades.csv")
-MODEL_PATH = Path("regime_lgbm.pkl")
+MODEL_PATH = Path("xrpusd_regime_lgbm.pkl")
 
 
 def load_trades(path: Path) -> pd.DataFrame:

@@ -19,7 +19,7 @@ def test_assess_early_token_scoring(monkeypatch):
         return [[0, 1, 1, 1, 1, 20_000]]
 
     def fake_load_model(name: str):
-        assert name == "regime_lgbm"
+        assert name == "xrpusd_regime_lgbm"
         return object()
 
     def fake_predict_regime(df, model):

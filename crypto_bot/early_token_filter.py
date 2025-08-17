@@ -100,7 +100,7 @@ async def assess_early_token(symbol: str, mint: str, cfg: Dict[str, Any]) -> flo
     # --- ML prediction ---------------------------------------------------
     if load_model and predict_regime:
         try:
-            model = load_model("regime_lgbm")
+            model = load_model("xrpusd_regime_lgbm")
             # Minimal feature set; additional features can be added as needed.
             early_df = pd.DataFrame(
                 [{"volume": vol_usd, "sentiment": sentiment}]
