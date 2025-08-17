@@ -12,12 +12,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Literal, Optional
+import logging
 import os
 
 import numpy as np
 import pandas as pd
 
 from crypto_bot.regime.registry import load_latest_regime
+
+
+logger = logging.getLogger(__name__)
 
 
 Action = Literal["long", "flat", "short"]
@@ -103,6 +107,11 @@ def predict(features: pd.DataFrame, symbol: str = "BTCUSDT") -> Prediction:
     """Predict the trading regime for the provided ``features``."""
 
     if not _have_supabase_creds():
+        logger.warning(
+            "Supabase credentials missing; set SUPABASE_URL and one of "
+            "SUPABASE_SERVICE_ROLE_KEY, SUPABASE_KEY or SUPABASE_API_KEY. "
+            "Falling back to heuristic regime (set features.ml=false to run heuristics)."
+        )
         return _baseline_action(features)
 
     try:
@@ -124,6 +133,14 @@ def predict(features: pd.DataFrame, symbol: str = "BTCUSDT") -> Prediction:
         action = mapping.get(class_id, "flat")
         score = float(proba[idx]) if hasattr(proba, "__len__") else float(proba)
         return Prediction(action=action, score=score, meta=meta)
-    except Exception:  # pragma: no cover - network or model failure
+    except Exception as exc:  # pragma: no cover - network or model failure
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        if status == 404 or "404" in str(exc):
+            logger.warning(
+                "No regime model found in Supabase (404). Falling back to heuristic "
+                "mode; remove Supabase credentials or set features.ml=false to run heuristics."
+            )
+        else:
+            logger.error("Failed to load regime model for %s: %s", symbol, exc)
         return _baseline_action(features)
 

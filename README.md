@@ -147,7 +147,10 @@ Configure the loader with the following environment variables:
 
 ```ini
 SUPABASE_URL=
+# One of the following keys must be set to download ML regime models
 SUPABASE_SERVICE_ROLE_KEY=
+# SUPABASE_KEY=
+# SUPABASE_API_KEY=
 CT_MODELS_BUCKET=models
 CT_REGIME_PREFIX=models/regime
 CT_SYMBOL=BTCUSDT
@@ -179,10 +182,10 @@ needed.
    Install them with `pip install -r requirements.txt` when `rl_selector.enabled`
    is set to `true` in `crypto_bot/config.yaml`. Set `rl_selector.enabled: false`
    if you prefer not to install these extra dependencies.
-   Machine learning integrations download pretrained models from Supabase.
-   The `cointrader-trainer` package is only needed when training new models;
-   runtime usage pulls models automatically as long as `SUPABASE_URL` and
-   `SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_KEY`) are configured.
+    Machine learning integrations download pretrained models from Supabase.
+    The `cointrader-trainer` package is only needed when training new models;
+    runtime usage pulls models automatically as long as `SUPABASE_URL` and
+    `SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_KEY`/`SUPABASE_API_KEY`) are configured.
 2. (Optional) Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius API key.
    `python -m crypto_bot.main` will launch this setup wizard automatically when credentials or `user_config.yaml` are missing.
 2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius and Supabase API keys.
@@ -282,7 +285,10 @@ HELIUS_API_KEY=your_helius_api_key      # required for Jupiter/Helius registry
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 SUPABASE_URL=https://xyzcompany.supabase.co
+# One of these keys must be provided for ML regime models
 SUPABASE_SERVICE_ROLE_KEY=your_service_key
+# SUPABASE_KEY=your_supabase_key
+# SUPABASE_API_KEY=your_api_key
 LUNARCRUSH_API_KEY=your_lunarcrush_api_key  # optional, LunarCrush social metrics
 token_registry.refresh_interval_minutes=720  # optional cache update interval
 ```
@@ -297,7 +303,7 @@ Each credential can be supplied in `.env`, or if missing, will be requested inte
 admin chats. Omit it to restrict control to the single `chat_id` in the
 configuration file.
 
-`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are required for downloading models used by `regime_classifier`.
+`SUPABASE_URL` and either `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_KEY`, or `SUPABASE_API_KEY` are required for downloading models used by `regime_classifier`.
 
 ### Solana token registry
 
@@ -778,8 +784,8 @@ cap.
    # COINBASE_API_PASSPHRASE=your_coinbase_passphrase
    # KRAKEN_API_KEY=your_kraken_key
    # KRAKEN_API_SECRET=your_kraken_secret
-   # SUPABASE_URL=your_supabase_project_url
-   # SUPABASE_SERVICE_ROLE_KEY=your_service_role_key  # or SUPABASE_KEY
+    # SUPABASE_URL=your_supabase_project_url
+    # SUPABASE_SERVICE_ROLE_KEY=your_service_role_key  # or SUPABASE_KEY/SUPABASE_API_KEY
    # FERNET_KEY=your_generated_fernet_key
    ```
 
@@ -1656,7 +1662,7 @@ the trainer to upload a LightGBM model to Supabase:
 python ml_trainer.py train regime --use-gpu --federated
 ```
 
-Ensure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_KEY` are set
+Ensure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_KEY`, or `SUPABASE_API_KEY` are set
 in `crypto_bot/.env` so the upload succeeds. Set
 `use_ml_regime_classifier: true` in `crypto_bot/regime/regime_config.yaml` to
 enable automatic downloads of the trained model when the bot starts.
