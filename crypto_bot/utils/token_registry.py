@@ -12,6 +12,8 @@ from typing import Any, Dict, Iterable, List, Optional
 import aiohttp
 import ccxt.async_support as ccxt
 import yaml
+import websockets
+from solana.rpc.async_api import AsyncClient
 from crypto_bot.solana.helius_client import HELIUS_API_KEY, HeliusClient, helius_available
 
 from crypto_bot.strategy import cross_chain_arb_bot
@@ -53,6 +55,7 @@ WSOL_MINT = "So11111111111111111111111111111111111111112"
 
 PUMP_URL = "https://api.pump.fun/tokens?limit=50&offset=0"
 RAYDIUM_URL = "https://api.raydium.io/v2/main/pairs"
+PUMP_FUN_PROGRAM = "6EF8rrecthR5Dkzon8NwuQ15oXE5mfzG3kC1P8JkLpt"
 
 # Poll interval for monitoring external token feeds
 # Reduced poll interval to surface new tokens faster
@@ -71,6 +74,9 @@ __all__ = [
     "add_manual_override",
     "get_mint_from_gecko",
     "fetch_from_helius",
+    "get_symbol_from_mint",
+    "extract_mint_from_logs",
+    "monitor_pump_websocket",
 ]
 
 
@@ -88,6 +94,44 @@ def _exc_str(exc: BaseException) -> str:
         return msg
     rep = repr(exc)
     return rep if rep else exc.__class__.__name__
+
+
+def extract_mint_from_logs(logs: Iterable[str]) -> str | None:
+    """Naively parse a mint address from Pump.fun logs."""
+    for line in logs:
+        for part in line.split():
+            if len(part) >= 32:
+                return part
+    return None
+
+
+async def get_symbol_from_mint(mint: str, client: AsyncClient) -> str | None:
+    """Attempt to resolve a token symbol from its mint address."""
+    for sym, addr in TOKEN_MINTS.items():
+        if addr == mint:
+            return sym
+    url = f"{HELIUS_TOKEN_API}?api-key={HELIUS_API_KEY}"
+    payload = {"mintAccounts": [mint]}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, timeout=10) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+    except Exception as exc:  # pragma: no cover - network best effort
+        logger.debug("mint lookup failed for %s: %s", mint, _exc_str(exc))
+        return None
+    item = None
+    if isinstance(data, list) and data:
+        item = data[0]
+    elif isinstance(data, dict):
+        items = data.get("tokens") or data.get("data") or []
+        if isinstance(items, list) and items:
+            item = items[0]
+    if isinstance(item, dict):
+        sym = item.get("symbol") or item.get("ticker")
+        if isinstance(sym, str):
+            return sym.upper()
+    return None
 
 
 def to_base_units(amount_tokens: float, decimals: int) -> int:
@@ -598,6 +642,72 @@ async def periodic_mint_sanity_check(interval_hours: float = 24.0) -> None:
         except Exception as exc:  # pragma: no cover - best effort
             logger.error("periodic_mint_sanity_check error: %s", exc)
         await asyncio.sleep(interval_hours * 3600)
+
+
+async def monitor_pump_websocket(cfg: Dict[str, Any] | None = None) -> None:
+    """Subscribe to Pump.fun program logs via WebSocket and update mints."""
+    import sys
+
+    enqueue_solana_tokens = None  # type: ignore
+    main_mod = sys.modules.get("crypto_bot.main")
+    if main_mod is not None:  # pragma: no branch - best effort
+        enqueue_solana_tokens = getattr(main_mod, "enqueue_solana_tokens", None)
+
+    cfg = cfg or {}
+    solana_rpc = cfg.get("solana_rpc", "https://api.mainnet-beta.solana.com")
+    solana_client = AsyncClient(solana_rpc)
+    async with solana_client:
+        while True:
+            try:
+                async with websockets.connect(solana_client.ws_endpoint) as ws:
+                    await ws.send(
+                        json.dumps(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": 1,
+                                "method": "logsSubscribe",
+                                "params": [
+                                    {"mentions": [PUMP_FUN_PROGRAM]},
+                                    {"commitment": "processed"},
+                                ],
+                            }
+                        )
+                    )
+                    async for msg in ws:
+                        data = json.loads(msg)
+                        result = data.get("result") or {}
+                        logs = result.get("value", {}).get("logs") or result.get("logs") or []
+                        if not logs or not any("Mint" in log for log in logs):
+                            continue
+                        mint = extract_mint_from_logs(logs)
+                        if not mint:
+                            continue
+                        symbol = await get_symbol_from_mint(mint, solana_client)
+                        if not symbol:
+                            continue
+                        key = symbol.upper()
+                        if key in TOKEN_MINTS:
+                            continue
+                        TOKEN_MINTS[key] = mint
+                        logger.info("Pump.fun %s mint %s", symbol, mint)
+                        if enqueue_solana_tokens:
+                            try:
+                                enqueue_solana_tokens([f"{key}/{mint}"])
+                            except Exception as exc:  # pragma: no cover - best effort
+                                logger.error("enqueue_solana_tokens failed: %s", _exc_str(exc))
+                        _write_cache()
+                        try:
+                            from .symbol_utils import invalidate_symbol_cache
+
+                            invalidate_symbol_cache()
+                        except Exception:  # pragma: no cover - best effort
+                            pass
+                        start = datetime.utcnow() - timedelta(hours=1)
+                        end = datetime.utcnow()
+                        asyncio.create_task(_fetch_and_train(start, end))
+            except Exception as exc:  # pragma: no cover - best effort
+                logger.error("WebSocket error: %s", _exc_str(exc))
+                await asyncio.sleep(5)
 
 
 async def monitor_pump_raydium() -> None:
