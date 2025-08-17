@@ -2608,15 +2608,13 @@ async def _main_impl() -> MainResult:
             logger.info("Setting %s from .env", key)
 
     # Export secrets into the process env for downstream libs (skip None, coerce to str)
-    for k, v in (secrets or {}).items():
-        # Guard against None values that would crash os.environ
-        if v is None:
-            logger.warning("Skipping env var %s because its value is None", k)
-            continue
-        try:
-            os.environ[str(k)] = str(v)
-        except Exception:
-            logger.exception("Failed to set env var %r", k)
+    os.environ.update({k: str(v) for k, v in (secrets or {}).items() if v is not None})
+
+    # Validate required environment variables for optional features
+    if config.get("ml_enabled", True) and not os.environ.get("SUPABASE_URL"):
+        config["ml_enabled"] = False
+        config.setdefault("features", {})["ml"] = False
+        logger.warning("SUPABASE_URL missing; disabling ML features")
 
     user = load_or_create(interactive=False)
 
