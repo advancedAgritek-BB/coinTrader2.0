@@ -2932,11 +2932,15 @@ async def _main_impl() -> MainResult:
     # ------------------------------------------------------------------
     # OHLCV provider setup
     # ------------------------------------------------------------------
-    def _ohlcv_provider(symbol: str, timeframe: str, limit: int = 500) -> pd.DataFrame:
+    async def _ohlcv_provider(
+        symbol: str, timeframe: str, limit: int = 500
+    ) -> pd.DataFrame:
         """Return OHLCV data for *symbol* and *timeframe*.
 
         The provider first attempts to read from the in-memory cache and
         falls back to a direct ``fetch_ohlcv`` call on the active exchange.
+        The actual blocking ``fetch_ohlcv`` call is executed in a worker thread
+        so the event loop remains responsive.
         """
 
         try:
@@ -2947,10 +2951,13 @@ async def _main_impl() -> MainResult:
         except Exception:
             pass
 
-        data = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+        data = await asyncio.to_thread(
+            exchange.fetch_ohlcv, symbol, timeframe, limit=limit
+        )
         cols = ["timestamp", "open", "high", "low", "close", "volume"]
         df = pd.DataFrame(data, columns=cols)
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        update_df_cache(session_state.df_cache, timeframe, symbol, df)
         return df
 
     set_ohlcv_provider(_ohlcv_provider)
