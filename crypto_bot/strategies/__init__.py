@@ -7,6 +7,32 @@ import pandas as pd
 
 log = logging.getLogger(__name__)
 
+# Optional OHLCV DataFrame provider supplied by the application. Strategies can
+# request recent price data via :func:`get_ohlcv_df`.
+_OHLCV_PROVIDER: Callable[[str, str, int], Any] | None = None
+
+
+def set_ohlcv_provider(provider: Callable[[str, str, int], Any]) -> None:
+    """Register a callable used to fetch OHLCV dataframes.
+
+    Parameters
+    ----------
+    provider:
+        Callable accepting ``(symbol, timeframe, limit)`` and returning a
+        :class:`pandas.DataFrame` with columns ``timestamp``, ``open``, ``high``,
+        ``low``, ``close`` and ``volume``.
+    """
+
+    global _OHLCV_PROVIDER
+    _OHLCV_PROVIDER = provider
+
+
+def get_ohlcv_df(symbol: str, timeframe: str, limit: int = 500):
+    """Return OHLCV data for ``symbol`` using the registered provider."""
+    if _OHLCV_PROVIDER is None:
+        raise RuntimeError("OHLCV provider not configured")
+    return _OHLCV_PROVIDER(symbol, timeframe, limit)
+
 # Will be set by main.py to return a pandas.DataFrame for (symbol, timeframe, limit)
 _OHLCV_PROVIDER: Callable[[str, str, int], "pd.DataFrame"] | None = None
 
@@ -126,5 +152,13 @@ def _maybe_await(func: Callable[..., Any] | None, *args, **kwargs) -> Any:
         log.exception("Strategy call failed")
         return {}
 
+__all__ = [
+    "load_strategies",
+    "initialize",
+    "score",
+    "LOADED_STRATEGIES",
+    "set_ohlcv_provider",
+    "get_ohlcv_df",
+]
 
 __all__ = ["score", "set_ohlcv_provider"]

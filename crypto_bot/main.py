@@ -42,11 +42,16 @@ from crypto_bot.ml.selfcheck import log_ml_status_once
 
 try:  # pragma: no cover - optional strategies module
     from crypto_bot import strategies
+    from crypto_bot.strategies import set_ohlcv_provider
 except Exception:  # pragma: no cover - fallback if strategies module missing
     strategies = types.SimpleNamespace(
         initialize=lambda *_a, **_k: asyncio.sleep(0),
         score=lambda *_a, **_k: {},
     )
+
+    def set_ohlcv_provider(*_a, **_k):
+        """Fallback no-op when strategies module is unavailable."""
+        return None
 
 shutdown_event = asyncio.Event()
 
@@ -2881,6 +2886,32 @@ async def _main_impl() -> MainResult:
     # Caches for OHLCV and regime data are stored on the session_state
     session_state = SessionState(last_balance=last_balance)
     last_candle_ts: dict[str, int] = {}
+
+    # ------------------------------------------------------------------
+    # OHLCV provider setup
+    # ------------------------------------------------------------------
+    def _ohlcv_provider(symbol: str, timeframe: str, limit: int = 500) -> pd.DataFrame:
+        """Return OHLCV data for *symbol* and *timeframe*.
+
+        The provider first attempts to read from the in-memory cache and
+        falls back to a direct ``fetch_ohlcv`` call on the active exchange.
+        """
+
+        try:
+            df = session_state.df_cache.get(timeframe, {}).get(symbol)
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                # limit rows if the cached DataFrame is larger than requested
+                return df.tail(limit)
+        except Exception:
+            pass
+
+        data = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+        cols = ["timestamp", "open", "high", "low", "close", "volume"]
+        df = pd.DataFrame(data, columns=cols)
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+        return df
+
+    set_ohlcv_provider(_ohlcv_provider)
 
     register_task(asyncio.create_task(console_control.control_loop(state)))
     register_task(
