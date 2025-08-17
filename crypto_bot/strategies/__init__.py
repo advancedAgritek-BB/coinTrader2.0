@@ -22,6 +22,32 @@ logger = logging.getLogger(__name__)
 # mapping keys are strategy names while the values are the instantiated objects.
 LOADED_STRATEGIES: dict[str, Any] = {}
 
+# Optional OHLCV DataFrame provider supplied by the application. Strategies can
+# request recent price data via :func:`get_ohlcv_df`.
+_OHLCV_PROVIDER: Callable[[str, str, int], Any] | None = None
+
+
+def set_ohlcv_provider(provider: Callable[[str, str, int], Any]) -> None:
+    """Register a callable used to fetch OHLCV dataframes.
+
+    Parameters
+    ----------
+    provider:
+        Callable accepting ``(symbol, timeframe, limit)`` and returning a
+        :class:`pandas.DataFrame` with columns ``timestamp``, ``open``, ``high``,
+        ``low``, ``close`` and ``volume``.
+    """
+
+    global _OHLCV_PROVIDER
+    _OHLCV_PROVIDER = provider
+
+
+def get_ohlcv_df(symbol: str, timeframe: str, limit: int = 500):
+    """Return OHLCV data for ``symbol`` using the registered provider."""
+    if _OHLCV_PROVIDER is None:
+        raise RuntimeError("OHLCV provider not configured")
+    return _OHLCV_PROVIDER(symbol, timeframe, limit)
+
 
 def _supports_mode(strategy: Any, mode: str) -> bool:
     """Return ``True`` if ``strategy`` declares compatibility with ``mode``.
@@ -127,5 +153,12 @@ async def score(*, symbols: list[str], timeframes: list[str]) -> dict[str, float
 # Re-export for backwards compatibility
 load_strategies = loader.load_strategies
 
-__all__ = ["load_strategies", "initialize", "score", "LOADED_STRATEGIES"]
+__all__ = [
+    "load_strategies",
+    "initialize",
+    "score",
+    "LOADED_STRATEGIES",
+    "set_ohlcv_provider",
+    "get_ohlcv_df",
+]
 
