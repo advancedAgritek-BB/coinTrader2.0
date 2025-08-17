@@ -453,6 +453,11 @@ cross_chain_arb_bot:
   pair: SOL/USDC
   spread_threshold: 0.05
   fee_threshold: 30
+triangular_arb_bot:
+  arb_pairs:
+    - [BTC/ETH, ETH/USDT, BTC/USDT]
+  spread_threshold: 0.005
+  fee_rate: 0.001
 lstm_bot:
   model_path: crypto_bot/models/lstm_model.pth
   sequence_length: 60
@@ -522,6 +527,7 @@ strategy_router:
     sideways:
     - grid_bot
     - cross_chain_arb_bot
+    - triangular_arb_bot
     - lstm_bot
     trending:
     - trend_bot

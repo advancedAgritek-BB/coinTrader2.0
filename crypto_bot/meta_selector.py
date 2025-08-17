@@ -24,6 +24,7 @@ from crypto_bot.strategy import (
     sniper_solana,
     solana_scalping,
     trend_bot,
+    triangular_arb_bot,
 )
 
 LOG_FILE = LOG_DIR / "strategy_performance.json"
@@ -102,6 +103,7 @@ for module, name in [
     (meme_wave_bot, "meme_wave_bot"),
     (dca_bot, "dca_bot"),
     (cross_chain_arb_bot, "cross_chain_arb_bot"),
+    (triangular_arb_bot, "triangular_arb_bot"),
 ]:
     _register(module, name)
 
