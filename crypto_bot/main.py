@@ -15,7 +15,7 @@ import dataclasses
 import types
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 import aiohttp
 from dotenv import dotenv_values, load_dotenv
@@ -181,6 +181,37 @@ class MainResult:
 
     notifier: "TelegramNotifier"
     reason: str
+
+
+async def evaluation_loop(
+    run_cycle: Callable[[], Awaitable[None]],
+    ctx: Any,
+    config: dict,
+    stop_reason_ref: list[str],
+) -> None:
+    """Continuously run evaluation cycles with timeout and logging."""
+    loop_interval = config.get("loop_interval_minutes", 1)
+    eval_timeout = config.get("evaluation_timeout", loop_interval * 60)
+    while not shutdown_event.is_set():
+        logger.info("Starting evaluation cycle")
+        try:
+            await asyncio.wait_for(run_cycle(), eval_timeout)
+        except asyncio.CancelledError:
+            raise
+        except asyncio.TimeoutError:
+            logger.error(
+                "Evaluation cycle timed out after %.0f seconds", eval_timeout
+            )
+        except Exception as exc:  # pragma: no cover - runtime safety
+            logger.exception("Evaluation cycle failed: %s", exc)
+            if stop_reason_ref[0] == "completed":
+                stop_reason_ref[0] = f"evaluation cycle failed: {exc}"
+        logger.info(
+            "Active universe: %d symbols, current batch: %d symbols",
+            len(getattr(ctx, "active_universe", []) or []),
+            len(getattr(ctx, "current_batch", []) or []),
+        )
+        await asyncio.sleep(loop_interval * 60)
 
 
 PhaseRunner = None  # type: ignore
@@ -3149,25 +3180,9 @@ async def _main_impl() -> MainResult:
 
     try:
         logger.info("Continuous evaluation loop started")
-        while True:
-            try:
-                await run_evaluation_cycle()
-                await asyncio.sleep(config.get("loop_interval_minutes", 1) * 60)
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:  # pragma: no cover - runtime safety
-                logger.exception("Evaluation cycle failed: %s", exc)
-                if stop_reason == "completed":
-                    stop_reason = f"evaluation cycle failed: {exc}"
-                continue
-            await run_evaluation_cycle()
-            logger.info(
-                "Active universe: %d symbols, current batch: %d symbols",
-                len(getattr(ctx, "active_universe", []) or []),
-                len(getattr(ctx, "current_batch", []) or []),
-            )
-            await asyncio.sleep(config.get("loop_interval_minutes", 1) * 60)
-
+        stop_reason_ref = [stop_reason]
+        await evaluation_loop(run_evaluation_cycle, ctx, config, stop_reason_ref)
+        stop_reason = stop_reason_ref[0]
     except asyncio.CancelledError:
         stop_reason = "external signal"
         raise
