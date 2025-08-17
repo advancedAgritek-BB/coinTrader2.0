@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import Any, Callable, Dict, Iterable, Tuple
+from typing import Any, Awaitable, Callable, Dict, Iterable, Tuple
 
 import pandas as pd
 
@@ -10,29 +10,31 @@ log = logging.getLogger(__name__)
 
 # Optional OHLCV DataFrame provider supplied by the application. Strategies can
 # request recent price data via :func:`get_ohlcv_df`.
-_OHLCV_PROVIDER: Callable[[str, str, int], pd.DataFrame] | None = None
+_OHLCV_PROVIDER: Callable[[str, str, int], Awaitable[pd.DataFrame]] | None = None
 
 
-def set_ohlcv_provider(provider: Callable[[str, str, int], pd.DataFrame]) -> None:
+def set_ohlcv_provider(
+    provider: Callable[[str, str, int], Awaitable[pd.DataFrame]]
+) -> None:
     """Register a function used to fetch OHLCV dataframes."""
 
     global _OHLCV_PROVIDER
     _OHLCV_PROVIDER = provider
 
 
-def get_ohlcv_df(symbol: str, timeframe: str, limit: int = 500) -> pd.DataFrame:
+async def get_ohlcv_df(symbol: str, timeframe: str, limit: int = 500) -> pd.DataFrame:
     """Return OHLCV data for ``symbol`` using the registered provider."""
 
     if _OHLCV_PROVIDER is None:
         raise RuntimeError("OHLCV provider not configured")
-    return _OHLCV_PROVIDER(symbol, timeframe, limit)
+    return await _OHLCV_PROVIDER(symbol, timeframe, limit)
 
 
-def _df(symbol: str, timeframe: str, limit: int = 500) -> pd.DataFrame | None:
+async def _df(symbol: str, timeframe: str, limit: int = 500) -> pd.DataFrame | None:
     if _OHLCV_PROVIDER is None:
         return None
     try:
-        return _OHLCV_PROVIDER(symbol, timeframe, limit)
+        return await _OHLCV_PROVIDER(symbol, timeframe, limit)
     except Exception as e:  # pragma: no cover - defensive
         log.debug("OHLCV provider failed for %s %s: %s", symbol, timeframe, e)
         return None
@@ -83,8 +85,8 @@ async def score(
         pairs = getattr(mod, "PAIRS", None) or getattr(mod, "pairs", None) or []
         for a, b in pairs:
             for tf in timeframes:
-                df_a = _df(a, tf)
-                df_b = _df(b, tf)
+                df_a = await _df(a, tf)
+                df_b = await _df(b, tf)
                 if df_a is None or df_b is None:
                     continue
                 try:
@@ -104,7 +106,7 @@ async def score(
     # Single-asset strategies
     for sym in symbols:
         for tf in timeframes:
-            df = _df(sym, tf)
+            df = await _df(sym, tf)
             if df is None:
                 continue
             try:

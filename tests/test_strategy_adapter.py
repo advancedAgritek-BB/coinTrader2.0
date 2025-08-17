@@ -6,7 +6,7 @@ from crypto_bot import strategies
 
 @pytest.fixture(autouse=True)
 def _provider():
-    def provider(symbol: str, timeframe: str, limit: int = 500) -> pd.DataFrame:
+    async def provider(symbol: str, timeframe: str, limit: int = 500) -> pd.DataFrame:
         return pd.DataFrame({"close": [1, 2, 3]})
 
     strategies.set_ohlcv_provider(provider)
