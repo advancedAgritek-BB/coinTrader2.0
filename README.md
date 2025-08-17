@@ -358,6 +358,7 @@ Edit `crypto_bot/config.yaml` to adjust trading behaviour. Key settings include:
 # configure up to two exchanges
 primary_exchange: coinbase  # coinbase or kraken
 secondary_exchange: kraken
+solana_rpc: https://api.mainnet-beta.solana.com
 execution_mode: dry_run  # or live
 mode: auto               # router chooses CEX or on-chain based on token mints
 use_websocket: true
@@ -1508,6 +1509,17 @@ meme_wave_sniper:
 
 ```
 Set the `HELIUS_API_KEY` environment variable with your Helius API key.
+
+Add a `yamlmeme_sniper` section for probability-based sniping:
+
+```yaml
+yamlmeme_sniper:
+  min_pump_prob: 0.6  # Assessment threshold
+  max_dev_hold_pct: 20
+  min_liquidity_usd: 5000
+  twitter_sentiment_min: 70
+  helius_api_key: your_key_here  # For metadata
+```
 
 ### Flow
 

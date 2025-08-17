@@ -19,6 +19,7 @@ solana_scanner:
   enabled: true
   interval_minutes: 0.1
   max_tokens_per_scan: 50
+solana_rpc: https://api.mainnet-beta.solana.com  # Custom endpoint
 
 # === strategies and params ===
 strategies:
@@ -52,6 +53,13 @@ strategies:
     atr_stop_mult: 1.0
     max_spread_bp: 8
     time_exit_bars: 6
+
+yamlmeme_sniper:
+  min_pump_prob: 0.6  # Assessment threshold
+  max_dev_hold_pct: 20
+  min_liquidity_usd: 5000
+  twitter_sentiment_min: 70
+  helius_api_key: your_key_here  # For metadata
 
 # === risk & sizing ===
 risk:

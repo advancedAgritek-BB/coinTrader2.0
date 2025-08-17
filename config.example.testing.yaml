@@ -9,3 +9,11 @@ features:
   pump_monitor: false
   telegram: false
 
+solana_rpc: https://api.mainnet-beta.solana.com  # Custom endpoint
+yamlmeme_sniper:
+  min_pump_prob: 0.6  # Assessment threshold
+  max_dev_hold_pct: 20
+  min_liquidity_usd: 5000
+  twitter_sentiment_min: 70
+  helius_api_key: your_key_here  # For metadata
+
