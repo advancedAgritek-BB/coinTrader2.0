@@ -17,14 +17,14 @@ import websockets
 from solana.rpc.async_api import AsyncClient
 
 from crypto_bot.strategy.sniper_solana import generate_signal
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.token_registry import (
     PUMP_FUN_PROGRAM,
     extract_mint_from_logs,
     get_symbol_from_mint,
 )
 
-logger = setup_logger(__name__)
+logger = setup_logger(__name__, LOG_DIR / "meme_sniper.log")
 
 
 async def monitor_pump_websocket(
