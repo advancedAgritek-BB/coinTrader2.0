@@ -14,6 +14,41 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
 
 
+QUOTE_PRIORITY = ("USDT", "USD", "EUR", "USDC")  # adjust to your quote prefs
+
+
+def _pairs_from_balance(exchange, balance, quotes=QUOTE_PRIORITY):
+    """Convert a CCXT balance to tradable pairs present on the exchange."""
+    markets = exchange.load_markets()
+    market_symbols = set(markets.keys())
+    currencies = set(getattr(exchange, "currencies", {}).keys())
+
+    totals = (balance or {}).get("total") or {}
+    picked = []
+
+    for code, amount in totals.items():
+        try:
+            if not amount or amount <= 0:
+                continue
+            if code not in currencies:
+                continue
+            for q in quotes:
+                s = f"{code}/{q}"
+                if s in market_symbols:
+                    picked.append(s)
+                    break
+        except Exception:
+            continue
+
+    seen: set[str] = set()
+    return [s for s in picked if not (s in seen or seen.add(s))]
+
+
+def _fallback_watchlist(exchange, quotes=QUOTE_PRIORITY, limit=50):
+    """Return a basic watchlist when the wallet is empty."""
+    symbols = [s for s in exchange.symbols if any(s.endswith(f"/{q}") for q in quotes)]
+    return symbols[:limit]
+
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 LOG_FILE = LOG_DIR / "rotations.json"
@@ -96,52 +131,41 @@ class PortfolioRotator:
         threshold = self.config.get("rebalance_threshold", 0.0)
         top_n = self.config.get("top_assets", len(current_holdings))
 
-        # convert holdings like {"BTC": 1} to trading pairs
-        markets = getattr(exchange, "markets", {}) or {}
-        quote_pref = self.config.get("quote_currency")
-        quote_candidates = [quote_pref] if quote_pref else ["USD", "USDT"]
-        pair_map: Dict[str, str] = {}
-        for asset in current_holdings:
-            if "/" in asset:
-                pair_map[asset] = asset.split("/")[0]
-                continue
+        # build a clean balance view and valid trading pairs
+        balance = (
+            current_holdings
+            if isinstance(current_holdings.get("total"), dict)
+            else {"total": current_holdings}
+        )
+        symbols = _pairs_from_balance(exchange, balance)
+        if not symbols:
+            symbols = _fallback_watchlist(exchange)
+        valid = set(getattr(exchange, "symbols", []))
+        symbols = [s for s in symbols if s in valid]
+        pair_map: Dict[str, str] = {s: s.split("/")[0] for s in symbols}
 
-            pair_found = None
-            for quote in quote_candidates:
-                if not quote:
-                    continue
-                pair = f"{asset}/{quote}"
-                if pair in markets:
-                    pair_found = pair
-                    break
-                if hasattr(exchange, "market"):
-                    try:
-                        if exchange.market(pair):
-                            pair_found = pair
-                            break
-                    except Exception:  # pragma: no cover - best effort
-                        pass
-            if not pair_found:
-                self.logger.warning("No matching pair for %s", asset)
-                pair_map[asset] = asset
-            else:
-                pair_map[pair_found] = asset
+        totals = balance.get("total", {})
+        holdings = {
+            k: v
+            for k, v in totals.items()
+            if isinstance(v, (int, float)) and v > 0 and k in pair_map.values()
+        }
 
         scores_pairs = await self.score_assets(exchange, pair_map.keys(), lookback, method)
         scores = {pair_map.get(p, p): s for p, s in scores_pairs.items()}
         self._log_scores(scores)
         if not scores:
-            return current_holdings
+            return holdings
 
         ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
         desired = [s for s, _ in ranked[:top_n]]
 
-        new_alloc = current_holdings.copy()
-        for token, amount in list(current_holdings.items()):
+        new_alloc = holdings.copy()
+        for token, amount in list(holdings.items()):
             if token in desired or amount <= 0:
                 continue
             # choose best asset not currently held
-            candidates = [d for d in desired if d not in current_holdings]
+            candidates = [d for d in desired if d not in holdings]
             if not candidates:
                 break
             target = candidates[0]
