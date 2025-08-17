@@ -162,7 +162,15 @@ async def get_filtered_symbols(
     allowed_quotes = {str(q).upper() for q in (allowed_quotes_cfg or [])}
     markets: dict[str, dict] = {}
     if mode == "cex" and hasattr(exchange, "list_markets"):
-        markets = exchange.list_markets()
+        timeout = config.get("symbol_scan_timeout", 30)
+        list_fn = getattr(exchange, "list_markets")
+        try:
+            markets = list_fn(timeout=timeout)
+        except TypeError:
+            try:
+                markets = list_fn(timeout)
+            except TypeError:
+                markets = list_fn()
         if asyncio.iscoroutine(markets):
             markets = await markets
         if isinstance(markets, list):
