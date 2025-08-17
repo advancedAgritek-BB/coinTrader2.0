@@ -144,6 +144,7 @@ class PortfolioRotator:
             symbols = _fallback_watchlist(exchange)
         valid = set(getattr(exchange, "symbols", []))
         symbols = [s for s in symbols if s in valid]
+        symbols = list(dict.fromkeys(symbols))
         pair_map: Dict[str, str] = {s: s.split("/")[0] for s in symbols}
 
         totals = balance.get("total", {})
@@ -153,9 +154,7 @@ class PortfolioRotator:
             if isinstance(v, (int, float)) and v > 0 and k in pair_map.values()
         }
 
-        scores_pairs = await self.score_assets(
-            exchange, list(pair_map.keys()), lookback, method
-        )
+        scores_pairs = await self.score_assets(exchange, symbols, lookback, method)
         scores = {pair_map.get(p, p): s for p, s in scores_pairs.items()}
         self._log_scores(scores)
         if not scores:
