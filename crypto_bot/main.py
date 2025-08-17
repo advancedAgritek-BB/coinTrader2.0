@@ -20,6 +20,8 @@ from typing import Any
 import aiohttp
 from dotenv import dotenv_values, load_dotenv
 
+from crypto_bot.utils.logging_config import setup_logging
+
 try:
     import ccxt  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
@@ -2535,7 +2537,7 @@ async def _rotation_loop(
 
 async def _main_impl() -> MainResult:
     """Implementation for running the trading bot."""
-
+    lastlog = setup_logging("logs/bot.log", level=logging.INFO)
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config, _ = await load_config_async()
@@ -2863,16 +2865,21 @@ async def _main_impl() -> MainResult:
             onchain_cfg.get("enabled", True),
         )
 
-    register_task(
-        asyncio.create_task(
-            console_monitor.monitor_loop(
-                exchange,
-                wallet,
-                LOG_DIR / "bot.log",
-                quiet_mode=config.get("quiet_mode", False),
+    async def status_loop() -> None:
+        while True:
+            try:
+                balance = await fetch_balance(exchange, wallet, config)
+            except Exception:
+                balance = 0.0
+            positions = getattr(wallet, "positions", {}) if wallet else {}
+            tickers = ",".join(sorted(positions.keys())) or "-"
+            line = (
+                f"[Monitor] balance=${balance:,.2f} open={len(positions)} ({tickers})  last='{lastlog.last}'"
             )
-        )
-    )
+            print("\r" + line[:180].ljust(180), end="", flush=True)
+            await asyncio.sleep(5)
+
+    register_task(asyncio.create_task(status_loop()))
 
     max_open_trades = config.get("max_open_trades", 1)
     position_guard = OpenPositionGuard(max_open_trades)
@@ -3190,7 +3197,7 @@ async def main() -> None:
     global PortfolioRotator, load_or_create, analyze_symbol, dca_bot, cooldown_configure
     global BotContext, PhaseRunner, RiskManager, RiskConfig, calculate_trailing_stop, should_exit
     global cex_trade_async, get_exchange, get_exchanges, OpenPositionGuard
-    global console_monitor, console_control, log_position, log_balance
+    global console_control, log_position, log_balance
     global load_kraken_symbols, update_ohlcv_cache, update_multi_tf_ohlcv_cache, update_regime_tf_cache
     global timeframe_seconds, market_loader_configure, fetch_order_book_async, WS_OHLCV_TIMEOUT
     global PAIR_FILE, load_liquid_pairs, DEFAULT_MIN_VOLUME_USD, DEFAULT_TOP_K, refresh_pairs_async
@@ -3232,7 +3239,7 @@ async def main() -> None:
         get_exchanges,
     )
     from crypto_bot.open_position_guard import OpenPositionGuard
-    from crypto_bot import console_monitor, console_control
+    from crypto_bot import console_control
     from crypto_bot.utils.position_logger import log_position, log_balance
     from crypto_bot.utils.market_loader import (
         load_kraken_symbols,
