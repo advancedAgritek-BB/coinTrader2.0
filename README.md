@@ -256,7 +256,14 @@ The bot looks in two locations for settings:
 
 ### Environment Variables
 
-Create `crypto_bot/.env` and fill in your secrets. Example:
+Copy the sample environment files and fill in your secrets:
+
+```bash
+cp .env.example .env
+cp crypto_bot/.env.example crypto_bot/.env
+```
+
+Edit `.env` and `crypto_bot/.env` with your API keys and other values. Example for `crypto_bot/.env`:
 
 ```env
 EXCHANGE=coinbase              # or kraken

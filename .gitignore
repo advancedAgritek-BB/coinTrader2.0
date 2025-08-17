@@ -1,5 +1,8 @@
 __pycache__/
 
+.env
+crypto_bot/.env
+
 crypto_bot/logs/
 crypto_bot/user_config.yaml
 crypto_bot/state/
