@@ -35,17 +35,13 @@ FEATURE_LIST = ["ema_8","ema_21","rsi_14","atr_14","roc_5","obv"]
 def make_features(df: pd.DataFrame) -> pd.DataFrame:
     c = df["close"]; h = df["high"]; l = df["low"]; v = df["volume"]
     X = pd.DataFrame(index=df.index)
-    X["ema_8"]  = ema(c, 8)
+    X["ema_8"] = ema(c, 8)
     X["ema_21"] = ema(c, 21)
     X["rsi_14"] = rsi(c, 14)
     X["atr_14"] = atr(h, l, c, 14)
-    X["roc_5"]  = roc(c, 5)
-    X["obv"]    = obv(c, v)
-    scaler = StandardScaler()
-    X_scaled = pd.DataFrame(
-        scaler.fit_transform(X), index=X.index, columns=X.columns
-    )
-    return X_scaled
+    X["roc_5"] = roc(c, 5)
+    X["obv"] = obv(c, v)
+    return X
 
 def make_labels(close: pd.Series, horizon: int, hold: float) -> pd.Series:
     future_ret = close.pct_change(horizon).shift(-horizon)
@@ -63,11 +59,11 @@ def _fit_model(X: pd.DataFrame, y: pd.Series):
     model.fit(X, y)
     return model
 
-def _save_local(model, cfg: TrainConfig, metadata: Dict) -> Path:
+def _save_local(model, scaler, cfg: TrainConfig, metadata: Dict) -> Path:
     import joblib
     cfg.outdir.mkdir(parents=True, exist_ok=True)
     path = cfg.outdir / f"{cfg.symbol.lower()}_regime_lgbm.pkl"
-    joblib.dump(model, path)
+    joblib.dump({"model": model, "scaler": scaler}, path)
     # Save an adjacent metadata snapshot for reference
     (cfg.outdir / f"{cfg.symbol.lower()}_metadata.json").write_text(pd.Series(metadata).to_json())
     return path
@@ -93,7 +89,11 @@ def train_from_csv7(csv_path: Path | str, cfg: TrainConfig) -> Tuple[object, Dic
     X = X_all[m]
     y = y_all[m]
 
-    model = _fit_model(X, y)
+    scaler = StandardScaler()
+    X_scaled = pd.DataFrame(
+        scaler.fit_transform(X), index=X.index, columns=X.columns
+    )
+    model = _fit_model(X_scaled, y)
 
     metadata = {
         "schema_version": "1",
@@ -105,13 +105,13 @@ def train_from_csv7(csv_path: Path | str, cfg: TrainConfig) -> Tuple[object, Dic
     }
 
     # Save local
-    local_path = _save_local(model, cfg, metadata)
+    local_path = _save_local(model, scaler, cfg, metadata)
 
     # Optional registry publish
     try:
         import io, joblib
         buf = io.BytesIO()
-        joblib.dump(model, buf)
+        joblib.dump({"model": model, "scaler": scaler}, buf)
         _maybe_publish_registry(buf.getvalue(), metadata, cfg)
     except Exception:
         pass

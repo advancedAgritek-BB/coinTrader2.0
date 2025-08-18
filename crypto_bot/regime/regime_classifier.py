@@ -63,6 +63,7 @@ def _configure_logger(cfg: dict) -> None:
 _configure_logger(CONFIG)
 
 _supabase_model = None
+_supabase_scaler = None
 _supabase_model_lock = asyncio.Lock()
 _model_lock = asyncio.Lock()
 _ml_recovery_task: asyncio.Task | None = None
@@ -220,28 +221,28 @@ def _ml_fallback(
     return label, float(conf)
 
 
-async def _download_supabase_model(symbol: str | None = None) -> object | None:
-    """Download LightGBM model from Supabase and return a Booster."""
+async def _download_supabase_model(symbol: str | None = None) -> tuple[object | None, object | None]:
+    """Download LightGBM model and scaler from Supabase."""
     async with _supabase_model_lock:
         target_symbol = symbol or os.getenv("CT_SYMBOL", "XRPUSD")
-        model, _path = await load_regime_model(target_symbol)
+        model, scaler, _path = await load_regime_model(target_symbol)
         if model is None:
-            return None
-        return model
+            return None, None
+        return model, scaler
 
 
-async def _get_supabase_model(symbol: str | None = None) -> object | None:
-    """Return the cached Supabase model, downloading it if needed."""
-    global _supabase_model, _supabase_symbol
+async def _get_supabase_model(symbol: str | None = None) -> tuple[object | None, object | None]:
+    """Return cached Supabase model and scaler, downloading if needed."""
+    global _supabase_model, _supabase_scaler, _supabase_symbol
     async with _model_lock:
         resolved_symbol = symbol or os.getenv("CT_SYMBOL", "XRPUSD")
         if _supabase_model is None or resolved_symbol != _supabase_symbol:
-            _supabase_model = await _download_supabase_model(resolved_symbol)
+            _supabase_model, _supabase_scaler = await _download_supabase_model(resolved_symbol)
             _supabase_symbol = resolved_symbol
-        return _supabase_model
+        return _supabase_model, _supabase_scaler
 
 
-async def load_regime_model(symbol: str) -> tuple[object | None, str | None]:
+async def load_regime_model(symbol: str) -> tuple[object | None, object | None, str | None]:
     try:
         from supabase import create_client
     except Exception as exc:  # pragma: no cover - optional dependency
@@ -263,31 +264,38 @@ async def load_regime_model(symbol: str) -> tuple[object | None, str | None]:
             data = json.loads(latest_bytes.decode("utf-8"))
             model_path = data["key"]
             model_bytes = client.storage.from_(bucket).download(model_path)
-            model = pickle.loads(model_bytes)
+            model_obj = pickle.loads(model_bytes)
+            if isinstance(model_obj, dict):
+                model = model_obj.get("model")
+                scaler = model_obj.get("scaler")
+            else:
+                model = model_obj
+                scaler = None
             logger.info("Loaded global regime model from Supabase: %s", model_path)
-            return model, model_path
+            return model, scaler, model_path
     except Exception as exc:
         msg = str(getattr(exc, "message", exc))
         if "not_found" in msg:
             logger.warning("Supabase regime model for %s not found", symbol)
-            return None, None
+            return None, None, None
         logger.error("Failed to load regime model: %s", exc)
 
-    return None, model_path
+    return None, None, model_path
 
 
 async def _ml_recovery_loop(notifier: TelegramNotifier | None) -> None:
     """Periodically attempt to restore the Supabase ML model."""
-    global _supabase_model, _supabase_symbol, _ml_recovery_task
+    global _supabase_model, _supabase_scaler, _supabase_symbol, _ml_recovery_task
     while True:
         await asyncio.sleep(3600)
         if not is_ml_available():
             continue
         symbol = _supabase_symbol or os.getenv("CT_SYMBOL", "XRPUSD")
-        model = await _download_supabase_model(symbol)
+        model, scaler = await _download_supabase_model(symbol)
         if model is None:
             continue
         _supabase_model = model
+        _supabase_scaler = scaler
         _supabase_symbol = symbol
         logger.info("Supabase ML model reloaded")
         if notifier is not None:
@@ -317,15 +325,18 @@ def _classify_ml(
             return _ml_fallback(df)
         return _ml_fallback(df, notifier)
 
-    global _supabase_model, _supabase_symbol
+    global _supabase_model, _supabase_scaler, _supabase_symbol
     resolved_symbol = symbol or os.getenv("CT_SYMBOL", "XRPUSD")
     if _supabase_model is None or resolved_symbol != _supabase_symbol:
         # Running the async download in a blocking manner; callers should
         # prefer :func:`classify_regime_async` to avoid blocking the event loop.
-        _supabase_model = asyncio.run(_download_supabase_model(resolved_symbol))
+        _supabase_model, _supabase_scaler = asyncio.run(
+            _download_supabase_model(resolved_symbol)
+        )
         _supabase_symbol = resolved_symbol
 
     model = _supabase_model
+    scaler = _supabase_scaler
     if model is None:
         try:
             return _ml_fallback(df, notifier)
@@ -336,6 +347,8 @@ def _classify_ml(
     try:
         change = df["close"].iloc[-1] - df["close"].iloc[0]
         X = np.array([[change]], dtype=float)
+        if scaler is not None:
+            X = scaler.transform(X)
         prob = float(model.predict(X)[0])
         if prob > 0.55:
             label = "trending"

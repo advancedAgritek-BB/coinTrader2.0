@@ -127,8 +127,19 @@ def predict(
             if available:
                 features_df = features[available]
 
-        model = _load_model_from_bytes(blob)
-        proba = model.predict_proba(features_df.tail(1))  # type: ignore[attr-defined]
+        model_obj = _load_model_from_bytes(blob)
+        scaler = None
+        if isinstance(model_obj, dict):
+            scaler = model_obj.get("scaler")
+            model = model_obj.get("model")
+        else:
+            model = model_obj
+        to_pred = features_df.tail(1)
+        if scaler is not None:
+            to_pred = pd.DataFrame(
+                scaler.transform(to_pred), index=to_pred.index, columns=to_pred.columns
+            )
+        proba = model.predict_proba(to_pred)  # type: ignore[attr-defined]
         proba = getattr(proba, "ravel", lambda: proba)()
         idx = int(np.argmax(proba))
         label_order = meta.get("label_order", [-1, 0, 1])

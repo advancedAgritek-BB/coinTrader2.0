@@ -18,6 +18,7 @@ from pathlib import Path
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 _model = None
+_scaler = None
 
 
 def load_model():
@@ -30,7 +31,13 @@ def load_model():
             logger.error("Failed to decode ML model: %s", exc)
             return None
         try:
-            _model = joblib.load(io.BytesIO(data))
+            obj = joblib.load(io.BytesIO(data))
+            if isinstance(obj, dict):
+                _model = obj.get("model")
+                global _scaler
+                _scaler = obj.get("scaler")
+            else:
+                _model = obj
         except Exception as exc:  # pragma: no cover - log load failure
             logger.error("Failed to load ML model: %s", exc)
             _model = None
@@ -43,10 +50,13 @@ def predict_regime(df: pd.DataFrame) -> Tuple[str, float]:
     if df is None or len(df) < 2:
         return "unknown", 0.0
     model = load_model()
+    scaler = _scaler
     if model is None:
         return "unknown", 0.0
     change = df["close"].iloc[-1] - df["close"].iloc[0]
     X = np.array([[change]])
+    if scaler is not None:
+        X = scaler.transform(X)
     prob = float(model.predict_proba(X)[0, 1])
     if prob > 0.55:
         label = "trending"

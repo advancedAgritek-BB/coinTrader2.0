@@ -732,7 +732,7 @@ def _ensure_ml(cfg: dict) -> None:
     try:  # pragma: no cover - best effort
         from crypto_bot.regime.regime_classifier import load_regime_model
 
-        model, model_path = asyncio.run(load_regime_model(symbol))
+        model, _scaler, model_path = asyncio.run(load_regime_model(symbol))
         if model is None:
             fallback_url = (
                 cfg.get("model_fallback_url")
