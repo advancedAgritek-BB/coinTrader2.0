@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import logging
+import numpy as np
 import pandas as pd
 
 from ta.volatility import AverageTrueRange
@@ -10,43 +11,56 @@ from ta.volatility import AverageTrueRange
 logger = logging.getLogger(__name__)
 
 
-def calc_atr(df: pd.DataFrame, window: int = 14) -> pd.Series:
-    """Compute the Average True Range for ``df`` using a given ``window``."""
+def calc_atr(df: pd.DataFrame, window: int = 14, **kwargs) -> pd.Series:
+    """Compute the Average True Range using ``window`` or ``period``."""
 
-    if len(df) < window:
-        return pd.Series([0] * len(df))
+    period = kwargs.get("period")
+    if period is not None:
+        window = int(period)
+
+    if df is None or df.empty or len(df) < max(2, int(window)):
+        return (
+            df["close"].iloc[:0] if df is not None and "close" in df else pd.Series([], dtype=float)
+        )
+
     atr_indicator = AverageTrueRange(
-        df["high"], df["low"], df["close"], window=window, fillna=False
+        df["high"], df["low"], df["close"], window=int(window), fillna=False
     )
     return atr_indicator.average_true_range()
 
 
-def atr_percent(df: pd.DataFrame, window: int = 14) -> float:
-    """Return the latest ATR value as a percentage of the close price."""
+def atr_percent(df: pd.DataFrame, period: int = 14) -> float:
+    """Return the latest ATR value as a fraction of the close price."""
 
-    if df.empty or "close" not in df:
-        return 0.0
-    atr_series = calc_atr(df, window=window)
-    if atr_series.empty:
-        return 0.0
-    atr_value = float(atr_series.iloc[-1])
+    if df is None or df.empty or "close" not in df:
+        return float(np.nan)
+
+    atr_series = calc_atr(df, period=period)
+    if getattr(atr_series, "empty", False):
+        return float(np.nan)
+
     price = float(df["close"].iloc[-1])
     if price == 0 or math.isnan(price):
-        return 0.0
-    return (atr_value / price) * 100.0
+        return float(np.nan)
+
+    atr_value = float(atr_series.iloc[-1]) if hasattr(atr_series, "iloc") else float(atr_series)
+    return atr_value / price
 
 
-def normalize_score_by_volatility(df, score, atr_period: int = 14, eps: float = 1e-8):
-    """Scales ``score`` by current ATR.
+def normalize_score_by_volatility(df, score, atr_period: int = 14):
+    """Scale ``score`` by current ATR percentage of price.
 
     If ATR isn't available, returns ``score`` unchanged.
     """
 
     try:
-        atr = calc_atr(df, window=atr_period)
-        current_atr = float(atr.iloc[-1]) if hasattr(atr, "iloc") else float(atr)
-        denom = max(abs(current_atr), eps)
-        return score / denom
+        atr_series = calc_atr(df, period=atr_period)
+        if getattr(atr_series, "empty", False) or df is None or df.empty:
+            return score
+        last_close = df["close"].iloc[-1]
+        last_atr = atr_series.iloc[-1] if hasattr(atr_series, "iloc") else float(atr_series)
+        vol = (last_atr / last_close) if last_close else 0.0
+        return score / max(vol, 1e-9) if vol else score
     except Exception:
         logger.exception(
             "normalize_score_by_volatility: ATR unavailable; returning unnormalized score"
