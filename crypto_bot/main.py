@@ -1375,17 +1375,35 @@ async def scan_arbitrage(exchange: object, config: dict) -> list[str]:
         )
     )
 
+    tickers: dict[str, dict[str, Any]] = {}
+    try:
+        has = getattr(exchange, "has", {})
+        if getattr(has, "get", lambda _k, _d=None: _d)("fetchTickers"):
+            try:
+                if asyncio.iscoroutinefunction(
+                    getattr(exchange, "fetch_tickers", None)
+                ):
+                    tickers = await exchange.fetch_tickers(pairs)
+                else:
+                    tickers = await asyncio.to_thread(exchange.fetch_tickers, pairs)
+            except Exception:
+                tickers = {}
+    except Exception:
+        tickers = {}
+
     for sym in pairs:
         dex_price = dex_prices.get(sym)
         if not dex_price:
             continue
-        try:
-            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
-                ticker = await exchange.fetch_ticker(sym)
-            else:
-                ticker = await asyncio.to_thread(exchange.fetch_ticker, sym)
-        except Exception:
-            continue
+        ticker = tickers.get(sym)
+        if ticker is None:
+            try:
+                if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
+                    ticker = await exchange.fetch_ticker(sym)
+                else:
+                    ticker = await asyncio.to_thread(exchange.fetch_ticker, sym)
+            except Exception:
+                continue
         cex_price = ticker.get("last") or ticker.get("close")
         if cex_price is None:
             continue
