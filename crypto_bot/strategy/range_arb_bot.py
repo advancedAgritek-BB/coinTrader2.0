@@ -38,10 +38,12 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
         return np.nan
     recent = df.iloc[-window:]
     X = recent[["close", "volume"]].values
-    y = recent["close"].values
+    y = recent["close"].values.reshape(-1, 1)
 
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    x_scaler = StandardScaler()
+    X_scaled = x_scaler.fit_transform(X)
+    y_scaler = StandardScaler()
+    y_scaled = y_scaler.fit_transform(y).ravel()
 
     kernel = ConstantKernel(
         1.0, constant_value_bounds=(1e-5, 1e5)
@@ -49,9 +51,10 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     gp = GaussianProcessRegressor(
         kernel=kernel, optimizer="fmin_l_bfgs_b", n_restarts_optimizer=15
     )
-    gp.fit(X_scaled, y)
+    gp.fit(X_scaled, y_scaled)
     latest_features = recent[["close", "volume"]].iloc[-1].values.reshape(1, -1)
-    pred, _ = gp.predict(scaler.transform(latest_features), return_std=True)
+    pred_scaled, _ = gp.predict(x_scaler.transform(latest_features), return_std=True)
+    pred = y_scaler.inverse_transform(pred_scaled.reshape(-1, 1))[0, 0]
     return float(pred)
 
 
