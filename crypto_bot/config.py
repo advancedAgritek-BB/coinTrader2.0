@@ -13,6 +13,15 @@ from typing import Dict, List
 
 
 @dataclass
+class OHLCVConfig:
+    """Settings for persisting and bootstrapping OHLCV data."""
+
+    storage_path: str = "crypto_bot/data/ohlcv"  # Directory for cached candles
+    tail_overlap_bars: int = 3  # Bars to re-fetch on update to avoid gaps
+    max_bootstrap_bars: int = 1000  # Cap initial load per symbol
+
+
+@dataclass
 class Config:
     """Typed representation of the core runtime configuration."""
 
@@ -27,6 +36,7 @@ class Config:
         default_factory=lambda: ["USD", "USDT", "USDC", "EUR"]
     )
     ohlcv_chunk_size: int = 20
+    ohlcv: OHLCVConfig = field(default_factory=OHLCVConfig)
     hft: bool = True
     strict_cex: bool = False
     denylist_symbols: List[str] = field(default_factory=list)

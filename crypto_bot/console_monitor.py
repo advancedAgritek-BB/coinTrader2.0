@@ -227,7 +227,24 @@ async def trade_stats_lines(exchange: Any, trade_file: Path = TRADE_FILE) -> lis
 
     symbols = {t["symbol"] for t in open_trades}
     prices: dict[str, float] = {}
-    for sym in symbols:
+    missing = set(symbols)
+
+    if getattr(exchange, "has", {}).get("fetchTickers"):
+        try:
+            if asyncio.iscoroutinefunction(getattr(exchange, "fetch_tickers", None)):
+                tickers = await exchange.fetch_tickers(list(symbols))
+            else:
+                tickers = await asyncio.to_thread(exchange.fetch_tickers, list(symbols))
+            for sym, ticker in (tickers or {}).items():
+                try:
+                    prices[sym] = float(ticker.get("last") or ticker.get("close") or 0.0)
+                except Exception:
+                    prices[sym] = 0.0
+                missing.discard(sym)
+        except Exception:
+            pass
+
+    for sym in missing:
         try:
             if asyncio.iscoroutinefunction(getattr(exchange, "fetch_ticker", None)):
                 ticker = await exchange.fetch_ticker(sym)

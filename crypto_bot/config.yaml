@@ -1,7 +1,12 @@
+# === exchange ===
+exchange:
+  name: kraken
+  max_concurrency: 3
+  request_timeout_ms: 10000
+
 # === trading/base ===
 trading:
   mode: cex           # cex | onchain | auto | dry_run
-  exchange: kraken
   allowed_quotes: [USD, USDT, USDC, EUR]
   min_ticker_volume: 10000
   timeframes: ["1m","5m"]
@@ -12,6 +17,12 @@ trading:
   hft_enabled: true
   hft_symbols: ["BTC/USD","ETH/USD","SOL/USDC","BONK/USDC"]   # seed list, can expand
   exclude_symbols: ["AIBTC/USD"]   # remove noisy/synthetic pairs
+
+# === ohlcv cache ===
+ohlcv:
+  storage_path: crypto_bot/data/ohlcv   # directory for persisted OHLCV data
+  tail_overlap_bars: 3                  # overlap bars to avoid gaps when appending
+  max_bootstrap_bars: 1000              # limit initial bootstrap to this many bars
 
 # === strategies and params ===
 strategies:
@@ -156,7 +167,6 @@ stat_arb_bot:
   window: 50
 drawdown_penalty_coef: 0.2
 ensemble_min_conf: 0.05
-exchange: kraken
 exchange_market_types:
 - spot
 - futures
@@ -340,6 +350,7 @@ portfolio_rotation:
   rebalance_threshold: 0.05
   scoring_method: sharpe
   top_assets: 20
+  log_scores_verbose: false
 preferred_chain: solana
 primary_exchange: kraken
 solana_rpc: https://api.mainnet-beta.solana.com  # Custom endpoint
