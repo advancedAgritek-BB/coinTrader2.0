@@ -13,6 +13,9 @@ from crypto_bot.sentiment_filter import (
 )
 from crypto_bot.solana.exit import monitor_price
 from crypto_bot.solana_trading import sniper_trade
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
+
+logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 
 async def trade(symbol: str, amount: float, cfg: Mapping[str, object]) -> dict:
@@ -86,6 +89,7 @@ async def generate_signal(
         sentiment = await fetch_twitter_sentiment_async(query) / 100.0
     except Exception:
         sentiment = fetch_twitter_sentiment(query) / 100.0
+    logger.info("Meme-wave sentiment: %.2f for query '%s'", sentiment, query)
 
     if avg_vol and recent_vol >= avg_vol * vol_threshold and sentiment >= sentiment_thr:
         return 1.0, "long"
