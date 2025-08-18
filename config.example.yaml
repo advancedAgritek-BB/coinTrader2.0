@@ -94,6 +94,11 @@ features:
 telemetry:
   batch_summary_secs: 60
 
+# === data ===
+data:
+  market-loader:
+    # Max minutes to wait for initial OHLCV bootstrap before giving up
+    bootstrap_timeout_minutes: 10
 ohlcv:
   bootstrap_timeframes: ['1h']
   defer_timeframes: ['4h', '1d']
