@@ -21,6 +21,7 @@ import aiohttp
 from dotenv import dotenv_values, load_dotenv
 
 from crypto_bot.utils.logging_config import setup_logging
+from crypto_bot.universe import build_tradable_set
 
 try:
     import ccxt  # type: ignore
@@ -1001,12 +1002,11 @@ async def initial_scan(
 ) -> None:
     """Populate OHLCV and regime caches before trading begins."""
 
-    ranked, onchain_symbols = await get_filtered_symbols(exchange, config)
-    symbols = [s for s, _ in ranked]
+    symbols = list(config.get("tradable_symbols", config.get("symbols", [])))
     top_n = int(config.get("scan_deep_top", 50))
     symbols = symbols[:top_n]
     if config.get("mode") != "cex":
-        for sym in onchain_symbols:
+        for sym in config.get("onchain_symbols", []):
             if sym not in symbols:
                 symbols.append(sym)
     symbols = list(dict.fromkeys(symbols))
@@ -1139,13 +1139,22 @@ async def fetch_candidates(ctx: BotContext) -> None:
         ctx.config["mode"] = "auto"
 
     try:
-        symbols, onchain_syms = await get_filtered_symbols(ctx.exchange, ctx.config)
+        scan_cfg = {**ctx.config}
+        scan_cfg["symbols"] = ctx.config.get(
+            "tradable_symbols", ctx.config.get("symbols", [])
+        )
+        symbols, _ = await get_filtered_symbols(ctx.exchange, scan_cfg)
     finally:
         if pump:
             sf["min_volume_usd"] = orig_min_volume
             sf["volume_percentile"] = orig_volume_pct
     symbols = [(s, sc) for s, sc in symbols if s not in no_data_symbols]
-    onchain_syms = [s for s in onchain_syms if s not in no_data_symbols]
+    allowed_syms = set(ctx.config.get("symbols", []))
+    onchain_syms = [
+        s
+        for s in ctx.config.get("onchain_symbols", [])
+        if s not in no_data_symbols and s in allowed_syms
+    ]
     cex_candidates = list(symbols)
     onchain_candidates = [(s, 0.0) for s in onchain_syms]
 
@@ -1224,6 +1233,8 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     total_candidates = len(symbols)
     symbols = [(s, sc) for s, sc in symbols if s not in no_data_symbols]
+    allowed_syms = set(ctx.config.get("symbols", []))
+    symbols = [(s, sc) for s, sc in symbols if s in allowed_syms]
     ctx.active_universe = [s for s, _ in symbols]
     ctx.resolved_mode = resolved_mode
 
@@ -2786,7 +2797,18 @@ async def _main_impl() -> MainResult:
             delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
 
         if discovered:
-            config["symbols"] = discovered + config.get("onchain_symbols", [])
+            sf_cfg = config.get("symbol_filter", {})
+            tradable = await build_tradable_set(
+                exchange,
+                allowed_quotes=config.get("allowed_quotes", []),
+                min_daily_volume_quote=float(sf_cfg.get("min_volume_usd", 0) or 0),
+                max_spread_pct=float(sf_cfg.get("max_spread_pct", 100) or 100),
+                whitelist=discovered,
+                blacklist=config.get("excluded_symbols"),
+                max_pairs=config.get("top_n_symbols"),
+            )
+            config["tradable_symbols"] = tradable
+            config["symbols"] = tradable + config.get("onchain_symbols", [])
             onchain_syms = config.get("onchain_symbols", [])
             cex_count = len([s for s in config["symbols"] if s not in onchain_syms])
             logger.info(
@@ -2797,6 +2819,7 @@ async def _main_impl() -> MainResult:
         elif discovered is None:
             cached = load_liquid_pairs()
             if isinstance(cached, list):
+                config["tradable_symbols"] = list(cached)
                 config["symbols"] = cached + config.get("onchain_symbols", [])
                 logger.warning("Using cached pairs due to symbol scan failure")
                 onchain_syms = config.get("onchain_symbols", [])
@@ -2821,6 +2844,7 @@ async def _main_impl() -> MainResult:
                     except Exception as exc:  # pragma: no cover - network errors
                         logger.error("refresh_pairs_async failed: %s", exc)
                 if fallback:
+                    config["tradable_symbols"] = list(fallback)
                     config["symbols"] = fallback + config.get("onchain_symbols", [])
                     logger.warning("Loaded fresh pairs after scan failure")
                 else:
