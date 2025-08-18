@@ -35,5 +35,8 @@ def setup_logger(name: str, log_file: str, to_console: bool = True) -> logging.L
     return logger
 
 
+# Shared logger for all indicator related modules
+indicator_logger = setup_logger("indicators", LOG_DIR / "indicators.log")
+
 # Shared logger for pipeline stages
 pipeline_logger = setup_logger("pipeline", LOG_DIR / "pipeline.log")

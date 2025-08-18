@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from crypto_bot.utils.indicator_cache import cache_series
+from crypto_bot.utils.logger import indicator_logger
 
 
 def calc_atr(df: pd.DataFrame, window: int = 14) -> float:
@@ -23,6 +24,9 @@ def calc_atr(df: pd.DataFrame, window: int = 14) -> float:
     """
 
     if df.empty or not {"high", "low", "close"}.issubset(df.columns):
+        indicator_logger.warning(
+            "ATR calculation skipped due to missing columns or empty data"
+        )
         return 0.0
 
     high_low = df["high"] - df["low"]
@@ -32,8 +36,11 @@ def calc_atr(df: pd.DataFrame, window: int = 14) -> float:
     atr_series = tr.rolling(window, min_periods=window).mean()
     cached = cache_series(f"atr_{window}", df, atr_series, window)
     if cached.empty:
+        indicator_logger.warning("ATR cache miss for window %d", window)
         return 0.0
-    return float(cached.iloc[-1])
+    value = float(cached.iloc[-1])
+    indicator_logger.info("ATR(%d) computed %.6f", window, value)
+    return value
 
 
 __all__ = ["calc_atr"]

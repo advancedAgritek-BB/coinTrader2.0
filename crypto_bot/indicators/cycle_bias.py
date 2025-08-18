@@ -5,11 +5,7 @@ from __future__ import annotations
 import os
 import requests
 
-from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from pathlib import Path
-
-
-logger = setup_logger(__name__, LOG_DIR / "indicators.log")
+from crypto_bot.utils.logger import indicator_logger
 
 DEFAULT_MVRV_URL = "https://api.example.com/mvrv"
 DEFAULT_NUPL_URL = "https://api.example.com/nupl"
@@ -31,7 +27,7 @@ def _fetch_value(url: str, mock_env: str) -> float:
         if isinstance(data, dict):
             return float(data.get("value", 0.0))
     except Exception as exc:
-        logger.error("Failed to fetch metric from %s: %s", url, exc)
+        indicator_logger.error("Failed to fetch metric from %s: %s", url, exc)
     return 0.0
 
 
@@ -48,7 +44,7 @@ def get_cycle_bias(config: dict | None = None) -> float:
 
     score = (mvrv + nupl + sopr) / 3
     bias = 1 + score
-    logger.info(
+    indicator_logger.info(
         "Cycle bias %.2f from MVRV %.2f NUPL %.2f SOPR %.2f",
         bias,
         mvrv,
