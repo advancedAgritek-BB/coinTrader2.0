@@ -186,6 +186,7 @@ def generate_signal(
     timeframe: str | None = None,
     mempool_monitor: SolanaMempoolMonitor | None = None,
     mempool_cfg: dict | None = None,
+    **_,
 ) -> Tuple[float, str]:
     """Generate a grid based trading signal."""
     cfg = GridConfig.from_dict(_as_dict(config))

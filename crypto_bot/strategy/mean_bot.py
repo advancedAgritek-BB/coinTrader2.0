@@ -49,6 +49,7 @@ async def generate_signal(
     config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
+    **_,
 ) -> Tuple[float, str]:
     """Score mean reversion opportunities using multiple indicators."""
 
