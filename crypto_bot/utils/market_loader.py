@@ -1710,12 +1710,22 @@ async def _update_ohlcv_cache_inner(
         unit = "ms" if df_new["timestamp"].max() > 1e12 else "s"
         df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit, utc=True)
         df_new = df_new.sort_values("timestamp").drop_duplicates("timestamp", keep="last")
-        df_new = (
-            df_new.set_index("timestamp")
-            .resample(f"{tf_sec}s")
-            .agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
-            .ffill()
-            .reset_index()
+        df_new = await asyncio.to_thread(
+            lambda df=df_new: (
+                df.set_index("timestamp")
+                .resample(f"{tf_sec}s")
+                .agg(
+                    {
+                        "open": "first",
+                        "high": "max",
+                        "low": "min",
+                        "close": "last",
+                        "volume": "sum",
+                    }
+                )
+                .ffill()
+                .reset_index()
+            )
         )
         df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
         frac = config.get("min_history_fraction", 0.5)
@@ -1755,27 +1765,35 @@ async def _update_ohlcv_cache_inner(
                     limit,
                 )
                 continue
-        changed = False
-        if sym in cache and not cache[sym].empty:
-            last_ts = cache[sym]["timestamp"].iloc[-1]
+        existing = None
+        async with timeframe_lock(timeframe):
+            if sym in cache:
+                existing = cache[sym].copy()
+        if existing is not None and not existing.empty:
+            last_ts = existing["timestamp"].iloc[-1]
             df_new = df_new[df_new["timestamp"] > last_ts]
             if df_new.empty:
                 continue
-            cache[sym] = pd.concat([cache[sym], df_new], ignore_index=True)
-            changed = True
+            combined = await asyncio.to_thread(
+                pd.concat, [existing, df_new], ignore_index=True
+            )
         else:
-            cache[sym] = df_new
-            changed = True
-        if changed:
-            cache[sym] = cache[sym].tail(limit).reset_index(drop=True)
-            cache[sym]["return"] = cache[sym]["close"].pct_change()
+            combined = df_new
+        combined = await asyncio.to_thread(
+            lambda df=combined, limit=limit: df.tail(limit).reset_index(drop=True)
+        )
+        returns = await asyncio.to_thread(lambda s=combined["close"]: s.pct_change())
+        combined["return"] = returns
+        async with timeframe_lock(timeframe):
+            cache[sym] = combined
             clear_regime_cache(sym, timeframe)
             if redis_conn:
                 try:
-                    redis_conn.setex(
+                    await asyncio.to_thread(
+                        redis_conn.setex,
                         f"ohlcv:{sym}:{timeframe}",
                         REDIS_TTL,
-                        cache[sym].to_json(orient="split"),
+                        combined.to_json(orient="split"),
                     )
                 except Exception:
                     pass
