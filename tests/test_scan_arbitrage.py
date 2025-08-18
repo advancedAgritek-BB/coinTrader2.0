@@ -54,6 +54,26 @@ def test_scan_cex_arbitrage(monkeypatch):
     assert res == ["SOL/USDC"]
 
 
+def test_scan_cex_arbitrage_bulk(monkeypatch):
+    ex1_prices = {"SOL/USDC": 10.0}
+    ex2_prices = {"SOL/USDC": 11.0}
+
+    class Ex:
+        def __init__(self, prices):
+            self.prices = prices
+            self.has = {"fetchTickers": True}
+
+        async def fetch_tickers(self, pairs):
+            return {sym: {"last": self.prices[sym]} for sym in pairs}
+
+        def fetch_ticker(self, _sym):  # pragma: no cover - should not be called
+            raise AssertionError("fetch_ticker should not be used when fetch_tickers is available")
+
+    ex1 = Ex(ex1_prices)
+    ex2 = Ex(ex2_prices)
+    cfg = {"arbitrage_pairs": ["SOL/USDC"], "arbitrage_threshold": 0.05}
+    res = asyncio.run(main.scan_cex_arbitrage(ex1, ex2, cfg))
+    assert res == ["SOL/USDC"]
 def test_scan_arbitrage_fetch_tickers(monkeypatch):
     cex_prices = {"SOL/USDC": 10.0, "BTC/USDC": 11.5}
     dex_prices = {"SOL/USDC": 11.0, "BTC/USDC": 12.0}
