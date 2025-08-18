@@ -1078,6 +1078,14 @@ async def reload_config(
         return
 
     _merge_dict(config, new_config)
+    if (
+        not config.get("symbols")
+        and not config.get("onchain_symbols")
+        and not config.get("symbol")
+    ):
+        config["symbol"] = fix_symbol(
+            os.getenv("CT_SYMBOL", "XRP/USDT")
+        )
     ctx.config = config
     new_hash = symbol_utils.compute_config_hash(config)
     old_hash = symbol_utils.get_cached_config_hash()
@@ -1373,7 +1381,9 @@ async def fetch_candidates(ctx: BotContext) -> None:
         and not ctx.config.get("onchain_symbols")
         and not ctx.config.get("symbol")
     ):
-        ctx.config["symbol"] = "BTC/USDT"
+        ctx.config["symbol"] = fix_symbol(
+            os.getenv("CT_SYMBOL", "XRP/USDT")
+        )
     orig_min_volume = sf.get("min_volume_usd")
     orig_volume_pct = sf.get("volume_percentile")
 
@@ -2900,6 +2910,14 @@ async def _main_impl() -> MainResult:
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config, _ = await load_config_async()
+    if (
+        not config.get("symbols")
+        and not config.get("onchain_symbols")
+        and not config.get("symbol")
+    ):
+        config["symbol"] = fix_symbol(
+            os.getenv("CT_SYMBOL", "XRP/USDT")
+        )
     env_chunk = os.getenv("OHLCV_CHUNK_SIZE")
     if env_chunk:
         try:
