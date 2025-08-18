@@ -1575,13 +1575,22 @@ async def _update_ohlcv_cache_inner(
         limit = max(config.get("ohlcv_snapshot_limit", limit), limit)
         since_map = {sym: None for sym in symbols}
     else:
+        tail = int((config.get("tail_overlap_bars") or 0))
+        need_tail = False
+        tf_sec = timeframe_seconds(exchange, timeframe)
         for sym in symbols:
             df = cache.get(sym)
             if df is not None and not df.empty:
-                # convert cached second timestamps to milliseconds for ccxt
-                since_map[sym] = int(df["timestamp"].iloc[-1]) * 1000 + 1
+                last_ts = int(df["timestamp"].iloc[-1]) * 1000
+                if tail > 0:
+                    since_map[sym] = last_ts - tail * tf_sec * 1000
+                    need_tail = True
+                else:
+                    since_map[sym] = last_ts + 1
             elif start_since is not None:
                 since_map[sym] = start_since
+        if need_tail:
+            limit += tail
     now = time.time()
     filtered_symbols: List[str] = []
     for s in symbols:
