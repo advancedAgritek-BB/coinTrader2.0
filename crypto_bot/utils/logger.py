@@ -5,13 +5,14 @@ from pathlib import Path
 LOG_DIR = Path(__file__).resolve().parents[2] / "crypto_bot" / "logs"
 
 
-def setup_logger(name: str, log_file: str, to_console: bool = True) -> logging.Logger:
+def setup_logger(name: str, log_file: Path | str, to_console: bool = True) -> logging.Logger:
     """Return a logger configured to write to ``log_file`` within ``LOG_DIR`` and optionally stdout.
 
     The directory ``LOG_DIR`` is created automatically when the logger is initialized.
     """
 
-    Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+    log_file = Path(log_file)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
 
@@ -19,7 +20,7 @@ def setup_logger(name: str, log_file: str, to_console: bool = True) -> logging.L
 
     file_handler_exists = any(
         isinstance(h, logging.FileHandler)
-        and Path(getattr(h, "baseFilename", "")) == Path(log_file)
+        and Path(getattr(h, "baseFilename", "")) == log_file
         for h in logger.handlers
     )
     if not file_handler_exists:
