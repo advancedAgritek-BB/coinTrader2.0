@@ -737,6 +737,13 @@ def _load_config_file() -> dict:
     tele_cfg.setdefault("batch_summary_secs", 0)
     data["telemetry"] = tele_cfg
 
+    data_cfg = data.get("data", {}) or {}
+    ml_cfg = data_cfg.get("market-loader", {}) or {}
+    ml_cfg.setdefault("bootstrap_timeout_minutes", 10)
+    data_cfg["market-loader"] = ml_cfg
+    data["data"] = data_cfg
+    data.setdefault("bootstrap_timeout_minutes", ml_cfg["bootstrap_timeout_minutes"])
+
     data = replace_placeholders(data)
 
     strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
@@ -1045,6 +1052,8 @@ async def initial_scan(
         datetime.utcfromtimestamp(history_since / 1000).isoformat(),
     )
 
+    bootstrap_timeout = float(config.get("bootstrap_timeout_minutes", 10) or 10) * 60
+
     for i in range(0, len(symbols), batch_size):
         batch = symbols[i : i + batch_size]
 
@@ -1067,6 +1076,7 @@ async def initial_scan(
                     notifier=notifier,
                     priority_queue=symbol_priority_queue,
                     batch_size=ohlcv_batch_size,
+                    timeout=bootstrap_timeout,
                 )
 
                 state.regime_cache = await update_regime_tf_cache(
@@ -1084,6 +1094,7 @@ async def initial_scan(
                     notifier=notifier,
                     df_map=state.df_cache,
                     batch_size=ohlcv_batch_size,
+                    timeout=bootstrap_timeout,
                 )
         logger.info("Deep historical OHLCV loaded for %d symbols", len(batch))
 
@@ -1474,6 +1485,8 @@ async def _update_caches_impl(ctx: BotContext) -> None:
         key=lambda t: timeframe_seconds(None, t),
     )
 
+    bootstrap_timeout = float(ctx.config.get("bootstrap_timeout_minutes", 10) or 10) * 60
+
     async with OHLCV_LOCK:
         try:
             for tf in tfs:
@@ -1496,6 +1509,7 @@ async def _update_caches_impl(ctx: BotContext) -> None:
                 ),
                 priority_queue=symbol_priority_queue,
                 batch_size=ohlcv_batch_size,
+                timeout=bootstrap_timeout,
             )
         except Exception as exc:
             logger.warning("WS OHLCV failed: %s - falling back to REST", exc)
@@ -1520,6 +1534,7 @@ async def _update_caches_impl(ctx: BotContext) -> None:
                 ),
                 priority_queue=symbol_priority_queue,
                 batch_size=ohlcv_batch_size,
+                timeout=bootstrap_timeout,
             )
         ctx.regime_cache = await update_regime_tf_cache(
             ctx.exchange,
@@ -1537,6 +1552,7 @@ async def _update_caches_impl(ctx: BotContext) -> None:
             ),
             df_map=ctx.df_cache,
             batch_size=ohlcv_batch_size,
+            timeout=bootstrap_timeout,
         )
 
     filtered_batch: list[str] = []
