@@ -297,8 +297,8 @@ micro_scalp_bot:
   vol_window: 15
   volume_window: 15
   wick_pct: 0.1
-min_agreeing_votes: 1
-min_confidence_score: 0.00001
+min_agreeing_votes: 0
+min_confidence_score: 0
 min_consistent_agreement: 1
 min_cooldown: 0
 min_history_fraction: 0.1
@@ -502,7 +502,7 @@ strategy_allocation:
   grid_bot: 0.2
   sniper_solana: 0.6
   trend_bot: 0.2
-strategy_evaluation_mode: best
+strategy_evaluation_mode: single
 strategy_router:
   # range_arb_bot runs globally and is appended automatically; no need to list it under regimes
   bandit_enabled: true
