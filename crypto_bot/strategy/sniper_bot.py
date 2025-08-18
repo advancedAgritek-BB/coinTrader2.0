@@ -193,12 +193,15 @@ def generate_signal(
     score = 0.0
 
     if price_fallback:
-        atr = calc_atr(df)
+        atr_series = calc_atr(df)
+        if len(atr_series) == 0 or atr_series.iloc[-1] <= 0:
+            logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+            return 0.0, "none", 0.0, event
+        atr = float(atr_series.iloc[-1])
         body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
         avg_vol = df["volume"].iloc[:-1].mean()
         if (
-            atr > 0
-            and body > atr * fallback_atr_mult
+            body > atr * fallback_atr_mult
             and avg_vol > 0
             and df["volume"].iloc[-1] > avg_vol * fallback_volume_mult
         ):

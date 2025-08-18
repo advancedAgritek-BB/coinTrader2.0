@@ -1,8 +1,7 @@
-from typing import Optional, Tuple
+from typing import Tuple
 
 import logging
 import pandas as pd
-import ta
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
@@ -25,6 +24,7 @@ else:  # pragma: no cover - fallback
 def generate_signal(
     df: pd.DataFrame,
     config: Optional[dict] = None,
+    config: dict | None = None,
     symbol: str | None = None,
     timeframe: str | None = None,
 ) -> Tuple[float, str]:
