@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel
+from sklearn.preprocessing import StandardScaler
 
 import ta
 from crypto_bot.utils.indicator_cache import cache_series
@@ -37,16 +38,25 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     recent = df.iloc[-window:]
     X = np.arange(len(recent)).reshape(-1, 1)
     y = recent["close"].values
-    kernel = ConstantKernel(1.0) * RBF(1.0)
-    gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10)
-    gp.fit(X, y)
-    pred, _ = gp.predict([[len(recent)]], return_std=True)
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    kernel = ConstantKernel(
+        1.0, constant_value_bounds=(1e-5, 1e5)
+    ) * RBF(1.0, length_scale_bounds=(1e-5, 1e5))
+    gp = GaussianProcessRegressor(
+        kernel=kernel, optimizer="fmin_l_bfgs_b", n_restarts_optimizer=15
+    )
+    gp.fit(X_scaled, y)
+    pred, _ = gp.predict(scaler.transform([[len(recent)]]), return_std=True)
     return float(pred)
 
 
 def generate_signal(
     df: pd.DataFrame,
     config: dict | None = None,
+    config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
 ) -> Tuple[float, str]:

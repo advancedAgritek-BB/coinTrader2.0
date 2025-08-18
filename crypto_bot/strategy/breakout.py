@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 def generate_signal(
     df: pd.DataFrame,
     config: Optional[dict] = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
 ) -> Tuple[float, str, float]:
     """Selective breakout strategy with compression and volume filters.
 

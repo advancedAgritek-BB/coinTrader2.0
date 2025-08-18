@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Tuple
 
 import pandas as pd
 import ta
@@ -25,24 +25,42 @@ if ML_AVAILABLE:
 else:  # pragma: no cover - fallback
     MODEL = None
 
-
 def generate_signal(
     df: pd.DataFrame,
     higher_df: Optional[pd.DataFrame] = None,
     config: Optional[dict] = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
+    higher_df: pd.DataFrame | None = None,
+    config: dict | None = None,
+    symbol: Optional[str] = None,
+    timeframe: Optional[str] = None,
+    **kwargs,
 ) -> Tuple[float, str]:
-    """Detect deep dips for mean reversion long entries."""
-    symbol = config.get("symbol", "") if config else ""
+    """Detect deep dips for mean reversion long entries.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input OHLCV data.
+    symbol : str, optional
+        Asset symbol. Kept for compatibility with other strategies.
+    timeframe : str, optional
+        Data timeframe. Unused but accepted for interface compatibility.
+    **kwargs : dict
+        May contain ``higher_df`` and ``config`` for advanced behaviour.
+    """
+
+    higher_df: Optional[pd.DataFrame] = kwargs.get("higher_df")
+    config: Optional[dict] = kwargs.get("config")
+
+    symbol = symbol or (config.get("symbol", "") if config else "")
     params = config.get("dip_hunter", {}) if config else {}
     cooldown_enabled = bool(params.get("cooldown_enabled", False))
     strategy = "dip_hunter"
 
     if cooldown_enabled and symbol and in_cooldown(symbol, strategy):
         logger.info("Signal for %s: %s, %s", symbol, 0.0, "cooldown")
-        return 0.0, "none"
-
-    if len(df) < 50:
-        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none"
 
     rsi_window = int(params.get("rsi_window", 14))
@@ -59,7 +77,13 @@ def generate_signal(
     atr_normalization = bool(params.get("atr_normalization", True))
 
     lookback = max(rsi_window, vol_window, adx_window, bb_window, dip_bars)
-    recent = df.iloc[-(lookback + 1) :]
+    required_len = 2 * adx_window - 1
+    min_len = max(50, lookback + 1, required_len)
+    recent = df.tail(min_len)
+
+    if len(recent) < required_len:
+        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        return 0.0, "none"
 
     rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
     adx = ADXIndicator(recent["high"], recent["low"], recent["close"], window=adx_window).adx()
