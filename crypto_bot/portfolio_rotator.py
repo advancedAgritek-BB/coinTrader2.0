@@ -6,12 +6,12 @@ import json
 from pathlib import Path
 from typing import Dict, Iterable, List
 
-import pandas as pd
 import yaml
 
-from crypto_bot.fund_manager import auto_convert_funds
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.telegram import TelegramNotifier
+
+auto_convert_funds = None  # type: ignore
 
 
 QUOTE_PRIORITY = ("USDT", "USD", "EUR", "USDC")  # adjust to your quote prefs
@@ -104,18 +104,22 @@ class PortfolioRotator:
                 self.logger.error("Invalid OHLCV for %s: %r", sym, ohlcv)
                 continue
 
-            df = pd.DataFrame(
-                ohlcv,
-                columns=["ts", "open", "high", "low", "close", "volume"],
-            )
+            closes = [row[4] for row in ohlcv if isinstance(row, (list, tuple)) and len(row) >= 5]
             if method == "sharpe":
-                rets = df["close"].pct_change().dropna()
-                std = rets.std()
-                score = float(rets.mean() / std) if std else 0.0
+                rets = [closes[i] / closes[i - 1] - 1 for i in range(1, len(closes))]
+                mean = sum(rets) / len(rets) if rets else 0.0
+                var = (
+                    sum((r - mean) ** 2 for r in rets) / (len(rets) - 1)
+                    if len(rets) > 1
+                    else 0.0
+                )
+                std = var**0.5
+                score = float(mean / std) if std else 0.0
             else:  # momentum
-                score = float(df["close"].iloc[-1] / df["close"].iloc[0] - 1)
+                score = float(closes[-1] / closes[0] - 1) if closes else 0.0
             scores[sym] = score
-            self.logger.info("Score for %s: %.4f", sym, score)
+            if self.config.get("log_scores_verbose", False):
+                self.logger.info("Score for %s: %.4f", sym, score)
 
         return scores
 
@@ -157,6 +161,8 @@ class PortfolioRotator:
         scores_pairs = await self.score_assets(exchange, symbols, lookback, method)
         scores = {pair_map.get(p, p): s for p, s in scores_pairs.items()}
         self._log_scores(scores)
+        if not self.config.get("log_scores_verbose", False):
+            self._log_score_summary(scores)
         if not scores:
             return holdings
 
@@ -184,6 +190,10 @@ class PortfolioRotator:
                 improvement,
             )
             # execute swap via fund manager helper
+            global auto_convert_funds
+            if auto_convert_funds is None:  # pragma: no cover - optional import
+                from crypto_bot.fund_manager import auto_convert_funds as _acf
+                auto_convert_funds = _acf
             await auto_convert_funds(
                 wallet,
                 token,
@@ -211,4 +221,27 @@ class PortfolioRotator:
     def _log_scores(self, scores: Dict[str, float]) -> None:
         """Write the latest asset scores to file."""
         SCORE_FILE.write_text(json.dumps(scores))
+
+    def _log_score_summary(self, scores: Dict[str, float]) -> None:
+        """Log top long/short opportunities and a simple histogram."""
+        if not scores:
+            return
+        top_k = 5
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        top_long = [f"{s}:{v:.2f}" for s, v in ranked[:top_k] if v > 0]
+        top_short = [f"{s}:{v:.2f}" for s, v in ranked[::-1] if v < 0][:top_k]
+        if top_long:
+            self.logger.info("Top long opportunities: %s", ", ".join(top_long))
+        if top_short:
+            self.logger.info("Top short opportunities: %s", ", ".join(top_short))
+        hist = {
+            ">0.2": sum(1 for v in scores.values() if v > 0.2),
+            "0-0.2": sum(1 for v in scores.values() if 0 < v <= 0.2),
+            "-0.2-0": sum(1 for v in scores.values() if -0.2 <= v <= 0),
+            "<-0.2": sum(1 for v in scores.values() if v < -0.2),
+        }
+        self.logger.info(
+            "Score histogram: %s",
+            ", ".join(f"{k}:{v}" for k, v in hist.items()),
+        )
 
