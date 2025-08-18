@@ -40,7 +40,7 @@ from .token_registry import (
 )
 from crypto_bot.solana.prices import fetch_onchain_ohlcv
 from crypto_bot.strategy.evaluator import get_stream_evaluator, StreamEvaluator
-from crypto_bot.strategy.registry import load_enabled
+from crypto_bot.strategy import registry
 from .logger import LOG_DIR, setup_logger
 from .constants import NON_SOLANA_BASES
 from crypto_bot.data.locks import timeframe_lock, TF_LOCKS as _TF_LOCKS
@@ -290,6 +290,27 @@ def warmup_reached_for(
         if df is None or len(df) < required:
             return False
     return True
+
+
+def _ensure_strategy_warmup(config: Dict[str, Any]) -> None:
+    """Ensure warmup settings meet strategy lookback requirements.
+
+    When ``data.auto_raise_warmup`` is enabled the configured warmup counts are
+    automatically increased to satisfy each strategy's ``required_lookback``.  If
+    any strategies still lack sufficient history after this adjustment a warning
+    is logged and those strategies are skipped.
+    """
+
+    strategies = registry.load_from_config(config)
+    enabled = registry.filter_by_warmup(config, strategies)
+
+    if config.get("data", {}).get("auto_raise_warmup", False):
+        skipped = [s.__name__ for s in strategies if s not in enabled]
+        if skipped:
+            logger.warning(
+                "Skipping strategies due to insufficient warmup after auto-raise: %s",
+                ", ".join(skipped),
+            )
 
 # Mapping of common symbols to CoinGecko IDs for OHLC fallback
 COINGECKO_IDS = {
@@ -2092,6 +2113,7 @@ async def update_ohlcv_cache(
     """Batch OHLCV updates for multiple calls."""
 
     config = config or {}
+    _ensure_strategy_warmup(config)
     backfill_map = config.get("backfill_days", {}) or {}
     warmup_map = config.get("warmup_candles", {}) or {}
     now_ms = utc_now_ms()
@@ -2292,7 +2314,7 @@ async def update_multi_tf_ohlcv_cache(
     # Ensure warmup candles satisfy strategy indicator lookbacks. This will
     # either raise the configured warmup or disable strategies requiring more
     # history, depending on ``data.auto_raise_warmup``.
-    load_enabled(config)
+    _ensure_strategy_warmup(config)
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     progress_state: dict[str, list[str]] = {}

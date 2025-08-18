@@ -9,7 +9,7 @@ trading:
   mode: cex           # cex | onchain | auto | dry_run
   allowed_quotes: [USD, USDT, USDC, EUR]
   min_ticker_volume: 10000
-  timeframes: ["1m","5m"]
+  timeframes: ["1m","5m","15m","1h"]
   backfill:
     warmup_high_tf: ["1h","4h","1d"]
     deep_low_tf: true        # backfill 1m/5m history for strategies
@@ -608,13 +608,17 @@ enable_token_overrides: true
 ticker_backoff_initial: 2
 ticker_backoff_max: 60
 ticker_rate_limit: null
-timeframes: ['1m','5m']
+timeframes: ['1m','5m','15m','1h']
 backfill_days:
   '1m': 2
   '5m': 3
+  '15m': 10
+  '1h': 30
 warmup_candles:
-  '1m': 600
-  '5m': 300
+  '1m': 1000
+  '5m': 600
+  '15m': 400
+  '1h': 240
 allowed_quotes: ['USD','USDT','USDC','EUR']
 hft: true
 token_registry:
