@@ -3,7 +3,8 @@ import pytest
 
 from crypto_bot.solana import meme_wave_runner
 from crypto_bot.solana.watcher import NewPoolEvent, PoolWatcher
-from crypto_bot.main import SessionState, initial_scan
+import crypto_bot.main as main
+from crypto_bot.main import SessionState
 from crypto_bot.phase_runner import BotContext, PhaseRunner
 
 
@@ -32,7 +33,7 @@ async def test_watch_starts_before_initial_scan(monkeypatch):
 
     task = meme_wave_runner.start_runner({"enabled": True, "pool": {"url": "u", "interval": 0.001}})
     assert isinstance(task, asyncio.Task)
-    await initial_scan(DummyExchange(), {"symbols": ["XBT/USDT"], "timeframes": ["1h"]}, SessionState())
+    await main.initial_scan(DummyExchange(), {"symbols": ["XBT/USDT"], "timeframes": ["1h"]}, SessionState())
     task.cancel()
     try:
         await task
