@@ -1,6 +1,7 @@
-"""Range arbitrage strategy for low volatility markets using kernel regression."""
+"""Range arbitrage strategy for low volatility markets using kernel
+regression."""
 
-from typing import Optional, Tuple
+from typing import Tuple
 
 import logging
 import numpy as np
@@ -54,6 +55,7 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
 
 def generate_signal(
     df: pd.DataFrame,
+    config: dict | None = None,
     config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
@@ -70,7 +72,9 @@ def generate_signal(
     atr_window = int(params.get("atr_window", 14))
     kr_window = int(params.get("kr_window", 20))
     z_threshold = float(params.get("z_threshold", 1.5))
-    vol_z_threshold = float(params.get("vol_z_threshold", 1.0))  # Low vol confirm
+    vol_z_threshold = float(
+        params.get("vol_z_threshold", 1.0)
+    )  # Low vol confirm
     volume_mult = float(params.get("volume_mult", 1.5))
     atr_normalization = bool(params.get("atr_normalization", True))
 
@@ -100,7 +104,10 @@ def generate_signal(
     latest = recent.iloc[-1]
 
     # Ignore if not low vol
-    if latest["atr_z"] >= vol_z_threshold or latest["vol_z"] >= vol_z_threshold:
+    if (
+        latest["atr_z"] >= vol_z_threshold
+        or latest["vol_z"] >= vol_z_threshold
+    ):
         return 0.0, "none"
 
     # Avoid volume spikes
@@ -111,7 +118,6 @@ def generate_signal(
     if np.isnan(pred_price):
         return 0.0, "none"
 
-    deviation = (latest["close"] - pred_price) / pred_price
     z_dev = stats.zscore(recent["close"], lookback).iloc[-1]
 
     score = 0.0
@@ -149,4 +155,3 @@ class regime_filter:
     def matches(regime: str) -> bool:
         """Return ``True`` for every supplied regime."""
         return True
-
