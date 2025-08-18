@@ -4,6 +4,13 @@ import types
 from pathlib import Path
 import pytest
 
+# Ensure project root on sys.path and load crypto_bot so later sys.modules
+# patches via ``setdefault`` do not replace the real package.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+import crypto_bot  # noqa: F401
+
 try:  # Ensure real redis module is loaded for tests using fakeredis
     import redis  # type: ignore
 except Exception:  # pragma: no cover - redis optional

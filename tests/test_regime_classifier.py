@@ -843,6 +843,7 @@ def test_supabase_missing_env_uses_fallback(monkeypatch):
 
     monkeypatch.setattr(rc, "_ml_fallback", fallback)
     rc._supabase_model = None
+    rc._supabase_scaler = None
     label, conf = rc._classify_ml(df)
     assert called
     assert label == "trending"
@@ -867,6 +868,7 @@ def test_supabase_download_failure(monkeypatch):
             self.storage = FakeStorage()
 
     monkeypatch.setattr(rc, "_supabase_model", None)
+    monkeypatch.setattr(rc, "_supabase_scaler", None)
     monkeypatch.setattr(rc, "_ml_fallback", lambda _df: ("sideways", 0.5))
     monkeypatch.setitem(sys.modules, "supabase", types.SimpleNamespace(create_client=lambda u, k: FakeClient()))
 
