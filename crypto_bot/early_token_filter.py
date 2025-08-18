@@ -84,6 +84,7 @@ async def assess_early_token(symbol: str, mint: str, cfg: Dict[str, Any]) -> flo
     except Exception as exc:  # pragma: no cover - best effort
         logger.error("Sentiment fetch failed for %s: %s", symbol, exc)
         sentiment = 50
+    logger.info("Sentiment for %s: %d", symbol, sentiment)
     score += (sentiment / 100.0) * 0.3
 
     # --- Volume via GeckoTerminal ---------------------------------------
