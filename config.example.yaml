@@ -107,3 +107,9 @@ warmup_candles:
 backfill_days:
   '1m': 2
   '5m': 3
+
+telegram:
+  token: YOUR_TELEGRAM_TOKEN
+  chat_id: YOUR_CHAT_ID
+  status_updates: true
+  bootstrap_updates: false

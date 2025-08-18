@@ -2330,6 +2330,10 @@ async def update_multi_tf_ohlcv_cache(
     if not tfs:
         return cache
 
+    tele_cfg = config.get("telegram", {})
+    send_bootstrap = bool(tele_cfg.get("bootstrap_updates")) and STATUS_UPDATES
+    total_tfs = len(tfs)
+
     min_volume_usd = float(config.get("min_volume_usd", 0) or 0)
     vol_thresh = config.get("bounce_scalper", {}).get("vol_zscore_threshold")
 
@@ -2361,7 +2365,7 @@ async def update_multi_tf_ohlcv_cache(
         ttl=listing_cache_ttl,
     )
 
-    for tf in tfs:
+    for idx, tf in enumerate(tfs, 1):
         if tf == "1m":
             symbols = one_min_syms
         elif tf == "5m":
@@ -2376,6 +2380,13 @@ async def update_multi_tf_ohlcv_cache(
             logger.info("Skip: %s update already running.", tf)
             continue
         async with lock:
+            if notifier and send_bootstrap:
+                try:
+                    await notifier.notify_async(
+                        f"Starting OHLCV update for {tf} ({idx}/{total_tfs})"
+                    )
+                except Exception:  # pragma: no cover - best effort
+                    logger.exception("Failed to send Telegram notification")
             logger.info("Starting OHLCV update for timeframe %s", tf)
             tf_cache = cache.get(tf, {})
 
@@ -2872,6 +2883,14 @@ async def update_multi_tf_ohlcv_cache(
                 log_progress()
             cache[tf] = tf_cache
             logger.info("Completed OHLCV update for timeframe %s", tf)
+
+        if notifier and send_bootstrap:
+            try:
+                await notifier.notify_async(
+                    f"Completed OHLCV update for {tf} ({idx}/{total_tfs})"
+                )
+            except Exception:  # pragma: no cover - best effort
+                logger.exception("Failed to send Telegram notification")
 
     return cache
 
