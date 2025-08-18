@@ -1,7 +1,7 @@
 """Range arbitrage strategy for low volatility markets using kernel
 regression."""
 
-from typing import Tuple
+from typing import Optional, Tuple
 
 import logging
 import numpy as np
@@ -57,9 +57,8 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
 def generate_signal(
     df: pd.DataFrame,
     config: dict | None = None,
-    config: Optional[dict] = None,
-    symbol: str | None = None,
-    timeframe: str | None = None,
+    symbol: Optional[str] = None,
+    timeframe: Optional[str] = None,
 ) -> Tuple[float, str]:
     """Generate arb signal using kernel prediction.
 
@@ -117,10 +116,6 @@ def generate_signal(
 
     pred_price = kernel_regression(recent, kr_window)
     if np.isnan(pred_price):
-        return 0.0, "none"
-
-    deviation = (latest["close"] - pred_price) / pred_price
-    if recent is None or len(recent) < lookback:
         return 0.0, "none"
     z_val = last_window_zscore(recent["close"], lookback)
     if np.isnan(z_val):
