@@ -691,20 +691,28 @@ def _ensure_ml(cfg: dict) -> None:
     """
     if not cfg.get("ml_enabled", True):
         return
+    symbol = cfg.get("symbol") or os.getenv("CT_SYMBOL", "XRPUSD")
     try:  # pragma: no cover - best effort
         from crypto_bot.regime.regime_classifier import load_regime_model
 
-        _, model_path = asyncio.run(load_regime_model("BTCUSDT"))
-        logger.info("Loaded global regime model from Supabase: %s", model_path)
+        _, model_path = asyncio.run(load_regime_model(symbol))
+        logger.info(
+            "Loaded global regime model for %s from Supabase: %s",
+            symbol,
+            model_path,
+        )
     except Exception as exc:  # pragma: no cover - model load failure
-        logger.error("Machine learning initialization failed: %s", exc)
+        logger.error(
+            "Machine learning initialization for %s failed: %s", symbol, exc
+        )
         raise MLUnavailableError("model load failure", cfg) from exc
     if not cfg.get("ml_enabled", True):
         return
     if not ML_AVAILABLE:
         logger.info(
-            "ML model unavailable; ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY are set. "
-            "Install cointrader-trainer only when training new models."
+            "ML model for %s unavailable; ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY are set. "
+            "Install cointrader-trainer only when training new models.",
+            symbol,
         )
         return
 
