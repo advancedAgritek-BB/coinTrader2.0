@@ -69,7 +69,7 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
         params["password"] = os.getenv("API_PASSPHRASE")
         exchange = ccxt.coinbase(params)
     elif exchange_name == "kraken":
-        exchange = kraken.get_client(api_key, api_secret)
+        exchange = KrakenClient(ccxt.kraken(params))
 
         if use_ws:
             if use_private_ws and not (api_key and api_secret):
@@ -92,17 +92,6 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
                 except Exception as err:  # pragma: no cover - optional dependency
                     logger.warning("Failed to initialize Kraken WS client: %s", err)
                     ws_client = None
-
-        exchange = ccxt.kraken(params)
-        exchange = KrakenClient(
-            ccxt.kraken(
-                {
-                    "apiKey": api_key,
-                    "secret": api_secret,
-                    "enableRateLimit": True,
-                }
-            )
-        )
     else:
         raise ValueError(f"Unsupported exchange: {exchange_name}")
 
