@@ -150,6 +150,7 @@ def generate_signal(
     lookback_cfg = int(cfg_all.get("indicator_lookback", 250))
     squeeze_pct = float(cfg_all.get("bb_squeeze_pct", 20))
 
+    min_bars = adx_window + 1
     lookback = max(
         bb_len,
         kc_len,
@@ -158,12 +159,13 @@ def generate_signal(
         ema_window,
         adx_window,
         14,
+        min_bars,
     )
     if len(df) < lookback:
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
     recent = df.iloc[-(lookback + 1):]
-    if len(recent) < lookback:
+    if len(recent) < min_bars:
         return (0.0, "none", 0.0) if higher_df is None else (0.0, "none")
 
     squeeze, atr = _squeeze(

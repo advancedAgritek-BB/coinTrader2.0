@@ -54,7 +54,9 @@ async def generate_signal(
 
     config = config or {}
     symbol = config.get("symbol", "")
-    if len(df) < 50:
+    adx_window = 14
+    min_bars = max(50, adx_window + 1)
+    if len(df) < min_bars:
         logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none"
 
