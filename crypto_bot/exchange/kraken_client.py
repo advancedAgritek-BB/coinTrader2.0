@@ -77,6 +77,19 @@ class KrakenClient:
         self._trim(now)
         return len(self._times) / (_REQUEST_WINDOW / 60.0)
 
+    async def list_markets(self) -> dict[str, Any]:
+        """Fetch and return market metadata keyed by symbol."""
+
+        loader = getattr(self._exchange, "load_markets", None)
+        if callable(loader):
+            markets = await self._call_with_retries(loader)
+        else:
+            fetcher = getattr(self._exchange, "fetch_markets")
+            markets = await self._call_with_retries(fetcher)
+        if isinstance(markets, list):
+            return {m.get("symbol", m): m for m in markets}
+        return markets
+
     async def close(self) -> None:
         await self._exchange.close()
 
