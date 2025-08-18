@@ -38,6 +38,7 @@ from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 
 # Internal project modules are imported lazily inside `main()` after env setup
 from crypto_bot.ml.selfcheck import log_ml_status_once
+from crypto_bot.utils.ml_utils import ML_AVAILABLE
 
 # Internal project modules are imported lazily in `_import_internal_modules()`
 
@@ -3632,7 +3633,6 @@ async def main() -> None:
     )
     from crypto_bot.utils import token_registry as registry
     from crypto_bot.utils import pnl_logger, regime_pnl_tracker
-    from crypto_bot.utils.ml_utils import ML_AVAILABLE
     from crypto_bot.solana_trading import cross_chain_trade, sniper_trade
     from crypto_bot.telegram_bot_ui import TelegramBotUI
     from crypto_bot.solana.runner import run as sniper_run
