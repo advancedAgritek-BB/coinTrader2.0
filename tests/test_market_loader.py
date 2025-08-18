@@ -626,6 +626,50 @@ def test_update_ohlcv_cache_respects_requested_limit():
     assert len(cache["BTC/USD"]) == 50
 
 
+def test_update_ohlcv_cache_since_overlap(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    market_loader._last_snapshot_time = time.time()
+    last_ts = 123
+    cache = {
+        "BTC/USD": pd.DataFrame(
+            [[last_ts, 1, 1, 1, 1, 1]],
+            columns=["timestamp", "open", "high", "low", "close", "volume"],
+        )
+    }
+
+    captured: dict[str, int | None] = {}
+
+    async def fake_load_ohlcv_parallel(
+        _ex, symbols, timeframe, limit, since_map, **kwargs
+    ):
+        captured.update(since_map)
+        return {s: [] for s in symbols}
+
+    monkeypatch.setattr(
+        market_loader, "load_ohlcv_parallel", fake_load_ohlcv_parallel
+    )
+
+    class DummyExchange:
+        has = {"fetchOHLCV": True}
+        markets = {
+            "BTC/USD": {
+                "symbol": "BTC/USD",
+                "base": "BTC",
+                "quote": "USD",
+                "active": True,
+            }
+        }
+
+    asyncio.run(
+        update_ohlcv_cache(
+            DummyExchange(), cache, ["BTC/USD"], limit=1, max_concurrent=1
+        )
+    )
+
+    assert captured["BTC/USD"] == last_ts * 1000 + 1
+
+
 class CountingExchange:
     has = {"fetchOHLCV": True}
 
