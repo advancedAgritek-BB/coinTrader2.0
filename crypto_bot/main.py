@@ -457,6 +457,32 @@ def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> f
     return sum(atr_values) / len(atr_values) if atr_values else 0.0
 
 
+def format_monitor_line(
+    ctx: Any,
+    session_state: "SessionState",
+    balance: float,
+    positions: dict[str, Any],
+    last_log: str,
+) -> str:
+    """Return a formatted status line with OHLCV progress and IOPS."""
+    tickers = ",".join(sorted(positions.keys())) or "-"
+    active = getattr(ctx, "active_universe", [])
+    total = len(active)
+    parts: list[str] = []
+    for tf in ctx.config.get("timeframes", []):
+        tf_cache = session_state.df_cache.get(tf, {})
+        count = sum(1 for s in active if s in tf_cache)
+        parts.append(f"{tf}: {count}/{total}")
+    ohlcv_summary = " | ".join(parts) if parts else "-"
+    from crypto_bot.utils import market_loader
+
+    iops = market_loader.get_iops()
+    return (
+        f"[Monitor] balance=${balance:,.2f} open={len(positions)} ({tickers}) "
+        f"last='{last_log}' OHLCV {ohlcv_summary} IOPS {iops:.1f}/s"
+    )
+
+
 def enqueue_solana_tokens(tokens: list[str]) -> None:
     """Add Solana ``tokens`` to the priority queue skipping recently queued ones."""
 
@@ -2911,10 +2937,7 @@ async def _main_impl() -> MainResult:
             except Exception:
                 balance = 0.0
             positions = getattr(wallet, "positions", {}) if wallet else {}
-            tickers = ",".join(sorted(positions.keys())) or "-"
-            line = (
-                f"[Monitor] balance=${balance:,.2f} open={len(positions)} ({tickers})  last='{lastlog.last}'"
-            )
+            line = format_monitor_line(ctx, session_state, balance, positions, lastlog.last)
             out_line = line[:180]
             if out_line != last_line:
                 sys.stdout.write("\r" + out_line.ljust(180))
@@ -2967,7 +2990,7 @@ async def _main_impl() -> MainResult:
 
     set_ohlcv_provider(_ohlcv_provider)
 
-    register_task(asyncio.create_task(console_control.control_loop(state)))
+    register_task(asyncio.create_task(console_control.control_loop(state, ctx, session_state)))
     register_task(
         asyncio.create_task(
             _rotation_loop(
