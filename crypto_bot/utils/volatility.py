@@ -7,23 +7,42 @@ logger = logging.getLogger(__name__)
 
 
 def calc_atr(
-    df: pd.DataFrame | None, window: int = 14, **kwargs
-) -> pd.Series:
-    """Compute the Average True Range using ``window`` or ``period``."""
+    df: pd.DataFrame | None,
+    window: int = 14,
+    *,
+    as_series: bool = True,
+    **kwargs,
+) -> pd.Series | float | None:
+    """Compute the Average True Range using ``window`` or ``period``.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame | None
+        Input OHLC data.
+    window : int, default 14
+        Window length for ATR calculation.
+    as_series : bool, default True
+        When ``True`` a :class:`pandas.Series` is returned, otherwise the
+        latest ATR value is returned as ``float`` or ``None`` when
+        insufficient data is provided.
+    """
 
     period = kwargs.get("period")
     if period is not None:
         window = int(period)
 
     if df is None or df.empty or len(df) < max(2, int(window)):
-        if df is not None and "close" in df:
-            return df["close"].iloc[:0]
-        return pd.Series([], dtype=float)
+        if as_series:
+            if df is not None and "close" in df:
+                return df["close"].iloc[:0]
+            return pd.Series([], dtype=float)
+        return None
 
     atr_indicator = AverageTrueRange(
         df["high"], df["low"], df["close"], window=int(window), fillna=False
-    )
-    return atr_indicator.average_true_range()
+    ).average_true_range()
+
+    return atr_indicator if as_series else float(atr_indicator.iloc[-1])
 
 
 def atr_percent(df: pd.DataFrame, period: int = 14) -> float:
