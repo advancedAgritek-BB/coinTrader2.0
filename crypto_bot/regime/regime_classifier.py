@@ -267,6 +267,10 @@ async def load_regime_model(symbol: str) -> tuple[object | None, str | None]:
             logger.info("Loaded global regime model from Supabase: %s", model_path)
             return model, model_path
     except Exception as exc:
+        msg = str(getattr(exc, "message", exc))
+        if "not_found" in msg:
+            logger.warning("Supabase regime model for %s not found", symbol)
+            return None, None
         logger.error("Failed to load regime model: %s", exc)
 
     return None, model_path
