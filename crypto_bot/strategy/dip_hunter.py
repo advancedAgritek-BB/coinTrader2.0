@@ -3,6 +3,7 @@ from typing import Tuple
 import pandas as pd
 import ta
 from ta.trend import ADXIndicator
+import numpy as np
 
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
@@ -86,7 +87,12 @@ def generate_signal(
         return 0.0, "none"
 
     rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
-    adx = ADXIndicator(recent["high"], recent["low"], recent["close"], window=adx_window).adx()
+    # Ensure enough candles for ADX
+    if recent is None or len(recent) < adx_window + 1:
+        return 0.0, "none"
+    adx = ADXIndicator(
+        recent["high"], recent["low"], recent["close"], window=int(adx_window)
+    ).adx()
     bb = ta.volatility.BollingerBands(recent["close"], window=bb_window)
     bb_pct = bb.bollinger_pband()
     vol_ma = recent["volume"].rolling(vol_window).mean()

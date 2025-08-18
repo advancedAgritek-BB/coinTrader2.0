@@ -54,7 +54,9 @@ def generate_signal(
     """Trend following signal with ADX, volume and optional Donchian filters."""
     config = config or {}
     symbol = config.get("symbol", "")
-    if df.empty or len(df) < 50:
+    adx_window = 7
+    min_bars = max(50, adx_window + 1)
+    if df.empty or len(df) < min_bars:
         logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none"
 
