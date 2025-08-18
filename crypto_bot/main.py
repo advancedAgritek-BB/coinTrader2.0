@@ -3370,7 +3370,19 @@ async def _main_impl() -> MainResult:
                                 timeframes=["1m", "5m"],
                             )
                             for (sym, tf), val in res.items():
-                                scores[f"{strat.name}:{sym}:{tf}"] = val
+                                if isinstance(val, tuple):
+                                    score, action = val
+                                else:
+                                    score, action = val, "none"
+                                logger.info(
+                                    "Signal for %s | %s | %s: %s, %s",
+                                    strat.name,
+                                    sym,
+                                    tf,
+                                    score,
+                                    action,
+                                )
+                                scores[f"{strat.name}:{sym}:{tf}"] = score
                         except Exception:
                             logger.exception(
                                 "Strategy %s scoring failed", getattr(strat, "name", str(strat))
