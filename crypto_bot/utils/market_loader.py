@@ -2089,6 +2089,7 @@ async def update_multi_tf_ohlcv_cache(
     notifier: TelegramNotifier | None = None,
     priority_queue: Deque[str] | None = None,
     batch_size: int | None = None,
+    chunk_size: int = 20,
     max_retries: int = 3,
     timeout: float | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
@@ -2101,6 +2102,9 @@ async def update_multi_tf_ohlcv_cache(
     start_since : int | None, optional
         When provided, fetch historical data starting from this timestamp
         in milliseconds when no cached data is available.
+    chunk_size : int, optional
+        Number of symbols to process per batch when fetching OHLCV data.
+        Defaults to ``20``.
     """
     try:  # pragma: no cover - optional regime dependency
         from crypto_bot.regime.regime_classifier import clear_regime_cache
@@ -2296,6 +2300,28 @@ async def update_multi_tf_ohlcv_cache(
                 cex_symbols = [s for s in priority_syms if s in cex_symbols] + [s for s in cex_symbols if s not in prio_set]
                 dex_symbols = [s for s in priority_syms if s in dex_symbols] + [s for s in dex_symbols if s not in prio_set]
 
+            total_syms = len(cex_symbols) + len(dex_symbols)
+            processed_syms = 0
+            start_fetch = time.perf_counter()
+
+            def log_progress() -> None:
+                if total_syms <= 0:
+                    return
+                elapsed = time.perf_counter() - start_fetch
+                rate = processed_syms / elapsed if elapsed > 0 else 0.0
+                pct = processed_syms / total_syms * 100
+                eta = (total_syms - processed_syms) / rate if rate > 0 else 0
+                eta_str = str(timedelta(seconds=int(eta))) if rate > 0 else "?"
+                logger.info(
+                    "%s: %d/%d fetched (%.0f%%), avg %.1f req/s, ETA %s",
+                    tf,
+                    processed_syms,
+                    total_syms,
+                    pct,
+                    rate,
+                    eta_str,
+                )
+
             if cex_symbols:
                 if tf_start_since is None:
                     prev_lengths = {s: len(tf_cache[s]) if s in tf_cache else 0 for s in cex_symbols}
@@ -2311,6 +2337,28 @@ async def update_multi_tf_ohlcv_cache(
                                     "Adjusting limit for %s on %s to %d", s, tf, lim
                                 )
                             curr_limit = lim
+                        for i in range(0, len(syms), chunk_size):
+                            chunk = syms[i : i + chunk_size]
+                            tf_cache = await update_ohlcv_cache(
+                                exchange,
+                                tf_cache,
+                                chunk,
+                                timeframe=tf,
+                                limit=curr_limit,
+                                config={
+                                    "min_history_fraction": 0,
+                                    "ohlcv_batch_size": config.get("ohlcv_batch_size"),
+                                },
+                                batch_size=batch_size,
+                                start_since=tf_start_since,
+                                use_websocket=use_websocket,
+                                force_websocket_history=force_websocket_history,
+                                max_concurrent=max_concurrent,
+                                notifier=notifier,
+                                priority_symbols=priority_syms,
+                            )
+                            processed_syms += len(chunk)
+                            log_progress()
                         tf_cache = await update_ohlcv_cache(
                             exchange,
                             tf_cache,
@@ -2379,6 +2427,8 @@ async def update_multi_tf_ohlcv_cache(
                                 sym,
                                 tf,
                             )
+                            processed_syms += 1
+                            log_progress()
                             continue
 
                         df_new = pd.DataFrame(
@@ -2470,6 +2520,8 @@ async def update_multi_tf_ohlcv_cache(
                                 sym, {"df_cache": cache, "symbol": sym}
                             )
                         await _maybe_enqueue_eval(sym, tf, cache, config)
+                        processed_syms += 1
+                        log_progress()
 
             for sym in dex_symbols:
                 data = None
@@ -2531,10 +2583,14 @@ async def update_multi_tf_ohlcv_cache(
                             timeout=timeout,
                         )
                         if isinstance(data, Exception) or not data:
+                            processed_syms += 1
+                            log_progress()
                             continue
                     add_priority(data, sym)
 
                 if not data:
+                    processed_syms += 1
+                    log_progress()
                     continue
 
                 if not isinstance(data, list):
@@ -2544,6 +2600,8 @@ async def update_multi_tf_ohlcv_cache(
                         tf,
                         type(data),
                     )
+                    processed_syms += 1
+                    log_progress()
                     continue
 
                 df_new = pd.DataFrame(
@@ -2557,6 +2615,8 @@ async def update_multi_tf_ohlcv_cache(
                     last_ts = tf_cache[sym]["timestamp"].iloc[-1]
                     df_new = df_new[df_new["timestamp"] > last_ts]
                     if df_new.empty:
+                        processed_syms += 1
+                        log_progress()
                         continue
                     new_rows = len(df_new)
                     tf_cache[sym] = pd.concat([tf_cache[sym], df_new], ignore_index=True)
@@ -2587,6 +2647,8 @@ async def update_multi_tf_ohlcv_cache(
 
                     cache[tf] = tf_cache
                     await _maybe_enqueue_eval(sym, tf, cache, config)
+                processed_syms += 1
+                log_progress()
             cache[tf] = tf_cache
             logger.info("Completed OHLCV update for timeframe %s", tf)
 
