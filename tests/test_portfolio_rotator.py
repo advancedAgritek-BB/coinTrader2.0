@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 
-import pandas as pd
 import pytest
 
 from crypto_bot.portfolio_rotator import PortfolioRotator
@@ -30,6 +29,16 @@ def test_score_assets_returns_scores():
     )
     assert set(scores.keys()) == {"BTC/USD", "ETH/USD"}
     assert scores["BTC/USD"] > scores["ETH/USD"]
+
+
+def test_score_assets_verbose_logging(caplog):
+    data = {"BTC": [1, 2, 3]}
+    ex = DummyExchange(data)
+    rotator = PortfolioRotator()
+    rotator.config["log_scores_verbose"] = True
+    with caplog.at_level("INFO"):
+        asyncio.run(rotator.score_assets(ex, ["BTC/USD"], 3, "momentum"))
+    assert any("Score for BTC/USD" in r.getMessage() for r in caplog.records)
 
 
 def test_rotate_calls_converter(monkeypatch):
@@ -97,6 +106,36 @@ def test_rotate_logs_scores(tmp_path, monkeypatch):
 
     data = json.loads(score_file.read_text())
     assert data["BTC"] == 0.5
+
+
+def test_rotate_summary_logging(tmp_path, monkeypatch, caplog):
+    rotator = PortfolioRotator()
+    rotator.config["log_scores_verbose"] = False
+    score_file = tmp_path / "scores.json"
+    monkeypatch.setattr("crypto_bot.portfolio_rotator.SCORE_FILE", score_file)
+
+    async def fake_scores(*a, **k):
+        return {"BTC": 0.3, "ETH": -0.4}
+
+    monkeypatch.setattr(rotator, "score_assets", fake_scores)
+    monkeypatch.setattr(
+        "crypto_bot.portfolio_rotator.auto_convert_funds", lambda *a, **k: {}
+    )
+    exchange = type("Ex", (), {"symbols": ["ETH/USD", "BTC/USD"]})()
+    monkeypatch.setattr(
+        "crypto_bot.portfolio_rotator._pairs_from_balance",
+        lambda ex, bal, quotes=None: ["ETH/USD", "BTC/USD"],
+    )
+
+    holdings = {"ETH": 10, "BTC": 10}
+    with caplog.at_level("INFO"):
+        asyncio.run(rotator.rotate(exchange, "wallet", holdings))
+
+    msgs = [r.getMessage() for r in caplog.records]
+    assert any("Top long opportunities" in m for m in msgs)
+    assert any("Top short opportunities" in m for m in msgs)
+    assert any("Score histogram" in m for m in msgs)
+    assert all("Score for" not in m for m in msgs)
 
 
 class BadDataExchange(DummyExchange):

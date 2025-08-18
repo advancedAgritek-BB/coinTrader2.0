@@ -430,6 +430,10 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **start_since** – optional timestamp used to backfill older data during the initial scan.
   When set, the bot loads candles starting from this time (e.g. `365d` for one year)
   before switching to realtime updates.
+* **bootstrap resume** – completed `symbol × timeframe` pairs are recorded in
+  `cache/ohlcv_bootstrap_state.json` so restarts continue from the last success.
+  Run `python -m crypto_bot.cli cache reset-bootstrap` to clear this file and
+  force a fresh bootstrap.
 * **min_history_fraction** – minimum portion of candles that must be retrieved
   for a pair to remain cached. Defaults to `0.5`.
 * **cycle_lookback_limit** – candles fetched each cycle. Defaults to `150`.
@@ -723,6 +727,9 @@ flash_crash_scalper:
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
 * **ohlcv_batch_size** – number of symbols grouped per OHLCV request.
 * **redis_url** – optional Redis connection string for caching OHLCV data.
+* **ohlcv.storage_path** – directory used to persist OHLCV caches between runs.
+* **tail_overlap_bars** – number of candles reloaded on startup to splice cached and new data.
+* **max_bootstrap_bars** – cap on candles fetched per timeframe when no cache exists.
 * **max_parallel** – number of markets processed concurrently.
 * **gecko_limit** – concurrent GeckoTerminal requests.
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
@@ -741,6 +748,19 @@ flash_crash_scalper:
 * **testing_mode** – indicates a sandbox environment.
 
 Set `redis_url` to a standard Redis connection string (e.g. `redis://localhost:6379/0`) to cache recent OHLCV candles and reduce API calls.
+
+#### Persistent OHLCV storage
+
+When `ohlcv.storage_path` is set, the bot writes OHLCV data to disk so later runs can reuse it. The first run boots each symbol/timeframe by requesting up to `max_bootstrap_bars` candles and saving them under this directory. Subsequent runs load the cached files and request only new data, refetching the last `tail_overlap_bars` candles to avoid gaps.
+
+Example first vs. second run output:
+
+```text
+2024-05-10 00:00:00 | INFO | market_loader | BTC/USD 1m bootstrap: fetching 1500 bars
+2024-05-10 00:05:00 | INFO | market_loader | BTC/USD 1m: using cache, requesting 5 new bars
+```
+
+The second run reused nearly all local data and hit the exchange for only a handful of candles.
 
 ### Kraken Call Rate Limits
 
@@ -1686,6 +1706,27 @@ Our CSV7 format is headerless with 7 columns: `ts,open,high,low,close,volume,tra
 **Ingest → normalized CSV (and Parquet if available):**
 ```bash
 cointrainer import-csv7 --file ./XRPUSD_1.csv --symbol XRPUSD --out ./data/XRPUSD_1m
+```
+
+### Chunked imports and resume
+
+`import-csv7` can process large files in smaller pieces. Control how many rows
+are handled at a time with the new `chunk_size` option. After each chunk a
+progress line is printed and appended to the resume file in the format
+`<start_ts>,<end_ts>,<rows_written>`. Re-running the command reads that file and
+skips any ranges that were already completed so interrupted runs pick up where
+they left off. Delete the resume file to reset the mechanism and start again
+from the beginning.
+
+Example configuration:
+
+```yaml
+file: ./XRPUSD_1.csv
+symbol: XRPUSD
+out: ./data/XRPUSD_1m
+chunk_size: 10000          # rows per chunk
+resume: true               # enable resume using the progress file
+resume_file: ./data/XRPUSD_1m.progress
 ```
 
 ## Development Setup

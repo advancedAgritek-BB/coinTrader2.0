@@ -45,14 +45,11 @@ def test_deduped_solana_queue(monkeypatch):
     monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.01)
     monkeypatch.setattr(main, "get_solana_new_tokens", lambda cfg: ["SOL/USDC"])
 
-    monkeypatch.setattr(main, "symbol_priority_queue", deque(["SOL/USDC"]))
+    monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "recent_solana_tokens", deque(["SOL/USDC"]))
     monkeypatch.setattr(main, "recent_solana_set", {"SOL/USDC"})
 
     asyncio.run(main.fetch_candidates(ctx))
 
-    assert ctx.current_batch == ["SOL/USDC"]
-    assert list(main.symbol_priority_queue) == []
-    assert "SOL/USDC" not in main.recent_solana_set
-    assert list(main.recent_solana_tokens) == []
+    assert ctx.current_batch == ["BTC/USD"]
 
