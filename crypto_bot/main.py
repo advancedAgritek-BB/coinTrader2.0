@@ -349,6 +349,8 @@ CROSS_ARB_TASKS: set[asyncio.Task] = set()
 BACKGROUND_TASKS: list[asyncio.Task] = []
 # Track pending OHLCV tasks during startup
 pending_tasks: list[asyncio.Task] = []
+# Track outstanding bootstrap tasks between cycles
+BOOTSTRAP_TASKS: set[asyncio.Task] = set()
 
 # Track background task failures to surface repeated issues
 TASK_FAILURE_COUNTS: Counter[str] = Counter()
@@ -385,6 +387,48 @@ def register_task(task: asyncio.Task | None) -> asyncio.Task | None:
 
     task.add_done_callback(_handle_task_completion)
     return task
+
+
+def _schedule_bootstrap(coro: Awaitable[Any]) -> None:
+    """Schedule ``coro`` as a background bootstrap task."""
+    task = register_task(asyncio.create_task(coro))
+    if task:
+        BOOTSTRAP_TASKS.add(task)
+
+
+async def _run_bootstrap(
+    func: Callable[..., Awaitable[Any]],
+    *args: Any,
+    run_timeout: float | None = None,
+    **kwargs: Any,
+) -> Any:
+    """Run ``func`` with ``asyncio.wait_for`` and queue background work on timeout.
+
+    If the call times out or returns a tuple ``(result, remaining)`` with
+    ``remaining`` truthy, a background task is scheduled to continue processing
+    using the same arguments. The primary result is returned when available.
+    """
+    if run_timeout is not None and run_timeout <= 0:
+        return await func(*args, **kwargs)
+    try:
+        result = await asyncio.wait_for(func(*args, **kwargs), run_timeout)
+    except asyncio.TimeoutError:
+        _schedule_bootstrap(func(*args, **kwargs))
+        return None
+    else:
+        if isinstance(result, tuple) and len(result) == 2:
+            primary, remaining = result
+            if remaining:
+                _schedule_bootstrap(func(*args, **kwargs))
+            return primary
+        return result
+
+
+def _prune_bootstrap_tasks() -> None:
+    """Remove completed bootstrap tasks from the tracker."""
+    for task in list(BOOTSTRAP_TASKS):
+        if task.done():
+            BOOTSTRAP_TASKS.discard(task)
 
 
 # Queue of symbols awaiting evaluation across loops
@@ -1052,7 +1096,8 @@ async def initial_scan(
             async with OHLCV_LOCK:
                 for tf in tfs:
                     logger.info("Starting OHLCV update for timeframe %s", tf)
-                state.df_cache = await update_multi_tf_ohlcv_cache(
+                res = await _run_bootstrap(
+                    update_multi_tf_ohlcv_cache,
                     exchange,
                     state.df_cache,
                     batch,
@@ -1067,9 +1112,14 @@ async def initial_scan(
                     notifier=notifier,
                     priority_queue=symbol_priority_queue,
                     batch_size=ohlcv_batch_size,
+                    timeout=config.get("bootstrap_timeout"),
+                    run_timeout=config.get("bootstrap_timeout"),
                 )
+                if res is not None:
+                    state.df_cache = res
 
-                state.regime_cache = await update_regime_tf_cache(
+                res = await _run_bootstrap(
+                    update_regime_tf_cache,
                     exchange,
                     state.regime_cache,
                     batch,
@@ -1084,7 +1134,11 @@ async def initial_scan(
                     notifier=notifier,
                     df_map=state.df_cache,
                     batch_size=ohlcv_batch_size,
+                    timeout=config.get("bootstrap_timeout"),
+                    run_timeout=config.get("bootstrap_timeout"),
                 )
+                if res is not None:
+                    state.regime_cache = res
         logger.info("Deep historical OHLCV loaded for %d symbols", len(batch))
 
         processed += len(batch)
@@ -1092,15 +1146,15 @@ async def initial_scan(
         logger.info("Initial scan %.1f%% complete", pct)
         if notifier and config.get("telegram", {}).get("status_updates", True):
             notifier.notify(f"Initial scan {pct:.1f}% complete")
-    if pending_tasks:
-        await asyncio.gather(*pending_tasks, return_exceptions=True)
-
     return
 
 
 async def fetch_candidates(ctx: BotContext) -> None:
     """Gather symbols for this cycle and build the evaluation batch."""
     global symbol_priority_queue
+
+    # Clean up any completed bootstrap tasks from previous cycles
+    _prune_bootstrap_tasks()
 
     if not ctx.df_cache:
         no_data_symbols.clear()
