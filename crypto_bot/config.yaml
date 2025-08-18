@@ -317,12 +317,14 @@ momentum_bot:
   atr_period: 14
   donchian_period: 20
   fast_length: 20
+  rsi_threshold: 55
+  macd_min: 0.0
   risk:
     max_drawdown: 0.4
     risk_pct: 0.01
     stop_loss_pct: 0.01
     take_profit_pct: 0.03
-    trailing_stop_factor: 1.5
+    trailing_stop_factor: 1.2
   setup_window: 10
   slow_length: 50
   trigger_window: 3
