@@ -2039,8 +2039,6 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
                 ctx.hft_engine = engine
             engine.attach(symbol, maker_spread)
             return {"symbol": symbol, "skip": True}
-            engine.attach(sym, maker_spread)
-            return
 
         logger.info(
             "DF len for %s: %d",
