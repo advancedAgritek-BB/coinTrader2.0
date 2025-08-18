@@ -7,6 +7,7 @@ import inspect
 import time
 import os
 from pathlib import Path
+from collections import deque
 from datetime import datetime, timezone, timedelta
 import yaml
 import pandas as pd
@@ -2121,6 +2122,9 @@ async def update_multi_tf_ohlcv_cache(
         one_min_syms, five_min_only = await split_symbols_by_timeframe(
             exchange, symbols_all
         )
+        if not one_min_syms and not five_min_only:
+            one_min_syms = symbols_all
+            five_min_only = symbols_all
 
     for tf in tfs:
         if tf == "1m":
@@ -2249,6 +2253,35 @@ async def update_multi_tf_ohlcv_cache(
                 cex_symbols = [s for s in priority_syms if s in cex_symbols] + [s for s in cex_symbols if s not in prio_set]
                 dex_symbols = [s for s in priority_syms if s in dex_symbols] + [s for s in dex_symbols if s not in prio_set]
 
+            total_syms = len(cex_symbols) + len(dex_symbols)
+            completed = 0
+            recent_times: Deque[float] = deque(maxlen=50)
+
+            def log_progress(ts: float | None = None) -> None:
+                """Log progress with a moving average request rate."""
+                nonlocal completed
+                if total_syms <= 0:
+                    return
+                completed += 1
+                now_t = ts if ts is not None else time.perf_counter()
+                recent_times.append(now_t)
+                rate = 0.0
+                if len(recent_times) > 1:
+                    span = recent_times[-1] - recent_times[0]
+                    if span > 0:
+                        rate = (len(recent_times) - 1) / span
+                remaining = total_syms - completed
+                eta = remaining / rate if rate > 0 else float("inf")
+                eta_str = f"{eta:.1f}s" if eta != float("inf") else "?"
+                logger.info(
+                    "Progress[%s] %d/%d (%.2f req/s, ETA %s)",
+                    tf,
+                    completed,
+                    total_syms,
+                    rate,
+                    eta_str,
+                )
+
             if cex_symbols:
                 if tf_start_since is None:
                     groups: Dict[int, list[str]] = {}
@@ -2281,6 +2314,9 @@ async def update_multi_tf_ohlcv_cache(
                             notifier=notifier,
                             priority_symbols=priority_syms,
                         )
+                        done_time = time.perf_counter()
+                        for _ in syms:
+                            log_progress(done_time)
                 else:
                     from crypto_bot.main import update_df_cache
 
@@ -2404,6 +2440,7 @@ async def update_multi_tf_ohlcv_cache(
                                 sym, {"df_cache": cache, "symbol": sym}
                             )
                         await _maybe_enqueue_eval(sym, tf, cache, config)
+                        log_progress()
 
             for sym in dex_symbols:
                 data = None
@@ -2514,6 +2551,7 @@ async def update_multi_tf_ohlcv_cache(
 
                     cache[tf] = tf_cache
                     await _maybe_enqueue_eval(sym, tf, cache, config)
+                log_progress()
             cache[tf] = tf_cache
             logger.info("Completed OHLCV update for timeframe %s", tf)
 
