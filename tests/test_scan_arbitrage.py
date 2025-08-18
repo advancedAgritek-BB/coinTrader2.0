@@ -1,9 +1,14 @@
 import asyncio
+import sys
 import types
 
+market_loader = types.ModuleType("crypto_bot.utils.market_loader")
+market_loader._is_valid_base_token = lambda *_a, **_k: True
+market_loader.get_kraken_listing_date = lambda *_a, **_k: None
+market_loader.fetch_geckoterminal_ohlcv = None
+sys.modules["crypto_bot.utils.market_loader"] = market_loader
+
 import crypto_bot.main as main
-import crypto_bot.solana as solana_mod
-from crypto_bot.utils import market_loader
 
 
 def dummy_fetch_ticker(price_map, symbol):

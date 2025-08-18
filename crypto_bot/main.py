@@ -1743,7 +1743,6 @@ async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) ->
                 ),
                 priority_queue=symbol_priority_queue,
                 batch_size=ohlcv_batch_size,
-                chunk_size=ohlcv_chunk_size,
                 timeout=bootstrap_timeout,
             )
         except Exception as exc:
@@ -1769,7 +1768,6 @@ async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) ->
                 ),
                 priority_queue=symbol_priority_queue,
                 batch_size=ohlcv_batch_size,
-                chunk_size=ohlcv_chunk_size,
                 timeout=bootstrap_timeout,
             )
         ctx.regime_cache = await update_regime_tf_cache(
