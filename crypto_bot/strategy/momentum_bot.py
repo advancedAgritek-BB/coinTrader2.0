@@ -23,6 +23,7 @@ else:  # pragma: no cover - fallback
 
 def generate_signal(
     df: pd.DataFrame,
+    config: Optional[dict] = None,
     config: dict | None = None,
     symbol: str | None = None,
     timeframe: str | None = None,

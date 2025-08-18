@@ -8,6 +8,8 @@ from crypto_bot.utils.volatility import normalize_score_by_volatility
 def generate_signal(
     df: pd.DataFrame,
     config: Optional[dict] = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
 ) -> Tuple[float, str]:
     """Return long signal on sudden drops with high volume."""
     if df is None or len(df) < 2:

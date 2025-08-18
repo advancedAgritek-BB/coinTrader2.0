@@ -45,7 +45,10 @@ else:  # pragma: no cover - fallback
 
 
 async def generate_signal(
-    df: pd.DataFrame, config: Optional[dict] = None
+    df: pd.DataFrame,
+    config: Optional[dict] = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
 ) -> Tuple[float, str]:
     """Score mean reversion opportunities using multiple indicators."""
 

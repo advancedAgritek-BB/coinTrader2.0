@@ -55,6 +55,8 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
 def generate_signal(
     df: pd.DataFrame,
     config: Optional[dict] = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
 ) -> Tuple[float, str]:
     """Generate arb signal using kernel prediction.
 
