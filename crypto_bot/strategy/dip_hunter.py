@@ -30,6 +30,8 @@ def generate_signal(
     df: pd.DataFrame,
     higher_df: Optional[pd.DataFrame] = None,
     config: Optional[dict] = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
 ) -> Tuple[float, str]:
     """Detect deep dips for mean reversion long entries."""
     symbol = config.get("symbol", "") if config else ""

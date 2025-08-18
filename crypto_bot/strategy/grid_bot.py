@@ -180,6 +180,8 @@ def generate_signal(
     *,
     mempool_monitor: micro_scalp_bot.SolanaMempoolMonitor | None = None,
     mempool_cfg: dict | None = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
 ) -> Tuple[float, str]:
     """Generate a grid based trading signal."""
     cfg = GridConfig.from_dict(_as_dict(config))
