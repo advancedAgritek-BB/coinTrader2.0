@@ -3178,24 +3178,6 @@ async def _main_impl() -> MainResult:
             onchain_cfg.get("enabled", True),
         )
 
-    async def status_loop() -> None:
-        last_line = ""
-        while True:
-            try:
-                balance = await fetch_balance(exchange, wallet, config)
-            except Exception:
-                balance = 0.0
-            positions = getattr(wallet, "positions", {}) if wallet else {}
-            line = format_monitor_line(ctx, session_state, balance, positions, lastlog.last)
-            out_line = line[:180]
-            if out_line != last_line:
-                sys.stdout.write("\r" + out_line.ljust(180))
-                sys.stdout.flush()
-                last_line = out_line
-            await asyncio.sleep(5)
-
-    register_task(asyncio.create_task(status_loop()))
-
     max_open_trades = config.get("max_open_trades", 1)
     position_guard = OpenPositionGuard(max_open_trades)
     log_ml_status_once()
@@ -3205,6 +3187,25 @@ async def _main_impl() -> MainResult:
     # Caches for OHLCV and regime data are stored on the session_state
     session_state = SessionState(last_balance=last_balance)
     last_candle_ts: dict[str, int] = {}
+
+    ctx = BotContext(
+        positions=session_state.positions,
+        df_cache=session_state.df_cache,
+        regime_cache=session_state.regime_cache,
+        config=config,
+        mempool_monitor=mempool_monitor,
+        mempool_cfg=mempool_cfg,
+    )
+    ctx.exchange = exchange
+    ctx.secondary_exchange = secondary_exchange
+    ctx.ws_client = ws_client
+    ctx.risk_manager = risk_manager
+    ctx.notifier = notifier
+    ctx.wallet = wallet
+    # backwards compatibility for modules still expecting ``paper_wallet``
+    ctx.paper_wallet = wallet
+    ctx.position_guard = position_guard
+    ctx.balance = await fetch_and_log_balance(exchange, wallet, config)
 
     # ------------------------------------------------------------------
     # OHLCV provider setup
@@ -3239,7 +3240,26 @@ async def _main_impl() -> MainResult:
 
     set_ohlcv_provider(_ohlcv_provider)
 
-    register_task(asyncio.create_task(console_control.control_loop(state, ctx, session_state)))
+    async def status_loop() -> None:
+        last_line = ""
+        while True:
+            try:
+                balance = await fetch_balance(exchange, wallet, config)
+            except Exception:
+                balance = 0.0
+            positions = getattr(wallet, "positions", {}) if wallet else {}
+            line = format_monitor_line(ctx, session_state, balance, positions, lastlog.last)
+            out_line = line[:180]
+            if out_line != last_line:
+                sys.stdout.write("\r" + out_line.ljust(180))
+                sys.stdout.flush()
+                last_line = out_line
+            await asyncio.sleep(5)
+
+    register_task(asyncio.create_task(status_loop()))
+
+    if not config.get("hft"):
+        register_task(asyncio.create_task(console_control.control_loop(state, ctx, session_state)))
     register_task(
         asyncio.create_task(
             _rotation_loop(
@@ -3358,25 +3378,6 @@ async def _main_impl() -> MainResult:
         strategy_task = asyncio.create_task(strategy_loop(), name="strategy-loop")
         await strategy_task
         return MainResult(notifier, stop_reason)
-
-    ctx = BotContext(
-        positions=session_state.positions,
-        df_cache=session_state.df_cache,
-        regime_cache=session_state.regime_cache,
-        config=config,
-        mempool_monitor=mempool_monitor,
-        mempool_cfg=mempool_cfg,
-    )
-    ctx.exchange = exchange
-    ctx.secondary_exchange = secondary_exchange
-    ctx.ws_client = ws_client
-    ctx.risk_manager = risk_manager
-    ctx.notifier = notifier
-    ctx.wallet = wallet
-    # backwards compatibility for modules still expecting ``paper_wallet``
-    ctx.paper_wallet = wallet
-    ctx.position_guard = position_guard
-    ctx.balance = await fetch_and_log_balance(exchange, wallet, config)
 
     async def _eval_symbol(symbol: str, data: dict) -> dict:
         df_map = {
