@@ -32,6 +32,11 @@ def calc_atr(
     as_series: bool = True,
     **kwargs,
 ) -> pd.Series | float | None:
+    """Compute the Average True Range using ``window`` or ``period``."""
+
+    period = kwargs.get("period")
+    if period is not None:
+        window = int(period)
     """Compute the Average True Range using ``window`` or ``period``.
 
     Parameters
@@ -68,6 +73,14 @@ def calc_atr(
 
     atr_indicator = AverageTrueRange(
         df["high"], df["low"], df["close"], window=int(window), fillna=False
+    )
+    atr_series = atr_indicator.average_true_range()
+    if as_series:
+        return atr_series
+    if atr_series.empty:
+        return None
+    value = float(atr_series.iloc[-1])
+    return 0.0 if math.isnan(value) else value
     ).average_true_range()
 
     return atr_indicator if as_series else float(atr_indicator.iloc[-1])

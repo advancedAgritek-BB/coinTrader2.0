@@ -3,7 +3,7 @@ from typing import Dict, Optional, Tuple
 import pandas as pd
 import ta
 
-from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.utils import volatility
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.utils import volatility
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
@@ -138,8 +138,9 @@ def generate_signal(
             except Exception:
                 pass
         if config is None or config.get("atr_normalization", True):
-            score = normalize_score_by_volatility(df, score)
+            score = volatility.normalize_score_by_volatility(df, score)
         logger.info("Signal for %s: %s, %s", symbol, score, "short")
+        return score, "short", atr_value or 0.0, False
         return score, "short", atr_value if atr_value is not None else 0.0, False
 
     base_volume = df["volume"].iloc[:initial_window].mean()
@@ -181,7 +182,7 @@ def generate_signal(
             except Exception:
                 pass
         if config is None or config.get("atr_normalization", True):
-            score = normalize_score_by_volatility(df, score)
+            score = volatility.normalize_score_by_volatility(df, score)
         if direction not in {"auto", "long", "short"}:
             direction = "auto"
         trade_direction = direction
@@ -198,6 +199,7 @@ def generate_signal(
         if atr_value is None or atr_value <= 0:
             logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
             return 0.0, "none", 0.0, event
+        atr = atr_value
         body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
         avg_vol = df["volume"].iloc[:-1].mean()
         if (
@@ -213,7 +215,7 @@ def generate_signal(
                 except Exception:
                     pass
             if config is None or config.get("atr_normalization", True):
-                score = normalize_score_by_volatility(df, score)
+                score = volatility.normalize_score_by_volatility(df, score)
             if direction not in {"auto", "long", "short"}:
                 direction = "auto"
             trade_direction = direction
