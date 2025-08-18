@@ -1441,12 +1441,12 @@ async def scan_cex_arbitrage(
     return results
 
 
-async def update_caches(ctx: BotContext) -> None:
+async def update_caches(ctx: BotContext, chunk_size: int | None = None) -> None:
     async with symbol_cache_guard():
-        await _update_caches_impl(ctx)
+        await _update_caches_impl(ctx, chunk_size)
 
 
-async def _update_caches_impl(ctx: BotContext) -> None:
+async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) -> None:
     """Update OHLCV and regime caches for the current symbol batch."""
     batch = ctx.current_batch
     if not batch:
@@ -1496,6 +1496,7 @@ async def _update_caches_impl(ctx: BotContext) -> None:
                 ),
                 priority_queue=symbol_priority_queue,
                 batch_size=ohlcv_batch_size,
+                chunk_size=chunk_size if chunk_size is not None else 20,
             )
         except Exception as exc:
             logger.warning("WS OHLCV failed: %s - falling back to REST", exc)
@@ -1520,6 +1521,7 @@ async def _update_caches_impl(ctx: BotContext) -> None:
                 ),
                 priority_queue=symbol_priority_queue,
                 batch_size=ohlcv_batch_size,
+                chunk_size=chunk_size if chunk_size is not None else 20,
             )
         ctx.regime_cache = await update_regime_tf_cache(
             ctx.exchange,
