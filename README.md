@@ -166,6 +166,16 @@ CT_MODELS_BUCKET=models
 # Prefix within the bucket for regime models
 CT_REGIME_PREFIX=models/regime
 CT_SYMBOL=XRPUSD
+# Optional override URL used if Supabase is unavailable
+# CT_MODEL_FALLBACK_URL=https://example.com/xrpusd_regime_lgbm.pkl
+```
+
+`CT_SYMBOL` controls which Supabase regime model is loaded. For instance,
+setting `CT_SYMBOL=XRPUSD` downloads the `xrpusd_regime_lgmb.pkl` model from the
+`models/regime/XRPUSD/` path in the configured bucket. When the Supabase
+download fails the loader uses `CT_MODEL_FALLBACK_URL` (or the corresponding
+`model_fallback_url` configuration) and logs when this fallback is used, allowing
+ML scoring to continue.
 # Optional path to a cached model used if Supabase is unavailable
 CT_MODEL_LOCAL_PATH=xrpusd_regime_lgbm.pkl
 # Template used to build the model filename. `{symbol}` expands to the lowercase

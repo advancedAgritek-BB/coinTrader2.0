@@ -93,8 +93,8 @@ features:
   pump_monitor: false
   telegram: true
 
-# Optional local fallback for the Supabase regime model
-model_local_path: models/xrpusd_regime_lgbm.pkl
+# Regime model is fetched from Supabase; override fallback URL if needed
+# model_fallback_url: https://example.com/xrpusd_regime_lgbm.pkl
 
 # === telemetry / metrics ===
 telemetry:

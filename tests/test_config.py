@@ -5,6 +5,8 @@ import asyncio
 import types
 import os
 
+from crypto_bot.regime import regime_classifier as rc
+
 if not hasattr(yaml, "__file__"):
     import sys
 
@@ -357,7 +359,7 @@ def test_ensure_ml_only_on_change(tmp_path, monkeypatch):
     main = _import_main(monkeypatch)
 
     cfg_path = tmp_path / "config.yaml"
-    cfg_path.write_text("ml_enabled: false\n")
+    cfg_path.write_text("ml_enabled: true\n")
     monkeypatch.setattr(main, "CONFIG_PATH", cfg_path)
     main._CONFIG_CACHE.clear()
     main._CONFIG_MTIMES.clear()
@@ -370,10 +372,12 @@ def test_ensure_ml_only_on_change(tmp_path, monkeypatch):
 
     calls: list[bool] = []
 
-    def fake_ensure(cfg):
+    async def fake_load(symbol):
         calls.append(True)
+        return object(), None, "path"
 
-    monkeypatch.setattr(main, "_ensure_ml", fake_ensure)
+    monkeypatch.setattr(rc, "load_regime_model", fake_load)
+    monkeypatch.setattr(main, "ML_AVAILABLE", True)
 
     asyncio.run(main.load_config_async())
     assert calls == [True]
@@ -384,5 +388,6 @@ def test_ensure_ml_only_on_change(tmp_path, monkeypatch):
 
     cfg_path.write_text("ml_enabled: true\n")
     os.utime(cfg_path, None)
+    calls.clear()
     asyncio.run(main.load_config_async())
-    assert calls == [True]
+    assert calls == []
