@@ -20,6 +20,7 @@ from crypto_bot import tax_logger
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.env import env_or_prompt
 from crypto_bot.utils import kraken
+from .kraken_client import KrakenClient
 
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
@@ -68,6 +69,8 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
         params["password"] = os.getenv("API_PASSPHRASE")
         exchange = ccxt.coinbase(params)
     elif exchange_name == "kraken":
+        exchange = kraken.get_client(api_key, api_secret)
+
         if use_ws:
             if use_private_ws and not (api_key and api_secret):
                 use_private_ws = kraken.use_private_ws = False
@@ -84,12 +87,22 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
                         api_key,
                         api_secret,
                         ws_token=ws_token if use_private_ws else None,
+                        exchange=exchange,
                     )
                 except Exception as err:  # pragma: no cover - optional dependency
                     logger.warning("Failed to initialize Kraken WS client: %s", err)
                     ws_client = None
 
         exchange = ccxt.kraken(params)
+        exchange = KrakenClient(
+            ccxt.kraken(
+                {
+                    "apiKey": api_key,
+                    "secret": api_secret,
+                    "enableRateLimit": True,
+                }
+            )
+        )
     else:
         raise ValueError(f"Unsupported exchange: {exchange_name}")
 

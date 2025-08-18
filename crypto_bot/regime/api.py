@@ -116,6 +116,8 @@ def predict(features: pd.DataFrame, symbol: str = "BTCUSDT") -> Prediction:
 
     try:
         blob, meta = load_latest_regime(symbol)
+        if not isinstance(blob, (bytes, bytearray)):
+            return _baseline_action(features)
         feat_list = meta.get("feature_list")
         features_df = features
         if feat_list:
@@ -135,12 +137,7 @@ def predict(features: pd.DataFrame, symbol: str = "BTCUSDT") -> Prediction:
         return Prediction(action=action, score=score, meta=meta)
     except Exception as exc:  # pragma: no cover - network or model failure
         status = getattr(getattr(exc, "response", None), "status_code", None)
-        if status == 404 or "404" in str(exc):
-            logger.warning(
-                "No regime model found in Supabase (404). Falling back to heuristic "
-                "mode; remove Supabase credentials or set features.ml=false to run heuristics."
-            )
-        else:
+        if status != 404 and "404" not in str(exc):
             logger.error("Failed to load regime model for %s: %s", symbol, exc)
         return _baseline_action(features)
 

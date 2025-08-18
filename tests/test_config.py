@@ -282,13 +282,21 @@ def test_load_config_normalizes_symbol(tmp_path, monkeypatch):
     assert loaded["symbol"] == "BTC/USDT"
 
 
-def test_reload_config_clears_symbol_cache(monkeypatch):
+def test_reload_config_clears_symbol_cache(monkeypatch, tmp_path):
+    import json
+
     main = _import_main(monkeypatch)
     from crypto_bot.utils import symbol_utils
 
-    # Pre-populate symbol cache
+    # Pre-populate symbol cache and hash
     symbol_utils._cached_symbols = ([("ETH/USD", 1.0)], [])
     symbol_utils._last_refresh = 123.0
+    symbol_utils._cached_hash = "oldhash"
+    cache_file = tmp_path / "symcache.json"
+    cache_file.write_text(
+        json.dumps({"timestamp": 0, "hash": "oldhash", "symbols": [], "onchain": []})
+    )
+    monkeypatch.setattr(symbol_utils, "SYMBOL_CACHE_FILE", cache_file)
 
     def fake_load_config():
         return {
@@ -314,6 +322,7 @@ def test_reload_config_clears_symbol_cache(monkeypatch):
 
     assert symbol_utils._cached_symbols is None
     assert symbol_utils._last_refresh == 0.0
+    assert not cache_file.exists()
 
 
 def test_load_config_async_detects_section_changes(tmp_path, monkeypatch):
