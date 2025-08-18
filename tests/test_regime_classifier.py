@@ -21,6 +21,11 @@ import crypto_bot.signals.signal_scoring as sc
 from crypto_bot.utils.telemetry import telemetry
 
 
+class DummyModel:
+    def predict(self, X):
+        return [0.8]
+
+
 @pytest.fixture(autouse=True)
 def reset_telemetry():
     telemetry.reset()
@@ -908,6 +913,57 @@ def test_supabase_download_failure(monkeypatch):
     label, conf = rc._classify_ml(df)
     assert label == "sideways"
     assert conf == 0.5
+
+
+def test_supabase_latest_missing_loads_direct_model(monkeypatch):
+    import pickle
+
+    df = _make_trending_df()
+    monkeypatch.setenv("SUPABASE_URL", "http://example.com")
+    monkeypatch.setenv("SUPABASE_KEY", "key")
+
+    model_bytes = pickle.dumps(DummyModel())
+
+    class NotFound(Exception):
+        def __init__(self):
+            self.message = "not_found"
+
+    class FakeBucket:
+        def download(self, path):
+            if path.endswith("LATEST.json"):
+                raise NotFound()
+            assert path.endswith("xrpusd_regime_lgbm.pkl")
+            return model_bytes
+
+    class FakeStorage:
+        def from_(self, name):
+            return FakeBucket()
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            self.storage = FakeStorage()
+
+    called = False
+
+    def fallback(_df, _notifier=None):
+        nonlocal called
+        called = True
+        return "sideways", 0.5
+
+    monkeypatch.setattr(rc, "_ml_fallback", fallback)
+    monkeypatch.setattr(rc, "_supabase_model", None)
+    monkeypatch.setattr(rc, "_supabase_scaler", None)
+    monkeypatch.setitem(sys.modules, "lightgbm", types.SimpleNamespace())
+    monkeypatch.setitem(
+        sys.modules,
+        "supabase",
+        types.SimpleNamespace(create_client=lambda u, k: FakeClient()),
+    )
+
+    label, conf = rc._classify_ml(df)
+    assert label == "trending"
+    assert conf > 0
+    assert not called
 
 
 def test_hft_env_overrides(monkeypatch):

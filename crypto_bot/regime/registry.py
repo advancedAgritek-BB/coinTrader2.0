@@ -48,14 +48,20 @@ def load_latest_regime(symbol: str) -> Tuple[Any, Dict]:
         return blob, meta
     except Exception as exc:
         status = getattr(getattr(exc, "response", None), "status_code", None)
-        if status == 404 or "404" in str(exc):
-            global _no_model_logged
-            if not _no_model_logged:
-                logger.info(
-                    "No regime model found in bucket '%s/%s' — falling back to heuristics (this is OK for live trading)",
-                    bucket,
-                    prefix,
-                )
-                _no_model_logged = True
-            return _load_fallback(), {}
+        msg = str(getattr(exc, "message", exc))
+        if status == 404 or "404" in str(exc) or "not_found" in msg:
+            try:
+                direct_key = f"{prefix}/{symbol}/{symbol.lower()}_regime_lgbm.pkl"
+                blob = client.storage.from_(bucket).download(direct_key)
+                return blob, {}
+            except Exception:
+                global _no_model_logged
+                if not _no_model_logged:
+                    logger.info(
+                        "No regime model found in bucket '%s/%s' — falling back to heuristics (this is OK for live trading)",
+                        bucket,
+                        prefix,
+                    )
+                    _no_model_logged = True
+                return _load_fallback(), {}
         raise
