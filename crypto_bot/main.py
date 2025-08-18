@@ -21,6 +21,7 @@ import aiohttp
 from dotenv import dotenv_values, load_dotenv
 
 from crypto_bot.utils.logging_config import setup_logging
+from crypto_bot.universe import build_tradable_set
 
 try:
     import ccxt  # type: ignore
@@ -737,6 +738,11 @@ def _load_config_file() -> dict:
     tele_cfg.setdefault("batch_summary_secs", 0)
     data["telemetry"] = tele_cfg
 
+    ohlcv_cfg = data.get("ohlcv", {}) or {}
+    ohlcv_cfg.setdefault("bootstrap_timeframes", ["1h"])
+    ohlcv_cfg.setdefault("defer_timeframes", ["4h", "1d"])
+    data["ohlcv"] = ohlcv_cfg
+
     data = replace_placeholders(data)
 
     strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
@@ -915,11 +921,11 @@ async def reload_config(
 
     _merge_dict(config, new_config)
     ctx.config = config
-
-    # Reset cached symbols when configuration changes to ensure
-    # symbol selections reflect the latest settings
-    symbol_utils._cached_symbols = None
-    symbol_utils._last_refresh = 0.0
+    new_hash = symbol_utils.compute_config_hash(config)
+    old_hash = symbol_utils.get_cached_config_hash()
+    if old_hash != new_hash:
+        symbol_utils.invalidate_symbol_cache()
+    symbol_utils._cached_hash = new_hash
 
     rotator.config = config.get("portfolio_rotation", rotator.config)
     position_guard.max_open_trades = config.get(
@@ -1001,12 +1007,11 @@ async def initial_scan(
 ) -> None:
     """Populate OHLCV and regime caches before trading begins."""
 
-    ranked, onchain_symbols = await get_filtered_symbols(exchange, config)
-    symbols = [s for s, _ in ranked]
+    symbols = list(config.get("tradable_symbols", config.get("symbols", [])))
     top_n = int(config.get("scan_deep_top", 50))
     symbols = symbols[:top_n]
     if config.get("mode") != "cex":
-        for sym in onchain_symbols:
+        for sym in config.get("onchain_symbols", []):
             if sym not in symbols:
                 symbols.append(sym)
     symbols = list(dict.fromkeys(symbols))
@@ -1025,7 +1030,11 @@ async def initial_scan(
         sf.get("initial_history_candles", config.get("scan_lookback_limit", 50))
     )
 
-    tfs = sf.get("initial_timeframes", config.get("timeframes", ["1h"]))
+    ohlcv_cfg = config.get("ohlcv", {})
+    bootstrap_tfs = ohlcv_cfg.get(
+        "bootstrap_timeframes", config.get("timeframes", ["1h"])
+    )
+    tfs = sf.get("initial_timeframes", bootstrap_tfs)
     tfs = sorted(set(tfs) | {"1m", "5m"}, key=lambda t: timeframe_seconds(None, t))
     tf_sec = timeframe_seconds(None, tfs[0])
     lookback_since = int(time.time() * 1000 - scan_limit * tf_sec * 1000)
@@ -1095,7 +1104,80 @@ async def initial_scan(
     if pending_tasks:
         await asyncio.gather(*pending_tasks, return_exceptions=True)
 
+    register_task(
+        asyncio.create_task(
+            warm_deferred_timeframes(exchange, config, state, symbols)
+        )
+    )
+
     return
+
+
+async def warm_deferred_timeframes(
+    exchange: object,
+    config: dict,
+    state: "SessionState",
+    symbols: list[str],
+) -> None:
+    """Warm OHLCV cache for deferred timeframes in the background."""
+
+    ohlcv_cfg = config.get("ohlcv", {})
+    defer_tfs = ohlcv_cfg.get("defer_timeframes")
+    if not defer_tfs:
+        return
+
+    sf = config.get("symbol_filter", {})
+    ohlcv_batch_size = config.get("ohlcv_batch_size")
+    if ohlcv_batch_size is None:
+        ohlcv_batch_size = sf.get("ohlcv_batch_size")
+    scan_limit = int(
+        sf.get("initial_history_candles", config.get("scan_lookback_limit", 50))
+    )
+
+    tfs = sorted(set(defer_tfs), key=lambda t: timeframe_seconds(None, t))
+    tf_sec = timeframe_seconds(None, tfs[0])
+    lookback_since = int(time.time() * 1000 - scan_limit * tf_sec * 1000)
+    batch_size = int(config.get("symbol_batch_size", 10))
+    for i in range(0, len(symbols), batch_size):
+        batch = symbols[i : i + batch_size]
+        async with OHLCV_LOCK:
+            state.df_cache = await update_multi_tf_ohlcv_cache(
+                exchange,
+                state.df_cache,
+                batch,
+                {**config, "timeframes": tfs},
+                limit=scan_limit,
+                start_since=lookback_since,
+                use_websocket=False,
+                force_websocket_history=config.get("force_websocket_history", False),
+                max_concurrent=config.get("max_concurrent_ohlcv"),
+                notifier=None,
+                priority_queue=symbol_priority_queue,
+                batch_size=ohlcv_batch_size,
+            )
+
+            regime_tfs = [tf for tf in config.get("regime_timeframes", []) if tf in tfs]
+            if regime_tfs:
+                state.regime_cache = await update_regime_tf_cache(
+                    exchange,
+                    state.regime_cache,
+                    batch,
+                    {**config, "regime_timeframes": regime_tfs},
+                    limit=scan_limit,
+                    start_since=lookback_since,
+                    use_websocket=False,
+                    force_websocket_history=config.get(
+                        "force_websocket_history", False
+                    ),
+                    max_concurrent=config.get("max_concurrent_ohlcv"),
+                    notifier=None,
+                    df_map=state.df_cache,
+                    batch_size=ohlcv_batch_size,
+                )
+        await asyncio.sleep(0)
+
+    if pending_tasks:
+        await asyncio.gather(*pending_tasks, return_exceptions=True)
 
 
 async def fetch_candidates(ctx: BotContext) -> None:
@@ -1139,13 +1221,22 @@ async def fetch_candidates(ctx: BotContext) -> None:
         ctx.config["mode"] = "auto"
 
     try:
-        symbols, onchain_syms = await get_filtered_symbols(ctx.exchange, ctx.config)
+        scan_cfg = {**ctx.config}
+        scan_cfg["symbols"] = ctx.config.get(
+            "tradable_symbols", ctx.config.get("symbols", [])
+        )
+        symbols, _ = await get_filtered_symbols(ctx.exchange, scan_cfg)
     finally:
         if pump:
             sf["min_volume_usd"] = orig_min_volume
             sf["volume_percentile"] = orig_volume_pct
     symbols = [(s, sc) for s, sc in symbols if s not in no_data_symbols]
-    onchain_syms = [s for s in onchain_syms if s not in no_data_symbols]
+    allowed_syms = set(ctx.config.get("symbols", []))
+    onchain_syms = [
+        s
+        for s in ctx.config.get("onchain_symbols", [])
+        if s not in no_data_symbols and s in allowed_syms
+    ]
     cex_candidates = list(symbols)
     onchain_candidates = [(s, 0.0) for s in onchain_syms]
 
@@ -1224,6 +1315,8 @@ async def fetch_candidates(ctx: BotContext) -> None:
 
     total_candidates = len(symbols)
     symbols = [(s, sc) for s, sc in symbols if s not in no_data_symbols]
+    allowed_syms = set(ctx.config.get("symbols", []))
+    symbols = [(s, sc) for s, sc in symbols if s in allowed_syms]
     ctx.active_universe = [s for s, _ in symbols]
     ctx.resolved_mode = resolved_mode
 
@@ -1441,12 +1534,12 @@ async def scan_cex_arbitrage(
     return results
 
 
-async def update_caches(ctx: BotContext) -> None:
+async def update_caches(ctx: BotContext, chunk_size: int | None = None) -> None:
     async with symbol_cache_guard():
-        await _update_caches_impl(ctx)
+        await _update_caches_impl(ctx, chunk_size)
 
 
-async def _update_caches_impl(ctx: BotContext) -> None:
+async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) -> None:
     """Update OHLCV and regime caches for the current symbol batch."""
     batch = ctx.current_batch
     if not batch:
@@ -1496,6 +1589,7 @@ async def _update_caches_impl(ctx: BotContext) -> None:
                 ),
                 priority_queue=symbol_priority_queue,
                 batch_size=ohlcv_batch_size,
+                chunk_size=chunk_size if chunk_size is not None else 20,
             )
         except Exception as exc:
             logger.warning("WS OHLCV failed: %s - falling back to REST", exc)
@@ -1520,6 +1614,7 @@ async def _update_caches_impl(ctx: BotContext) -> None:
                 ),
                 priority_queue=symbol_priority_queue,
                 batch_size=ohlcv_batch_size,
+                chunk_size=chunk_size if chunk_size is not None else 20,
             )
         ctx.regime_cache = await update_regime_tf_cache(
             ctx.exchange,
@@ -2581,6 +2676,12 @@ async def _main_impl() -> MainResult:
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config, _ = await load_config_async()
+    env_chunk = os.getenv("OHLCV_CHUNK_SIZE")
+    if env_chunk:
+        try:
+            config["ohlcv_batch_size"] = int(env_chunk)
+        except ValueError:
+            logger.warning("Invalid OHLCV_CHUNK_SIZE %r", env_chunk)
     stop_reason = "completed"
 
     mapping = await load_token_mints()
@@ -2778,7 +2879,18 @@ async def _main_impl() -> MainResult:
             delay = min(delay * 2, MAX_SYMBOL_SCAN_DELAY)
 
         if discovered:
-            config["symbols"] = discovered + config.get("onchain_symbols", [])
+            sf_cfg = config.get("symbol_filter", {})
+            tradable = await build_tradable_set(
+                exchange,
+                allowed_quotes=config.get("allowed_quotes", []),
+                min_daily_volume_quote=float(sf_cfg.get("min_volume_usd", 0) or 0),
+                max_spread_pct=float(sf_cfg.get("max_spread_pct", 100) or 100),
+                whitelist=discovered,
+                blacklist=config.get("excluded_symbols"),
+                max_pairs=config.get("top_n_symbols"),
+            )
+            config["tradable_symbols"] = tradable
+            config["symbols"] = tradable + config.get("onchain_symbols", [])
             onchain_syms = config.get("onchain_symbols", [])
             cex_count = len([s for s in config["symbols"] if s not in onchain_syms])
             logger.info(
@@ -2789,6 +2901,7 @@ async def _main_impl() -> MainResult:
         elif discovered is None:
             cached = load_liquid_pairs()
             if isinstance(cached, list):
+                config["tradable_symbols"] = list(cached)
                 config["symbols"] = cached + config.get("onchain_symbols", [])
                 logger.warning("Using cached pairs due to symbol scan failure")
                 onchain_syms = config.get("onchain_symbols", [])
@@ -2813,6 +2926,7 @@ async def _main_impl() -> MainResult:
                     except Exception as exc:  # pragma: no cover - network errors
                         logger.error("refresh_pairs_async failed: %s", exc)
                 if fallback:
+                    config["tradable_symbols"] = list(fallback)
                     config["symbols"] = fallback + config.get("onchain_symbols", [])
                     logger.warning("Loaded fresh pairs after scan failure")
                 else:

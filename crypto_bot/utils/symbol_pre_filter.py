@@ -52,50 +52,7 @@ try:
 except Exception:
     cfg = {}
 
-# Semaphore guarding concurrent OHLCV requests
-SEMA: asyncio.Semaphore | None = None
-# Semaphore guarding concurrent ticker requests
-TICKER_SEMA: asyncio.Semaphore | None = None
-TICKER_DELAY = 0.0
-
-
-def init_semaphore(limit: int | None = None) -> asyncio.Semaphore:
-    """Initialize the global semaphore with ``limit`` permits."""
-
-    global SEMA
-    if limit is None:
-        limit = 4
-    try:
-        val = int(limit)
-        if val < 1:
-            raise ValueError
-    except (TypeError, ValueError):
-        val = 4
-    SEMA = asyncio.Semaphore(val)
-    return SEMA
-
-
-def init_ticker_semaphore(
-    limit: int | None = None, delay_ms: int | float | None = None
-) -> asyncio.Semaphore:
-    """Initialize the ticker semaphore and delay."""
-
-    global TICKER_SEMA, TICKER_DELAY
-    if limit is None:
-        limit = 20
-    try:
-        val = int(limit)
-        if val < 1:
-            raise ValueError
-    except (TypeError, ValueError):
-        val = 20
-    TICKER_SEMA = asyncio.Semaphore(val)
-    try:
-        delay_val = float(delay_ms) if delay_ms is not None else 0.0
-    except (TypeError, ValueError):
-        delay_val = 0.0
-    TICKER_DELAY = delay_val / 1000 if delay_val else 0.0
-    return TICKER_SEMA
+# Legacy semaphores removed; concurrency is handled by KrakenClient
 
 
 logger = setup_logger(__name__, LOG_DIR / "symbol_filter.log")
@@ -176,10 +133,9 @@ async def has_enough_history(
     seconds = timeframe_seconds(exchange, timeframe)
     candles_needed = int((days * 86400) / seconds)
     try:
-        async with SEMA:
-            data = await fetch_ohlcv_async(
-                exchange, symbol, timeframe=timeframe, limit=candles_needed
-            )
+        data = await fetch_ohlcv_async(
+            exchange, symbol, timeframe=timeframe, limit=candles_needed
+        )
     except Exception as exc:  # pragma: no cover - network
         logger.warning(
             "fetch_ohlcv failed for %s on %s for %d days: %s",
@@ -237,11 +193,10 @@ async def _fetch_ticker_async(
     combined: dict = {"result": {}, "error": []}
     async with aiohttp.ClientSession() as session:
         async def fetch(url: str):
-            async with TICKER_SEMA:
-                resp = await session.get(url, timeout=timeout)
-                if delay:
-                    await asyncio.sleep(delay)
-                return resp
+            resp = await session.get(url, timeout=timeout)
+            if delay:
+                await asyncio.sleep(delay)
+            return resp
 
         tasks = []
         for i in range(0, len(pairs_list), 20):
@@ -356,10 +311,6 @@ async def _refresh_tickers(
     symbols = list(symbols)
     cfg = config if config is not None else globals().get("cfg", {})
     sf = cfg.get("symbol_filter", {})
-    init_ticker_semaphore(
-        sf.get("max_concurrent_tickers", cfg.get("max_concurrent_tickers")),
-        cfg.get("ticker_rate_limit"),
-    )
     delay_ms = cfg.get("ticker_rate_limit")
     if delay_ms is None:
         delay_ms = getattr(exchange, "rateLimit", 0)
@@ -437,10 +388,9 @@ async def _refresh_tickers(
             if ws_failures:
                 await asyncio.sleep(min(2 ** (ws_failures - 1), 30))
             try:
-                async with TICKER_SEMA:
-                    data = await _fetch_tickers_with_retry(exchange, to_fetch)
-                    if delay:
-                        await asyncio.sleep(delay)
+                data = await _fetch_tickers_with_retry(exchange, to_fetch)
+                if delay:
+                    await asyncio.sleep(delay)
                 opts = getattr(exchange, "options", None)
                 if opts is not None:
                     opts["ws_failures"] = 0
@@ -502,15 +452,13 @@ async def _refresh_tickers(
                     try:
                         fetcher = getattr(exchange, "fetch_tickers", None)
                         if asyncio.iscoroutinefunction(fetcher):
-                            async with TICKER_SEMA:
-                                fetched = await fetcher(chunk)
-                                if delay:
-                                    await asyncio.sleep(delay)
+                            fetched = await fetcher(chunk)
+                            if delay:
+                                await asyncio.sleep(delay)
                         else:
-                            async with TICKER_SEMA:
-                                fetched = await asyncio.to_thread(fetcher, chunk)
-                                if delay:
-                                    await asyncio.sleep(delay)
+                            fetched = await asyncio.to_thread(fetcher, chunk)
+                            if delay:
+                                await asyncio.sleep(delay)
                         chunk_data = {s: t.get("info", t) for s, t in fetched.items()}
                         break
                     except ccxt.BadSymbol as exc:  # pragma: no cover - network
@@ -547,15 +495,13 @@ async def _refresh_tickers(
                         try:
                             fetcher = getattr(exchange, "fetch_tickers", None)
                             if asyncio.iscoroutinefunction(fetcher):
-                                async with TICKER_SEMA:
-                                    fetched = await fetcher(list(symbols))
-                                    if delay:
-                                        await asyncio.sleep(delay)
+                                fetched = await fetcher(list(symbols))
+                                if delay:
+                                    await asyncio.sleep(delay)
                             else:
-                                async with TICKER_SEMA:
-                                    fetched = await asyncio.to_thread(fetcher, list(symbols))
-                                    if delay:
-                                        await asyncio.sleep(delay)
+                                fetched = await asyncio.to_thread(fetcher, list(symbols))
+                                if delay:
+                                    await asyncio.sleep(delay)
                             data = {s: t.get("info", t) for s, t in fetched.items()}
                             break
                         except ccxt.BadSymbol as exc:  # pragma: no cover - network
@@ -603,15 +549,13 @@ async def _refresh_tickers(
                     pairs = [_id_for_symbol(exchange, s) for s in symbols]
 
                     try:
-                        async with TICKER_SEMA:
-                            resp = await _fetch_ticker_async(pairs, timeout=timeout)
-                            if delay:
-                                await asyncio.sleep(delay)
+                        resp = await _fetch_ticker_async(pairs, timeout=timeout)
+                        if delay:
+                            await asyncio.sleep(delay)
                     except TypeError:
-                        async with TICKER_SEMA:
-                            resp = await _fetch_ticker_async(pairs)
-                            if delay:
-                                await asyncio.sleep(delay)
+                        resp = await _fetch_ticker_async(pairs)
+                        if delay:
+                            await asyncio.sleep(delay)
                     raw = resp.get("result", {})
                     if resp.get("error"):
                         logger.warning(
@@ -620,19 +564,17 @@ async def _refresh_tickers(
                             "; ".join(resp["error"]),
                         )
                         try:
-                            async with TICKER_SEMA:
-                                raw = (
-                                    await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
-                                ).get("result", {})
-                                if delay:
-                                    await asyncio.sleep(delay)
+                            raw = (
+                                await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
+                            ).get("result", {})
+                            if delay:
+                                await asyncio.sleep(delay)
                         except TypeError:
-                            async with TICKER_SEMA:
-                                raw = (
-                                    await _fetch_ticker_async(symbols, exchange=exchange)
-                                ).get("result", {})
-                                if delay:
-                                    await asyncio.sleep(delay)
+                            raw = (
+                                await _fetch_ticker_async(symbols, exchange=exchange)
+                            ).get("result", {})
+                            if delay:
+                                await asyncio.sleep(delay)
                     data = {}
                     if len(raw) == len(symbols):
                         for sym, (_, ticker) in zip(symbols, raw.items()):
@@ -664,15 +606,13 @@ async def _refresh_tickers(
                 pairs = [_id_for_symbol(exchange, s) for s in symbols]
 
                 try:
-                    async with TICKER_SEMA:
-                        resp = await _fetch_ticker_async(pairs, timeout=timeout)
-                        if delay:
-                            await asyncio.sleep(delay)
+                    resp = await _fetch_ticker_async(pairs, timeout=timeout)
+                    if delay:
+                        await asyncio.sleep(delay)
                 except TypeError:
-                    async with TICKER_SEMA:
-                        resp = await _fetch_ticker_async(pairs)
-                        if delay:
-                            await asyncio.sleep(delay)
+                    resp = await _fetch_ticker_async(pairs)
+                    if delay:
+                        await asyncio.sleep(delay)
                 raw = resp.get("result", {})
                 if resp.get("error"):
                     logger.warning(
@@ -681,19 +621,17 @@ async def _refresh_tickers(
                         "; ".join(resp["error"]),
                     )
                     try:
-                        async with TICKER_SEMA:
-                            raw = (
-                                await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
-                            ).get("result", {})
-                            if delay:
-                                await asyncio.sleep(delay)
+                        raw = (
+                            await _fetch_ticker_async(symbols, timeout=timeout, exchange=exchange)
+                        ).get("result", {})
+                        if delay:
+                            await asyncio.sleep(delay)
                     except TypeError:
-                        async with TICKER_SEMA:
-                            raw = (
-                                await _fetch_ticker_async(symbols, exchange=exchange)
-                            ).get("result", {})
-                            if delay:
-                                await asyncio.sleep(delay)
+                        raw = (
+                            await _fetch_ticker_async(symbols, exchange=exchange)
+                        ).get("result", {})
+                        if delay:
+                            await asyncio.sleep(delay)
                 data = {}
                 if len(raw) == len(symbols):
                     for sym, (_, ticker) in zip(symbols, raw.items()):
@@ -744,15 +682,13 @@ async def _refresh_tickers(
             try:
                 fetcher = getattr(exchange, "fetch_ticker", None)
                 if asyncio.iscoroutinefunction(fetcher):
-                    async with TICKER_SEMA:
-                        ticker = await fetcher(sym)
-                        if delay:
-                            await asyncio.sleep(delay)
+                    ticker = await fetcher(sym)
+                    if delay:
+                        await asyncio.sleep(delay)
                 else:
-                    async with TICKER_SEMA:
-                        ticker = await asyncio.to_thread(fetcher, sym)
-                        if delay:
-                            await asyncio.sleep(delay)
+                    ticker = await asyncio.to_thread(fetcher, sym)
+                    if delay:
+                        await asyncio.sleep(delay)
                 if ticker:
                     result[sym] = ticker.get("info", ticker)
                 else:
@@ -812,17 +748,16 @@ async def _bounded_score(
     symbol's volatility.  Passing ``None`` disables this normalization.
     """
 
-    async with SEMA:
-        score = await score_symbol(
-            exchange,
-            symbol,
-            volume_usd,
-            change_pct,
-            spread_pct,
-            liquidity_score,
-            cfg,
-            df,
-        )
+    score = await score_symbol(
+        exchange,
+        symbol,
+        volume_usd,
+        change_pct,
+        spread_pct,
+        liquidity_score,
+        cfg,
+        df,
+    )
     return symbol, score
 
 
@@ -838,11 +773,6 @@ async def filter_symbols(
 
     cfg = config or {}
     sf = cfg.get("symbol_filter", {})
-    init_semaphore(sf.get("max_concurrent_ohlcv", cfg.get("max_concurrent_ohlcv", 4)))
-    init_ticker_semaphore(
-        sf.get("max_concurrent_tickers", cfg.get("max_concurrent_tickers")),
-        cfg.get("ticker_rate_limit"),
-    )
     min_volume = sf.get("min_volume_usd", DEFAULT_MIN_VOLUME_USD)
     vol_pct = sf.get("volume_percentile", DEFAULT_VOLUME_PERCENTILE)
     max_spread = sf.get("max_spread_pct", 1.0)

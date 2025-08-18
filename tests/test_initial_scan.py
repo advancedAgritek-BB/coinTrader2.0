@@ -1,3 +1,4 @@
+import asyncio
 import types
 import sys
 import pytest
@@ -183,5 +184,43 @@ async def test_initial_scan_symbol_filter_overrides(monkeypatch):
 
     assert cfg_params
     for c, limit in cfg_params:
-        assert c['timeframes'] == ['5m']
+        assert set(c['timeframes']) == {'1m', '5m'}
         assert limit == 25
+
+
+@pytest.mark.asyncio
+async def test_initial_scan_warms_deferred_timeframes(monkeypatch):
+    calls = []
+
+    async def fake_update_multi(exchange, cache, batch, cfg, limit=0, **kwargs):
+        calls.append(list(cfg.get('timeframes', [])))
+        return {}
+
+    async def fake_update_regime(*args, **kwargs):
+        return {}
+
+    monkeypatch.setattr('crypto_bot.main.update_multi_tf_ohlcv_cache', fake_update_multi)
+    monkeypatch.setattr('crypto_bot.main.update_regime_tf_cache', fake_update_regime)
+
+    async def fake_get_filtered_symbols(ex, cfg):
+        return ([(cfg['symbols'][0], 0.0)], [])
+
+    monkeypatch.setattr(
+        'crypto_bot.main.get_filtered_symbols',
+        fake_get_filtered_symbols,
+    )
+
+    cfg = {
+        'symbols': ['BTC/USD'],
+        'ohlcv': {
+            'bootstrap_timeframes': ['1h'],
+            'defer_timeframes': ['4h'],
+        },
+        'scan_lookback_limit': 100,
+    }
+
+    await initial_scan(DummyExchange(), cfg, SessionState())
+    await asyncio.sleep(0)
+
+    assert calls and set(calls[0]) == {'1m', '5m', '1h'}
+    assert any(set(call) == {'4h'} for call in calls[1:])
