@@ -681,6 +681,93 @@ def test_correlation_pair_limit(monkeypatch):
     assert symbols == [("ETH/USD", 0.8), ("BTC/USD", 0.6)]
 
 
+def test_correlation_max_pairs_limits_symbols(monkeypatch):
+    N = 2
+    symbols = ["ETH/USD", "BTC/USD", "LTC/USD", "XRP/USD"]
+
+    async def fake_fetch_many(*_a, **_k):
+        return {
+            "result": {
+                "XETHZUSD": {
+                    "a": ["101", "1", "1"],
+                    "b": ["100", "1", "1"],
+                    "c": ["101", "0.5"],
+                    "v": ["1000", "1000"],
+                    "p": ["100", "100"],
+                    "o": "99",
+                },
+                "XXBTZUSD": {
+                    "a": ["51", "1", "1"],
+                    "b": ["50", "1", "1"],
+                    "c": ["51", "1"],
+                    "v": ["900", "900"],
+                    "p": ["100", "100"],
+                    "o": "49",
+                },
+                "XLTCZUSD": {
+                    "a": ["31", "1", "1"],
+                    "b": ["31", "1", "1"],
+                    "c": ["31", "1"],
+                    "v": ["800", "800"],
+                    "p": ["100", "100"],
+                    "o": "29",
+                },
+                "XXRPZUSD": {
+                    "a": ["21", "1", "1"],
+                    "b": ["21", "1", "1"],
+                    "c": ["21", "1"],
+                    "v": ["700", "700"],
+                    "p": ["100", "100"],
+                    "o": "19",
+                },
+            }
+        }
+
+    monkeypatch.setattr(
+        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch_many
+    )
+
+    async def fake_update(_ex, cache, syms, *_args, **_kw):
+        return {s: pd.DataFrame({"return": [0, 0, 0]}) for s in syms}
+
+    monkeypatch.setattr(sp, "update_multi_tf_ohlcv_cache", fake_update)
+
+    used: list[list[str]] = []
+
+    def fake_corr(subset, window=3):
+        used.append(list(subset.keys()))
+        assert len(subset) == N
+        return {}
+
+    monkeypatch.setattr(sp, "incremental_correlation", fake_corr)
+
+    cfg = {
+        **CONFIG,
+        "symbol_filter": {
+            "volume_percentile": 0,
+            "change_pct_percentile": 0,
+            "max_spread_pct": 3.0,
+            "correlation_max_pairs": N,
+            "correlation_window": 3,
+        },
+    }
+
+    class MultiExchange:
+        markets_by_id = {
+            "XETHZUSD": {"symbol": "ETH/USD"},
+            "XXBTZUSD": {"symbol": "BTC/USD"},
+            "XLTCZUSD": {"symbol": "LTC/USD"},
+            "XXRPZUSD": {"symbol": "XRP/USD"},
+        }
+        markets = {s: {} for s in symbols}
+        has = {}
+        options = {}
+
+    asyncio.run(filter_symbols(MultiExchange(), symbols, cfg))
+
+    assert used == [["ETH/USD", "BTC/USD"]]
+
+
 def test_correlation_skipped_when_insufficient_history(monkeypatch):
     monkeypatch.setattr(
         "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async",
