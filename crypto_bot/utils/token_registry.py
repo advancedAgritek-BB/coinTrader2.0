@@ -13,6 +13,7 @@ import aiohttp
 import ccxt.async_support as ccxt
 import yaml
 import websockets
+from crypto_bot.utils import kraken as kraken_utils
 from solana.rpc.async_api import AsyncClient
 from crypto_bot.solana.helius_client import HELIUS_API_KEY, HeliusClient, helius_available
 
@@ -163,24 +164,22 @@ async def fetch_from_jupiter() -> Dict[str, str]:
     return result
 
 
-async def _check_cex_arbitrage(symbol: str) -> None:
+async def _check_cex_arbitrage(
+    symbol: str, exchange: kraken_utils.KrakenClient | None = None
+) -> None:
     """Check Kraken and Coinbase for arbitrage on ``symbol`` and trade to BTC."""
 
     pair = f"{symbol}/USD"
     try:
-        kraken = ccxt.kraken()
+        kraken_ex = exchange or kraken_utils.get_client()
         coinbase = ccxt.coinbase()
         ticker_kraken, ticker_coinbase = await asyncio.gather(
-            kraken.fetch_ticker(pair), coinbase.fetch_ticker(pair)
+            kraken_ex.fetch_ticker(pair), coinbase.fetch_ticker(pair)
         )
     except Exception as exc:  # pragma: no cover - network
         logger.error("CEX fetch failed for %s: %s", pair, exc)
         return
     finally:
-        try:
-            await kraken.close()
-        except Exception:  # pragma: no cover - best effort
-            pass
         try:
             await coinbase.close()
         except Exception:  # pragma: no cover - best effort

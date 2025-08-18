@@ -6,6 +6,7 @@ import json
 import time
 from pathlib import Path
 import logging
+import os
 
 import ccxt.async_support as ccxt
 import yaml
@@ -74,15 +75,41 @@ def load_config() -> dict:
         data["symbol"] = fix_symbol(data["symbol"])
     if "symbols" in data:
         data["symbols"] = [fix_symbol(s) for s in data.get("symbols", [])]
+
+    trading_cfg = data.get("trading", {}) or {}
+    raw_ex = data.get("exchange") or trading_cfg.get("exchange") or os.getenv("EXCHANGE")
+    if isinstance(raw_ex, dict):
+        ex_cfg = dict(raw_ex)
+    else:
+        ex_cfg = {"name": raw_ex}
+    ex_cfg.setdefault("name", "kraken")
+    ex_cfg.setdefault("max_concurrency", 3)
+    ex_cfg.setdefault("request_timeout_ms", 10000)
+    data["exchange"] = ex_cfg
+
     return data
 
 
 def get_exchange(config: dict) -> ccxt.Exchange:
     """Instantiate the configured ccxt exchange."""
-    name = config.get("exchange", "kraken").lower()
+    ex = config.get("exchange", "kraken")
+    if isinstance(ex, dict):
+        name = ex.get("name", "kraken").lower()
+        params = {"enableRateLimit": True}
+        timeout = ex.get("request_timeout_ms")
+        if timeout:
+            params["timeout"] = int(timeout)
+        max_conc = ex.get("max_concurrency")
+    else:
+        name = str(ex).lower()
+        params = {"enableRateLimit": True}
+        max_conc = None
     if not hasattr(ccxt, name):
         raise ValueError(f"Unsupported exchange: {name}")
-    return getattr(ccxt, name)({"enableRateLimit": True})
+    exchange = getattr(ccxt, name)(params)
+    if max_conc is not None:
+        setattr(exchange, "max_concurrency", int(max_conc))
+    return exchange
 
 
 async def _fetch_tickers(exchange: ccxt.Exchange) -> dict:

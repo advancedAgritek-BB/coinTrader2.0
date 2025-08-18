@@ -115,7 +115,7 @@ def test_get_solana_new_tokens_filters_by_score(monkeypatch):
         return {"A/USDC": 0.6, "B/USDC": 0.4}[sym]
 
     monkeypatch.setattr(scanner.symbol_scoring, "score_symbol", fake_score)
-    monkeypatch.setattr(scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
+    monkeypatch.setattr(scanner.kraken_utils, "get_client", lambda *_a, **_k: DummyEx())
 
     cfg = {
         "url": "http://x", 
