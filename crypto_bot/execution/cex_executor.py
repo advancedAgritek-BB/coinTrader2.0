@@ -55,6 +55,8 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
             }
         )
     elif exchange_name == "kraken":
+        exchange = kraken.get_client(api_key, api_secret)
+
         if use_ws:
             if use_private_ws and not (api_key and api_secret):
                 use_private_ws = kraken.use_private_ws = False
@@ -71,6 +73,7 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
                         api_key,
                         api_secret,
                         ws_token=ws_token if use_private_ws else None,
+                        exchange=exchange,
                     )
                 except Exception as err:  # pragma: no cover - optional dependency
                     logger.warning("Failed to initialize Kraken WS client: %s", err)

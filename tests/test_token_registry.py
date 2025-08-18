@@ -678,10 +678,10 @@ def test_check_cex_arbitrage_triggers(monkeypatch, tmp_path):
     import types
 
     fake_ccxt = types.SimpleNamespace(
-        kraken=lambda: DummyEx(100),
         coinbase=lambda: DummyEx(101),
     )
     monkeypatch.setattr(mod, "ccxt", fake_ccxt)
+    monkeypatch.setattr(mod.kraken_utils, "get_client", lambda *a, **k: DummyEx(100))
 
     called = {}
 
@@ -716,10 +716,10 @@ def test_check_cex_arbitrage_no_trigger(monkeypatch, tmp_path):
     import types
 
     fake_ccxt = types.SimpleNamespace(
-        kraken=lambda: DummyEx(100),
         coinbase=lambda: DummyEx(100.4),
     )
     monkeypatch.setattr(mod, "ccxt", fake_ccxt)
+    monkeypatch.setattr(mod.kraken_utils, "get_client", lambda *a, **k: DummyEx(100))
 
     called = {}
 

@@ -7,12 +7,44 @@ import urllib.parse
 
 import requests
 
+from typing import Any
+
+try:  # optional dependency
+    import ccxt  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    ccxt = None  # type: ignore
+
 DEFAULT_KRAKEN_URL = "https://api.kraken.com"
 PATH = "/0/private/GetWebSocketsToken"
 
 # Flag controlling whether the private WebSocket API should be used. Tests
 # toggle this to exercise fallback behaviour in ``cex_executor``.
 use_private_ws = True
+
+
+KrakenClient = Any  # type: ignore
+_client: KrakenClient | None = None
+
+
+def get_client(api_key: str | None = None, api_secret: str | None = None):
+    """Return a singleton ``ccxt.kraken`` client instance."""
+
+    if ccxt is None:  # pragma: no cover - optional dependency
+        raise RuntimeError("ccxt Kraken client not available")
+
+    global _client
+    if _client is None:
+        exchange_cls = getattr(ccxt, "kraken", None)
+        if exchange_cls is None:
+            raise RuntimeError("Kraken exchange not supported by ccxt")
+        _client = exchange_cls(
+            {
+                "apiKey": api_key or os.getenv("API_KEY"),
+                "secret": api_secret or os.getenv("API_SECRET"),
+                "enableRateLimit": True,
+            }
+        )
+    return _client
 
 
 def get_ws_token(
