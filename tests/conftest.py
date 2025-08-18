@@ -310,7 +310,10 @@ class _FakeTelegram:
 sys.modules.setdefault("crypto_bot.utils.telegram", _FakeTelegram())
 
 # Prepopulate common token decimals to avoid network lookups in tests
-from crypto_bot.utils.token_registry import TOKEN_DECIMALS  # type: ignore
+try:
+    from crypto_bot.utils.token_registry import TOKEN_DECIMALS  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    TOKEN_DECIMALS = {}
 TOKEN_DECIMALS.setdefault("SOL", 9)
 TOKEN_DECIMALS.setdefault("USDC", 6)
 
@@ -583,7 +586,11 @@ def _clear_strategy_router_cache():
 @pytest.fixture(autouse=True)
 def _mock_listing_date(monkeypatch):
     """Avoid network calls for Kraken listing timestamps."""
-    from crypto_bot.utils import market_loader
+    try:
+        from crypto_bot.utils import market_loader
+    except Exception:  # pragma: no cover - optional dependency
+        yield
+        return
 
     async def _no_listing(*_a, **_k):
         return None
