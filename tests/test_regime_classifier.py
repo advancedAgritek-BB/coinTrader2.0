@@ -480,6 +480,39 @@ def test_voting_no_consensus(monkeypatch):
     assert res["direction"] == "none"
 
 
+def test_voting_single_vote(monkeypatch):
+    df = _make_trending_df()
+
+    def base(df, cfg=None):
+        return 0.6, "long"
+
+    def v1(df, cfg=None):
+        return 0.2, "long"
+
+    import crypto_bot.utils.market_analyzer as ma
+    monkeypatch.setattr(ma, "route", lambda *a, **k: base)
+    monkeypatch.setattr(strategy_router, "route", lambda *a, **k: base)
+    monkeypatch.setattr(ma, "get_strategy_by_name", lambda n: {"a": v1}.get(n))
+    monkeypatch.setattr(
+        strategy_router,
+        "get_strategy_by_name",
+        lambda name: {"a": v1}.get(name),
+    )
+
+    async def run():
+        cfg = {
+            "timeframe": "1h",
+            "regime_timeframes": ["1h"],
+            "voting_strategies": ["a"],
+            "min_agreeing_votes": 1,
+        }
+        df_map = {"1h": df}
+        return await analyze_symbol("AAA", df_map, "cex", cfg, None)
+
+    res = asyncio.run(run())
+    assert res["direction"] == "long"
+
+
 def test_regime_voting_disagreement_unknown():
     df_trend = _make_trending_df()
     df_side = _make_sideways_df()
