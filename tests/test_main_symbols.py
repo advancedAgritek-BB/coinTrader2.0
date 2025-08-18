@@ -247,6 +247,35 @@ def test_get_filtered_symbols_onchain_pair(monkeypatch):
     assert result == ([("ETH/USD", 1.0)], [])
 
 
+def test_get_filtered_symbols_min_volume(monkeypatch):
+    class VolumeExchange:
+        markets = {
+            "LOW/USD": {"quote": "USD", "quoteVolume": 100},
+            "HIGH/USD": {"quote": "USD", "quoteVolume": 1000},
+        }
+
+        def list_markets(self, **_):
+            return self.markets
+
+    calls: list[list[str]] = []
+
+    async def fake_filter_symbols(ex, syms, _cfg):
+        calls.append(list(syms))
+        return [(s, ex.markets[s]["quoteVolume"]) for s in syms], []
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    config = {
+        "symbols": ["LOW/USD", "HIGH/USD"],
+        "symbol_filter": {"min_volume_usd": 500},
+    }
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+
+    result = asyncio.run(symbol_utils.get_filtered_symbols(VolumeExchange(), config))
+
+    assert result == ([("HIGH/USD", 1000)], [])
+    assert calls == [["HIGH/USD"]]
 def test_symbol_cache_disk_reuse(monkeypatch, tmp_path, caplog):
     caplog.set_level(logging.INFO)
     cache_file = tmp_path / "symcache.json"
