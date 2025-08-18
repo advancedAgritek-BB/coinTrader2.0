@@ -172,6 +172,11 @@ CT_SYMBOL=XRPUSD
 setting `CT_SYMBOL=XRPUSD` downloads the `xrpusd_regime_lgmb.pkl` model from the
 `models/regime/XRPUSD/` path in the configured bucket.
 
+To load models for additional pairs set `use_per_pair_models: true` and list
+allowed symbols under `model_symbols` in
+`crypto_bot/regime/regime_config.yaml`.  The classifier only downloads models
+for the `CT_SYMBOL` or symbols in that allow‑list.
+
 After training a model you can upload it to Supabase so the bot can fetch it
 automatically:
 

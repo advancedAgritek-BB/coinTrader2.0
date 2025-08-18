@@ -16,7 +16,8 @@ ma_window: 20
 higher_timeframe: "4h"
 confirm_trend_with_higher_tf: false
 use_ml_regime_classifier: true  # Enable Trainer's LightGBM
-use_per_pair_models: true
+use_per_pair_models: true       # Download models per symbol
+model_symbols: []               # Allow-list for per-pair models
 ml_min_bars: 5
 log_level: INFO
 score_weights:
