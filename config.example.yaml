@@ -93,6 +93,9 @@ features:
   pump_monitor: false
   telegram: true
 
+# Optional local fallback for the Supabase regime model
+model_local_path: models/xrpusd_regime_lgbm.pkl
+
 # === telemetry / metrics ===
 telemetry:
   batch_summary_secs: 60
