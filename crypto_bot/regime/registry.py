@@ -57,6 +57,13 @@ def load_latest_regime(symbol: str) -> Tuple[Any, Dict]:
         return blob, meta
     except Exception as exc:
         status = getattr(getattr(exc, "response", None), "status_code", None)
+        msg = str(getattr(exc, "message", exc))
+        if status == 404 or "404" in str(exc) or "not_found" in msg:
+            try:
+                direct_key = f"{prefix}/{symbol}/{symbol.lower()}_regime_lgbm.pkl"
+                blob = client.storage.from_(bucket).download(direct_key)
+                return blob, {}
+            except Exception:
         if status == 404 or "404" in str(exc):
             try:
                 direct_key = template.format(

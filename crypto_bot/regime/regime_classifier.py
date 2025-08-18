@@ -297,7 +297,21 @@ async def load_regime_model(symbol: str) -> tuple[object | None, object | None, 
         msg = str(getattr(exc, "message", exc))
         if "not_found" in msg:
             logger.warning("Supabase regime model for %s not found", symbol)
-            return None, None, None
+            try:
+                direct_key = f"regime/{symbol}/{symbol.lower()}_regime_lgbm.pkl"
+                model_path = direct_key
+                model_bytes = client.storage.from_(bucket).download(direct_key)
+                model_obj = pickle.loads(model_bytes)
+                if isinstance(model_obj, dict):
+                    model = model_obj.get("model")
+                    scaler = model_obj.get("scaler")
+                else:
+                    model = model_obj
+                    scaler = None
+                logger.info("Loaded direct regime model from Supabase: %s", direct_key)
+                return model, scaler, model_path
+            except Exception:
+                return None, None, None
         logger.error("Failed to load regime model: %s", exc)
         return None, None, fallback_name
 
