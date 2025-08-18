@@ -2070,6 +2070,23 @@ async def update_ohlcv_cache(
     return await req.future
 
 
+class MultiTFUpdateResult(dict):
+    """Dict-like result from :func:`update_multi_tf_ohlcv_cache`.
+
+    The mapping itself represents the updated cache while the ``remaining``
+    attribute describes unprocessed timeframes and symbols that can be used to
+    resume an incomplete bootstrap operation.
+    """
+
+    def __init__(
+        self,
+        cache: Dict[str, Dict[str, pd.DataFrame]],
+        remaining: Dict[str, List[str]],
+    ) -> None:
+        super().__init__(cache)
+        self.remaining = remaining
+
+
 async def update_multi_tf_ohlcv_cache(
     exchange,
     cache: Dict[str, Dict[str, pd.DataFrame]],
@@ -2085,7 +2102,8 @@ async def update_multi_tf_ohlcv_cache(
     batch_size: int | None = None,
     max_retries: int = 3,
     timeout: float | None = None,
-) -> Dict[str, Dict[str, pd.DataFrame]]:
+    bootstrap_timeout: float | None = None,
+) -> MultiTFUpdateResult:
     """Update OHLCV caches for multiple timeframes.
 
     Parameters
@@ -2095,6 +2113,10 @@ async def update_multi_tf_ohlcv_cache(
     start_since : int | None, optional
         When provided, fetch historical data starting from this timestamp
         in milliseconds when no cached data is available.
+    bootstrap_timeout : float | None, optional
+        Maximum number of seconds to spend bootstrapping each timeframe before
+        returning early. Remaining work is reported via the ``remaining``
+        attribute of the returned object.
     """
     try:  # pragma: no cover - optional regime dependency
         from crypto_bot.regime.regime_classifier import clear_regime_cache
@@ -2163,21 +2185,28 @@ async def update_multi_tf_ohlcv_cache(
             exchange, symbols_all
         )
 
+    tf_symbol_map: Dict[str, List[str]] = {}
     for tf in tfs:
         if tf == "1m":
-            symbols = one_min_syms
+            tf_symbol_map[tf] = one_min_syms
         elif tf == "5m":
-            symbols = five_min_only
+            tf_symbol_map[tf] = five_min_only
         else:
-            symbols = symbols_all
+            tf_symbol_map[tf] = symbols_all
+
+    remaining: Dict[str, List[str]] = {}
+    for idx, tf in enumerate(tfs):
+        symbols = tf_symbol_map.get(tf, [])
         if not symbols:
             continue
+        remaining_syms = list(symbols)
         lock = timeframe_lock(tf)
         if lock.locked():
             logger.info("Skip: %s update already running.", tf)
             continue
         async with lock:
             logger.info("Starting OHLCV update for timeframe %s", tf)
+            start_time = time.monotonic()
             tf_cache = cache.get(tf, {})
 
             now_ms = utc_now_ms()
@@ -2237,7 +2266,25 @@ async def update_multi_tf_ohlcv_cache(
 
             start_list = time.perf_counter()
             tasks = [asyncio.create_task(_fetch_listing(sym)) for sym in symbols]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            if bootstrap_timeout is not None:
+                remaining_time = bootstrap_timeout - (time.monotonic() - start_time)
+                if remaining_time <= 0:
+                    remaining[tf] = remaining_syms
+                    for tf_rest in tfs[idx + 1 :]:
+                        remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                    return MultiTFUpdateResult(cache, remaining)
+                try:
+                    results = await asyncio.wait_for(
+                        asyncio.gather(*tasks, return_exceptions=True),
+                        remaining_time,
+                    )
+                except asyncio.TimeoutError:
+                    remaining[tf] = remaining_syms
+                    for tf_rest in tfs[idx + 1 :]:
+                        remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                    return MultiTFUpdateResult(cache, remaining)
+            else:
+                results = await asyncio.gather(*tasks, return_exceptions=True)
             for sym, res in zip(symbols, results):
                 if isinstance(res, Exception):
                     logger.exception(
@@ -2268,6 +2315,11 @@ async def update_multi_tf_ohlcv_cache(
                 len(symbols),
                 time.perf_counter() - start_list,
             )
+            if bootstrap_timeout is not None and time.monotonic() - start_time > bootstrap_timeout:
+                remaining[tf] = remaining_syms
+                for tf_rest in tfs[idx + 1 :]:
+                    remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                return MultiTFUpdateResult(cache, remaining)
 
             cex_symbols: list[str] = []
             dex_symbols: list[str] = []
@@ -2297,6 +2349,14 @@ async def update_multi_tf_ohlcv_cache(
                         sym_limit = dynamic_limits.get(sym, tf_limit)
                         groups.setdefault(int(sym_limit), []).append(sym)
                     for lim, syms in groups.items():
+                        if bootstrap_timeout is not None:
+                            elapsed = time.monotonic() - start_time
+                            remaining_time = bootstrap_timeout - elapsed
+                            if remaining_time <= 0:
+                                remaining[tf] = remaining_syms
+                                for tf_rest in tfs[idx + 1 :]:
+                                    remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                                return MultiTFUpdateResult(cache, remaining)
                         curr_limit = tf_limit
                         if lim < tf_limit:
                             for s in syms:
@@ -2304,30 +2364,74 @@ async def update_multi_tf_ohlcv_cache(
                                     "Adjusting limit for %s on %s to %d", s, tf, lim
                                 )
                             curr_limit = lim
-                        tf_cache = await update_ohlcv_cache(
-                            exchange,
-                            tf_cache,
-                            syms,
-                            timeframe=tf,
-                            limit=curr_limit,
-                            config={
-                                "min_history_fraction": 0,
-                                "ohlcv_batch_size": config.get("ohlcv_batch_size"),
-                            },
-                            batch_size=batch_size,
-                            start_since=tf_start_since,
-                            use_websocket=use_websocket,
-                            force_websocket_history=force_websocket_history,
-                            max_concurrent=max_concurrent,
-                            notifier=notifier,
-                            priority_symbols=priority_syms,
-                            max_retries=max_retries,
-                            timeout=timeout,
-                        )
+                        try:
+                            if bootstrap_timeout is not None:
+                                tf_cache = await asyncio.wait_for(
+                                    update_ohlcv_cache(
+                                        exchange,
+                                        tf_cache,
+                                        syms,
+                                        timeframe=tf,
+                                        limit=curr_limit,
+                                        config={
+                                            "min_history_fraction": 0,
+                                            "ohlcv_batch_size": config.get("ohlcv_batch_size"),
+                                        },
+                                        batch_size=batch_size,
+                                        start_since=tf_start_since,
+                                        use_websocket=use_websocket,
+                                        force_websocket_history=force_websocket_history,
+                                        max_concurrent=max_concurrent,
+                                        notifier=notifier,
+                                        priority_symbols=priority_syms,
+                                        max_retries=max_retries,
+                                        timeout=timeout,
+                                    ),
+                                    remaining_time,
+                                )
+                            else:
+                                tf_cache = await update_ohlcv_cache(
+                                    exchange,
+                                    tf_cache,
+                                    syms,
+                                    timeframe=tf,
+                                    limit=curr_limit,
+                                    config={
+                                        "min_history_fraction": 0,
+                                        "ohlcv_batch_size": config.get("ohlcv_batch_size"),
+                                    },
+                                    batch_size=batch_size,
+                                    start_since=tf_start_since,
+                                    use_websocket=use_websocket,
+                                    force_websocket_history=force_websocket_history,
+                                    max_concurrent=max_concurrent,
+                                    notifier=notifier,
+                                    priority_symbols=priority_syms,
+                                    max_retries=max_retries,
+                                    timeout=timeout,
+                                )
+                        except asyncio.TimeoutError:
+                            remaining[tf] = remaining_syms
+                            for tf_rest in tfs[idx + 1 :]:
+                                remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                            return MultiTFUpdateResult(cache, remaining)
+                        for s in syms:
+                            if s in remaining_syms:
+                                remaining_syms.remove(s)
+                        if bootstrap_timeout is not None and time.monotonic() - start_time > bootstrap_timeout:
+                            remaining[tf] = remaining_syms
+                            for tf_rest in tfs[idx + 1 :]:
+                                remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                            return MultiTFUpdateResult(cache, remaining)
                 else:
                     from crypto_bot.main import update_df_cache
 
                     for sym in cex_symbols:
+                        if bootstrap_timeout is not None and time.monotonic() - start_time > bootstrap_timeout:
+                            remaining[tf] = remaining_syms
+                            for tf_rest in tfs[idx + 1 :]:
+                                remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                            return MultiTFUpdateResult(cache, remaining)
                         batches: list = []
                         current_since = tf_start_since
                         sym_total = min(tf_limit, dynamic_limits.get(sym, tf_limit))
@@ -2337,6 +2441,14 @@ async def update_multi_tf_ohlcv_cache(
                             )
                         remaining = sym_total
                         while remaining > 0:
+                            if bootstrap_timeout is not None:
+                                elapsed = time.monotonic() - start_time
+                                remaining_time = bootstrap_timeout - elapsed
+                                if remaining_time <= 0:
+                                    remaining[tf] = remaining_syms
+                                    for tf_rest in tfs[idx + 1 :]:
+                                        remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                                    return MultiTFUpdateResult(cache, remaining)
                             req = min(remaining, 1000)
                             data = load_ohlcv(
                                 exchange,
@@ -2350,7 +2462,16 @@ async def update_multi_tf_ohlcv_cache(
                                 timeout=timeout,
                             )
                             if inspect.isawaitable(data):
-                                data = await data
+                                if bootstrap_timeout is not None:
+                                    try:
+                                        data = await asyncio.wait_for(data, remaining_time)
+                                    except asyncio.TimeoutError:
+                                        remaining[tf] = remaining_syms
+                                        for tf_rest in tfs[idx + 1 :]:
+                                            remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                                        return MultiTFUpdateResult(cache, remaining)
+                                else:
+                                    data = await data
                             if not data or isinstance(data, Exception):
                                 break
                             batches.extend(data)
@@ -2451,8 +2572,20 @@ async def update_multi_tf_ohlcv_cache(
                                 sym, {"df_cache": cache, "symbol": sym}
                             )
                         await _maybe_enqueue_eval(sym, tf, cache, config)
+                        if sym in remaining_syms:
+                            remaining_syms.remove(sym)
+                        if bootstrap_timeout is not None and time.monotonic() - start_time > bootstrap_timeout:
+                            remaining[tf] = remaining_syms
+                            for tf_rest in tfs[idx + 1 :]:
+                                remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                            return MultiTFUpdateResult(cache, remaining)
 
             for sym in dex_symbols:
+                if bootstrap_timeout is not None and time.monotonic() - start_time > bootstrap_timeout:
+                    remaining[tf] = remaining_syms
+                    for tf_rest in tfs[idx + 1 :]:
+                        remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                    return MultiTFUpdateResult(cache, remaining)
                 data = None
                 vol = 0.0
                 res = None
@@ -2499,6 +2632,11 @@ async def update_multi_tf_ohlcv_cache(
                     data = fetch_onchain_ohlcv(sym, timeframe=tf, limit=sym_l)
                     if inspect.isawaitable(data):
                         data = await data
+                    if bootstrap_timeout is not None and time.monotonic() - start_time > bootstrap_timeout:
+                        remaining[tf] = remaining_syms
+                        for tf_rest in tfs[idx + 1 :]:
+                            remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                        return MultiTFUpdateResult(cache, remaining)
                     if not data:
                         data = await fetch_dex_ohlcv(
                             exchange,
@@ -2511,6 +2649,11 @@ async def update_multi_tf_ohlcv_cache(
                             max_retries=max_retries,
                             timeout=timeout,
                         )
+                        if bootstrap_timeout is not None and time.monotonic() - start_time > bootstrap_timeout:
+                            remaining[tf] = remaining_syms
+                            for tf_rest in tfs[idx + 1 :]:
+                                remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                            return MultiTFUpdateResult(cache, remaining)
                         if isinstance(data, Exception) or not data:
                             continue
                     add_priority(data, sym)
@@ -2563,10 +2706,17 @@ async def update_multi_tf_ohlcv_cache(
 
                     cache[tf] = tf_cache
                     await _maybe_enqueue_eval(sym, tf, cache, config)
+                    if sym in remaining_syms:
+                        remaining_syms.remove(sym)
+                    if bootstrap_timeout is not None and time.monotonic() - start_time > bootstrap_timeout:
+                        remaining[tf] = remaining_syms
+                        for tf_rest in tfs[idx + 1 :]:
+                            remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
+                        return MultiTFUpdateResult(cache, remaining)
             cache[tf] = tf_cache
             logger.info("Completed OHLCV update for timeframe %s", tf)
 
-    return cache
+    return MultiTFUpdateResult(cache, remaining)
 
 
 async def update_regime_tf_cache(
