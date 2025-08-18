@@ -607,6 +607,7 @@ class DummyLargeExchange:
 
     def __init__(self):
         self.data = [[i * 3600] + [i] * 5 for i in range(200)]
+        self.markets = {"BTC/USD": {"symbol": "BTC/USD"}}
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
         if since is not None and since > self.data[-1][0] and since // 1000 <= self.data[-1][0]:
@@ -624,6 +625,40 @@ def test_update_ohlcv_cache_respects_requested_limit():
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=50, max_concurrent=2)
     )
     assert len(cache["BTC/USD"]) == 50
+
+
+def test_update_ohlcv_cache_saves_trimmed(monkeypatch, tmp_path):
+    from crypto_bot.utils import market_loader
+
+    market_loader._last_snapshot_time = 0
+    ex = DummyLargeExchange()
+    cache: dict[str, pd.DataFrame] = {}
+
+    saved: dict = {}
+
+    def fake_save(df, symbol, timeframe, storage_path):
+        saved["df"] = df
+        saved["symbol"] = symbol
+        saved["timeframe"] = timeframe
+        saved["storage_path"] = storage_path
+
+    monkeypatch.setattr(market_loader, "save_ohlcv", fake_save)
+
+    asyncio.run(
+        update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=4,
+            max_concurrent=2,
+            config={"storage_path": tmp_path, "max_bootstrap_bars": 3},
+        )
+    )
+
+    assert saved["symbol"] == "BTC/USD"
+    assert saved["timeframe"] == "1h"
+    assert saved["storage_path"] == tmp_path
+    assert len(saved["df"]) == 3
 
 
 class CountingExchange:

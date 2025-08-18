@@ -109,6 +109,23 @@ def is_supported_symbol(symbol: str) -> bool:
 
     return symbol not in UNSUPPORTED_SYMBOLS and not is_synthetic_symbol(symbol)
 
+
+def save_ohlcv(
+    df: pd.DataFrame, symbol: str, timeframe: str, storage_path: str | Path
+) -> None:
+    """Persist OHLCV ``df`` for ``symbol`` under ``storage_path``.
+
+    The file is written as ``<storage_path>/<timeframe>/<symbol>.csv`` where
+    ``symbol`` has ``/`` replaced by ``_``. Directories are created as needed.
+    """
+
+    if not storage_path:
+        return
+    path = Path(storage_path) / timeframe
+    path.mkdir(parents=True, exist_ok=True)
+    filename = symbol.replace("/", "_") + ".csv"
+    df.to_csv(path / filename, index=False)
+
 async def _maybe_enqueue_eval(symbol: str, timeframe: str, cache: Dict[str, Dict[str, pd.DataFrame]], config: Dict[str, Any]) -> None:
     if timeframe not in ("1m", "5m"):
         return
@@ -1785,6 +1802,16 @@ async def _update_ohlcv_cache_inner(
                     )
                 except Exception:
                     pass
+            storage_path = config.get("storage_path")
+            if storage_path:
+                max_bars = config.get("max_bootstrap_bars")
+                try:
+                    max_bars = int(max_bars) if max_bars is not None else None
+                except (TypeError, ValueError):
+                    max_bars = None
+                df_save = cache[sym].tail(max_bars) if max_bars else cache[sym]
+                df_save = df_save.reset_index(drop=True)
+                save_ohlcv(df_save, sym, timeframe, storage_path)
     return cache
 
 
