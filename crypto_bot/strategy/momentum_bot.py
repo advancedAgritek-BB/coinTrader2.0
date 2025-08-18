@@ -2,6 +2,7 @@ from typing import Optional, Tuple
 
 import logging
 import pandas as pd
+import ta
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
@@ -32,34 +33,56 @@ def generate_signal(
     if df is None or df.empty:
         return 0.0, "none"
 
-    params = config.get("momentum", {}) if config else {}
+    params = config.get("momentum_bot", {}) if config else {}
     window = int(params.get("donchian_window", 20))
     vol_window = int(params.get("volume_window", 20))
     vol_mult = float(params.get("volume_mult", 1.5))
+    rsi_threshold = float(params.get("rsi_threshold", 55))
+    macd_min = float(params.get("macd_min", 0.0))
+    macd_fast = int(params.get("fast_length", 12))
+    macd_slow = int(params.get("slow_length", 26))
+    rsi_window = 14
 
-    if len(df) < vol_window:
+    min_len = max(window, vol_window, macd_slow, rsi_window)
+    if len(df) < min_len:
         return 0.0, "none"
 
-    lookback = min(len(df), max(window, vol_window))
+    lookback = min(len(df), min_len)
     recent = df.iloc[-(lookback + 1) :]
 
     dc_high = recent["high"].rolling(window).max().shift(1)
     dc_low = recent["low"].rolling(window).min().shift(1)
     vol_ma = recent["volume"].rolling(vol_window).mean()
+    rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
+    macd = ta.trend.macd(
+        recent["close"], window_fast=macd_fast, window_slow=macd_slow
+    )
 
     dc_high = cache_series("momentum_dc_high", df, dc_high, lookback)
     dc_low = cache_series("momentum_dc_low", df, dc_low, lookback)
     vol_ma = cache_series("momentum_vol_ma", df, vol_ma, lookback)
+    rsi = cache_series("momentum_rsi", df, rsi, lookback)
+    macd = cache_series("momentum_macd", df, macd, lookback)
 
     recent = recent.copy()
     recent["dc_high"] = dc_high
     recent["dc_low"] = dc_low
     recent["vol_ma"] = vol_ma
+    recent["rsi"] = rsi
+    recent["macd"] = macd
 
     latest = recent.iloc[-1]
 
-    long_cond = latest["close"] > dc_high.iloc[-1]
-    short_cond = latest["close"] < dc_low.iloc[-1]
+    long_cond = (
+        latest["close"] > dc_high.iloc[-1]
+        and latest["rsi"] > rsi_threshold
+        and latest["macd"] > macd_min
+    )
+    short_cond = (
+        latest["close"] < dc_low.iloc[-1]
+        and latest["rsi"] < 100 - rsi_threshold
+        and latest["macd"] < -macd_min
+    )
     vol_ok = (
         pd.notna(latest["vol_ma"])
         and latest["vol_ma"] > 0
@@ -85,6 +108,13 @@ def generate_signal(
         if config is None or config.get("atr_normalization", True):
             score = normalize_score_by_volatility(recent, score)
 
+    logger.info(
+        "RSI %.2f MACD %.5f score %.2f direction %s",
+        float(latest.get("rsi", float("nan"))),
+        float(latest.get("macd", float("nan"))),
+        score,
+        direction,
+    )
     return score, direction
 
 
