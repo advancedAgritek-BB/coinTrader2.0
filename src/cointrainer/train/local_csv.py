@@ -9,6 +9,7 @@ import numpy as np
 
 from cointrainer.io.csv7 import read_csv7
 from cointrainer.features.simple_indicators import ema, rsi, atr, roc, obv
+from sklearn.preprocessing import StandardScaler
 
 try:
     # Optional at import time; actual training imports happen inside train()
@@ -40,7 +41,11 @@ def make_features(df: pd.DataFrame) -> pd.DataFrame:
     X["atr_14"] = atr(h, l, c, 14)
     X["roc_5"]  = roc(c, 5)
     X["obv"]    = obv(c, v)
-    return X
+    scaler = StandardScaler()
+    X_scaled = pd.DataFrame(
+        scaler.fit_transform(X), index=X.index, columns=X.columns
+    )
+    return X_scaled
 
 def make_labels(close: pd.Series, horizon: int, hold: float) -> pd.Series:
     future_ret = close.pct_change(horizon).shift(-horizon)
