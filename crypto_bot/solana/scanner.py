@@ -12,11 +12,14 @@ import ccxt.async_support as ccxt
 
 from crypto_bot.utils.solana_scanner import search_geckoterminal_token
 from crypto_bot.utils import symbol_scoring
+from crypto_bot.utils import kraken as kraken_utils
 
 logger = logging.getLogger(__name__)
 
 
-async def get_solana_new_tokens(cfg: Mapping[str, object]) -> List[str]:
+async def get_solana_new_tokens(
+    cfg: Mapping[str, object], exchange: kraken_utils.KrakenClient | None = None
+) -> List[str]:
     """Return a list of new token mint addresses using ``cfg`` options."""
 
     url = str(cfg.get("url", ""))
@@ -78,9 +81,33 @@ async def get_solana_new_tokens(cfg: Mapping[str, object]) -> List[str]:
         return []
 
     min_score = float(cfg.get("min_symbol_score", 0.0))
-    ex_name = str(cfg.get("exchange", "kraken")).lower()
+    ex = cfg.get("exchange", "kraken")
+    if isinstance(ex, dict):
+        ex_name = ex.get("name", "kraken").lower()
+        params = {"enableRateLimit": True}
+        timeout = ex.get("request_timeout_ms")
+        if timeout:
+            params["timeout"] = int(timeout)
+        max_conc = ex.get("max_concurrency")
+    else:
+        ex_name = str(ex).lower()
+        params = {"enableRateLimit": True}
+        max_conc = None
     exchange_cls = getattr(ccxt, ex_name)
-    exchange = exchange_cls({"enableRateLimit": True})
+    exchange = exchange_cls(params)
+    if max_conc is not None:
+        setattr(exchange, "max_concurrency", int(max_conc))
+    ex_name = str(cfg.get("exchange", "kraken")).lower()
+    if exchange is None:
+        if ex_name == "kraken":
+            exchange = kraken_utils.get_client()
+            close_exchange = False
+        else:
+            exchange_cls = getattr(ccxt, ex_name)
+            exchange = exchange_cls({"enableRateLimit": True})
+            close_exchange = True
+    else:
+        close_exchange = False
 
     try:
         scores = await asyncio.gather(
@@ -92,15 +119,16 @@ async def get_solana_new_tokens(cfg: Mapping[str, object]) -> List[str]:
             ]
         )
     finally:
-        close = getattr(exchange, "close", None)
-        if close:
-            try:
-                if asyncio.iscoroutinefunction(close):
-                    await close()
-                else:
-                    close()
-            except Exception:  # pragma: no cover - best effort
-                pass
+        if close_exchange:
+            close = getattr(exchange, "close", None)
+            if close:
+                try:
+                    if asyncio.iscoroutinefunction(close):
+                        await close()
+                    else:
+                        close()
+                except Exception:  # pragma: no cover - best effort
+                    pass
 
     scored = [
         (sym, score) for (sym, _), score in zip(resolved, scores) if score >= min_score

@@ -1,5 +1,8 @@
 import asyncio
+import json
+import hashlib
 import time
+from pathlib import Path
 from threading import Lock
 import logging
 from typing import AsyncIterator
@@ -34,6 +37,8 @@ pipeline_logger = logging.getLogger("pipeline")
 
 _cached_symbols: tuple[list[tuple[str, float]], list[str]] | None = None
 _last_refresh: float = 0.0
+_cached_hash: str | None = None
+SYMBOL_CACHE_FILE = Path(__file__).resolve().parents[2] / "cache" / "symbol_cache.json"
 _CACHE_INVALIDATION_LOCK = Lock()
 _LAST_INVALIDATION_TS = 0.0
 _INVALIDATION_DEBOUNCE_SEC = 10.0
@@ -44,10 +49,15 @@ _PREVIOUSLY_LOADED_STRATEGIES = False
 
 def _apply_invalidation(ts: float | None = None) -> None:
     """Apply the symbol cache invalidation."""
-    global _cached_symbols, _last_refresh, _LAST_INVALIDATION_TS
+    global _cached_symbols, _last_refresh, _LAST_INVALIDATION_TS, _cached_hash
     _LAST_INVALIDATION_TS = ts if ts is not None else time.time()
     _cached_symbols = None
     _last_refresh = 0.0
+    _cached_hash = None
+    try:
+        SYMBOL_CACHE_FILE.unlink()
+    except FileNotFoundError:
+        pass
     logger.info("Symbol cache invalidated")
 
 
@@ -120,6 +130,74 @@ async def _deferred_invalidation(
     _apply_invalidation(ts)
 
 
+def _relevant_config(config: dict) -> dict:
+    allowed_quotes_cfg = config.get("allowed_quotes") or config.get("trading", {}).get(
+        "allowed_quotes"
+    )
+    return {
+        "mode": config.get("mode"),
+        "symbol": config.get("symbol"),
+        "symbols": config.get("symbols"),
+        "symbol_filter": config.get("symbol_filter"),
+        "onchain_symbols": config.get("onchain_symbols"),
+        "allowed_quotes": allowed_quotes_cfg,
+    }
+
+
+def compute_config_hash(config: dict) -> str:
+    """Return a stable hash for relevant config fields."""
+    data = json.dumps(_relevant_config(config), sort_keys=True, default=str)
+    return hashlib.sha256(data.encode()).hexdigest()
+
+
+def get_cached_config_hash() -> str | None:
+    """Return the config hash stored with the symbol cache."""
+    global _cached_hash
+    if _cached_hash is None and SYMBOL_CACHE_FILE.exists():
+        try:
+            data = json.loads(SYMBOL_CACHE_FILE.read_text())
+            _cached_hash = data.get("hash")
+        except Exception:  # pragma: no cover - best effort
+            _cached_hash = None
+    return _cached_hash
+
+
+def _load_disk_cache() -> None:
+    """Load cached symbols from disk into memory."""
+    global _cached_symbols, _last_refresh, _cached_hash
+    if not SYMBOL_CACHE_FILE.exists():
+        return
+    try:
+        data = json.loads(SYMBOL_CACHE_FILE.read_text())
+        syms = [(str(s), float(v)) for s, v in data.get("symbols", [])]
+        onchain = [str(s) for s in data.get("onchain", [])]
+        _cached_symbols = (syms, onchain)
+        _last_refresh = float(data.get("timestamp", 0.0))
+        _cached_hash = data.get("hash")
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.warning("Failed to read %s: %s", SYMBOL_CACHE_FILE, exc)
+        _cached_symbols = None
+        _last_refresh = 0.0
+        _cached_hash = None
+
+
+def _save_disk_cache(
+    symbols: list[tuple[str, float]], onchain: list[str], cfg_hash: str, ts: float
+) -> None:
+    """Persist symbol cache to disk."""
+    try:
+        SYMBOL_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "timestamp": ts,
+            "hash": cfg_hash,
+            "symbols": symbols,
+            "onchain": onchain,
+        }
+        SYMBOL_CACHE_FILE.write_text(json.dumps(data))
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.warning("Failed to write %s: %s", SYMBOL_CACHE_FILE, exc)
+
+
 async def get_filtered_symbols(
     exchange, config
 ) -> tuple[list[tuple[str, float]], list[str]]:
@@ -128,13 +206,23 @@ async def get_filtered_symbols(
     Results are cached for ``symbol_refresh_minutes`` minutes to avoid
     unnecessary API calls.
     """
-    global _cached_symbols, _last_refresh
+    global _cached_symbols, _last_refresh, _cached_hash
 
     refresh_m = config.get("symbol_refresh_minutes", 30)
     now = time.time()
+    cfg_hash = compute_config_hash(config)
     sf = config.get("symbol_filter", {})
 
-    if _cached_symbols is not None and now - _last_refresh < refresh_m * 60:
+    if _cached_symbols is None:
+        _load_disk_cache()
+
+    if (
+        _cached_symbols is not None
+        and _cached_hash == cfg_hash
+        and now - _last_refresh < refresh_m * 60
+    ):
+        age = int(now - _last_refresh)
+        logger.info("Using cached symbols (age=%ds)", age)
         pipeline_logger.info(
             "discovered_cex=%d discovered_onchain=%d",
             len(_cached_symbols[0]),
@@ -152,6 +240,8 @@ async def get_filtered_symbols(
         result = [(s, 0.0) for s in syms]
         _cached_symbols = (result, [])
         _last_refresh = now
+        _cached_hash = cfg_hash
+        _save_disk_cache(result, [], cfg_hash, now)
         return result, []
 
     mode = config.get("mode", "cex")
@@ -199,8 +289,10 @@ async def get_filtered_symbols(
         len(onchain),
     )
     if not symbols:
-        _cached_symbols = []
+        _cached_symbols = ([], onchain)
         _last_refresh = now
+        _cached_hash = cfg_hash
+        _save_disk_cache([], onchain, cfg_hash, now)
         return [], onchain
     cleaned_symbols = []
     onchain_syms: list[str] = []
@@ -243,6 +335,10 @@ async def get_filtered_symbols(
                 "No symbols met volume/spread requirements; consider adjusting symbol_filter in config. Rejected %d symbols",
                 skipped_main,
             )
+            _cached_symbols = ([], onchain)
+            _last_refresh = now
+            _cached_hash = cfg_hash
+            _save_disk_cache([], onchain, cfg_hash, now)
             return [], onchain
 
         skipped_before = telemetry.snapshot().get("scan.symbols_skipped", 0)
@@ -266,6 +362,10 @@ async def get_filtered_symbols(
                 skipped_main,
                 skipped_fb,
             )
+            _cached_symbols = ([], onchain)
+            _last_refresh = now
+            _cached_hash = cfg_hash
+            _save_disk_cache([], onchain, cfg_hash, now)
             return [], onchain
 
         logger.warning(
@@ -285,6 +385,8 @@ async def get_filtered_symbols(
     if scored or onchain_syms:
         _cached_symbols = (scored, onchain_syms)
         _last_refresh = now
+        _cached_hash = cfg_hash
+        _save_disk_cache(scored, onchain_syms, cfg_hash, now)
 
     exchange_id = getattr(exchange, "id", "unknown")
     quote_whitelist = sf.get("quote_whitelist")
