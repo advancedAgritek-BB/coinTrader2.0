@@ -3,6 +3,7 @@ import pytest
 
 import importlib.util
 import pathlib
+import types
 
 path = pathlib.Path(__file__).resolve().parents[1] / "crypto_bot" / "strategy" / "micro_scalp_bot.py"
 spec = importlib.util.spec_from_file_location("micro_scalp_bot", path)

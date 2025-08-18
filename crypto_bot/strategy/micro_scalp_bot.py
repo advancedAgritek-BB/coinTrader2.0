@@ -60,8 +60,6 @@ def generate_signal(
     tick_data: pd.DataFrame | None = None,
     book: Optional[dict] = None,
     ticks: Optional[pd.DataFrame] = None,
-    symbol: str | None = None,
-    timeframe: str | None = None,
 ) -> Tuple[float, str]:
     """Return short-term signal using EMA crossover on 1m data.
 
