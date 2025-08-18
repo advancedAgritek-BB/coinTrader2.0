@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import inspect
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import re
 import subprocess
@@ -20,7 +21,6 @@ from typing import Any, Awaitable, Callable
 import aiohttp
 from dotenv import dotenv_values, load_dotenv
 
-from crypto_bot.utils.logging_config import setup_logging
 from crypto_bot.universe import build_tradable_set
 
 try:
@@ -60,6 +60,42 @@ except Exception:  # pragma: no cover - fallback if strategies module missing
         return []
 
 shutdown_event = asyncio.Event()
+
+
+lastlog = types.SimpleNamespace(last="")
+
+
+class LastLineHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover - trivial
+        try:
+            lastlog.last = record.getMessage()
+        except Exception:
+            pass
+
+
+def setup_logging() -> None:
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+
+    for h in list(root.handlers):
+        root.removeHandler(h)
+
+    fh = RotatingFileHandler("bot.log", maxBytes=5_000_000, backupCount=3)
+    fh.setLevel(logging.INFO)
+    fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    root.addHandler(fh)
+
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.ERROR)
+    ch.setFormatter(logging.Formatter("%(message)s"))
+    root.addHandler(ch)
+
+    logging.getLogger("ccxt").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
+    logging.getLogger("websockets").setLevel(logging.WARNING)
+
+    root.addHandler(LastLineHandler())
 
 
 def format_top(scores, n: int = 25) -> str:
@@ -2842,7 +2878,6 @@ async def _rotation_loop(
 
 async def _main_impl() -> MainResult:
     """Implementation for running the trading bot."""
-    lastlog = setup_logging("logs/bot.log", level=logging.INFO)
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config, _ = await load_config_async()
@@ -3552,6 +3587,7 @@ async def shutdown(calling_task: asyncio.Task | None = None) -> None:
 
 async def main() -> None:
     """Entry point for running the trading bot with error handling."""
+    setup_logging()
     load_dotenv()
     _ensure_user_setup()
     load_dotenv(override=True)
