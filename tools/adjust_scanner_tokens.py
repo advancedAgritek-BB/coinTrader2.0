@@ -1,53 +1,13 @@
 from __future__ import annotations
 
-"""Adjust solana_scanner.max_tokens_per_scan based on BTC balance."""
-
 import asyncio
 from pathlib import Path
 import yaml
-import os
 import ccxt.async_support as ccxt
 
-from crypto_bot.utils.symbol_utils import fix_symbol
+from configy import load_config
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "crypto_bot" / "config.yaml"
-
-
-def load_config() -> dict:
-    if CONFIG_PATH.exists():
-        with open(CONFIG_PATH) as f:
-            data = yaml.safe_load(f) or {}
-    else:
-        data = {}
-
-    strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
-    trend_file = strat_dir / "trend_bot.yaml"
-    if trend_file.exists():
-        with open(trend_file) as sf:
-            overrides = yaml.safe_load(sf) or {}
-        trend_cfg = data.get("trend_bot", {})
-        if isinstance(trend_cfg, dict):
-            trend_cfg.update(overrides)
-        else:
-            trend_cfg = overrides
-        data["trend_bot"] = trend_cfg
-    if "symbol" in data:
-        data["symbol"] = fix_symbol(data["symbol"])
-    if "symbols" in data:
-        data["symbols"] = [fix_symbol(s) for s in data.get("symbols", [])]
-
-    trading_cfg = data.get("trading", {}) or {}
-    raw_ex = data.get("exchange") or trading_cfg.get("exchange") or os.getenv("EXCHANGE")
-    if isinstance(raw_ex, dict):
-        ex_cfg = dict(raw_ex)
-    else:
-        ex_cfg = {"name": raw_ex}
-    ex_cfg.setdefault("name", "kraken")
-    ex_cfg.setdefault("max_concurrency", 3)
-    ex_cfg.setdefault("request_timeout_ms", 10000)
-    data["exchange"] = ex_cfg
-
-    return data
 
 
 async def fetch_btc_balance(exchange) -> float:

@@ -1,41 +1,10 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import asyncio
-import yaml
 
+from configy import load_config
 from crypto_bot.utils.telegram import send_test_message
-from crypto_bot.utils.symbol_utils import fix_symbol
-
-CONFIG_PATH = Path(__file__).resolve().parents[1] / "crypto_bot" / "config.yaml"
-
-
-def load_config() -> dict:
-    """Load YAML configuration if available."""
-    if CONFIG_PATH.exists():
-        with open(CONFIG_PATH) as f:
-            data = yaml.safe_load(f) or {}
-    else:
-        data = {}
-
-    strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
-    trend_file = strat_dir / "trend_bot.yaml"
-    if trend_file.exists():
-        with open(trend_file) as sf:
-            overrides = yaml.safe_load(sf) or {}
-        trend_cfg = data.get("trend_bot", {})
-        if isinstance(trend_cfg, dict):
-            trend_cfg.update(overrides)
-        else:
-            trend_cfg = overrides
-        data["trend_bot"] = trend_cfg
-
-    if "symbol" in data:
-        data["symbol"] = fix_symbol(data["symbol"])
-    if "symbols" in data:
-        data["symbols"] = [fix_symbol(s) for s in data.get("symbols", [])]
-    return data
 
 
 def main() -> None:
