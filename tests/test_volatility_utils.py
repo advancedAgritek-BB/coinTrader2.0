@@ -17,20 +17,17 @@ def _dummy_df():
 def test_normalize_uses_window(monkeypatch):
     captured = {}
 
-    def fake_atr(df, window=14, **kwargs):
-        captured["val"] = kwargs.get("period", window)
-        return pd.Series([2.0])
+    def fake_atr(df, period=14, as_series=False):
+        captured["val"] = period
+        return 2.0
 
     monkeypatch.setattr(vol, "calc_atr", fake_atr)
     result = vol.normalize_score_by_volatility(_dummy_df(), 14.0, atr_period=7)
     assert captured["val"] == 7
-    assert result == pytest.approx(35.0)
+    assert result == pytest.approx(7.0)
 
 
-def test_returns_score_on_failure(monkeypatch):
-    def fake_atr(df, window=14, **kwargs):
-        raise RuntimeError("bad atr")
-
-    monkeypatch.setattr(vol, "calc_atr", fake_atr)
+def test_returns_input_when_atr_nan(monkeypatch):
+    monkeypatch.setattr(vol, "calc_atr", lambda *a, **k: float("nan"))
     df = _dummy_df()
     assert vol.normalize_score_by_volatility(df, 5.0) == pytest.approx(5.0)
