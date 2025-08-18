@@ -34,7 +34,13 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
     exchange access.
     """
 
-    exchange_name = config.get("exchange", "coinbase")
+    raw_ex = config.get("exchange", "coinbase")
+    if isinstance(raw_ex, dict):
+        exchange_cfg = dict(raw_ex)
+        exchange_name = exchange_cfg.get("name", "coinbase")
+    else:
+        exchange_cfg = {}
+        exchange_name = raw_ex
     use_ws = config.get("use_websocket", False)
     requested_private_ws = config.get("kraken", {}).get(
         "use_private_ws", kraken.use_private_ws
@@ -45,15 +51,23 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
     api_key = env_or_prompt("API_KEY", "Enter API key: ") or None
     api_secret = env_or_prompt("API_SECRET", "Enter API secret: ") or None
 
+    params = {
+        "apiKey": api_key,
+        "secret": api_secret,
+        "enableRateLimit": True,
+    }
+    timeout = exchange_cfg.get("request_timeout_ms")
+    if timeout:
+        params["timeout"] = int(timeout)
+
+    if exchange_cfg.get("max_concurrency") is not None:
+        max_conc = int(exchange_cfg["max_concurrency"])
+    else:
+        max_conc = None
+
     if exchange_name == "coinbase":
-        exchange = ccxt.coinbase(
-            {
-                "apiKey": api_key,
-                "secret": api_secret,
-                "password": os.getenv("API_PASSPHRASE"),
-                "enableRateLimit": True,
-            }
-        )
+        params["password"] = os.getenv("API_PASSPHRASE")
+        exchange = ccxt.coinbase(params)
     elif exchange_name == "kraken":
         exchange = kraken.get_client(api_key, api_secret)
 
@@ -79,6 +93,7 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
                     logger.warning("Failed to initialize Kraken WS client: %s", err)
                     ws_client = None
 
+        exchange = ccxt.kraken(params)
         exchange = KrakenClient(
             ccxt.kraken(
                 {
@@ -92,6 +107,8 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
         raise ValueError(f"Unsupported exchange: {exchange_name}")
 
     exchange.options["ws_scan"] = config.get("use_websocket", False)
+    if max_conc is not None:
+        setattr(exchange, "max_concurrency", max_conc)
 
     return exchange, ws_client
 
@@ -100,12 +117,23 @@ def get_exchanges(config) -> Dict[str, Tuple[ccxt.Exchange, Optional[KrakenWSCli
     """Return exchange instances for all configured CEXes."""
     names = config.get("exchanges")
     if not names:
-        primary = config.get("primary_exchange") or config.get("exchange")
+        raw_ex = config.get("exchange")
+        if isinstance(raw_ex, dict):
+            ex_name = raw_ex.get("name")
+        else:
+            ex_name = raw_ex
+        primary = config.get("primary_exchange") or ex_name
         names = [name for name in [primary, config.get("secondary_exchange")] if name]
     result: Dict[str, Tuple[ccxt.Exchange, Optional[KrakenWSClient]]] = {}
     for name in names:
         cfg = dict(config)
-        cfg["exchange"] = name
+        base_ex = config.get("exchange")
+        if isinstance(base_ex, dict):
+            new_ex = dict(base_ex)
+            new_ex["name"] = name
+            cfg["exchange"] = new_ex
+        else:
+            cfg["exchange"] = name
         result[name] = get_exchange(cfg)
     return result
 

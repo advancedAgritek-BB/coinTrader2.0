@@ -1,5 +1,8 @@
 mode: paper
-exchange: kraken
+exchange:
+  name: kraken
+  max_concurrency: 3
+  request_timeout_ms: 10000
 timeframes: ["1h", "4h", "1d"]
 ohlcv:
   bootstrap_timeframes: ['1h']
