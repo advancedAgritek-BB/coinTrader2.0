@@ -7,8 +7,12 @@ logger = logging.getLogger(__name__)
 
 
 def calc_atr(
-    df: pd.DataFrame | None, window: int = 14, **kwargs
-) -> pd.Series:
+    df: pd.DataFrame | None,
+    window: int = 14,
+    *,
+    as_series: bool = True,
+    **kwargs,
+) -> pd.Series | float | None:
     """Compute the Average True Range using ``window`` or ``period``."""
 
     period = kwargs.get("period")
@@ -16,14 +20,22 @@ def calc_atr(
         window = int(period)
 
     if df is None or df.empty or len(df) < max(2, int(window)):
-        if df is not None and "close" in df:
-            return df["close"].iloc[:0]
-        return pd.Series([], dtype=float)
+        if as_series:
+            if df is not None and "close" in df:
+                return df["close"].iloc[:0]
+            return pd.Series([], dtype=float)
+        return None
 
     atr_indicator = AverageTrueRange(
         df["high"], df["low"], df["close"], window=int(window), fillna=False
     )
-    return atr_indicator.average_true_range()
+    atr_series = atr_indicator.average_true_range()
+    if as_series:
+        return atr_series
+    if atr_series.empty:
+        return None
+    value = float(atr_series.iloc[-1])
+    return 0.0 if math.isnan(value) else value
 
 
 def atr_percent(df: pd.DataFrame, period: int = 14) -> float:

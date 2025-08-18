@@ -3,9 +3,8 @@ from typing import Dict, Optional, Tuple
 import pandas as pd
 import ta
 
-from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.utils import volatility
 from crypto_bot.utils.pair_cache import load_liquid_pairs
-from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
@@ -129,7 +128,7 @@ def generate_signal(
 
     price_change = df["close"].iloc[-1] / first_close - 1
     if direction == "auto" and price_change < 0:
-        atr = calc_atr(df)
+        atr_value = volatility.calc_atr(df, period=atr_window, as_series=False)
         score = 1.0
         if MODEL is not None:
             try:  # pragma: no cover - best effort
@@ -138,9 +137,9 @@ def generate_signal(
             except Exception:
                 pass
         if config is None or config.get("atr_normalization", True):
-            score = normalize_score_by_volatility(df, score)
+            score = volatility.normalize_score_by_volatility(df, score)
         logger.info("Signal for %s: %s, %s", symbol, score, "short")
-        return score, "short", atr, False
+        return score, "short", atr_value or 0.0, False
 
     base_volume = df["volume"].iloc[:initial_window].mean()
     vol_ratio = df["volume"].iloc[-1] / base_volume if base_volume > 0 else 0
@@ -181,7 +180,7 @@ def generate_signal(
             except Exception:
                 pass
         if config is None or config.get("atr_normalization", True):
-            score = normalize_score_by_volatility(df, score)
+            score = volatility.normalize_score_by_volatility(df, score)
         if direction not in {"auto", "long", "short"}:
             direction = "auto"
         trade_direction = direction
@@ -194,11 +193,11 @@ def generate_signal(
     score = 0.0
 
     if price_fallback:
-        atr_series = calc_atr(df)
-        if len(atr_series) == 0 or atr_series.iloc[-1] <= 0:
+        atr_value = volatility.calc_atr(df, period=atr_window, as_series=False)
+        if atr_value is None or atr_value <= 0:
             logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
             return 0.0, "none", 0.0, event
-        atr = float(atr_series.iloc[-1])
+        atr = atr_value
         body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
         avg_vol = df["volume"].iloc[:-1].mean()
         if (
@@ -214,7 +213,7 @@ def generate_signal(
                 except Exception:
                     pass
             if config is None or config.get("atr_normalization", True):
-                score = normalize_score_by_volatility(df, score)
+                score = volatility.normalize_score_by_volatility(df, score)
             if direction not in {"auto", "long", "short"}:
                 direction = "auto"
             trade_direction = direction
