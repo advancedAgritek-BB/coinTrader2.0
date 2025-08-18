@@ -24,6 +24,8 @@ from crypto_bot.utils.token_registry import (
     get_symbol_from_mint,
 )
 
+NAME = "meme_sniper"
+
 logger = setup_logger(__name__, LOG_DIR / "meme_sniper.log")
 
 

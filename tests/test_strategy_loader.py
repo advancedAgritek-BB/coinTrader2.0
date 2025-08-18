@@ -4,6 +4,7 @@ import types
 import pytest
 
 from crypto_bot.strategies.loader import load_strategies
+from crypto_bot.strategy.loader import load_strategies as load_all_strategies
 
 
 def _make_module(name: str) -> types.ModuleType:
@@ -43,3 +44,10 @@ def test_load_strategies_fallback(patch_strategy_modules):
         "micro_scalp_bot",
         "trend_bot",
     ]
+
+
+def test_loaded_strategy_names_non_empty():
+    loaded, _ = load_all_strategies()
+    assert loaded, "no strategies loaded"
+    for inst in loaded.values():
+        assert inst.name.strip(), "strategy name is empty"

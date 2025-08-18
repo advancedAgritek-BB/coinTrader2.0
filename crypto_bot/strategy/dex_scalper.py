@@ -8,6 +8,7 @@ from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 
+NAME = "dex_scalper"
 ALLOWED_PAIRS = load_liquid_pairs() or []
 
 

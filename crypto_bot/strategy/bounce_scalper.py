@@ -31,6 +31,7 @@ from crypto_bot.cooldown_manager import in_cooldown, mark_cooldown
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
+NAME = "bounce_scalper"
 logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - optional dependency

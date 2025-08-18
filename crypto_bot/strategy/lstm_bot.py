@@ -5,6 +5,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
+NAME = "lstm_bot"
 
 try:  # pragma: no cover - optional trainer
     from coinTrader_Trainer.ml_trainer import load_model

@@ -6,7 +6,7 @@ from crypto_bot.utils import volatility
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
-
+NAME = "sniper_bot"
 DEFAULT_PAIRS = ["BTC/USD", "ETH/USD"]
 ALLOWED_PAIRS = load_liquid_pairs() or DEFAULT_PAIRS
 

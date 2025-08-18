@@ -9,6 +9,8 @@ from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
 logger = logging.getLogger(__name__)
 
+NAME = "momentum_bot"
+
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model
     ML_AVAILABLE = True

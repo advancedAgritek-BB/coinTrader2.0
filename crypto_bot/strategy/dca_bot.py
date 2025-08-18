@@ -2,6 +2,7 @@ from typing import Optional, Tuple
 
 import pandas as pd
 
+NAME = "dca_bot"
 
 def generate_signal(
     df: pd.DataFrame,

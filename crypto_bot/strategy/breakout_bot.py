@@ -43,6 +43,7 @@ from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
+NAME = "breakout_bot"
 logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - optional dependency

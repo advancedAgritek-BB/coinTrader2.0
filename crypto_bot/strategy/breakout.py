@@ -9,6 +9,7 @@ import ta
 from crypto_bot.utils import stats
 from crypto_bot.utils.indicator_cache import cache_series
 
+NAME = "breakout"
 logger = logging.getLogger(__name__)
 
 
