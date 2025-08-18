@@ -9,6 +9,11 @@ features:
   pump_monitor: false
   telegram: false
 
+ohlcv:
+  storage_path: crypto_bot/data/ohlcv   # directory for persisted OHLCV data
+  tail_overlap_bars: 3                  # overlap bars to avoid gaps when appending
+  max_bootstrap_bars: 1000              # limit initial bootstrap to this many bars
+
 solana_rpc: https://api.mainnet-beta.solana.com  # Custom endpoint
 yamlmeme_sniper:
   min_pump_prob: 0.6  # Assessment threshold

@@ -13,6 +13,12 @@ trading:
   hft_symbols: ["BTC/USD","ETH/USD","SOL/USDC","BONK/USDC"]   # seed list, can expand
   exclude_symbols: ["AIBTC/USD"]   # remove noisy/synthetic pairs
 
+# === ohlcv cache ===
+ohlcv:
+  storage_path: crypto_bot/data/ohlcv   # directory for persisted OHLCV data
+  tail_overlap_bars: 3                  # overlap bars to avoid gaps when appending
+  max_bootstrap_bars: 1000              # limit initial bootstrap to this many bars
+
 # Default on-chain universe and scanner options
 onchain_symbols: ["SOL/USDC"]
 solana_scanner:

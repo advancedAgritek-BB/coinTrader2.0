@@ -8,12 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Deque, Dict, List, Optional, Union
 
-try:
-    import ccxt  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    import types
-
-    ccxt = types.SimpleNamespace()
+from crypto_bot.utils import kraken
 
 import keyring
 from websocket import WebSocketApp
@@ -421,6 +416,7 @@ class KrakenWSClient:
         api_key: Optional[str] = None,
         api_secret: Optional[str] = None,
         ws_token: Optional[str] = None,
+        exchange: Optional[kraken.KrakenClient] = None,
     ):
         if api_key is None:
             api_key = keyring.get_password("kraken", "api_key")
@@ -440,15 +436,12 @@ class KrakenWSClient:
         # Tokens can be supplied via environment variables to avoid repeated REST calls
         self.ws_token = ws_token or os.getenv("KRAKEN_WS_TOKEN")
 
-        self.exchange = None
-        if self.api_key and self.api_secret:
-            self.exchange = ccxt.kraken(
-                {
-                    "apiKey": self.api_key,
-                    "secret": self.api_secret,
-                    "enableRateLimit": True,
-                }
-            )
+        self.exchange = exchange
+        if self.exchange is None and self.api_key and self.api_secret:
+            try:
+                self.exchange = kraken.get_client(self.api_key, self.api_secret)
+            except Exception:  # pragma: no cover - optional dependency
+                self.exchange = None
 
         self.token: Optional[str] = self.ws_token
         self.token_created: Optional[datetime] = None

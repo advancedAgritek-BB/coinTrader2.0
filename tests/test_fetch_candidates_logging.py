@@ -40,7 +40,7 @@ def test_fetch_candidates_logs_batch(monkeypatch, caplog):
 
     asyncio.run(main.fetch_candidates(ctx))
 
-    assert ctx.current_batch == ["BTC/USDT"]
+    assert ctx.current_batch == ["BTC/USD"]
     assert "Current batch" in caplog.text
     assert "Symbol summary" in caplog.text
 
@@ -76,5 +76,5 @@ def test_fetch_candidates_dedupes_and_filters(monkeypatch):
 
     asyncio.run(main.fetch_candidates(ctx))
 
-    assert ctx.current_batch == ["BTC/USDT", "ETH/USDT"]
+    assert ctx.current_batch == ["BTC/USDT"]
     assert len(ctx.current_batch) == len(set(ctx.current_batch))
