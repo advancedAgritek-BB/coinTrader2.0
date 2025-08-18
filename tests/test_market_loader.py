@@ -1,4 +1,5 @@
 import asyncio
+import json
 import pandas as pd
 import pytest
 import logging
@@ -18,6 +19,12 @@ from crypto_bot.utils.market_loader import (
     update_multi_tf_ohlcv_cache,
     update_regime_tf_cache,
 )
+
+
+@pytest.fixture(autouse=True)
+def clear_listing_cache():
+    from crypto_bot.utils import market_loader
+    market_loader._LISTING_DATE_CACHE.clear()
 
 
 class DummyExchange:
@@ -607,6 +614,7 @@ class DummyLargeExchange:
 
     def __init__(self):
         self.data = [[i * 3600] + [i] * 5 for i in range(200)]
+        self.markets = {"BTC/USD": {"symbol": "BTC/USD"}}
 
     async def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=100):
         if since is not None and since > self.data[-1][0] and since // 1000 <= self.data[-1][0]:
@@ -624,6 +632,40 @@ def test_update_ohlcv_cache_respects_requested_limit():
         update_ohlcv_cache(ex, cache, ["BTC/USD"], limit=50, max_concurrent=2)
     )
     assert len(cache["BTC/USD"]) == 50
+
+
+def test_update_ohlcv_cache_saves_trimmed(monkeypatch, tmp_path):
+    from crypto_bot.utils import market_loader
+
+    market_loader._last_snapshot_time = 0
+    ex = DummyLargeExchange()
+    cache: dict[str, pd.DataFrame] = {}
+
+    saved: dict = {}
+
+    def fake_save(df, symbol, timeframe, storage_path):
+        saved["df"] = df
+        saved["symbol"] = symbol
+        saved["timeframe"] = timeframe
+        saved["storage_path"] = storage_path
+
+    monkeypatch.setattr(market_loader, "save_ohlcv", fake_save)
+
+    asyncio.run(
+        update_ohlcv_cache(
+            ex,
+            cache,
+            ["BTC/USD"],
+            limit=4,
+            max_concurrent=2,
+            config={"storage_path": tmp_path, "max_bootstrap_bars": 3},
+        )
+    )
+
+    assert saved["symbol"] == "BTC/USD"
+    assert saved["timeframe"] == "1h"
+    assert saved["storage_path"] == tmp_path
+    assert len(saved["df"]) == 3
 
 
 class CountingExchange:
@@ -1025,6 +1067,49 @@ def test_update_multi_tf_ohlcv_cache_priority_queue(monkeypatch):
     assert not pq
 
 
+def test_update_multi_tf_ohlcv_cache_resume(tmp_path, monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    state_file = tmp_path / "state.json"
+    monkeypatch.setattr(market_loader, "BOOTSTRAP_STATE_FILE", state_file)
+    monkeypatch.setattr(market_loader, "CACHE_DIR", tmp_path)
+
+    calls: list[str] = []
+
+    async def fake_update_ohlcv_cache(exchange, tf_cache, symbols, **kwargs):
+        calls.extend(symbols)
+        for s in symbols:
+            tf_cache[s] = pd.DataFrame(
+                [[0, 0, 0, 0, 0, 0]],
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
+        return tf_cache
+
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update_ohlcv_cache)
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", lambda _s: 0)
+
+    ex = DummyMultiTFExchange()
+    cache: dict[str, dict[str, pd.DataFrame]] = {}
+    cfg = {"timeframes": ["1h"]}
+
+    asyncio.run(
+        market_loader.update_multi_tf_ohlcv_cache(
+            ex, cache, ["BTC/USD", "ETH/USD"], cfg, limit=1
+        )
+    )
+    data = json.loads(state_file.read_text())
+    assert set(data.get("1h", [])) == {"BTC/USD", "ETH/USD"}
+    assert set(calls) == {"BTC/USD", "ETH/USD"}
+
+    calls.clear()
+    asyncio.run(
+        market_loader.update_multi_tf_ohlcv_cache(
+            ex, cache, ["BTC/USD", "ETH/USD"], cfg, limit=1
+        )
+    )
+    assert calls == []
+
+
 def test_update_multi_tf_ohlcv_cache_skips_unsupported_tf(caplog):
     ex = LimitedTFExchange()
     caplog.set_level(logging.INFO)
@@ -1042,6 +1127,111 @@ def test_update_multi_tf_ohlcv_cache_skips_unsupported_tf(caplog):
     assert any(
         "Skipping unsupported timeframes" in r.getMessage() for r in caplog.records
     )
+
+
+def test_update_multi_tf_ohlcv_cache_notifier(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    class DummyNotifier:
+        def __init__(self):
+            self.msgs: list[str] = []
+
+        async def notify_async(self, text):
+            self.msgs.append(text)
+
+    monkeypatch.setattr(market_loader, "load_enabled", lambda _c: None)
+
+    async def _no_enqueue(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(market_loader, "_maybe_enqueue_eval", _no_enqueue)
+    monkeypatch.setattr(
+        market_loader, "resolve_listed_symbol", lambda *_a, **_k: "BTC/USD"
+    )
+
+    async def fake_update(exchange, tf_cache, symbols, **kwargs):
+        for s in symbols:
+            tf_cache[s] = pd.DataFrame(
+                [[0, 0, 0, 0, 0, 0]],
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
+        return tf_cache
+
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
+    async def fake_load_ohlcv(*_a, **_k):
+        return [[0, 0, 0, 0, 0, 0]]
+
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_load_ohlcv)
+
+    notifier = DummyNotifier()
+    ex = DummyMultiTFExchange()
+    cfg = {"timeframes": ["1h", "4h"], "telegram": {"bootstrap_updates": True}}
+
+    asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["BTC/USD"],
+            cfg,
+            limit=1,
+            notifier=notifier,
+        )
+    )
+
+    assert any("Starting OHLCV update" in m for m in notifier.msgs)
+    assert any("Completed OHLCV update" in m for m in notifier.msgs)
+
+
+def test_update_multi_tf_ohlcv_cache_notifier_disabled(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    class DummyNotifier:
+        def __init__(self):
+            self.msgs: list[str] = []
+
+        async def notify_async(self, text):
+            self.msgs.append(text)
+
+    monkeypatch.setattr(market_loader, "load_enabled", lambda _c: None)
+
+    async def _no_enqueue(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(market_loader, "_maybe_enqueue_eval", _no_enqueue)
+    monkeypatch.setattr(
+        market_loader, "resolve_listed_symbol", lambda *_a, **_k: "BTC/USD"
+    )
+
+    async def fake_update(exchange, tf_cache, symbols, **kwargs):
+        for s in symbols:
+            tf_cache[s] = pd.DataFrame(
+                [[0, 0, 0, 0, 0, 0]],
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
+        return tf_cache
+
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
+    async def fake_load_ohlcv(*_a, **_k):
+        return [[0, 0, 0, 0, 0, 0]]
+
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_load_ohlcv)
+
+    notifier = DummyNotifier()
+    ex = DummyMultiTFExchange()
+    cfg = {"timeframes": ["1h"], "telegram": {"bootstrap_updates": False}}
+
+    asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["BTC/USD"],
+            cfg,
+            limit=1,
+            notifier=notifier,
+        )
+    )
+
+    assert notifier.msgs == []
 
 
 class MixedTFExchange(DummyMultiTFExchange):
@@ -2544,3 +2734,46 @@ def test_listing_date_concurrency(monkeypatch):
     )
 
     assert 1 < max_active <= 2
+
+
+def test_listing_date_cache(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    calls: list[str] = []
+
+    async def listing_date(sym: str):
+        calls.append(sym)
+        return 1
+
+    async def fake_update(*_a, **_k):
+        return {}
+
+    market_loader._LISTING_DATE_CACHE.clear()
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", listing_date)
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
+    monkeypatch.setattr(market_loader, "fetch_dex_ohlcv", lambda *a, **k: [])
+    async def fake_load(*a, **k):
+        return []
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_load)
+
+    ex = DummyMultiTFExchange()
+    asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["A/USD"],
+            {"timeframes": ["1h"]},
+            limit=1,
+        )
+    )
+    asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["A/USD"],
+            {"timeframes": ["1h"]},
+            limit=1,
+        )
+    )
+
+    assert calls == ["A/USD"]

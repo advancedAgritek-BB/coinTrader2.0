@@ -6,7 +6,9 @@ import asyncio
 import inspect
 import time
 import os
+from collections import deque
 from pathlib import Path
+from collections import deque
 from datetime import datetime, timezone, timedelta
 import yaml
 import pandas as pd
@@ -15,6 +17,7 @@ import aiohttp
 import base58
 import contextlib
 import logging
+import json
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -71,7 +74,71 @@ async def get_kraken_listing_date(symbol: str) -> Optional[int]:
 
 _last_snapshot_time = 0
 
+# cache of Kraken listing dates: symbol -> (timestamp_ms | None, fetch_time)
+_LISTING_DATE_CACHE: Dict[str, tuple[Optional[int], float]] = {}
+
+
+async def _get_listing_dates(
+    symbols: Iterable[str],
+    config: Dict[str, Any],
+    refresh: bool = False,
+    ttl: int | None = None,
+) -> Dict[str, Optional[int]]:
+    """Return listing dates for *symbols* with optional caching.
+
+    Parameters
+    ----------
+    refresh : bool, optional
+        If ``True`` all cached values are ignored and fetched again.
+    ttl : int | None, optional
+        Maximum age in seconds for cached values. ``None`` disables expiry.
+    """
+
+    now = time.time()
+    results: Dict[str, Optional[int]] = {}
+    to_fetch: list[str] = []
+    for sym in set(symbols):
+        if not refresh:
+            cached = _LISTING_DATE_CACHE.get(sym)
+            if cached and (ttl is None or now - cached[1] < ttl):
+                results[sym] = cached[0]
+                continue
+        to_fetch.append(sym)
+
+    if to_fetch:
+        concurrency = int(config.get("listing_date_concurrency", 5) or 0)
+        semaphore = asyncio.Semaphore(concurrency) if concurrency > 0 else None
+
+        async def _fetch(sym: str) -> tuple[str, Optional[int]]:
+            if semaphore:
+                async with semaphore:
+                    ts = await get_kraken_listing_date(sym)
+            else:
+                ts = await get_kraken_listing_date(sym)
+            return sym, ts
+
+        start_list = time.perf_counter()
+        tasks = [asyncio.create_task(_fetch(sym)) for sym in to_fetch]
+        fetched = await asyncio.gather(*tasks, return_exceptions=True)
+        for res in fetched:
+            if isinstance(res, Exception):
+                logger.exception("listing date fetch failed: %s", res)
+                continue
+            sym, ts = res
+            _LISTING_DATE_CACHE[sym] = (ts, now)
+            results[sym] = ts
+        logger.debug(
+            "listing date fetch for %d symbols took %.2fs",
+            len(to_fetch),
+            time.perf_counter() - start_list,
+        )
+
+    return results
+
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
+
+CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
+BOOTSTRAP_STATE_FILE = CACHE_DIR / "ohlcv_bootstrap_state.json"
 
 UNSUPPORTED_SYMBOLS: set[str] = {
     "AIBTC/EUR",
@@ -109,6 +176,23 @@ def is_supported_symbol(symbol: str) -> bool:
 
     return symbol not in UNSUPPORTED_SYMBOLS and not is_synthetic_symbol(symbol)
 
+
+def save_ohlcv(
+    df: pd.DataFrame, symbol: str, timeframe: str, storage_path: str | Path
+) -> None:
+    """Persist OHLCV ``df`` for ``symbol`` under ``storage_path``.
+
+    The file is written as ``<storage_path>/<timeframe>/<symbol>.csv`` where
+    ``symbol`` has ``/`` replaced by ``_``. Directories are created as needed.
+    """
+
+    if not storage_path:
+        return
+    path = Path(storage_path) / timeframe
+    path.mkdir(parents=True, exist_ok=True)
+    filename = symbol.replace("/", "_") + ".csv"
+    df.to_csv(path / filename, index=False)
+
 async def _maybe_enqueue_eval(symbol: str, timeframe: str, cache: Dict[str, Dict[str, pd.DataFrame]], config: Dict[str, Any]) -> None:
     if timeframe not in ("1m", "5m"):
         return
@@ -140,12 +224,31 @@ MAX_OHLCV_FAILURES = 10
 MAX_WS_LIMIT = 500
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 STATUS_UPDATES = True
-SEMA: asyncio.Semaphore | None = None
 # Per-timeframe locks are provided by crypto_bot.data.locks
 
 # Shared StreamEvaluator instance set by main
 STREAM_EVALUATOR: StreamEvaluator | None = None
 _WARMED_UP: set[str] = set()
+
+# Rolling window of OHLCV fetch timestamps for IOPS calculation
+IOPS_WINDOW = 5.0
+IO_TIMESTAMPS: Deque[float] = deque()
+
+
+def record_io() -> None:
+    """Record an OHLCV fetch completion timestamp."""
+    now = time.time()
+    IO_TIMESTAMPS.append(now)
+    while IO_TIMESTAMPS and now - IO_TIMESTAMPS[0] > IOPS_WINDOW:
+        IO_TIMESTAMPS.popleft()
+
+
+def get_iops() -> float:
+    """Return recent I/O operations per second."""
+    now = time.time()
+    while IO_TIMESTAMPS and now - IO_TIMESTAMPS[0] > IOPS_WINDOW:
+        IO_TIMESTAMPS.popleft()
+    return len(IO_TIMESTAMPS) / IOPS_WINDOW
 
 # Redis settings
 REDIS_TTL = 3600  # cache expiry in seconds
@@ -199,8 +302,10 @@ COINGECKO_IDS = {
 
 
 def resolve_listed_symbol(exchange, base: str, allowed_quotes: list[str]) -> str | None:
-    """Return the first listed symbol for *base* across ``allowed_quotes``."""
+    """Return the first listed symbol for ``base`` across ``allowed_quotes``."""
     markets = getattr(exchange, "markets", {}) or {}
+    if not markets:
+        return f"{base}/{allowed_quotes[0]}" if allowed_quotes else f"{base}/USD"
     for q in allowed_quotes:
         sym = f"{base}/{q}"
         if sym in markets:
@@ -208,7 +313,7 @@ def resolve_listed_symbol(exchange, base: str, allowed_quotes: list[str]) -> str
     for m in markets.values():
         try:
             if m.get("base") == base and m.get("quote") in allowed_quotes:
-                return m.get("symbol")
+                return m.get("symbol") or f"{m['base']}/{m['quote']}"
         except Exception:
             continue
     return None
@@ -433,7 +538,7 @@ def configure(
     gecko_limit: int | None = None,
 ) -> None:
     """Configure module-wide settings."""
-    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES, SEMA, GECKO_SEMAPHORE
+    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES, GECKO_SEMAPHORE
     try:
         with open(CONFIG_PATH) as f:
             cfg = yaml.safe_load(f) or {}
@@ -505,17 +610,8 @@ def configure(
             )
     if status_updates is not None:
         STATUS_UPDATES = bool(status_updates)
-    if max_concurrent is not None:
-        try:
-            val = int(max_concurrent)
-            if val < 1:
-                raise ValueError
-            SEMA = asyncio.Semaphore(val)
-        except (TypeError, ValueError):
-            logger.warning(
-                "Invalid max_concurrent %s; disabling semaphore", max_concurrent
-            )
-            SEMA = None
+    # max_concurrent is retained for backward compatibility but concurrency
+    # limits are now handled internally by the KrakenClient
 
     if gecko_limit is not None:
         try:
@@ -1248,13 +1344,31 @@ async def load_ohlcv(
     timeout: float | None = None,
     **kwargs,
 ) -> list:
-    """Load OHLCV data via REST with basic retries.
+    """Load OHLCV data either from REST or from cached files.
 
-    ``mode`` is retained for backward compatibility but ignored. On a
-    successful call it sleeps for one second to respect exchange rate limits.
-    Any exception containing ``"429"`` triggers a 60 second sleep before the
-    request is retried.
+    When ``mode`` is ``"file"`` this will attempt to load a previously cached
+    OHLCV file from ``LOG_DIR/ohlcv/<timeframe>/<symbol>.json``.  If the file is
+    missing or unreadable an empty list is returned.  Otherwise the data is
+    returned as a list of lists matching the CCXT OHLCV schema.
+
+    For ``mode`` other than ``"file"`` the function falls back to fetching data
+    from the provided ``exchange`` with basic retry handling for rate limits.
+    On a successful REST call it sleeps for one second to respect exchange rate
+    limits.  Any exception containing ``"429"`` triggers a 60 second sleep
+    before the request is retried.
     """
+
+    if mode == "file":
+        path = LOG_DIR / "ohlcv" / timeframe / f"{symbol.replace('/', '-')}.json"
+        try:
+            df = pd.read_json(path, orient="split")
+        except Exception:
+            return []
+        return (
+            df[["timestamp", "open", "high", "low", "close", "volume"]]
+            .to_records(index=False)
+            .tolist()
+        )
 
     markets = getattr(exchange, "markets", None)
     if markets is not None:
@@ -1282,6 +1396,7 @@ async def load_ohlcv(
             else:  # pragma: no cover - synchronous fallback
                 coro = asyncio.to_thread(fetch_fn, market_id, timeframe, limit, **kwargs)
             data = await asyncio.wait_for(coro, timeout)
+            record_io()
             await asyncio.sleep(1)
             return data
         except Exception as exc:
@@ -1384,8 +1499,6 @@ async def load_ohlcv_parallel(
         if not isinstance(max_concurrent, int) or max_concurrent < 1:
             raise ValueError("max_concurrent must be a positive integer or None")
         sem = asyncio.Semaphore(max_concurrent)
-    elif SEMA is not None:
-        sem = SEMA
     else:
         sem = None
 
@@ -1511,6 +1624,7 @@ async def load_ohlcv_parallel(
         if res and len(res[0]) > 6:
             res = [[c[0], c[1], c[2], c[3], c[4], c[6]] for c in res]
         data[sym] = res
+        record_io()
         failed_symbols.pop(sym, None)
     return data
 
@@ -1588,13 +1702,30 @@ async def _update_ohlcv_cache_inner(
         limit = max(config.get("ohlcv_snapshot_limit", limit), limit)
         since_map = {sym: None for sym in symbols}
     else:
+        ohlcv_cfg = config.get("ohlcv", {}) if isinstance(config, dict) else {}
+        tail = int(ohlcv_cfg.get("tail_overlap_bars", 0))
+        bootstrap = int(ohlcv_cfg.get("max_bootstrap_bars", limit))
+        tail = int((config.get("tail_overlap_bars") or 0))
+        need_tail = False
+        tf_sec = timeframe_seconds(exchange, timeframe)
         for sym in symbols:
             df = cache.get(sym)
             if df is not None and not df.empty:
-                # convert cached second timestamps to milliseconds for ccxt
-                since_map[sym] = int(df["timestamp"].iloc[-1]) * 1000 + 1
+                last_ts = int(df["timestamp"].iloc[-1])
+                since_map[sym] = int((last_ts - tail * tf_sec) * 1000)
+            else:
+                since_map[sym] = None
+                limit = max(limit, bootstrap)
+                last_ts = int(df["timestamp"].iloc[-1]) * 1000
+                if tail > 0:
+                    since_map[sym] = last_ts - tail * tf_sec * 1000
+                    need_tail = True
+                else:
+                    since_map[sym] = last_ts + 1
             elif start_since is not None:
                 since_map[sym] = start_since
+        if need_tail:
+            limit += tail
     now = time.time()
     filtered_symbols: List[str] = []
     for s in symbols:
@@ -1710,12 +1841,22 @@ async def _update_ohlcv_cache_inner(
         unit = "ms" if df_new["timestamp"].max() > 1e12 else "s"
         df_new["timestamp"] = pd.to_datetime(df_new["timestamp"], unit=unit, utc=True)
         df_new = df_new.sort_values("timestamp").drop_duplicates("timestamp", keep="last")
-        df_new = (
-            df_new.set_index("timestamp")
-            .resample(f"{tf_sec}s")
-            .agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
-            .ffill()
-            .reset_index()
+        df_new = await asyncio.to_thread(
+            lambda df=df_new: (
+                df.set_index("timestamp")
+                .resample(f"{tf_sec}s")
+                .agg(
+                    {
+                        "open": "first",
+                        "high": "max",
+                        "low": "min",
+                        "close": "last",
+                        "volume": "sum",
+                    }
+                )
+                .ffill()
+                .reset_index()
+            )
         )
         df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
         frac = config.get("min_history_fraction", 0.5)
@@ -1755,30 +1896,48 @@ async def _update_ohlcv_cache_inner(
                     limit,
                 )
                 continue
-        changed = False
-        if sym in cache and not cache[sym].empty:
-            last_ts = cache[sym]["timestamp"].iloc[-1]
+        existing = None
+        async with timeframe_lock(timeframe):
+            if sym in cache:
+                existing = cache[sym].copy()
+        if existing is not None and not existing.empty:
+            last_ts = existing["timestamp"].iloc[-1]
             df_new = df_new[df_new["timestamp"] > last_ts]
             if df_new.empty:
                 continue
-            cache[sym] = pd.concat([cache[sym], df_new], ignore_index=True)
-            changed = True
+            combined = await asyncio.to_thread(
+                pd.concat, [existing, df_new], ignore_index=True
+            )
         else:
-            cache[sym] = df_new
-            changed = True
-        if changed:
-            cache[sym] = cache[sym].tail(limit).reset_index(drop=True)
-            cache[sym]["return"] = cache[sym]["close"].pct_change()
+            combined = df_new
+        combined = await asyncio.to_thread(
+            lambda df=combined, limit=limit: df.tail(limit).reset_index(drop=True)
+        )
+        returns = await asyncio.to_thread(lambda s=combined["close"]: s.pct_change())
+        combined["return"] = returns
+        async with timeframe_lock(timeframe):
+            cache[sym] = combined
             clear_regime_cache(sym, timeframe)
             if redis_conn:
                 try:
-                    redis_conn.setex(
+                    await asyncio.to_thread(
+                        redis_conn.setex,
                         f"ohlcv:{sym}:{timeframe}",
                         REDIS_TTL,
-                        cache[sym].to_json(orient="split"),
+                        combined.to_json(orient="split"),
                     )
                 except Exception:
                     pass
+            storage_path = config.get("storage_path")
+            if storage_path:
+                max_bars = config.get("max_bootstrap_bars")
+                try:
+                    max_bars = int(max_bars) if max_bars is not None else None
+                except (TypeError, ValueError):
+                    max_bars = None
+                df_save = cache[sym].tail(max_bars) if max_bars else cache[sym]
+                df_save = df_save.reset_index(drop=True)
+                save_ohlcv(df_save, sym, timeframe, storage_path)
     return cache
 
 
@@ -2008,6 +2167,8 @@ async def update_ohlcv_cache(
         listed = resolve_listed_symbol(exchange, base, allowed_quotes)
         if listed:
             resolved.append(listed)
+        elif not markets:
+            resolved.append(sym)
         else:
             logger.debug(
                 "Skipping %s: no listed market on %s for quotes %s",
@@ -2083,6 +2244,9 @@ async def update_multi_tf_ohlcv_cache(
     notifier: TelegramNotifier | None = None,
     priority_queue: Deque[str] | None = None,
     batch_size: int | None = None,
+    refresh_listing_cache: bool = False,
+    listing_cache_ttl: int | None = None,
+    chunk_size: int = 20,
     max_retries: int = 3,
     timeout: float | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
@@ -2095,6 +2259,9 @@ async def update_multi_tf_ohlcv_cache(
     start_since : int | None, optional
         When provided, fetch historical data starting from this timestamp
         in milliseconds when no cached data is available.
+    chunk_size : int, optional
+        Number of symbols to process per batch when fetching OHLCV data.
+        Defaults to ``20``.
     """
     try:  # pragma: no cover - optional regime dependency
         from crypto_bot.regime.regime_classifier import clear_regime_cache
@@ -2110,6 +2277,27 @@ async def update_multi_tf_ohlcv_cache(
     # either raise the configured warmup or disable strategies requiring more
     # history, depending on ``data.auto_raise_warmup``.
     load_enabled(config)
+
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    progress_state: dict[str, list[str]] = {}
+    completed_pairs: set[tuple[str, str]] = set()
+    if BOOTSTRAP_STATE_FILE.exists():
+        try:
+            with BOOTSTRAP_STATE_FILE.open() as f:
+                progress_state = json.load(f)
+            for tf, syms in progress_state.items():
+                for sym in syms:
+                    completed_pairs.add((sym, tf))
+        except Exception:
+            progress_state = {}
+            completed_pairs = set()
+
+    def mark_completed(sym: str, tf: str) -> None:
+        if sym in progress_state.get(tf, []):
+            return
+        progress_state.setdefault(tf, []).append(sym)
+        with BOOTSTRAP_STATE_FILE.open("w") as f:
+            json.dump(progress_state, f)
 
     def add_priority(data: list, symbol: str) -> None:
         """Push ``symbol`` to ``priority_queue`` if volume spike detected."""
@@ -2142,6 +2330,10 @@ async def update_multi_tf_ohlcv_cache(
     if not tfs:
         return cache
 
+    tele_cfg = config.get("telegram", {})
+    send_bootstrap = bool(tele_cfg.get("bootstrap_updates")) and STATUS_UPDATES
+    total_tfs = len(tfs)
+
     min_volume_usd = float(config.get("min_volume_usd", 0) or 0)
     vol_thresh = config.get("bounce_scalper", {}).get("vol_zscore_threshold")
 
@@ -2162,14 +2354,25 @@ async def update_multi_tf_ohlcv_cache(
         one_min_syms, five_min_only = await split_symbols_by_timeframe(
             exchange, symbols_all
         )
+        if not one_min_syms and not five_min_only:
+            one_min_syms = symbols_all
+            five_min_only = symbols_all
 
-    for tf in tfs:
+    listing_dates = await _get_listing_dates(
+        symbols_all,
+        config,
+        refresh=refresh_listing_cache,
+        ttl=listing_cache_ttl,
+    )
+
+    for idx, tf in enumerate(tfs, 1):
         if tf == "1m":
             symbols = one_min_syms
         elif tf == "5m":
             symbols = five_min_only
         else:
             symbols = symbols_all
+        symbols = [s for s in symbols if (s, tf) not in completed_pairs]
         if not symbols:
             continue
         lock = timeframe_lock(tf)
@@ -2177,8 +2380,40 @@ async def update_multi_tf_ohlcv_cache(
             logger.info("Skip: %s update already running.", tf)
             continue
         async with lock:
+            if notifier and send_bootstrap:
+                try:
+                    await notifier.notify_async(
+                        f"Starting OHLCV update for {tf} ({idx}/{total_tfs})"
+                    )
+                except Exception:  # pragma: no cover - best effort
+                    logger.exception("Failed to send Telegram notification")
             logger.info("Starting OHLCV update for timeframe %s", tf)
             tf_cache = cache.get(tf, {})
+
+            # Load any previously cached OHLCV files for missing symbols
+            for sym in symbols:
+                df = tf_cache.get(sym)
+                if df is not None and not df.empty:
+                    continue
+                try:
+                    rows = await load_ohlcv(
+                        exchange, sym, timeframe=tf, limit=0, mode="file"
+                    )
+                except Exception:
+                    rows = []
+                if rows:
+                    tf_cache[sym] = pd.DataFrame(
+                        rows,
+                        columns=[
+                            "timestamp",
+                            "open",
+                            "high",
+                            "low",
+                            "close",
+                            "volume",
+                        ],
+                    )
+            cache[tf] = tf_cache
 
             now_ms = utc_now_ms()
             tf_sec = timeframe_seconds(exchange, tf)
@@ -2224,30 +2459,8 @@ async def update_multi_tf_ohlcv_cache(
                 )
                 tf_start_since = None
 
-            concurrency = int(config.get("listing_date_concurrency", 5) or 0)
-            semaphore = asyncio.Semaphore(concurrency) if concurrency > 0 else None
-
-            async def _fetch_listing(sym: str) -> tuple[str, int | None]:
-                if semaphore is not None:
-                    async with semaphore:
-                        ts = await get_kraken_listing_date(sym)
-                else:
-                    ts = await get_kraken_listing_date(sym)
-                return sym, ts
-
-            start_list = time.perf_counter()
-            tasks = [asyncio.create_task(_fetch_listing(sym)) for sym in symbols]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for sym, res in zip(symbols, results):
-                if isinstance(res, Exception):
-                    logger.exception(
-                        "OHLCV task failed for %s @ %s: %s",
-                        sym,
-                        tf,
-                        res,
-                    )
-                    continue
-                _, listing_ts = res
+            for sym in symbols:
+                listing_ts = listing_dates.get(sym)
                 if listing_ts and 0 < listing_ts <= now_ms:
                     age_ms = now_ms - listing_ts
                     tf_sec = timeframe_seconds(exchange, tf)
@@ -2263,11 +2476,6 @@ async def update_multi_tf_ohlcv_cache(
                         )
                         continue
                     dynamic_limits[sym] = int(min(hist_candles, max_cap))
-            logger.debug(
-                "listing date fetch for %d symbols took %.2fs",
-                len(symbols),
-                time.perf_counter() - start_list,
-            )
 
             cex_symbols: list[str] = []
             dex_symbols: list[str] = []
@@ -2290,8 +2498,55 @@ async def update_multi_tf_ohlcv_cache(
                 cex_symbols = [s for s in priority_syms if s in cex_symbols] + [s for s in cex_symbols if s not in prio_set]
                 dex_symbols = [s for s in priority_syms if s in dex_symbols] + [s for s in dex_symbols if s not in prio_set]
 
+            total_syms = len(cex_symbols) + len(dex_symbols)
+            completed = 0
+            recent_times: Deque[float] = deque(maxlen=50)
+
+            def log_progress(ts: float | None = None) -> None:
+                """Log progress with a moving average request rate."""
+                nonlocal completed
+                if total_syms <= 0:
+                    return
+                completed += 1
+                now_t = ts if ts is not None else time.perf_counter()
+                recent_times.append(now_t)
+                rate = 0.0
+                if len(recent_times) > 1:
+                    span = recent_times[-1] - recent_times[0]
+                    if span > 0:
+                        rate = (len(recent_times) - 1) / span
+                remaining = total_syms - completed
+                eta = remaining / rate if rate > 0 else float("inf")
+                eta_str = f"{eta:.1f}s" if eta != float("inf") else "?"
+                logger.info(
+                    "Progress[%s] %d/%d (%.2f req/s, ETA %s)",
+                    tf,
+                    completed,
+                    total_syms,
+            processed_syms = 0
+            start_fetch = time.perf_counter()
+
+            def log_progress() -> None:
+                if total_syms <= 0:
+                    return
+                elapsed = time.perf_counter() - start_fetch
+                rate = processed_syms / elapsed if elapsed > 0 else 0.0
+                pct = processed_syms / total_syms * 100
+                eta = (total_syms - processed_syms) / rate if rate > 0 else 0
+                eta_str = str(timedelta(seconds=int(eta))) if rate > 0 else "?"
+                logger.info(
+                    "%s: %d/%d fetched (%.0f%%), avg %.1f req/s, ETA %s",
+                    tf,
+                    processed_syms,
+                    total_syms,
+                    pct,
+                    rate,
+                    eta_str,
+                )
+
             if cex_symbols:
                 if tf_start_since is None:
+                    prev_lengths = {s: len(tf_cache[s]) if s in tf_cache else 0 for s in cex_symbols}
                     groups: Dict[int, list[str]] = {}
                     for sym in cex_symbols:
                         sym_limit = dynamic_limits.get(sym, tf_limit)
@@ -2304,6 +2559,28 @@ async def update_multi_tf_ohlcv_cache(
                                     "Adjusting limit for %s on %s to %d", s, tf, lim
                                 )
                             curr_limit = lim
+                        for i in range(0, len(syms), chunk_size):
+                            chunk = syms[i : i + chunk_size]
+                            tf_cache = await update_ohlcv_cache(
+                                exchange,
+                                tf_cache,
+                                chunk,
+                                timeframe=tf,
+                                limit=curr_limit,
+                                config={
+                                    "min_history_fraction": 0,
+                                    "ohlcv_batch_size": config.get("ohlcv_batch_size"),
+                                },
+                                batch_size=batch_size,
+                                start_since=tf_start_since,
+                                use_websocket=use_websocket,
+                                force_websocket_history=force_websocket_history,
+                                max_concurrent=max_concurrent,
+                                notifier=notifier,
+                                priority_symbols=priority_syms,
+                            )
+                            processed_syms += len(chunk)
+                            log_progress()
                         tf_cache = await update_ohlcv_cache(
                             exchange,
                             tf_cache,
@@ -2320,10 +2597,25 @@ async def update_multi_tf_ohlcv_cache(
                             force_websocket_history=force_websocket_history,
                             max_concurrent=max_concurrent,
                             notifier=notifier,
+                            priority_symbols=[s for s in priority_syms if s in syms],
+                        )
+                        for s in syms:
+                            if s in tf_cache and not getattr(tf_cache.get(s), "empty", True):
+                                mark_completed(s, tf)
                             priority_symbols=priority_syms,
                             max_retries=max_retries,
                             timeout=timeout,
                         )
+                        done_time = time.perf_counter()
+                        for _ in syms:
+                            log_progress(done_time)
+                    for s in cex_symbols:
+                        curr_len = len(tf_cache[s]) if s in tf_cache else 0
+                        prev = prev_lengths.get(s, 0)
+                        fetched = curr_len - prev
+                        if fetched > 0:
+                            state = "bootstrap" if prev == 0 else "tail"
+                            logger.info("%s %s fetched=%d", tf, state, fetched)
                 else:
                     from crypto_bot.main import update_df_cache
 
@@ -2365,6 +2657,8 @@ async def update_multi_tf_ohlcv_cache(
                                 sym,
                                 tf,
                             )
+                            processed_syms += 1
+                            log_progress()
                             continue
 
                         df_new = pd.DataFrame(
@@ -2424,16 +2718,21 @@ async def update_multi_tf_ohlcv_cache(
                         )
                         df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
 
+                        new_rows = len(df_new)
+                        state = "bootstrap"
                         if sym in tf_cache and not tf_cache[sym].empty:
                             last_ts = tf_cache[sym]["timestamp"].iloc[-1]
                             df_new = df_new[df_new["timestamp"] > last_ts]
                             if df_new.empty:
                                 continue
+                            new_rows = len(df_new)
                             df_new = pd.concat([tf_cache[sym], df_new], ignore_index=True)
+                            state = "tail"
 
                         update_df_cache(cache, tf, sym, df_new)
                         tf_cache = cache.get(tf, {})
                         tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
+                        logger.info("%s %s fetched=%d", tf, state, new_rows)
                         clear_regime_cache(sym, tf)
                         if (
                             STREAM_EVALUATOR
@@ -2451,6 +2750,9 @@ async def update_multi_tf_ohlcv_cache(
                                 sym, {"df_cache": cache, "symbol": sym}
                             )
                         await _maybe_enqueue_eval(sym, tf, cache, config)
+                        mark_completed(sym, tf)
+                        processed_syms += 1
+                        log_progress()
 
             for sym in dex_symbols:
                 data = None
@@ -2512,10 +2814,14 @@ async def update_multi_tf_ohlcv_cache(
                             timeout=timeout,
                         )
                         if isinstance(data, Exception) or not data:
+                            processed_syms += 1
+                            log_progress()
                             continue
                     add_priority(data, sym)
 
                 if not data:
+                    processed_syms += 1
+                    log_progress()
                     continue
 
                 if not isinstance(data, list):
@@ -2525,6 +2831,8 @@ async def update_multi_tf_ohlcv_cache(
                         tf,
                         type(data),
                     )
+                    processed_syms += 1
+                    log_progress()
                     continue
 
                 df_new = pd.DataFrame(
@@ -2532,18 +2840,25 @@ async def update_multi_tf_ohlcv_cache(
                     columns=["timestamp", "open", "high", "low", "close", "volume"],
                 )
                 changed = False
+                new_rows = len(df_new)
+                state = "bootstrap"
                 if sym in tf_cache and not tf_cache[sym].empty:
                     last_ts = tf_cache[sym]["timestamp"].iloc[-1]
                     df_new = df_new[df_new["timestamp"] > last_ts]
                     if df_new.empty:
+                        processed_syms += 1
+                        log_progress()
                         continue
+                    new_rows = len(df_new)
                     tf_cache[sym] = pd.concat([tf_cache[sym], df_new], ignore_index=True)
                     changed = True
+                    state = "tail"
                 else:
                     tf_cache[sym] = df_new
                     changed = True
                 if changed:
                     tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
+                    logger.info("%s %s fetched=%d", tf, state, new_rows)
                     clear_regime_cache(sym, tf)
                     if (
                         STREAM_EVALUATOR
@@ -2563,8 +2878,19 @@ async def update_multi_tf_ohlcv_cache(
 
                     cache[tf] = tf_cache
                     await _maybe_enqueue_eval(sym, tf, cache, config)
+                    mark_completed(sym, tf)
+                processed_syms += 1
+                log_progress()
             cache[tf] = tf_cache
             logger.info("Completed OHLCV update for timeframe %s", tf)
+
+        if notifier and send_bootstrap:
+            try:
+                await notifier.notify_async(
+                    f"Completed OHLCV update for {tf} ({idx}/{total_tfs})"
+                )
+            except Exception:  # pragma: no cover - best effort
+                logger.exception("Failed to send Telegram notification")
 
     return cache
 

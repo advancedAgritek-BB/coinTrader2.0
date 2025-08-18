@@ -102,6 +102,7 @@ def test_get_filtered_symbols_caching(monkeypatch):
 
     symbol_utils._cached_symbols = None
     symbol_utils._last_refresh = 0.0
+    symbol_utils._cached_hash = None
 
     result1 = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
     result2 = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
@@ -244,3 +245,119 @@ def test_get_filtered_symbols_onchain_pair(monkeypatch):
     result = asyncio.run(symbol_utils.get_filtered_symbols(DummyEx(), config))
 
     assert result == ([("ETH/USD", 1.0)], [])
+
+
+def test_symbol_cache_disk_reuse(monkeypatch, tmp_path, caplog):
+    caplog.set_level(logging.INFO)
+    cache_file = tmp_path / "symcache.json"
+    monkeypatch.setattr(symbol_utils, "SYMBOL_CACHE_FILE", cache_file)
+
+    calls = []
+
+    async def fake_filter_symbols(ex, syms, cfg):
+        calls.append(True)
+        return [(syms[0], 1.0)], []
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    t = {"now": 1000.0}
+
+    def fake_time():
+        return t["now"]
+
+    monkeypatch.setattr(symbol_utils.time, "time", fake_time)
+
+    config = {"symbols": ["ETH/USD"], "symbol_refresh_minutes": 10}
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+    symbol_utils._cached_hash = None
+
+    result1 = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
+    assert result1 == ([("ETH/USD", 1.0)], [])
+    assert cache_file.exists()
+    assert len(calls) == 1
+
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+    symbol_utils._cached_hash = None
+    caplog.clear()
+    t["now"] += 5
+    result2 = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
+    assert result2 == result1
+    assert len(calls) == 1
+    assert any("Using cached symbols" in r.getMessage() for r in caplog.records)
+
+
+def test_symbol_cache_config_change_invalidation(monkeypatch, tmp_path, caplog):
+    caplog.set_level(logging.INFO)
+    cache_file = tmp_path / "symcache.json"
+    monkeypatch.setattr(symbol_utils, "SYMBOL_CACHE_FILE", cache_file)
+
+    calls = []
+
+    async def fake_filter_symbols(ex, syms, cfg):
+        calls.append(syms)
+        return [(syms[0], 1.0)], []
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    t = {"now": 1000.0}
+
+    def fake_time():
+        return t["now"]
+
+    monkeypatch.setattr(symbol_utils.time, "time", fake_time)
+
+    config1 = {"symbols": ["ETH/USD"], "symbol_refresh_minutes": 10}
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+    symbol_utils._cached_hash = None
+    asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config1))
+    assert len(calls) == 1
+
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+    symbol_utils._cached_hash = None
+    caplog.clear()
+    t["now"] += 5
+    config2 = {"symbols": ["BTC/USD"], "symbol_refresh_minutes": 10}
+    asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config2))
+    assert len(calls) == 2
+    assert any("Refreshing symbol cache" in r.getMessage() for r in caplog.records)
+
+
+def test_symbol_cache_ttl_expiration(monkeypatch, tmp_path, caplog):
+    caplog.set_level(logging.INFO)
+    cache_file = tmp_path / "symcache.json"
+    monkeypatch.setattr(symbol_utils, "SYMBOL_CACHE_FILE", cache_file)
+
+    calls = []
+
+    async def fake_filter_symbols(ex, syms, cfg):
+        calls.append(True)
+        return [(syms[0], 1.0)], []
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    t = {"now": 1000.0}
+
+    def fake_time():
+        return t["now"]
+
+    monkeypatch.setattr(symbol_utils.time, "time", fake_time)
+
+    config = {"symbols": ["ETH/USD"], "symbol_refresh_minutes": 1}
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+    symbol_utils._cached_hash = None
+    asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
+    assert len(calls) == 1
+
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+    symbol_utils._cached_hash = None
+    caplog.clear()
+    t["now"] += 61
+    asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
+    assert len(calls) == 2
+    assert any("Refreshing symbol cache" in r.getMessage() for r in caplog.records)
