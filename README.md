@@ -430,6 +430,10 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 * **start_since** – optional timestamp used to backfill older data during the initial scan.
   When set, the bot loads candles starting from this time (e.g. `365d` for one year)
   before switching to realtime updates.
+* **bootstrap resume** – completed `symbol × timeframe` pairs are recorded in
+  `cache/ohlcv_bootstrap_state.json` so restarts continue from the last success.
+  Run `python -m crypto_bot.cli cache reset-bootstrap` to clear this file and
+  force a fresh bootstrap.
 * **min_history_fraction** – minimum portion of candles that must be retrieved
   for a pair to remain cached. Defaults to `0.5`.
 * **cycle_lookback_limit** – candles fetched each cycle. Defaults to `150`.
