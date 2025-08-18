@@ -12,6 +12,7 @@ from sklearn.preprocessing import StandardScaler
 
 import ta
 from scipy import stats
+from crypto_bot.utils.stats import last_window_zscore
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
@@ -119,12 +120,12 @@ def generate_signal(
         return 0.0, "none"
 
     deviation = (latest["close"] - pred_price) / pred_price
-    z_scores = pd.Series(stats.zscore(recent["close"]), index=recent.index)
-    if len(z_scores) == 0:
-        z_dev = 0.0
-    else:
-        z_dev = z_scores.iloc[-1]
-    z_dev = stats.zscore(recent["close"], lookback).iloc[-1]
+    if recent is None or len(recent) < lookback:
+        return 0.0, "none"
+    z_val = last_window_zscore(recent["close"], lookback)
+    if np.isnan(z_val):
+        return 0.0, "none"
+    z_dev = z_val
 
     score = 0.0
     direction = "none"
