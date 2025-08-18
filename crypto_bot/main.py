@@ -165,6 +165,16 @@ update_multi_tf_ohlcv_cache = None  # type: ignore
 update_regime_tf_cache = None  # type: ignore
 
 
+def collect_timeframes(config: dict) -> list[str]:
+    """Return sorted unique timeframes required by strategies."""
+    tfs: set[str] = set(config.get("timeframes", []))
+    router_cfg = config.get("strategy_router", {})
+    for key, val in router_cfg.items():
+        if key.endswith("_timeframe") and isinstance(val, str):
+            tfs.add(val)
+    return sorted(tfs, key=lambda t: timeframe_seconds(None, t))
+
+
 def market_loader_configure(*_a, **_k) -> None:  # pragma: no cover - placeholder
     pass
 
@@ -1201,7 +1211,10 @@ async def initial_scan(
         "bootstrap_timeframes", config.get("timeframes", ["1h"])
     )
     tfs = sf.get("initial_timeframes", bootstrap_tfs)
-    tfs = sorted(set(tfs) | {"1m", "5m"}, key=lambda t: timeframe_seconds(None, t))
+    tfs = sorted(
+        set(tfs) | set(config.get("timeframes", [])),
+        key=lambda t: timeframe_seconds(None, t),
+    )
     tf_sec = timeframe_seconds(None, tfs[0])
     lookback_since = int(time.time() * 1000 - scan_limit * tf_sec * 1000)
 
@@ -1803,7 +1816,7 @@ async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) ->
             max_concurrent = max(1, max_concurrent // 2)
 
     tfs = sorted(
-        set(ctx.config.get("timeframes", [])) | {"1m", "5m"},
+        set(ctx.config.get("timeframes", [])),
         key=lambda t: timeframe_seconds(None, t),
     )
 
@@ -2916,6 +2929,7 @@ async def _main_impl() -> MainResult:
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config, _ = await load_config_async()
+    config["timeframes"] = collect_timeframes(config)
     if (
         not config.get("symbols")
         and not config.get("onchain_symbols")
@@ -3445,7 +3459,7 @@ async def _main_impl() -> MainResult:
                             res = await strategies.score(
                                 strat,
                                 symbols=selected_symbols,
-                                timeframes=["1m", "5m"],
+                                timeframes=config.get("timeframes", []),
                             )
                             for (sym, tf), val in res.items():
                                 if isinstance(val, tuple):
