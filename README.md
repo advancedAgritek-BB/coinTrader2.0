@@ -723,6 +723,9 @@ flash_crash_scalper:
 * **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
 * **ohlcv_batch_size** – number of symbols grouped per OHLCV request.
 * **redis_url** – optional Redis connection string for caching OHLCV data.
+* **ohlcv.storage_path** – directory used to persist OHLCV caches between runs.
+* **tail_overlap_bars** – number of candles reloaded on startup to splice cached and new data.
+* **max_bootstrap_bars** – cap on candles fetched per timeframe when no cache exists.
 * **max_parallel** – number of markets processed concurrently.
 * **gecko_limit** – concurrent GeckoTerminal requests.
 * **max_concurrent_tickers** – maximum simultaneous ticker requests.
@@ -741,6 +744,19 @@ flash_crash_scalper:
 * **testing_mode** – indicates a sandbox environment.
 
 Set `redis_url` to a standard Redis connection string (e.g. `redis://localhost:6379/0`) to cache recent OHLCV candles and reduce API calls.
+
+#### Persistent OHLCV storage
+
+When `ohlcv.storage_path` is set, the bot writes OHLCV data to disk so later runs can reuse it. The first run boots each symbol/timeframe by requesting up to `max_bootstrap_bars` candles and saving them under this directory. Subsequent runs load the cached files and request only new data, refetching the last `tail_overlap_bars` candles to avoid gaps.
+
+Example first vs. second run output:
+
+```text
+2024-05-10 00:00:00 | INFO | market_loader | BTC/USD 1m bootstrap: fetching 1500 bars
+2024-05-10 00:05:00 | INFO | market_loader | BTC/USD 1m: using cache, requesting 5 new bars
+```
+
+The second run reused nearly all local data and hit the exchange for only a handful of candles.
 
 ### Kraken Call Rate Limits
 
