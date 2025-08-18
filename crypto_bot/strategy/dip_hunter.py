@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Tuple
 
 import pandas as pd
 import ta
@@ -28,8 +28,10 @@ else:  # pragma: no cover - fallback
 
 def generate_signal(
     df: pd.DataFrame,
-    higher_df: Optional[pd.DataFrame] = None,
-    config: Optional[dict] = None,
+    higher_df: pd.DataFrame | None = None,
+    config: dict | None = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
 ) -> Tuple[float, str]:
     """Detect deep dips for mean reversion long entries."""
     symbol = config.get("symbol", "") if config else ""
