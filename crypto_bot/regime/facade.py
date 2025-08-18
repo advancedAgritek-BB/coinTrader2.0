@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+import os
 
 from .registry import load_latest_regime
 
@@ -17,7 +18,9 @@ def _get_model(symbol: str) -> Any:
     return _cache[symbol]
 
 
-def predict(features_df, symbol: str = "BTCUSDT"):
+def predict(
+    features_df, symbol: str = os.getenv("CT_SYMBOL", "XRPUSD")
+):
     """Predict the regime action for the given ``features_df``.
 
     The function delegates to a LightGBM style model loaded via
