@@ -156,11 +156,14 @@ Configure the loader with the following environment variables:
 
 ```ini
 SUPABASE_URL=
-# One of the following keys must be set to download ML regime models
+# Required: service role key with access to the storage bucket
 SUPABASE_SERVICE_ROLE_KEY=
+# Optional alternative keys for download-only setups
 # SUPABASE_KEY=
 # SUPABASE_API_KEY=
+# Storage bucket holding uploaded models
 CT_MODELS_BUCKET=models
+# Prefix within the bucket for regime models
 CT_REGIME_PREFIX=models/regime
 CT_SYMBOL=XRPUSD
 ```
@@ -168,6 +171,16 @@ CT_SYMBOL=XRPUSD
 `CT_SYMBOL` controls which Supabase regime model is loaded. For instance,
 setting `CT_SYMBOL=XRPUSD` downloads the `xrpusd_regime_lgmb.pkl` model from the
 `models/regime/XRPUSD/` path in the configured bucket.
+
+After training a model you can upload it to Supabase so the bot can fetch it
+automatically:
+
+```bash
+python ml_trainer.py train regime --use-gpu --federated
+```
+
+The command writes the model and a `LATEST.json` manifest to the
+`CT_MODELS_BUCKET` bucket under `CT_REGIME_PREFIX` for the symbol.
 
 ## Fast-Path Checks
 

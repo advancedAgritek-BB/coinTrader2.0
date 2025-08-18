@@ -696,7 +696,9 @@ def _ensure_ml(cfg: dict) -> None:
     try:  # pragma: no cover - best effort
         from crypto_bot.regime.regime_classifier import load_regime_model
 
-        _, model_path = asyncio.run(load_regime_model(symbol))
+        model, model_path = asyncio.run(load_regime_model(symbol))
+        if model is None:
+            raise MLUnavailableError("model not found", cfg)
         logger.info(
             "Loaded global regime model for %s from Supabase: %s",
             symbol,
@@ -723,7 +725,13 @@ def _ensure_ml_if_needed(cfg: dict) -> None:
     global _LAST_ML_CFG
     ml_cfg = {"ml_enabled": cfg.get("ml_enabled", True)}
     if ml_cfg != _LAST_ML_CFG:
-        _ensure_ml(cfg)
+        if ml_cfg["ml_enabled"]:
+            try:
+                _ensure_ml(cfg)
+            except MLUnavailableError as exc:
+                logger.warning("ML disabled: %s", exc)
+                cfg["ml_enabled"] = False
+                ml_cfg["ml_enabled"] = False
         _LAST_ML_CFG = ml_cfg
 
 
