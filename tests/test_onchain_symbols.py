@@ -87,12 +87,18 @@ def test_fetch_candidates_adds_onchain(monkeypatch):
         positions={},
         df_cache={"1h": {"BTC/USD": df}},
         regime_cache={},
-        config={"timeframe": "1h", "symbol_batch_size": 2},
+        config={
+            "timeframe": "1h",
+            "symbol_batch_size": 2,
+            "symbols": ["BTC/USD", "BONK/USDC"],
+            "tradable_symbols": ["BTC/USD"],
+            "onchain_symbols": ["BONK/USDC"],
+        },
     )
     ctx.exchange = object()
 
     async def fake_get_filtered_symbols(ex, cfg):
-        return [("BTC/USD", 1.0)], ["BONK/USDC"]
+        return [("BTC/USD", 1.0)], []
 
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)

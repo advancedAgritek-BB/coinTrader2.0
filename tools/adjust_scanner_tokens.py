@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 import yaml
+import os
 import ccxt.async_support as ccxt
 
 from crypto_bot.utils.symbol_utils import fix_symbol
@@ -34,6 +35,18 @@ def load_config() -> dict:
         data["symbol"] = fix_symbol(data["symbol"])
     if "symbols" in data:
         data["symbols"] = [fix_symbol(s) for s in data.get("symbols", [])]
+
+    trading_cfg = data.get("trading", {}) or {}
+    raw_ex = data.get("exchange") or trading_cfg.get("exchange") or os.getenv("EXCHANGE")
+    if isinstance(raw_ex, dict):
+        ex_cfg = dict(raw_ex)
+    else:
+        ex_cfg = {"name": raw_ex}
+    ex_cfg.setdefault("name", "kraken")
+    ex_cfg.setdefault("max_concurrency", 3)
+    ex_cfg.setdefault("request_timeout_ms", 10000)
+    data["exchange"] = ex_cfg
+
     return data
 
 
@@ -47,9 +60,22 @@ async def fetch_btc_balance(exchange) -> float:
 
 
 async def adjust(config: dict) -> None:
-    name = config.get("exchange", "kraken").lower()
+    ex = config.get("exchange", "kraken")
+    if isinstance(ex, dict):
+        name = ex.get("name", "kraken").lower()
+        params = {"enableRateLimit": True}
+        timeout = ex.get("request_timeout_ms")
+        if timeout:
+            params["timeout"] = int(timeout)
+        max_conc = ex.get("max_concurrency")
+    else:
+        name = str(ex).lower()
+        params = {"enableRateLimit": True}
+        max_conc = None
     exchange_cls = getattr(ccxt, name)
-    exchange = exchange_cls({"enableRateLimit": True})
+    exchange = exchange_cls(params)
+    if max_conc is not None:
+        setattr(exchange, "max_concurrency", int(max_conc))
     balance = 0.0
     try:
         balance = await fetch_btc_balance(exchange)

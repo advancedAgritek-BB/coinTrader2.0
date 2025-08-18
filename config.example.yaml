@@ -1,17 +1,27 @@
+# === exchange ===
+exchange:
+  name: kraken
+  max_concurrency: 3
+  request_timeout_ms: 10000
+
 # === trading/base ===
 trading:
   mode: dry_run           # cex | onchain | auto | dry_run
-  exchange: kraken
   allowed_quotes: [USD, USDT, USDC, EUR]
   min_ticker_volume: 10000
   timeframes: ["1m","5m"]
   backfill:
-    warmup_high_tf: ["1h","4h","1d"]
     deep_low_tf: true        # backfill 1m/5m history for strategies
     deep_days: 30
   hft_enabled: true
   hft_symbols: ["BTC/USD","ETH/USD","SOL/USDC","BONK/USDC"]   # seed list, can expand
   exclude_symbols: ["AIBTC/USD"]   # remove noisy/synthetic pairs
+
+# === ohlcv cache ===
+ohlcv:
+  storage_path: crypto_bot/data/ohlcv   # directory for persisted OHLCV data
+  tail_overlap_bars: 3                  # overlap bars to avoid gaps when appending
+  max_bootstrap_bars: 1000              # limit initial bootstrap to this many bars
 
 # Default on-chain universe and scanner options
 onchain_symbols: ["SOL/USDC"]
@@ -84,6 +94,10 @@ features:
 telemetry:
   batch_summary_secs: 60
 
+ohlcv:
+  bootstrap_timeframes: ['1h']
+  defer_timeframes: ['4h', '1d']
+
 timeframes: ['1m','5m']
 
 warmup_candles:
@@ -93,3 +107,9 @@ warmup_candles:
 backfill_days:
   '1m': 2
   '5m': 3
+
+telegram:
+  token: YOUR_TELEGRAM_TOKEN
+  chat_id: YOUR_CHAT_ID
+  status_updates: true
+  bootstrap_updates: false
