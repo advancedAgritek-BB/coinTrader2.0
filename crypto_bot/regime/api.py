@@ -103,7 +103,9 @@ def _have_supabase_creds() -> bool:
     return url_ok and key_ok
 
 
-def predict(features: pd.DataFrame, symbol: str = "BTCUSDT") -> Prediction:
+def predict(
+    features: pd.DataFrame, symbol: str = os.getenv("CT_SYMBOL", "XRPUSD")
+) -> Prediction:
     """Predict the trading regime for the provided ``features``."""
 
     if not _have_supabase_creds():
