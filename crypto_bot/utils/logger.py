@@ -33,3 +33,7 @@ def setup_logger(name: str, log_file: str, to_console: bool = True) -> logging.L
         logger.addHandler(ch)
 
     return logger
+
+
+# Shared logger for pipeline stages
+pipeline_logger = setup_logger("pipeline", LOG_DIR / "pipeline.log")
