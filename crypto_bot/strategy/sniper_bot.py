@@ -45,8 +45,6 @@ def generate_signal(
     price_fallback: bool = True,
     fallback_atr_mult: float = 1.5,
     fallback_volume_mult: float = 1.2,
-    symbol: str | None = None,
-    timeframe: str | None = None,
 ) -> Tuple[float, str, float, bool]:
     """Detect pumps for newly listed tokens using early price and volume action.
 
@@ -92,7 +90,8 @@ def generate_signal(
     Tuple[float, str, float, bool]
         Score between 0 and 1, trade direction, ATR value and event flag.
     """
-    symbol = config.get("symbol", "unknown") if config else "unknown"
+    symbol = symbol or (config.get("symbol", "unknown") if config else "unknown")
+    timeframe = timeframe or (config.get("timeframe") if config else None)
     if (
         symbol
         and symbol != "unknown"
