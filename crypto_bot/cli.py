@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 CACHE_DIR = Path(__file__).resolve().parents[1] / "cache"
+BOOTSTRAP_FILE = CACHE_DIR / "ohlcv_bootstrap_state.json"
 
 
 def select_exchange(args):
@@ -21,6 +22,14 @@ def cache_purge(_args):
         print("No cache directory found")
 
 
+def cache_reset_bootstrap(_args):
+    if BOOTSTRAP_FILE.exists():
+        BOOTSTRAP_FILE.unlink()
+        print(f"Removed progress file {BOOTSTRAP_FILE}")
+    else:
+        print("No progress file found")
+
+
 def build_parser():
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="command")
@@ -29,6 +38,10 @@ def build_parser():
     cache_sub = cache_p.add_subparsers(dest="cache_command")
     purge_p = cache_sub.add_parser("purge", help="Delete cache files")
     purge_p.set_defaults(func=cache_purge)
+    reset_p = cache_sub.add_parser(
+        "reset-bootstrap", help="Remove OHLCV bootstrap progress"
+    )
+    reset_p.set_defaults(func=cache_reset_bootstrap)
 
     p.add_argument(
         "--exchange", choices=["coinbase", "kraken"], help="Exchange to use"

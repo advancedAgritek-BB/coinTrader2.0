@@ -15,6 +15,7 @@ import aiohttp
 import base58
 import contextlib
 import logging
+import json
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -72,6 +73,9 @@ async def get_kraken_listing_date(symbol: str) -> Optional[int]:
 _last_snapshot_time = 0
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
+
+CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
+BOOTSTRAP_STATE_FILE = CACHE_DIR / "ohlcv_bootstrap_state.json"
 
 UNSUPPORTED_SYMBOLS: set[str] = {
     "AIBTC/EUR",
@@ -2070,6 +2074,27 @@ async def update_multi_tf_ohlcv_cache(
     # history, depending on ``data.auto_raise_warmup``.
     load_enabled(config)
 
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    progress_state: dict[str, list[str]] = {}
+    completed_pairs: set[tuple[str, str]] = set()
+    if BOOTSTRAP_STATE_FILE.exists():
+        try:
+            with BOOTSTRAP_STATE_FILE.open() as f:
+                progress_state = json.load(f)
+            for tf, syms in progress_state.items():
+                for sym in syms:
+                    completed_pairs.add((sym, tf))
+        except Exception:
+            progress_state = {}
+            completed_pairs = set()
+
+    def mark_completed(sym: str, tf: str) -> None:
+        if sym in progress_state.get(tf, []):
+            return
+        progress_state.setdefault(tf, []).append(sym)
+        with BOOTSTRAP_STATE_FILE.open("w") as f:
+            json.dump(progress_state, f)
+
     def add_priority(data: list, symbol: str) -> None:
         """Push ``symbol`` to ``priority_queue`` if volume spike detected."""
         if priority_queue is None or vol_thresh is None or not data:
@@ -2129,6 +2154,7 @@ async def update_multi_tf_ohlcv_cache(
             symbols = five_min_only
         else:
             symbols = symbols_all
+        symbols = [s for s in symbols if (s, tf) not in completed_pairs]
         if not symbols:
             continue
         lock = timeframe_lock(tf)
@@ -2279,8 +2305,11 @@ async def update_multi_tf_ohlcv_cache(
                             force_websocket_history=force_websocket_history,
                             max_concurrent=max_concurrent,
                             notifier=notifier,
-                            priority_symbols=priority_syms,
+                            priority_symbols=[s for s in priority_syms if s in syms],
                         )
+                        for s in syms:
+                            if s in tf_cache and not getattr(tf_cache.get(s), "empty", True):
+                                mark_completed(s, tf)
                 else:
                     from crypto_bot.main import update_df_cache
 
@@ -2404,6 +2433,7 @@ async def update_multi_tf_ohlcv_cache(
                                 sym, {"df_cache": cache, "symbol": sym}
                             )
                         await _maybe_enqueue_eval(sym, tf, cache, config)
+                        mark_completed(sym, tf)
 
             for sym in dex_symbols:
                 data = None
@@ -2514,6 +2544,7 @@ async def update_multi_tf_ohlcv_cache(
 
                     cache[tf] = tf_cache
                     await _maybe_enqueue_eval(sym, tf, cache, config)
+                    mark_completed(sym, tf)
             cache[tf] = tf_cache
             logger.info("Completed OHLCV update for timeframe %s", tf)
 

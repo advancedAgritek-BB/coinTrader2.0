@@ -1,4 +1,5 @@
 import asyncio
+import json
 import pandas as pd
 import pytest
 import logging
@@ -990,6 +991,49 @@ def test_update_multi_tf_ohlcv_cache_priority_queue(monkeypatch):
     assert captured.get("priority") == ["ETH/USD"]
     assert captured.get("symbols", [])[0] == "ETH/USD"
     assert not pq
+
+
+def test_update_multi_tf_ohlcv_cache_resume(tmp_path, monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    state_file = tmp_path / "state.json"
+    monkeypatch.setattr(market_loader, "BOOTSTRAP_STATE_FILE", state_file)
+    monkeypatch.setattr(market_loader, "CACHE_DIR", tmp_path)
+
+    calls: list[str] = []
+
+    async def fake_update_ohlcv_cache(exchange, tf_cache, symbols, **kwargs):
+        calls.extend(symbols)
+        for s in symbols:
+            tf_cache[s] = pd.DataFrame(
+                [[0, 0, 0, 0, 0, 0]],
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
+        return tf_cache
+
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update_ohlcv_cache)
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", lambda _s: 0)
+
+    ex = DummyMultiTFExchange()
+    cache: dict[str, dict[str, pd.DataFrame]] = {}
+    cfg = {"timeframes": ["1h"]}
+
+    asyncio.run(
+        market_loader.update_multi_tf_ohlcv_cache(
+            ex, cache, ["BTC/USD", "ETH/USD"], cfg, limit=1
+        )
+    )
+    data = json.loads(state_file.read_text())
+    assert set(data.get("1h", [])) == {"BTC/USD", "ETH/USD"}
+    assert set(calls) == {"BTC/USD", "ETH/USD"}
+
+    calls.clear()
+    asyncio.run(
+        market_loader.update_multi_tf_ohlcv_cache(
+            ex, cache, ["BTC/USD", "ETH/USD"], cfg, limit=1
+        )
+    )
+    assert calls == []
 
 
 def test_update_multi_tf_ohlcv_cache_skips_unsupported_tf(caplog):
