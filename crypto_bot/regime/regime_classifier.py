@@ -223,7 +223,7 @@ def _ml_fallback(
 async def _download_supabase_model(symbol: str | None = None) -> object | None:
     """Download LightGBM model from Supabase and return a Booster."""
     async with _supabase_model_lock:
-        target_symbol = symbol or os.getenv("SYMBOL", "BTCUSDT")
+        target_symbol = symbol or os.getenv("CT_SYMBOL", "XRPUSD")
         model, _path = await load_regime_model(target_symbol)
         if model is None:
             return None
@@ -234,9 +234,10 @@ async def _get_supabase_model(symbol: str | None = None) -> object | None:
     """Return the cached Supabase model, downloading it if needed."""
     global _supabase_model, _supabase_symbol
     async with _model_lock:
-        if _supabase_model is None or symbol != _supabase_symbol:
-            _supabase_model = await _download_supabase_model(symbol)
-            _supabase_symbol = symbol
+        resolved_symbol = symbol or os.getenv("CT_SYMBOL", "XRPUSD")
+        if _supabase_model is None or resolved_symbol != _supabase_symbol:
+            _supabase_model = await _download_supabase_model(resolved_symbol)
+            _supabase_symbol = resolved_symbol
         return _supabase_model
 
 
@@ -278,10 +279,12 @@ async def _ml_recovery_loop(notifier: TelegramNotifier | None) -> None:
         await asyncio.sleep(3600)
         if not is_ml_available():
             continue
-        model = await _download_supabase_model(_supabase_symbol)
+        symbol = _supabase_symbol or os.getenv("CT_SYMBOL", "XRPUSD")
+        model = await _download_supabase_model(symbol)
         if model is None:
             continue
         _supabase_model = model
+        _supabase_symbol = symbol
         logger.info("Supabase ML model reloaded")
         if notifier is not None:
             try:
@@ -311,11 +314,12 @@ def _classify_ml(
         return _ml_fallback(df, notifier)
 
     global _supabase_model, _supabase_symbol
-    if _supabase_model is None or symbol != _supabase_symbol:
+    resolved_symbol = symbol or os.getenv("CT_SYMBOL", "XRPUSD")
+    if _supabase_model is None or resolved_symbol != _supabase_symbol:
         # Running the async download in a blocking manner; callers should
         # prefer :func:`classify_regime_async` to avoid blocking the event loop.
-        _supabase_model = asyncio.run(_download_supabase_model(symbol))
-        _supabase_symbol = symbol
+        _supabase_model = asyncio.run(_download_supabase_model(resolved_symbol))
+        _supabase_symbol = resolved_symbol
 
     model = _supabase_model
     if model is None:
@@ -805,9 +809,9 @@ async def classify_regime_async(
     notifier: TelegramNotifier | None = None,
 ) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Asynchronous wrapper around :func:`classify_regime`."""
-    if symbol and CONFIG.get("use_per_pair_models", False):
+    if CONFIG.get("use_per_pair_models", False):
         try:
-            await _get_supabase_model(symbol)
+            await _get_supabase_model(symbol or os.getenv("CT_SYMBOL", "XRPUSD"))
         except Exception:
             pass
     return await asyncio.to_thread(
