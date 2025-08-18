@@ -3,27 +3,9 @@
 from __future__ import annotations
 
 import math
-from typing import Optional
-
 import pandas as pd
+from ta.volatility import AverageTrueRange
 
-
-def calc_atr(df: pd.DataFrame, period: int = 14, as_series: bool = False):
-    """Compute the Average True Range.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame containing ``high``, ``low`` and ``close`` columns.
-    period : int, optional
-        Lookback window for ATR calculation. This replaces older ``n`` or
-        ``window`` arguments that might have been used previously.
-    as_series : bool, optional
-        When ``True`` the full ATR :class:`~pandas.Series` is returned. When
-        ``False`` (the default) the last finite ATR value is returned as a
-        ``float``. Returning a scalar by default helps avoid "Series is
-        ambiguous" errors in caller logic.
-    """
 
 def calc_atr(
     df: pd.DataFrame | None,
@@ -32,11 +14,6 @@ def calc_atr(
     as_series: bool = True,
     **kwargs,
 ) -> pd.Series | float | None:
-    """Compute the Average True Range using ``window`` or ``period``."""
-
-    period = kwargs.get("period")
-    if period is not None:
-        window = int(period)
     """Compute the Average True Range using ``window`` or ``period``.
 
     Parameters
@@ -50,6 +27,10 @@ def calc_atr(
         latest ATR value is returned as ``float`` or ``None`` when
         insufficient data is provided.
     """
+
+    period = kwargs.get("period")
+    if period is not None:
+        window = int(period)
     high = df["high"].astype(float)
     low = df["low"].astype(float)
     close = df["close"].astype(float)
@@ -81,18 +62,9 @@ def calc_atr(
         return None
     value = float(atr_series.iloc[-1])
     return 0.0 if math.isnan(value) else value
-    ).average_true_range()
 
-    return atr_indicator if as_series else float(atr_indicator.iloc[-1])
-    atr_series = tr.rolling(window=period, min_periods=period).mean()
-
-    if as_series:
-        return atr_series
-
-    # Return the last finite value as a scalar float. If no values are
-    # available ``nan`` is returned.
-    last: Optional[float] = atr_series.iloc[-1] if len(atr_series) else float("nan")
-    return float(last) if pd.notna(last) else float("nan")
+    # The following unreachable code is intentionally removed to avoid
+    # ambiguous return paths and ensure a scalar is returned when requested.
 
 
 def atr_percent(df: pd.DataFrame, period: int = 14) -> float:
@@ -120,7 +92,7 @@ def normalize_score_by_volatility(
     """
 
     atr_val = calc_atr(df, period=atr_period, as_series=False)
-    if not math.isfinite(atr_val) or atr_val == 0:
+    if atr_val is None or not math.isfinite(atr_val) or atr_val == 0:
         return float(score)
     return float(score) / float(atr_val)
 

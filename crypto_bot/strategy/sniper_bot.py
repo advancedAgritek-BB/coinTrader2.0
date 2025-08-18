@@ -4,7 +4,6 @@ import pandas as pd
 
 from crypto_bot.utils import volatility
 from crypto_bot.utils.pair_cache import load_liquid_pairs
-from crypto_bot.utils import volatility
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
@@ -140,7 +139,6 @@ def generate_signal(
         if config is None or config.get("atr_normalization", True):
             score = volatility.normalize_score_by_volatility(df, score)
         logger.info("Signal for %s: %s, %s", symbol, score, "short")
-        return score, "short", atr_value or 0.0, False
         return score, "short", atr_value if atr_value is not None else 0.0, False
 
     base_volume = df["volume"].iloc[:initial_window].mean()
