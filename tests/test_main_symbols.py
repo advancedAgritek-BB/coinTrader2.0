@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from crypto_bot.utils import symbol_utils, market_loader
+from crypto_bot.utils import market_loader, symbol_utils
 
 
 class DummyExchange:
