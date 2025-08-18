@@ -5,6 +5,7 @@ import ta
 
 from crypto_bot.utils import volatility
 from crypto_bot.utils.pair_cache import load_liquid_pairs
+from crypto_bot.utils import volatility
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
@@ -140,6 +141,7 @@ def generate_signal(
             score = volatility.normalize_score_by_volatility(df, score)
         logger.info("Signal for %s: %s, %s", symbol, score, "short")
         return score, "short", atr_value or 0.0, False
+        return score, "short", atr_value if atr_value is not None else 0.0, False
 
     base_volume = df["volume"].iloc[:initial_window].mean()
     vol_ratio = df["volume"].iloc[-1] / base_volume if base_volume > 0 else 0
@@ -201,7 +203,7 @@ def generate_signal(
         body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
         avg_vol = df["volume"].iloc[:-1].mean()
         if (
-            body > atr * fallback_atr_mult
+            body > atr_value * fallback_atr_mult
             and avg_vol > 0
             and df["volume"].iloc[-1] > avg_vol * fallback_volume_mult
         ):
@@ -224,7 +226,7 @@ def generate_signal(
                     else "long"
                 )
             logger.info("Signal for %s: %s, %s", symbol, score, trade_direction)
-            return score, trade_direction, atr, event
+            return score, trade_direction, atr_value, event
 
     logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
     return 0.0, "none", atr, event

@@ -1,10 +1,29 @@
-import logging
+"""Utility functions for volatility and Average True Range (ATR)."""
+
+from __future__ import annotations
+
 import math
+from typing import Optional
+
 import pandas as pd
-from ta.volatility import AverageTrueRange
 
-logger = logging.getLogger(__name__)
 
+def calc_atr(df: pd.DataFrame, period: int = 14, as_series: bool = False):
+    """Compute the Average True Range.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing ``high``, ``low`` and ``close`` columns.
+    period : int, optional
+        Lookback window for ATR calculation. This replaces older ``n`` or
+        ``window`` arguments that might have been used previously.
+    as_series : bool, optional
+        When ``True`` the full ATR :class:`~pandas.Series` is returned. When
+        ``False`` (the default) the last finite ATR value is returned as a
+        ``float``. Returning a scalar by default helps avoid "Series is
+        ambiguous" errors in caller logic.
+    """
 
 def calc_atr(
     df: pd.DataFrame | None,
@@ -18,6 +37,32 @@ def calc_atr(
     period = kwargs.get("period")
     if period is not None:
         window = int(period)
+    """Compute the Average True Range using ``window`` or ``period``.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame | None
+        Input OHLC data.
+    window : int, default 14
+        Window length for ATR calculation.
+    as_series : bool, default True
+        When ``True`` a :class:`pandas.Series` is returned, otherwise the
+        latest ATR value is returned as ``float`` or ``None`` when
+        insufficient data is provided.
+    """
+    high = df["high"].astype(float)
+    low = df["low"].astype(float)
+    close = df["close"].astype(float)
+    prev_close = close.shift(1)
+
+    tr = pd.concat(
+        [
+            (high - low).abs(),
+            (high - prev_close).abs(),
+            (low - prev_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
 
     if df is None or df.empty or len(df) < max(2, int(window)):
         if as_series:
@@ -36,58 +81,49 @@ def calc_atr(
         return None
     value = float(atr_series.iloc[-1])
     return 0.0 if math.isnan(value) else value
+    ).average_true_range()
+
+    return atr_indicator if as_series else float(atr_indicator.iloc[-1])
+    atr_series = tr.rolling(window=period, min_periods=period).mean()
+
+    if as_series:
+        return atr_series
+
+    # Return the last finite value as a scalar float. If no values are
+    # available ``nan`` is returned.
+    last: Optional[float] = atr_series.iloc[-1] if len(atr_series) else float("nan")
+    return float(last) if pd.notna(last) else float("nan")
 
 
 def atr_percent(df: pd.DataFrame, period: int = 14) -> float:
-    """Return the latest ATR value as a fraction of the close price."""
+    """Return ATR as a percentage of the latest close price.
 
-    if df is None or df.empty or "close" not in df:
+    The return value is a scalar percentage (0-100). ``nan`` is returned when
+    ATR or price data are unavailable.
+    """
+
+    last_close = float(df["close"].iloc[-1])
+    atr_val = calc_atr(df, period=period, as_series=False)
+    if not (math.isfinite(atr_val) and last_close > 0):
         return float("nan")
-
-    atr_series = calc_atr(df, period=period)
-    if getattr(atr_series, "empty", False):
-        return float("nan")
-
-    price = float(df["close"].iloc[-1])
-    if price == 0 or math.isnan(price):
-        return float("nan")
-
-    atr_value = float(atr_series.iloc[-1]) if hasattr(atr_series, "iloc") else float(
-        atr_series
-    )
-    return atr_value / price
+    return 100.0 * atr_val / last_close
 
 
 def normalize_score_by_volatility(
-    df: pd.DataFrame,
-    score: float,
-    atr_period: int = 14,
-    eps: float = 1e-8,
+    df: pd.DataFrame, score: float, atr_period: int = 14
 ) -> float:
-    """Scale ``score`` by the latest ATR percentage.
+    """Normalize ``score`` by dividing by the latest ATR.
 
-    If ATR cannot be computed, returns ``score`` unchanged.
+    If the ATR cannot be computed or is zero the ``score`` is returned
+    unchanged. This helper is used to de-emphasise trading signals during
+    periods of heightened volatility.
     """
-    try:
-        atr = calc_atr(df, period=atr_period)
-        if getattr(atr, "empty", False) or df is None or df.empty or "close" not in df:
-            return score
 
-        last_close = df["close"].iloc[-1]
-        if last_close == 0 or math.isnan(last_close):
-            return score
-
-        last_atr = atr.iloc[-1] if hasattr(atr, "iloc") else float(atr)
-        vol = last_atr / last_close
-
-        if vol < 0.1 and score / max(vol, eps) > score:
-            return score * vol
-        return score / max(vol, eps) if vol else score
-    except Exception:
-        logger.exception(
-            "normalize_score_by_volatility: ATR unavailable; returning unnormalized score",
-        )
-        return score
+    atr_val = calc_atr(df, period=atr_period, as_series=False)
+    if not math.isfinite(atr_val) or atr_val == 0:
+        return float(score)
+    return float(score) / float(atr_val)
 
 
 __all__ = ["calc_atr", "atr_percent", "normalize_score_by_volatility"]
+
