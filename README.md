@@ -162,8 +162,12 @@ SUPABASE_SERVICE_ROLE_KEY=
 # SUPABASE_API_KEY=
 CT_MODELS_BUCKET=models
 CT_REGIME_PREFIX=models/regime
-CT_SYMBOL=BTCUSDT
+CT_SYMBOL=XRPUSD
 ```
+
+`CT_SYMBOL` controls which Supabase regime model is loaded. For instance,
+setting `CT_SYMBOL=XRPUSD` downloads the `xrpusd_regime_lgmb.pkl` model from the
+`models/regime/XRPUSD/` path in the configured bucket.
 
 ## Fast-Path Checks
 
