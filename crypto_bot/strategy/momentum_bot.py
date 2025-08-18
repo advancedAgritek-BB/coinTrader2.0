@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Optional, Tuple
 
 import logging
 import pandas as pd
@@ -14,6 +14,7 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # pragma: no cover - trainer missing
     ML_AVAILABLE = False
 
+MODEL: Optional[object]
 if ML_AVAILABLE:
     MODEL = load_model("momentum_bot")
 else:  # pragma: no cover - fallback
@@ -23,7 +24,6 @@ else:  # pragma: no cover - fallback
 
 def generate_signal(
     df: pd.DataFrame,
-    config: Optional[dict] = None,
     config: dict | None = None,
     symbol: str | None = None,
     timeframe: str | None = None,
