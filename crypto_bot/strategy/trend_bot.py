@@ -183,6 +183,19 @@ def generate_signal(
         and latest["volume"] > latest["volume_ma"]
     )
 
+    logger.debug(
+        "long_cond=%s short_cond=%s close=%s ema_fast=%s ema_slow=%s rsi=%s adx=%s volume=%s volume_ma=%s",
+        long_cond,
+        short_cond,
+        float(latest["close"]),
+        float(latest["ema_fast"]),
+        float(latest["ema_slow"]),
+        float(latest["rsi"]),
+        float(latest["adx"]),
+        float(latest["volume"]),
+        float(latest["volume_ma"]),
+    )
+
     if config.get("donchian_confirmation", False):
         try:
             window = int(config.get("donchian_window", 20))

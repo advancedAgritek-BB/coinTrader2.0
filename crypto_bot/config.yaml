@@ -624,8 +624,9 @@ trade_size_pct: 0.3
 trend_bot:
   atr_period: 10
   k: 0.8
-  trend_ema_fast: 15
-  trend_ema_slow: 40
+  adx_threshold: 20
+  trend_ema_fast: 12
+  trend_ema_slow: 35
 twap_enabled: true
 twap_interval_seconds: 5
 twap_slices: 6
