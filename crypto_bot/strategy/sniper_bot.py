@@ -1,7 +1,6 @@
 from typing import Dict, Optional, Tuple
 
 import pandas as pd
-import ta
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.pair_cache import load_liquid_pairs
@@ -146,10 +145,7 @@ def generate_signal(
     vol_ratio = df["volume"].iloc[-1] / base_volume if base_volume > 0 else 0
 
     atr_window = min(atr_window, len(df))
-    atr_series = ta.volatility.average_true_range(
-        df["high"], df["low"], df["close"], window=atr_window
-    )
-    atr = float(atr_series.iloc[-1]) if len(atr_series) else 0.0
+    atr = volatility.calc_atr(df, period=atr_window, as_series=False)
 
     if len(df) > volume_window:
         prev_vol = df["volume"].iloc[-(volume_window + 1):-1]
@@ -158,13 +154,13 @@ def generate_signal(
     avg_vol = prev_vol.mean() if not prev_vol.empty else 0.0
     body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
     event = False
-    if atr > 0 and avg_vol > 0:
+    if (atr is not None and atr > 0) and avg_vol > 0:
         if body >= 2 * atr and df["volume"].iloc[-1] >= 2 * avg_vol:
             event = True
 
     if df["volume"].iloc[-1] < min_volume:
         logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
-        return 0.0, "none", atr, event
+        return 0.0, "none", atr if atr is not None else 0.0, event
 
     if (
         len(df) <= max_history
@@ -188,7 +184,7 @@ def generate_signal(
         if direction == "auto":
             trade_direction = "short" if price_change < 0 else "long"
         logger.info("Signal for %s: %s, %s", symbol, score, trade_direction)
-        return score, trade_direction, atr, event
+        return score, trade_direction, atr if atr is not None else 0.0, event
 
     trade_direction = direction
     score = 0.0
@@ -227,7 +223,7 @@ def generate_signal(
             return score, trade_direction, atr_value, event
 
     logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
-    return 0.0, "none", atr, event
+    return 0.0, "none", atr if atr is not None else 0.0, event
 
 
 class regime_filter:
