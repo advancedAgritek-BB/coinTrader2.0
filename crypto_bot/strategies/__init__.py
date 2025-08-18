@@ -1,12 +1,55 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 from typing import Any, Awaitable, Callable, Dict, Iterable, Tuple
 
 import pandas as pd
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
+log = logger
+
+
+def _filter_kwargs(func, **kwargs):
+    """Return only kwargs that the callable accepts (unless it has **kwargs)."""
+    try:
+        sig = inspect.signature(func)
+    except (TypeError, ValueError):
+        # If we can't introspect, best effort: pass only 'df'
+        return {k: v for k, v in kwargs.items() if k == "df"}
+    accepts_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+    if accepts_varkw:
+        return kwargs
+    return {k: v for k, v in kwargs.items() if k in sig.parameters}
+
+
+async def _invoke_strategy(gen, **ctx):
+    """Call a strategy, awaiting if necessary, after filtering kwargs."""
+    filtered = _filter_kwargs(gen, **ctx)
+    # Handle pure async strategy functions
+    if inspect.iscoroutinefunction(gen):
+        return await gen(**filtered)
+    # Handle sync functions that might still return an awaitable
+    res = gen(**filtered)
+    if inspect.isawaitable(res):
+        return await res
+    return res
+
+
+def _normalize_result(val):
+    """Normalize strategy outputs to (score: float, action: str)."""
+    if val is None:
+        return 0.0, "none"
+    if isinstance(val, (tuple, list)) and len(val) == 2:
+        try:
+            return float(val[0]), str(val[1])
+        except Exception:
+            return 0.0, "none"
+    if isinstance(val, (int, float)):
+        return float(val), "none"
+    logger.warning("Unexpected strategy result type: %r", val)
+    return 0.0, "none"
 
 # Optional OHLCV DataFrame provider supplied by the application. Strategies can
 # request recent price data via :func:`get_ohlcv_df`.
@@ -77,11 +120,13 @@ async def score(
         )
         return {}
 
+    name = getattr(mod, "__name__", mod)
     sig = inspect.signature(gen).parameters
+    params = set(sig.keys())
     out: Dict[Tuple[str, str], Any] = {}
 
     # Pair / stat-arb style strategies expect two dataframes.
-    if "df_a" in sig and "df_b" in sig:
+    if {"df_a", "df_b"} <= params:
         pairs = getattr(mod, "PAIRS", None) or getattr(mod, "pairs", None) or []
         for a, b in pairs:
             for tf in timeframes:
@@ -90,17 +135,25 @@ async def score(
                 if df_a is None or df_b is None:
                     continue
                 try:
-                    res = gen(
+                    res = await _invoke_strategy(
+                        gen,
                         df_a=df_a,
                         df_b=df_b,
                         symbol_a=a,
                         symbol_b=b,
                         timeframe=tf,
                     )
-                except TypeError:
-                    res = gen(df_a, df_b)
-                if res:
-                    out[(f"{a}|{b}", tf)] = res
+                except Exception:
+                    logger.exception(
+                        "Strategy %s scoring failed for %s|%s @ %s",
+                        name,
+                        a,
+                        b,
+                        tf,
+                    )
+                    res = (0.0, "none")
+                score_action = _normalize_result(res)
+                out[(f"{a}|{b}", tf)] = score_action
         return out
 
     # Single-asset strategies
@@ -109,12 +162,22 @@ async def score(
             df = await _df(sym, tf)
             if df is None:
                 continue
+            if {"df_a", "df_b"} & params:
+                logger.debug(
+                    "Skipping pairwise strategy %s for single-symbol pass", name
+                )
+                continue
             try:
-                res = gen(df=df, symbol=sym, timeframe=tf)
-            except TypeError:
-                res = gen(df)
-            if res:
-                out[(sym, tf)] = res
+                res = await _invoke_strategy(
+                    gen, df=df, symbol=sym, timeframe=tf
+                )
+            except Exception:
+                logger.exception(
+                    "Strategy %s scoring failed for %s @ %s", name, sym, tf
+                )
+                res = (0.0, "none")
+            score_action = _normalize_result(res)
+            out[(sym, tf)] = score_action
     return out
 
 
@@ -124,8 +187,6 @@ def _maybe_await(func: Callable[..., Any] | None, *args, **kwargs) -> Any:
     We filter keyword arguments by the function signature but never fabricate
     positional arguments.
     """
-
-    import asyncio
 
     if func is None:
         return {}
