@@ -192,6 +192,26 @@ def test_get_filtered_symbols_skip(monkeypatch):
     assert result == ([("BTC/USD", 0.0), ("ETH/USD", 0.0)], [])
 
 
+def test_get_filtered_symbols_spread_filter(monkeypatch):
+    async def fake_filter_symbols(_ex, syms, cfg):
+        spreads = {"BTC/USD": 0.5, "ETH/USD": 2.0}
+        max_spread = cfg.get("symbol_filter", {}).get("max_spread_pct", float("inf"))
+        return ([(s, spreads[s]) for s in syms if spreads[s] <= max_spread], [])
+
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    config = {
+        "symbols": ["BTC/USD", "ETH/USD"],
+        "symbol_filter": {"max_spread_pct": 1.0},
+    }
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+
+    result = asyncio.run(symbol_utils.get_filtered_symbols(DummyExchange(), config))
+    assert result == ([("BTC/USD", 0.5)], [])
+    assert all(spread <= 1.0 for _, spread in result[0])
+
+
 def test_get_filtered_symbols_valid_sol(monkeypatch, caplog):
     caplog.set_level(logging.INFO)
 
