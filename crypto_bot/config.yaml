@@ -64,7 +64,7 @@ fees:
 
 # === features ===
 features:
-  ml: false
+  ml: true
   helius: false
   pump_monitor: false
   telegram: true
@@ -305,7 +305,7 @@ min_history_fraction: 0.1
 min_symbol_age_days: 0
 min_symbol_score: 0
 # Set to true only if coinTrader_Trainer and models are installed
-ml_enabled: false
+ml_enabled: true
 ml_signal_model:
   enabled: true
   weight: 0.9
@@ -491,7 +491,7 @@ solana_scanner:
   gecko_search: true
   interval_minutes: 0.1
   max_tokens_per_scan: 50
-  min_volume_usd: 100000
+  min_volume_usd: 10000
 solana_slippage_bps: 10
 stat_arb_bot:
   pairs:
@@ -502,7 +502,7 @@ strategy_allocation:
   grid_bot: 0.2
   sniper_solana: 0.6
   trend_bot: 0.2
-strategy_evaluation_mode: ensemble
+strategy_evaluation_mode: best
 strategy_router:
   # range_arb_bot runs globally and is appended automatically; no need to list it under regimes
   bandit_enabled: true
