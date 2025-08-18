@@ -734,15 +734,36 @@ def _ensure_ml(cfg: dict) -> None:
 
         model, model_path = asyncio.run(load_regime_model(symbol))
         if model is None:
-            raise MLUnavailableError("model not found", cfg)
-        logger.info(
-            "Loaded global regime model for %s from Supabase: %s",
-            symbol,
-            model_path,
-        )
+            fallback_url = (
+                cfg.get("model_fallback_url")
+                or os.getenv(
+                    "CT_MODEL_FALLBACK_URL",
+                    "https://prmhankbfjanqffwjcba.supabase.co/storage/v1/object/public/models/xrpusd_regime_lgbm.pkl",
+                )
+            )
+            try:
+                import urllib.request
+                import pickle
+
+                with urllib.request.urlopen(fallback_url) as resp:
+                    model = pickle.loads(resp.read())
+                model_path = fallback_url
+                logger.info(
+                    "Loaded fallback regime model for %s from %s",
+                    symbol,
+                    fallback_url,
+                )
+            except Exception as url_exc:  # pragma: no cover - fallback failure
+                raise MLUnavailableError("model not found", cfg) from url_exc
+        else:
+            logger.info(
+                "Loaded global regime model for %s from Supabase: %s",
+                symbol,
+                model_path,
+            )
     except Exception as exc:  # pragma: no cover - model load failure
-        logger.error(
-            "Machine learning initialization for %s failed: %s", symbol, exc
+        logger.warning(
+            "Supabase model load failed: %s. Using fallback non-ML mode.", exc
         )
         raise MLUnavailableError("model load failure", cfg) from exc
     if not cfg.get("ml_enabled", True):
