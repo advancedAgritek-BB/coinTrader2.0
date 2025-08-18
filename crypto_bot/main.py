@@ -739,10 +739,40 @@ def _ensure_ml(cfg: dict) -> None:
     if not cfg.get("ml_enabled", True):
         return
     symbol = cfg.get("symbol") or os.getenv("CT_SYMBOL", "XRPUSD")
+    local_path = cfg.get("model_local_path") or os.getenv(
+        "CT_MODEL_LOCAL_PATH", f"{symbol.lower()}_regime_lgbm.pkl"
+    )
+    model = None
+    scaler = None
+    model_path: str | None = None
     try:  # pragma: no cover - best effort
-        from crypto_bot.regime.regime_classifier import load_regime_model
+        from crypto_bot.regime import regime_classifier as rc
 
-        model, _scaler, model_path = asyncio.run(load_regime_model(symbol))
+        model, scaler, model_path = asyncio.run(rc.load_regime_model(symbol))
+    except Exception as exc:  # pragma: no cover - model load failure
+        logger.warning("Supabase model load failed: %s", exc)
+
+    if model is not None:
+        logger.info(
+            "Loaded global regime model for %s from Supabase: %s",
+            symbol,
+            model_path,
+        )
+    if model is None:
+        if local_path and Path(local_path).exists():
+            try:
+                import pickle
+
+                with open(local_path, "rb") as f:
+                    model = pickle.load(f)
+                model_path = str(local_path)
+                logger.info(
+                    "Loaded cached fallback regime model for %s from %s",
+                    symbol,
+                    local_path,
+                )
+            except Exception as file_exc:  # pragma: no cover - load failure
+                logger.warning("Failed to load cached model from %s: %s", local_path, file_exc)
         if model is None:
             fallback_url = (
                 cfg.get("model_fallback_url")
@@ -763,19 +793,39 @@ def _ensure_ml(cfg: dict) -> None:
                     symbol,
                     fallback_url,
                 )
+                if local_path:
+                    try:
+                        Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+                        with open(local_path, "wb") as f:
+                            pickle.dump(model, f)
+                        logger.info(
+                            "Cached fallback regime model for %s to %s",
+                            symbol,
+                            local_path,
+                        )
+                    except Exception as cache_exc:  # pragma: no cover - cache failure
+                        logger.debug(
+                            "Failed to cache fallback model to %s: %s",
+                            local_path,
+                            cache_exc,
+                        )
             except Exception as url_exc:  # pragma: no cover - fallback failure
-                raise MLUnavailableError("model not found", cfg) from url_exc
-        else:
-            logger.info(
-                "Loaded global regime model for %s from Supabase: %s",
-                symbol,
-                model_path,
-            )
-    except Exception as exc:  # pragma: no cover - model load failure
-        logger.warning(
-            "Supabase model load failed: %s. Using fallback non-ML mode.", exc
-        )
-        raise MLUnavailableError("model load failure", cfg) from exc
+                logger.warning(
+                    "Failed to load fallback model from %s: %s", fallback_url, url_exc
+                )
+
+    if model is None:
+        raise MLUnavailableError("model not found", cfg)
+
+    try:
+        from crypto_bot.regime import regime_classifier as rc
+
+        rc._supabase_model = model
+        rc._supabase_scaler = scaler
+        rc._supabase_symbol = symbol
+    except Exception:  # pragma: no cover - assignment failure
+        pass
+
     if not cfg.get("ml_enabled", True):
         return
     if not ML_AVAILABLE:
@@ -792,13 +842,12 @@ def _ensure_ml_if_needed(cfg: dict) -> None:
     global _LAST_ML_CFG
     ml_cfg = {"ml_enabled": cfg.get("ml_enabled", True)}
     if ml_cfg != _LAST_ML_CFG:
-        if ml_cfg["ml_enabled"]:
-            try:
-                _ensure_ml(cfg)
-            except MLUnavailableError as exc:
-                logger.warning("ML disabled: %s", exc)
-                cfg["ml_enabled"] = False
-                ml_cfg["ml_enabled"] = False
+        try:
+            _ensure_ml(cfg)
+        except MLUnavailableError as exc:
+            logger.warning("ML disabled: %s", exc)
+            cfg["ml_enabled"] = False
+            ml_cfg["ml_enabled"] = False
         _LAST_ML_CFG = ml_cfg
 
 
