@@ -189,6 +189,30 @@ async def test_initial_scan_symbol_filter_overrides(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_initial_scan_filters_tradable_symbols(monkeypatch):
+    captured_batches: list[list[str]] = []
+
+    async def fake_update_multi(exchange, cache, batch, cfg, **kwargs):
+        captured_batches.append(batch)
+        return {}
+
+    async def fake_update_regime(*_args, **_kwargs):
+        return {}
+
+    tradable = ['BTC/USD', 'ETH/USD']
+
+    async def fake_get_filtered_symbols(ex, cfg):
+        return ([(s, 0.0) for s in tradable], [])
+
+    monkeypatch.setattr(
+        'crypto_bot.main.update_multi_tf_ohlcv_cache',
+        fake_update_multi,
+    )
+    monkeypatch.setattr(
+        'crypto_bot.main.update_regime_tf_cache',
+        fake_update_regime,
+    )
+    monkeypatch.setattr(
 async def test_initial_scan_warms_deferred_timeframes(monkeypatch):
     calls = []
 
@@ -211,6 +235,15 @@ async def test_initial_scan_warms_deferred_timeframes(monkeypatch):
     )
 
     cfg = {
+        'symbols': tradable + ['DOGE/USD'],
+        'timeframes': ['1h'],
+        'scan_lookback_limit': 50,
+        'symbol_batch_size': 10,
+    }
+
+    await initial_scan(DummyExchange(), cfg, SessionState())
+
+    assert captured_batches == [tradable]
         'symbols': ['BTC/USD'],
         'ohlcv': {
             'bootstrap_timeframes': ['1h'],
