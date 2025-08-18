@@ -21,6 +21,7 @@ import aiohttp
 from dotenv import dotenv_values, load_dotenv
 
 from crypto_bot.utils.logging_config import setup_logging
+from crypto_bot.utils.ml_utils import ML_AVAILABLE
 
 try:
     import ccxt  # type: ignore
