@@ -19,12 +19,12 @@ def test_auto_mode_falls_back_to_cex(monkeypatch, caplog):
     monkeypatch.setattr(su, "filter_symbols", fake_filter_symbols, raising=False)
     cfg = {"mode": "auto", "symbol_filter": {}, "symbols": ["BTC/USDT"]}
     ex = types.SimpleNamespace(markets={})
-    caplog.set_level(logging.WARNING)
+    caplog.set_level(logging.DEBUG)
     scored, onchain = asyncio.run(su.get_filtered_symbols(ex, cfg))
     assert scored == [("BTC/USDT", 1.0)]
     assert onchain == []
     assert cfg["mode"] == "cex"
-    assert "falling back to CEX" in caplog.text
+    assert "using CEX mode" in caplog.text
 
 def test_empty_universe_raises(monkeypatch):
     async def fake_filter_symbols(exchange, symbols, config):

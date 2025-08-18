@@ -22,7 +22,12 @@ def test_fetch_candidates_logs_batch(monkeypatch, caplog):
         positions={},
         df_cache={"1h": {"BTC/USD": df}},
         regime_cache={},
-        config={"timeframe": "1h", "symbols": ["BTC/USD"], "symbol_batch_size": 1},
+        config={
+            "timeframe": "1h",
+            "symbols": ["BTC/USD"],
+            "symbol_batch_size": 1,
+            "benchmark_symbols": [],
+        },
     )
     ctx.exchange = object()
 
@@ -51,7 +56,12 @@ def test_fetch_candidates_dedupes_and_filters(monkeypatch):
         positions={},
         df_cache={"1h": {"BTC/USDT": df}},
         regime_cache={},
-        config={"timeframe": "1h", "symbols": ["BTC/USDT"], "symbol_batch_size": 5},
+        config={
+            "timeframe": "1h",
+            "symbols": ["BTC/USDT"],
+            "symbol_batch_size": 5,
+            "benchmark_symbols": [],
+        },
     )
 
     class DummyExchange:

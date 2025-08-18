@@ -1450,8 +1450,13 @@ async def fetch_candidates(ctx: BotContext) -> None:
         ctx.config.get("mode"),
     )
 
-    # Always include major benchmark pairs
-    active_candidates.extend([("BTC/USDT", 10.0), ("SOL/USDC", 10.0)])
+    # Include benchmark pairs from configuration.
+    benchmark_symbols = ctx.config.get(
+        "benchmark_symbols",
+        [ctx.config.get("symbol", "BTC/USDT"), "SOL/USDC"],
+    )
+    if benchmark_symbols:
+        active_candidates.extend((s, 10.0) for s in benchmark_symbols if s)
 
     symbols = active_candidates
     solana_tokens: list[str] = list(onchain_syms) if resolved_mode != "cex" else []
@@ -1489,6 +1494,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
     total_candidates = len(symbols)
     symbols = [(s, sc) for s, sc in symbols if s not in no_data_symbols]
     allowed_syms = set(ctx.config.get("symbols", []))
+    allowed_syms.update(benchmark_symbols or [])
     symbols = [(s, sc) for s, sc in symbols if s in allowed_syms]
     ctx.active_universe = [s for s, _ in symbols]
     ctx.resolved_mode = resolved_mode
