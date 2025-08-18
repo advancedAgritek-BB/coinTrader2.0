@@ -140,7 +140,6 @@ MAX_OHLCV_FAILURES = 10
 MAX_WS_LIMIT = 500
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 STATUS_UPDATES = True
-SEMA: asyncio.Semaphore | None = None
 # Per-timeframe locks are provided by crypto_bot.data.locks
 
 # Shared StreamEvaluator instance set by main
@@ -433,7 +432,7 @@ def configure(
     gecko_limit: int | None = None,
 ) -> None:
     """Configure module-wide settings."""
-    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES, SEMA, GECKO_SEMAPHORE
+    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES, GECKO_SEMAPHORE
     try:
         with open(CONFIG_PATH) as f:
             cfg = yaml.safe_load(f) or {}
@@ -505,17 +504,8 @@ def configure(
             )
     if status_updates is not None:
         STATUS_UPDATES = bool(status_updates)
-    if max_concurrent is not None:
-        try:
-            val = int(max_concurrent)
-            if val < 1:
-                raise ValueError
-            SEMA = asyncio.Semaphore(val)
-        except (TypeError, ValueError):
-            logger.warning(
-                "Invalid max_concurrent %s; disabling semaphore", max_concurrent
-            )
-            SEMA = None
+    # max_concurrent is retained for backward compatibility but concurrency
+    # limits are now handled internally by the KrakenClient
 
     if gecko_limit is not None:
         try:
@@ -1384,8 +1374,6 @@ async def load_ohlcv_parallel(
         if not isinstance(max_concurrent, int) or max_concurrent < 1:
             raise ValueError("max_concurrent must be a positive integer or None")
         sem = asyncio.Semaphore(max_concurrent)
-    elif SEMA is not None:
-        sem = SEMA
     else:
         sem = None
 
