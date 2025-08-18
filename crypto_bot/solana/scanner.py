@@ -78,9 +78,22 @@ async def get_solana_new_tokens(cfg: Mapping[str, object]) -> List[str]:
         return []
 
     min_score = float(cfg.get("min_symbol_score", 0.0))
-    ex_name = str(cfg.get("exchange", "kraken")).lower()
+    ex = cfg.get("exchange", "kraken")
+    if isinstance(ex, dict):
+        ex_name = ex.get("name", "kraken").lower()
+        params = {"enableRateLimit": True}
+        timeout = ex.get("request_timeout_ms")
+        if timeout:
+            params["timeout"] = int(timeout)
+        max_conc = ex.get("max_concurrency")
+    else:
+        ex_name = str(ex).lower()
+        params = {"enableRateLimit": True}
+        max_conc = None
     exchange_cls = getattr(ccxt, ex_name)
-    exchange = exchange_cls({"enableRateLimit": True})
+    exchange = exchange_cls(params)
+    if max_conc is not None:
+        setattr(exchange, "max_concurrency", int(max_conc))
 
     try:
         scores = await asyncio.gather(

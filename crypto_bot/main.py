@@ -584,7 +584,9 @@ async def fetch_balance(exchange, wallet, config):
         else:
             bal = await asyncio.to_thread(exchange.fetch_balance)
         return bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
-    return wallet.total_balance if wallet else 0.0
+    if wallet:
+        return getattr(wallet, "total_balance", getattr(wallet, "balance", 0.0))
+    return 0.0
 
 
 async def fetch_and_log_balance(exchange, wallet, config):
@@ -682,9 +684,15 @@ def _load_config_file() -> dict:
         logger.info("Loading config from %s", CONFIG_PATH)
         data = yaml.safe_load(f) or {}
     trading_cfg = data.get("trading", {}) or {}
-    exchange_id = (
-        data.get("exchange") or trading_cfg.get("exchange") or os.getenv("EXCHANGE")
-    )
+    raw_ex = data.get("exchange") or trading_cfg.get("exchange") or os.getenv("EXCHANGE")
+    if isinstance(raw_ex, dict):
+        exchange_cfg = dict(raw_ex)
+    else:
+        exchange_cfg = {"name": raw_ex}
+    exchange_cfg.setdefault("name", "kraken")
+    exchange_cfg.setdefault("max_concurrency", 3)
+    exchange_cfg.setdefault("request_timeout_ms", 10000)
+    exchange_id = exchange_cfg.get("name")
     timeframes = data.get("timeframes") or trading_cfg.get("timeframes")
     trading_mode = data.get("execution_mode") or trading_cfg.get("mode")
     allowed_quotes = trading_cfg.get("allowed_quotes", [])
@@ -712,7 +720,7 @@ def _load_config_file() -> dict:
     if allowed_quotes:
         sf_cfg.setdefault("quote_whitelist", allowed_quotes)
     data["symbol_filter"] = sf_cfg
-    data.setdefault("exchange", exchange_id)
+    data["exchange"] = exchange_cfg
     data.setdefault("timeframes", timeframes)
     data.setdefault("execution_mode", trading_mode)
 
@@ -2712,11 +2720,10 @@ async def _main_impl() -> MainResult:
 
     if config.get("exchanges"):
         exchanges = get_exchanges(config)
-        primary = (
-            config.get("primary_exchange")
-            or config.get("exchange")
-            or next(iter(exchanges))
-        )
+        ex_name = config.get("exchange")
+        if isinstance(ex_name, dict):
+            ex_name = ex_name.get("name")
+        primary = config.get("primary_exchange") or ex_name or next(iter(exchanges))
         exchange, ws_client = exchanges[primary]
         secondary_exchange = None
         for name, pair in exchanges.items():
