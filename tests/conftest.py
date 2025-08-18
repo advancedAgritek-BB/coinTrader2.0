@@ -221,6 +221,14 @@ class _FakeProm:
 sys.modules.setdefault("prometheus_client", _FakeProm())
 
 
+@pytest.fixture
+def progress_path(tmp_path):
+    path = tmp_path / "ohlcv_progress.log"
+    yield path
+    if path.exists():
+        path.unlink()
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config, items):
     """Skip network tests when HTTP libraries are unavailable."""
