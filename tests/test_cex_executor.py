@@ -287,7 +287,7 @@ def test_get_exchange_websocket_missing_creds(monkeypatch):
             self.options = {}
 
     kraken.use_private_ws = True
-    monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: DummyCCXT2(params), raising=False)
+    monkeypatch.setattr(cex_executor.kraken, "get_client", lambda *a, **k: DummyCCXT2({}))
     monkeypatch.setattr(cex_executor, "env_or_prompt", lambda *a, **k: None)
     exchange, ws = cex_executor.get_exchange(config)
     assert ws is None
@@ -311,7 +311,7 @@ def test_get_exchange_ws_token_failure_fallback(monkeypatch):
         def __init__(self, params):
             self.options = {}
 
-    monkeypatch.setattr(cex_executor.ccxt, "kraken", lambda params: DummyCCXT(params), raising=False)
+    monkeypatch.setattr(cex_executor.kraken, "get_client", lambda *a, **k: DummyCCXT({}))
 
     exchange, ws = cex_executor.get_exchange(config)
     assert ws is None

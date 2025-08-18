@@ -27,6 +27,8 @@ def load_funcs():
         'np': np,
         'time': __import__('time'),
         'logger': logging.getLogger('test'),
+        'pipeline_logger': logging.getLogger('pipeline'),
+        'deque': deque,
         'BotContext': BotContext,
         'symbol_priority_queue': deque(),
         'QUEUE_LOCK': asyncio.Lock(),
@@ -43,6 +45,17 @@ def load_funcs():
         'enqueue_solana_tokens': lambda tokens, mark_new=False: None,
         'recent_solana_set': set(),
         'recent_solana_tokens': deque(),
+        'no_data_symbols': set(),
+        'symbol_cache_guard': lambda: type(
+            'G',
+            (),
+            {
+                '__aenter__': lambda self: asyncio.sleep(0),
+                '__aexit__': lambda self, exc_type, exc, tb: asyncio.sleep(0),
+            },
+        )(),
+        '_update_caches_impl': lambda ctx: asyncio.sleep(0),
+        '_analyse_batch_impl': lambda ctx: asyncio.sleep(0),
         'TOTAL_ANALYSES': 0,
         'UNKNOWN_COUNT': 0,
     }
