@@ -738,6 +738,11 @@ def _load_config_file() -> dict:
     tele_cfg.setdefault("batch_summary_secs", 0)
     data["telemetry"] = tele_cfg
 
+    ohlcv_cfg = data.get("ohlcv", {}) or {}
+    ohlcv_cfg.setdefault("bootstrap_timeframes", ["1h"])
+    ohlcv_cfg.setdefault("defer_timeframes", ["4h", "1d"])
+    data["ohlcv"] = ohlcv_cfg
+
     data = replace_placeholders(data)
 
     strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
@@ -1025,7 +1030,11 @@ async def initial_scan(
         sf.get("initial_history_candles", config.get("scan_lookback_limit", 50))
     )
 
-    tfs = sf.get("initial_timeframes", config.get("timeframes", ["1h"]))
+    ohlcv_cfg = config.get("ohlcv", {})
+    bootstrap_tfs = ohlcv_cfg.get(
+        "bootstrap_timeframes", config.get("timeframes", ["1h"])
+    )
+    tfs = sf.get("initial_timeframes", bootstrap_tfs)
     tfs = sorted(set(tfs) | {"1m", "5m"}, key=lambda t: timeframe_seconds(None, t))
     tf_sec = timeframe_seconds(None, tfs[0])
     lookback_since = int(time.time() * 1000 - scan_limit * tf_sec * 1000)
@@ -1095,7 +1104,80 @@ async def initial_scan(
     if pending_tasks:
         await asyncio.gather(*pending_tasks, return_exceptions=True)
 
+    register_task(
+        asyncio.create_task(
+            warm_deferred_timeframes(exchange, config, state, symbols)
+        )
+    )
+
     return
+
+
+async def warm_deferred_timeframes(
+    exchange: object,
+    config: dict,
+    state: "SessionState",
+    symbols: list[str],
+) -> None:
+    """Warm OHLCV cache for deferred timeframes in the background."""
+
+    ohlcv_cfg = config.get("ohlcv", {})
+    defer_tfs = ohlcv_cfg.get("defer_timeframes")
+    if not defer_tfs:
+        return
+
+    sf = config.get("symbol_filter", {})
+    ohlcv_batch_size = config.get("ohlcv_batch_size")
+    if ohlcv_batch_size is None:
+        ohlcv_batch_size = sf.get("ohlcv_batch_size")
+    scan_limit = int(
+        sf.get("initial_history_candles", config.get("scan_lookback_limit", 50))
+    )
+
+    tfs = sorted(set(defer_tfs), key=lambda t: timeframe_seconds(None, t))
+    tf_sec = timeframe_seconds(None, tfs[0])
+    lookback_since = int(time.time() * 1000 - scan_limit * tf_sec * 1000)
+    batch_size = int(config.get("symbol_batch_size", 10))
+    for i in range(0, len(symbols), batch_size):
+        batch = symbols[i : i + batch_size]
+        async with OHLCV_LOCK:
+            state.df_cache = await update_multi_tf_ohlcv_cache(
+                exchange,
+                state.df_cache,
+                batch,
+                {**config, "timeframes": tfs},
+                limit=scan_limit,
+                start_since=lookback_since,
+                use_websocket=False,
+                force_websocket_history=config.get("force_websocket_history", False),
+                max_concurrent=config.get("max_concurrent_ohlcv"),
+                notifier=None,
+                priority_queue=symbol_priority_queue,
+                batch_size=ohlcv_batch_size,
+            )
+
+            regime_tfs = [tf for tf in config.get("regime_timeframes", []) if tf in tfs]
+            if regime_tfs:
+                state.regime_cache = await update_regime_tf_cache(
+                    exchange,
+                    state.regime_cache,
+                    batch,
+                    {**config, "regime_timeframes": regime_tfs},
+                    limit=scan_limit,
+                    start_since=lookback_since,
+                    use_websocket=False,
+                    force_websocket_history=config.get(
+                        "force_websocket_history", False
+                    ),
+                    max_concurrent=config.get("max_concurrent_ohlcv"),
+                    notifier=None,
+                    df_map=state.df_cache,
+                    batch_size=ohlcv_batch_size,
+                )
+        await asyncio.sleep(0)
+
+    if pending_tasks:
+        await asyncio.gather(*pending_tasks, return_exceptions=True)
 
 
 async def fetch_candidates(ctx: BotContext) -> None:
