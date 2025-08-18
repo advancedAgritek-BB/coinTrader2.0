@@ -3,6 +3,8 @@ import os
 import shutil
 from pathlib import Path
 
+from crypto_bot.utils.bootstrap_progress import reset_bootstrap_progress
+
 CACHE_DIR = Path(__file__).resolve().parents[1] / "cache"
 BOOTSTRAP_FILE = CACHE_DIR / "ohlcv_bootstrap_state.json"
 
@@ -54,6 +56,16 @@ def build_parser():
         action="store_true",
         help="Run a quick fetch/strategy smoke test then exit",
     )
+    p.add_argument(
+        "--ohlcv-chunk-size",
+        type=int,
+        help="Symbols per chunk when fetching OHLCV during bootstrap",
+    )
+    p.add_argument(
+        "--reset-bootstrap-progress",
+        action="store_true",
+        help="Reset bootstrap progress tracker and start over",
+    )
     return p
 
 
@@ -71,6 +83,10 @@ def main():
         # In smoke test just output selection and exit quickly
         print(f"Selected exchange {exchange} (paper={args.paper})")
         return
+    if args.ohlcv_chunk_size is not None:
+        os.environ["OHLCV_CHUNK_SIZE"] = str(args.ohlcv_chunk_size)
+    if args.reset_bootstrap_progress:
+        reset_bootstrap_progress()
     from crypto_bot.main import main as bot_main
     import asyncio
 

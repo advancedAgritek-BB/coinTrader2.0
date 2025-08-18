@@ -20,6 +20,7 @@ from crypto_bot import tax_logger
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.env import env_or_prompt
 from crypto_bot.utils import kraken
+from .kraken_client import KrakenClient
 
 
 logger = setup_logger(__name__, LOG_DIR / "execution.log")
@@ -75,12 +76,14 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
                     logger.warning("Failed to initialize Kraken WS client: %s", err)
                     ws_client = None
 
-        exchange = ccxt.kraken(
-            {
-                "apiKey": api_key,
-                "secret": api_secret,
-                "enableRateLimit": True,
-            }
+        exchange = KrakenClient(
+            ccxt.kraken(
+                {
+                    "apiKey": api_key,
+                    "secret": api_secret,
+                    "enableRateLimit": True,
+                }
+            )
         )
     else:
         raise ValueError(f"Unsupported exchange: {exchange_name}")

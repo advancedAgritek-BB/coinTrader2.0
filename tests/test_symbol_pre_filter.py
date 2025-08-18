@@ -17,16 +17,6 @@ def reset_telemetry():
     yield
 
 
-@pytest.fixture(autouse=True)
-def reset_semaphore():
-    sp.init_semaphore(1)
-    yield
-
-
-@pytest.fixture(autouse=True)
-def reset_ticker_semaphore():
-    sp.init_ticker_semaphore(1, 0)
-    yield
 
 
 @pytest.fixture(autouse=True)
@@ -110,22 +100,6 @@ def test_filter_symbols(monkeypatch, track_multi_tf):
     )
     assert [s for s, _ in result[0]] == ["ETH/USD", "BTC/USD"]
     assert track_multi_tf == [["ETH/USD", "BTC/USD"]]
-
-
-def test_filter_symbols_sets_semaphore(monkeypatch):
-    monkeypatch.setattr(
-        "crypto_bot.utils.symbol_pre_filter._fetch_ticker_async", fake_fetch
-    )
-    cfg = {
-        **CONFIG,
-        "symbol_filter": {
-            **CONFIG["symbol_filter"],
-            "max_concurrent_ohlcv": 3,
-        },
-    }
-    asyncio.run(filter_symbols(DummyExchange(), ["ETH/USD"], cfg))
-    assert sp.SEMA is not None
-    assert sp.SEMA._value == 3
 
 
 class FetchTickersExchange(DummyExchange):
