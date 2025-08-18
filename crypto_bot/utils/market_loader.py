@@ -2251,6 +2251,7 @@ async def update_multi_tf_ohlcv_cache(
 
             if cex_symbols:
                 if tf_start_since is None:
+                    prev_lengths = {s: len(tf_cache[s]) if s in tf_cache else 0 for s in cex_symbols}
                     groups: Dict[int, list[str]] = {}
                     for sym in cex_symbols:
                         sym_limit = dynamic_limits.get(sym, tf_limit)
@@ -2281,6 +2282,13 @@ async def update_multi_tf_ohlcv_cache(
                             notifier=notifier,
                             priority_symbols=priority_syms,
                         )
+                    for s in cex_symbols:
+                        curr_len = len(tf_cache[s]) if s in tf_cache else 0
+                        prev = prev_lengths.get(s, 0)
+                        fetched = curr_len - prev
+                        if fetched > 0:
+                            state = "bootstrap" if prev == 0 else "tail"
+                            logger.info("%s %s fetched=%d", tf, state, fetched)
                 else:
                     from crypto_bot.main import update_df_cache
 
@@ -2377,16 +2385,21 @@ async def update_multi_tf_ohlcv_cache(
                         )
                         df_new["timestamp"] = df_new["timestamp"].astype(int) // 10 ** 9
 
+                        new_rows = len(df_new)
+                        state = "bootstrap"
                         if sym in tf_cache and not tf_cache[sym].empty:
                             last_ts = tf_cache[sym]["timestamp"].iloc[-1]
                             df_new = df_new[df_new["timestamp"] > last_ts]
                             if df_new.empty:
                                 continue
+                            new_rows = len(df_new)
                             df_new = pd.concat([tf_cache[sym], df_new], ignore_index=True)
+                            state = "tail"
 
                         update_df_cache(cache, tf, sym, df_new)
                         tf_cache = cache.get(tf, {})
                         tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
+                        logger.info("%s %s fetched=%d", tf, state, new_rows)
                         clear_regime_cache(sym, tf)
                         if (
                             STREAM_EVALUATOR
@@ -2483,18 +2496,23 @@ async def update_multi_tf_ohlcv_cache(
                     columns=["timestamp", "open", "high", "low", "close", "volume"],
                 )
                 changed = False
+                new_rows = len(df_new)
+                state = "bootstrap"
                 if sym in tf_cache and not tf_cache[sym].empty:
                     last_ts = tf_cache[sym]["timestamp"].iloc[-1]
                     df_new = df_new[df_new["timestamp"] > last_ts]
                     if df_new.empty:
                         continue
+                    new_rows = len(df_new)
                     tf_cache[sym] = pd.concat([tf_cache[sym], df_new], ignore_index=True)
                     changed = True
+                    state = "tail"
                 else:
                     tf_cache[sym] = df_new
                     changed = True
                 if changed:
                     tf_cache[sym]["return"] = tf_cache[sym]["close"].pct_change()
+                    logger.info("%s %s fetched=%d", tf, state, new_rows)
                     clear_regime_cache(sym, tf)
                     if (
                         STREAM_EVALUATOR
