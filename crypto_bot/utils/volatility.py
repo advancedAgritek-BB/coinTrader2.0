@@ -2,9 +2,30 @@
 from __future__ import annotations
 
 import math
+import inspect
+import logging
 import pandas as pd
 
 from crypto_bot.indicators import calc_atr
+
+logger = logging.getLogger(__name__)
+
+
+def _calc_atr_compat(df, atr_period):
+    """Call ``calc_atr(df, ...)`` using whatever parameter name it supports."""
+    try:
+        params = set(inspect.signature(calc_atr).parameters.keys())
+    except Exception:
+        params = set()
+    for pname in ("period", "window", "length", "n"):
+        if pname in params:
+            return calc_atr(df, **{pname: atr_period})
+    try:
+        # As a last resort, try positional
+        return calc_atr(df, atr_period)
+    except TypeError:
+        # Or no-arg beyond df
+        return calc_atr(df)
 
 
 def atr_percent(df: pd.DataFrame, period: int = 14) -> float:
@@ -19,46 +40,22 @@ def atr_percent(df: pd.DataFrame, period: int = 14) -> float:
     return 0.0 if math.isnan(atr) else float(atr / price * 100.0)
 
 
-def normalize_score_by_volatility(
-    score: float | pd.DataFrame,
-    df: pd.DataFrame | float,
-    atr_period: int = 14,
-    floor: float = 0.25,
-    ceil: float = 2.0,
-) -> float:
-    """Scale ``score`` by ATR%% to adjust for volatility.
+def normalize_score_by_volatility(df, score, atr_period=14, eps=1e-8):
+    """Scales ``score`` by current ATR.
 
-    Accepts either ``(score, df)`` or the legacy ``(df, score)`` positional
-    order. Returns ``score`` scaled to the range ``[floor, ceil]`` based on
-    ATR%%. When insufficient data is supplied the ``floor`` multiplier is
-    applied.
+    If ATR isn't available, returns ``score`` unchanged.
     """
 
-    # Support legacy ``(df, score)`` order
-    if isinstance(score, pd.DataFrame) and not isinstance(df, pd.DataFrame):
-        df, score = score, df
-
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError("df must be a pandas DataFrame")
-
-    score_f = float(score)
-    if df.empty or "close" not in df:
-        return floor * score_f
-
-    price = float(df["close"].iloc[-1])
-    if price == 0 or math.isnan(price):
-        return floor * score_f
-
-    atr = calc_atr(df, period=atr_period)
-    if atr == 0 or math.isnan(atr):
-        return floor * score_f
-
-    atr_pct = atr / price
-    low, high = 0.001, 0.03  # 0.1% .. 3% daily-ish
-    x = max(min(float(atr_pct), high), low)
-    k = (x - low) / (high - low)  # 0..1
-    factor = floor + k * (ceil - floor)
-    return score_f * factor
+    try:
+        atr = _calc_atr_compat(df, atr_period)
+        current_atr = float(atr.iloc[-1]) if hasattr(atr, "iloc") else float(atr)
+        denom = max(abs(current_atr), eps)
+        return score / denom
+    except Exception:
+        logger.exception(
+            "normalize_score_by_volatility: ATR unavailable; returning unnormalized score"
+        )
+        return score
 
 
 __all__ = ["atr_percent", "normalize_score_by_volatility", "calc_atr"]
