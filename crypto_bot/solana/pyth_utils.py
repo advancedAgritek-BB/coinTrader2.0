@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
+
+logger = setup_logger(__name__, LOG_DIR / "meme_sniper.log")
 
 
 async def get_pyth_price(client: Any, symbol: str) -> float:
