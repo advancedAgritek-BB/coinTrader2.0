@@ -1,8 +1,8 @@
+import pytest
 import asyncio
+import logging
 import json
 import pandas as pd
-import pytest
-import logging
 import time
 import threading
 import ccxt
