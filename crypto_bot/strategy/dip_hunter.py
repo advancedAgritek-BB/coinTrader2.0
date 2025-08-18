@@ -1,9 +1,8 @@
-from typing import Tuple
+from typing import Tuple, Optional
 
 import pandas as pd
 import ta
 from ta.trend import ADXIndicator
-import numpy as np
 
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
@@ -28,14 +27,10 @@ else:  # pragma: no cover - fallback
 
 def generate_signal(
     df: pd.DataFrame,
-    higher_df: Optional[pd.DataFrame] = None,
-    config: Optional[dict] = None,
-    symbol: str | None = None,
-    timeframe: str | None = None,
     higher_df: pd.DataFrame | None = None,
     config: dict | None = None,
-    symbol: Optional[str] = None,
-    timeframe: Optional[str] = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
     **kwargs,
 ) -> Tuple[float, str]:
     """Detect deep dips for mean reversion long entries.
@@ -52,8 +47,10 @@ def generate_signal(
         May contain ``higher_df`` and ``config`` for advanced behaviour.
     """
 
-    higher_df: Optional[pd.DataFrame] = kwargs.get("higher_df")
-    config: Optional[dict] = kwargs.get("config")
+    if higher_df is None:
+        higher_df = kwargs.get("higher_df")
+    if config is None:
+        config = kwargs.get("config")
 
     symbol = symbol or (config.get("symbol", "") if config else "")
     params = config.get("dip_hunter", {}) if config else {}
