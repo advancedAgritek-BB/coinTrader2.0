@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Tuple
 
 import pandas as pd
 import ta
@@ -27,6 +27,8 @@ else:  # pragma: no cover - fallback
 
 def generate_signal(
     df: pd.DataFrame,
+    higher_df: pd.DataFrame | None = None,
+    config: dict | None = None,
     symbol: Optional[str] = None,
     timeframe: Optional[str] = None,
     **kwargs,
