@@ -166,7 +166,7 @@ stat_arb_bot:
   z_threshold: 2.0
   window: 50
 drawdown_penalty_coef: 0.2
-ensemble_min_conf: 0.05
+ensemble_min_conf: 0.01
 exchange_market_types:
 - spot
 - futures
@@ -297,7 +297,7 @@ micro_scalp_bot:
   vol_window: 15
   volume_window: 15
   wick_pct: 0.1
-min_agreeing_votes: 0
+min_agreeing_votes: 1
 min_confidence_score: 0
 min_consistent_agreement: 1
 min_cooldown: 0
@@ -517,7 +517,7 @@ strategy_router:
     breakdown_volume_multiplier: 3
   mean_reverting_timeframe: 1h
   flash_crash_timeframe: 1m
-  min_confidence: 0.001
+  min_confidence: 0.0005
   regimes:
     bounce:
     - bounce_scalper
