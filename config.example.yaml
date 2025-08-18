@@ -27,6 +27,7 @@ ohlcv:
 
 # Default on-chain universe and scanner options
 onchain_symbols: ["SOL/USDC"]
+benchmark_symbols: ["BTC/USDT", "SOL/USDC"]  # set [] to disable benchmarks
 solana_scanner:
   enabled: true
   interval_minutes: 0.1

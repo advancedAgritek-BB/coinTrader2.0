@@ -21,7 +21,12 @@ def _ctx():
         positions={},
         df_cache={"1h": {"SOL/USDC": df}},
         regime_cache={},
-        config={"timeframe": "1h", "symbols": ["SOL/USDC"], "symbol_batch_size": 5},
+        config={
+            "timeframe": "1h",
+            "symbols": ["SOL/USDC"],
+            "symbol_batch_size": 5,
+            "symbol": "ETH/USDT",
+        },
     )
     ctx.exchange = object()
     return ctx
@@ -39,4 +44,21 @@ def test_single_symbol_no_duplicates(monkeypatch):
 
     asyncio.run(main.fetch_candidates(ctx))
 
-    assert set(ctx.current_batch) == {"BTC/USDT", "SOL/USDC"}
+    assert set(ctx.current_batch) == {"ETH/USDT", "SOL/USDC"}
+
+
+def test_disable_benchmark_symbols(monkeypatch):
+    ctx = _ctx()
+    ctx.config["benchmark_symbols"] = []
+
+    async def fake_get_filtered_symbols(ex, cfg):
+        return [("SOL/USDC", 1.0)], []
+
+    monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
+    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.01)
+    monkeypatch.setattr(main, "compute_average_atr", lambda *_a, **_k: 0.01)
+    monkeypatch.setattr(main, "symbol_priority_queue", deque())
+
+    asyncio.run(main.fetch_candidates(ctx))
+
+    assert set(ctx.current_batch) == {"SOL/USDC"}
