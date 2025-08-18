@@ -4,7 +4,7 @@ import pytest
 from crypto_bot.solana import meme_wave_runner
 from crypto_bot.solana.watcher import NewPoolEvent, PoolWatcher
 import crypto_bot.main as main
-from crypto_bot.main import SessionState
+from crypto_bot.main import SessionState, initial_scan
 from crypto_bot.phase_runner import BotContext, PhaseRunner
 
 
