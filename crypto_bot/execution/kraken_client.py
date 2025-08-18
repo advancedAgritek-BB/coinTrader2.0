@@ -25,6 +25,20 @@ class KrakenClient:
     def __getattr__(self, name: str) -> Any:  # pragma: no cover - passthrough
         return getattr(self._exchange, name)
 
+    def list_markets(self) -> dict[str, Any]:
+        """Return market metadata keyed by symbol.
+
+        The underlying exchange may return either a dictionary or a list of
+        market dictionaries.  In the latter case, convert it into the expected
+        ``{symbol: info}`` mapping.
+        """
+
+        loader = getattr(self._exchange, "load_markets", None)
+        markets = loader() if callable(loader) else self._exchange.fetch_markets()
+        if isinstance(markets, list):
+            return {m.get("symbol", m): m for m in markets}
+        return markets
+
     def request(
         self,
         path: str,
