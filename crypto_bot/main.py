@@ -1411,18 +1411,47 @@ async def scan_cex_arbitrage(
 
     results: list[str] = []
     threshold = float(config.get("arbitrage_threshold", 0.0))
-    for sym in pairs:
+    primary_tickers: dict[str, dict] = {}
+    secondary_tickers: dict[str, dict] = {}
+
+    if getattr(primary, "has", {}).get("fetchTickers") and hasattr(primary, "fetch_tickers"):
         try:
-            if asyncio.iscoroutinefunction(getattr(primary, "fetch_ticker", None)):
-                t1 = await primary.fetch_ticker(sym)
+            if asyncio.iscoroutinefunction(getattr(primary, "fetch_tickers", None)):
+                primary_tickers = await primary.fetch_tickers(pairs)
             else:
-                t1 = await asyncio.to_thread(primary.fetch_ticker, sym)
-            if asyncio.iscoroutinefunction(getattr(secondary, "fetch_ticker", None)):
-                t2 = await secondary.fetch_ticker(sym)
-            else:
-                t2 = await asyncio.to_thread(secondary.fetch_ticker, sym)
+                primary_tickers = await asyncio.to_thread(primary.fetch_tickers, pairs)
         except Exception:
-            continue
+            primary_tickers = {}
+
+    if getattr(secondary, "has", {}).get("fetchTickers") and hasattr(secondary, "fetch_tickers"):
+        try:
+            if asyncio.iscoroutinefunction(getattr(secondary, "fetch_tickers", None)):
+                secondary_tickers = await secondary.fetch_tickers(pairs)
+            else:
+                secondary_tickers = await asyncio.to_thread(secondary.fetch_tickers, pairs)
+        except Exception:
+            secondary_tickers = {}
+
+    for sym in pairs:
+        t1 = primary_tickers.get(sym)
+        if t1 is None:
+            try:
+                if asyncio.iscoroutinefunction(getattr(primary, "fetch_ticker", None)):
+                    t1 = await primary.fetch_ticker(sym)
+                else:
+                    t1 = await asyncio.to_thread(primary.fetch_ticker, sym)
+            except Exception:
+                continue
+
+        t2 = secondary_tickers.get(sym)
+        if t2 is None:
+            try:
+                if asyncio.iscoroutinefunction(getattr(secondary, "fetch_ticker", None)):
+                    t2 = await secondary.fetch_ticker(sym)
+                else:
+                    t2 = await asyncio.to_thread(secondary.fetch_ticker, sym)
+            except Exception:
+                continue
 
         p1 = t1.get("last") or t1.get("close")
         p2 = t2.get("last") or t2.get("close")
