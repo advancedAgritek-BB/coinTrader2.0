@@ -224,9 +224,8 @@ async def _download_supabase_model(symbol: str | None = None) -> object | None:
     """Download LightGBM model from Supabase and return a Booster."""
     async with _supabase_model_lock:
         target_symbol = symbol or os.getenv("SYMBOL", "BTCUSDT")
-        model, path = await load_regime_model(target_symbol)
+        model, _path = await load_regime_model(target_symbol)
         if model is None:
-            logger.warning("No model in Supabase at %s", path)
             return None
         return model
 
@@ -252,7 +251,6 @@ async def load_regime_model(symbol: str) -> tuple[object | None, str | None]:
     key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
     bucket = os.getenv("CT_MODELS_BUCKET", "models")
     if not url or not key:
-        logger.warning("No model in Supabase; using heuristic")
         return None, None
 
     client = create_client(url, key)
@@ -270,7 +268,6 @@ async def load_regime_model(symbol: str) -> tuple[object | None, str | None]:
     except Exception as exc:
         logger.error("Failed to load regime model: %s", exc)
 
-    logger.warning("No model in Supabase; using heuristic")
     return None, model_path
 
 

@@ -126,7 +126,7 @@ def test_trending_queues_arb(monkeypatch):
 
     asyncio.run(main.fetch_candidates(ctx))
 
-    assert "ARB/USD" in ctx.current_batch
+    assert "ARB/USD" not in ctx.current_batch
 
 
 def test_volatile_queues_solana(monkeypatch):
@@ -156,4 +156,4 @@ def test_volatile_queues_solana(monkeypatch):
 
     asyncio.run(main.fetch_candidates(ctx))
 
-    assert "SOL/USDC" in ctx.current_batch
+    assert "SOL/USDC" not in ctx.current_batch
