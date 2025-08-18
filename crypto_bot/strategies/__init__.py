@@ -11,16 +11,29 @@ logger = logging.getLogger(__name__)
 log = logger
 
 
-async def _invoke_strategy(gen, df, sym, tf):
-    filtered = {"df": df}
-    params = inspect.signature(gen).parameters
-    if "symbol" in params:
-        filtered["symbol"] = sym
-    if "timeframe" in params:
-        filtered["timeframe"] = tf
-    if inspect.iscoroutinefunction(gen):
-        return await gen(**filtered)
-    return gen(**filtered)
+async def _invoke_strategy(gen, **kwargs):
+    """
+    Call a strategy's ``generate_signal`` while respecting its signature.
+
+    Different strategies accept different keyword arguments.  By inspecting the
+    callable we only pass the parameters it expects, preventing a flood of
+    ``TypeError`` exceptions when a strategy does not accept ``symbol`` or
+    ``timeframe``.
+    """
+
+    try:
+        params = inspect.signature(gen).parameters
+        filtered = {k: v for k, v in kwargs.items() if k in params}
+        if inspect.iscoroutinefunction(gen):
+            return await gen(**filtered)
+        return gen(**filtered)
+    except TypeError:
+        # As a final fallback, try calling with only ``df`` if available.
+        if "df" in kwargs:
+            if inspect.iscoroutinefunction(gen):
+                return await gen(kwargs["df"])
+            return gen(kwargs["df"])
+        raise
 
 
 def _normalize_result(val):
@@ -158,7 +171,7 @@ async def score(
                 )
                 continue
             try:
-                res = await _invoke_strategy(gen, df, sym, tf)
+                res = await _invoke_strategy(gen, df=df, symbol=sym, timeframe=tf)
             except Exception:
                 logger.exception(
                     "Strategy %s scoring failed for %s @ %s", name, sym, tf
