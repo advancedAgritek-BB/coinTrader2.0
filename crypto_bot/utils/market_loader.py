@@ -1711,6 +1711,8 @@ async def _update_ohlcv_cache_inner(
             if df is not None and not df.empty:
                 last_ts = int(df["timestamp"].iloc[-1])
                 since_map[sym] = int((last_ts - tail * tf_sec) * 1000)
+            elif start_since is not None:
+                since_map[sym] = start_since
             else:
                 since_map[sym] = None
                 limit = max(limit, bootstrap)
@@ -1720,8 +1722,6 @@ async def _update_ohlcv_cache_inner(
                     need_tail = True
                 else:
                     since_map[sym] = last_ts + 1
-            elif start_since is not None:
-                since_map[sym] = start_since
         if need_tail:
             limit += tail
     now = time.time()
@@ -2259,8 +2259,6 @@ async def update_multi_tf_ohlcv_cache(
     notifier: TelegramNotifier | None = None,
     priority_queue: Deque[str] | None = None,
     batch_size: int | None = None,
-    chunk_size: int | None = None,
-) -> Dict[str, Dict[str, pd.DataFrame]]:
     refresh_listing_cache: bool = False,
     listing_cache_ttl: int | None = None,
     chunk_size: int = 20,
@@ -2387,7 +2385,6 @@ async def update_multi_tf_ohlcv_cache(
             five_min_only = symbols_all
 
     tf_symbol_map: Dict[str, List[str]] = {}
-    for tf in tfs:
     listing_dates = await _get_listing_dates(
         symbols_all,
         config,
@@ -2406,6 +2403,7 @@ async def update_multi_tf_ohlcv_cache(
     remaining: Dict[str, List[str]] = {}
     for idx, tf in enumerate(tfs):
         symbols = tf_symbol_map.get(tf, [])
+        if not symbols:
             symbols = symbols_all
         symbols = [s for s in symbols if (s, tf) not in completed_pairs]
         if not symbols:
@@ -2612,26 +2610,29 @@ async def update_multi_tf_ohlcv_cache(
                     tf,
                     completed,
                     total_syms,
-            processed_syms = 0
-            start_fetch = time.perf_counter()
-
-            def log_progress() -> None:
-                if total_syms <= 0:
-                    return
-                elapsed = time.perf_counter() - start_fetch
-                rate = processed_syms / elapsed if elapsed > 0 else 0.0
-                pct = processed_syms / total_syms * 100
-                eta = (total_syms - processed_syms) / rate if rate > 0 else 0
-                eta_str = str(timedelta(seconds=int(eta))) if rate > 0 else "?"
-                logger.info(
-                    "%s: %d/%d fetched (%.0f%%), avg %.1f req/s, ETA %s",
-                    tf,
-                    processed_syms,
-                    total_syms,
-                    pct,
                     rate,
                     eta_str,
                 )
+                processed_syms = 0
+                start_fetch = time.perf_counter()
+
+                def log_progress() -> None:
+                    if total_syms <= 0:
+                        return
+                    elapsed = time.perf_counter() - start_fetch
+                    rate = processed_syms / elapsed if elapsed > 0 else 0.0
+                    pct = processed_syms / total_syms * 100
+                    eta = (total_syms - processed_syms) / rate if rate > 0 else 0
+                    eta_str = str(timedelta(seconds=int(eta))) if rate > 0 else "?"
+                    logger.info(
+                        "%s: %d/%d fetched (%.0f%%), avg %.1f req/s, ETA %s",
+                        tf,
+                        processed_syms,
+                        total_syms,
+                        pct,
+                        rate,
+                        eta_str,
+                    )
 
             if cex_symbols:
                 if tf_start_since is None:
@@ -2738,8 +2739,6 @@ async def update_multi_tf_ohlcv_cache(
                                 notifier=notifier,
                                 priority_symbols=prio if prio else None,
                             )
-                                priority_symbols=priority_syms,
-                            )
                             processed_syms += len(chunk)
                             log_progress()
                         tf_cache = await update_ohlcv_cache(
@@ -2763,10 +2762,6 @@ async def update_multi_tf_ohlcv_cache(
                         for s in syms:
                             if s in tf_cache and not getattr(tf_cache.get(s), "empty", True):
                                 mark_completed(s, tf)
-                            priority_symbols=priority_syms,
-                            max_retries=max_retries,
-                            timeout=timeout,
-                        )
                         done_time = time.perf_counter()
                         for _ in syms:
                             log_progress(done_time)
@@ -3094,19 +3089,6 @@ async def update_multi_tf_ohlcv_cache(
             logger.info("Completed OHLCV update for timeframe %s", tf)
 
     return MultiTFUpdateResult(cache, remaining)
-                    mark_completed(sym, tf)
-                processed_syms += 1
-                log_progress()
-            cache[tf] = tf_cache
-            logger.info("Completed OHLCV update for timeframe %s", tf)
-
-        if notifier and send_bootstrap:
-            try:
-                await notifier.notify_async(
-                    f"Completed OHLCV update for {tf} ({idx}/{total_tfs})"
-                )
-            except Exception:  # pragma: no cover - best effort
-                logger.exception("Failed to send Telegram notification")
 
     return cache
 
