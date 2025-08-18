@@ -71,6 +71,67 @@ async def get_kraken_listing_date(symbol: str) -> Optional[int]:
 
 _last_snapshot_time = 0
 
+# cache of Kraken listing dates: symbol -> (timestamp_ms | None, fetch_time)
+_LISTING_DATE_CACHE: Dict[str, tuple[Optional[int], float]] = {}
+
+
+async def _get_listing_dates(
+    symbols: Iterable[str],
+    config: Dict[str, Any],
+    refresh: bool = False,
+    ttl: int | None = None,
+) -> Dict[str, Optional[int]]:
+    """Return listing dates for *symbols* with optional caching.
+
+    Parameters
+    ----------
+    refresh : bool, optional
+        If ``True`` all cached values are ignored and fetched again.
+    ttl : int | None, optional
+        Maximum age in seconds for cached values. ``None`` disables expiry.
+    """
+
+    now = time.time()
+    results: Dict[str, Optional[int]] = {}
+    to_fetch: list[str] = []
+    for sym in set(symbols):
+        if not refresh:
+            cached = _LISTING_DATE_CACHE.get(sym)
+            if cached and (ttl is None or now - cached[1] < ttl):
+                results[sym] = cached[0]
+                continue
+        to_fetch.append(sym)
+
+    if to_fetch:
+        concurrency = int(config.get("listing_date_concurrency", 5) or 0)
+        semaphore = asyncio.Semaphore(concurrency) if concurrency > 0 else None
+
+        async def _fetch(sym: str) -> tuple[str, Optional[int]]:
+            if semaphore:
+                async with semaphore:
+                    ts = await get_kraken_listing_date(sym)
+            else:
+                ts = await get_kraken_listing_date(sym)
+            return sym, ts
+
+        start_list = time.perf_counter()
+        tasks = [asyncio.create_task(_fetch(sym)) for sym in to_fetch]
+        fetched = await asyncio.gather(*tasks, return_exceptions=True)
+        for res in fetched:
+            if isinstance(res, Exception):
+                logger.exception("listing date fetch failed: %s", res)
+                continue
+            sym, ts = res
+            _LISTING_DATE_CACHE[sym] = (ts, now)
+            results[sym] = ts
+        logger.debug(
+            "listing date fetch for %d symbols took %.2fs",
+            len(to_fetch),
+            time.perf_counter() - start_list,
+        )
+
+    return results
+
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 UNSUPPORTED_SYMBOLS: set[str] = {
@@ -198,18 +259,9 @@ COINGECKO_IDS = {
 }
 
 
-# --- NEW: resolve markets only to what the exchange actually lists ---
 def resolve_listed_symbol(exchange, base: str, allowed_quotes: list[str]) -> str | None:
     """Return the first listed symbol for *base* across ``allowed_quotes``."""
     markets = getattr(exchange, "markets", {}) or {}
-# --- NEW: resolve markets only to what the exchange actually lists ---
-def resolve_listed_symbol(exchange, base: str, allowed_quotes: list[str]) -> str | None:
-    """
-    Given an exchange instance with markets loaded, return the first listed
-    symbol for ``base`` across ``allowed_quotes`` (in order), or ``None`` if not found.
-    Works with normalized ccxt symbols.
-    """
-    markets = exchange.markets or {}
     for q in allowed_quotes:
         sym = f"{base}/{q}"
         if sym in markets:
@@ -217,7 +269,7 @@ def resolve_listed_symbol(exchange, base: str, allowed_quotes: list[str]) -> str
     for m in markets.values():
         try:
             if m.get("base") == base and m.get("quote") in allowed_quotes:
-                return m.get("symbol")
+                return m.get("symbol") or f"{m['base']}/{m['quote']}"
         except Exception:
             continue
     return None
@@ -1973,6 +2025,8 @@ async def update_ohlcv_cache(
         listed = resolve_listed_symbol(exchange, base, allowed_quotes)
         if listed:
             resolved.append(listed)
+        elif not markets:
+            resolved.append(sym)
         else:
             logger.debug(
                 "Skipping %s: no listed market on %s for quotes %s",
@@ -2044,6 +2098,8 @@ async def update_multi_tf_ohlcv_cache(
     notifier: TelegramNotifier | None = None,
     priority_queue: Deque[str] | None = None,
     batch_size: int | None = None,
+    refresh_listing_cache: bool = False,
+    listing_cache_ttl: int | None = None,
 ) -> Dict[str, Dict[str, pd.DataFrame]]:
     """Update OHLCV caches for multiple timeframes.
 
@@ -2122,6 +2178,13 @@ async def update_multi_tf_ohlcv_cache(
             exchange, symbols_all
         )
 
+    listing_dates = await _get_listing_dates(
+        symbols_all,
+        config,
+        refresh=refresh_listing_cache,
+        ttl=listing_cache_ttl,
+    )
+
     for tf in tfs:
         if tf == "1m":
             symbols = one_min_syms
@@ -2183,30 +2246,8 @@ async def update_multi_tf_ohlcv_cache(
                 )
                 tf_start_since = None
 
-            concurrency = int(config.get("listing_date_concurrency", 5) or 0)
-            semaphore = asyncio.Semaphore(concurrency) if concurrency > 0 else None
-
-            async def _fetch_listing(sym: str) -> tuple[str, int | None]:
-                if semaphore is not None:
-                    async with semaphore:
-                        ts = await get_kraken_listing_date(sym)
-                else:
-                    ts = await get_kraken_listing_date(sym)
-                return sym, ts
-
-            start_list = time.perf_counter()
-            tasks = [asyncio.create_task(_fetch_listing(sym)) for sym in symbols]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for sym, res in zip(symbols, results):
-                if isinstance(res, Exception):
-                    logger.exception(
-                        "OHLCV task failed for %s @ %s: %s",
-                        sym,
-                        tf,
-                        res,
-                    )
-                    continue
-                _, listing_ts = res
+            for sym in symbols:
+                listing_ts = listing_dates.get(sym)
                 if listing_ts and 0 < listing_ts <= now_ms:
                     age_ms = now_ms - listing_ts
                     tf_sec = timeframe_seconds(exchange, tf)
@@ -2222,11 +2263,6 @@ async def update_multi_tf_ohlcv_cache(
                         )
                         continue
                     dynamic_limits[sym] = int(min(hist_candles, max_cap))
-            logger.debug(
-                "listing date fetch for %d symbols took %.2fs",
-                len(symbols),
-                time.perf_counter() - start_list,
-            )
 
             cex_symbols: list[str] = []
             dex_symbols: list[str] = []

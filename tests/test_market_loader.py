@@ -20,6 +20,12 @@ from crypto_bot.utils.market_loader import (
 )
 
 
+@pytest.fixture(autouse=True)
+def clear_listing_cache():
+    from crypto_bot.utils import market_loader
+    market_loader._LISTING_DATE_CACHE.clear()
+
+
 class DummyExchange:
     exchange_market_types = {"spot"}
 
@@ -2479,3 +2485,46 @@ def test_listing_date_concurrency(monkeypatch):
     )
 
     assert 1 < max_active <= 2
+
+
+def test_listing_date_cache(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    calls: list[str] = []
+
+    async def listing_date(sym: str):
+        calls.append(sym)
+        return 1
+
+    async def fake_update(*_a, **_k):
+        return {}
+
+    market_loader._LISTING_DATE_CACHE.clear()
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", listing_date)
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
+    monkeypatch.setattr(market_loader, "fetch_dex_ohlcv", lambda *a, **k: [])
+    async def fake_load(*a, **k):
+        return []
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_load)
+
+    ex = DummyMultiTFExchange()
+    asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["A/USD"],
+            {"timeframes": ["1h"]},
+            limit=1,
+        )
+    )
+    asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["A/USD"],
+            {"timeframes": ["1h"]},
+            limit=1,
+        )
+    )
+
+    assert calls == ["A/USD"]
