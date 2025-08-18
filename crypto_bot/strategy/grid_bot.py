@@ -13,7 +13,8 @@ import ta
 
 from crypto_bot import grid_state
 from crypto_bot.utils.indicator_cache import cache_series
-from crypto_bot.utils.volatility import normalize_score_by_volatility, atr_percent
+from crypto_bot.utils.volatility import normalize_score_by_volatility
+from crypto_bot.volatility import atr_percent
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.volatility_filter import calc_atr
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
@@ -27,7 +28,10 @@ try:  # pragma: no cover - optional dependency
 except Exception:  # pragma: no cover - trainer missing
     ML_AVAILABLE = False
 
-from . import breakout_bot, micro_scalp_bot
+# ``micro_scalp_bot`` is imported lazily inside ``generate_signal`` to avoid
+# issues if the module has optional dependencies or is otherwise unavailable
+# during import. Only ``breakout_bot`` is required at module load time.
+from . import breakout_bot
 from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 
@@ -180,10 +184,8 @@ def generate_signal(
     *,
     symbol: str | None = None,
     timeframe: str | None = None,
-    mempool_monitor: micro_scalp_bot.SolanaMempoolMonitor | None = None,
+    mempool_monitor: SolanaMempoolMonitor | None = None,
     mempool_cfg: dict | None = None,
-    symbol: str | None = None,
-    timeframe: str | None = None,
 ) -> Tuple[float, str]:
     """Generate a grid based trading signal."""
     cfg = GridConfig.from_dict(_as_dict(config))
@@ -318,15 +320,21 @@ def generate_signal(
         near_lower = price - lower_bound <= grid_step
         near_upper = upper_bound - price <= grid_step
         if (near_lower or near_upper) and {"open", "high", "low", "close"}.issubset(df.columns):
-            scalp_score, scalp_dir = micro_scalp_bot.generate_signal(
-                df,
-                _as_dict(config),
-                higher_df=higher_df,
-                mempool_monitor=mempool_monitor,
-                mempool_cfg=mempool_cfg,
-            )
-            if scalp_dir != "none":
-                return scalp_score, scalp_dir
+            try:  # pragma: no cover - optional dependency
+                from . import micro_scalp_bot
+            except Exception:  # pragma: no cover - best effort
+                micro_scalp_bot = None
+
+            if micro_scalp_bot is not None:
+                scalp_score, scalp_dir = micro_scalp_bot.generate_signal(
+                    df,
+                    _as_dict(config),
+                    higher_df=higher_df,
+                    mempool_monitor=mempool_monitor,
+                    mempool_cfg=mempool_cfg,
+                )
+                if scalp_dir != "none":
+                    return scalp_score, scalp_dir
 
     if price <= lower_bound:
         if not is_in_trend(recent, cfg.trend_ema_fast, cfg.trend_ema_slow, "long"):
