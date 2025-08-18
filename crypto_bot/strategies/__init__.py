@@ -11,28 +11,27 @@ logger = logging.getLogger(__name__)
 log = logger
 
 
-async def _invoke_strategy(gen, **kwargs):
-    """
-    Call a strategy's ``generate_signal`` while respecting its signature.
+def _filter_kwargs(func: Callable, **kwargs) -> Dict[str, Any]:
+    """Keep only kwargs the strategy function accepts."""
+    sig = inspect.signature(func)
+    return {k: v for k, v in kwargs.items() if k in sig.parameters}
 
-    Different strategies accept different keyword arguments.  By inspecting the
-    callable we only pass the parameters it expects, preventing a flood of
-    ``TypeError`` exceptions when a strategy does not accept ``symbol`` or
-    ``timeframe``.
-    """
 
+async def _maybe_await(res: Any) -> Any:
+    if asyncio.iscoroutine(res):
+        return await res
+    return res
+
+
+async def _invoke_strategy(gen: Callable, **kwargs):
+    """Call generate_signal with only the kwargs it supports; fallback to df-only."""
     try:
-        params = inspect.signature(gen).parameters
-        filtered = {k: v for k, v in kwargs.items() if k in params}
-        if inspect.iscoroutinefunction(gen):
-            return await gen(**filtered)
-        return gen(**filtered)
+        filtered = _filter_kwargs(gen, **kwargs)
+        return await _maybe_await(gen(**filtered))
     except TypeError:
-        # As a final fallback, try calling with only ``df`` if available.
+        # Some older strategies are df-only; try that before failing.
         if "df" in kwargs:
-            if inspect.iscoroutinefunction(gen):
-                return await gen(kwargs["df"])
-            return gen(kwargs["df"])
+            return await _maybe_await(gen(kwargs["df"]))
         raise
 
 
@@ -106,7 +105,7 @@ async def score(
     native = getattr(mod, "score", None)
     if callable(native) and native is not score:
         try:
-            return await _maybe_await(native, symbols=symbols, timeframes=timeframes)
+            return await _maybe_call(native, symbols=symbols, timeframes=timeframes)
         except Exception:  # pragma: no cover - defensive
             log.exception("Strategy %s score() failed", getattr(mod, "__name__", mod))
             return {}
@@ -142,10 +141,7 @@ async def score(
                         filtered["symbol_b"] = b
                     if "timeframe" in params:
                         filtered["timeframe"] = tf
-                    if inspect.iscoroutinefunction(gen):
-                        res = await gen(**filtered)
-                    else:
-                        res = gen(**filtered)
+                    res = await _maybe_await(gen(**filtered))
                 except Exception:
                     logger.exception(
                         "Strategy %s scoring failed for %s|%s @ %s",
@@ -182,21 +178,15 @@ async def score(
     return out
 
 
-def _maybe_await(func: Callable[..., Any] | None, *args, **kwargs) -> Any:
-    """Invoke ``func`` which may be synchronous or asynchronous.
-
-    We filter keyword arguments by the function signature but never fabricate
-    positional arguments.
-    """
+async def _maybe_call(func: Callable[..., Any] | None, *args, **kwargs) -> Any:
+    """Invoke ``func`` which may be synchronous or asynchronous."""
 
     if func is None:
         return {}
     try:
-        sig = inspect.signature(func)
-        allowed = {k: v for k, v in kwargs.items() if k in sig.parameters}
-        if inspect.iscoroutinefunction(func):
-            return asyncio.create_task(func(*args, **allowed))
-        return func(*args, **allowed)
+        filtered = _filter_kwargs(func, **kwargs)
+        res = func(*args, **filtered)
+        return await _maybe_await(res)
     except Exception:  # pragma: no cover - defensive
         log.exception("Strategy call failed")
         return {}
