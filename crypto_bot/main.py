@@ -737,6 +737,9 @@ def _load_config_file() -> dict:
     tele_cfg.setdefault("batch_summary_secs", 0)
     data["telemetry"] = tele_cfg
 
+    # Default chunk size for OHLCV updates if not provided
+    data.setdefault("ohlcv_chunk_size", 20)
+
     data = replace_placeholders(data)
 
     strat_dir = CONFIG_PATH.parent.parent / "config" / "strategies"
@@ -1463,6 +1466,10 @@ async def _update_caches_impl(ctx: BotContext) -> None:
     if ohlcv_batch_size is None:
         ohlcv_batch_size = ctx.config.get("symbol_filter", {}).get("ohlcv_batch_size")
 
+    ohlcv_chunk_size = ctx.config.get("ohlcv_chunk_size")
+    if ohlcv_chunk_size is None:
+        ohlcv_chunk_size = 20
+
     max_concurrent = ctx.config.get("max_concurrent_ohlcv")
     if isinstance(max_concurrent, (int, float)):
         max_concurrent = int(max_concurrent)
@@ -1496,6 +1503,7 @@ async def _update_caches_impl(ctx: BotContext) -> None:
                 ),
                 priority_queue=symbol_priority_queue,
                 batch_size=ohlcv_batch_size,
+                chunk_size=ohlcv_chunk_size,
             )
         except Exception as exc:
             logger.warning("WS OHLCV failed: %s - falling back to REST", exc)
@@ -1520,6 +1528,7 @@ async def _update_caches_impl(ctx: BotContext) -> None:
                 ),
                 priority_queue=symbol_priority_queue,
                 batch_size=ohlcv_batch_size,
+                chunk_size=ohlcv_chunk_size,
             )
         ctx.regime_cache = await update_regime_tf_cache(
             ctx.exchange,

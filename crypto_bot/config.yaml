@@ -547,6 +547,7 @@ strategy_router:
   volatile_timeframe: 1m
 symbol: BTC/USDT
 symbol_batch_size: 50
+ohlcv_chunk_size: 20
 symbol_filter:
   change_pct_percentile: 10
   correlation_max_pairs: 200

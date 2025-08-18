@@ -12,6 +12,10 @@ async def dummy_update(*args, **kwargs):
     return {}
 
 
+async def dummy_update_regime(*args, **kwargs):
+    return {}
+
+
 def test_update_caches_default_limit(monkeypatch):
     ctx = BotContext(
         positions={}, df_cache={}, regime_cache={}, config={"timeframe": "1h"}
@@ -19,9 +23,10 @@ def test_update_caches_default_limit(monkeypatch):
     ctx.exchange = object()
     ctx.current_batch = ["BTC/USDT"]
     monkeypatch.setattr(main, "update_multi_tf_ohlcv_cache", dummy_update)
-    monkeypatch.setattr(main, "update_regime_tf_cache", dummy_update)
+    monkeypatch.setattr(main, "update_regime_tf_cache", dummy_update_regime)
     asyncio.run(main.update_caches(ctx))
     assert dummy_update.kwargs["limit"] == 150
+    assert dummy_update.kwargs["chunk_size"] == 20
 
 
 def test_update_caches_override(monkeypatch):

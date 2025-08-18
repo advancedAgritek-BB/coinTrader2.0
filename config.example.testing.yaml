@@ -17,3 +17,4 @@ yamlmeme_sniper:
   twitter_sentiment_min: 70
   helius_api_key: your_key_here  # For metadata
 
+ohlcv_chunk_size: 20

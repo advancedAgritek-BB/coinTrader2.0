@@ -26,6 +26,7 @@ class Config:
     allowed_quotes: List[str] = field(
         default_factory=lambda: ["USD", "USDT", "USDC", "EUR"]
     )
+    ohlcv_chunk_size: int = 20
     hft: bool = True
     strict_cex: bool = False
     denylist_symbols: List[str] = field(default_factory=list)
