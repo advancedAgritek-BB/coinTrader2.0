@@ -814,10 +814,14 @@ async def classify_regime_async(
 ) -> Tuple[str, object] | Dict[str, str] | Tuple[str, str]:
     """Asynchronous wrapper around :func:`classify_regime`."""
     if CONFIG.get("use_per_pair_models", False):
-        try:
-            await _get_supabase_model(symbol or os.getenv("CT_SYMBOL", "XRPUSD"))
-        except Exception:
-            pass
+        allowed = set(CONFIG.get("model_symbols") or [])
+        ct_symbol = os.getenv("CT_SYMBOL", "XRPUSD")
+        resolved = symbol or ct_symbol
+        if resolved == ct_symbol or resolved in allowed:
+            try:
+                await _get_supabase_model(resolved)
+            except Exception:
+                pass
     return await asyncio.to_thread(
         classify_regime,
         df,
