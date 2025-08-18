@@ -1704,6 +1704,27 @@ Our CSV7 format is headerless with 7 columns: `ts,open,high,low,close,volume,tra
 cointrainer import-csv7 --file ./XRPUSD_1.csv --symbol XRPUSD --out ./data/XRPUSD_1m
 ```
 
+### Chunked imports and resume
+
+`import-csv7` can process large files in smaller pieces. Control how many rows
+are handled at a time with the new `chunk_size` option. After each chunk a
+progress line is printed and appended to the resume file in the format
+`<start_ts>,<end_ts>,<rows_written>`. Re-running the command reads that file and
+skips any ranges that were already completed so interrupted runs pick up where
+they left off. Delete the resume file to reset the mechanism and start again
+from the beginning.
+
+Example configuration:
+
+```yaml
+file: ./XRPUSD_1.csv
+symbol: XRPUSD
+out: ./data/XRPUSD_1m
+chunk_size: 10000          # rows per chunk
+resume: true               # enable resume using the progress file
+resume_file: ./data/XRPUSD_1m.progress
+```
+
 ## Development Setup
 
 Use Python&nbsp;3.10 or later to avoid package incompatibilities. Set up a
