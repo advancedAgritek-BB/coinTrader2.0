@@ -1,12 +1,14 @@
-"""Range arbitrage strategy for low volatility markets using kernel regression."""
+"""Range arbitrage strategy for low volatility markets using kernel
+regression."""
 
-from typing import Optional, Tuple
+from typing import Tuple
 
 import logging
 import numpy as np
 import pandas as pd
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel
+from sklearn.preprocessing import StandardScaler
 
 import ta
 from scipy import stats
@@ -36,16 +38,27 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     recent = df.iloc[-window:]
     X = np.arange(len(recent)).reshape(-1, 1)
     y = recent["close"].values
-    kernel = ConstantKernel(1.0) * RBF(1.0)
-    gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10)
-    gp.fit(X, y)
-    pred, _ = gp.predict([[len(recent)]], return_std=True)
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    kernel = ConstantKernel(
+        1.0, constant_value_bounds=(1e-5, 1e5)
+    ) * RBF(1.0, length_scale_bounds=(1e-5, 1e5))
+    gp = GaussianProcessRegressor(
+        kernel=kernel, optimizer="fmin_l_bfgs_b", n_restarts_optimizer=15
+    )
+    gp.fit(X_scaled, y)
+    pred, _ = gp.predict(scaler.transform([[len(recent)]]), return_std=True)
     return float(pred)
 
 
 def generate_signal(
     df: pd.DataFrame,
+    config: dict | None = None,
     config: Optional[dict] = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
 ) -> Tuple[float, str]:
     """Generate arb signal using kernel prediction.
 
@@ -59,7 +72,9 @@ def generate_signal(
     atr_window = int(params.get("atr_window", 14))
     kr_window = int(params.get("kr_window", 20))
     z_threshold = float(params.get("z_threshold", 1.5))
-    vol_z_threshold = float(params.get("vol_z_threshold", 1.0))  # Low vol confirm
+    vol_z_threshold = float(
+        params.get("vol_z_threshold", 1.0)
+    )  # Low vol confirm
     volume_mult = float(params.get("volume_mult", 1.5))
     atr_normalization = bool(params.get("atr_normalization", True))
 
@@ -89,7 +104,10 @@ def generate_signal(
     latest = recent.iloc[-1]
 
     # Ignore if not low vol
-    if latest["atr_z"] >= vol_z_threshold or latest["vol_z"] >= vol_z_threshold:
+    if (
+        latest["atr_z"] >= vol_z_threshold
+        or latest["vol_z"] >= vol_z_threshold
+    ):
         return 0.0, "none"
 
     # Avoid volume spikes
@@ -106,6 +124,7 @@ def generate_signal(
         z_dev = 0.0
     else:
         z_dev = z_scores.iloc[-1]
+    z_dev = stats.zscore(recent["close"], lookback).iloc[-1]
 
     score = 0.0
     direction = "none"
@@ -142,4 +161,3 @@ class regime_filter:
     def matches(regime: str) -> bool:
         """Return ``True`` for every supplied regime."""
         return True
-

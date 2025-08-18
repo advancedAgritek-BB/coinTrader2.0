@@ -45,7 +45,12 @@ else:  # pragma: no cover - fallback
     MODEL = None
 
 
-def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
+def generate_signal(
+    df: pd.DataFrame,
+    config: Optional[dict] = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
+) -> Tuple[float, str]:
     """Trend following signal with ADX, volume and optional Donchian filters."""
     config = config or {}
     symbol = config.get("symbol", "")

@@ -53,11 +53,15 @@ def generate_signal(
     config: Optional[dict] = None,
     higher_df: pd.DataFrame | None = None,
     *,
+    symbol: str | None = None,
+    timeframe: str | None = None,
     mempool_monitor: Optional[SolanaMempoolMonitor] = None,
     mempool_cfg: Optional[dict] = None,
     tick_data: pd.DataFrame | None = None,
     book: Optional[dict] = None,
     ticks: Optional[pd.DataFrame] = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
 ) -> Tuple[float, str]:
     """Return short-term signal using EMA crossover on 1m data.
 
