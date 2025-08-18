@@ -46,7 +46,7 @@ strategies:
     max_spread_bp: 10
     time_exit_bars: 12
 
-  mean_revert:
+  mean_bot:
     enabled: true
     tf: "1m"
     ema_len: 50
@@ -638,7 +638,7 @@ volatility_filter:
 voting_strategies:
 - trend_bot
 - momentum_bot
-- mean_revert
+- mean_bot
 - sniper_solana
 wallet_address: your_wallet
 ws_failures_before_disable: 1

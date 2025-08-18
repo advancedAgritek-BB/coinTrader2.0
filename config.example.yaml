@@ -56,7 +56,7 @@ strategies:
     max_spread_bp: 10
     time_exit_bars: 12
 
-  mean_revert:
+  mean_bot:
     enabled: true
     tf: "1m"
     ema_len: 50
