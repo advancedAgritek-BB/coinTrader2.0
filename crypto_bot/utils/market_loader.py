@@ -1710,18 +1710,14 @@ async def _update_ohlcv_cache_inner(
             df = cache.get(sym)
             if df is not None and not df.empty:
                 last_ts = int(df["timestamp"].iloc[-1])
-                since_map[sym] = int((last_ts - tail * tf_sec) * 1000)
-            elif start_since is not None:
-                since_map[sym] = start_since
+                if tail > 0:
+                    since_map[sym] = int((last_ts - tail * tf_sec) * 1000)
+                    need_tail = True
+                else:
+                    since_map[sym] = int((last_ts + 1) * 1000)
             else:
                 since_map[sym] = None
                 limit = max(limit, bootstrap)
-                last_ts = int(df["timestamp"].iloc[-1]) * 1000
-                if tail > 0:
-                    since_map[sym] = last_ts - tail * tf_sec * 1000
-                    need_tail = True
-                else:
-                    since_map[sym] = last_ts + 1
         if need_tail:
             limit += tail
     now = time.time()
