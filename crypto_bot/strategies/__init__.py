@@ -11,30 +11,16 @@ logger = logging.getLogger(__name__)
 log = logger
 
 
-def _filter_kwargs(func, **kwargs):
-    """Return only kwargs that the callable accepts (unless it has **kwargs)."""
-    try:
-        sig = inspect.signature(func)
-    except (TypeError, ValueError):
-        # If we can't introspect, best effort: pass only 'df'
-        return {k: v for k, v in kwargs.items() if k == "df"}
-    accepts_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
-    if accepts_varkw:
-        return kwargs
-    return {k: v for k, v in kwargs.items() if k in sig.parameters}
-
-
-async def _invoke_strategy(gen, **ctx):
-    """Call a strategy, awaiting if necessary, after filtering kwargs."""
-    filtered = _filter_kwargs(gen, **ctx)
-    # Handle pure async strategy functions
+async def _invoke_strategy(gen, df, sym, tf):
+    filtered = {"df": df}
+    params = inspect.signature(gen).parameters
+    if "symbol" in params:
+        filtered["symbol"] = sym
+    if "timeframe" in params:
+        filtered["timeframe"] = tf
     if inspect.iscoroutinefunction(gen):
         return await gen(**filtered)
-    # Handle sync functions that might still return an awaitable
-    res = gen(**filtered)
-    if inspect.isawaitable(res):
-        return await res
-    return res
+    return gen(**filtered)
 
 
 def _normalize_result(val):
@@ -135,14 +121,18 @@ async def score(
                 if df_a is None or df_b is None:
                     continue
                 try:
-                    res = await _invoke_strategy(
-                        gen,
-                        df_a=df_a,
-                        df_b=df_b,
-                        symbol_a=a,
-                        symbol_b=b,
-                        timeframe=tf,
-                    )
+                    params = inspect.signature(gen).parameters
+                    filtered = {"df_a": df_a, "df_b": df_b}
+                    if "symbol_a" in params:
+                        filtered["symbol_a"] = a
+                    if "symbol_b" in params:
+                        filtered["symbol_b"] = b
+                    if "timeframe" in params:
+                        filtered["timeframe"] = tf
+                    if inspect.iscoroutinefunction(gen):
+                        res = await gen(**filtered)
+                    else:
+                        res = gen(**filtered)
                 except Exception:
                     logger.exception(
                         "Strategy %s scoring failed for %s|%s @ %s",
@@ -168,9 +158,7 @@ async def score(
                 )
                 continue
             try:
-                res = await _invoke_strategy(
-                    gen, df=df, symbol=sym, timeframe=tf
-                )
+                res = await _invoke_strategy(gen, df, sym, tf)
             except Exception:
                 logger.exception(
                     "Strategy %s scoring failed for %s @ %s", name, sym, tf

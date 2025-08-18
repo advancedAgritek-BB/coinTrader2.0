@@ -3,11 +3,12 @@ from __future__ import annotations
 """Helper utilities for Solana token pricing and OHLCV."""
 
 import aiohttp
-import logging
 import time
 from typing import List, Dict, List as _List
 
-logger = logging.getLogger(__name__)
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
+
+logger = setup_logger(__name__, LOG_DIR / "meme_sniper.log")
 
 
 async def fetch_solana_prices(symbols: List[str]) -> Dict[str, float]:

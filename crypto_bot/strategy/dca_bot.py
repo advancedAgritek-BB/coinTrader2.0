@@ -3,7 +3,12 @@ from typing import Optional, Tuple
 import pandas as pd
 
 
-def generate_signal(df: pd.DataFrame, config: Optional[dict] = None) -> Tuple[float, str]:
+def generate_signal(
+    df: pd.DataFrame,
+    config: Optional[dict] = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
+) -> Tuple[float, str]:
     """Simple dollar-cost averaging signal supporting long and short."""
     if df is None or df.empty or "close" not in df:
         return 0.0, "none"

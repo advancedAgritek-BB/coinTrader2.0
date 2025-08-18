@@ -3,7 +3,6 @@ from __future__ import annotations
 """Utilities for scanning new Solana tokens."""
 
 import asyncio
-import logging
 import os
 from typing import Mapping, List
 
@@ -13,8 +12,9 @@ import ccxt.async_support as ccxt
 from crypto_bot.utils.solana_scanner import search_geckoterminal_token
 from crypto_bot.utils import symbol_scoring
 from crypto_bot.utils import kraken as kraken_utils
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__, LOG_DIR / "meme_sniper.log")
 
 
 async def get_solana_new_tokens(

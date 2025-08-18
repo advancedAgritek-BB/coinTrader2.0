@@ -4,11 +4,10 @@ import hashlib
 import time
 from pathlib import Path
 from threading import Lock
-import logging
 from typing import AsyncIterator
 import contextlib
 
-from .logger import LOG_DIR, setup_logger
+from .logger import LOG_DIR, setup_logger, pipeline_logger
 from crypto_bot.utils.eval_guard import eval_gate
 
 try:
@@ -32,7 +31,6 @@ def fix_symbol(sym: str) -> str:
 
 
 logger = setup_logger("bot", LOG_DIR / "bot.log")
-pipeline_logger = logging.getLogger("pipeline")
 
 
 _cached_symbols: tuple[list[tuple[str, float]], list[str]] | None = None

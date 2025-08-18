@@ -43,6 +43,8 @@ def generate_signal(
     config: Optional[dict] = None,
     *,
     spread_bp: float = 0.0,
+    symbol: str | None = None,
+    timeframe: str | None = None,
 ) -> Tuple[float, str, Optional[float], Optional[Position]]:
     """Mean-reversion strategy with ATR stop and time/z exits.
 

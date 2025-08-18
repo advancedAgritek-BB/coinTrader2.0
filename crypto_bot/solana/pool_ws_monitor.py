@@ -5,7 +5,8 @@ import aiohttp
 from typing import AsyncGenerator, Any, Dict
 import json
 import os
-import logging
+
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 
 async def watch_pool(
@@ -28,7 +29,7 @@ async def watch_pool(
         raise RuntimeError("HELIUS API key is required; set api_key or HELIUS_KEY env var")
 
     url = f"wss://atlas-mainnet.helius-rpc.com/?api-key={api_key}"
-    logger = logging.getLogger(__name__)
+    logger = setup_logger(__name__, LOG_DIR / "meme_sniper.log")
     ClientError = getattr(aiohttp, "ClientError", Exception)
     async with aiohttp.ClientSession() as session:
         backoff = 1

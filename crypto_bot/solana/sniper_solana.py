@@ -22,7 +22,10 @@ class RugCheckAPI:
 
 
 def generate_signal(
-    df: pd.DataFrame, config: Optional[dict] = None
+    df: pd.DataFrame,
+    config: Optional[dict] = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
 ) -> Tuple[float, str]:
     """Return a signal score and direction based on ATR jumps."""
 

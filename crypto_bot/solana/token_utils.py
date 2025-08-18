@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import os
-import logging
 from typing import List, Dict, Any
 
 import aiohttp
 
 from crypto_bot.solana.helius_client import HELIUS_API_KEY, helius_available
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__, LOG_DIR / "meme_sniper.log")
 
 MIN_BALANCE_THRESHOLD = float(os.getenv("MIN_BALANCE_THRESHOLD", "0.0"))
 

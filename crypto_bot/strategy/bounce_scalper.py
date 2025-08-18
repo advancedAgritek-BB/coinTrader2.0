@@ -195,6 +195,8 @@ def generate_signal(
     fetcher: Optional[Callable[[str], pd.DataFrame]] = None,
     book: Optional[dict] = None,
     force: bool = False,
+    symbol: str | None = None,
+    timeframe: str | None = None,
 ) -> Tuple[float, str]:
     """Identify short-term bounces with volume confirmation.
 

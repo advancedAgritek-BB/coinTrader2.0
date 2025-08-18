@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 import pytest
 
@@ -72,3 +73,32 @@ def test_assess_early_token_rejects_onchain(monkeypatch):
 
     score = asyncio.run(_run("AAA", "mint", {"helius_api_key": "k"}))
     assert score == 0.0
+
+
+def test_assess_early_token_logs(monkeypatch, caplog):
+    async def fake_sentiment(query: str):
+        return 80
+
+    async def fake_gecko(pair: str, limit: int = 5):
+        return [[0, 1, 1, 1, 1, 20_000]]
+
+    monkeypatch.setattr(
+        "crypto_bot.early_token_filter.fetch_twitter_sentiment_async", fake_sentiment
+    )
+    monkeypatch.setattr(
+        "crypto_bot.early_token_filter.fetch_geckoterminal_ohlcv", fake_gecko
+    )
+    monkeypatch.setattr("crypto_bot.early_token_filter.load_model", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "crypto_bot.early_token_filter.predict_regime",
+        lambda df, model: {"volatile_pump": 0},
+    )
+
+    with caplog.at_level(logging.INFO):
+        score = asyncio.run(assess_early_token("AAA", "mint", {}))
+
+    expected = (80 / 100) * 0.3 + 0.2
+    assert score == pytest.approx(expected)
+    assert any(
+        f"Early score for AAA: {expected:.2f}" in rec.message for rec in caplog.records
+    )
