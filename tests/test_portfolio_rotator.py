@@ -36,7 +36,7 @@ def test_score_assets_verbose_logging(caplog):
     ex = DummyExchange(data)
     rotator = PortfolioRotator()
     rotator.config["log_scores_verbose"] = True
-    with caplog.at_level("INFO"):
+    with caplog.at_level("DEBUG", logger="crypto_bot.portfolio_rotator"):
         asyncio.run(rotator.score_assets(ex, ["BTC/USD"], 3, "momentum"))
     assert any("Score for BTC/USD" in r.getMessage() for r in caplog.records)
 

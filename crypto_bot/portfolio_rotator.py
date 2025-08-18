@@ -119,7 +119,7 @@ class PortfolioRotator:
                 score = float(closes[-1] / closes[0] - 1) if closes else 0.0
             scores[sym] = score
             if self.config.get("log_scores_verbose", False):
-                self.logger.info("Score for %s: %.4f", sym, score)
+                self.logger.debug("Score for %s: %.4f", sym, score)
 
         return scores
 
