@@ -2,6 +2,7 @@ import importlib
 import pkgutil
 import traceback
 import logging
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, Iterable, List, Optional, Set
 
@@ -32,6 +33,26 @@ def _default_module_names(package_name: str) -> Set[str]:
         if m.name not in _NON_STRATEGY_MODS
     }
 
+
+def _module_name(mod) -> str:
+    """Return a best effort name for ``mod``.
+
+    The module's ``__name__`` basename is used when available and truthy;
+    otherwise the name is derived from the file path.  As a final fallback,
+    ``"unknown"`` is returned.
+    """
+
+    base = getattr(mod, "__name__", "")
+    base = base.split(".")[-1] if base else ""
+    if base:
+        return base
+    file = getattr(mod, "__file__", "")
+    if file:
+        stem = Path(file).stem
+        if stem:
+            return stem
+    return "unknown"
+
 class _SimpleRegistry:
     def __init__(self):
         self._items: Dict[str, Any] = {}
@@ -60,14 +81,20 @@ def _discover(mod) -> Dict[str, Any]:
     if cls:
         inst = _instantiate(cls)
         if inst:
-            out[getattr(inst, "name", mod.__name__.split(".")[-1])] = inst
+            name = getattr(inst, "name", None)
+            if not name:
+                name = _module_name(mod)
+            out[name] = inst
     # 2) STRATEGIES / ALL_STRATEGIES / strategies
     for attr in ("STRATEGIES", "__all_strategies__", "strategies", "ALL_STRATEGIES"):
         if hasattr(mod, attr):
             for obj in _as_list(getattr(mod, attr)):
                 inst = _instantiate(obj)
                 if inst:
-                    out[getattr(inst, "name", obj.__class__.__name__)] = inst
+                    name = getattr(inst, "name", None)
+                    if not name:
+                        name = obj.__class__.__name__
+                    out[name] = inst
     # 3) get_strategies()
     for attr in ("get_strategies", "strategies_factory"):
         fn = getattr(mod, attr, None)
@@ -76,7 +103,10 @@ def _discover(mod) -> Dict[str, Any]:
                 for obj in _as_list(fn()):
                     inst = _instantiate(obj)
                     if inst:
-                        out[getattr(inst, "name", obj.__class__.__name__)] = inst
+                        name = getattr(inst, "name", None)
+                        if not name:
+                            name = obj.__class__.__name__
+                        out[name] = inst
             except Exception:
                 logger.error("get_strategies() failed:\n%s", traceback.format_exc())
     # 4) register(registry)
@@ -105,7 +135,9 @@ def _discover(mod) -> Dict[str, Any]:
 
             filt = _DefaultFilter
 
-        name = getattr(mod, "NAME", mod.__name__.split(".")[-1])
+        name = getattr(mod, "NAME", None)
+        if not name:
+            name = _module_name(mod)
         out[name] = SimpleNamespace(
             name=name,
             generate_signal=sig,

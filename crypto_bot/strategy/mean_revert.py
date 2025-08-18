@@ -6,6 +6,7 @@ import pandas as pd
 import ta
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+NAME = "mean_revert"
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 

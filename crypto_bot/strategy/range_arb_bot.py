@@ -26,6 +26,7 @@ except Exception:  # pragma: no cover - trainer missing
     ML_AVAILABLE = False
     warn_ml_unavailable_once()
 
+NAME = "range_arb_bot"
 if ML_AVAILABLE:
     MODEL = load_model("range_arb_bot")
 else:  # pragma: no cover - fallback

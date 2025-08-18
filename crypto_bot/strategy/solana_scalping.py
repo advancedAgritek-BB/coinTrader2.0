@@ -2,4 +2,6 @@
 
 from crypto_bot.solana.scalping import generate_signal
 
+NAME = "solana_scalping"
+
 __all__ = ["generate_signal"]

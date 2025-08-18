@@ -28,6 +28,7 @@ from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+NAME = "mean_bot"
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 

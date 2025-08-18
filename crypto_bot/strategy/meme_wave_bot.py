@@ -14,6 +14,7 @@ from crypto_bot.sentiment_filter import (
 from crypto_bot.solana.exit import monitor_price
 from crypto_bot.solana_trading import sniper_trade
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+NAME = "meme_wave_bot"
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 

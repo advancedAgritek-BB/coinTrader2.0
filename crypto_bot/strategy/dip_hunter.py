@@ -11,6 +11,7 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.cooldown_manager import cooldown, in_cooldown
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
+NAME = "dip_hunter"
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
 
 try:  # Optional LightGBM integration

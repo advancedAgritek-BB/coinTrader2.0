@@ -11,6 +11,7 @@ from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.solana import fetch_solana_prices
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
+NAME = "cross_chain_arb_bot"
 
 def _fetch_prices(symbols: List[str]) -> Dict[str, float]:
     """Return Solana prices synchronously."""

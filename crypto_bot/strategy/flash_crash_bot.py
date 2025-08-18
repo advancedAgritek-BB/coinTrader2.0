@@ -4,6 +4,7 @@ import pandas as pd
 import ta
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 
+NAME = "flash_crash_bot"
 
 def generate_signal(
     df: pd.DataFrame,
