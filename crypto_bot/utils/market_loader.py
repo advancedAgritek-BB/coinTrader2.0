@@ -7,6 +7,7 @@ import inspect
 import time
 import os
 from pathlib import Path
+from collections import deque
 from datetime import datetime, timezone, timedelta
 import yaml
 import pandas as pd
@@ -2289,6 +2290,9 @@ async def update_multi_tf_ohlcv_cache(
         one_min_syms, five_min_only = await split_symbols_by_timeframe(
             exchange, symbols_all
         )
+        if not one_min_syms and not five_min_only:
+            one_min_syms = symbols_all
+            five_min_only = symbols_all
 
     listing_dates = await _get_listing_dates(
         symbols_all,
@@ -2399,6 +2403,30 @@ async def update_multi_tf_ohlcv_cache(
                 dex_symbols = [s for s in priority_syms if s in dex_symbols] + [s for s in dex_symbols if s not in prio_set]
 
             total_syms = len(cex_symbols) + len(dex_symbols)
+            completed = 0
+            recent_times: Deque[float] = deque(maxlen=50)
+
+            def log_progress(ts: float | None = None) -> None:
+                """Log progress with a moving average request rate."""
+                nonlocal completed
+                if total_syms <= 0:
+                    return
+                completed += 1
+                now_t = ts if ts is not None else time.perf_counter()
+                recent_times.append(now_t)
+                rate = 0.0
+                if len(recent_times) > 1:
+                    span = recent_times[-1] - recent_times[0]
+                    if span > 0:
+                        rate = (len(recent_times) - 1) / span
+                remaining = total_syms - completed
+                eta = remaining / rate if rate > 0 else float("inf")
+                eta_str = f"{eta:.1f}s" if eta != float("inf") else "?"
+                logger.info(
+                    "Progress[%s] %d/%d (%.2f req/s, ETA %s)",
+                    tf,
+                    completed,
+                    total_syms,
             processed_syms = 0
             start_fetch = time.perf_counter()
 
@@ -2482,6 +2510,9 @@ async def update_multi_tf_ohlcv_cache(
                             max_retries=max_retries,
                             timeout=timeout,
                         )
+                        done_time = time.perf_counter()
+                        for _ in syms:
+                            log_progress(done_time)
                     for s in cex_symbols:
                         curr_len = len(tf_cache[s]) if s in tf_cache else 0
                         prev = prev_lengths.get(s, 0)
