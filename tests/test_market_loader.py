@@ -1011,6 +1011,111 @@ def test_update_multi_tf_ohlcv_cache_skips_unsupported_tf(caplog):
     )
 
 
+def test_update_multi_tf_ohlcv_cache_notifier(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    class DummyNotifier:
+        def __init__(self):
+            self.msgs: list[str] = []
+
+        async def notify_async(self, text):
+            self.msgs.append(text)
+
+    monkeypatch.setattr(market_loader, "load_enabled", lambda _c: None)
+
+    async def _no_enqueue(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(market_loader, "_maybe_enqueue_eval", _no_enqueue)
+    monkeypatch.setattr(
+        market_loader, "resolve_listed_symbol", lambda *_a, **_k: "BTC/USD"
+    )
+
+    async def fake_update(exchange, tf_cache, symbols, **kwargs):
+        for s in symbols:
+            tf_cache[s] = pd.DataFrame(
+                [[0, 0, 0, 0, 0, 0]],
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
+        return tf_cache
+
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
+    async def fake_load_ohlcv(*_a, **_k):
+        return [[0, 0, 0, 0, 0, 0]]
+
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_load_ohlcv)
+
+    notifier = DummyNotifier()
+    ex = DummyMultiTFExchange()
+    cfg = {"timeframes": ["1h", "4h"], "telegram": {"bootstrap_updates": True}}
+
+    asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["BTC/USD"],
+            cfg,
+            limit=1,
+            notifier=notifier,
+        )
+    )
+
+    assert any("Starting OHLCV update" in m for m in notifier.msgs)
+    assert any("Completed OHLCV update" in m for m in notifier.msgs)
+
+
+def test_update_multi_tf_ohlcv_cache_notifier_disabled(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    class DummyNotifier:
+        def __init__(self):
+            self.msgs: list[str] = []
+
+        async def notify_async(self, text):
+            self.msgs.append(text)
+
+    monkeypatch.setattr(market_loader, "load_enabled", lambda _c: None)
+
+    async def _no_enqueue(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(market_loader, "_maybe_enqueue_eval", _no_enqueue)
+    monkeypatch.setattr(
+        market_loader, "resolve_listed_symbol", lambda *_a, **_k: "BTC/USD"
+    )
+
+    async def fake_update(exchange, tf_cache, symbols, **kwargs):
+        for s in symbols:
+            tf_cache[s] = pd.DataFrame(
+                [[0, 0, 0, 0, 0, 0]],
+                columns=["timestamp", "open", "high", "low", "close", "volume"],
+            )
+        return tf_cache
+
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
+    async def fake_load_ohlcv(*_a, **_k):
+        return [[0, 0, 0, 0, 0, 0]]
+
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_load_ohlcv)
+
+    notifier = DummyNotifier()
+    ex = DummyMultiTFExchange()
+    cfg = {"timeframes": ["1h"], "telegram": {"bootstrap_updates": False}}
+
+    asyncio.run(
+        update_multi_tf_ohlcv_cache(
+            ex,
+            {},
+            ["BTC/USD"],
+            cfg,
+            limit=1,
+            notifier=notifier,
+        )
+    )
+
+    assert notifier.msgs == []
+
+
 class MixedTFExchange(DummyMultiTFExchange):
     timeframes = {"1m": "1m", "5m": "5m"}
 

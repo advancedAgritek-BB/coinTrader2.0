@@ -202,8 +202,8 @@ needed.
    `Symbol -- entry -- unrealized PnL`.
    The program prints "Bot running..." before the [Monitor] lines.
    Before trading begins the bot performs a full market scan to populate
-   its caches. Progress is logged and, when `telegram.status_updates` is
-   enabled, sent to your Telegram chat.
+   its caches. Progress is logged and, when `telegram.bootstrap_updates`
+   is enabled, sent to your Telegram chat.
    In dry-run mode order prices are pulled from the latest ticker. If the
    exchange fails to return a price the entry value from the trade log is
    used so profit calculations remain accurate.
@@ -369,6 +369,7 @@ telegram:
   chat_id: your_chat_id
   trade_updates: true
   status_updates: true
+  bootstrap_updates: false
   balance_updates: false
   mempool_monitor:
     enabled: false
@@ -730,8 +731,8 @@ flash_crash_scalper:
 * **log_to_google** – export trades to Google Sheets.
 * **quiet_mode** – suppress monitor output when stdout is not a TTY.
 * **telegram** – bot token, chat ID and trade notifications. Optional
-  **status_updates** and **balance_updates** flags control startup and
-  balance alerts.
+  **status_updates**, **bootstrap_updates** and **balance_updates** flags
+  control startup messages, bootstrap progress and balance alerts.
 * **telegram.message_interval** – minimum seconds between notifications.
 * **telegram.max_messages_per_minute** – maximum Telegram sends per minute.
 * **balance_change_threshold** – delta for Telegram balance alerts.
