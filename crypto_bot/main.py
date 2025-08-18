@@ -35,6 +35,7 @@ from types import SimpleNamespace
 from pydantic import ValidationError
 from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
+from crypto_bot.utils.logger import pipeline_logger
 
 # Internal project modules are imported lazily inside `main()` after env setup
 from crypto_bot.ml.selfcheck import log_ml_status_once
@@ -108,7 +109,6 @@ def format_top(scores, n: int = 25) -> str:
 
 
 logger = logging.getLogger("bot")
-pipeline_logger = logging.getLogger("pipeline")
 
 # Module-level placeholders populated once internal modules are loaded in ``main``
 
