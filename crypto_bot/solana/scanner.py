@@ -81,33 +81,29 @@ async def get_solana_new_tokens(
         return []
 
     min_score = float(cfg.get("min_symbol_score", 0.0))
-    ex = cfg.get("exchange", "kraken")
-    if isinstance(ex, dict):
-        ex_name = ex.get("name", "kraken").lower()
-        params = {"enableRateLimit": True}
-        timeout = ex.get("request_timeout_ms")
-        if timeout:
-            params["timeout"] = int(timeout)
-        max_conc = ex.get("max_concurrency")
-    else:
-        ex_name = str(ex).lower()
-        params = {"enableRateLimit": True}
-        max_conc = None
-    exchange_cls = getattr(ccxt, ex_name)
-    exchange = exchange_cls(params)
-    if max_conc is not None:
-        setattr(exchange, "max_concurrency", int(max_conc))
-    ex_name = str(cfg.get("exchange", "kraken")).lower()
+    close_exchange = False
     if exchange is None:
+        ex_cfg = cfg.get("exchange", "kraken")
+        if isinstance(ex_cfg, dict):
+            ex_name = ex_cfg.get("name", "kraken").lower()
+            params = {"enableRateLimit": True}
+            timeout = ex_cfg.get("request_timeout_ms")
+            if timeout:
+                params["timeout"] = int(timeout)
+            max_conc = ex_cfg.get("max_concurrency")
+        else:
+            ex_name = str(ex_cfg).lower()
+            params = {"enableRateLimit": True}
+            max_conc = None
+
         if ex_name == "kraken":
             exchange = kraken_utils.get_client()
-            close_exchange = False
         else:
             exchange_cls = getattr(ccxt, ex_name)
-            exchange = exchange_cls({"enableRateLimit": True})
+            exchange = exchange_cls(params)
+            if max_conc is not None:
+                setattr(exchange, "max_concurrency", int(max_conc))
             close_exchange = True
-    else:
-        close_exchange = False
 
     try:
         scores = await asyncio.gather(
