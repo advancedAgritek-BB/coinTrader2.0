@@ -72,6 +72,7 @@ async def _get_lunarcrush_sentiment(symbol: str) -> int:
         logger.error("Failed to fetch LunarCrush sentiment: %s", exc)
         value = 50
 
+    logger.info("LunarCrush sentiment %s -> %d", symbol, value)
     _CACHE[key] = value
     return value
 
