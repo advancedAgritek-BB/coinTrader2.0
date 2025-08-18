@@ -1,0 +1,7 @@
+# Example settings for chunked CSV7 imports
+file: ./XRPUSD_1.csv
+symbol: XRPUSD
+out: ./data/XRPUSD_1m
+chunk_size: 10000       # rows per chunk
+resume: true            # enable resume
+resume_file: ./data/XRPUSD_1m.progress
