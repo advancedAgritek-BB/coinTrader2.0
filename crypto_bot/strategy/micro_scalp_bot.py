@@ -53,6 +53,8 @@ def generate_signal(
     config: Optional[dict] = None,
     higher_df: pd.DataFrame | None = None,
     *,
+    symbol: str | None = None,
+    timeframe: str | None = None,
     mempool_monitor: Optional[SolanaMempoolMonitor] = None,
     mempool_cfg: Optional[dict] = None,
     tick_data: pd.DataFrame | None = None,
