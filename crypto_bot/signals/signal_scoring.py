@@ -4,7 +4,7 @@ import asyncio
 from crypto_bot.ml_signal_model import predict_signal
 from crypto_bot.indicators.cycle_bias import get_cycle_bias
 from crypto_bot.utils.strategy_utils import compute_drawdown
-from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger, indicator_logger
 
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
@@ -31,6 +31,12 @@ def evaluate(
         score, direction = result, "none"
         atr = None
     score = max(0.0, min(score, 1.0))
+    if atr is not None:
+        indicator_logger.info(
+            "ATR provided by %s: %.6f",
+            getattr(strategy_fn, "__name__", str(strategy_fn)),
+            atr,
+        )
 
     if config:
         ml_cfg = config.get("ml_signal_model", {})
@@ -47,8 +53,15 @@ def evaluate(
         if bias_cfg.get("enabled"):
             try:
                 bias = get_cycle_bias(bias_cfg)
+                prev_score = score
                 score *= bias
                 score = max(0.0, min(score, 1.0))
+                indicator_logger.info(
+                    "Cycle bias %.2f adjusted score %.2f -> %.2f",
+                    bias,
+                    prev_score,
+                    score,
+                )
             except Exception:
                 pass
 
