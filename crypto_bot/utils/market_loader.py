@@ -2348,7 +2348,7 @@ async def update_multi_tf_ohlcv_cache(
         tfs = [tf for tf in tfs if tf in supported]
     logger.info("Updating OHLCV cache for timeframes: %s", tfs)
     if not tfs:
-        return cache
+        return MultiTFUpdateResult(cache, {})
 
     tele_cfg = config.get("telegram", {})
     send_bootstrap = bool(tele_cfg.get("bootstrap_updates")) and STATUS_UPDATES
