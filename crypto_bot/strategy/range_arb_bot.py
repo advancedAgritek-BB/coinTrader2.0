@@ -11,9 +11,9 @@ from sklearn.gaussian_process.kernels import RBF, ConstantKernel
 from sklearn.preprocessing import StandardScaler
 
 import ta
+from scipy import stats
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
-from crypto_bot.utils import stats
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
 logger = logging.getLogger(__name__)
@@ -88,8 +88,8 @@ def generate_signal(
         recent["high"], recent["low"], recent["close"], window=atr_window
     )
     vol_ma = recent["volume"].rolling(kr_window).mean()
-    atr_z = stats.zscore(atr, lookback)
-    vol_z = stats.zscore(recent["volume"], lookback)
+    atr_z = pd.Series(stats.zscore(atr), index=atr.index)
+    vol_z = pd.Series(stats.zscore(recent["volume"]), index=recent.index)
 
     atr = cache_series("atr_range", df, atr, lookback)
     atr_z = cache_series("atr_z_range", df, atr_z, lookback)
@@ -118,6 +118,12 @@ def generate_signal(
     if np.isnan(pred_price):
         return 0.0, "none"
 
+    deviation = (latest["close"] - pred_price) / pred_price
+    z_scores = pd.Series(stats.zscore(recent["close"]), index=recent.index)
+    if len(z_scores) == 0:
+        z_dev = 0.0
+    else:
+        z_dev = z_scores.iloc[-1]
     z_dev = stats.zscore(recent["close"], lookback).iloc[-1]
 
     score = 0.0
