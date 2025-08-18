@@ -8,6 +8,7 @@ def generate_signal(
     config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
+    **_,
 ) -> Tuple[float, str]:
     """Simple dollar-cost averaging signal supporting long and short."""
     if df is None or df.empty or "close" not in df:

@@ -35,6 +35,7 @@ def generate_signal(
     config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
+    **_,
 ) -> Tuple[float, str]:
     """Return (score, direction) based on the price spread z-score."""
     if df_a is None or df_b is None or df_a.empty or df_b.empty:

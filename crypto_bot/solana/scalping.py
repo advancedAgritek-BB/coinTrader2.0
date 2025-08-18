@@ -9,6 +9,7 @@ def generate_signal(
     pyth_price: float | None = None,
     symbol: str | None = None,
     timeframe: str | None = None,
+    **_,
 ) -> tuple[float, str]:
     """Return a simple Solana scalping signal using RSI and MACD.
 

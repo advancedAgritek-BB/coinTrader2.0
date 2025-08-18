@@ -26,6 +26,7 @@ def generate_signal(
     config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
+    **_,
 ) -> Tuple[float, str]:
     """Return a signal score and direction based on ATR jumps."""
 

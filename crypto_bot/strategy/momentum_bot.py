@@ -27,6 +27,7 @@ def generate_signal(
     config: dict | None = None,
     symbol: str | None = None,
     timeframe: str | None = None,
+    **_,
 ) -> Tuple[float, str]:
     """Donchian breakout with volume confirmation."""
     if df is None or df.empty:
