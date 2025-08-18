@@ -26,8 +26,6 @@ from crypto_bot.universe import build_tradable_set
 try:
     import ccxt  # type: ignore
 except Exception:  # pragma: no cover - optional dependency
-    import types
-
     ccxt = types.SimpleNamespace()
 
 import pandas as pd
