@@ -302,8 +302,10 @@ COINGECKO_IDS = {
 
 
 def resolve_listed_symbol(exchange, base: str, allowed_quotes: list[str]) -> str | None:
-    """Return the first listed symbol for *base* across ``allowed_quotes``."""
+    """Return the first listed symbol for ``base`` across ``allowed_quotes``."""
     markets = getattr(exchange, "markets", {}) or {}
+    if not markets:
+        return f"{base}/{allowed_quotes[0]}" if allowed_quotes else f"{base}/USD"
     for q in allowed_quotes:
         sym = f"{base}/{q}"
         if sym in markets:
@@ -1342,13 +1344,31 @@ async def load_ohlcv(
     timeout: float | None = None,
     **kwargs,
 ) -> list:
-    """Load OHLCV data via REST with basic retries.
+    """Load OHLCV data either from REST or from cached files.
 
-    ``mode`` is retained for backward compatibility but ignored. On a
-    successful call it sleeps for one second to respect exchange rate limits.
-    Any exception containing ``"429"`` triggers a 60 second sleep before the
-    request is retried.
+    When ``mode`` is ``"file"`` this will attempt to load a previously cached
+    OHLCV file from ``LOG_DIR/ohlcv/<timeframe>/<symbol>.json``.  If the file is
+    missing or unreadable an empty list is returned.  Otherwise the data is
+    returned as a list of lists matching the CCXT OHLCV schema.
+
+    For ``mode`` other than ``"file"`` the function falls back to fetching data
+    from the provided ``exchange`` with basic retry handling for rate limits.
+    On a successful REST call it sleeps for one second to respect exchange rate
+    limits.  Any exception containing ``"429"`` triggers a 60 second sleep
+    before the request is retried.
     """
+
+    if mode == "file":
+        path = LOG_DIR / "ohlcv" / timeframe / f"{symbol.replace('/', '-')}.json"
+        try:
+            df = pd.read_json(path, orient="split")
+        except Exception:
+            return []
+        return (
+            df[["timestamp", "open", "high", "low", "close", "volume"]]
+            .to_records(index=False)
+            .tolist()
+        )
 
     markets = getattr(exchange, "markets", None)
     if markets is not None:
@@ -1682,12 +1702,20 @@ async def _update_ohlcv_cache_inner(
         limit = max(config.get("ohlcv_snapshot_limit", limit), limit)
         since_map = {sym: None for sym in symbols}
     else:
+        ohlcv_cfg = config.get("ohlcv", {}) if isinstance(config, dict) else {}
+        tail = int(ohlcv_cfg.get("tail_overlap_bars", 0))
+        bootstrap = int(ohlcv_cfg.get("max_bootstrap_bars", limit))
         tail = int((config.get("tail_overlap_bars") or 0))
         need_tail = False
         tf_sec = timeframe_seconds(exchange, timeframe)
         for sym in symbols:
             df = cache.get(sym)
             if df is not None and not df.empty:
+                last_ts = int(df["timestamp"].iloc[-1])
+                since_map[sym] = int((last_ts - tail * tf_sec) * 1000)
+            else:
+                since_map[sym] = None
+                limit = max(limit, bootstrap)
                 last_ts = int(df["timestamp"].iloc[-1]) * 1000
                 if tail > 0:
                     since_map[sym] = last_ts - tail * tf_sec * 1000
@@ -2350,6 +2378,31 @@ async def update_multi_tf_ohlcv_cache(
         async with lock:
             logger.info("Starting OHLCV update for timeframe %s", tf)
             tf_cache = cache.get(tf, {})
+
+            # Load any previously cached OHLCV files for missing symbols
+            for sym in symbols:
+                df = tf_cache.get(sym)
+                if df is not None and not df.empty:
+                    continue
+                try:
+                    rows = await load_ohlcv(
+                        exchange, sym, timeframe=tf, limit=0, mode="file"
+                    )
+                except Exception:
+                    rows = []
+                if rows:
+                    tf_cache[sym] = pd.DataFrame(
+                        rows,
+                        columns=[
+                            "timestamp",
+                            "open",
+                            "high",
+                            "low",
+                            "close",
+                            "volume",
+                        ],
+                    )
+            cache[tf] = tf_cache
 
             now_ms = utc_now_ms()
             tf_sec = timeframe_seconds(exchange, tf)
