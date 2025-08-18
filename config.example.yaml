@@ -6,7 +6,6 @@ trading:
   min_ticker_volume: 10000
   timeframes: ["1m","5m"]
   backfill:
-    warmup_high_tf: ["1h","4h","1d"]
     deep_low_tf: true        # backfill 1m/5m history for strategies
     deep_days: 30
   hft_enabled: true
@@ -83,6 +82,10 @@ features:
 # === telemetry / metrics ===
 telemetry:
   batch_summary_secs: 60
+
+ohlcv:
+  bootstrap_timeframes: ['1h']
+  defer_timeframes: ['4h', '1d']
 
 timeframes: ['1m','5m']
 

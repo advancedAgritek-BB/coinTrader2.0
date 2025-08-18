@@ -1,6 +1,9 @@
 mode: paper
 exchange: kraken
 timeframes: ["1h", "4h", "1d"]
+ohlcv:
+  bootstrap_timeframes: ['1h']
+  defer_timeframes: ['4h', '1d']
 filters:
   min_ticker_volume: 10000
 features:

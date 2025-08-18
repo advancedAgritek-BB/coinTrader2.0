@@ -70,6 +70,15 @@ cache populated for each pair. The `timeframes` list in
 `crypto_bot/config.yaml` defines which intervals are stored and reused across
 the various bots.
 
+### OHLCV bootstrap and defer
+
+Specify higher timeframes in the `ohlcv` section of the config to control how
+the candle cache warms up. `bootstrap_timeframes` (default ['1h']) are loaded
+on startup, and the bot begins scoring once these frames are ready. Additional
+`defer_timeframes` such as ['4h', '1d'] warm in the background so
+initialization is not blocked. The legacy `trading.backfill.warmup_high_tf`
+option has been removed.
+
 ### Optional ML Fallback
 
 Set `use_ml_regime_classifier` to `true` in `crypto_bot/config.yaml` to fall
