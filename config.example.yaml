@@ -22,6 +22,8 @@ ohlcv:
   storage_path: crypto_bot/data/ohlcv   # directory for persisted OHLCV data
   tail_overlap_bars: 3                  # overlap bars to avoid gaps when appending
   max_bootstrap_bars: 1000              # limit initial bootstrap to this many bars
+  bootstrap_timeframes: ['1h']
+  defer_timeframes: ['4h', '1d']
 
 # Default on-chain universe and scanner options
 onchain_symbols: ["SOL/USDC"]
@@ -99,9 +101,6 @@ data:
   market-loader:
     # Max minutes to wait for initial OHLCV bootstrap before giving up
     bootstrap_timeout_minutes: 10
-ohlcv:
-  bootstrap_timeframes: ['1h']
-  defer_timeframes: ['4h', '1d']
 
 timeframes: ['1m','5m']
 
