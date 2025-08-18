@@ -25,6 +25,26 @@ def calc_atr(df: pd.DataFrame, period: int = 14, as_series: bool = False):
         ambiguous" errors in caller logic.
     """
 
+def calc_atr(
+    df: pd.DataFrame | None,
+    window: int = 14,
+    *,
+    as_series: bool = True,
+    **kwargs,
+) -> pd.Series | float | None:
+    """Compute the Average True Range using ``window`` or ``period``.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame | None
+        Input OHLC data.
+    window : int, default 14
+        Window length for ATR calculation.
+    as_series : bool, default True
+        When ``True`` a :class:`pandas.Series` is returned, otherwise the
+        latest ATR value is returned as ``float`` or ``None`` when
+        insufficient data is provided.
+    """
     high = df["high"].astype(float)
     low = df["low"].astype(float)
     close = df["close"].astype(float)
@@ -39,6 +59,18 @@ def calc_atr(df: pd.DataFrame, period: int = 14, as_series: bool = False):
         axis=1,
     ).max(axis=1)
 
+    if df is None or df.empty or len(df) < max(2, int(window)):
+        if as_series:
+            if df is not None and "close" in df:
+                return df["close"].iloc[:0]
+            return pd.Series([], dtype=float)
+        return None
+
+    atr_indicator = AverageTrueRange(
+        df["high"], df["low"], df["close"], window=int(window), fillna=False
+    ).average_true_range()
+
+    return atr_indicator if as_series else float(atr_indicator.iloc[-1])
     atr_series = tr.rolling(window=period, min_periods=period).mean()
 
     if as_series:
