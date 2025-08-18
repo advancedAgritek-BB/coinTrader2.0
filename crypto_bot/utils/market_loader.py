@@ -8,14 +8,12 @@ import time
 import os
 from collections import deque
 from pathlib import Path
-from collections import deque
 from datetime import datetime, timezone, timedelta
 import yaml
 import pandas as pd
 import numpy as np
 import aiohttp
 import base58
-import contextlib
 import logging
 import json
 from tenacity import (
