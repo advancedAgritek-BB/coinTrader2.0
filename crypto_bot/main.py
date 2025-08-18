@@ -1165,7 +1165,6 @@ async def initial_scan(
                     notifier=notifier,
                     priority_queue=symbol_priority_queue,
                     batch_size=ohlcv_batch_size,
-                    timeout=config.get("bootstrap_timeout"),
                     run_timeout=config.get("bootstrap_timeout"),
                     timeout=bootstrap_timeout,
                 )
@@ -1188,7 +1187,6 @@ async def initial_scan(
                     notifier=notifier,
                     df_map=state.df_cache,
                     batch_size=ohlcv_batch_size,
-                    timeout=config.get("bootstrap_timeout"),
                     run_timeout=config.get("bootstrap_timeout"),
                     timeout=bootstrap_timeout,
                 )
@@ -1747,7 +1745,6 @@ async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) ->
                 batch_size=ohlcv_batch_size,
                 chunk_size=ohlcv_chunk_size,
                 timeout=bootstrap_timeout,
-                chunk_size=chunk_size if chunk_size is not None else 20,
             )
         except Exception as exc:
             logger.warning("WS OHLCV failed: %s - falling back to REST", exc)
@@ -1774,7 +1771,6 @@ async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) ->
                 batch_size=ohlcv_batch_size,
                 chunk_size=ohlcv_chunk_size,
                 timeout=bootstrap_timeout,
-                chunk_size=chunk_size if chunk_size is not None else 20,
             )
         ctx.regime_cache = await update_regime_tf_cache(
             ctx.exchange,
