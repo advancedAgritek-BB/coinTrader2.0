@@ -151,3 +151,14 @@ def test_fetch_lunarcrush_sentiment_cached(monkeypatch):
     assert asyncio.run(sf.fetch_lunarcrush_sentiment_async("BTC")) == 70
     assert calls["n"] == 1
 
+
+@pytest.mark.asyncio
+async def test_too_bearish_logs(monkeypatch, caplog):
+    sf._CACHE.clear()
+    monkeypatch.setenv("MOCK_FNG_VALUE", "50")
+    monkeypatch.setenv("LUNARCRUSH_API_KEY", "key")
+    monkeypatch.setattr(sf.lunar_client, "get_sentiment", lambda s: 30)
+    with caplog.at_level(logging.INFO):
+        await sf.too_bearish(10, 10, symbol="BTC")
+    assert any("FNG 50, sentiment 30" in rec.message for rec in caplog.records)
+
