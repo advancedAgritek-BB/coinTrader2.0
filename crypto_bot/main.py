@@ -816,6 +816,8 @@ def _load_config_file() -> dict:
     tele_cfg.setdefault("batch_summary_secs", 0)
     data["telemetry"] = tele_cfg
 
+    # Default chunk size for OHLCV updates if not provided
+    data.setdefault("ohlcv_chunk_size", 20)
     data_cfg = data.get("data", {}) or {}
     ml_cfg = data_cfg.get("market-loader", {}) or {}
     ml_cfg.setdefault("bootstrap_timeout_minutes", 10)
@@ -1704,6 +1706,10 @@ async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) ->
     if ohlcv_batch_size is None:
         ohlcv_batch_size = ctx.config.get("symbol_filter", {}).get("ohlcv_batch_size")
 
+    ohlcv_chunk_size = ctx.config.get("ohlcv_chunk_size")
+    if ohlcv_chunk_size is None:
+        ohlcv_chunk_size = 20
+
     max_concurrent = ctx.config.get("max_concurrent_ohlcv")
     if isinstance(max_concurrent, (int, float)):
         max_concurrent = int(max_concurrent)
@@ -1739,6 +1745,7 @@ async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) ->
                 ),
                 priority_queue=symbol_priority_queue,
                 batch_size=ohlcv_batch_size,
+                chunk_size=ohlcv_chunk_size,
                 timeout=bootstrap_timeout,
                 chunk_size=chunk_size if chunk_size is not None else 20,
             )
@@ -1765,6 +1772,7 @@ async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) ->
                 ),
                 priority_queue=symbol_priority_queue,
                 batch_size=ohlcv_batch_size,
+                chunk_size=ohlcv_chunk_size,
                 timeout=bootstrap_timeout,
                 chunk_size=chunk_size if chunk_size is not None else 20,
             )

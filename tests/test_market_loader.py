@@ -1109,6 +1109,13 @@ def test_update_multi_tf_ohlcv_cache_priority_queue(monkeypatch):
     assert not pq
 
 
+def test_update_multi_tf_ohlcv_cache_default_chunk(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    captured: list[list[str]] = []
+
+    async def fake_update(exchange, tf_cache, symbols, **kwargs):
+        captured.append(list(symbols))
 def test_update_multi_tf_ohlcv_cache_resume(tmp_path, monkeypatch):
     from crypto_bot.utils import market_loader
 
@@ -1127,6 +1134,27 @@ def test_update_multi_tf_ohlcv_cache_resume(tmp_path, monkeypatch):
             )
         return tf_cache
 
+    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", lambda _s: 0)
+
+    class Ex(DummyMultiTFExchange):
+        timeframes = {"1h": "1h"}
+        symbols = [f"S{i}/USD" for i in range(25)]
+
+    cache: dict[str, dict[str, pd.DataFrame]] = {}
+    asyncio.run(
+        market_loader.update_multi_tf_ohlcv_cache(
+            Ex(),
+            cache,
+            [f"S{i}/USD" for i in range(25)],
+            {"timeframes": ["1h"]},
+            limit=1,
+        )
+    )
+
+    assert len(captured) == 2
+    assert len(captured[0]) == 20
+    assert len(captured[1]) == 5
     monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update_ohlcv_cache)
     monkeypatch.setattr(market_loader, "get_kraken_listing_date", lambda _s: 0)
 

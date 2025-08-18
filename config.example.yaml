@@ -113,6 +113,7 @@ backfill_days:
   '1m': 2
   '5m': 3
 
+ohlcv_chunk_size: 20
 telegram:
   token: YOUR_TELEGRAM_TOKEN
   chat_id: YOUR_CHAT_ID

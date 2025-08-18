@@ -2261,6 +2261,8 @@ async def update_multi_tf_ohlcv_cache(
     notifier: TelegramNotifier | None = None,
     priority_queue: Deque[str] | None = None,
     batch_size: int | None = None,
+    chunk_size: int | None = None,
+) -> Dict[str, Dict[str, pd.DataFrame]]:
     refresh_listing_cache: bool = False,
     listing_cache_ttl: int | None = None,
     chunk_size: int = 20,
@@ -2360,6 +2362,12 @@ async def update_multi_tf_ohlcv_cache(
     vol_thresh = config.get("bounce_scalper", {}).get("vol_zscore_threshold")
 
     symbols = list(symbols)
+    if chunk_size is None:
+        chunk_size = int(config.get("ohlcv_chunk_size", 20) or 20)
+    else:
+        chunk_size = int(chunk_size)
+    if chunk_size < 1:
+        chunk_size = 1
     priority_syms: list[str] = []
     if priority_queue is not None:
         seen: set[str] = set()
@@ -2650,6 +2658,9 @@ async def update_multi_tf_ohlcv_cache(
                                     "Adjusting limit for %s on %s to %d", s, tf, lim
                                 )
                             curr_limit = lim
+                        for i in range(0, len(syms), chunk_size):
+                            chunk = syms[i : i + chunk_size]
+                            prio = [s for s in (priority_syms or []) if s in chunk]
                         try:
                             if bootstrap_timeout is not None:
                                 tf_cache = await asyncio.wait_for(
@@ -2727,6 +2738,8 @@ async def update_multi_tf_ohlcv_cache(
                                 force_websocket_history=force_websocket_history,
                                 max_concurrent=max_concurrent,
                                 notifier=notifier,
+                                priority_symbols=prio if prio else None,
+                            )
                                 priority_symbols=priority_syms,
                             )
                             processed_syms += len(chunk)
