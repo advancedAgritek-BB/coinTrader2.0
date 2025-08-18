@@ -176,6 +176,22 @@ setting `CT_SYMBOL=XRPUSD` downloads the `xrpusd_regime_lgmb.pkl` model from the
 download fails the loader uses `CT_MODEL_FALLBACK_URL` (or the corresponding
 `model_fallback_url` configuration) and logs when this fallback is used, allowing
 ML scoring to continue.
+# Optional path to a cached model used if Supabase is unavailable
+CT_MODEL_LOCAL_PATH=xrpusd_regime_lgbm.pkl
+# Template used to build the model filename. `{symbol}` expands to the lowercase
+# value of `CT_SYMBOL`.
+CT_REGIME_MODEL_TEMPLATE={symbol}_regime_lgbm.pkl
+```
+
+`CT_SYMBOL` controls which Supabase regime model is loaded. With
+`CT_REGIME_MODEL_TEMPLATE={symbol}_regime_lgbm.pkl` and `CT_SYMBOL=XRPUSD`, the
+loader resolves the filename `xrpusd_regime_lgbm.pkl` inside
+`models/regime/XRPUSD/`. Models can also be served from a public URL such as
+`https://prmhankbfjanqffwjcba.supabase.co/storage/v1/object/public/models/xrpusd_regime_lgbm.pkl`
+when credentials are provided or the bucket is public. When the Supabase
+download fails the loader tries `CT_MODEL_LOCAL_PATH` (or the corresponding
+`model_local_path` configuration) and logs when this fallback is used, allowing
+ML scoring to continue with a cached model.
 
 To load models for additional pairs set `use_per_pair_models: true` and list
 allowed symbols under `model_symbols` in

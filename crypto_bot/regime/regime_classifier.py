@@ -4,6 +4,7 @@ import asyncio
 import time
 import logging
 import os
+from io import BytesIO
 
 import pandas as pd
 import numpy as np
@@ -260,7 +261,11 @@ async def load_regime_model(symbol: str) -> tuple[object | None, object | None, 
     model_path = None
     try:
         latest_bytes = client.storage.from_(bucket).download(latest_path)
-        if latest_bytes:
+    except Exception:
+        latest_bytes = None
+
+    if latest_bytes:
+        try:
             data = json.loads(latest_bytes.decode("utf-8"))
             model_path = data["key"]
             model_bytes = client.storage.from_(bucket).download(model_path)
@@ -273,14 +278,65 @@ async def load_regime_model(symbol: str) -> tuple[object | None, object | None, 
                 scaler = None
             logger.info("Loaded global regime model from Supabase: %s", model_path)
             return model, scaler, model_path
+        except Exception as exc:
+            msg = str(getattr(exc, "message", exc))
+            logger.error("Failed to load regime model: %s", exc)
+            return None, None, model_path
+
+    # LATEST.json missing or invalid; attempt direct file fallback
+    template = os.getenv("CT_REGIME_MODEL_TEMPLATE", "{symbol_lower}_regime_lgbm.pkl")
+    fallback_name = template.format(symbol=symbol, symbol_lower=symbol.lower())
+    logger.info(
+        "LATEST metadata missing for %s; falling back to direct file %s",
+        symbol,
+        fallback_name,
+    )
+    try:
+        model_bytes = client.storage.from_(bucket).download(fallback_name)
     except Exception as exc:
         msg = str(getattr(exc, "message", exc))
         if "not_found" in msg:
             logger.warning("Supabase regime model for %s not found", symbol)
-            return None, None, None
+            try:
+                direct_key = f"regime/{symbol}/{symbol.lower()}_regime_lgbm.pkl"
+                model_path = direct_key
+                model_bytes = client.storage.from_(bucket).download(direct_key)
+                model_obj = pickle.loads(model_bytes)
+                if isinstance(model_obj, dict):
+                    model = model_obj.get("model")
+                    scaler = model_obj.get("scaler")
+                else:
+                    model = model_obj
+                    scaler = None
+                logger.info("Loaded direct regime model from Supabase: %s", direct_key)
+                return model, scaler, model_path
+            except Exception:
+                return None, None, None
         logger.error("Failed to load regime model: %s", exc)
+        return None, None, fallback_name
 
-    return None, None, model_path
+    try:
+        model_obj = pickle.loads(model_bytes)
+    except Exception:
+        try:
+            import joblib
+
+            model_obj = joblib.load(BytesIO(model_bytes))
+        except Exception as exc:  # pragma: no cover - joblib optional
+            logger.error("Failed to deserialize regime model: %s", exc)
+            return None, None, fallback_name
+
+    if isinstance(model_obj, dict):
+        model = model_obj.get("model")
+        scaler = model_obj.get("scaler")
+    else:
+        model = model_obj
+        scaler = None
+
+    logger.info(
+        "Loaded global regime model from Supabase fallback file: %s", fallback_name
+    )
+    return model, scaler, fallback_name
 
 
 async def _ml_recovery_loop(notifier: TelegramNotifier | None) -> None:

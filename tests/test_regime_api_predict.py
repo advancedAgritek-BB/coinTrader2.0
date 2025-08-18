@@ -80,6 +80,62 @@ def test_predict_falls_back_without_creds(monkeypatch):
     assert pred.meta["source"] == "fallback"
 
 
+def test_predict_uses_direct_path_when_latest_missing(monkeypatch):
+    model_bytes = b"blob"
+
+    class NotFound(Exception):
+        def __init__(self):
+            self.message = "not_found"
+            self.response = types.SimpleNamespace(status_code=404)
+
+    class Bucket:
+        def download(self, path):
+            if path.endswith("LATEST.json"):
+                raise NotFound()
+            assert path.endswith("xrpusd_regime_lgbm.pkl")
+            return model_bytes
+
+    class Storage:
+        def from_(self, _bucket):
+            return Bucket()
+
+    class Client:
+        storage = Storage()
+
+    monkeypatch.setitem(
+        sys.modules, "supabase", types.SimpleNamespace(create_client=lambda u, k: Client())
+    )
+    monkeypatch.setenv("SUPABASE_URL", "http://example")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "key")
+    monkeypatch.delenv("CT_SYMBOL", raising=False)
+    monkeypatch.setattr(api, "_load_model_from_bytes", lambda blob: DummyModel())
+
+    fallback_called = False
+
+    def baseline(features):
+        nonlocal fallback_called
+        fallback_called = True
+        return api.Prediction("flat", 0.0, meta={"source": "fallback"})
+
+    monkeypatch.setattr(api, "_baseline_action", baseline)
+
+    fallback_registry_called = False
+
+    def load_fallback():
+        nonlocal fallback_registry_called
+        fallback_registry_called = True
+        return b""
+
+    monkeypatch.setattr(registry, "_load_fallback", load_fallback)
+
+    df = pd.DataFrame({"close": [1, 2, 3]})
+    pred = api.predict(df)
+
+    assert pred.action == "long"
+    assert not fallback_called
+    assert not fallback_registry_called
+
+
 def test_missing_model_logs_once(monkeypatch, caplog):
     class Response:
         status_code = 404

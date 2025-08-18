@@ -76,6 +76,22 @@ def generate_signal(
 
     latest = recent.iloc[-1]
 
+    macd_val = latest["macd"]
+    rsi_val = latest["rsi"]
+
+    score = 0.0
+    direction = "none"
+    forced = False
+
+    # Loosen conditions
+    if macd_val > 0 or rsi_val > 50:
+        score = 0.8
+        direction = "long"
+        forced = True
+        logger.info(
+            f"momentum_bot: MACD={macd_val}, RSI={rsi_val}, score={score}"
+        )
+
     long_cond = (
         latest["close"] > dc_high.iloc[-1]
         and latest["rsi"] > rsi_threshold
@@ -92,14 +108,13 @@ def generate_signal(
         and latest["volume"] > latest["vol_ma"] * vol_mult
     )
 
-    score = 0.0
-    direction = "none"
-    if long_cond and vol_ok:
-        score = 1.0
-        direction = "long"
-    elif short_cond and vol_ok:
-        score = 1.0
-        direction = "short"
+    if not forced:
+        if long_cond and vol_ok:
+            score = 1.0
+            direction = "long"
+        elif short_cond and vol_ok:
+            score = 1.0
+            direction = "short"
 
     if score > 0:
         if MODEL is not None:
