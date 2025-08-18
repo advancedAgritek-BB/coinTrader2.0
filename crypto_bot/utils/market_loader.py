@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import time
 import os
+from collections import deque
 from pathlib import Path
 from collections import deque
 from datetime import datetime, timezone, timedelta
@@ -228,6 +229,26 @@ STATUS_UPDATES = True
 # Shared StreamEvaluator instance set by main
 STREAM_EVALUATOR: StreamEvaluator | None = None
 _WARMED_UP: set[str] = set()
+
+# Rolling window of OHLCV fetch timestamps for IOPS calculation
+IOPS_WINDOW = 5.0
+IO_TIMESTAMPS: Deque[float] = deque()
+
+
+def record_io() -> None:
+    """Record an OHLCV fetch completion timestamp."""
+    now = time.time()
+    IO_TIMESTAMPS.append(now)
+    while IO_TIMESTAMPS and now - IO_TIMESTAMPS[0] > IOPS_WINDOW:
+        IO_TIMESTAMPS.popleft()
+
+
+def get_iops() -> float:
+    """Return recent I/O operations per second."""
+    now = time.time()
+    while IO_TIMESTAMPS and now - IO_TIMESTAMPS[0] > IOPS_WINDOW:
+        IO_TIMESTAMPS.popleft()
+    return len(IO_TIMESTAMPS) / IOPS_WINDOW
 
 # Redis settings
 REDIS_TTL = 3600  # cache expiry in seconds
@@ -1355,6 +1376,7 @@ async def load_ohlcv(
             else:  # pragma: no cover - synchronous fallback
                 coro = asyncio.to_thread(fetch_fn, market_id, timeframe, limit, **kwargs)
             data = await asyncio.wait_for(coro, timeout)
+            record_io()
             await asyncio.sleep(1)
             return data
         except Exception as exc:
@@ -1582,6 +1604,7 @@ async def load_ohlcv_parallel(
         if res and len(res[0]) > 6:
             res = [[c[0], c[1], c[2], c[3], c[4], c[6]] for c in res]
         data[sym] = res
+        record_io()
         failed_symbols.pop(sym, None)
     return data
 
