@@ -916,11 +916,11 @@ async def reload_config(
 
     _merge_dict(config, new_config)
     ctx.config = config
-
-    # Reset cached symbols when configuration changes to ensure
-    # symbol selections reflect the latest settings
-    symbol_utils._cached_symbols = None
-    symbol_utils._last_refresh = 0.0
+    new_hash = symbol_utils.compute_config_hash(config)
+    old_hash = symbol_utils.get_cached_config_hash()
+    if old_hash != new_hash:
+        symbol_utils.invalidate_symbol_cache()
+    symbol_utils._cached_hash = new_hash
 
     rotator.config = config.get("portfolio_rotation", rotator.config)
     position_guard.max_open_trades = config.get(
