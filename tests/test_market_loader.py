@@ -519,6 +519,39 @@ def test_load_ohlcv_backoff_429(monkeypatch):
     assert sleeps[1] == 1
 
 
+def test_load_ohlcv_timeout_and_retry(monkeypatch, caplog):
+    from crypto_bot.utils import market_loader
+
+    calls = {"count": 0}
+    orig_sleep = asyncio.sleep
+
+    class SlowEx:
+        has = {"fetchOHLCV": True}
+
+        async def fetch_ohlcv(self, symbol, timeframe="1m", limit=100):
+            calls["count"] += 1
+            await orig_sleep(0.05)
+
+    async def fast_sleep(_):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", fast_sleep)
+
+    ex = SlowEx()
+    with caplog.at_level(logging.ERROR):
+        data = asyncio.run(
+            market_loader.load_ohlcv(
+                ex,
+                "BTC/USD",
+                timeout=0.01,
+                max_retries=2,
+            )
+        )
+    assert data == []
+    assert calls["count"] == 2
+    assert any("Failed to load OHLCV" in r.message for r in caplog.records)
+
+
 class DummyIncExchange:
     has = {"fetchOHLCV": True}
 
@@ -1546,6 +1579,38 @@ def test_load_ohlcv_parallel_timeout_fallback(monkeypatch):
     assert "BTC/USD" in result
     assert ex.fetch_called is True
     assert "BTC/USD" not in market_loader.failed_symbols
+
+
+def test_load_ohlcv_parallel_respects_max_retries(monkeypatch):
+    from crypto_bot.utils import market_loader
+
+    calls = {"count": 0}
+    orig_sleep = asyncio.sleep
+
+    class SlowEx:
+        has = {"fetchOHLCV": True}
+
+        async def fetch_ohlcv(self, symbol, timeframe="1h", limit=100):
+            calls["count"] += 1
+            await orig_sleep(0.05)
+
+    async def fast_sleep(_):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", fast_sleep)
+
+    ex = SlowEx()
+    result = asyncio.run(
+        market_loader.load_ohlcv_parallel(
+            ex,
+            ["BTC/USD"],
+            max_concurrent=1,
+            timeout=0.01,
+            max_retries=2,
+        )
+    )
+    assert result == {}
+    assert calls["count"] == 2
 
 
 class LimitCaptureWS:

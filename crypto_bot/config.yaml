@@ -340,6 +340,7 @@ portfolio_rotation:
   rebalance_threshold: 0.05
   scoring_method: sharpe
   top_assets: 20
+  log_scores_verbose: false
 preferred_chain: solana
 primary_exchange: kraken
 solana_rpc: https://api.mainnet-beta.solana.com  # Custom endpoint

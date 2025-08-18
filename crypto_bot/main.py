@@ -2583,6 +2583,12 @@ async def _main_impl() -> MainResult:
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config, _ = await load_config_async()
+    env_chunk = os.getenv("OHLCV_CHUNK_SIZE")
+    if env_chunk:
+        try:
+            config["ohlcv_batch_size"] = int(env_chunk)
+        except ValueError:
+            logger.warning("Invalid OHLCV_CHUNK_SIZE %r", env_chunk)
     stop_reason = "completed"
 
     mapping = await load_token_mints()
