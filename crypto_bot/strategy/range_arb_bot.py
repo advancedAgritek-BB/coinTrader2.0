@@ -37,7 +37,7 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     if len(df) < window:
         return np.nan
     recent = df.iloc[-window:]
-    X = np.arange(len(recent)).reshape(-1, 1)
+    X = recent[["close", "volume"]].values
     y = recent["close"].values
 
     scaler = StandardScaler()
@@ -50,7 +50,8 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
         kernel=kernel, optimizer="fmin_l_bfgs_b", n_restarts_optimizer=15
     )
     gp.fit(X_scaled, y)
-    pred, _ = gp.predict(scaler.transform([[len(recent)]]), return_std=True)
+    latest_features = recent[["close", "volume"]].iloc[-1].values.reshape(1, -1)
+    pred, _ = gp.predict(scaler.transform(latest_features), return_std=True)
     return float(pred)
 
 
