@@ -1438,10 +1438,10 @@ async def fetch_candidates(ctx: BotContext) -> None:
     )
 
     # Include benchmark pairs from configuration.
-    benchmark_symbols = ctx.config.get(
-        "benchmark_symbols",
-        [ctx.config.get("symbol", "BTC/USDT"), "SOL/USDC"],
-    )
+    default_symbol = ctx.config.get("symbol") or os.getenv("CT_SYMBOL")
+    default_symbol = fix_symbol(default_symbol) if default_symbol else ""
+    default_benchmarks = [default_symbol, "SOL/USDC"] if default_symbol else ["SOL/USDC"]
+    benchmark_symbols = ctx.config.get("benchmark_symbols", default_benchmarks)
     if benchmark_symbols:
         active_candidates.extend((s, 10.0) for s in benchmark_symbols if s)
 
