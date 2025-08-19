@@ -50,7 +50,7 @@ def generate_signal(
     config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str]:
     """Trend following signal with ADX, volume and optional Donchian filters."""
     config = config or {}

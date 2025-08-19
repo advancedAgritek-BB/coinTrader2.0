@@ -198,7 +198,7 @@ def generate_signal(
     force: bool = False,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str]:
     """Identify short-term bounces with volume confirmation.
 

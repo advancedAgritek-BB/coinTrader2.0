@@ -19,7 +19,7 @@ def generate_signal(
     mempool_monitor: Optional[SolanaMempoolMonitor] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str]:
     """Short-term momentum strategy using EMA divergence on DEX pairs.
 

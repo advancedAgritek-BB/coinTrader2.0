@@ -11,7 +11,7 @@ def generate_signal(
     config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str]:
     """Return long signal on sudden drops with high volume."""
     if df is None or len(df) < 2:

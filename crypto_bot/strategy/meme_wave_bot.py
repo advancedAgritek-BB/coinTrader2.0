@@ -49,7 +49,7 @@ async def generate_signal(
     mempool_cfg: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str]:
     """Return a meme wave score and direction using volume and sentiment."""
 

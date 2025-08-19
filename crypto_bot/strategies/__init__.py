@@ -23,6 +23,25 @@ async def _maybe_await(res: Any) -> Any:
     return res
 
 
+async def _invoke_strategy(gen: Callable, **kwargs):
+    """Call generate_signal with only the kwargs it supports; fallback to df-only."""
+    try:
+        filtered = _filter_kwargs(gen, **kwargs)
+        return await _maybe_await(gen(**filtered))
+    except TypeError:
+        # Some older strategies are df-only; try that before failing.
+        if "df" in kwargs:
+            try:
+                return await _maybe_await(
+                    gen(
+                        kwargs["df"],
+                        kwargs.get("symbol"),
+                        kwargs.get("timeframe"),
+                    )
+                )
+            except TypeError:
+                return await _maybe_await(gen(kwargs["df"]))
+        raise
 async def _invoke_strategy(
     gen: Callable, *, df: pd.DataFrame, symbol: str, timeframe: str, **kwargs
 ):
