@@ -8,11 +8,12 @@ from ta.volatility import AverageTrueRange
 
 
 def calc_atr(
-    df: pd.DataFrame | None,
-    window: int = 14,
+    df,
+    window: int | None = None,
     *,
+    period: int | None = None,
     as_series: bool = True,
-    **kwargs,
+    **_,
 ) -> pd.Series | float | None:
     """Compute the Average True Range using ``window`` or ``period``.
 
@@ -28,9 +29,10 @@ def calc_atr(
         insufficient data is provided.
     """
 
-    period = kwargs.get("period")
-    if period is not None:
-        window = int(period)
+    if window is None and period is not None:
+        window = period
+    if window is None:
+        window = 14
     high = df["high"].astype(float)
     low = df["low"].astype(float)
     close = df["close"].astype(float)
