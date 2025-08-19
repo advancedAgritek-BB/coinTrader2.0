@@ -15,7 +15,7 @@ trading:
     deep_low_tf: true        # backfill 1m/5m history for strategies
     deep_days: 30
   hft_enabled: true
-  hft_symbols: ["BTC/USD","ETH/USD","SOL/USDC","BONK/USDC"]   # seed list, can expand
+  hft_symbols: ["BTC/USD","ETH/USD","SOL/USDC","BONK/USDC","BNB/USDT","SHIB/USDT","PEPE/USD"]   # seed list, can expand
   exclude_symbols: ["AIBTC/USD"]   # remove noisy/synthetic pairs
 
 # === ohlcv cache ===
@@ -558,6 +558,9 @@ strategy_router:
   sideways_timeframe: 1h
   trending_timeframe: 1h
   volatile_timeframe: 1m
+yamlrouter:
+  min_score: 0.5
+  min_confidence: 0.4
 symbol: BTC/USDT
 symbol_batch_size: 50
 ohlcv_chunk_size: 20
@@ -645,13 +648,14 @@ use_ml_regime_classifier: true
 use_per_pair_models: true
 use_websocket: true
 volatility_filter:
-  max_funding_rate: 0.1
-  min_atr_pct: 0
+  max_funding_rate: 0.2
+  min_atr_pct: 0.001
 voting_strategies:
 - trend_bot
 - momentum_bot
 - mean_bot
 - sniper_solana
+min_agreeing_votes: 1
 wallet_address: your_wallet
 ws_failures_before_disable: 1
 ws_ping_interval: 5
