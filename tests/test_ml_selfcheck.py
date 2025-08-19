@@ -14,6 +14,7 @@ def reload_selfcheck():
 def _clear_supabase_env(monkeypatch):
     for var in [
         "SUPABASE_URL",
+        "SUPABASE_SERVICE_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
         "SUPABASE_KEY",
         "SUPABASE_API_KEY",

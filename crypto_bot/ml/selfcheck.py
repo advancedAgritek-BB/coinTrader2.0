@@ -19,7 +19,8 @@ def log_ml_status_once() -> None:
     )
     url_ok = bool(os.getenv("SUPABASE_URL"))
     key_ok = bool(
-        os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        os.getenv("SUPABASE_SERVICE_KEY")
+        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         or os.getenv("SUPABASE_KEY")
         or os.getenv("SUPABASE_API_KEY")
         or os.getenv("SUPABASE_ANON_KEY")

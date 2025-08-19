@@ -75,7 +75,7 @@ def _maybe_publish_registry(model_bytes: bytes, metadata: Dict, cfg: TrainConfig
         # lazy import to avoid runtime deps
         from cointrainer import registry
         ts = time.strftime("%Y%m%d-%H%M%S")
-        key = f"models/regime/{cfg.symbol}/{ts}_regime_lgbm.pkl"
+        key = f"regime/{cfg.symbol}/{ts}_regime_lgbm.pkl"
         registry.save_model(key, model_bytes, metadata)
         return key
     except Exception:
