@@ -109,6 +109,7 @@ def format_top(scores, n: int = 25) -> str:
 
 
 logger = logging.getLogger("bot")
+pythonlogger = logging.getLogger("python")
 
 # Module-level placeholders populated once internal modules are loaded in ``main``
 
@@ -2361,6 +2362,9 @@ async def execute_signals(ctx: BotContext) -> None:
                 sym,
                 amount,
                 trade_reason,
+            )
+            pythonlogger.info(
+                f"Attempting trade for {candidate['symbol']}: score={candidate.get('score')}, direction={candidate.get('direction')}, after filters"
             )
             order = await cex_trade_async(
                 ctx.exchange,
