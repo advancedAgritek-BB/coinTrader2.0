@@ -4,16 +4,10 @@ import asyncio
 import time
 import logging
 import os
-from io import BytesIO
-
 import pandas as pd
 import numpy as np
 import ta
 import yaml
-import json
-import pickle
-
-from crypto_bot.utils.telegram import TelegramNotifier
 
 from .pattern_detector import detect_patterns
 from crypto_bot.utils.pattern_logger import log_patterns
@@ -21,6 +15,7 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.market_loader import timeframe_seconds
 from crypto_bot.utils.telemetry import telemetry
 from crypto_bot.utils.telegram import TelegramNotifier
+from crypto_bot.ml.model_loader import load_regime_model
 
 
 # Thresholds and ML blend settings are defined in ``regime_config.yaml``
@@ -223,7 +218,7 @@ def _ml_fallback(
 
 
 async def _download_supabase_model(symbol: str | None = None) -> tuple[object | None, object | None]:
-    """Download LightGBM model and scaler from Supabase."""
+    """Download LightGBM model and scaler using the shared loader."""
     async with _supabase_model_lock:
         target_symbol = symbol or os.getenv("CT_SYMBOL", "XRPUSD")
         model, scaler, _path = await load_regime_model(target_symbol)

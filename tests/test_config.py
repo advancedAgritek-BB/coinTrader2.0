@@ -376,7 +376,9 @@ def test_ensure_ml_only_on_change(tmp_path, monkeypatch):
         calls.append(True)
         return object(), None, "path"
 
-    monkeypatch.setattr(rc, "load_regime_model", fake_load)
+    from crypto_bot.ml import model_loader
+
+    monkeypatch.setattr(model_loader, "load_regime_model", fake_load)
     monkeypatch.setattr(main, "ML_AVAILABLE", True)
 
     asyncio.run(main.load_config_async())
