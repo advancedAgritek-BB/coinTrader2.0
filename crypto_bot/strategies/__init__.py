@@ -7,6 +7,8 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, Tuple
 
 import pandas as pd
 
+from crypto_bot.config import cfg
+
 logger = logging.getLogger(__name__)
 log = logger
 
@@ -116,6 +118,8 @@ async def score(
     symbols = list(symbols or [])
     timeframes = list(timeframes or [])
 
+    min_needed = max(200, getattr(cfg, "indicator_lookback", 200))
+
     # Prefer a native vectorised score implementation if provided.
     native = getattr(mod, "score", None)
     if callable(native) and native is not score:
@@ -149,7 +153,10 @@ async def score(
                     continue
                 try:
                     params = inspect.signature(gen).parameters
-                    filtered = {"df_a": df_a, "df_b": df_b}
+                    filtered = {
+                        "df_a": df_a.tail(min_needed),
+                        "df_b": df_b.tail(min_needed),
+                    }
                     if "symbol_a" in params:
                         filtered["symbol_a"] = a
                     if "symbol_b" in params:
@@ -182,7 +189,12 @@ async def score(
                 )
                 continue
             try:
-                res = await _invoke_strategy(gen, df=df, symbol=sym, timeframe=tf)
+                res = await _invoke_strategy(
+                    gen,
+                    df=df.tail(min_needed),
+                    symbol=sym,
+                    timeframe=tf,
+                )
             except Exception:
                 logger.exception(
                     "Strategy %s scoring failed for %s @ %s", name, sym, tf
