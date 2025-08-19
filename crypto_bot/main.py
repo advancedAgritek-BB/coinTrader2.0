@@ -2118,12 +2118,26 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
 
 async def execute_signals(ctx: BotContext) -> None:
     """Open trades for qualified analysis results."""
+    from collections import Counter
+
     results = getattr(ctx, "analysis_results", [])
     if not results:
         logger.info("No analysis results to act on")
         return
     ctx.reject_reasons = {}
     reject_counts = Counter()
+
+    def _log_rejection(sym: str, score: float, direction: str, min_score: float, verdict: str, category: str) -> None:
+        """Emit structured log for a rejected candidate."""
+        logger.info(
+            "[REJECT][%s] sym=%s score=%.2f dir=%s min_score=%.2f verdict=%s",
+            category,
+            sym,
+            score,
+            direction,
+            min_score,
+            verdict,
+        )
 
     # Filter and prioritize by score
     orig_results = results
@@ -2134,38 +2148,28 @@ async def execute_signals(ctx: BotContext) -> None:
     dry_run = ctx.config.get("execution_mode") == "dry_run"
     for r in orig_results:
         logger.debug("Analysis result: %s", r)
-        if r.get("skip"):
-            skipped_syms.append(r.get("symbol"))
-            logger.warning(
-                "Skipped trade: score=%s, direction=%s, min_score=%s",
-                r.get("score"),
-                r.get("direction"),
-                r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0)),
-            )
-            continue
-        if r.get("direction") == "none":
-            no_dir_syms.append(r.get("symbol"))
-            logger.warning(
-                "Skipped trade: score=%s, direction=%s, min_score=%s",
-                r.get("score"),
-                r.get("direction"),
-                r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0)),
-            )
-            continue
+        sym = r.get("symbol", "")
+        direction = r.get("direction", "none")
         min_req = r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0))
         score = r.get("score", 0.0)
+        if r.get("skip"):
+            skipped_syms.append(sym)
+            _log_rejection(sym, score, direction, min_req, "skip_flag", "SCORING")
+            reject_counts["skip_flag"] += 1
+            continue
+        if direction == "none":
+            no_dir_syms.append(sym)
+            _log_rejection(sym, score, direction, min_req, "no_direction", "SCORING")
+            reject_counts["no_direction"] += 1
+            continue
         if score < min_req:
-            low_score.append(f"{r.get('symbol')}({score:.2f}<{min_req:.2f})")
-            logger.warning(
-                "Skipped trade: score=%s, direction=%s, min_score=%s",
-                score,
-                r.get("direction"),
-                min_req,
-            )
+            low_score.append(f"{sym}({score:.2f}<{min_req:.2f})")
+            _log_rejection(sym, score, direction, min_req, "below_min_score", "SCORING")
+            reject_counts["below_min_score"] += 1
             continue
         logger.info(
             "Passing to execute: symbol=%s, score=%s, dry_run=%s",
-            r.get("symbol"),
+            sym,
             score,
             dry_run,
         )
@@ -2194,8 +2198,22 @@ async def execute_signals(ctx: BotContext) -> None:
         logger.info("Analysis result: %s", candidate)
         max_trades = ctx.position_guard.max_open_trades if ctx.position_guard else 0
         logger.debug("Open trades: %d / %d", len(ctx.positions), max_trades)
+        min_req = candidate.get(
+            "min_confidence", ctx.config.get("min_confidence_score", 0.0)
+        )
+        score = candidate.get("score", 0.0)
+        direction = candidate.get("direction", "none")
         if ctx.position_guard and not ctx.position_guard.can_open(ctx.positions):
             logger.debug("Position guard blocked opening a new position")
+            _log_rejection(
+                candidate.get("symbol", ""),
+                score,
+                direction,
+                min_req,
+                "max_open_trades",
+                "POSITION_GUARD",
+            )
+            reject_counts["position_guard_limit"] += 1
             logger.info(
                 "Max open trades reached (%d/%d); skipping remaining signals",
                 len(ctx.positions),
@@ -2216,16 +2234,18 @@ async def execute_signals(ctx: BotContext) -> None:
             )
         if sym in ctx.positions:
             outcome_reason = "existing position"
+            _log_rejection(sym, score, direction, min_req, outcome_reason, "POSITION_GUARD")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
+            reject_counts["existing_position"] += 1
             continue
 
         df = candidate["df"]
         price = df["close"].iloc[-1]
-        score = candidate.get("score", 0.0)
         strategy = candidate.get("name", "")
         allowed, reason = ctx.risk_manager.allow_trade(df, strategy, sym)
         if not allowed:
             outcome_reason = f"blocked: {reason}"
+            _log_rejection(sym, score, direction, min_req, reason, "RISK_MANAGER")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             key = reason.lower().replace(" ", "_")
             reject_counts[key] += 1
@@ -2256,7 +2276,9 @@ async def execute_signals(ctx: BotContext) -> None:
             )
             if size == 0:
                 outcome_reason = f"size {size:.4f}"
+                _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
                 logger.info("[EVAL] %s -> %s", sym, outcome_reason)
+                reject_counts["size_zero"] += 1
                 continue
 
         if not ctx.risk_manager.can_allocate(strategy, abs(size), ctx.balance):
@@ -2267,14 +2289,18 @@ async def execute_signals(ctx: BotContext) -> None:
                 strategy,
             )
             outcome_reason = "insufficient capital"
+            _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
+            reject_counts["insufficient_capital"] += 1
             continue
 
         amount = abs(size) / price if price > 0 else 0.0
         side = direction_to_side(direction)
         if side == "sell" and not ctx.config.get("allow_short", False):
             outcome_reason = "short selling disabled"
+            _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
+            reject_counts["short_selling_disabled"] += 1
             continue
         start_exec = time.perf_counter()
         executed_via_sniper = False
@@ -2360,7 +2386,7 @@ async def execute_signals(ctx: BotContext) -> None:
                 amount,
                 trade_reason,
             )
-            pythonlogger.info(
+            logger.info(
                 f"Attempting trade for {candidate['symbol']}: score={candidate.get('score')}, direction={candidate.get('direction')}, after filters"
             )
             order = await cex_trade_async(
