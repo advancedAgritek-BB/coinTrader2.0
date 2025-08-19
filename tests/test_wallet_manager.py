@@ -90,12 +90,10 @@ def test_load_exports_supabase_creds(tmp_path, monkeypatch):
     monkeypatch.setattr(wallet_manager, "CONFIG_FILE", cfg)
     monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_KEY", raising=False)
-    monkeypatch.delenv("SUPABASE_API_KEY", raising=False)
     monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
     creds = wallet_manager.load_or_create()
     assert os.environ["SUPABASE_URL"] == "url"
     assert os.environ["SUPABASE_KEY"] == "key"
-    assert os.environ["SUPABASE_API_KEY"] == "key"
     assert os.environ["SUPABASE_SERVICE_ROLE_KEY"] == "key"
     assert creds["supabase_url"] == "url"
     assert creds["supabase_key"] == "key"
