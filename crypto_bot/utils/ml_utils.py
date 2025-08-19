@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Iterable
 
+from crypto_bot.ml.model_loader import get_supabase_key
+
 logger = logging.getLogger(__name__)
 
 _REQUIRED_PACKAGES: Iterable[str] = ("sklearn", "joblib", "ta")
@@ -40,16 +42,11 @@ def _check_packages(pkgs: Iterable[str]) -> list[str]:
 
 
 def _get_supabase_creds() -> tuple[str | None, str | None]:
-    """Return Supabase URL and key from canonical or legacy env names."""
+    """Return Supabase URL and key using :func:`get_supabase_key`."""
     url = os.getenv("SUPABASE_URL")
-    key = (
-        os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        or os.getenv("SUPABASE_KEY")
-        or os.getenv("SUPABASE_API_KEY")
-        or os.getenv("SUPABASE_ANON_KEY")
-    )
+    key = get_supabase_key()
     logger.debug(
-        "Supabase configured: url=%s key_len=%d",
+        "Supabase configured: url=%s SUPABASE_KEY_len=%d",
         bool(url),
         len(key or ""),
     )
@@ -101,7 +98,7 @@ def is_ml_available() -> bool:
         if not url or not key:
             if not _LOGGER_ONCE["missing_supabase_creds"]:
                 logger.info(
-                    "ML unavailable: Missing Supabase credentials (url=%s, key_present=%s)",
+                    "ML unavailable: Missing Supabase credentials (url=%s, SUPABASE_KEY_present=%s)",
                     bool(url),
                     bool(key),
                 )
