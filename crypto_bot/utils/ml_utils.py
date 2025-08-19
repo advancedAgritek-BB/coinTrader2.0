@@ -43,7 +43,8 @@ def _get_supabase_creds() -> tuple[str | None, str | None]:
     """Return Supabase URL and key from canonical or legacy env names."""
     url = os.getenv("SUPABASE_URL")
     key = (
-        os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        os.getenv("SUPABASE_SERVICE_KEY")
+        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         or os.getenv("SUPABASE_KEY")
         or os.getenv("SUPABASE_API_KEY")
         or os.getenv("SUPABASE_ANON_KEY")

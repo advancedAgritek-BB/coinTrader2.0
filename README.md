@@ -143,7 +143,7 @@ Trained LightGBM models may be stored in Supabase using a stable layout:
 
 ```
 bucket: models
-prefix: models/regime/{SYMBOL}/…
+prefix: regime/{SYMBOL}/…
 ```
 
 The loader searches this path for a `LATEST.json` manifest to resolve the
@@ -156,15 +156,16 @@ Configure the loader with the following environment variables:
 
 ```ini
 SUPABASE_URL=
-# Required: service role key with access to the storage bucket
-SUPABASE_SERVICE_ROLE_KEY=
-# Optional alternative keys for download-only setups
+# Required: service or anon key with access to the storage bucket
+SUPABASE_SERVICE_KEY=
+# Legacy alternative keys
+# SUPABASE_SERVICE_ROLE_KEY=
 # SUPABASE_KEY=
 # SUPABASE_API_KEY=
 # Storage bucket holding uploaded models
 CT_MODELS_BUCKET=models
 # Prefix within the bucket for regime models
-CT_REGIME_PREFIX=models/regime
+CT_REGIME_PREFIX=regime
 CT_SYMBOL=XRPUSD
 # Optional override URL used if Supabase is unavailable
 # CT_MODEL_FALLBACK_URL=https://example.com/xrpusd_regime_lgbm.pkl
@@ -172,7 +173,7 @@ CT_SYMBOL=XRPUSD
 
 `CT_SYMBOL` controls which Supabase regime model is loaded. For instance,
 setting `CT_SYMBOL=XRPUSD` downloads the `xrpusd_regime_lgmb.pkl` model from the
-`models/regime/XRPUSD/` path in the configured bucket. When the Supabase
+`regime/XRPUSD/` path in the configured bucket. When the Supabase
 download fails the loader uses `CT_MODEL_FALLBACK_URL` (or the corresponding
 `model_fallback_url` configuration) and logs when this fallback is used, allowing
 ML scoring to continue.
@@ -186,7 +187,7 @@ CT_REGIME_MODEL_TEMPLATE={symbol}_regime_lgbm.pkl
 `CT_SYMBOL` controls which Supabase regime model is loaded. With
 `CT_REGIME_MODEL_TEMPLATE={symbol}_regime_lgbm.pkl` and `CT_SYMBOL=XRPUSD`, the
 loader resolves the filename `xrpusd_regime_lgbm.pkl` inside
-`models/regime/XRPUSD/`. Models can also be served from a public URL such as
+`regime/XRPUSD/`. Models can also be served from a public URL such as
 `https://prmhankbfjanqffwjcba.supabase.co/storage/v1/object/public/models/xrpusd_regime_lgbm.pkl`
 when credentials are provided or the bucket is public. When the Supabase
 download fails the loader tries `CT_MODEL_LOCAL_PATH` (or the corresponding

@@ -94,6 +94,7 @@ def _have_supabase_creds() -> bool:
     key_ok = any(
         os.getenv(k)
         for k in [
+            "SUPABASE_SERVICE_KEY",
             "SUPABASE_SERVICE_ROLE_KEY",
             "SUPABASE_KEY",
             "SUPABASE_API_KEY",
@@ -111,7 +112,7 @@ def predict(
     if not _have_supabase_creds():
         logger.warning(
             "Supabase credentials missing; set SUPABASE_URL and one of "
-            "SUPABASE_SERVICE_ROLE_KEY, SUPABASE_KEY or SUPABASE_API_KEY. "
+            "SUPABASE_SERVICE_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_KEY or SUPABASE_API_KEY. "
             "Falling back to heuristic regime (set features.ml=false to run heuristics)."
         )
         return _baseline_action(features)
