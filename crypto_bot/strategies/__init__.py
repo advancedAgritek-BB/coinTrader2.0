@@ -23,31 +23,28 @@ async def _maybe_await(res: Any) -> Any:
     return res
 
 
-async def _invoke_strategy(gen: Callable, **kwargs):
-    """Call generate_signal with only the kwargs it supports; fallback to df-only."""
-    try:
-        filtered = _filter_kwargs(gen, **kwargs)
-        return await _maybe_await(gen(**filtered))
-    except TypeError:
-        # Some older strategies are df-only; try that before failing.
-        if "df" in kwargs:
-            try:
-                return await _maybe_await(
-                    gen(
-                        kwargs["df"],
-                        kwargs.get("symbol"),
-                        kwargs.get("timeframe"),
-                    )
-                )
-            except TypeError:
-                return await _maybe_await(gen(kwargs["df"]))
-        raise
-async def _invoke_strategy(
+async def run_strategy(
     gen: Callable, *, df: pd.DataFrame, symbol: str, timeframe: str, **kwargs
 ):
-    """Call ``gen`` with df, symbol and timeframe and await the result if needed."""
-    res = gen(df=df, symbol=symbol, timeframe=timeframe, **kwargs)
-    return await _maybe_await(res)
+    """Execute ``gen`` with sensible fallbacks and error handling."""
+
+    try:
+        res = gen(df=df, symbol=symbol, timeframe=timeframe, **kwargs)
+    except TypeError:
+        try:
+            res = gen(df=df)
+        except Exception:
+            logger.exception("Strategy %s invocation failed", getattr(gen, "__name__", gen))
+            return {"score": 0.0, "signal": "none"}
+    except Exception:
+        logger.exception("Strategy %s invocation failed", getattr(gen, "__name__", gen))
+        return {"score": 0.0, "signal": "none"}
+
+    try:
+        return await _maybe_await(res)
+    except Exception:
+        logger.exception("Strategy %s invocation failed", getattr(gen, "__name__", gen))
+        return {"score": 0.0, "signal": "none"}
 
 
 def _normalize_result(val):
@@ -181,13 +178,7 @@ async def score(
                     "Skipping pairwise strategy %s for single-symbol pass", name
                 )
                 continue
-            try:
-                res = await _invoke_strategy(gen, df=df, symbol=sym, timeframe=tf)
-            except Exception:
-                logger.exception(
-                    "Strategy %s scoring failed for %s @ %s", name, sym, tf
-                )
-                res = (0.0, "none")
+            res = await run_strategy(gen, df=df, symbol=sym, timeframe=tf)
             score_action = _normalize_result(res)
             out[(sym, tf)] = score_action
     return out
