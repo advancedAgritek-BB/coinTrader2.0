@@ -59,7 +59,7 @@ def _df_small_range(price: float = 100.0) -> pd.DataFrame:
 
 
 def test_short_signal_above_upper_grid(monkeypatch):
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: pd.Series([5.0]))
     monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: 1.0)
     df = _df_with_price(111.0)
     score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
@@ -68,7 +68,7 @@ def test_short_signal_above_upper_grid(monkeypatch):
 
 
 def test_long_signal_below_lower_grid(monkeypatch):
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: pd.Series([5.0]))
     monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: 1.0)
     df = _df_with_price(89.0)
     score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
@@ -77,7 +77,7 @@ def test_long_signal_below_lower_grid(monkeypatch):
 
 
 def test_no_signal_in_middle(monkeypatch):
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: pd.Series([5.0]))
     monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: 1.0)
     df = _df_with_price(102.0)
     score, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
@@ -86,7 +86,7 @@ def test_no_signal_in_middle(monkeypatch):
 
 
 def test_grid_levels_env_override(monkeypatch):
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: pd.Series([5.0]))
     df = _df_with_price(102.0)
     _, direction = grid_bot.generate_signal(df, config=GridConfig(atr_normalization=False))
     assert direction == "none"
@@ -172,7 +172,7 @@ def test_atr_spacing(monkeypatch):
 
 
 def test_small_range_no_signal(monkeypatch):
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 0.5)
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: pd.Series([0.5]))
     df = _df_small_range()
     cfg = GridConfig(min_range_pct=0.02, atr_normalization=False)
     score, direction = grid_bot.generate_signal(df, config=cfg)
@@ -224,7 +224,7 @@ def test_short_blocked_by_trend_filter():
 @pytest.mark.parametrize("cfg", [{"range_window": 10}, GridConfig(range_window=10)])
 def test_range_window_config(cfg, monkeypatch):
     df = _df_range_change()
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: pd.Series([5.0]))
     monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: 18.0)
     _, default_direction = grid_bot.generate_signal(df)
     assert default_direction == "none"
@@ -236,7 +236,7 @@ def test_range_window_config(cfg, monkeypatch):
 
 
 def test_trainer_model_influence(monkeypatch):
-    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: 5.0)
+    monkeypatch.setattr(grid_bot, "calc_atr", lambda df, window=14: pd.Series([5.0]))
     monkeypatch.setattr(grid_bot, "atr_percent", lambda df, window=14: 1.0)
     df = _df_with_price(111.0)
     cfg = GridConfig(atr_normalization=False)

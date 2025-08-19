@@ -63,7 +63,7 @@ def test_strategy_regime_strength(monkeypatch):
 
     monkeypatch.setattr(ma, "evaluate_async", fake_eval)
     monkeypatch.setattr(ma, "detect_patterns", lambda _df: {})
-    monkeypatch.setattr(ma, "calc_atr", lambda *_a, **_k: 0.0)
+    monkeypatch.setattr(ma, "calc_atr", lambda *_a, **_k: pd.Series([0.0]))
 
     cfg = {
         "timeframe": "1h",

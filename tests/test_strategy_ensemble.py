@@ -87,7 +87,7 @@ def test_analyze_symbol_ensemble_default_min_conf(monkeypatch):
     monkeypatch.setattr(ma, "classify_regime_async", fake_async)
     monkeypatch.setattr(ma, "classify_regime_cached", fake_cached)
     monkeypatch.setattr(ma, "detect_patterns", lambda _df: {})
-    monkeypatch.setattr(ma, "calc_atr", lambda *_a, **_k: 0.0)
+    monkeypatch.setattr(ma, "calc_atr", lambda *_a, **_k: pd.Series([0.0]))
 
     base_called = []
 

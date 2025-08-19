@@ -36,7 +36,7 @@ def test_fetch_candidates_logs_batch(monkeypatch, caplog):
 
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
-    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.02)
+    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: pd.Series([0.02]))
     monkeypatch.setattr(main, "get_market_regime", lambda *_a, **_k: "trending")
     monkeypatch.setattr(main, "compute_average_atr", lambda *_a, **_k: 0.01)
 
@@ -80,7 +80,7 @@ def test_fetch_candidates_dedupes_and_filters(monkeypatch):
 
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
-    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.02)
+    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: pd.Series([0.02]))
     monkeypatch.setattr(main, "get_market_regime", lambda *_a, **_k: "unknown")
     monkeypatch.setattr(main, "compute_average_atr", lambda *_a, **_k: 0.01)
 

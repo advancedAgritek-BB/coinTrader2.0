@@ -128,7 +128,8 @@ def generate_signal(
 
     price_change = df["close"].iloc[-1] / first_close - 1
     if direction == "auto" and price_change < 0:
-        atr_value = volatility.calc_atr(df, period=atr_window, as_series=False)
+        atr_series = volatility.calc_atr(df, period=atr_window)
+        atr_value = float(atr_series.iloc[-1]) if not atr_series.empty else 0.0
         score = 1.0
         if MODEL is not None:
             try:  # pragma: no cover - best effort
@@ -139,13 +140,14 @@ def generate_signal(
         if config is None or config.get("atr_normalization", True):
             score = volatility.normalize_score_by_volatility(df, score)
         logger.info("Signal for %s: %s, %s", symbol, score, "short")
-        return score, "short", atr_value if atr_value is not None else 0.0, False
+        return score, "short", atr_value, False
 
     base_volume = df["volume"].iloc[:initial_window].mean()
     vol_ratio = df["volume"].iloc[-1] / base_volume if base_volume > 0 else 0
 
     atr_window = min(atr_window, len(df))
-    atr = volatility.calc_atr(df, period=atr_window, as_series=False)
+    atr_series = volatility.calc_atr(df, period=atr_window)
+    atr = float(atr_series.iloc[-1]) if not atr_series.empty else 0.0
 
     if len(df) > volume_window:
         prev_vol = df["volume"].iloc[-(volume_window + 1):-1]
@@ -154,18 +156,13 @@ def generate_signal(
     avg_vol = prev_vol.mean() if not prev_vol.empty else 0.0
     body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
     event = False
-    atr_val = 0.0
-    if atr is not None:
-        atr_src = getattr(atr, "iloc", atr)
-        atr_val = float(atr_src[-1] if hasattr(atr_src, "__getitem__") else atr_src)
-    if atr_val > 0.0 and avg_vol > 0:
-        if body >= 2 * atr_val and df["volume"].iloc[-1] >= 2 * avg_vol:
+    if atr > 0.0 and avg_vol > 0:
+        if body >= 2 * atr and df["volume"].iloc[-1] >= 2 * avg_vol:
             event = True
-    atr = atr_val
 
     if df["volume"].iloc[-1] < min_volume:
         logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
-        return 0.0, "none", atr if atr is not None else 0.0, event
+        return 0.0, "none", atr, event
 
     if (
         len(df) <= max_history
@@ -189,18 +186,14 @@ def generate_signal(
         if direction == "auto":
             trade_direction = "short" if price_change < 0 else "long"
         logger.info("Signal for %s: %s, %s", symbol, score, trade_direction)
-        return score, trade_direction, atr if atr is not None else 0.0, event
+        return score, trade_direction, atr, event
 
     trade_direction = direction
     score = 0.0
 
     if price_fallback:
-        atr_value = volatility.calc_atr(df, period=atr_window, as_series=False)
-        if atr_value is not None:
-            atr_src = getattr(atr_value, "iloc", atr_value)
-            atr_value = float(atr_src[-1] if hasattr(atr_src, "__getitem__") else atr_src)
-        else:
-            atr_value = 0.0
+        atr_series = volatility.calc_atr(df, period=atr_window)
+        atr_value = float(atr_series.iloc[-1]) if not atr_series.empty else 0.0
         if atr_value <= 0.0:
             logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
             return 0.0, "none", 0.0, event

@@ -4,6 +4,7 @@ import pathlib
 import sys
 import types
 from collections import deque
+import pandas as pd
 
 # create minimal package structure
 pkg_root = types.ModuleType("crypto_bot")
@@ -12,7 +13,7 @@ utils_pkg = types.ModuleType("crypto_bot.utils")
 pkg_root.solana = sol_pkg
 pkg_root.utils = utils_pkg
 pkg_root.volatility_filter = types.ModuleType("crypto_bot.volatility_filter")
-pkg_root.volatility_filter.calc_atr = lambda *_a, **_k: 0.0
+pkg_root.volatility_filter.calc_atr = lambda *_a, **_k: pd.Series([0.0])
 pkg_root.strategy = types.ModuleType("crypto_bot.strategy")
 pkg_root.strategy.cross_chain_arb_bot = types.ModuleType(
     "crypto_bot.strategy.cross_chain_arb_bot"

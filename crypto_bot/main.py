@@ -543,7 +543,8 @@ def compute_average_atr(symbols: list[str], df_cache: dict, timeframe: str) -> f
         df = tf_cache.get(sym)
         if df is None or df.empty or "close" not in df:
             continue
-        atr_values.append(calc_atr(df))
+        series = calc_atr(df)
+        atr_values.append(float(series.iloc[-1]) if not series.empty else 0.0)
     return sum(atr_values) / len(atr_values) if atr_values else 0.0
 
 

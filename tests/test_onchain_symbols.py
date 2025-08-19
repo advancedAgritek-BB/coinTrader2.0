@@ -103,7 +103,7 @@ def test_fetch_candidates_adds_onchain(monkeypatch):
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
     monkeypatch.setattr(main, "build_priority_queue", lambda pairs: deque([s for s, _ in pairs]))
-    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.01)
+    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: pd.Series([0.01]))
     monkeypatch.setattr(main, "is_market_pumping", lambda *a, **k: False)
 
     asyncio.run(main.fetch_candidates(ctx))
@@ -128,7 +128,7 @@ def test_auto_mode_falls_back_to_cex(monkeypatch, caplog):
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
     monkeypatch.setattr(main, "build_priority_queue", lambda pairs: deque([s for s, _ in pairs]))
-    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.01)
+    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: pd.Series([0.01]))
     monkeypatch.setattr(main, "is_market_pumping", lambda *a, **k: False)
 
     asyncio.run(main.fetch_candidates(ctx))

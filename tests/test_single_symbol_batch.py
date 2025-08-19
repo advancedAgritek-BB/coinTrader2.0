@@ -38,7 +38,7 @@ def test_single_symbol_no_duplicates(monkeypatch):
         return [("SOL/USDC", 1.0)], []
 
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
-    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.01)
+    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: pd.Series([0.01]))
     monkeypatch.setattr(main, "compute_average_atr", lambda *_a, **_k: 0.01)
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
 
@@ -55,7 +55,7 @@ def test_disable_benchmark_symbols(monkeypatch):
         return [("SOL/USDC", 1.0)], []
 
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
-    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.01)
+    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: pd.Series([0.01]))
     monkeypatch.setattr(main, "compute_average_atr", lambda *_a, **_k: 0.01)
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
 

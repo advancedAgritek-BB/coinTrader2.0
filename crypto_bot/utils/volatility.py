@@ -8,65 +8,41 @@ from ta.volatility import AverageTrueRange
 
 
 def calc_atr(
-    df,
-    window: int | None = None,
+    df: pd.DataFrame | None,
+    length: int | None = None,
     *,
+    window: int | None = None,
     period: int | None = None,
-    as_series: bool = True,
     **_,
-) -> pd.Series | float | None:
-    """Compute the Average True Range using ``window`` or ``period``.
+) -> pd.Series:
+    """Compute the Average True Range.
 
-    Parameters
-    ----------
-    df : pandas.DataFrame | None
-        Input OHLC data.
-    window : int, default 14
-        Window length for ATR calculation.
-    as_series : bool, default True
-        When ``True`` a :class:`pandas.Series` is returned, otherwise the
-        latest ATR value is returned as ``float`` or ``None`` when
-        insufficient data is provided.
+    ``length`` is the preferred parameter name. ``window`` and ``period`` are
+    accepted for backward compatibility and mapped to ``length``. A
+    :class:`pandas.Series` of ATR values is always returned.
     """
 
-    if window is None and period is not None:
-        window = period
-    if window is None:
-        window = 14
+    if length is None:
+        if window is not None:
+            length = window
+        elif period is not None:
+            length = period
+    if length is None:
+        length = 14
+
+    if df is None or df.empty or len(df) < max(2, int(length)):
+        if df is not None and "close" in df:
+            return df["close"].iloc[:0]
+        return pd.Series([], dtype=float)
+
     high = df["high"].astype(float)
     low = df["low"].astype(float)
     close = df["close"].astype(float)
-    prev_close = close.shift(1)
-
-    tr = pd.concat(
-        [
-            (high - low).abs(),
-            (high - prev_close).abs(),
-            (low - prev_close).abs(),
-        ],
-        axis=1,
-    ).max(axis=1)
-
-    if df is None or df.empty or len(df) < max(2, int(window)):
-        if as_series:
-            if df is not None and "close" in df:
-                return df["close"].iloc[:0]
-            return pd.Series([], dtype=float)
-        return None
 
     atr_indicator = AverageTrueRange(
-        df["high"], df["low"], df["close"], window=int(window), fillna=False
+        high, low, close, window=int(length), fillna=False
     )
-    atr_series = atr_indicator.average_true_range()
-    if as_series:
-        return atr_series
-    if atr_series.empty:
-        return None
-    value = float(atr_series.iloc[-1])
-    return 0.0 if math.isnan(value) else value
-
-    # The following unreachable code is intentionally removed to avoid
-    # ambiguous return paths and ensure a scalar is returned when requested.
+    return atr_indicator.average_true_range()
 
 
 def atr_percent(df: pd.DataFrame, period: int = 14) -> float:
@@ -77,7 +53,8 @@ def atr_percent(df: pd.DataFrame, period: int = 14) -> float:
     """
 
     last_close = float(df["close"].iloc[-1])
-    atr_val = calc_atr(df, period=period, as_series=False)
+    atr_series = calc_atr(df, period=period)
+    atr_val = float(atr_series.iloc[-1]) if not atr_series.empty else float("nan")
     if not (math.isfinite(atr_val) and last_close > 0):
         return float("nan")
     return 100.0 * atr_val / last_close
@@ -93,8 +70,11 @@ def normalize_score_by_volatility(
     periods of heightened volatility.
     """
 
-    atr_val = calc_atr(df, period=atr_period, as_series=False)
-    if atr_val is None or not math.isfinite(atr_val) or atr_val == 0:
+    atr_series = calc_atr(df, period=atr_period)
+    if atr_series.empty:
+        return float(score)
+    atr_val = float(atr_series.iloc[-1])
+    if not math.isfinite(atr_val) or atr_val == 0:
         return float(score)
     return float(score) / float(atr_val)
 

@@ -535,7 +535,8 @@ def _bandit_context(
             except Exception:
                 pass
 
-        atr = calc_atr(df)
+        atr_series = calc_atr(df)
+        atr = float(atr_series.iloc[-1]) if not atr_series.empty else 0.0
         context["atr_pct"] = atr / price if price else 0.0
 
         ts = df.index[-1]

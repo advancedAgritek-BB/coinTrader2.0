@@ -36,7 +36,7 @@ def load_funcs():
         'is_market_pumping': lambda *a, **k: False,
         'get_filtered_symbols': lambda ex, cfg: asyncio.sleep(0, result=([(s, 1.0) for s in cfg.get('symbols', [])], [])),
         'compute_average_atr': lambda *a, **k: 0.01,
-        'calc_atr': lambda df, window=14: 0.01,
+        'calc_atr': lambda df, window=14: pd.Series([0.01]),
         'get_market_regime': lambda ctx: 'unknown',
         'scan_cex_arbitrage': lambda *a, **k: [],
         'scan_arbitrage': lambda *a, **k: [],

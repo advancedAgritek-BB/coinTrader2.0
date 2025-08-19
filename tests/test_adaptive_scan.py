@@ -42,7 +42,7 @@ def test_fetch_candidates_adapts(monkeypatch):
 
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
-    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.02)
+    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: pd.Series([0.02]))
 
     asyncio.run(main.fetch_candidates(ctx))
 

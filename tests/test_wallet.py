@@ -1,4 +1,9 @@
 import pytest
+import importlib, sys
+
+# Ensure the real package is loaded in case other tests inserted a stub
+sys.modules.pop("crypto_bot", None)
+crypto_bot = importlib.import_module("crypto_bot")
 from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.wallet import Wallet
 

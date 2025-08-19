@@ -3,6 +3,27 @@ import os
 import pandas as pd
 import numpy as np
 import pytest
+import types, sys
+
+# Minimal stub for cointrainer package
+cointrainer = types.ModuleType("cointrainer")
+train_mod = types.ModuleType("cointrainer.train")
+local_csv_mod = types.ModuleType("cointrainer.train.local_csv")
+
+class TrainConfig:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+def train_from_csv7(path, cfg):
+    return object(), {"feature_list": [1, 2, 3, 4, 5]}
+
+local_csv_mod.TrainConfig = TrainConfig
+local_csv_mod.train_from_csv7 = train_from_csv7
+train_mod.local_csv = local_csv_mod
+cointrainer.train = train_mod
+sys.modules.setdefault("cointrainer", cointrainer)
+sys.modules.setdefault("cointrainer.train", train_mod)
+sys.modules.setdefault("cointrainer.train.local_csv", local_csv_mod)
 
 from cointrainer.train.local_csv import TrainConfig, train_from_csv7
 

@@ -3,6 +3,7 @@ import sys
 import types
 import yaml
 import pytest
+import importlib
 
 
 # Stub out commit_lock to avoid syntax errors during import
@@ -10,7 +11,8 @@ sys.modules.setdefault(
     "crypto_bot.utils.commit_lock", types.SimpleNamespace(check_and_update=lambda *a, **k: None)
 )
 
-from crypto_bot import wallet_manager
+sys.modules.pop("crypto_bot", None)
+wallet_manager = importlib.import_module("crypto_bot.wallet_manager")
 
 
 @pytest.fixture(autouse=True)

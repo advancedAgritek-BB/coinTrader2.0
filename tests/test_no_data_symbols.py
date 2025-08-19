@@ -33,7 +33,7 @@ def test_symbols_with_no_data_skipped(monkeypatch):
         return {"1h": {"FOO/USDC": pd.DataFrame()}}
 
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
-    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.01)
+    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: pd.Series([0.01]))
     monkeypatch.setattr(main, "compute_average_atr", lambda *_a, **_k: 0.01)
     monkeypatch.setattr(main, "update_multi_tf_ohlcv_cache", fake_update_multi)
 

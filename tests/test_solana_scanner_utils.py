@@ -5,13 +5,14 @@ import sys
 import types
 from datetime import datetime
 import pathlib
+import pandas as pd
 
 pkg_root = types.ModuleType("crypto_bot")
 utils_pkg = types.ModuleType("crypto_bot.utils")
 pkg_root.utils = utils_pkg
 pkg_root.__path__ = [str(pathlib.Path("crypto_bot"))]
 pkg_root.volatility_filter = types.ModuleType("crypto_bot.volatility_filter")
-pkg_root.volatility_filter.calc_atr = lambda *_a, **_k: 0.0
+pkg_root.volatility_filter.calc_atr = lambda *_a, **_k: pd.Series([0.0])
 utils_pkg.__path__ = [str(pathlib.Path("crypto_bot/utils"))]
 market_loader_mod = types.ModuleType("market_loader")
 market_loader_mod.get_kraken_listing_date = lambda *_a, **_k: None
@@ -27,7 +28,7 @@ sys.modules.setdefault("crypto_bot.volatility_filter", pkg_root.volatility_filte
 sys.modules.setdefault("crypto_bot.utils.market_loader", market_loader_mod)
 sys.modules.setdefault("crypto_bot.utils.token_registry", token_registry_mod)
 vf_mod = types.ModuleType("volatility_filter")
-vf_mod.calc_atr = lambda *a, **k: 0
+vf_mod.calc_atr = lambda *a, **k: pd.Series([0.0])
 sys.modules.setdefault("crypto_bot.volatility_filter", vf_mod)
 
 solana_scanner = importlib.import_module("crypto_bot.utils.solana_scanner")
