@@ -180,6 +180,8 @@ def generate_signal(
     df: pd.DataFrame,
     symbol: str | None = None,
     timeframe: str | None = None,
+    mempool_monitor: SolanaMempoolMonitor | None = None,
+    mempool_cfg: dict | None = None,
     **kwargs,
 ) -> Tuple[float, str]:
     """Generate a grid based trading signal."""

@@ -52,6 +52,11 @@ def generate_signal(
     df: pd.DataFrame,
     symbol: str | None = None,
     timeframe: str | None = None,
+    mempool_monitor: Optional[SolanaMempoolMonitor] = None,
+    mempool_cfg: Optional[dict] = None,
+    tick_data: pd.DataFrame | None = None,
+    book: Optional[dict] = None,
+    ticks: Optional[pd.DataFrame] = None,
     **kwargs,
 ) -> Tuple[float, str]:
     """Return short-term signal using EMA crossover on 1m data.
@@ -69,14 +74,20 @@ def generate_signal(
         Higher timeframe OHLCV data used to confirm the trend. When provided
         the function only returns a signal if ``trend_fast`` is above
         ``trend_slow`` for longs (and vice versa for shorts).
-    book : dict, optional
-        Order book data with ``bids`` and ``asks`` arrays.
-    ticks : pd.DataFrame, optional
-        Optional tick-level data with ``price`` and optional ``volume`` columns.
+    symbol : str, optional
+        Asset symbol for the data. Unused but accepted for compatibility.
+    timeframe : str, optional
+        Candle timeframe of ``df``. Unused but accepted for compatibility.
     mempool_monitor : SolanaMempoolMonitor, optional
         Instance used to monitor the Solana priority fee.
     mempool_cfg : dict, optional
         Configuration controlling the mempool fee check.
+    tick_data : pd.DataFrame, optional
+        Additional tick data to append before generating the signal.
+    book : dict, optional
+        Order book data with ``bids`` and ``asks`` arrays.
+    ticks : pd.DataFrame, optional
+        Optional tick-level data with ``price`` and optional ``volume`` columns.
     
     Additional config options
     -------------------------

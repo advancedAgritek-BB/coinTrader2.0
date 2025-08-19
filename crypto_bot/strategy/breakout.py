@@ -27,6 +27,12 @@ def generate_signal(
         Input OHLCV data on a 5m timeframe.
     config : dict, optional
         Configuration containing a ``breakout`` section with parameters.
+    symbol : str, optional
+        Asset symbol for the data. Unused but accepted for compatibility.
+    timeframe : str, optional
+        Candle timeframe for ``df``. Unused but accepted for compatibility.
+    **kwargs : dict
+        Additional keyword arguments for forward compatibility.
 
     Returns
     -------

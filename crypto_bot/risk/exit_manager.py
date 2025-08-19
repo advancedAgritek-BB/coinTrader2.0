@@ -55,13 +55,13 @@ def calculate_atr_trailing_stop(df: pd.DataFrame, atr_factor: float = 2.0) -> fl
         Calculated trailing stop using ATR.
     """
     highest = df["close"].max()
-    atr = calc_atr(df)
-    stop = highest - atr * atr_factor
+    atr_val = calc_atr(df).iloc[-1]
+    stop = highest - atr_val * atr_factor
     logger.info(
         "Calculated ATR trailing stop %.4f using high %.4f and ATR %.4f",
         stop,
         highest,
-        atr,
+        atr_val,
     )
     return stop
 
