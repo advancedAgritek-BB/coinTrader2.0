@@ -307,8 +307,8 @@ def test_position_size_scales_with_volatility_and_drawdown():
     df = make_vol_df(1.0, 2.0)
     manager.peak_equity = 1.0
     manager.equity = 0.75
-    short_atr = calc_atr(df, window=cfg.atr_short_window)
-    long_atr = calc_atr(df, window=cfg.atr_long_window)
+    short_atr = calc_atr(df, period=cfg.atr_short_window)
+    long_atr = calc_atr(df, period=cfg.atr_long_window)
     vol_factor = min(short_atr / long_atr, cfg.max_volatility_factor)
     drawdown = 1 - manager.equity / manager.peak_equity
     risk_factor = 1 - drawdown / cfg.max_drawdown
