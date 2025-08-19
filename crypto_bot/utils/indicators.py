@@ -51,21 +51,29 @@ def atr(
     return tr.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
 
 
-def calc_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Convenience wrapper around :func:`atr` for OHLC data frames."""
+def calc_atr(df: pd.DataFrame, window: int = 14, **kwargs) -> pd.Series:
+    """Convenience wrapper around :func:`atr` for OHLC data frames.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Input OHLC data containing ``high``, ``low`` and ``close`` columns.
+    window : int, default 14
+        Lookback window for the ATR calculation.
+    period : int, optional
+        Alias for ``window`` kept for backwards compatibility.
+    """
 
     cols = {"high", "low", "close"}
     if not cols.issubset(df.columns):
         msg = f"calc_atr expects columns {cols}, got {list(df.columns)}"
         raise ValueError(msg)
-    cols = {"high", "low", "close"}
-    if not cols.issubset(df.columns):
-        message = "calc_atr expects columns {}, got {}".format(
-            cols,
-            list(df.columns),
-        )
-        raise ValueError(message)
-    return atr(df["high"], df["low"], df["close"], period=period)
+
+    period = kwargs.get("period")
+    if period is not None and window == 14:
+        window = int(period)
+
+    return atr(df["high"], df["low"], df["close"], period=window)
 
 
 def rsi(close: pd.Series, period: int = 14) -> pd.Series:

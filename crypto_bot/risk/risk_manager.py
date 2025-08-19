@@ -199,9 +199,14 @@ class RiskManager:
 
         if stop_distance is not None or atr is not None:
             risk_value = balance * self.config.risk_pct * confidence
-            stop_loss_distance = atr if atr and atr > 0 else stop_distance
+            atr_value = (
+                float(atr.iloc[-1]) if hasattr(atr, "iloc") else float(atr)
+            ) if atr is not None else None
+            stop_loss_distance = (
+                atr_value if atr_value is not None else stop_distance
+            )
             trade_price = price or 1.0
-            if stop_loss_distance and stop_loss_distance > 0:
+            if stop_loss_distance is not None and stop_loss_distance > 0:
                 size = risk_value * trade_price / stop_loss_distance
             else:
                 size = balance * confidence * self.config.trade_size_pct
