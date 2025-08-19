@@ -239,10 +239,10 @@ async def load_token_mints(
 
     The list is fetched from ``url`` or ``TOKEN_MINTS_URL`` environment variable.
     Results are cached on disk and subsequent calls return an empty dict unless
-    ``force_refresh`` is ``True``.
-    The Solana list is fetched from Jupiter first then GitHub as a fallback.
-    Cached results are reused unless ``force_refresh`` is ``True``.
-    Unknown ``symbols`` can be resolved via the Helius API.
+    ``force_refresh`` is ``True``.  The Solana list is fetched from GitHub first
+    then Jupiter as a fallback.  Cached results are reused unless
+    ``force_refresh`` is ``True``.  Unknown ``symbols`` can be resolved via the
+    Helius API.
     """
     global _LOADED
     if _LOADED and not force_refresh:
@@ -250,47 +250,47 @@ async def load_token_mints(
 
     mapping: Dict[str, str] = {}
 
-    # Fetch from Jupiter with retries
+    # Try static GitHub token registry first
+    fetch_url = url or os.getenv("TOKEN_MINTS_URL", TOKEN_REGISTRY_URL)
     for attempt in range(3):
         try:
-            mapping = await fetch_from_jupiter()
-            if mapping:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(fetch_url, timeout=10) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json(content_type=None)
+            tokens = data.get("tokens") or data.get("data", {}).get("tokens") or []
+            temp: Dict[str, str] = {}
+            for item in tokens:
+                symbol = item.get("symbol") or item.get("ticker")
+                mint = (
+                    item.get("address")
+                    or item.get("mint")
+                    or item.get("tokenMint")
+                )
+                if isinstance(symbol, str) and isinstance(mint, str):
+                    temp[symbol.upper()] = mint
+            if temp:
+                mapping = temp
                 break
-        except Exception:  # pragma: no cover - network failures
-            logger.exception(
-                "Failed to fetch Jupiter tokens (attempt %d/3)", attempt + 1
+        except Exception as exc:  # pragma: no cover - network failures
+            logger.error(
+                "Failed to fetch token registry (attempt %d/3): %s",
+                attempt + 1,
+                exc,
             )
         if attempt < 2:
             await asyncio.sleep(0.5 * 2**attempt)
 
-    # Fallback to static registry if Jupiter fails
+    # Fallback to Jupiter API if static registry fails
     if not mapping:
-        fetch_url = url or os.getenv("TOKEN_MINTS_URL", TOKEN_REGISTRY_URL)
         for attempt in range(3):
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(fetch_url, timeout=10) as resp:
-                        resp.raise_for_status()
-                        data = await resp.json(content_type=None)
-                tokens = data.get("tokens") or data.get("data", {}).get("tokens") or []
-                temp: Dict[str, str] = {}
-                for item in tokens:
-                    symbol = item.get("symbol") or item.get("ticker")
-                    mint = (
-                        item.get("address")
-                        or item.get("mint")
-                        or item.get("tokenMint")
-                    )
-                    if isinstance(symbol, str) and isinstance(mint, str):
-                        temp[symbol.upper()] = mint
-                if temp:
-                    mapping = temp
+                mapping = await fetch_from_jupiter()
+                if mapping:
                     break
-            except Exception as exc:  # pragma: no cover - network failures
-                logger.error(
-                    "Failed to fetch token registry (attempt %d/3): %s",
-                    attempt + 1,
-                    exc,
+            except Exception:  # pragma: no cover - network failures
+                logger.exception(
+                    "Failed to fetch Jupiter tokens (attempt %d/3)", attempt + 1
                 )
             if attempt < 2:
                 await asyncio.sleep(0.5 * 2**attempt)
