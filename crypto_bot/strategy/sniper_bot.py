@@ -166,7 +166,7 @@ def generate_signal(
         if config is None or config.get("atr_normalization", True):
             score = volatility.normalize_score_by_volatility(df, score)
         logger.info("Signal for %s: %s, %s", symbol, score, "short")
-        return score, "short", atr_value if atr_value is not None else 0.0, False
+        return score, "short", float(atr_value) if atr_value is not None else 0.0, False
 
     base_volume = df["volume"].iloc[:initial_window].mean()
     vol_ratio = df["volume"].iloc[-1] / base_volume if base_volume > 0 else 0
@@ -191,7 +191,7 @@ def generate_signal(
 
     if df["volume"].iloc[-1] < min_volume:
         logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
-        return 0.0, "none", atr if atr is not None else 0.0, event
+        return 0.0, "none", float(atr) if atr is not None else 0.0, event
 
     if (
         len(df) <= max_history
@@ -215,7 +215,7 @@ def generate_signal(
         if direction == "auto":
             trade_direction = "short" if price_change < 0 else "long"
         logger.info("Signal for %s: %s, %s", symbol, score, trade_direction)
-        return score, trade_direction, atr if atr is not None else 0.0, event
+        return score, trade_direction, float(atr) if atr is not None else 0.0, event
 
     trade_direction = direction
     score = 0.0
@@ -258,7 +258,7 @@ def generate_signal(
             return score, trade_direction, atr_value, event
 
     logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
-    return 0.0, "none", atr if atr is not None else 0.0, event
+    return 0.0, "none", float(atr) if atr is not None else 0.0, event
 
 
 class regime_filter:
