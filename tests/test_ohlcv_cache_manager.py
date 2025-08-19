@@ -15,6 +15,7 @@ def test_update_intraday_runs_all_timeframes(caplog):
     cfg = SimpleNamespace(
         warmup_candles={'1m': 1000, '5m': 600},
         backfill_days={'1m': 2, '5m': 3},
+        deep_backfill_days={'1m': 2, '5m': 3},
     )
     cache = DummyCache(cfg, logger=logging.getLogger('test'))
     caplog.set_level('INFO')

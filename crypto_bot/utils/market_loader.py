@@ -2131,10 +2131,13 @@ async def update_ohlcv_cache(
     config = config or {}
     _ensure_strategy_warmup(config)
     backfill_map = config.get("backfill_days", {}) or {}
+    deep_backfill_map = config.get("deep_backfill_days", {}) or {}
     warmup_map = config.get("warmup_candles", {}) or {}
     now_ms = utc_now_ms()
     if start_since is not None:
-        bf_days = backfill_map.get(timeframe)
+        bf_days = deep_backfill_map.get(timeframe)
+        if bf_days is None:
+            bf_days = backfill_map.get(timeframe)
         if bf_days is not None:
             cutoff = now_ms - int(float(bf_days) * 86400000)
             if start_since < cutoff:
@@ -2491,9 +2494,12 @@ async def update_multi_tf_ohlcv_cache(
             max_cap = min(snapshot_cap, 720)
 
             backfill_map = config.get("backfill_days", {}) or {}
+            deep_backfill_map = config.get("deep_backfill_days", {}) or {}
             warmup_map = config.get("warmup_candles", {}) or {}
             tf_start = start_since
-            bf_days = backfill_map.get(tf)
+            bf_days = deep_backfill_map.get(tf)
+            if bf_days is None:
+                bf_days = backfill_map.get(tf)
             if tf_start is not None and bf_days is not None:
                 cutoff = now_ms - int(float(bf_days) * 86400000)
                 if tf_start < cutoff:
@@ -2518,15 +2524,19 @@ async def update_multi_tf_ohlcv_cache(
                     tf_limit,
                 )
                 tf_limit = int(warmup)
-            tf_start_since = tf_start
-            if needed is not None and tf_limit < needed:
-                logger.info(
-                    "Warmup limit %d smaller than requested range %d for %s; dropping start_since",
-                    tf_limit,
-                    needed,
-                    tf,
-                )
-                tf_start_since = None
+            earliest = now_ms - tf_limit * tf_sec * 1000
+            if tf_start is None or tf_start < earliest:
+                if tf_start is not None and needed is not None and tf_limit < needed:
+                    logger.info(
+                        "Warmup limit %d smaller than requested range %d for %s; starting from %s",
+                        tf_limit,
+                        needed,
+                        tf,
+                        iso_utc(earliest),
+                    )
+                tf_start_since = earliest
+            else:
+                tf_start_since = tf_start
 
             concurrency = int(config.get("listing_date_concurrency", 5) or 0)
             semaphore = asyncio.Semaphore(concurrency) if concurrency > 0 else None
@@ -2622,37 +2632,36 @@ async def update_multi_tf_ohlcv_cache(
             total_syms = len(cex_symbols) + len(dex_symbols)
             completed = 0
             recent_times: Deque[float] = deque(maxlen=50)
+            processed_syms = 0
+            start_fetch = time.perf_counter()
 
             def log_progress(ts: float | None = None) -> None:
                 """Log progress with a moving average request rate."""
-                nonlocal completed
+                nonlocal completed, processed_syms, start_fetch
                 if total_syms <= 0:
                     return
-                completed += 1
-                now_t = ts if ts is not None else time.perf_counter()
-                recent_times.append(now_t)
-                rate = 0.0
-                if len(recent_times) > 1:
-                    span = recent_times[-1] - recent_times[0]
-                    if span > 0:
-                        rate = (len(recent_times) - 1) / span
-                remaining = total_syms - completed
-                eta = remaining / rate if rate > 0 else float("inf")
-                eta_str = f"{eta:.1f}s" if eta != float("inf") else "?"
-                logger.info(
-                    "Progress[%s] %d/%d (%.2f req/s, ETA %s)",
-                    tf,
-                    completed,
-                    total_syms,
-                    rate,
-                    eta_str,
-                )
-                processed_syms = 0
-                start_fetch = time.perf_counter()
-
-                def log_progress() -> None:
-                    if total_syms <= 0:
-                        return
+                if ts is not None:
+                    completed += 1
+                    recent_times.append(ts)
+                    rate = 0.0
+                    if len(recent_times) > 1:
+                        span = recent_times[-1] - recent_times[0]
+                        if span > 0:
+                            rate = (len(recent_times) - 1) / span
+                    remaining = total_syms - completed
+                    eta = remaining / rate if rate > 0 else float("inf")
+                    eta_str = f"{eta:.1f}s" if eta != float("inf") else "?"
+                    logger.info(
+                        "Progress[%s] %d/%d (%.2f req/s, ETA %s)",
+                        tf,
+                        completed,
+                        total_syms,
+                        rate,
+                        eta_str,
+                    )
+                    processed_syms = 0
+                    start_fetch = time.perf_counter()
+                else:
                     elapsed = time.perf_counter() - start_fetch
                     rate = processed_syms / elapsed if elapsed > 0 else 0.0
                     pct = processed_syms / total_syms * 100

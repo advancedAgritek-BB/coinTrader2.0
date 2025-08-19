@@ -614,6 +614,11 @@ backfill_days:
   '5m': 3
   '15m': 10
   '1h': 30
+deep_backfill_days:
+  '1m': 7
+  '5m': 14
+  '15m': 60
+  '1h': 180
 warmup_candles:
   '1m': 1000
   '5m': 600

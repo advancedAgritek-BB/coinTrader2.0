@@ -29,6 +29,7 @@ class Config:
     warmup_candles: Dict[str, int] = field(
         default_factory=lambda: {"1m": 1000, "5m": 600}
     )
+    deep_backfill_days: Dict[str, int] = field(default_factory=dict)
     backfill_days: Dict[str, int] = field(
         default_factory=lambda: {"1m": 2, "5m": 3}
     )
