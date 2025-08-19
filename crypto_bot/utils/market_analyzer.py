@@ -64,9 +64,7 @@ def _heuristic_regime(df: pd.DataFrame) -> tuple[str, dict]:
 
     try:
         adx = float(
-            ADXIndicator(df["high"], df["low"], df["close"], window=14)
-            .adx()
-            .iloc[-1]
+            ADXIndicator(df["high"], df["low"], df["close"], window=14).adx().iloc[-1]
         )
     except Exception:
         adx = 0.0
@@ -305,7 +303,9 @@ async def analyze_symbol(
         if ML_AVAILABLE:
             try:
                 cache_symbol = (
-                    f"{symbol}_{float(tf_df['close'].iloc[-1])}" if 'close' in tf_df else f"{symbol}_{len(tf_df)}"
+                    f"{symbol}_{float(tf_df['close'].iloc[-1])}"
+                    if "close" in tf_df
+                    else f"{symbol}_{len(tf_df)}"
                 )
                 res = classify_regime_cached(
                     cache_symbol, tf, tf_df, higher_df, profile
@@ -333,9 +333,7 @@ async def analyze_symbol(
                     df_map=vote_map, notifier=notifier, symbol=symbol
                 )
             except Exception as exc:
-                analysis_logger.error(
-                    "classify_regime_async voting failed: %s", exc
-                )
+                analysis_logger.error("classify_regime_async voting failed: %s", exc)
                 label_map = {
                     tf: _heuristic_regime(df)[0] for tf, df in vote_map.items()
                 }
@@ -346,9 +344,7 @@ async def analyze_symbol(
                     label_map = labels
         else:
             analysis_logger.error("ML unavailable; using heuristic regime")
-            label_map = {
-                tf: _heuristic_regime(df)[0] for tf, df in vote_map.items()
-            }
+            label_map = {tf: _heuristic_regime(df)[0] for tf, df in vote_map.items()}
         for tf in regime_tfs:
             r = label_map.get(tf)
             if r:
@@ -497,9 +493,7 @@ async def analyze_symbol(
             )
             selected_fn = strategy_fn
             name = strategy_name(sub_regime, env)
-            score, direction, atr = (
-                await evaluate_async([strategy_fn], df, cfg)
-            )[0]
+            score, direction, atr = (await evaluate_async([strategy_fn], df, cfg))[0]
 
         atr_period = int(config.get("risk", {}).get("atr_period", 14))
         if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
@@ -544,7 +538,6 @@ async def analyze_symbol(
                 "atr": atr,
             }
         )
-
         votes = []
         voting = config.get("voting_strategies", [])
         if isinstance(voting, list):
@@ -559,6 +552,7 @@ async def analyze_symbol(
                     continue
                 votes.append(dir_vote)
 
+        original_direction = result["direction"]
         if votes:
             counts = {}
             for d in votes:
@@ -566,7 +560,31 @@ async def analyze_symbol(
             best_dir, n = max(counts.items(), key=lambda kv: kv[1])
             min_votes = int(config.get("min_agreeing_votes", 1))
             if n >= min_votes:
+                if best_dir != original_direction:
+                    analysis_logger.info(
+                        "Voting changed direction for %s: %s -> %s (%d/%d votes)",
+                        symbol,
+                        original_direction,
+                        best_dir,
+                        n,
+                        len(votes),
+                    )
+                else:
+                    analysis_logger.info(
+                        "Voting confirmed direction for %s: %s (%d/%d votes)",
+                        symbol,
+                        original_direction,
+                        n,
+                        len(votes),
+                    )
                 result["direction"] = best_dir
             else:
-                result["direction"] = "none"
+                analysis_logger.info(
+                    "Voting kept original direction for %s: %s (%d/%d votes, min=%d)",
+                    symbol,
+                    original_direction,
+                    n,
+                    len(votes),
+                    min_votes,
+                )
     return result
