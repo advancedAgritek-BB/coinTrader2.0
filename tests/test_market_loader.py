@@ -2404,23 +2404,19 @@ def test_update_multi_tf_ohlcv_cache_min_volume(monkeypatch):
     assert f"{VALID_MINT}/USDC" in cache["1h"]
 
 
-def test_dex_fetch_fallback_coingecko(monkeypatch):
+def test_dex_fetch_uses_exchange_on_gecko_failure(monkeypatch):
     from crypto_bot.utils import market_loader
 
     async def fail_gecko(*_a, **_k):
         raise Exception("boom")
 
-    async def fake_coingecko(*_a, **_k):
-        return [[0, 1, 2, 3, 4, 5]]
-
-    calls = {"kraken": 0}
+    calls = {"exchange": 0}
 
     async def fake_fetch(ex, *a, **k):
-        calls["kraken"] += 1
+        calls["exchange"] += 1
         return [[9, 9, 9, 9, 9, 9]]
 
     monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
-    monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", fake_coingecko)
     monkeypatch.setattr(market_loader, "fetch_onchain_ohlcv", lambda *a, **k: None)
     monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
 
@@ -2438,17 +2434,11 @@ def test_dex_fetch_fallback_coingecko(monkeypatch):
         )
     )
     assert f"{VALID_MINT}/USDC" in cache["1h"]
-    assert calls["kraken"] == 0
+    assert calls["exchange"] == 1
 
 
-def test_dex_fetch_fallback_coinbase(monkeypatch):
+def test_dex_fetch_uses_provided_exchange(monkeypatch):
     from crypto_bot.utils import market_loader
-
-    async def fail_gecko(*_a, **_k):
-        return None
-
-    async def fail_coingecko(*_a, **_k):
-        return None
 
     calls = {"coinbase": 0, "exchange": 0}
 
@@ -2464,53 +2454,28 @@ def test_dex_fetch_fallback_coinbase(monkeypatch):
         has = {"fetchOHLCV": True}
 
     monkeypatch.setattr(market_loader.ccxt, "coinbase", lambda params=None: DummyCB())
-    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
-    monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", fail_coingecko)
-    monkeypatch.setattr(market_loader, "fetch_onchain_ohlcv", lambda *a, **k: None)
     monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
 
     ex = DummyMultiTFExchange()
 
     data = asyncio.run(market_loader.fetch_dex_ohlcv(ex, "FOO/USDC", limit=1))
     assert data
-    assert calls["coinbase"] == 1
-    assert calls["exchange"] == 0
+    assert calls["coinbase"] == 0
+    assert calls["exchange"] == 1
 
 
-def test_dex_fetch_fallback_kraken(monkeypatch):
+def test_dex_fetch_returns_none_on_error(monkeypatch):
     from crypto_bot.utils import market_loader
 
-    async def fail_gecko(*_a, **_k):
-        return None
+    async def fail_fetch(*_a, **_k):
+        raise Exception("boom")
 
-    async def fail_coingecko(*_a, **_k):
-        return None
-
-    calls = {"coinbase": 0, "exchange": 0}
-
-    async def fake_fetch(ex, *a, **k):
-        if getattr(ex, "id", None) == "coinbase":
-            calls["coinbase"] += 1
-        else:
-            calls["exchange"] += 1
-        return [[8, 8, 8, 8, 8, 8]]
-
-    class DummyCB:
-        id = "coinbase"
-        has = {"fetchOHLCV": True}
-
-    monkeypatch.setattr(market_loader.ccxt, "coinbase", lambda params=None: DummyCB())
-    monkeypatch.setattr(market_loader, "fetch_geckoterminal_ohlcv", fail_gecko)
-    monkeypatch.setattr(market_loader, "fetch_coingecko_ohlc", fail_coingecko)
-    monkeypatch.setattr(market_loader, "fetch_onchain_ohlcv", lambda *a, **k: None)
-    monkeypatch.setattr(market_loader, "load_ohlcv", fake_fetch)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fail_fetch)
 
     ex = DummyMultiTFExchange()
 
     data = asyncio.run(market_loader.fetch_dex_ohlcv(ex, "FOO/BTC", limit=1))
-    assert data
-    assert calls["coinbase"] == 0
-    assert calls["exchange"] == 1
+    assert data is None
 
 
 def test_update_multi_tf_ohlcv_cache_fallback_exchange(monkeypatch):
