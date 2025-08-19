@@ -805,7 +805,11 @@ def _load_config_file() -> dict:
     exchange_cfg.setdefault("request_timeout_ms", 10000)
     exchange_id = exchange_cfg.get("name")
     timeframes = data.get("timeframes") or trading_cfg.get("timeframes")
-    trading_mode = data.get("execution_mode") or trading_cfg.get("mode")
+    trading_mode = (
+        data.get("execution_mode")
+        or trading_cfg.get("mode")
+        or "dry_run"
+    )
     allowed_quotes = trading_cfg.get("allowed_quotes", [])
     logger.info(
         "Exchange=%s timeframes=%s mode=%s allowed_quotes=%s hft=%s",
@@ -1434,10 +1438,10 @@ async def fetch_candidates(ctx: BotContext) -> None:
     )
 
     # Include benchmark pairs from configuration.
-    benchmark_symbols = ctx.config.get(
-        "benchmark_symbols",
-        [ctx.config.get("symbol", "BTC/USDT"), "SOL/USDC"],
-    )
+    default_symbol = ctx.config.get("symbol") or os.getenv("CT_SYMBOL")
+    default_symbol = fix_symbol(default_symbol) if default_symbol else ""
+    default_benchmarks = [default_symbol, "SOL/USDC"] if default_symbol else ["SOL/USDC"]
+    benchmark_symbols = ctx.config.get("benchmark_symbols", default_benchmarks)
     if benchmark_symbols:
         active_candidates.extend((s, 10.0) for s in benchmark_symbols if s)
 
