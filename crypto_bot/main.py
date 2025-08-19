@@ -40,7 +40,7 @@ from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.utils.logger import pipeline_logger
 from crypto_bot.ml.selfcheck import log_ml_status_once
-from crypto_bot.utils.ml_utils import ML_AVAILABLE
+from crypto_bot.utils.ml_utils import ML_AVAILABLE, is_ml_available
 from crypto_bot.ml.model_loader import load_regime_model, _norm_symbol
 
 # Internal project modules are imported lazily in `_import_internal_modules()`
@@ -705,10 +705,12 @@ def _ensure_ml_if_needed(cfg: dict) -> None:
             return
         if not ML_AVAILABLE:
             symbol = cfg.get("symbol") or os.getenv("CT_SYMBOL", "XRPUSD")
+            _available, reason = is_ml_available()
             logger.info(
-                "ML model for %s unavailable; ensure SUPABASE_URL and SUPABASE_KEY are set. "
+                "ML model for %s unavailable (%s); ensure SUPABASE_URL and SUPABASE_KEY are set. "
                 "Install cointrader-trainer only when training new models.",
                 symbol,
+                reason or "unknown reason",
             )
             cfg["ml_enabled"] = False
             ml_cfg["ml_enabled"] = False

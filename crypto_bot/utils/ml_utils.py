@@ -70,22 +70,21 @@ def _warn_if_anon_key(key: str) -> None:
         pass
 
 
-def is_ml_available() -> bool:
-    """Return ``True`` if optional ML dependencies and model are available."""
-    global _ml_checked, ML_AVAILABLE
+def is_ml_available() -> tuple[bool, str]:
+    """Return ML availability along with a descriptive reason if unavailable."""
+    global _ml_checked, ML_AVAILABLE, ML_UNAVAILABLE_REASON
     if _ml_checked:
-        return ML_AVAILABLE
+        return ML_AVAILABLE, ML_UNAVAILABLE_REASON
     _ml_checked = True
 
     try:
         missing = _check_packages(_REQUIRED_PACKAGES)
         if missing:
-            logger.info(
-                "ML unavailable: Missing required ML packages (%s)",
-                ", ".join(missing),
-            )
+            reason = "Missing required ML packages: " + ", ".join(missing)
+            logger.info("ML unavailable: %s", reason)
             ML_AVAILABLE = False
-            return False
+            ML_UNAVAILABLE_REASON = reason
+            return ML_AVAILABLE, reason
 
         try:  # cointrader-trainer is optional and only used for training
             import cointrader_trainer  # noqa: F401
@@ -103,8 +102,10 @@ def is_ml_available() -> bool:
                     bool(key),
                 )
                 _LOGGER_ONCE["missing_supabase_creds"] = True
+            reason = "Missing Supabase credentials"
             ML_AVAILABLE = False
-            return False
+            ML_UNAVAILABLE_REASON = reason
+            return ML_AVAILABLE, reason
 
         _warn_if_anon_key(key)
 
@@ -114,24 +115,36 @@ def is_ml_available() -> bool:
             / "meta_selector_lgbm.txt"
         )
         if not model_path.exists():
-            logger.info("ML unavailable: Model file not found: %s", model_path)
+            reason = f"Model file not found: {model_path}"
+            logger.info("ML unavailable: %s", reason)
             ML_AVAILABLE = False
-            return False
+            ML_UNAVAILABLE_REASON = reason
+            return ML_AVAILABLE, reason
 
         ML_AVAILABLE = True
-        return True
+        ML_UNAVAILABLE_REASON = ""
+        return ML_AVAILABLE, ""
     except Exception as exc:  # pragma: no cover - best effort
-        logger.error("ML unavailable: %s", exc)
+        reason = str(exc)
+        logger.error("ML unavailable: %s", reason)
         ML_AVAILABLE = False
-        return False
+        ML_UNAVAILABLE_REASON = reason
+        return ML_AVAILABLE, reason
 ML_AVAILABLE = False
+ML_UNAVAILABLE_REASON = ""
 
 
-def init_ml_components() -> bool:
-    """Initialize ML components and update :data:`ML_AVAILABLE`."""
-    global ML_AVAILABLE
-    ML_AVAILABLE = is_ml_available()
-    return ML_AVAILABLE
+def init_ml_components() -> tuple[bool, str]:
+    """Initialize ML components and update availability globals."""
+    global ML_AVAILABLE, ML_UNAVAILABLE_REASON
+    ML_AVAILABLE, ML_UNAVAILABLE_REASON = is_ml_available()
+    return ML_AVAILABLE, ML_UNAVAILABLE_REASON
 
 
-__all__ = ["is_ml_available", "ML_AVAILABLE", "warn_ml_unavailable_once", "init_ml_components"]
+__all__ = [
+    "is_ml_available",
+    "ML_AVAILABLE",
+    "ML_UNAVAILABLE_REASON",
+    "warn_ml_unavailable_once",
+    "init_ml_components",
+]
