@@ -2114,6 +2114,8 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
 
 async def execute_signals(ctx: BotContext) -> None:
     """Open trades for qualified analysis results."""
+    from collections import Counter
+
     results = getattr(ctx, "analysis_results", [])
     if not results:
         logger.info("No analysis results to act on")
@@ -2128,36 +2130,39 @@ async def execute_signals(ctx: BotContext) -> None:
     no_dir_syms: list[str] = []
     low_score: list[str] = []
     dry_run = ctx.config.get("execution_mode") == "dry_run"
+    def log_reject(cand, stage, detail, risk="n/a"):
+        score = cand.get("score", 0.0)
+        min_req = cand.get(
+            "min_confidence", ctx.config.get("min_confidence_score", 0.0)
+        )
+        logger.info(
+            "Candidate rejected [%s]: symbol=%s score=%.4f direction=%s min_score=%.4f risk=%s reason=%s",
+            stage,
+            cand.get("symbol"),
+            score,
+            cand.get("direction"),
+            min_req,
+            risk,
+            detail,
+        )
+
+    register_task_fn = globals().get("register_task", lambda t: t)
+
     for r in orig_results:
         logger.debug("Analysis result: %s", r)
         if r.get("skip"):
             skipped_syms.append(r.get("symbol"))
-            logger.warning(
-                "Skipped trade: score=%s, direction=%s, min_score=%s",
-                r.get("score"),
-                r.get("direction"),
-                r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0)),
-            )
+            log_reject(r, "scoring", "skip flag")
             continue
         if r.get("direction") == "none":
             no_dir_syms.append(r.get("symbol"))
-            logger.warning(
-                "Skipped trade: score=%s, direction=%s, min_score=%s",
-                r.get("score"),
-                r.get("direction"),
-                r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0)),
-            )
+            log_reject(r, "scoring", "no direction")
             continue
         min_req = r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0))
         score = r.get("score", 0.0)
         if score < min_req:
             low_score.append(f"{r.get('symbol')}({score:.2f}<{min_req:.2f})")
-            logger.warning(
-                "Skipped trade: score=%s, direction=%s, min_score=%s",
-                score,
-                r.get("direction"),
-                min_req,
-            )
+            log_reject(r, "scoring", "score below min")
             continue
         logger.info(
             "Passing to execute: symbol=%s, score=%s, dry_run=%s",
@@ -2191,6 +2196,11 @@ async def execute_signals(ctx: BotContext) -> None:
         max_trades = ctx.position_guard.max_open_trades if ctx.position_guard else 0
         logger.debug("Open trades: %d / %d", len(ctx.positions), max_trades)
         if not ctx.position_guard or not ctx.position_guard.can_open(ctx.positions):
+            log_reject(
+                candidate,
+                "position_guard",
+                f"max_open_trades {len(ctx.positions)}/{max_trades}",
+            )
             logger.info(
                 "Max open trades reached (%d/%d); skipping remaining signals",
                 len(ctx.positions),
@@ -2199,6 +2209,7 @@ async def execute_signals(ctx: BotContext) -> None:
             break
         sym = candidate["symbol"]
         logger.info("[EVAL] evaluating %s", sym)
+        state_running = globals().get("state", {}).get("running", True)
         outcome_reason = ""
         if ctx.balance <= 0:
             old_balance = ctx.balance
@@ -2221,6 +2232,7 @@ async def execute_signals(ctx: BotContext) -> None:
         allowed, reason = ctx.risk_manager.allow_trade(df, strategy, sym)
         if not allowed:
             outcome_reason = f"blocked: {reason}"
+            log_reject(candidate, "risk_manager", reason, risk=reason)
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             key = reason.lower().replace(" ", "_")
             reject_counts[key] += 1
@@ -2287,7 +2299,7 @@ async def execute_signals(ctx: BotContext) -> None:
                 amount,
                 trade_reason,
             )
-            task = register_task(
+            task = register_task_fn(
                 asyncio.create_task(
                     cross_chain_trade(
                         ctx.exchange,
@@ -2316,7 +2328,14 @@ async def execute_signals(ctx: BotContext) -> None:
                     NEW_SOLANA_TOKENS.discard(sym)
                     continue
 
-            sol_score, _ = sniper_solana.generate_signal(df)
+            try:
+                from crypto_bot.solana import sniper_solana as _sniper_solana
+            except Exception:
+                _sniper_solana = globals().get("sniper_solana")
+            if _sniper_solana is None:
+                sol_score = 0.0
+            else:
+                sol_score, _ = _sniper_solana.generate_signal(df)
             if sym in NEW_SOLANA_TOKENS:
                 NEW_SOLANA_TOKENS.discard(sym)
             if sol_score > 0.7:
@@ -2329,7 +2348,7 @@ async def execute_signals(ctx: BotContext) -> None:
                     amount,
                     trade_reason,
                 )
-                task = register_task(
+                task = register_task_fn(
                     asyncio.create_task(
                         sniper_trade(
                             ctx.config.get("wallet_address", ""),
@@ -2355,7 +2374,7 @@ async def execute_signals(ctx: BotContext) -> None:
                 amount,
                 trade_reason,
             )
-            pythonlogger.info(
+            globals().get("pythonlogger", logger).info(
                 f"Attempting trade for {candidate['symbol']}: score={candidate.get('score')}, direction={candidate.get('direction')}, after filters"
             )
             order = await cex_trade_async(
@@ -2370,7 +2389,7 @@ async def execute_signals(ctx: BotContext) -> None:
                 config=ctx.config,
                 score=candidate.get("score", 0.0),
                 reason=trade_reason,
-                trading_paused=not state.get("running", True),
+                trading_paused=not state_running,
             )
             if order:
                 executed += 1
@@ -2445,7 +2464,7 @@ async def execute_signals(ctx: BotContext) -> None:
         await refresh_balance(ctx)
 
         if strategy == "micro_scalp_bot":
-            register_task(asyncio.create_task(_monitor_micro_scalp_exit(ctx, sym)))
+            register_task_fn(asyncio.create_task(_monitor_micro_scalp_exit(ctx, sym)))
 
     if executed == 0:
         logger.info(
