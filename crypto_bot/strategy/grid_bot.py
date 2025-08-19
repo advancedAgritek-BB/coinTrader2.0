@@ -178,17 +178,23 @@ def is_in_trend(df: pd.DataFrame, fast: int, slow: int, side: str) -> bool:
 
 def generate_signal(
     df: pd.DataFrame,
-    num_levels: int | None = None,
-    config: ConfigType = None,
-    higher_df: pd.DataFrame | None = None,
-    *,
     symbol: str | None = None,
     timeframe: str | None = None,
-    mempool_monitor: SolanaMempoolMonitor | None = None,
-    mempool_cfg: dict | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str]:
     """Generate a grid based trading signal."""
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+    num_levels: int | None = kwargs.get("num_levels")
+    higher_df: pd.DataFrame | None = kwargs.get("higher_df")
+    mempool_monitor: SolanaMempoolMonitor | None = kwargs.get("mempool_monitor")
+    mempool_cfg: dict | None = kwargs.get("mempool_cfg")
+
     cfg = GridConfig.from_dict(_as_dict(config))
 
     if num_levels is None:

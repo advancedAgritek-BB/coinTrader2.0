@@ -15,10 +15,9 @@ logger = logging.getLogger(__name__)
 
 def generate_signal(
     df: pd.DataFrame,
-    config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str, float]:
     """Selective breakout strategy with compression and volume filters.
 
@@ -34,6 +33,14 @@ def generate_signal(
     Tuple[float, str, float]
         ``(score, direction, atr)`` where ``score`` is 1 on signal, 0 otherwise.
     """
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+
     if df is None or df.empty:
         logger.info(
             "signal=breakout side=none reason=insufficient_data vol_z=nan bbw_pct=nan"

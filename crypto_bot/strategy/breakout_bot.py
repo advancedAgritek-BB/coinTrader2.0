@@ -104,11 +104,9 @@ def _squeeze(
 
 def generate_signal(
     df: pd.DataFrame,
-    config: Optional[dict] = None,
-    higher_df: Optional[pd.DataFrame] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str] | Tuple[float, str, float]:
     """Breakout strategy using Bollinger/Keltner squeeze confirmation.
 
@@ -126,6 +124,15 @@ def generate_signal(
         Otherwise it returns ``(score, direction, atr)`` where ``atr`` is the
         most recent Average True Range value.
     """
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+    higher_df: Optional[pd.DataFrame] = kwargs.get("higher_df")
+
     if df is None or df.empty:
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
