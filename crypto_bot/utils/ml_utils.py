@@ -42,12 +42,7 @@ def _check_packages(pkgs: Iterable[str]) -> list[str]:
 def _get_supabase_creds() -> tuple[str | None, str | None]:
     """Return Supabase URL and key from canonical or legacy env names."""
     url = os.getenv("SUPABASE_URL")
-    key = (
-        os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        or os.getenv("SUPABASE_KEY")
-        or os.getenv("SUPABASE_API_KEY")
-        or os.getenv("SUPABASE_ANON_KEY")
-    )
+    key = os.getenv("SUPABASE_KEY")
     logger.debug(
         "Supabase configured: url=%s key_len=%d",
         bool(url),

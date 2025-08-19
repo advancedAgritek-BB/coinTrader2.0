@@ -61,7 +61,7 @@ def save_model(model, path: Path) -> None:
 
 def upload_to_supabase(path: Path) -> None:
     url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+    key = os.getenv("SUPABASE_KEY")
     if not url or not key:
         LOG.error("Missing Supabase credentials")
         return

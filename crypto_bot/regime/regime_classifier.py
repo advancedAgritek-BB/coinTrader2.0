@@ -98,7 +98,7 @@ PATTERN_WEIGHTS = {
 def is_ml_available() -> bool:
     """Return ``True`` if ML dependencies and credentials are available."""
     url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+    key = os.getenv("SUPABASE_KEY")
     if not url or not key:
         return False
     try:  # pragma: no cover - optional dependency
@@ -251,7 +251,7 @@ async def load_regime_model(symbol: str) -> tuple[object | None, object | None, 
         return None, None
 
     url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+    key = os.getenv("SUPABASE_KEY")
     bucket = os.getenv("CT_MODELS_BUCKET", "models")
     if not url or not key:
         return None, None

@@ -31,7 +31,7 @@ def load_latest_regime(symbol: str) -> Tuple[Any, Dict]:
     """
 
     bucket = os.environ.get("CT_MODELS_BUCKET", "models")
-    prefix = os.environ.get("CT_REGIME_PREFIX", "models/regime")
+    prefix = os.environ.get("CT_REGIME_PREFIX", "regime")
     template = os.environ.get(
         "CT_REGIME_MODEL_TEMPLATE",
         "{prefix}/{symbol}/{symbol_lower}_regime_lgbm.pkl",
@@ -42,11 +42,7 @@ def load_latest_regime(symbol: str) -> Tuple[Any, Dict]:
         from supabase import create_client  # type: ignore
 
         url = os.environ["SUPABASE_URL"]
-        key = (
-            os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-            or os.environ.get("SUPABASE_SERVICE_KEY")
-            or os.environ["SUPABASE_KEY"]
-        )
+        key = os.environ["SUPABASE_KEY"]
         client = create_client(url, key)
 
         latest_key = f"{prefix}/{symbol}/LATEST.json"

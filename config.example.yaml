@@ -88,7 +88,7 @@ fees:
 
 # === features ===
 features:
-  ml: false  # set true to use ML regime models (requires SUPABASE_URL and one of SUPABASE_SERVICE_ROLE_KEY/SUPABASE_KEY/SUPABASE_API_KEY)
+  ml: false  # set true to use ML regime models (requires SUPABASE_URL and SUPABASE_KEY)
   helius: false
   pump_monitor: false
   telegram: true

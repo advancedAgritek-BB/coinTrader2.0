@@ -36,9 +36,9 @@ def test_loads_direct_model_when_latest_missing(monkeypatch, caplog):
         sys.modules, "supabase", types.SimpleNamespace(create_client=create_client)
     )
     monkeypatch.setenv("SUPABASE_URL", "http://example")
-    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "key")
+    monkeypatch.setenv("SUPABASE_KEY", "key")
     monkeypatch.setenv("CT_MODELS_BUCKET", "models")
-    monkeypatch.setenv("CT_REGIME_PREFIX", "models/regime")
+    monkeypatch.setenv("CT_REGIME_PREFIX", "regime")
     monkeypatch.setenv(
         "CT_REGIME_MODEL_TEMPLATE", "{prefix}/{symbol}/{symbol_lower}_regime_lgbm.pkl"
     )
@@ -51,8 +51,8 @@ def test_loads_direct_model_when_latest_missing(monkeypatch, caplog):
     assert blob == b"direct-bytes"
     assert meta == {}
     assert calls == [
-        "models/regime/BTCUSD/LATEST.json",
-        "models/regime/BTCUSD/btcusd_regime_lgbm.pkl",
+        "regime/BTCUSD/LATEST.json",
+        "regime/BTCUSD/btcusd_regime_lgbm.pkl",
     ]
     assert not [r for r in caplog.records if "No regime model found" in r.message]
 

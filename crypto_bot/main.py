@@ -740,7 +740,7 @@ def _ensure_ml_if_needed(cfg: dict) -> None:
         if not ML_AVAILABLE:
             symbol = cfg.get("symbol") or os.getenv("CT_SYMBOL", "XRPUSD")
             logger.info(
-                "ML model for %s unavailable; ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY are set. "
+                "ML model for %s unavailable; ensure SUPABASE_URL and SUPABASE_KEY are set. "
                 "Install cointrader-trainer only when training new models.",
                 symbol,
             )

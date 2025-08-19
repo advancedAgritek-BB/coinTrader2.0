@@ -23,7 +23,7 @@ def fetch_snapshot(mint: str, bucket: str = "snapshots") -> Optional[dict]:
         credentials/SDK are unavailable.
     """
     url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+    key = os.getenv("SUPABASE_KEY")
     if not url or not key:
         logger.error("Missing Supabase credentials")
         return None
