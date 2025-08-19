@@ -37,8 +37,8 @@ from crypto_bot.paper_wallet import PaperWallet as Wallet
 import time
 
 wallet = Wallet(1000.0)
-wallet.open("BTC/USDT", "buy", 1.0, 100.0)  # buy
-wallet.close("BTC/USDT", 1.0, 110.0)        # sell
+wallet.open("XRP/USD", "buy", 1.0, 100.0)  # buy
+wallet.close("XRP/USD", 1.0, 110.0)        # sell
 
 while True:
     current = 110.0  # replace with a real price feed
@@ -1322,7 +1322,7 @@ starts.
 
 Kraken labels Bitcoin as `XBT` in its market identifiers. The bot
 automatically converts canonical symbols using `exchange.market_id`,
-so configuration files may still list pairs like `BTC/USDT`.
+so configuration files may still list pairs like `XRP/USD`.
 
 `setup_window` controls how many candles of ticker history are gathered before
 a symbol is eligible to trade, while `trigger_window` defines the period after
