@@ -2009,7 +2009,13 @@ async def fetch_dex_ohlcv(
     max_retries: int = 3,
     timeout: float | None = None,
 ) -> List[List[float]] | None:
-    """Fetch OHLCV data for DEX tokens with several fallbacks."""
+    """Fetch OHLCV data for DEX tokens using the provided exchange.
+
+    Previous versions attempted to fall back to external services such as
+    CoinGecko or Coinbase when the exchange failed.  The simplified behaviour
+    implemented here removes those fallbacks and simply returns ``None`` if the
+    exchange lookup fails.
+    """
 
     if min_volume_usd:
         logger.debug(
@@ -2020,33 +2026,6 @@ async def fetch_dex_ohlcv(
     if gecko_res:
         return gecko_res[0] if isinstance(gecko_res, tuple) else gecko_res
 
-    base, _, quote = symbol.partition("/")
-    quote = quote.upper()
-
-    # Try CoinGecko for known USD-quoted pairs
-    if use_gecko and quote in SUPPORTED_USD_QUOTES:
-        data = fetch_coingecko_ohlc(symbol)
-        if inspect.isawaitable(data):
-            data = await data
-        if data:
-            return data
-
-        # Fallback to Coinbase if available
-        try:
-            if hasattr(ccxt, "coinbase"):
-                cb = ccxt.coinbase()
-                return await load_ohlcv(
-                    cb,
-                    symbol,
-                    timeframe=timeframe,
-                    limit=limit,
-                    max_retries=max_retries,
-                    timeout=timeout,
-                )
-        except Exception:
-            pass
-
-    # Final fallback: use the provided exchange
     try:
         return await load_ohlcv(
             exchange,
