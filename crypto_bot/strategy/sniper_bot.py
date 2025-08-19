@@ -154,10 +154,11 @@ def generate_signal(
     avg_vol = prev_vol.mean() if not prev_vol.empty else 0.0
     body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
     event = False
-    atr_val: float | None = None
+    atr_val = 0.0
     if atr is not None:
-        atr_val = float(atr.iloc[-1]) if hasattr(atr, "iloc") else float(atr)
-    if (atr_val is not None and atr_val > 0) and avg_vol > 0:
+        atr_src = getattr(atr, "iloc", atr)
+        atr_val = float(atr_src[-1] if hasattr(atr_src, "__getitem__") else atr_src)
+    if atr_val > 0.0 and avg_vol > 0:
         if body >= 2 * atr_val and df["volume"].iloc[-1] >= 2 * avg_vol:
             event = True
     atr = atr_val
@@ -195,11 +196,12 @@ def generate_signal(
 
     if price_fallback:
         atr_value = volatility.calc_atr(df, period=atr_window, as_series=False)
-        if atr_value is not None and hasattr(atr_value, "iloc"):
-            atr_value = float(atr_value.iloc[-1])
-        elif atr_value is not None:
-            atr_value = float(atr_value)
-        if atr_value is None or atr_value <= 0:
+        if atr_value is not None:
+            atr_src = getattr(atr_value, "iloc", atr_value)
+            atr_value = float(atr_src[-1] if hasattr(atr_src, "__getitem__") else atr_src)
+        else:
+            atr_value = 0.0
+        if atr_value <= 0.0:
             logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
             return 0.0, "none", 0.0, event
         atr = atr_value
