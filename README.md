@@ -160,19 +160,19 @@ SUPABASE_URL=
 SUPABASE_KEY=
 # Storage bucket holding uploaded models
 CT_MODELS_BUCKET=models
-# Prefix within the bucket for regime models
-CT_REGIME_PREFIX=regime
+# Optional prefix within the bucket for regime models (default empty)
+CT_REGIME_PREFIX=
 CT_SYMBOL=XRPUSD
 # Optional override URL used if Supabase is unavailable
 # CT_MODEL_FALLBACK_URL=https://example.com/xrpusd_regime_lgbm.pkl
 ```
 
 `CT_SYMBOL` controls which Supabase regime model is loaded. For instance,
-setting `CT_SYMBOL=XRPUSD` downloads the `xrpusd_regime_lgmb.pkl` model from the
-`models/regime/XRPUSD/` path in the storage bucket. When the Supabase
-download fails the loader uses `CT_MODEL_FALLBACK_URL` (or the corresponding
-`model_fallback_url` configuration) and logs when this fallback is used, allowing
-ML scoring to continue.
+setting `CT_SYMBOL=XRPUSD` downloads the `xrpusd_regime_lgbm.pkl` model from the
+root of the `models` bucket (or under `CT_REGIME_PREFIX` if set). When the
+Supabase download fails the loader uses `CT_MODEL_FALLBACK_URL` (or the
+corresponding `model_fallback_url` configuration) and logs when this fallback is
+used, allowing ML scoring to continue.
 # Optional path to a cached model used if Supabase is unavailable
 CT_MODEL_LOCAL_PATH=xrpusd_regime_lgbm.pkl
 # Template used to build the model filename. `{symbol}` expands to the lowercase
@@ -182,8 +182,9 @@ CT_REGIME_MODEL_TEMPLATE={symbol}_regime_lgbm.pkl
 
 `CT_SYMBOL` controls which Supabase regime model is loaded. With
 `CT_REGIME_MODEL_TEMPLATE={symbol}_regime_lgbm.pkl` and `CT_SYMBOL=XRPUSD`, the
-loader resolves the filename `xrpusd_regime_lgbm.pkl` inside
-`regime/XRPUSD/`. Models can also be served from a public URL such as
+loader resolves the filename `xrpusd_regime_lgbm.pkl` in the bucket (under
+`CT_REGIME_PREFIX` if provided). Models can also be served from a public URL such
+as
 `https://prmhankbfjanqffwjcba.supabase.co/storage/v1/object/public/models/xrpusd_regime_lgbm.pkl`
 when credentials are provided or the bucket is public. When the Supabase
 download fails the loader tries `CT_MODEL_LOCAL_PATH` (or the corresponding
@@ -203,7 +204,8 @@ python ml_trainer.py train regime --use-gpu --federated
 ```
 
 The command writes the model and a `LATEST.json` manifest to the
-`CT_MODELS_BUCKET` bucket under `CT_REGIME_PREFIX` for the symbol.
+`CT_MODELS_BUCKET` bucket, optionally under `CT_REGIME_PREFIX/<symbol>` if a
+prefix is configured.
 
 ## Fast-Path Checks
 

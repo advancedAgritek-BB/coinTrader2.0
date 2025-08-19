@@ -31,11 +31,12 @@ def load_latest_regime(symbol: str) -> Tuple[Any, Dict]:
     """
 
     bucket = os.environ.get("CT_MODELS_BUCKET", "models")
-    prefix = os.environ.get("CT_REGIME_PREFIX", "regime").strip("/")
+    prefix = os.environ.get("CT_REGIME_PREFIX", "").strip("/")
     template = os.environ.get(
         "CT_REGIME_MODEL_TEMPLATE",
         "{prefix}/{symbol}/{symbol_lower}_regime_lgbm.pkl",
     )
+    filename = f"{symbol.lower()}_regime_lgbm.pkl"
 
     client = None
     try:  # pragma: no cover - optional dependency and network access
@@ -45,7 +46,8 @@ def load_latest_regime(symbol: str) -> Tuple[Any, Dict]:
         key = os.environ.get("SUPABASE_KEY")
         client = create_client(url, key)
 
-        latest_key = f"{prefix}/{symbol}/LATEST.json"
+        base = "/".join([p for p in (prefix, symbol) if p])
+        latest_key = f"{base}/LATEST.json"
         meta_bytes = client.storage.from_(bucket).download(latest_key)
         meta = json.loads(meta_bytes.decode("utf-8"))
         assert meta.get("key"), "LATEST.json missing 'key'"
@@ -62,10 +64,11 @@ def load_latest_regime(symbol: str) -> Tuple[Any, Dict]:
 
         if client and not_found:
             for direct_key in (
-                f"{prefix}/{symbol}/{symbol.lower()}_regime_lgbm.pkl",
+                "/".join([p for p in (prefix, filename) if p]),
+                "/".join([p for p in (prefix, symbol, filename) if p]),
                 template.format(
                     prefix=prefix, symbol=symbol, symbol_lower=symbol.lower()
-                ),
+                ).lstrip("/"),
             ):
                 try:
                     blob = client.storage.from_(bucket).download(direct_key)
