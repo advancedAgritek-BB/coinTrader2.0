@@ -2194,7 +2194,8 @@ async def execute_signals(ctx: BotContext) -> None:
         logger.info("Analysis result: %s", candidate)
         max_trades = ctx.position_guard.max_open_trades if ctx.position_guard else 0
         logger.debug("Open trades: %d / %d", len(ctx.positions), max_trades)
-        if not ctx.position_guard or not ctx.position_guard.can_open(ctx.positions):
+        if ctx.position_guard and not ctx.position_guard.can_open(ctx.positions):
+            logger.debug("Position guard blocked opening a new position")
             logger.info(
                 "Max open trades reached (%d/%d); skipping remaining signals",
                 len(ctx.positions),
