@@ -1,6 +1,7 @@
 import asyncio
 import importlib
 import functools
+import numpy as np
 import pandas as pd
 from typing import Dict, Iterable, Tuple, List, Callable
 
@@ -520,6 +521,7 @@ async def analyze_symbol(
                 pass
 
         weights = config.get("scoring_weights", {})
+        volume = float(df["volume"].iloc[-1]) if "volume" in df.columns else 0.0
         final = (
             weights.get("strategy_score", 1.0) * score
             + weights.get("regime_confidence", 0.0) * confidence
@@ -528,6 +530,7 @@ async def analyze_symbol(
             + weights.get("spread_penalty", 0.0) * 0.0
             + weights.get("strategy_regime_strength", 0.0) * reg_strength
         )
+        final /= 1 + np.log1p(volume) / 10
 
         result.update(
             {

@@ -310,7 +310,8 @@ def test_analyze_symbol_async_consistent():
     assert res["regime"] == regime
     assert isinstance(res.get("patterns"), dict)
     assert res["confidence"] == 1.0
-    assert res["score"] == sync_score
+    expected = sync_score / (1 + np.log1p(df["volume"].iloc[-1]) / 10)
+    assert res["score"] == pytest.approx(expected)
     assert res["direction"] == sync_dir
 
 
@@ -347,7 +348,8 @@ def test_analyze_symbol_best_mode(monkeypatch):
     res = asyncio.run(run())
     assert res["name"] == "strat_b"
     assert res["direction"] == "short"
-    assert res["score"] == 0.7
+    expected = 0.7 / (1 + np.log1p(df["volume"].iloc[-1]) / 10)
+    assert res["score"] == pytest.approx(expected)
     assert calls
 
 

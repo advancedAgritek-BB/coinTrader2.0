@@ -1,5 +1,6 @@
 import pandas as pd
 import asyncio
+import numpy as np
 import pytest
 
 import crypto_bot.strategy_router as sr
@@ -42,7 +43,16 @@ def test_evaluate_regime_min_conf(monkeypatch):
 
 
 def test_analyze_symbol_ensemble_mode(monkeypatch):
-    df = pd.DataFrame({"open": [1, 2], "high": [1, 2], "low": [1, 2], "close": [1, 2], "volume": [1, 1]})
+    vals = np.linspace(1, 2, 60)
+    df = pd.DataFrame(
+        {
+            "open": vals,
+            "high": vals,
+            "low": vals,
+            "close": vals,
+            "volume": np.ones_like(vals),
+        }
+    )
 
     async def fake_async(*_a, **_k):
         return "trending", {"trending": 1.0}
@@ -70,12 +80,22 @@ def test_analyze_symbol_ensemble_mode(monkeypatch):
         return await analyze_symbol("AAA", {"1h": df}, "cex", cfg, None)
 
     res = asyncio.run(run())
-    assert res["score"] == 0.6
+    expected = 0.6 / (1 + np.log1p(df["volume"].iloc[-1]) / 10)
+    assert res["score"] == pytest.approx(expected)
     assert res["direction"] == "long"
 
 
 def test_analyze_symbol_ensemble_default_min_conf(monkeypatch):
-    df = pd.DataFrame({"open": [1, 2], "high": [1, 2], "low": [1, 2], "close": [1, 2], "volume": [1, 1]})
+    vals = np.linspace(1, 2, 60)
+    df = pd.DataFrame(
+        {
+            "open": vals,
+            "high": vals,
+            "low": vals,
+            "close": vals,
+            "volume": np.ones_like(vals),
+        }
+    )
 
     async def fake_async(*_a, **_k):
         return "trending", {"trending": 1.0}
