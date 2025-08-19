@@ -13,18 +13,17 @@ def test_ensure_ml_uses_fallback_url(monkeypatch, tmp_path, caplog):
     rc._supabase_scaler = None
     rc._supabase_symbol = None
 
-    async def fail_load(_symbol):
-        raise Exception("supabase down")
-
-    monkeypatch.setattr(rc, "load_regime_model", fail_load)
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+    monkeypatch.delenv("SUPABASE_KEY", raising=False)
     monkeypatch.setattr(main, "ML_AVAILABLE", True)
+    monkeypatch.setenv("CT_MODEL_FALLBACK_URL", remote.resolve().as_uri())
 
     cfg = {
         "ml_enabled": True,
         "symbol": "XRPUSD",
-        "model_fallback_url": remote.resolve().as_uri(),
     }
 
     caplog.set_level(logging.INFO, logger="bot")
     main._ensure_ml_if_needed(cfg)
-    assert "Loaded fallback regime model for XRPUSD" in caplog.text
+    assert f"Loaded global regime model for XRPUSD from {remote.resolve().as_uri()}" in caplog.text

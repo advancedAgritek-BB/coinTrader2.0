@@ -4,16 +4,10 @@ import asyncio
 import time
 import logging
 import os
-from io import BytesIO
-
 import pandas as pd
 import numpy as np
 import ta
 import yaml
-import json
-import pickle
-
-from crypto_bot.utils.telegram import TelegramNotifier
 
 from .pattern_detector import detect_patterns
 from crypto_bot.utils.pattern_logger import log_patterns
@@ -21,6 +15,7 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.market_loader import timeframe_seconds
 from crypto_bot.utils.telemetry import telemetry
 from crypto_bot.utils.telegram import TelegramNotifier
+from crypto_bot.ml.model_loader import load_regime_model
 
 
 # Thresholds and ML blend settings are defined in ``regime_config.yaml``
@@ -223,7 +218,7 @@ def _ml_fallback(
 
 
 async def _download_supabase_model(symbol: str | None = None) -> tuple[object | None, object | None]:
-    """Download LightGBM model and scaler from Supabase."""
+    """Download LightGBM model and scaler using the shared loader."""
     async with _supabase_model_lock:
         target_symbol = symbol or os.getenv("CT_SYMBOL", "XRPUSD")
         model, scaler, _path = await load_regime_model(target_symbol)
@@ -243,100 +238,6 @@ async def _get_supabase_model(symbol: str | None = None) -> tuple[object | None,
         return _supabase_model, _supabase_scaler
 
 
-async def load_regime_model(symbol: str) -> tuple[object | None, object | None, str | None]:
-    try:
-        from supabase import create_client
-    except Exception as exc:  # pragma: no cover - optional dependency
-        logger.warning("Supabase client unavailable: %s", exc)
-        return None, None
-
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
-    bucket = os.getenv("CT_MODELS_BUCKET", "models")
-    if not url or not key:
-        return None, None
-
-    client = create_client(url, key)
-    latest_path = f"regime/{symbol}/LATEST.json"
-    model_path = None
-    try:
-        latest_bytes = client.storage.from_(bucket).download(latest_path)
-    except Exception:
-        latest_bytes = None
-
-    if latest_bytes:
-        try:
-            data = json.loads(latest_bytes.decode("utf-8"))
-            model_path = data["key"]
-            model_bytes = client.storage.from_(bucket).download(model_path)
-            model_obj = pickle.loads(model_bytes)
-            if isinstance(model_obj, dict):
-                model = model_obj.get("model")
-                scaler = model_obj.get("scaler")
-            else:
-                model = model_obj
-                scaler = None
-            logger.info("Loaded global regime model from Supabase: %s", model_path)
-            return model, scaler, model_path
-        except Exception as exc:
-            msg = str(getattr(exc, "message", exc))
-            logger.error("Failed to load regime model: %s", exc)
-            return None, None, model_path
-
-    # LATEST.json missing or invalid; attempt direct file fallback
-    template = os.getenv("CT_REGIME_MODEL_TEMPLATE", "{symbol_lower}_regime_lgbm.pkl")
-    fallback_name = template.format(symbol=symbol, symbol_lower=symbol.lower())
-    logger.info(
-        "LATEST metadata missing for %s; falling back to direct file %s",
-        symbol,
-        fallback_name,
-    )
-    try:
-        model_bytes = client.storage.from_(bucket).download(fallback_name)
-    except Exception as exc:
-        msg = str(getattr(exc, "message", exc))
-        if "not_found" in msg:
-            logger.warning("Supabase regime model for %s not found", symbol)
-            try:
-                direct_key = f"regime/{symbol}/{symbol.lower()}_regime_lgbm.pkl"
-                model_path = direct_key
-                model_bytes = client.storage.from_(bucket).download(direct_key)
-                model_obj = pickle.loads(model_bytes)
-                if isinstance(model_obj, dict):
-                    model = model_obj.get("model")
-                    scaler = model_obj.get("scaler")
-                else:
-                    model = model_obj
-                    scaler = None
-                logger.info("Loaded direct regime model from Supabase: %s", direct_key)
-                return model, scaler, model_path
-            except Exception:
-                return None, None, None
-        logger.error("Failed to load regime model: %s", exc)
-        return None, None, fallback_name
-
-    try:
-        model_obj = pickle.loads(model_bytes)
-    except Exception:
-        try:
-            import joblib
-
-            model_obj = joblib.load(BytesIO(model_bytes))
-        except Exception as exc:  # pragma: no cover - joblib optional
-            logger.error("Failed to deserialize regime model: %s", exc)
-            return None, None, fallback_name
-
-    if isinstance(model_obj, dict):
-        model = model_obj.get("model")
-        scaler = model_obj.get("scaler")
-    else:
-        model = model_obj
-        scaler = None
-
-    logger.info(
-        "Loaded global regime model from Supabase fallback file: %s", fallback_name
-    )
-    return model, scaler, fallback_name
 
 
 async def _ml_recovery_loop(notifier: TelegramNotifier | None) -> None:

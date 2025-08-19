@@ -751,46 +751,23 @@ def _ensure_ml_if_needed(cfg: dict) -> None:
         symbol = cfg.get("symbol") or os.getenv("CT_SYMBOL", "XRPUSD")
         try:
             from crypto_bot.regime import regime_classifier as rc
+            from crypto_bot.ml.model_loader import load_regime_model
 
-            model, scaler, model_path = asyncio.run(rc.load_regime_model(symbol))
+            model, scaler, model_path = asyncio.run(load_regime_model(symbol))
+            if model is None:
+                raise RuntimeError("model load failed")
             rc._supabase_model = model
             rc._supabase_scaler = scaler
             rc._supabase_symbol = symbol
             logger.info(
-                "Loaded global regime model for %s from Supabase: %s",
+                "Loaded global regime model for %s from %s",
                 symbol,
                 model_path,
             )
         except Exception as exc:
             logger.warning("Supabase model load failed: %s", exc)
-            fallback_url = (
-                cfg.get("model_fallback_url")
-                or os.getenv(
-                    "CT_MODEL_FALLBACK_URL",
-                    "https://prmhankbfjanqffwjcba.supabase.co/storage/v1/object/public/models/xrpusd_regime_lgbm.pkl",
-                )
-            )
-            try:
-                import urllib.request
-                import pickle
-
-                with urllib.request.urlopen(fallback_url) as resp:
-                    model = pickle.loads(resp.read())
-                rc._supabase_model = model
-                rc._supabase_scaler = None
-                rc._supabase_symbol = symbol
-                logger.info(
-                    "Loaded fallback regime model for %s from %s",
-                    symbol,
-                    fallback_url,
-                )
-            except Exception as url_exc:
-                logger.warning(
-                    "Failed to load fallback model from %s: %s", fallback_url, url_exc
-                )
-                logger.warning("ML disabled: %s", url_exc)
-                cfg["ml_enabled"] = False
-                ml_cfg["ml_enabled"] = False
+            cfg["ml_enabled"] = False
+            ml_cfg["ml_enabled"] = False
         _LAST_ML_CFG = ml_cfg
 
 
