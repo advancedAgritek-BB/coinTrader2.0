@@ -175,9 +175,9 @@ class AltnameMappingExchange:
         self.markets_by_id = {"XXBTZUSD": {"symbol": "XBT/USDT", "altname": "XBTUSDT"}}
 
     async def fetch_tickers(self, symbols):
-        assert symbols == ["XBT/USDT"]
+        assert symbols == ["XBTUSDT"]
         data = (await fake_fetch(None))["result"]
-        return {"XBT/USDT": data["XXBTZUSD"]}
+        return {"XBTUSDT": data["XXBTZUSD"]}
 
 
 def test_altname_mapping(monkeypatch):
@@ -191,7 +191,7 @@ def test_altname_mapping(monkeypatch):
     ex = AltnameMappingExchange()
     symbols = asyncio.run(filter_symbols(ex, ["XBT/USDT"], CONFIG))
 
-    assert symbols == [("BTC/USDT", 0.6)]
+    assert symbols == [("BTCUSDT", 0.6)]
 
 
 class RawIdMappingExchange:
@@ -216,7 +216,7 @@ def test_raw_id_mapping(monkeypatch):
     ex = RawIdMappingExchange()
     symbols = asyncio.run(filter_symbols(ex, ["XBTUSDT"], CONFIG))
 
-    assert symbols == [("BTC/USDT", 0.6)]
+    assert symbols == [("BTCUSDT", 0.6)]
 
 
 class USDCVolumeExchange:
@@ -1365,10 +1365,10 @@ def test_log_ticker_exceptions(monkeypatch, caplog):
 
 class MarketIDExchange:
     has = {}
-    markets_by_id = {"XXBTZUSD": {"symbol": "BTC/USDT"}}
+    markets_by_id = {"XXBTZUSD": {"symbol": "BTCUSDT"}}
 
     def market_id(self, symbol):
-        assert symbol == "BTC/USDT"
+        assert symbol == "BTCUSDT"
         return "XBTUSDT"
 
 
@@ -1393,7 +1393,7 @@ def test_market_id_used_for_public_api(monkeypatch):
     monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch_market_id)
     result = asyncio.run(sp.filter_symbols(MarketIDExchange(), ["BTC/USDT"], CONFIG))
     assert calls == [["XBTUSDT"]]
-    assert result == [("BTC/USDT", 0.6)]
+    assert result == [("BTCUSDT", 0.6)]
 
 
 async def fake_fetch_unknown(pairs):
@@ -1406,7 +1406,7 @@ def test_unknown_pair_not_cached(monkeypatch):
     monkeypatch.setattr(sp, "_fetch_ticker_async", fake_fetch_unknown)
     result = asyncio.run(sp.filter_symbols(MarketIDExchange(), ["BTC/USDT"], CONFIG))
     assert result == []
-    assert "BTC/USDT" not in sp.liq_cache
+    assert "BTCUSDT" not in sp.liq_cache
 
 
 def test_refresh_tickers_empty_result(monkeypatch, caplog):
@@ -1521,9 +1521,9 @@ class BTCQuoteExchange:
         self.has = {"fetchTickers": True, "fetchTicker": True}
         self.markets_by_id = {
             "XETHXXBT": {"symbol": "ETH/BTC"},
-            "XXBTZUSD": {"symbol": "BTC/USDT"},
+            "XXBTZUSD": {"symbol": "BTCUSDT"},
         }
-        self.markets = {"ETH/BTC": {}, "BTC/USDT": {}}
+        self.markets = {"ETH/BTC": {}, "BTCUSDT": {}}
 
     async def fetch_tickers(self, symbols):
         assert symbols == ["ETH/BTC"]
@@ -1538,7 +1538,7 @@ class BTCQuoteExchange:
         return {"ETH/BTC": ticker}
 
     async def fetch_ticker(self, symbol):
-        assert symbol == "BTC/USDT"
+        assert symbol == "BTCUSDT"
         return {"last": 50000.0}
 
 

@@ -54,11 +54,11 @@ def test_fetch_candidates_dedupes_and_filters(monkeypatch):
     df = pd.DataFrame({"high": [1, 2], "low": [0, 1], "close": [1, 2]})
     ctx = BotContext(
         positions={},
-        df_cache={"1h": {"BTC/USDT": df}},
+        df_cache={"1h": {"BTCUSDT": df}},
         regime_cache={},
         config={
             "timeframe": "1h",
-            "symbols": ["BTC/USDT"],
+            "symbols": ["BTCUSDT"],
             "symbol_batch_size": 5,
             "benchmark_symbols": [],
         },
@@ -66,16 +66,16 @@ def test_fetch_candidates_dedupes_and_filters(monkeypatch):
 
     class DummyExchange:
         def list_markets(self):
-            return ["BTC/USDT", "ETH/USDT"]
+            return ["BTCUSDT", "ETHUSDT"]
 
     ctx.exchange = DummyExchange()
 
     async def fake_get_filtered_symbols(ex, cfg):
         return [
-            ("ETH/USDT", 2.0),
-            ("BTC/USDT", 1.0),
-            ("DOGE/USDT", 0.5),
-            ("ETH/USDT", 0.1),
+            ("ETHUSDT", 2.0),
+            ("BTCUSDT", 1.0),
+            ("DOGEUSDT", 0.5),
+            ("ETHUSDT", 0.1),
         ], []
 
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
@@ -86,5 +86,5 @@ def test_fetch_candidates_dedupes_and_filters(monkeypatch):
 
     asyncio.run(main.fetch_candidates(ctx))
 
-    assert ctx.current_batch == ["BTC/USDT"]
+    assert ctx.current_batch == ["BTCUSDT"]
     assert len(ctx.current_batch) == len(set(ctx.current_batch))
