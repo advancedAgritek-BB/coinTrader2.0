@@ -14,9 +14,6 @@ ALLOWED_PAIRS = load_liquid_pairs() or []
 
 def generate_signal(
     df: pd.DataFrame,
-    config: Optional[dict] = None,
-    *,
-    mempool_monitor: Optional[SolanaMempoolMonitor] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
     **kwargs,
@@ -27,6 +24,15 @@ def generate_signal(
     used. If not provided, the ``MOCK_PRIORITY_FEE`` environment variable can
     define the fee for testing.
     """
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+    mempool_monitor: Optional[SolanaMempoolMonitor] = kwargs.get("mempool_monitor")
+
     if df.empty:
         return 0.0, "none"
 

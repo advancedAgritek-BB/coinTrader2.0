@@ -33,17 +33,30 @@ _CORRELATION_THRESHOLD = 0.8
 def generate_signal(
     df_a: pd.DataFrame,
     df_b: pd.DataFrame,
-    config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
     **kwargs,
 ) -> Tuple[float, str]:
     """Return (score, direction) based on the price spread z-score."""
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+
     if df_a is None or df_b is None or df_a.empty or df_b.empty:
         return 0.0, "none"
 
-    threshold = float(config.get("zscore_threshold", _ZSCORE_THRESHOLD_DEFAULT)) if config else _ZSCORE_THRESHOLD_DEFAULT
-    lookback = int(config.get("lookback", _LOOKBACK_DEFAULT)) if config else _LOOKBACK_DEFAULT
+    threshold = (
+        float(config.get("zscore_threshold", _ZSCORE_THRESHOLD_DEFAULT))
+        if config
+        else _ZSCORE_THRESHOLD_DEFAULT
+    )
+    lookback = (
+        int(config.get("lookback", _LOOKBACK_DEFAULT)) if config else _LOOKBACK_DEFAULT
+    )
 
     if len(df_a) < lookback or len(df_b) < lookback:
         return 0.0, "none"

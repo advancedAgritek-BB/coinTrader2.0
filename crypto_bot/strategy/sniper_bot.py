@@ -27,8 +27,6 @@ else:  # pragma: no cover - fallback
 
 def generate_signal(
     df: pd.DataFrame,
-    config: Optional[Dict[str, float | int | str]] = None,
-    *,
     symbol: str | None = None,
     timeframe: str | None = None,
     breakout_pct: float = 0.01,
@@ -93,6 +91,27 @@ def generate_signal(
     Tuple[float, str, float, bool]
         Score between 0 and 1, trade direction, ATR value and event flag.
     """
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+
+    breakout_pct = kwargs.get("breakout_pct", 0.01)
+    volume_multiple = kwargs.get("volume_multiple", 1.2)
+    max_history = kwargs.get("max_history", 30)
+    initial_window = kwargs.get("initial_window", 3)
+    min_volume = kwargs.get("min_volume", 100.0)
+    direction = kwargs.get("direction", "auto")
+    high_freq = kwargs.get("high_freq", False)
+    atr_window = kwargs.get("atr_window", 14)
+    volume_window = kwargs.get("volume_window", 5)
+    price_fallback = kwargs.get("price_fallback", True)
+    fallback_atr_mult = kwargs.get("fallback_atr_mult", 1.5)
+    fallback_volume_mult = kwargs.get("fallback_volume_mult", 1.2)
+
     symbol = symbol or (config.get("symbol", "unknown") if config else "unknown")
     timeframe = timeframe or (config.get("timeframe") if config else None)
     if (

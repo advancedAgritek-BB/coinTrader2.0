@@ -190,12 +190,6 @@ def confirm_lower_highs(df: pd.DataFrame, bars: int) -> bool:
 
 def generate_signal(
     df: pd.DataFrame,
-    config: Optional[Union[dict, BounceScalperConfig]] = None,
-    *,
-    lower_df: Optional[pd.DataFrame] = None,
-    fetcher: Optional[Callable[[str], pd.DataFrame]] = None,
-    book: Optional[dict] = None,
-    force: bool = False,
     symbol: str | None = None,
     timeframe: str | None = None,
     **kwargs,
@@ -205,6 +199,18 @@ def generate_signal(
     Setting ``force=True`` bypasses the cooldown and recent win-rate filters
     for a single invocation.
     """
+    if isinstance(symbol, (dict, BounceScalperConfig)) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+    lower_df = kwargs.get("lower_df")
+    fetcher = kwargs.get("fetcher")
+    book = kwargs.get("book")
+    force = kwargs.get("force", False)
+
     if df.empty:
         return 0.0, "none"
 

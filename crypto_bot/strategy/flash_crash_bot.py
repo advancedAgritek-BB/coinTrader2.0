@@ -8,12 +8,18 @@ NAME = "flash_crash_bot"
 
 def generate_signal(
     df: pd.DataFrame,
-    config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
     **kwargs,
 ) -> Tuple[float, str]:
     """Return long signal on sudden drops with high volume."""
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
     if df is None or len(df) < 2:
         return 0.0, "none"
 

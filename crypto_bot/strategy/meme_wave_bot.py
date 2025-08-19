@@ -43,15 +43,21 @@ async def exit_trade(price_feed, entry_price: float, cfg: Mapping[str, float]) -
 
 async def generate_signal(
     df: pd.DataFrame,
-    config: Optional[dict] = None,
-    *,
-    mempool_monitor: Optional[SolanaMempoolMonitor] = None,
-    mempool_cfg: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
     **kwargs,
 ) -> Tuple[float, str]:
     """Return a meme wave score and direction using volume and sentiment."""
+
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+    mempool_monitor: Optional[SolanaMempoolMonitor] = kwargs.get("mempool_monitor")
+    mempool_cfg: Optional[dict] = kwargs.get("mempool_cfg")
 
     if mempool_monitor is None:
         return 0.0, "none"

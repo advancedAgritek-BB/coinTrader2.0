@@ -50,9 +50,6 @@ def _wick_ratios(row: pd.Series) -> Tuple[float, float]:
 
 def generate_signal(
     df: pd.DataFrame,
-    config: Optional[dict] = None,
-    higher_df: pd.DataFrame | None = None,
-    *,
     symbol: str | None = None,
     timeframe: str | None = None,
     mempool_monitor: Optional[SolanaMempoolMonitor] = None,
@@ -103,6 +100,20 @@ def generate_signal(
     ``trend_filter``
         When ``false`` the higher timeframe EMA confirmation is ignored.
     """
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+    higher_df = kwargs.get("higher_df")
+    mempool_monitor: Optional[SolanaMempoolMonitor] = kwargs.get("mempool_monitor")
+    mempool_cfg: Optional[dict] = kwargs.get("mempool_cfg")
+    tick_data: pd.DataFrame | None = kwargs.get("tick_data")
+    book: Optional[dict] = kwargs.get("book")
+    ticks: Optional[pd.DataFrame] = kwargs.get("ticks")
+
     if tick_data is not None and not tick_data.empty:
         df = pd.concat(
             [df.reset_index(drop=True), tick_data.reset_index(drop=True)],

@@ -25,19 +25,24 @@ def _fetch_prices(symbols: List[str]) -> Dict[str, float]:
 
 def generate_signal(
     df: pd.DataFrame,
-    config: Optional[Mapping[str, object]] = None,
-    *,
-    mempool_monitor: Optional[SolanaMempoolMonitor] = None,
-    mempool_cfg: Optional[Mapping[str, object]] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
     **kwargs,
 ) -> Tuple[float, str]:
     """Return arbitrage signal comparing CEX OHLCV data to Solana prices."""
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config") or {}
+    mempool_monitor: Optional[SolanaMempoolMonitor] = kwargs.get("mempool_monitor")
+    mempool_cfg: Optional[Mapping[str, object]] = kwargs.get("mempool_cfg")
+
     if df is None or df.empty:
         return 0.0, "none"
 
-    config = config or {}
     params = config.get("cross_chain_arb_bot", {})
     pair = str(params.get("pair", ""))
     try:

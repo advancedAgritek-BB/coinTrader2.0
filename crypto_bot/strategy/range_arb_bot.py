@@ -61,7 +61,6 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
 
 def generate_signal(
     df: pd.DataFrame,
-    config: dict | None = None,
     symbol: Optional[str] = None,
     timeframe: Optional[str] = None,
     **kwargs,
@@ -71,6 +70,14 @@ def generate_signal(
     The strategy can run in any market regime, but trades are only taken
     when low volatility conditions are detected.
     """
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+
     if df.empty:
         return 0.0, "none"
 
