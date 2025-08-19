@@ -221,6 +221,8 @@ REST_OHLCV_TIMEOUT = 90
 MAX_OHLCV_FAILURES = 10
 MAX_WS_LIMIT = 500
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
+# Cap simultaneous OHLCV requests to stay within Kraken's connection pool.
+DEFAULT_MAX_CONCURRENT_OHLCV = 10
 STATUS_UPDATES = True
 # Per-timeframe locks are provided by crypto_bot.data.locks
 
@@ -1456,6 +1458,10 @@ async def load_ohlcv_parallel(
     ----------
     notifier : TelegramNotifier | None, optional
         If provided, failures will be sent using this notifier.
+    max_concurrent : int | None, optional
+        Maximum number of simultaneous OHLCV requests. If ``None``, the
+        ``max_concurrent_ohlcv`` value from ``config.yaml`` is used when
+        available, otherwise a default of ``10`` is applied.
     """
     if use_websocket or force_websocket_history:
         logger.debug(
@@ -1516,12 +1522,20 @@ async def load_ohlcv_parallel(
     if not symbols:
         return data
 
-    if max_concurrent is not None:
-        if not isinstance(max_concurrent, int) or max_concurrent < 1:
-            raise ValueError("max_concurrent must be a positive integer or None")
-        sem = asyncio.Semaphore(max_concurrent)
-    else:
-        sem = None
+    if max_concurrent is None:
+        try:
+            with open(CONFIG_PATH) as f:
+                cfg = yaml.safe_load(f) or {}
+            cfg_val = cfg.get("max_concurrent_ohlcv")
+            if cfg_val is not None:
+                max_concurrent = int(cfg_val)
+        except Exception:
+            pass
+        if max_concurrent is None:
+            max_concurrent = DEFAULT_MAX_CONCURRENT_OHLCV
+    if not isinstance(max_concurrent, int) or max_concurrent < 1:
+        raise ValueError("max_concurrent must be a positive integer or None")
+    sem = asyncio.Semaphore(max_concurrent)
 
     async def sem_fetch(sym: str):
         async def _fetch_and_sleep():
