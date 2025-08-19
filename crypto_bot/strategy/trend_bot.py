@@ -125,22 +125,19 @@ def generate_signal(
         logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none"
 
-    adx = latest["adx"]
-    ema_slow = df["ema_slow"]
+    adx = float(latest["adx"])
     close = df["close"]
+    ema_slow = df["ema_slow"]
+    if adx > 15 and close.iloc[-1] > ema_slow.iloc[-1]:
+        score = 0.8
+        direction = "long"
+        logger.info(
+            "trend_bot: ADX=%s, EMA_slow=%s, score=%s", adx, ema_slow.iloc[-1], score
+        )
+        return score, direction
 
     score = 0.0
     direction = "none"
-    forced = False
-
-    # Loosen conditions
-    if adx > 15 and close.iloc[-1] > ema_slow.iloc[-1]:  # Lower ADX from 25
-        score = 0.8  # Force positive
-        direction = "long"
-        forced = True
-        logger.info(
-            f"trend_bot: ADX={adx}, EMA_slow={ema_slow.iloc[-1]}, score={score}"
-        )
 
     atr_pct = 0.0
     if latest["close"] != 0:
@@ -148,104 +145,103 @@ def generate_signal(
     dynamic_oversold = min(90.0, 30 + k * atr_pct)
     dynamic_overbought = max(10.0, 70 - k * atr_pct)
 
-    if not forced:
-        rsi_z_last = df["rsi_z"].iloc[-1]
-        rsi_z_series = df["rsi_z"].dropna()
-        if not rsi_z_series.empty:
-            upper_thr = rsi_z_series.quantile(rsi_overbought_pct / 100)
-            lower_thr = rsi_z_series.quantile(rsi_oversold_pct / 100)
-        else:
-            upper_thr = np.nan
-            lower_thr = np.nan
+    rsi_z_last = df["rsi_z"].iloc[-1]
+    rsi_z_series = df["rsi_z"].dropna()
+    if not rsi_z_series.empty:
+        upper_thr = rsi_z_series.quantile(rsi_overbought_pct / 100)
+        lower_thr = rsi_z_series.quantile(rsi_oversold_pct / 100)
+    else:
+        upper_thr = np.nan
+        lower_thr = np.nan
 
-        # Derive overbought/oversold thresholds from the distribution of recent
-        # RSI z-scores.  These quantile based levels adapt to the data and proved
-        # more robust in practice than theoretical values from `norm.ppf`.  The
-        # old behaviour using `scipy_stats.norm.ppf` has been removed but left
-        # here for reference:
-        #
-        #    upper_thr_norm = scipy_stats.norm.ppf(rsi_overbought_pct / 100)
-        #    lower_thr_norm = scipy_stats.norm.ppf(rsi_oversold_pct / 100)
+    # Derive overbought/oversold thresholds from the distribution of recent
+    # RSI z-scores.  These quantile based levels adapt to the data and proved
+    # more robust in practice than theoretical values from `norm.ppf`.  The
+    # old behaviour using `scipy_stats.norm.ppf` has been removed but left
+    # here for reference:
+    #
+    #    upper_thr_norm = scipy_stats.norm.ppf(rsi_overbought_pct / 100)
+    #    lower_thr_norm = scipy_stats.norm.ppf(rsi_oversold_pct / 100)
 
-        volume_ok = latest["volume"] > latest["volume_ma"] * volume_mult
-        overbought_cond = (
-            (
-                rsi_z_last > upper_thr
-                if not pd.isna(upper_thr) and not pd.isna(rsi_z_last)
-                else latest["rsi"] > dynamic_overbought
-            )
-            and volume_ok
+    volume_ok = latest["volume"] > latest["volume_ma"] * volume_mult
+    overbought_cond = (
+        (
+            rsi_z_last > upper_thr
+            if not pd.isna(upper_thr) and not pd.isna(rsi_z_last)
+            else latest["rsi"] > dynamic_overbought
         )
-        oversold_cond = (
-            (
-                rsi_z_last < lower_thr
-                if not pd.isna(lower_thr) and not pd.isna(rsi_z_last)
-                else latest["rsi"] < dynamic_oversold
-            )
-            and volume_ok
+        and volume_ok
+    )
+    oversold_cond = (
+        (
+            rsi_z_last < lower_thr
+            if not pd.isna(lower_thr) and not pd.isna(rsi_z_last)
+            else latest["rsi"] < dynamic_oversold
         )
+        and volume_ok
+    )
 
-        long_cond = (
-            latest["close"] > latest["ema_fast"]
-            and latest["ema_fast"] > latest["ema_slow"]
-            and overbought_cond
-            and latest["adx"] > adx_threshold
-            and latest["volume"] > latest["volume_ma"]
-        )
-        short_cond = (
-            latest["close"] < latest["ema_fast"]
-            and latest["ema_fast"] < latest["ema_slow"]
-            and oversold_cond
-            and latest["adx"] > adx_threshold
-            and latest["volume"] > latest["volume_ma"]
-        )
+    long_cond = (
+        latest["close"] > latest["ema_fast"]
+        and latest["ema_fast"] > latest["ema_slow"]
+        and overbought_cond
+        and latest["adx"] > adx_threshold
+        and latest["volume"] > latest["volume_ma"]
+    )
+    short_cond = (
+        latest["close"] < latest["ema_fast"]
+        and latest["ema_fast"] < latest["ema_slow"]
+        and oversold_cond
+        and latest["adx"] > adx_threshold
+        and latest["volume"] > latest["volume_ma"]
+    )
 
-        logger.debug(
-            "long_cond=%s short_cond=%s close=%s ema_fast=%s ema_slow=%s rsi=%s adx=%s volume=%s volume_ma=%s",
-            long_cond,
-            short_cond,
-            float(latest["close"]),
-            float(latest["ema_fast"]),
-            float(latest["ema_slow"]),
-            float(latest["rsi"]),
-            float(latest["adx"]),
-            float(latest["volume"]),
-            float(latest["volume_ma"]),
-        )
+    logger.debug(
+        "long_cond=%s short_cond=%s close=%s ema_fast=%s ema_slow=%s rsi=%s adx=%s volume=%s volume_ma=%s",
+        long_cond,
+        short_cond,
+        float(latest["close"]),
+        float(latest["ema_fast"]),
+        float(latest["ema_slow"]),
+        float(latest["rsi"]),
+        float(latest["adx"]),
+        float(latest["volume"]),
+        float(latest["volume_ma"]),
+    )
 
-        if config.get("donchian_confirmation", False):
-            try:
-                window = int(config.get("donchian_window", 20))
-            except (TypeError, ValueError):
-                window = 20
-            upper = df["high"].rolling(window=window).max().iloc[-1]
-            lower = df["low"].rolling(window=window).min().iloc[-1]
-            long_cond = long_cond and latest["close"] >= upper
-            short_cond = short_cond and latest["close"] <= lower
+    if config.get("donchian_confirmation", False):
+        try:
+            window = int(config.get("donchian_window", 20))
+        except (TypeError, ValueError):
+            window = 20
+        upper = df["high"].rolling(window=window).max().iloc[-1]
+        lower = df["low"].rolling(window=window).min().iloc[-1]
+        long_cond = long_cond and latest["close"] >= upper
+        short_cond = short_cond and latest["close"] <= lower
 
-        cross_up = (
-            df["ema_fast"].iloc[-2] < df["ema_slow"].iloc[-2]
-            and latest["ema_fast"] > latest["ema_slow"]
-        )
-        cross_down = (
-            df["ema_fast"].iloc[-2] > df["ema_slow"].iloc[-2]
-            and latest["ema_fast"] < latest["ema_slow"]
-        )
-        reversal_long = cross_up and oversold_cond and latest["volume"] > latest["volume_ma"]
-        reversal_short = cross_down and overbought_cond and latest["volume"] > latest["volume_ma"]
+    cross_up = (
+        df["ema_fast"].iloc[-2] < df["ema_slow"].iloc[-2]
+        and latest["ema_fast"] > latest["ema_slow"]
+    )
+    cross_down = (
+        df["ema_fast"].iloc[-2] > df["ema_slow"].iloc[-2]
+        and latest["ema_fast"] < latest["ema_slow"]
+    )
+    reversal_long = cross_up and oversold_cond and latest["volume"] > latest["volume_ma"]
+    reversal_short = cross_down and overbought_cond and latest["volume"] > latest["volume_ma"]
 
-        if long_cond:
-            score = min((latest["rsi"] - 50) / 50, 1.0)
-            direction = "long"
-        elif short_cond:
-            score = min((50 - latest["rsi"]) / 50, 1.0)
-            direction = "short"
-        elif reversal_long:
-            score = min((dynamic_oversold - latest["rsi"]) / dynamic_oversold, 1.0)
-            direction = "long"
-        elif reversal_short:
-            score = min((latest["rsi"] - dynamic_overbought) / (100 - dynamic_overbought), 1.0)
-            direction = "short"
+    if long_cond:
+        score = min((latest["rsi"] - 50) / 50, 1.0)
+        direction = "long"
+    elif short_cond:
+        score = min((50 - latest["rsi"]) / 50, 1.0)
+        direction = "short"
+    elif reversal_long:
+        score = min((dynamic_oversold - latest["rsi"]) / dynamic_oversold, 1.0)
+        direction = "long"
+    elif reversal_short:
+        score = min((latest["rsi"] - dynamic_overbought) / (100 - dynamic_overbought), 1.0)
+        direction = "short"
 
     if score > 0:
         if MODEL is not None:

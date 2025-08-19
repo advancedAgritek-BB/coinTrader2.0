@@ -40,6 +40,27 @@ def _df_adx_range():
     return pd.DataFrame({"open": close, "high": high, "low": low, "close": close, "volume": volume})
 
 
+def _df_slope(slope: float):
+    np.random.seed(0)
+    close = pd.Series(
+        np.linspace(100, 100 + slope * 59, 60) + np.random.normal(0, 0.05, 60)
+    )
+    high = close + 0.1
+    low = close - 0.1
+    volume = pd.Series([200.0] * 59 + [220.0])
+    return pd.DataFrame(
+        {"open": close, "high": high, "low": low, "close": close, "volume": volume}
+    )
+
+
+def _df_low_adx_trend():
+    return _df_slope(0.007)
+
+
+def _df_forced_long_trend():
+    return _df_slope(0.008)
+
+
 def test_no_signal_when_volume_below_ma():
     df = _df_trend(50.0)
     score, direction = trend_bot.generate_signal(df)
@@ -122,8 +143,15 @@ def test_adx_threshold(monkeypatch):
 
 
 def test_torch_signal_default_weight(monkeypatch):
-    df = _df_trend(150.0, high_equals_close=True)
-    base_score, _ = trend_bot.generate_signal(df, {"donchian_confirmation": False})
+    df = _df_low_adx_trend()
+    monkeypatch.setattr(
+        trend_bot.stats,
+        "zscore",
+        lambda s, lookback=250: pd.Series(range(len(s)), index=s.index, dtype=float),
+    )
+    base_score, _ = trend_bot.generate_signal(
+        df, {"donchian_confirmation": False, "adx_threshold": 5}
+    )
 
     class _FakeTorch:
         @staticmethod
@@ -131,15 +159,24 @@ def test_torch_signal_default_weight(monkeypatch):
             return 0.2
 
     monkeypatch.setitem(sys.modules, "crypto_bot.torch_signal_model", _FakeTorch)
-    cfg = {"donchian_confirmation": False, "torch_signal_model": {"enabled": True}}
+    cfg = {
+        "donchian_confirmation": False,
+        "torch_signal_model": {"enabled": True},
+        "adx_threshold": 5,
+    }
     score, _ = trend_bot.generate_signal(df, cfg)
     expected = base_score * 0.3 + 0.2 * 0.7
     assert score == pytest.approx(expected)
 
 
 def test_trainer_model_influence(monkeypatch):
-    df = _df_trend(150.0, high_equals_close=True)
-    cfg = {"donchian_confirmation": False, "atr_normalization": False}
+    df = _df_low_adx_trend()
+    cfg = {"donchian_confirmation": False, "atr_normalization": False, "adx_threshold": 5}
+    monkeypatch.setattr(
+        trend_bot.stats,
+        "zscore",
+        lambda s, lookback=250: pd.Series(range(len(s)), index=s.index, dtype=float),
+    )
     monkeypatch.setattr(trend_bot, "MODEL", None)
     base, direction = trend_bot.generate_signal(df, cfg)
     dummy = types.SimpleNamespace(predict=lambda _df: 0.7)
@@ -147,3 +184,12 @@ def test_trainer_model_influence(monkeypatch):
     score, direction2 = trend_bot.generate_signal(df, cfg)
     assert direction2 == direction
     assert score == pytest.approx((base + 0.7) / 2)
+
+
+def test_forced_long_when_adx_above_15():
+    df = _df_forced_long_trend()
+    adx_val = ta.trend.ADXIndicator(df["high"], df["low"], df["close"], window=7).adx().iloc[-1]
+    assert 15 < adx_val < 25
+    score, direction = trend_bot.generate_signal(df)
+    assert direction == "long"
+    assert score == 0.8
