@@ -69,6 +69,9 @@ features:
   pump_monitor: false
   telegram: true
 
+# Regime model is fetched from Supabase; override fallback URL if needed
+model_fallback_url: https://prmhankbfjanqffwjcba.supabase.co/storage/v1/object/public/models/xrpusd_regime_lgbm.pkl
+
 # === telemetry / metrics ===
 telemetry:
   batch_summary_secs: 60
