@@ -156,11 +156,8 @@ Configure the loader with the following environment variables:
 
 ```ini
 SUPABASE_URL=
-# Required: service role key with access to the storage bucket
-SUPABASE_SERVICE_ROLE_KEY=
-# Optional alternative keys for download-only setups
-# SUPABASE_KEY=
-# SUPABASE_API_KEY=
+# Supabase key (service role for private buckets or anon for public buckets)
+SUPABASE_KEY=
 # Storage bucket holding uploaded models
 CT_MODELS_BUCKET=models
 # Prefix within the bucket for regime models
@@ -237,10 +234,10 @@ needed.
     Machine learning integrations download pretrained models from Supabase.
     The `cointrader-trainer` package is only needed when training new models;
     runtime usage pulls models automatically as long as `SUPABASE_URL` and
-    `SUPABASE_SERVICE_ROLE_KEY` (or `SUPABASE_KEY`/`SUPABASE_API_KEY`) are configured.
-2. (Optional) Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius API key.
+    `SUPABASE_KEY` are configured. Use the service role key for private buckets or the anon key when buckets are public.
+2. (Optional) Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius key and Supabase URL/key.
    `python -m crypto_bot.main` will launch this setup wizard automatically when credentials or `user_config.yaml` are missing.
-2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius and Supabase API keys.
+2. Run `python crypto_bot/wallet_manager.py` to create `user_config.yaml` and enter your API credentials, including your Helius key and Supabase URL/key.
 3. Adjust `crypto_bot/config.yaml` to select the exchange and execution mode.
 4. Start the trading bot:
    ```bash
@@ -296,8 +293,8 @@ Run it with:
 python examples/wallet_demo.py
 ```
 
-Run `python crypto_bot/wallet_manager.py` if you want to create `user_config.yaml` and enter your exchange credentials and Helius API key manually. This step is optional—`python -m crypto_bot.main` launches the same wizard automatically whenever credentials or `user_config.yaml` are missing. Values from `.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
-Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials and Helius and Supabase API keys. Values from `.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
+Run `python crypto_bot/wallet_manager.py` if you want to create `user_config.yaml` and enter your exchange credentials along with your Helius key and Supabase URL/key manually. This step is optional—`python -m crypto_bot.main` launches the same wizard automatically whenever credentials or `user_config.yaml` are missing. Values from `.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
+Run `wallet_manager.py` to create `user_config.yaml` and enter your exchange credentials and Helius key and Supabase URL/key. Values from `.env` override those stored in `user_config.yaml`. Setting `SECRETS_PROVIDER` (`aws` or `vault`) with `SECRETS_PATH` loads credentials automatically. Provide a `FERNET_KEY` to encrypt sensitive values before they are written to `user_config.yaml`. Without this key the wallet manager stores API secrets unencrypted.
 
 ## Configuration Files
 
@@ -337,10 +334,7 @@ HELIUS_API_KEY=your_helius_api_key      # required for Jupiter/Helius registry
 MORALIS_KEY=your_moralis_api_key       # optional, for Solana scanner
 BITQUERY_KEY=your_bitquery_api_key     # optional, for Solana scanner
 SUPABASE_URL=https://xyzcompany.supabase.co
-# One of these keys must be provided for ML regime models
-SUPABASE_SERVICE_ROLE_KEY=your_service_key
-# SUPABASE_KEY=your_supabase_key
-# SUPABASE_API_KEY=your_api_key
+SUPABASE_KEY=your_supabase_key  # service role for private buckets or anon for public buckets
 LUNARCRUSH_API_KEY=your_lunarcrush_api_key  # optional, LunarCrush social metrics
 token_registry.refresh_interval_minutes=720  # optional cache update interval
 ```
@@ -355,7 +349,7 @@ Each credential can be supplied in `.env`, or if missing, will be requested inte
 admin chats. Omit it to restrict control to the single `chat_id` in the
 configuration file.
 
-`SUPABASE_URL` and either `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_KEY`, or `SUPABASE_API_KEY` are required for downloading models used by `regime_classifier`.
+`SUPABASE_URL` and `SUPABASE_KEY` are required for downloading models used by `regime_classifier`. Use the service role key for private buckets or the anon key for public buckets.
 
 ### Solana token registry
 
@@ -861,7 +855,7 @@ cap.
    # KRAKEN_API_KEY=your_kraken_key
    # KRAKEN_API_SECRET=your_kraken_secret
     # SUPABASE_URL=your_supabase_project_url
-    # SUPABASE_SERVICE_ROLE_KEY=your_service_role_key  # or SUPABASE_KEY/SUPABASE_API_KEY
+    # SUPABASE_KEY=your_supabase_key  # service role for private bucket or anon for public
    # FERNET_KEY=your_generated_fernet_key
    ```
 
@@ -1750,8 +1744,8 @@ the trainer to upload a LightGBM model to Supabase:
 python ml_trainer.py train regime --use-gpu --federated
 ```
 
-Ensure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_KEY`, or `SUPABASE_API_KEY` are set
-in `.env` so the upload succeeds. Set
+Ensure `SUPABASE_URL` and `SUPABASE_KEY` are set
+in `.env` so the upload succeeds. Use the service role key for private buckets or the anon key for public buckets. Set
 `use_ml_regime_classifier: true` in `crypto_bot/regime/regime_config.yaml` to
 enable automatic downloads of the trained model when the bot starts.
 
