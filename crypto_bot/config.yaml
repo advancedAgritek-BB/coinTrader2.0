@@ -372,7 +372,6 @@ micro_scalp_bot:
   vol_window: 15
   volume_window: 15
   wick_pct: 0.1
-min_agreeing_votes: 1
 min_confidence_score: 0.0005
 min_consistent_agreement: 1
 min_cooldown: 0
@@ -641,7 +640,7 @@ strategy_router:
   trending_timeframe: 1h
   volatile_timeframe: 1m
 yamlrouter:
-  min_score: 0.5
+  min_score: 0.4
   min_confidence: 0.4
 symbol: XRPUSD
 symbol_batch_size: 50
@@ -730,14 +729,15 @@ use_ml_regime_classifier: true
 use_per_pair_models: true
 use_websocket: true
 volatility_filter:
-  max_funding_rate: 0.2
-  min_atr_pct: 0.001
+  max_funding_rate: 0.3
+  min_atr_pct: 0.0005
 voting_strategies:
-- trend_bot
-- momentum_bot
-- mean_bot
-- sniper_solana
-min_agreeing_votes: 1
+  strategies:
+    - trend_bot
+    - momentum_bot
+    - mean_bot
+    - sniper_solana
+  min_agreeing_votes: 1
 wallet_address: your_wallet
 ws_failures_before_disable: 1
 ws_ping_interval: 5

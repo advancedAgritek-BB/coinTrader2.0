@@ -539,7 +539,13 @@ async def analyze_symbol(
             }
         )
         votes = []
-        voting = config.get("voting_strategies", [])
+        voting_cfg = config.get("voting_strategies", [])
+        min_votes = int(config.get("min_agreeing_votes", 1))
+        if isinstance(voting_cfg, dict):
+            voting = voting_cfg.get("strategies", [])
+            min_votes = int(voting_cfg.get("min_agreeing_votes", min_votes))
+        else:
+            voting = voting_cfg
         if isinstance(voting, list):
             for strat_name in voting:
                 fn = get_strategy_by_name(strat_name)
@@ -558,7 +564,6 @@ async def analyze_symbol(
             for d in votes:
                 counts[d] = counts.get(d, 0) + 1
             best_dir, n = max(counts.items(), key=lambda kv: kv[1])
-            min_votes = int(config.get("min_agreeing_votes", 1))
             if n >= min_votes:
                 if best_dir != original_direction:
                     analysis_logger.info(
