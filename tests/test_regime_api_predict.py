@@ -15,6 +15,7 @@ class DummyModel:
 
 
 def test_predict_uses_supabase_model(monkeypatch):
+    """Loads regime model when SUPABASE_KEY is present."""
     calls = []
 
     def fake_load_latest(symbol):
@@ -24,7 +25,7 @@ def test_predict_uses_supabase_model(monkeypatch):
     monkeypatch.setattr(api, "load_latest_regime", fake_load_latest)
     monkeypatch.setattr(api, "_load_model_from_bytes", lambda blob: DummyModel())
     monkeypatch.setenv("SUPABASE_URL", "http://example")
-    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "key")
+    monkeypatch.setenv("SUPABASE_KEY", "key")
     monkeypatch.delenv("CT_SYMBOL", raising=False)
 
     df = pd.DataFrame({"close": [1, 2, 3]})
@@ -45,7 +46,7 @@ def test_predict_allows_symbol_override(monkeypatch):
     monkeypatch.setattr(api, "load_latest_regime", fake_load_latest)
     monkeypatch.setattr(api, "_load_model_from_bytes", lambda blob: DummyModel())
     monkeypatch.setenv("SUPABASE_URL", "http://example")
-    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "key")
+    monkeypatch.setenv("SUPABASE_KEY", "key")
     monkeypatch.setenv("CT_SYMBOL", "ETHUSD")
 
     df = pd.DataFrame({"close": [1, 2, 3]})
@@ -64,13 +65,7 @@ def test_predict_falls_back_without_creds(monkeypatch):
         return b"", {}
 
     monkeypatch.setattr(api, "load_latest_regime", fake_load_latest)
-    for var in [
-        "SUPABASE_URL",
-        "SUPABASE_SERVICE_ROLE_KEY",
-        "SUPABASE_KEY",
-        "SUPABASE_API_KEY",
-        "SUPABASE_ANON_KEY",
-    ]:
+    for var in ["SUPABASE_URL", "SUPABASE_KEY", "SUPABASE_ANON_KEY"]:
         monkeypatch.delenv(var, raising=False)
 
     df = pd.DataFrame({"close": [1, 2, 3]})
@@ -106,7 +101,7 @@ def test_predict_uses_direct_path_when_latest_missing(monkeypatch):
         sys.modules, "supabase", types.SimpleNamespace(create_client=lambda u, k: Client())
     )
     monkeypatch.setenv("SUPABASE_URL", "http://example")
-    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "key")
+    monkeypatch.setenv("SUPABASE_KEY", "key")
     monkeypatch.delenv("CT_SYMBOL", raising=False)
     monkeypatch.setattr(api, "_load_model_from_bytes", lambda blob: DummyModel())
 
@@ -160,7 +155,7 @@ def test_missing_model_logs_once(monkeypatch, caplog):
 
     monkeypatch.setitem(sys.modules, "supabase", types.SimpleNamespace(create_client=create_client))
     monkeypatch.setenv("SUPABASE_URL", "http://example")
-    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "key")
+    monkeypatch.setenv("SUPABASE_KEY", "key")
     monkeypatch.setattr(registry, "_load_fallback", lambda: object())
     monkeypatch.setattr(registry, "_no_model_logged", False)
 

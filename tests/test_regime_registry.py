@@ -6,6 +6,7 @@ from crypto_bot.regime import registry
 
 
 def test_loads_direct_model_when_latest_missing(monkeypatch, caplog):
+    """Downloads model directly when LATEST is absent, using SUPABASE_KEY."""
     class Response:
         status_code = 404
 
@@ -36,7 +37,7 @@ def test_loads_direct_model_when_latest_missing(monkeypatch, caplog):
         sys.modules, "supabase", types.SimpleNamespace(create_client=create_client)
     )
     monkeypatch.setenv("SUPABASE_URL", "http://example")
-    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "key")
+    monkeypatch.setenv("SUPABASE_KEY", "key")
     monkeypatch.setenv("CT_MODELS_BUCKET", "models")
     monkeypatch.setenv("CT_REGIME_PREFIX", "models/regime")
     monkeypatch.setenv(
