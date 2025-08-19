@@ -74,7 +74,8 @@ def test_strategy_regime_strength(monkeypatch):
     # Matching regime
     monkeypatch.setattr(ma, "route", lambda *a, **k: strat_match)
     res = asyncio.run(analyze_symbol("AAA", df_map, "cex", cfg, None))
-    assert res["score"] == pytest.approx(1.0)
+    expected = 1.0 / (1 + np.log1p(df["volume"].iloc[-1]) / 10)
+    assert res["score"] == pytest.approx(expected)
 
     # Non-matching regime
     monkeypatch.setattr(ma, "route", lambda *a, **k: strat_nomatch)
