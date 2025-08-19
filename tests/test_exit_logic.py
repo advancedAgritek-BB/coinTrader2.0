@@ -78,7 +78,7 @@ def test_should_exit_ignores_historical_high_when_trailing_stop_zero():
 
 def test_calculate_atr_trailing_stop():
     df = _sample_df()
-    atr = calc_atr(df)
+    atr = calc_atr(df).iloc[-1]
     expected = df["close"].max() - atr * 2
     result = calculate_atr_trailing_stop(df, 2)
     assert result == expected
