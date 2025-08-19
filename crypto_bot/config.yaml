@@ -89,7 +89,7 @@ auto_convert_quote: USDC
 runtime:
   fast_start:
     enabled: true
-    seed_symbols: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "DOGE/USDT"]
+    seed_symbols: ["XRPUSD", "ETH/USDT", "SOL/USDT", "XRP/USDT", "DOGE/USDT"]
     seed_batch_size: 15
     followup_batch_size: 25
   evaluation:
@@ -200,7 +200,7 @@ priority_fee_cap_micro_lamports: 50
 gecko_limit: 10
 grid_bot:
   arbitrage_pairs:
-  - BTC/USDT
+  - XRPUSD
   - SOL/USDC
   arbitrage_threshold: 0.001
   atr_normalization: true
@@ -564,7 +564,7 @@ strategy_router:
 yamlrouter:
   min_score: 0.5
   min_confidence: 0.4
-symbol: BTC/USDT
+symbol: XRPUSD
 symbol_batch_size: 50
 ohlcv_chunk_size: 20
 symbol_filter:
@@ -668,7 +668,7 @@ evaluation:
   gate_ttl_sec: 120
   fast_start:
     enabled: true
-    seed_symbols: ['BTC/USDT','ETH/USDT','SOL/USDT','XRP/USDT','DOGE/USDT']
+    seed_symbols: ['XRPUSD','ETH/USDT','SOL/USDT','XRP/USDT','DOGE/USDT']
     immediate: true
 
 onchain_watchers:
