@@ -1413,7 +1413,9 @@ async def load_ohlcv(
             if asyncio.iscoroutinefunction(fetch_fn):
                 coro = fetch_fn(market_id, timeframe=timeframe, limit=limit, **kwargs)
             else:  # pragma: no cover - synchronous fallback
-                coro = asyncio.to_thread(fetch_fn, market_id, timeframe, limit, **kwargs)
+                coro = asyncio.to_thread(
+                    fetch_fn, market_id, timeframe=timeframe, limit=limit, **kwargs
+                )
             data = await asyncio.wait_for(coro, timeout)
             record_io()
             await asyncio.sleep(1)
