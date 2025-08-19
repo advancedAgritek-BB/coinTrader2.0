@@ -10,14 +10,42 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 import aiohttp
-import ccxt.async_support as ccxt
 import yaml
-import websockets
-from crypto_bot.utils import kraken as kraken_utils
-from solana.rpc.async_api import AsyncClient
-from crypto_bot.solana.helius_client import HELIUS_API_KEY, HeliusClient, helius_available
 
-from crypto_bot.strategy import cross_chain_arb_bot
+try:  # optional dependency
+    import ccxt.async_support as ccxt  # type: ignore
+except ImportError:  # pragma: no cover - optional
+    ccxt = None  # type: ignore
+
+try:  # optional dependency
+    import websockets  # type: ignore
+except ImportError:  # pragma: no cover - optional
+    websockets = None  # type: ignore
+
+try:  # optional dependency
+    from solana.rpc.async_api import AsyncClient  # type: ignore
+except ImportError:  # pragma: no cover - optional
+    AsyncClient = None  # type: ignore
+
+try:  # optional dependency
+    from crypto_bot.solana.helius_client import (
+        HELIUS_API_KEY,
+        HeliusClient,
+        helius_available,
+    )
+except Exception:  # pragma: no cover - optional
+    HELIUS_API_KEY = ""  # type: ignore
+    HeliusClient = None  # type: ignore
+
+    def helius_available() -> bool:  # type: ignore
+        return False
+
+from crypto_bot.utils import kraken as kraken_utils
+
+try:  # optional dependency
+    from crypto_bot.strategy import cross_chain_arb_bot
+except Exception:  # pragma: no cover - optional
+    cross_chain_arb_bot = None  # type: ignore
 from .gecko import gecko_request
 
 try:  # optional dependency
@@ -106,8 +134,11 @@ def extract_mint_from_logs(logs: Iterable[str]) -> str | None:
     return None
 
 
-async def get_symbol_from_mint(mint: str, client: AsyncClient) -> str | None:
+async def get_symbol_from_mint(mint: str, client: Any) -> str | None:
     """Attempt to resolve a token symbol from its mint address."""
+    if AsyncClient is None or client is None:
+        return None
+
     for sym, addr in TOKEN_MINTS.items():
         if addr == mint:
             return sym
@@ -168,6 +199,8 @@ async def _check_cex_arbitrage(
     symbol: str, exchange: kraken_utils.KrakenClient | None = None
 ) -> None:
     """Check Kraken and Coinbase for arbitrage on ``symbol`` and trade to BTC."""
+    if ccxt is None:
+        return
 
     pair = f"{symbol}/USD"
     try:
@@ -645,6 +678,10 @@ async def periodic_mint_sanity_check(interval_hours: float = 24.0) -> None:
 
 async def monitor_pump_websocket(cfg: Dict[str, Any] | None = None) -> None:
     """Subscribe to Pump.fun program logs via WebSocket and update mints."""
+    if AsyncClient is None or websockets is None:
+        logger.info("websockets or solana client unavailable; skipping monitor_pump_websocket")
+        return
+
     import sys
 
     enqueue_solana_tokens = None  # type: ignore
