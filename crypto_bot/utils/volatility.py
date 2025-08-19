@@ -7,32 +7,34 @@ import pandas as pd
 from ta.volatility import AverageTrueRange
 
 
-def calc_atr(
-    df,
-    window: int | None = None,
-    *,
-    period: int | None = None,
-    as_series: bool = True,
-    **_,
-) -> pd.Series | float | None:
-    """Compute the Average True Range using ``window`` or ``period``.
+def calc_atr(df, period=None, window=None, length=None, as_series=True):
+    """Compute the Average True Range.
+
+    The ATR window length may be provided via the ``period``, ``window`` or
+    ``length`` parameters. These are treated as aliases with the first
+    non-``None`` value used. When all are ``None`` the default window of ``14``
+    is applied.
 
     Parameters
     ----------
     df : pandas.DataFrame | None
         Input OHLC data.
-    window : int, default 14
-        Window length for ATR calculation.
+    period, window, length : int, optional
+        Aliases for the ATR lookback window.
     as_series : bool, default True
-        When ``True`` a :class:`pandas.Series` is returned, otherwise the
-        latest ATR value is returned as ``float`` or ``None`` when
-        insufficient data is provided.
+        When ``True`` a :class:`pandas.Series` is returned; otherwise the latest
+        ATR value is returned as ``float`` or ``None`` when insufficient data is
+        provided.
     """
 
-    if window is None and period is not None:
-        window = period
-    if window is None:
-        window = 14
+    n = int(period or window or length or 14)
+    if df is None or df.empty or len(df) < max(2, n):
+        if as_series:
+            if df is not None and "close" in df:
+                return df["close"].iloc[:0]
+            return pd.Series([], dtype=float)
+        return None
+
     high = df["high"].astype(float)
     low = df["low"].astype(float)
     close = df["close"].astype(float)
@@ -47,15 +49,8 @@ def calc_atr(
         axis=1,
     ).max(axis=1)
 
-    if df is None or df.empty or len(df) < max(2, int(window)):
-        if as_series:
-            if df is not None and "close" in df:
-                return df["close"].iloc[:0]
-            return pd.Series([], dtype=float)
-        return None
-
     atr_indicator = AverageTrueRange(
-        df["high"], df["low"], df["close"], window=int(window), fillna=False
+        high, low, close, window=n, fillna=False
     )
     atr_series = atr_indicator.average_true_range()
     if as_series:
