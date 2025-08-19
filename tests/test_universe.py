@@ -1,5 +1,3 @@
-import types
-import asyncio
 import pytest
 
 from crypto_bot.universe import build_tradable_set
@@ -64,3 +62,38 @@ async def test_initial_scan_uses_tradable_symbols(monkeypatch):
     }
     await initial_scan(DummyExchange(), cfg, SessionState())
     assert batches and batches[0] == ["AAA/USD"]
+
+
+class BroadExchange:
+    def list_markets(self):
+        markets = {}
+        for i in range(70):
+            if i < 40:
+                sym = f"AAA{i}/USD"
+                markets[sym] = {"quote": "USD", "status": "online"}
+            else:
+                sym = f"BBB{i}/USDT"
+                markets[sym] = {"quote": "USDT", "status": "online"}
+        return markets
+
+    async def fetch_tickers(self):
+        tickers = {}
+        for i in range(70):
+            if i < 40:
+                sym = f"AAA{i}/USD"
+            else:
+                sym = f"BBB{i}/USDT"
+            tickers[sym] = {"bid": 1.0, "ask": 1.01, "quoteVolume": 1000}
+        return tickers
+
+
+@pytest.mark.asyncio
+async def test_build_tradable_set_retains_breadth():
+    ex = BroadExchange()
+    res = await build_tradable_set(
+        ex,
+        allowed_quotes=["USD", "USDT"],
+        min_daily_volume_quote=500,
+        max_spread_pct=2.0,
+    )
+    assert len(res) == 70

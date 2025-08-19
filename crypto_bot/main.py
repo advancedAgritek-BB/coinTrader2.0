@@ -1308,6 +1308,7 @@ async def warm_deferred_timeframes(
     if not defer_tfs:
         return
 
+    original_count = len(symbols)
     sf = config.get("symbol_filter", {})
     ohlcv_batch_size = config.get("ohlcv_batch_size")
     if ohlcv_batch_size is None:
@@ -1356,7 +1357,8 @@ async def warm_deferred_timeframes(
                     df_map=state.df_cache,
                     batch_size=ohlcv_batch_size,
                 )
-        await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert len(symbols) == original_count, "Symbol count changed during warm-up"
 
     if pending_tasks:
         await asyncio.gather(*pending_tasks, return_exceptions=True)
@@ -3143,6 +3145,14 @@ async def _main_impl() -> MainResult:
             )
             config["tradable_symbols"] = tradable
             config["symbols"] = tradable + config.get("onchain_symbols", [])
+            final_syms = config["symbols"]
+            for tf in config.get("timeframes", []):
+                logger.info(
+                    "Final symbols for timeframe %s (%d): %s",
+                    tf,
+                    len(final_syms),
+                    ", ".join(sorted(final_syms)),
+                )
             onchain_syms = config.get("onchain_symbols", [])
             cex_count = len([s for s in config["symbols"] if s not in onchain_syms])
             logger.info(
