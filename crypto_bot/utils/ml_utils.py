@@ -18,6 +18,7 @@ _LOGGER_ONCE = {
     "ml_unavailable": False,
     "missing_supabase_creds": False,
     "service_key_role": False,
+    "supabase_connection": False,
 }
 
 
@@ -70,6 +71,21 @@ def _warn_if_service_key(key: str) -> None:
         pass
 
 
+def _test_supabase_connection() -> None:
+    """Attempt a simple Supabase query to confirm connectivity."""
+    if _LOGGER_ONCE["supabase_connection"]:
+        return
+    try:  # pragma: no cover - supabase optional
+        from supabase import create_client  # type: ignore
+
+        client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+        client.table("models").select("*").limit(1).execute()
+        logger.debug("Supabase connection succeeded")
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.error("Supabase connection failed: %s", exc)
+    _LOGGER_ONCE["supabase_connection"] = True
+
+
 def is_ml_available() -> tuple[bool, str]:
     """Return ML availability along with a descriptive reason if unavailable."""
     global _ml_checked, ML_AVAILABLE, ML_UNAVAILABLE_REASON
@@ -108,6 +124,8 @@ def is_ml_available() -> tuple[bool, str]:
             return ML_AVAILABLE, reason
 
         _warn_if_service_key(key)
+
+        _test_supabase_connection()
 
         model_path = (
             Path(__file__).resolve().parent.parent
