@@ -56,3 +56,51 @@ def test_loads_direct_model_when_latest_missing(monkeypatch, caplog):
     ]
     assert not [r for r in caplog.records if "No regime model found" in r.message]
 
+
+def test_http_fallback_used_when_supabase_unavailable(monkeypatch, tmp_path, caplog):
+    data = b"fallback-bytes"
+    remote = tmp_path / "model.pkl"
+    remote.write_bytes(data)
+
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+    monkeypatch.setenv("CT_MODEL_FALLBACK_URL", remote.as_uri())
+    monkeypatch.setattr(registry, "_no_model_logged", False)
+
+    def fail_fallback():  # pragma: no cover - ensure not called
+        raise AssertionError("heuristic fallback should not be used")
+
+    monkeypatch.setattr(registry, "_load_fallback", fail_fallback)
+
+    caplog.set_level(logging.INFO, logger="crypto_bot.regime.registry")
+
+    blob, meta = registry.load_latest_regime("BTCUSD")
+
+    assert blob == data
+    assert meta.get("source") == remote.as_uri()
+    assert not [r for r in caplog.records if "No regime model found" in r.message]
+
+
+def test_http_fallback_logs_and_uses_heuristic_when_download_fails(
+    monkeypatch, caplog
+):
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.setenv("CT_MODEL_FALLBACK_URL", "file:///nonexistent.pkl")
+
+    sentinel = object()
+
+    def fake_fallback():
+        return sentinel
+
+    monkeypatch.setattr(registry, "_load_fallback", fake_fallback)
+    monkeypatch.setattr(registry, "_no_model_logged", False)
+
+    caplog.set_level(logging.INFO, logger="crypto_bot.regime.registry")
+
+    blob, meta = registry.load_latest_regime("BTCUSD")
+
+    assert blob is sentinel
+    assert meta == {}
+    assert [r for r in caplog.records if "Failed to download fallback model" in r.message]
+    assert [r for r in caplog.records if "No regime model found" in r.message]
+

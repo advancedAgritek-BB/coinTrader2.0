@@ -69,6 +69,9 @@ features:
   pump_monitor: false
   telegram: true
 
+# Regime model is fetched from Supabase; override fallback URL if needed
+model_fallback_url: https://prmhankbfjanqffwjcba.supabase.co/storage/v1/object/public/models/xrpusd_regime_lgbm.pkl
+
 # === telemetry / metrics ===
 telemetry:
   batch_summary_secs: 60
@@ -176,7 +179,7 @@ excluded_symbols:
 exec:
   allow_market_orders: true
   order_retry_interval: 3
-execution_mode: dry_run
+execution_mode: live
 exit_strategy:
   default_sl_pct: 0.015
   default_tp_pct: 0.07
@@ -246,7 +249,7 @@ meme_wave_bot:
 meme_wave_sniper:
   enabled: true
   execution:
-    dry_run: true
+    dry_run: false
   pool:
     interval: 3
     raydium_program_id: EhhTK0i58FmSPrbr30Y8wVDDDeWGPAHDq6vNru6wUATk

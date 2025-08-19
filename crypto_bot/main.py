@@ -4,7 +4,6 @@ import asyncio
 import contextlib
 import inspect
 import logging
-from logging.handlers import RotatingFileHandler
 import os
 import re
 import subprocess
@@ -21,7 +20,6 @@ from typing import Any, Awaitable, Callable
 import aiohttp
 from dotenv import dotenv_values, load_dotenv
 
-from crypto_bot.universe import build_tradable_set
 
 try:
     import ccxt  # type: ignore
@@ -33,11 +31,14 @@ import numpy as np
 import yaml
 from types import SimpleNamespace
 from pydantic import ValidationError
+from crypto_bot.utils.logging_config import setup_logging
+
+lastlog = setup_logging("logs/bot.log")
+
+from crypto_bot.universe import build_tradable_set
 from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.utils.logger import pipeline_logger
-
-# Internal project modules are imported lazily inside `main()` after env setup
 from crypto_bot.ml.selfcheck import log_ml_status_once
 from crypto_bot.utils.ml_utils import ML_AVAILABLE
 
@@ -61,42 +62,6 @@ except Exception:  # pragma: no cover - fallback if strategies module missing
         return []
 
 shutdown_event = asyncio.Event()
-
-
-lastlog = types.SimpleNamespace(last="")
-
-
-class LastLineHandler(logging.Handler):
-    def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover - trivial
-        try:
-            lastlog.last = record.getMessage()
-        except Exception:
-            pass
-
-
-def setup_logging() -> None:
-    root = logging.getLogger()
-    root.setLevel(logging.DEBUG)
-
-    for h in list(root.handlers):
-        root.removeHandler(h)
-
-    fh = RotatingFileHandler("bot.log", maxBytes=5_000_000, backupCount=3)
-    fh.setLevel(logging.INFO)
-    fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-    root.addHandler(fh)
-
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.ERROR)
-    ch.setFormatter(logging.Formatter("%(message)s"))
-    root.addHandler(ch)
-
-    logging.getLogger("ccxt").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("asyncio").setLevel(logging.WARNING)
-    logging.getLogger("websockets").setLevel(logging.WARNING)
-
-    root.addHandler(LastLineHandler())
 
 
 def format_top(scores, n: int = 25) -> str:
@@ -2161,18 +2126,44 @@ async def execute_signals(ctx: BotContext) -> None:
     skipped_syms: list[str] = []
     no_dir_syms: list[str] = []
     low_score: list[str] = []
+    dry_run = ctx.config.get("execution_mode") == "dry_run"
     for r in orig_results:
+        logger.debug("Analysis result: %s", r)
         if r.get("skip"):
             skipped_syms.append(r.get("symbol"))
+            logger.warning(
+                "Skipped trade: score=%s, direction=%s, min_score=%s",
+                r.get("score"),
+                r.get("direction"),
+                r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0)),
+            )
             continue
         if r.get("direction") == "none":
             no_dir_syms.append(r.get("symbol"))
+            logger.warning(
+                "Skipped trade: score=%s, direction=%s, min_score=%s",
+                r.get("score"),
+                r.get("direction"),
+                r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0)),
+            )
             continue
         min_req = r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0))
         score = r.get("score", 0.0)
         if score < min_req:
             low_score.append(f"{r.get('symbol')}({score:.2f}<{min_req:.2f})")
+            logger.warning(
+                "Skipped trade: score=%s, direction=%s, min_score=%s",
+                score,
+                r.get("direction"),
+                min_req,
+            )
             continue
+        logger.info(
+            "Passing to execute: symbol=%s, score=%s, dry_run=%s",
+            r.get("symbol"),
+            score,
+            dry_run,
+        )
         results.append(r)
 
     logger.debug(
@@ -3649,7 +3640,6 @@ async def shutdown(calling_task: asyncio.Task | None = None) -> None:
 
 async def main() -> None:
     """Entry point for running the trading bot with error handling."""
-    setup_logging()
     load_dotenv()
     _ensure_user_setup()
     load_dotenv(override=True)

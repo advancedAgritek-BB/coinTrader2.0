@@ -19,7 +19,7 @@ def setup_logging(log_path="logs/bot.log", level=logging.INFO):
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     root = logging.getLogger()
     root.handlers.clear()
-    root.setLevel(level)
+    root.setLevel(logging.DEBUG)
 
     # File handler for everything
     fh = RotatingFileHandler(log_path, maxBytes=5_000_000, backupCount=3)
