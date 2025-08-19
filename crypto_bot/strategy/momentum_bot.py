@@ -53,7 +53,6 @@ def generate_signal(
     lookback = min(len(df), min_len)
     recent = df.iloc[-(lookback + 1) :]
 
-    dc_high = recent["high"].rolling(window).max().shift(1)
     dc_low = recent["low"].rolling(window).min().shift(1)
     vol_ma = recent["volume"].rolling(vol_window).mean()
     rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
@@ -61,14 +60,12 @@ def generate_signal(
         recent["close"], window_fast=macd_fast, window_slow=macd_slow
     )
 
-    dc_high = cache_series("momentum_dc_high", df, dc_high, lookback)
     dc_low = cache_series("momentum_dc_low", df, dc_low, lookback)
     vol_ma = cache_series("momentum_vol_ma", df, vol_ma, lookback)
     rsi = cache_series("momentum_rsi", df, rsi, lookback)
     macd = cache_series("momentum_macd", df, macd, lookback)
 
     recent = recent.copy()
-    recent["dc_high"] = dc_high
     recent["dc_low"] = dc_low
     recent["vol_ma"] = vol_ma
     recent["rsi"] = rsi
@@ -81,22 +78,8 @@ def generate_signal(
 
     score = 0.0
     direction = "none"
-    forced = False
 
-    # Loosen conditions
-    if macd_val > 0 or rsi_val > 50:
-        score = 0.8
-        direction = "long"
-        forced = True
-        logger.info(
-            f"momentum_bot: MACD={macd_val}, RSI={rsi_val}, score={score}"
-        )
-
-    long_cond = (
-        latest["close"] > dc_high.iloc[-1]
-        and latest["rsi"] > rsi_threshold
-        and latest["macd"] > macd_min
-    )
+    long_cond = macd_val > 0 or rsi_val > 50
     short_cond = (
         latest["close"] < dc_low.iloc[-1]
         and latest["rsi"] < 100 - rsi_threshold
@@ -108,13 +91,15 @@ def generate_signal(
         and latest["volume"] > latest["vol_ma"] * vol_mult
     )
 
-    if not forced:
-        if long_cond and vol_ok:
-            score = 1.0
-            direction = "long"
-        elif short_cond and vol_ok:
-            score = 1.0
-            direction = "short"
+    if long_cond:
+        score = 0.8
+        direction = "long"
+        logger.info(
+            f"momentum_bot long signal: MACD={macd_val}, RSI={rsi_val}"
+        )
+    elif short_cond and vol_ok:
+        score = 1.0
+        direction = "short"
 
     if score > 0:
         if MODEL is not None:
