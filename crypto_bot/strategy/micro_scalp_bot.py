@@ -50,9 +50,6 @@ def _wick_ratios(row: pd.Series) -> Tuple[float, float]:
 
 def generate_signal(
     df: pd.DataFrame,
-    config: Optional[dict] = None,
-    higher_df: pd.DataFrame | None = None,
-    *,
     symbol: str | None = None,
     timeframe: str | None = None,
     mempool_monitor: Optional[SolanaMempoolMonitor] = None,
@@ -60,7 +57,7 @@ def generate_signal(
     tick_data: pd.DataFrame | None = None,
     book: Optional[dict] = None,
     ticks: Optional[pd.DataFrame] = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str]:
     """Return short-term signal using EMA crossover on 1m data.
 
@@ -77,14 +74,20 @@ def generate_signal(
         Higher timeframe OHLCV data used to confirm the trend. When provided
         the function only returns a signal if ``trend_fast`` is above
         ``trend_slow`` for longs (and vice versa for shorts).
-    book : dict, optional
-        Order book data with ``bids`` and ``asks`` arrays.
-    ticks : pd.DataFrame, optional
-        Optional tick-level data with ``price`` and optional ``volume`` columns.
+    symbol : str, optional
+        Asset symbol for the data. Unused but accepted for compatibility.
+    timeframe : str, optional
+        Candle timeframe of ``df``. Unused but accepted for compatibility.
     mempool_monitor : SolanaMempoolMonitor, optional
         Instance used to monitor the Solana priority fee.
     mempool_cfg : dict, optional
         Configuration controlling the mempool fee check.
+    tick_data : pd.DataFrame, optional
+        Additional tick data to append before generating the signal.
+    book : dict, optional
+        Order book data with ``bids`` and ``asks`` arrays.
+    ticks : pd.DataFrame, optional
+        Optional tick-level data with ``price`` and optional ``volume`` columns.
     
     Additional config options
     -------------------------
@@ -97,6 +100,20 @@ def generate_signal(
     ``trend_filter``
         When ``false`` the higher timeframe EMA confirmation is ignored.
     """
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+    higher_df = kwargs.get("higher_df")
+    mempool_monitor: Optional[SolanaMempoolMonitor] = kwargs.get("mempool_monitor")
+    mempool_cfg: Optional[dict] = kwargs.get("mempool_cfg")
+    tick_data: pd.DataFrame | None = kwargs.get("tick_data")
+    book: Optional[dict] = kwargs.get("book")
+    ticks: Optional[pd.DataFrame] = kwargs.get("ticks")
+
     if tick_data is not None and not tick_data.empty:
         df = pd.concat(
             [df.reset_index(drop=True), tick_data.reset_index(drop=True)],

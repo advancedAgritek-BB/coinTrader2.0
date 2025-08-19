@@ -47,14 +47,19 @@ else:  # pragma: no cover - fallback
 
 async def generate_signal(
     df: pd.DataFrame,
-    config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str]:
     """Score mean reversion opportunities using multiple indicators."""
 
-    config = config or {}
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config") or {}
     symbol = config.get("symbol", "")
     adx_window = 14
     min_bars = max(50, adx_window + 1)

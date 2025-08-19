@@ -28,8 +28,6 @@ else:  # pragma: no cover - fallback
 
 def generate_signal(
     df: pd.DataFrame,
-    higher_df: pd.DataFrame | None = None,
-    config: dict | None = None,
     symbol: str | None = None,
     timeframe: str | None = None,
     **kwargs,
@@ -48,10 +46,14 @@ def generate_signal(
         May contain ``higher_df`` and ``config`` for advanced behaviour.
     """
 
-    if higher_df is None:
-        higher_df = kwargs.get("higher_df")
-    if config is None:
-        config = kwargs.get("config")
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    higher_df = kwargs.get("higher_df")
+    config = kwargs.get("config")
 
     symbol = symbol or (config.get("symbol", "") if config else "")
     params = config.get("dip_hunter", {}) if config else {}

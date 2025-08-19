@@ -40,13 +40,9 @@ class Config:
 
 def generate_signal(
     df: pd.DataFrame,
-    position: Optional[Position] = None,
-    config: Optional[dict] = None,
-    *,
-    spread_bp: float = 0.0,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str, Optional[float], Optional[Position]]:
     """Mean-reversion strategy with ATR stop and time/z exits.
 
@@ -55,6 +51,19 @@ def generate_signal(
     suggested stop loss for new entries.  ``new_position`` describes the
     position after taking the action and should be persisted by the caller.
     """
+
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    elif symbol is not None and not isinstance(symbol, str):
+        kwargs.setdefault("position", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    position: Optional[Position] = kwargs.get("position")
+    config = kwargs.get("config")
+    spread_bp: float = kwargs.get("spread_bp", 0.0)
 
     if df is None or df.empty:
         return 0.0, "none", None, position

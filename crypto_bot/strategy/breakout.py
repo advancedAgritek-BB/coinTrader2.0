@@ -15,10 +15,9 @@ logger = logging.getLogger(__name__)
 
 def generate_signal(
     df: pd.DataFrame,
-    config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str, float]:
     """Selective breakout strategy with compression and volume filters.
 
@@ -28,12 +27,26 @@ def generate_signal(
         Input OHLCV data on a 5m timeframe.
     config : dict, optional
         Configuration containing a ``breakout`` section with parameters.
+    symbol : str, optional
+        Asset symbol for the data. Unused but accepted for compatibility.
+    timeframe : str, optional
+        Candle timeframe for ``df``. Unused but accepted for compatibility.
+    **kwargs : dict
+        Additional keyword arguments for forward compatibility.
 
     Returns
     -------
     Tuple[float, str, float]
         ``(score, direction, atr)`` where ``score`` is 1 on signal, 0 otherwise.
     """
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+
     if df is None or df.empty:
         logger.info(
             "signal=breakout side=none reason=insufficient_data vol_z=nan bbw_pct=nan"

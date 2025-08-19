@@ -27,12 +27,19 @@ else:  # pragma: no cover - fallback
 
 def generate_signal(
     df: pd.DataFrame,
-    config: dict | None = None,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str]:
     """Donchian breakout with volume confirmation."""
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+
     if df is None or df.empty:
         return 0.0, "none"
 

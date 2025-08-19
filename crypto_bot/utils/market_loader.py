@@ -1446,7 +1446,7 @@ async def load_ohlcv_parallel(
     since_map: Dict[str, int] | None = None,
     use_websocket: bool = False,
     force_websocket_history: bool = False,
-    max_concurrent: int | None = None,
+    max_concurrent: int = DEFAULT_MAX_CONCURRENT_OHLCV,
     notifier: TelegramNotifier | None = None,
     priority_symbols: Iterable[str] | None = None,
     max_retries: int = 3,
@@ -1458,10 +1458,9 @@ async def load_ohlcv_parallel(
     ----------
     notifier : TelegramNotifier | None, optional
         If provided, failures will be sent using this notifier.
-    max_concurrent : int | None, optional
-        Maximum number of simultaneous OHLCV requests. If ``None``, the
-        ``max_concurrent_ohlcv`` value from ``config.yaml`` is used when
-        available, otherwise a default of ``10`` is applied.
+    max_concurrent : int, optional
+        Maximum number of simultaneous OHLCV requests. Defaults to
+        ``DEFAULT_MAX_CONCURRENT_OHLCV``.
     """
     if use_websocket or force_websocket_history:
         logger.debug(
@@ -1522,19 +1521,8 @@ async def load_ohlcv_parallel(
     if not symbols:
         return data
 
-    if max_concurrent is None:
-        try:
-            with open(CONFIG_PATH) as f:
-                cfg = yaml.safe_load(f) or {}
-            cfg_val = cfg.get("max_concurrent_ohlcv")
-            if cfg_val is not None:
-                max_concurrent = int(cfg_val)
-        except Exception:
-            pass
-        if max_concurrent is None:
-            max_concurrent = DEFAULT_MAX_CONCURRENT_OHLCV
     if not isinstance(max_concurrent, int) or max_concurrent < 1:
-        raise ValueError("max_concurrent must be a positive integer or None")
+        raise ValueError("max_concurrent must be a positive integer")
     sem = asyncio.Semaphore(max_concurrent)
 
     async def sem_fetch(sym: str):
@@ -1685,7 +1673,8 @@ async def _update_ohlcv_cache_inner(
     Parameters
     ----------
     max_concurrent : int | None, optional
-        Maximum number of concurrent OHLCV requests. ``None`` means no limit.
+        Maximum number of concurrent OHLCV requests. ``None`` defaults to
+        ``DEFAULT_MAX_CONCURRENT_OHLCV``.
     start_since : int | None, optional
         When provided, fetch data starting from this timestamp in milliseconds.
     """
@@ -1715,9 +1704,10 @@ async def _update_ohlcv_cache_inner(
     limit = int(limit)
     # Request the number of candles specified by the caller
 
-    if max_concurrent is not None:
-        if not isinstance(max_concurrent, int) or max_concurrent < 1:
-            raise ValueError("max_concurrent must be a positive integer or None")
+    if max_concurrent is None:
+        max_concurrent = DEFAULT_MAX_CONCURRENT_OHLCV
+    elif not isinstance(max_concurrent, int) or max_concurrent < 1:
+        raise ValueError("max_concurrent must be a positive integer or None")
 
     global _last_snapshot_time
     config = config or {}
@@ -2009,7 +1999,13 @@ async def fetch_dex_ohlcv(
     max_retries: int = 3,
     timeout: float | None = None,
 ) -> List[List[float]] | None:
-    """Fetch OHLCV data for DEX tokens with several fallbacks."""
+    """Fetch OHLCV data for DEX tokens using the provided exchange.
+
+    Previous versions attempted to fall back to external services such as
+    CoinGecko or Coinbase when the exchange failed.  The simplified behaviour
+    implemented here removes those fallbacks and simply returns ``None`` if the
+    exchange lookup fails.
+    """
 
     if min_volume_usd:
         logger.debug(
@@ -2020,33 +2016,6 @@ async def fetch_dex_ohlcv(
     if gecko_res:
         return gecko_res[0] if isinstance(gecko_res, tuple) else gecko_res
 
-    base, _, quote = symbol.partition("/")
-    quote = quote.upper()
-
-    # Try CoinGecko for known USD-quoted pairs
-    if use_gecko and quote in SUPPORTED_USD_QUOTES:
-        data = fetch_coingecko_ohlc(symbol)
-        if inspect.isawaitable(data):
-            data = await data
-        if data:
-            return data
-
-        # Fallback to Coinbase if available
-        try:
-            if hasattr(ccxt, "coinbase"):
-                cb = ccxt.coinbase()
-                return await load_ohlcv(
-                    cb,
-                    symbol,
-                    timeframe=timeframe,
-                    limit=limit,
-                    max_retries=max_retries,
-                    timeout=timeout,
-                )
-        except Exception:
-            pass
-
-    # Final fallback: use the provided exchange
     try:
         return await load_ohlcv(
             exchange,

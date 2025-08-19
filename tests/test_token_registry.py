@@ -285,10 +285,28 @@ def test_periodic_mint_sanity_check_missing_logged_once(monkeypatch, tmp_path, c
 def test_load_token_mints(monkeypatch, tmp_path):
     mod = _load_module(monkeypatch, tmp_path)
 
+    class FailingSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+
+        def get(self, url, timeout=10):
+            raise Exception("boom")
+
+    aiohttp_mod = type("M", (), {"ClientSession": lambda: FailingSession()})
+    monkeypatch.setattr(mod, "aiohttp", aiohttp_mod)
+
     async def fake_jup():
         return {"SOL": "So111"}
 
     monkeypatch.setattr(mod, "fetch_from_jupiter", fake_jup)
+
+    async def fast_sleep(_):
+        pass
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fast_sleep)
 
     mapping = asyncio.run(mod.load_token_mints(force_refresh=True))
     assert mapping == {"SOL": "So111"}

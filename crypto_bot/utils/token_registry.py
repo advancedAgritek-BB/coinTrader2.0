@@ -10,14 +10,42 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 import aiohttp
-import ccxt.async_support as ccxt
 import yaml
-import websockets
-from crypto_bot.utils import kraken as kraken_utils
-from solana.rpc.async_api import AsyncClient
-from crypto_bot.solana.helius_client import HELIUS_API_KEY, HeliusClient, helius_available
 
-from crypto_bot.strategy import cross_chain_arb_bot
+try:  # optional dependency
+    import ccxt.async_support as ccxt  # type: ignore
+except ImportError:  # pragma: no cover - optional
+    ccxt = None  # type: ignore
+
+try:  # optional dependency
+    import websockets  # type: ignore
+except ImportError:  # pragma: no cover - optional
+    websockets = None  # type: ignore
+
+try:  # optional dependency
+    from solana.rpc.async_api import AsyncClient  # type: ignore
+except ImportError:  # pragma: no cover - optional
+    AsyncClient = None  # type: ignore
+
+try:  # optional dependency
+    from crypto_bot.solana.helius_client import (
+        HELIUS_API_KEY,
+        HeliusClient,
+        helius_available,
+    )
+except Exception:  # pragma: no cover - optional
+    HELIUS_API_KEY = ""  # type: ignore
+    HeliusClient = None  # type: ignore
+
+    def helius_available() -> bool:  # type: ignore
+        return False
+
+from crypto_bot.utils import kraken as kraken_utils
+
+try:  # optional dependency
+    from crypto_bot.strategy import cross_chain_arb_bot
+except Exception:  # pragma: no cover - optional
+    cross_chain_arb_bot = None  # type: ignore
 from .gecko import gecko_request
 
 try:  # optional dependency
@@ -106,8 +134,11 @@ def extract_mint_from_logs(logs: Iterable[str]) -> str | None:
     return None
 
 
-async def get_symbol_from_mint(mint: str, client: AsyncClient) -> str | None:
+async def get_symbol_from_mint(mint: str, client: Any) -> str | None:
     """Attempt to resolve a token symbol from its mint address."""
+    if AsyncClient is None or client is None:
+        return None
+
     for sym, addr in TOKEN_MINTS.items():
         if addr == mint:
             return sym
@@ -168,6 +199,8 @@ async def _check_cex_arbitrage(
     symbol: str, exchange: kraken_utils.KrakenClient | None = None
 ) -> None:
     """Check Kraken and Coinbase for arbitrage on ``symbol`` and trade to BTC."""
+    if ccxt is None:
+        return
 
     pair = f"{symbol}/USD"
     try:
@@ -239,10 +272,10 @@ async def load_token_mints(
 
     The list is fetched from ``url`` or ``TOKEN_MINTS_URL`` environment variable.
     Results are cached on disk and subsequent calls return an empty dict unless
-    ``force_refresh`` is ``True``.
-    The Solana list is fetched from Jupiter first then GitHub as a fallback.
-    Cached results are reused unless ``force_refresh`` is ``True``.
-    Unknown ``symbols`` can be resolved via the Helius API.
+    ``force_refresh`` is ``True``.  The Solana list is fetched from GitHub first
+    then Jupiter as a fallback.  Cached results are reused unless
+    ``force_refresh`` is ``True``.  Unknown ``symbols`` can be resolved via the
+    Helius API.
     """
     global _LOADED
     if _LOADED and not force_refresh:
@@ -250,47 +283,47 @@ async def load_token_mints(
 
     mapping: Dict[str, str] = {}
 
-    # Fetch from Jupiter with retries
+    # Try static GitHub token registry first
+    fetch_url = url or os.getenv("TOKEN_MINTS_URL", TOKEN_REGISTRY_URL)
     for attempt in range(3):
         try:
-            mapping = await fetch_from_jupiter()
-            if mapping:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(fetch_url, timeout=10) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json(content_type=None)
+            tokens = data.get("tokens") or data.get("data", {}).get("tokens") or []
+            temp: Dict[str, str] = {}
+            for item in tokens:
+                symbol = item.get("symbol") or item.get("ticker")
+                mint = (
+                    item.get("address")
+                    or item.get("mint")
+                    or item.get("tokenMint")
+                )
+                if isinstance(symbol, str) and isinstance(mint, str):
+                    temp[symbol.upper()] = mint
+            if temp:
+                mapping = temp
                 break
-        except Exception:  # pragma: no cover - network failures
-            logger.exception(
-                "Failed to fetch Jupiter tokens (attempt %d/3)", attempt + 1
+        except Exception as exc:  # pragma: no cover - network failures
+            logger.error(
+                "Failed to fetch token registry (attempt %d/3): %s",
+                attempt + 1,
+                exc,
             )
         if attempt < 2:
             await asyncio.sleep(0.5 * 2**attempt)
 
-    # Fallback to static registry if Jupiter fails
+    # Fallback to Jupiter API if static registry fails
     if not mapping:
-        fetch_url = url or os.getenv("TOKEN_MINTS_URL", TOKEN_REGISTRY_URL)
         for attempt in range(3):
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(fetch_url, timeout=10) as resp:
-                        resp.raise_for_status()
-                        data = await resp.json(content_type=None)
-                tokens = data.get("tokens") or data.get("data", {}).get("tokens") or []
-                temp: Dict[str, str] = {}
-                for item in tokens:
-                    symbol = item.get("symbol") or item.get("ticker")
-                    mint = (
-                        item.get("address")
-                        or item.get("mint")
-                        or item.get("tokenMint")
-                    )
-                    if isinstance(symbol, str) and isinstance(mint, str):
-                        temp[symbol.upper()] = mint
-                if temp:
-                    mapping = temp
+                mapping = await fetch_from_jupiter()
+                if mapping:
                     break
-            except Exception as exc:  # pragma: no cover - network failures
-                logger.error(
-                    "Failed to fetch token registry (attempt %d/3): %s",
-                    attempt + 1,
-                    exc,
+            except Exception:  # pragma: no cover - network failures
+                logger.exception(
+                    "Failed to fetch Jupiter tokens (attempt %d/3)", attempt + 1
                 )
             if attempt < 2:
                 await asyncio.sleep(0.5 * 2**attempt)
@@ -645,6 +678,10 @@ async def periodic_mint_sanity_check(interval_hours: float = 24.0) -> None:
 
 async def monitor_pump_websocket(cfg: Dict[str, Any] | None = None) -> None:
     """Subscribe to Pump.fun program logs via WebSocket and update mints."""
+    if AsyncClient is None or websockets is None:
+        logger.info("websockets or solana client unavailable; skipping monitor_pump_websocket")
+        return
+
     import sys
 
     enqueue_solana_tokens = None  # type: ignore
