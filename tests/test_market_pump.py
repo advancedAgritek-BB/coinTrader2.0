@@ -43,7 +43,7 @@ def test_fetch_candidates_market_pump(monkeypatch):
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
     monkeypatch.setattr(main, "is_market_pumping", lambda *a, **k: True)
-    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.02)
+    monkeypatch.setattr(main, "calc_atr", lambda df, period=14: 0.02)
 
     asyncio.run(main.fetch_candidates(ctx))
 
@@ -61,7 +61,7 @@ def test_fetch_candidates_no_pump(monkeypatch):
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
     monkeypatch.setattr(main, "is_market_pumping", lambda *a, **k: False)
-    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.02)
+    monkeypatch.setattr(main, "calc_atr", lambda df, period=14: 0.02)
 
     asyncio.run(main.fetch_candidates(ctx))
 
@@ -79,7 +79,7 @@ def test_pump_allocates_solana(monkeypatch):
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
     monkeypatch.setattr(main, "is_market_pumping", lambda *a, **k: True)
-    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.02)
+    monkeypatch.setattr(main, "calc_atr", lambda df, period=14: 0.02)
     async def fake_regime(*_a, **_k):
         return "trending"
 
@@ -113,7 +113,7 @@ def test_trending_queues_arb(monkeypatch):
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
     monkeypatch.setattr(main, "is_market_pumping", lambda *a, **k: False)
-    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.02)
+    monkeypatch.setattr(main, "calc_atr", lambda df, period=14: 0.02)
     async def fake_regime(*_a, **_k):
         return "trending"
 
@@ -139,7 +139,7 @@ def test_volatile_queues_solana(monkeypatch):
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
     monkeypatch.setattr(main, "is_market_pumping", lambda *a, **k: False)
-    monkeypatch.setattr(main, "calc_atr", lambda df, window=14: 0.02)
+    monkeypatch.setattr(main, "calc_atr", lambda df, period=14: 0.02)
     async def fake_regime2(*_a, **_k):
         return "volatile"
 

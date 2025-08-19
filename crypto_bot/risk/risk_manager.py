@@ -176,8 +176,8 @@ class RiskManager:
 
         volatility_factor = 1.0
         if df is not None and not df.empty:
-            short_atr = calc_atr(df, window=self.config.atr_short_window)
-            long_atr = calc_atr(df, window=self.config.atr_long_window)
+            short_atr = calc_atr(df, period=self.config.atr_short_window)
+            long_atr = calc_atr(df, period=self.config.atr_long_window)
             if long_atr > 0 and not isnan(short_atr) and not isnan(long_atr):
                 volatility_factor = min(
                     short_atr / long_atr,
