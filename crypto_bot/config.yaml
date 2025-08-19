@@ -56,6 +56,78 @@ strategies:
     atr_stop_mult: 1.0
     max_spread_bp: 8
     time_exit_bars: 6
+
+  trend_bot:
+    enabled: true
+    tf: "1m"
+
+  momentum_bot:
+    enabled: true
+    tf: "1m"
+
+  breakout_bot:
+    enabled: true
+    tf: "1m"
+
+  sniper_bot:
+    enabled: true
+    tf: "1m"
+
+  sniper_solana:
+    enabled: true
+    tf: "1m"
+
+  grid_bot:
+    enabled: true
+    tf: "1m"
+
+  micro_scalp_bot:
+    enabled: true
+    tf: "1m"
+
+  lstm_bot:
+    enabled: true
+    tf: "1m"
+
+  bounce_scalper:
+    enabled: true
+    tf: "1m"
+
+  flash_crash_bot:
+    enabled: true
+    tf: "1m"
+
+  meme_wave_bot:
+    enabled: true
+    tf: "1m"
+
+  cross_chain_arb_bot:
+    enabled: true
+
+  dca_bot:
+    enabled: true
+
+  dex_scalper:
+    enabled: true
+
+  dip_hunter:
+    enabled: true
+
+  meme_sniper:
+    enabled: true
+
+  mean_revert:
+    enabled: true
+
+  range_arb_bot:
+    enabled: true
+
+  solana_scalping:
+    enabled: true
+
+  stat_arb_bot:
+    enabled: true
+
 # === fees ===
 fees:
   kraken:
@@ -430,12 +502,18 @@ signal_fusion:
   fusion_method: weight
   min_confidence: 0.01
   strategies:
-  - - trend_bot
-    - 0.5
-  - - micro_scalp_bot
-    - 0.3
-  - - sniper_solana
-    - 0.2
+    - [trend_bot, 0.3]
+    - [momentum_bot, 0.25]
+    - [mean_bot, 0.15]
+    - [breakout_bot, 0.1]
+    - [sniper_bot, 0.1]
+    - [sniper_solana, 0.1]
+    - [grid_bot, 0.05]
+    - [micro_scalp_bot, 0.05]
+    - [lstm_bot, 0.1]
+    - [bounce_scalper, 0.1]
+    - [flash_crash_bot, 0.05]
+    - [meme_wave_bot, 0.05]
 signal_threshold: 0.0001
 signal_weight_optimizer:
   enabled: true
@@ -511,6 +589,7 @@ strategy_evaluation_mode: single
 strategy_router:
   # range_arb_bot runs globally and is appended automatically; no need to list it under regimes
   bandit_enabled: true
+  fusion_enabled: true
   bounce_timeframe: 5m
   breakout_timeframe: 15m
   fast_path:
