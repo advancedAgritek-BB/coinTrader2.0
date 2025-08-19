@@ -98,11 +98,7 @@ PATTERN_WEIGHTS = {
 def is_ml_available() -> bool:
     """Return ``True`` if ML dependencies and credentials are available."""
     url = os.getenv("SUPABASE_URL")
-    key = (
-        os.getenv("SUPABASE_SERVICE_KEY")
-        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        or os.getenv("SUPABASE_KEY")
-    )
+    key = os.getenv("SUPABASE_KEY")
     if not url or not key:
         return False
     try:  # pragma: no cover - optional dependency
@@ -255,17 +251,14 @@ async def load_regime_model(symbol: str) -> tuple[object | None, object | None, 
         return None, None
 
     url = os.getenv("SUPABASE_URL")
-    key = (
-        os.getenv("SUPABASE_SERVICE_KEY")
-        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        or os.getenv("SUPABASE_KEY")
-    )
+    key = os.getenv("SUPABASE_KEY")
     bucket = os.getenv("CT_MODELS_BUCKET", "models")
+    prefix = os.getenv("CT_REGIME_PREFIX", "regime").strip("/")
     if not url or not key:
         return None, None
 
     client = create_client(url, key)
-    latest_path = f"regime/{symbol}/LATEST.json"
+    latest_path = f"{prefix}/{symbol}/LATEST.json"
     model_path = None
     try:
         latest_bytes = client.storage.from_(bucket).download(latest_path)
@@ -306,7 +299,7 @@ async def load_regime_model(symbol: str) -> tuple[object | None, object | None, 
         if "not_found" in msg:
             logger.warning("Supabase regime model for %s not found", symbol)
             try:
-                direct_key = f"regime/{symbol}/{symbol.lower()}_regime_lgbm.pkl"
+                direct_key = f"{prefix}/{symbol}/{symbol.lower()}_regime_lgbm.pkl"
                 model_path = direct_key
                 model_bytes = client.storage.from_(bucket).download(direct_key)
                 model_obj = pickle.loads(model_bytes)

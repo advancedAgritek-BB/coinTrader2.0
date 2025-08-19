@@ -6,15 +6,8 @@ log = logging.getLogger(__name__)
 
 
 def supabase_key() -> Optional[str]:
-    """Return the Supabase key from canonical or legacy env vars."""
-    # Prefer canonical SUPABASE_KEY, but fall back to legacy names
-    return (
-        os.getenv("SUPABASE_KEY")
-        or os.getenv("SUPABASE_SERVICE_KEY")
-        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        or os.getenv("SUPABASE_API_KEY")
-        or os.getenv("SUPABASE_ANON_KEY")
-    )
+    """Return the Supabase key from environment variables."""
+    return os.getenv("SUPABASE_KEY")
 
 def _norm_symbol(symbol: str) -> str:
     # normalize to the naming convention used in storage

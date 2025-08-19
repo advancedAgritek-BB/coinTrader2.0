@@ -61,7 +61,7 @@ def _persist_supabase_env(url: str, key: str) -> None:
         if url:
             set_key(str(ENV_FILE), "SUPABASE_URL", url)
         if key:
-            set_key(str(ENV_FILE), "SUPABASE_SERVICE_KEY", key)
+            set_key(str(ENV_FILE), "SUPABASE_KEY", key)
         logger.info(
             "Wrote Supabase creds to %s (url=%s, key_len=%d)",
             ENV_FILE,
@@ -147,19 +147,14 @@ def prompt_user() -> dict:
     data["supabase_url"] = env_or_prompt(
         "SUPABASE_URL", "Enter Supabase URL: "
     )
-    existing_key = (
-        os.getenv("SUPABASE_SERVICE_KEY")
-        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        or os.getenv("SUPABASE_API_KEY")
-        or os.getenv("SUPABASE_KEY")
-    )
+    existing_key = os.getenv("SUPABASE_KEY")
     if existing_key:
-        os.environ["SUPABASE_SERVICE_KEY"] = existing_key
+        os.environ["SUPABASE_KEY"] = existing_key
     data["supabase_key"] = env_or_prompt(
-        "SUPABASE_SERVICE_KEY", "Enter Supabase API key: "
+        "SUPABASE_KEY", "Enter Supabase API key: "
     )
     key = data["supabase_key"]
-    os.environ["SUPABASE_SERVICE_KEY"] = key
+    os.environ["SUPABASE_KEY"] = key
     _persist_supabase_env(data["supabase_url"], key)
     data["lunarcrush_api_key"] = env_or_prompt(
         "LUNARCRUSH_API_KEY", "Enter LunarCrush API key: "
@@ -222,7 +217,6 @@ def load_or_create(interactive: bool = False) -> dict:
     }
     fields.update(creds.keys())
     env_mapping: Dict[str, List[str]] = {key: [key.upper()] for key in fields}
-    env_mapping["supabase_key"] = ["SUPABASE_SERVICE_KEY"]
 
     aliases = {
         "coinbase_api_key": ["API_KEY"],
@@ -231,11 +225,6 @@ def load_or_create(interactive: bool = False) -> dict:
         "kraken_api_key": ["API_KEY"],
         "kraken_api_secret": ["API_SECRET"],
         "helius_api_key": ["HELIUS_API_KEY", "HELIUS_KEY"],
-        "supabase_key": [
-            "SUPABASE_SERVICE_ROLE_KEY",
-            "SUPABASE_API_KEY",
-            "SUPABASE_KEY",
-        ],
     }
 
     for key, env_keys in aliases.items():
@@ -266,7 +255,7 @@ def load_or_create(interactive: bool = False) -> dict:
     os.environ["HELIUS_KEY"] = helius_val
     os.environ["SUPABASE_URL"] = creds.get("supabase_url", "")
     supabase_key = creds.get("supabase_key", "")
-    os.environ["SUPABASE_SERVICE_KEY"] = supabase_key
+    os.environ["SUPABASE_KEY"] = supabase_key
     try:  # refresh ML availability after setting credentials
         from crypto_bot.utils.ml_utils import init_ml_components
 
