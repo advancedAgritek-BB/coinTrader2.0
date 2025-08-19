@@ -55,12 +55,12 @@ def load_regime_model(symbol: str) -> Tuple[object | None, object | None, str | 
     3. Local file located under ``crypto_bot/models/regime``.
 
     ``CT_MODELS_BUCKET`` specifies the bucket name (default ``"models"``) and
-    ``CT_REGIME_PREFIX`` controls the prefix/path within the bucket (default
-    ``"regime"``).
+    ``CT_REGIME_PREFIX`` controls the prefix/path within the bucket (default is
+    empty, meaning the bucket root).
     """
 
     bucket = os.getenv("CT_MODELS_BUCKET", "models")
-    prefix = os.getenv("CT_REGIME_PREFIX", "regime").strip("/")
+    prefix = os.getenv("CT_REGIME_PREFIX", "").strip("/")
     norm = _norm_symbol(symbol)
     filename = f"{norm.lower()}_regime_lgbm.pkl"
     key = f"{prefix}/{filename}" if prefix else filename
