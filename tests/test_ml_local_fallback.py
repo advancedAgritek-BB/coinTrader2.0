@@ -13,10 +13,10 @@ def test_ensure_ml_uses_fallback_url(monkeypatch, tmp_path, caplog):
     rc._supabase_scaler = None
     rc._supabase_symbol = None
 
-    async def fail_load(_symbol):
+    def fail_load(_symbol):
         raise Exception("supabase down")
 
-    monkeypatch.setattr(rc, "load_regime_model", fail_load)
+    monkeypatch.setattr(main, "load_regime_model", fail_load)
     monkeypatch.setattr(main, "ML_AVAILABLE", True)
 
     cfg = {

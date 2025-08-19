@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Iterable
 
-from crypto_bot.ml.model_loader import supabase_key
+from crypto_bot.ml.model_loader import _supabase_key
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ def _check_packages(pkgs: Iterable[str]) -> list[str]:
 def _get_supabase_creds() -> tuple[str | None, str | None]:
     """Return Supabase URL and key using shared helper for key lookup."""
     url = os.getenv("SUPABASE_URL")
-    key = supabase_key()
+    key = _supabase_key()
     logger.debug(
         "Supabase configured: SUPABASE_URL=%s SUPABASE_KEY_len=%d",
         bool(url),

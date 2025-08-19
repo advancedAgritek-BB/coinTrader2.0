@@ -2,7 +2,7 @@ import importlib
 import logging
 import os
 
-from .model_loader import supabase_key
+from .model_loader import _supabase_key
 
 _logged = False
 
@@ -20,7 +20,7 @@ def log_ml_status_once() -> None:
         importlib.util.find_spec(name) is not None for name in _REQUIRED_PACKAGES
     )
     url_ok = bool(os.getenv("SUPABASE_URL"))
-    key_ok = bool(supabase_key())
+    key_ok = bool(_supabase_key())
     log.info(
         "ML status: packages=%s SUPABASE_URL=%s SUPABASE_KEY_present=%s",
         pkgs_ok,

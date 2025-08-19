@@ -41,6 +41,7 @@ from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.utils.logger import pipeline_logger
 from crypto_bot.ml.selfcheck import log_ml_status_once
 from crypto_bot.utils.ml_utils import ML_AVAILABLE
+from crypto_bot.ml.model_loader import load_regime_model, _norm_symbol
 
 # Internal project modules are imported lazily in `_import_internal_modules()`
 
@@ -717,10 +718,10 @@ def _ensure_ml_if_needed(cfg: dict) -> None:
         try:
             from crypto_bot.regime import regime_classifier as rc
 
-            model, scaler, model_path = asyncio.run(rc.load_regime_model(symbol))
+            model, scaler, model_path = load_regime_model(symbol)
             rc._supabase_model = model
             rc._supabase_scaler = scaler
-            rc._supabase_symbol = symbol
+            rc._supabase_symbol = _norm_symbol(symbol)
             logger.info(
                 "Loaded global regime model for %s from Supabase: %s",
                 symbol,
