@@ -87,4 +87,11 @@ async def build_tradable_set(
         sorted(allowed_quotes_set) if allowed_quotes_set else sorted({q for _, q, _ in tradable}),
         max_pairs,
     )
+    if max_pairs and len(selected) < max_pairs:
+        logger.warning(
+            "Filtered symbols fewer than requested max_pairs=%s (got %d)",
+            max_pairs,
+            len(selected),
+        )
+    logger.debug("Final tradable symbols: %s", ", ".join(sorted(selected)))
     return selected
