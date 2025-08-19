@@ -85,8 +85,8 @@ def generate_signal(
         return 0.0, "none"
 
     rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
-    # Guard: need at least window+1 rows to compute a stable ADX in ta
-    if len(recent) < adx_window + 1:
+    # Need > window bars to compute ADX safely
+    if len(recent) <= adx_window:
         return 0.0, "none"
     adx = ADXIndicator(
         recent["high"], recent["low"], recent["close"], window=adx_window
