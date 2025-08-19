@@ -4,14 +4,11 @@ import asyncio
 import time
 import logging
 import os
-from io import BytesIO
 
 import pandas as pd
 import numpy as np
 import ta
 import yaml
-import json
-import pickle
 
 from crypto_bot.utils.telegram import TelegramNotifier
 
@@ -20,7 +17,7 @@ from crypto_bot.utils.pattern_logger import log_patterns
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.market_loader import timeframe_seconds
 from crypto_bot.utils.telemetry import telemetry
-from crypto_bot.utils.telegram import TelegramNotifier
+from crypto_bot.ml.model_loader import load_regime_model, _norm_symbol
 
 
 # Thresholds and ML blend settings are defined in ``regime_config.yaml``
@@ -223,10 +220,10 @@ def _ml_fallback(
 
 
 async def _download_supabase_model(symbol: str | None = None) -> tuple[object | None, object | None]:
-    """Download LightGBM model and scaler from Supabase."""
+    """Download LightGBM model and scaler using the shared loader."""
     async with _supabase_model_lock:
-        target_symbol = symbol or os.getenv("CT_SYMBOL", "XRPUSD")
-        model, scaler, _path = await load_regime_model(target_symbol)
+        target_symbol = _norm_symbol(symbol or os.getenv("CT_SYMBOL", "XRPUSD"))
+        model, scaler, _path = await asyncio.to_thread(load_regime_model, target_symbol)
         if model is None:
             return None, None
         return model, scaler
@@ -236,7 +233,7 @@ async def _get_supabase_model(symbol: str | None = None) -> tuple[object | None,
     """Return cached Supabase model and scaler, downloading if needed."""
     global _supabase_model, _supabase_scaler, _supabase_symbol
     async with _model_lock:
-        resolved_symbol = symbol or os.getenv("CT_SYMBOL", "XRPUSD")
+        resolved_symbol = _norm_symbol(symbol or os.getenv("CT_SYMBOL", "XRPUSD"))
         if _supabase_model is None or resolved_symbol != _supabase_symbol:
             _supabase_model, _supabase_scaler = await _download_supabase_model(resolved_symbol)
             _supabase_symbol = resolved_symbol
