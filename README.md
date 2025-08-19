@@ -1280,7 +1280,7 @@ symbol_filter:
   http_timeout: 10               # seconds for fallback /Ticker requests
   ticker_retry_attempts: 3       # number of fetch_tickers retries
   log_ticker_exceptions: false   # include stack traces when true
-max_concurrent_ohlcv: 2          # simultaneous OHLCV requests during startup
+max_concurrent_ohlcv: 10         # simultaneous OHLCV requests during startup
   max_concurrent_tickers: 20       # simultaneous ticker requests
   ticker_rate_limit: 0             # ms delay after each ticker request
   ticker_backoff_initial: 2        # seconds after first failure
@@ -1303,7 +1303,8 @@ symbol_filter:
 ```
 
 `max_concurrent_ohlcv` controls how many OHLCV requests are made in parallel
-during the startup scan. It defaults to `2`, keeping API usage modest.
+during the startup scan. It defaults to `10` but can be overridden in
+`config.yaml` to stay within Kraken's connection pool capacity.
 `initial_timeframes` lists the intervals preloaded before trading begins. When
 omitted it falls back to the `timeframes` list (1m, 5m, 15m and 1h by
 default; Coinbase does not offer 4h candles). `initial_history_candles` sets how many bars to download for each of
