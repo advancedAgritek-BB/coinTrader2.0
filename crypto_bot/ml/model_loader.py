@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 
 
-def supabase_key() -> Optional[str]:
+def _supabase_key() -> Optional[str]:
     """Return the Supabase key from environment variables."""
     return os.getenv("SUPABASE_KEY")
 
