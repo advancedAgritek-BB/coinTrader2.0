@@ -6,8 +6,12 @@ from typing import Any, Awaitable, Callable
 
 import logging
 from crypto_bot.strategies.loader import load_strategies
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 logger = logging.getLogger(__name__)
+# Dedicated logger for symbol signal details
+signal_logger = setup_logger("symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False)
+signal_logger.propagate = False
 
 
 class EvalGate:
@@ -135,7 +139,7 @@ class StreamEvaluationEngine:
                 if direction == "long"
                 else "SELL" if direction == "short" else "NONE"
             )
-            logger.info(
+            signal_logger.info(
                 f"STRAT {res.get('name')} on {symbol}: signal={signal} score={res.get('score')} reason={res.get('reason', '')}"
             )
         logger.debug(f"[EVAL OK] {symbol}")
