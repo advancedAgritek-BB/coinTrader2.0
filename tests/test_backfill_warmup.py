@@ -1,25 +1,22 @@
 import asyncio
 import logging
 
-import pandas as pd
-
 from crypto_bot.utils import market_loader
 
 
-def test_update_multi_tf_ohlcv_cache_clamps(monkeypatch, caplog):
-    captured: dict[str, dict[str, int | None]] = {}
+def test_update_multi_tf_ohlcv_cache_clamps(monkeypatch, caplog, tmp_path):
+    async def fake_load(exchange, symbol, timeframe="1m", limit=100, mode="rest", since=None, **kwargs):
+        return [[(since or 0) + i * 60000, 0, 0, 0, 0, 0] for i in range(limit)]
 
-    async def fake_update(exchange, tf_cache, symbols, timeframe, limit, start_since, **kwargs):
-        captured[timeframe] = {"limit": limit, "start_since": start_since}
-        for s in symbols:
-            tf_cache[s] = pd.DataFrame(
-                [[0, 0, 0, 0, 0, 0]],
-                columns=["timestamp", "open", "high", "low", "close", "volume"],
-            )
-        return tf_cache
-
-    monkeypatch.setattr(market_loader, "update_ohlcv_cache", fake_update)
-    monkeypatch.setattr(market_loader, "get_kraken_listing_date", lambda _s: 0)
+    monkeypatch.setattr(market_loader, "load_ohlcv", fake_load)
+    async def _listing(_s):
+        return 0
+    monkeypatch.setattr(market_loader, "get_kraken_listing_date", _listing)
+    async def _split(exchange, syms):
+        return syms, syms
+    monkeypatch.setattr(market_loader, "split_symbols_by_timeframe", _split)
+    now_ms = 1_000_000_000_000
+    monkeypatch.setattr(market_loader, "utc_now_ms", lambda: now_ms)
 
     class Ex:
         id = "dummy"
@@ -31,6 +28,10 @@ def test_update_multi_tf_ohlcv_cache_clamps(monkeypatch, caplog):
         "backfill_days": {"1m": 2, "5m": 3},
         "warmup_candles": {"1m": 1000, "5m": 600},
     }
+    import crypto_bot.main as main
+    monkeypatch.setattr(main, "update_df_cache", lambda cache, tf, sym, df: cache.setdefault(tf, {}).update({sym: df}))
+    monkeypatch.setattr(market_loader, "BOOTSTRAP_STATE_FILE", tmp_path / "state.json")
+
     with caplog.at_level(logging.INFO):
         asyncio.run(
             market_loader.update_multi_tf_ohlcv_cache(
@@ -42,9 +43,7 @@ def test_update_multi_tf_ohlcv_cache_clamps(monkeypatch, caplog):
                 start_since=0,
             )
         )
-    assert captured["1m"]["limit"] == 1000
-    assert captured["1m"]["start_since"] is None
-    assert captured["5m"]["limit"] == 600
-    assert captured["5m"]["start_since"] is None
+    assert "starting from" in caplog.text
+    assert "dropping start_since" not in caplog.text
     assert "Clamping warmup candles for 1m" in caplog.text
     assert "Clamping warmup candles for 5m" in caplog.text

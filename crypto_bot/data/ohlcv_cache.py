@@ -32,7 +32,7 @@ class OHLCVCache:
         async with lock:
             self.logger.info("Starting OHLCV update for timeframe %s", tf)
             warmup = self.cfg.warmup_candles.get(tf)
-            backfill_days = self.cfg.backfill_days.get(tf)
+            backfill_days = self.cfg.deep_backfill_days.get(tf) or self.cfg.backfill_days.get(tf)
             start = None
             if backfill_days:
                 start = utc_now() - timedelta(days=backfill_days)
