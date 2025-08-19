@@ -3,8 +3,12 @@ import pytest
 from crypto_bot.main import _fix_symbol as fix_symbol
 
 
-def test_fix_symbol_converts_xbt():
-    assert fix_symbol("XBT/USDT") == "BTC/USDT"
+@pytest.mark.parametrize(
+    "input_sym",
+    ["XBT/USDT", "XBTUSDT", "BTC/USDT"],
+)
+def test_fix_symbol_converts_xbt(input_sym):
+    assert fix_symbol(input_sym) == "BTCUSDT"
 
 
 @pytest.mark.parametrize("value", [None, 42, 1.0, [], {"a": 1}])

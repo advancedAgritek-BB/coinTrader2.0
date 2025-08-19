@@ -282,7 +282,7 @@ def test_load_config_normalizes_symbol(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "CONFIG_PATH", path)
     monkeypatch.setattr(main, "yaml", types.SimpleNamespace(safe_load=_simple_yaml))
     loaded = main.load_config()
-    assert loaded["symbol"] == "BTC/USDT"
+    assert loaded["symbol"] == "BTCUSDT"
 
 
 def test_reload_config_clears_symbol_cache(monkeypatch, tmp_path):
@@ -303,7 +303,7 @@ def test_reload_config_clears_symbol_cache(monkeypatch, tmp_path):
 
     def fake_load_config():
         return {
-            "symbol": "BTC/USDT",
+            "symbol": "BTCUSDT",
             "risk": {
                 "max_drawdown": 1.0,
                 "stop_loss_pct": 0.0,

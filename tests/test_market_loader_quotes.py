@@ -11,7 +11,7 @@ class QuoteExchange:
         return {
             "BTC/USD": {"active": True, "type": "spot", "quote": "USD"},
             "BTC/EUR": {"active": True, "type": "spot", "quote": "EUR"},
-            "BTC/USDT": {"active": True, "type": "spot", "quote": "USDT"},
+            "BTCUSDT": {"active": True, "type": "spot", "quote": "USDT"},
             "BTC/JPY": {"active": True, "type": "spot", "quote": "JPY"},
         }
 
@@ -19,7 +19,7 @@ class QuoteExchange:
 def test_load_kraken_symbols_filters_quotes():
     ex = QuoteExchange()
     symbols = asyncio.run(load_kraken_symbols(ex))
-    assert set(symbols) == {"BTC/USD", "BTC/EUR", "BTC/USDT"}
+    assert set(symbols) == {"BTC/USD", "BTC/EUR", "BTCUSDT"}
 
 
 class SyntheticExchange:

@@ -21,7 +21,7 @@ def test_execute_trade_async_live_calls_cex(monkeypatch):
         order_executor.execute_trade_async(
             exchange=object(),
             ws_client=None,
-            symbol="BTC/USDT",
+            symbol="BTCUSDT",
             side="buy",
             amount=1.0,
             notifier=DummyNotifier(),

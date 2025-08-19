@@ -505,7 +505,7 @@ def test_pnl_stats_output(monkeypatch, tmp_path):
     state = {"running": True, "mode": "cex"}
     ui, _ = make_ui(tmp_path, state, exchange=DummyExchange())
 
-    lines = ["BTC/USDT -- 100.00 -- +5.00"]
+    lines = ["BTCUSDT -- 100.00 -- +5.00"]
     async def fake_lines(*_a, **_k):
         return lines
     monkeypatch.setattr(telegram_bot_ui.console_monitor, "trade_stats_lines", fake_lines)

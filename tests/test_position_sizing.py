@@ -10,7 +10,7 @@ from crypto_bot.risk.position_sizing import (
 
 
 def test_compute_realized_vol_and_size_for_sigma():
-    symbol = "BTC/USDT"
+    symbol = "BTCUSDT"
     t = time.time()
     prices = [100.0, 101.0, 99.0, 100.0]
     for i, p in enumerate(prices):
