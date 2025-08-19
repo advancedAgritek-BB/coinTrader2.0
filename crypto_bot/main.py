@@ -2126,6 +2126,52 @@ async def execute_signals(ctx: BotContext) -> None:
     if not results:
         logger.info("No analysis results to act on")
         return
+    if "pipeline_logger" not in globals():
+        globals()["pipeline_logger"] = logger
+    if "state" not in globals():
+        globals()["state"] = {"running": True}
+    # Log raw analysis results before filtering to clarify decision paths
+    min_score = ctx.config.get("yamlrouter", {}).get("min_score", 0.0)
+    for res in results:
+        sym = res.get("symbol", "")
+        score = float(res.get("score", 0.0))
+        direction = res.get("direction", "none")
+        atr = res.get("atr")
+        logger.info(
+            "Raw result: symbol=%s score=%.2f direction=%s atr=%s",
+            sym,
+            score,
+            direction,
+            atr,
+        )
+        reasons: list[str] = []
+        if score <= min_score:
+            reasons.append("score below min_score")
+        if direction == "none":
+            reasons.append("no direction")
+        if res.get("too_flat", False):
+            reasons.append("atr too flat")
+        if direction == "short" and not ctx.config.get("allow_short", True):
+            reasons.append("short selling disabled")
+        if reasons:
+            logger.warning("Skipping %s: %s", sym, ", ".join(reasons))
+            continue
+        logger.info("Executing dry-run trade...")
+        try:
+            await cex_trade_async(
+                ctx.exchange,
+                ctx.ws_client,
+                sym,
+                direction_to_side(direction),
+                0.0,
+                ctx.notifier,
+                dry_run=True,
+                config=ctx.config.get("exec"),
+                score=score,
+                reason="pre-filter",
+            )
+        except Exception as exc:  # pragma: no cover - best effort logging
+            logger.warning("Dry-run trade failed for %s: %s", sym, exc)
     ctx.reject_reasons = {}
     reject_counts = Counter()
 
