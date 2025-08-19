@@ -2,6 +2,8 @@ import importlib
 import logging
 import os
 
+from .model_loader import supabase_key
+
 _logged = False
 
 _REQUIRED_PACKAGES = ("sklearn", "joblib", "ta")
@@ -18,15 +20,9 @@ def log_ml_status_once() -> None:
         importlib.util.find_spec(name) is not None for name in _REQUIRED_PACKAGES
     )
     url_ok = bool(os.getenv("SUPABASE_URL"))
-    key_ok = bool(
-        os.getenv("SUPABASE_SERVICE_KEY")
-        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        or os.getenv("SUPABASE_KEY")
-        or os.getenv("SUPABASE_API_KEY")
-        or os.getenv("SUPABASE_ANON_KEY")
-    )
+    key_ok = bool(supabase_key())
     log.info(
-        "ML status: packages=%s supabase_url=%s key_present=%s",
+        "ML status: packages=%s SUPABASE_URL=%s SUPABASE_KEY_present=%s",
         pkgs_ok,
         url_ok,
         key_ok,

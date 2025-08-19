@@ -30,7 +30,7 @@ def test_log_ml_status_once_logs_supabase_status(monkeypatch, caplog):
 
     selfcheck.log_ml_status_once()
     assert (
-        "ML status: packages=True supabase_url=False key_present=False"
+        "ML status: packages=True SUPABASE_URL=False SUPABASE_KEY_present=False"
         in caplog.text
     )
 
@@ -48,6 +48,6 @@ def test_log_ml_status_once_detects_credentials(monkeypatch, caplog):
 
     selfcheck.log_ml_status_once()
     assert (
-        "ML status: packages=True supabase_url=True key_present=True"
+        "ML status: packages=True SUPABASE_URL=True SUPABASE_KEY_present=True"
         in caplog.text
     )

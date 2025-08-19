@@ -4,13 +4,16 @@ from typing import Any, Dict, Optional
 
 log = logging.getLogger(__name__)
 
-def _supabase_key() -> Optional[str]:
-    # Prefer canonical service key, then legacy names
+
+def supabase_key() -> Optional[str]:
+    """Return the Supabase key from canonical or legacy env vars."""
+    # Prefer canonical SUPABASE_KEY, but fall back to legacy names
     return (
-        os.getenv("SUPABASE_SERVICE_KEY")
+        os.getenv("SUPABASE_KEY")
+        or os.getenv("SUPABASE_SERVICE_KEY")
         or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        or os.getenv("SUPABASE_KEY")
         or os.getenv("SUPABASE_API_KEY")
+        or os.getenv("SUPABASE_ANON_KEY")
     )
 
 def _norm_symbol(symbol: str) -> str:
@@ -23,7 +26,7 @@ def load_regime_model(symbol: str) -> Dict[str, Any]:
 
     key = f"{prefix}/{_norm_symbol(symbol)}.json"
     url = os.getenv("SUPABASE_URL")
-    sb_key = _supabase_key()
+    sb_key = supabase_key()
 
     # 1) Supabase storage client path (if you use supabase-py)
     try:
