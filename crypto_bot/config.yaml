@@ -6,7 +6,7 @@ exchange:
 
 # === trading/base ===
 trading:
-  mode: cex           # cex | onchain | auto | dry_run
+  mode: dry_run           # cex | onchain | auto | dry_run
   allowed_quotes: [USD, USDT, USDC, EUR]
   min_ticker_volume: 10000
   timeframes: ["1m","5m","15m","1h"]
@@ -179,7 +179,7 @@ excluded_symbols:
 exec:
   allow_market_orders: true
   order_retry_interval: 3
-execution_mode: live
+execution_mode: dry_run
 exit_strategy:
   default_sl_pct: 0.015
   default_tp_pct: 0.07

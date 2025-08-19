@@ -805,7 +805,11 @@ def _load_config_file() -> dict:
     exchange_cfg.setdefault("request_timeout_ms", 10000)
     exchange_id = exchange_cfg.get("name")
     timeframes = data.get("timeframes") or trading_cfg.get("timeframes")
-    trading_mode = data.get("execution_mode") or trading_cfg.get("mode")
+    trading_mode = (
+        data.get("execution_mode")
+        or trading_cfg.get("mode")
+        or "dry_run"
+    )
     allowed_quotes = trading_cfg.get("allowed_quotes", [])
     logger.info(
         "Exchange=%s timeframes=%s mode=%s allowed_quotes=%s hft=%s",
