@@ -32,7 +32,7 @@ def test_bandit_context_uses_pyth(monkeypatch):
 
     import crypto_bot.volatility_filter as vf
 
-    monkeypatch.setattr(vf, "calc_atr", lambda d: 1.0)
+    monkeypatch.setattr(vf, "calc_atr", lambda d: pd.Series([1.0]))
 
     from crypto_bot.utils import stats as utils_stats
 
@@ -49,7 +49,7 @@ def test_bandit_context_fallback(monkeypatch):
     monkeypatch.setattr(pyth_mod, "get_pyth_price", lambda symbol: None)
     import crypto_bot.volatility_filter as vf
 
-    monkeypatch.setattr(vf, "calc_atr", lambda d: 1.0)
+    monkeypatch.setattr(vf, "calc_atr", lambda d: pd.Series([1.0]))
 
     from crypto_bot.utils import stats as utils_stats
 

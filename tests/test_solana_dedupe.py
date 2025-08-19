@@ -42,7 +42,7 @@ def test_deduped_solana_queue(monkeypatch):
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
     monkeypatch.setattr(main, "get_market_regime", lambda *_a, **_k: "volatile")
     monkeypatch.setattr(main, "compute_average_atr", lambda *_a, **_k: 0.01)
-    monkeypatch.setattr(main, "calc_atr", lambda df, period=14: 0.01)
+    monkeypatch.setattr(main, "calc_atr", lambda df, period=14: pd.Series([0.01]))
     monkeypatch.setattr(main, "get_solana_new_tokens", lambda cfg: ["SOL/USDC"])
 
     monkeypatch.setattr(main, "symbol_priority_queue", deque())

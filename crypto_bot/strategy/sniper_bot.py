@@ -1,5 +1,6 @@
 from typing import Dict, Optional, Tuple
 
+import math
 import pandas as pd
 
 from crypto_bot.utils import volatility
@@ -151,7 +152,10 @@ def generate_signal(
 
     price_change = df["close"].iloc[-1] / first_close - 1
     if direction == "auto" and price_change < 0:
-        atr_value = volatility.calc_atr(df, period=atr_window, as_series=False)
+        atr_series = volatility.calc_atr(df, period=atr_window)
+        atr_value = float(atr_series.iloc[-1]) if not atr_series.empty else 0.0
+        if not math.isfinite(atr_value):
+            atr_value = 0.0
         score = 1.0
         if MODEL is not None:
             try:  # pragma: no cover - best effort
@@ -168,7 +172,7 @@ def generate_signal(
     vol_ratio = df["volume"].iloc[-1] / base_volume if base_volume > 0 else 0
 
     atr_window = min(atr_window, len(df))
-    atr = volatility.calc_atr(df, period=atr_window, as_series=False)
+    atr_series = volatility.calc_atr(df, period=atr_window)
 
     if len(df) > volume_window:
         prev_vol = df["volume"].iloc[-(volume_window + 1):-1]
@@ -177,10 +181,9 @@ def generate_signal(
     avg_vol = prev_vol.mean() if not prev_vol.empty else 0.0
     body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
     event = False
-    atr_val = 0.0
-    if atr is not None:
-        atr_src = getattr(atr, "iloc", atr)
-        atr_val = float(atr_src[-1] if hasattr(atr_src, "__getitem__") else atr_src)
+    atr_val = float(atr_series.iloc[-1]) if not atr_series.empty else 0.0
+    if not math.isfinite(atr_val):
+        atr_val = 0.0
     if atr_val > 0.0 and avg_vol > 0:
         if body >= 2 * atr_val and df["volume"].iloc[-1] >= 2 * avg_vol:
             event = True
@@ -218,11 +221,9 @@ def generate_signal(
     score = 0.0
 
     if price_fallback:
-        atr_value = volatility.calc_atr(df, period=atr_window, as_series=False)
-        if atr_value is not None:
-            atr_src = getattr(atr_value, "iloc", atr_value)
-            atr_value = float(atr_src[-1] if hasattr(atr_src, "__getitem__") else atr_src)
-        else:
+        atr_series = volatility.calc_atr(df, period=atr_window)
+        atr_value = float(atr_series.iloc[-1]) if not atr_series.empty else 0.0
+        if not math.isfinite(atr_value):
             atr_value = 0.0
         if atr_value <= 0.0:
             logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")

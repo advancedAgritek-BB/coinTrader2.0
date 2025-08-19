@@ -176,15 +176,16 @@ class RiskManager:
 
         volatility_factor = 1.0
         if df is not None and not df.empty:
-            short_atr = calc_atr(df, period=self.config.atr_short_window)
-            long_atr = calc_atr(df, period=self.config.atr_long_window)
-            short_atr = calc_atr(df, window=self.config.atr_short_window).iloc[-1]
-            long_atr = calc_atr(df, window=self.config.atr_long_window).iloc[-1]
-            if long_atr > 0 and not isnan(short_atr) and not isnan(long_atr):
-                volatility_factor = min(
-                    short_atr / long_atr,
-                    self.config.max_volatility_factor,
-                )
+            short_series = calc_atr(df, period=self.config.atr_short_window)
+            long_series = calc_atr(df, period=self.config.atr_long_window)
+            if not short_series.empty and not long_series.empty:
+                short_atr = float(short_series.iloc[-1])
+                long_atr = float(long_series.iloc[-1])
+                if long_atr > 0 and not isnan(short_atr) and not isnan(long_atr):
+                    volatility_factor = min(
+                        short_atr / long_atr,
+                        self.config.max_volatility_factor,
+                    )
 
         drawdown = 0.0
         if self.peak_equity > 0:
