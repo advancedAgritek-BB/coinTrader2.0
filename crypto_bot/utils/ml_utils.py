@@ -17,7 +17,7 @@ _ml_checked = False
 _LOGGER_ONCE = {
     "ml_unavailable": False,
     "missing_supabase_creds": False,
-    "anon_key_role": False,
+    "service_key_role": False,
 }
 
 
@@ -53,18 +53,18 @@ def _get_supabase_creds() -> tuple[str | None, str | None]:
     return url, key
 
 
-def _warn_if_anon_key(key: str) -> None:
-    """Warn once if ``key`` appears to be an anon key."""
-    if _LOGGER_ONCE["anon_key_role"]:
+def _warn_if_service_key(key: str) -> None:
+    """Warn once if ``key`` appears to be a service role key."""
+    if _LOGGER_ONCE["service_key_role"]:
         return
     try:  # pragma: no cover - best effort
         payload_b64 = key.split(".")[1]
         padding = "=" * (-len(payload_b64) % 4)
         payload = json.loads(base64.urlsafe_b64decode(payload_b64 + padding))
         role = payload.get("role")
-        if role and role != "service_role":
-            logger.warning("Supabase key has non-service role: %s", role)
-            _LOGGER_ONCE["anon_key_role"] = True
+        if role == "service_role":
+            logger.warning("Supabase key uses service role; prefer anon key for runtime")
+            _LOGGER_ONCE["service_key_role"] = True
     except Exception:
         # Ignore malformed keys or decoding issues
         pass
@@ -107,7 +107,7 @@ def is_ml_available() -> tuple[bool, str]:
             ML_UNAVAILABLE_REASON = reason
             return ML_AVAILABLE, reason
 
-        _warn_if_anon_key(key)
+        _warn_if_service_key(key)
 
         model_path = (
             Path(__file__).resolve().parent.parent
