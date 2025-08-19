@@ -14,11 +14,7 @@ def reload_selfcheck():
 def _clear_supabase_env(monkeypatch):
     for var in [
         "SUPABASE_URL",
-        "SUPABASE_SERVICE_KEY",
-        "SUPABASE_SERVICE_ROLE_KEY",
         "SUPABASE_KEY",
-        "SUPABASE_API_KEY",
-        "SUPABASE_ANON_KEY",
     ]:
         monkeypatch.delenv(var, raising=False)
 
@@ -43,7 +39,7 @@ def test_log_ml_status_once_detects_credentials(monkeypatch, caplog):
     _clear_supabase_env(monkeypatch)
     monkeypatch.setattr(selfcheck, "_REQUIRED_PACKAGES", ())
     monkeypatch.setenv("SUPABASE_URL", "http://example")
-    monkeypatch.setenv("SUPABASE_API_KEY", "x")
+    monkeypatch.setenv("SUPABASE_KEY", "x")
     caplog.set_level(logging.INFO, logger="crypto_bot.ml")
 
     selfcheck.log_ml_status_once()
