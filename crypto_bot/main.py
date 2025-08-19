@@ -2160,18 +2160,44 @@ async def execute_signals(ctx: BotContext) -> None:
     skipped_syms: list[str] = []
     no_dir_syms: list[str] = []
     low_score: list[str] = []
+    dry_run = ctx.config.get("execution_mode") == "dry_run"
     for r in orig_results:
+        logger.debug("Analysis result: %s", r)
         if r.get("skip"):
             skipped_syms.append(r.get("symbol"))
+            logger.warning(
+                "Skipped trade: score=%s, direction=%s, min_score=%s",
+                r.get("score"),
+                r.get("direction"),
+                r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0)),
+            )
             continue
         if r.get("direction") == "none":
             no_dir_syms.append(r.get("symbol"))
+            logger.warning(
+                "Skipped trade: score=%s, direction=%s, min_score=%s",
+                r.get("score"),
+                r.get("direction"),
+                r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0)),
+            )
             continue
         min_req = r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0))
         score = r.get("score", 0.0)
         if score < min_req:
             low_score.append(f"{r.get('symbol')}({score:.2f}<{min_req:.2f})")
+            logger.warning(
+                "Skipped trade: score=%s, direction=%s, min_score=%s",
+                score,
+                r.get("direction"),
+                min_req,
+            )
             continue
+        logger.info(
+            "Passing to execute: symbol=%s, score=%s, dry_run=%s",
+            r.get("symbol"),
+            score,
+            dry_run,
+        )
         results.append(r)
 
     logger.debug(
