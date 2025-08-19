@@ -724,6 +724,13 @@ def route(
         )
         if bandit_active:
             strategies = get_strategies_for_regime(regime, cfg)
+            selected_strategies = strategies
+            logger.debug(
+                "Routed %s to strategies: %s based on regime %s",
+                symbol,
+                [s.__name__ for s in selected_strategies],
+                regime,
+            )
             if isinstance(cfg, RouterConfig):
                 arms = list(cfg.regimes.get(regime, []))
             else:
@@ -732,7 +739,7 @@ def route(
                 )
             arms = [a for a in arms if get_strategy_by_name(a)]
             if not arms:
-                arms = [fn.__name__ for fn in strategies]
+                arms = [fn.__name__ for fn in selected_strategies]
             sym = ""
             if isinstance(cfg, RouterConfig):
                 sym = str(cfg.raw.get("symbol", ""))
