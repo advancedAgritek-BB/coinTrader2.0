@@ -14,16 +14,10 @@ import requests
 log = logging.getLogger(__name__)
 
 
-def _supabase_key() -> Optional[str]:
-    """Return Supabase key from canonical or legacy environment variables."""
 
-    return (
-        os.getenv("SUPABASE_KEY")
-        or os.getenv("SUPABASE_SERVICE_KEY")
-        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        or os.getenv("SUPABASE_API_KEY")
-        or os.getenv("SUPABASE_ANON_KEY")
-    )
+def supabase_key() -> Optional[str]:
+    """Return the Supabase key from environment variables."""
+    return os.getenv("SUPABASE_KEY")
 
 
 def _norm_symbol(symbol: str) -> str:

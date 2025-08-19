@@ -156,8 +156,8 @@ Configure the loader with the following environment variables:
 
 ```ini
 SUPABASE_URL=
-# Required: service or anon key with access to the storage bucket
-SUPABASE_SERVICE_KEY=
+# Required: Supabase key (service role for private buckets or anon for public)
+SUPABASE_KEY=
 # Storage bucket holding uploaded models
 CT_MODELS_BUCKET=models
 # Prefix within the bucket for regime models
@@ -169,7 +169,7 @@ CT_SYMBOL=XRPUSD
 
 `CT_SYMBOL` controls which Supabase regime model is loaded. For instance,
 setting `CT_SYMBOL=XRPUSD` downloads the `xrpusd_regime_lgmb.pkl` model from the
-`regime/XRPUSD/` path in the configured bucket. When the Supabase
+`models/regime/XRPUSD/` path in the storage bucket. When the Supabase
 download fails the loader uses `CT_MODEL_FALLBACK_URL` (or the corresponding
 `model_fallback_url` configuration) and logs when this fallback is used, allowing
 ML scoring to continue.

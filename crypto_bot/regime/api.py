@@ -90,18 +90,7 @@ def _load_model_from_bytes(blob: bytes):
 def _have_supabase_creds() -> bool:
     """Return ``True`` if Supabase credentials are present."""
 
-    url_ok = bool(os.getenv("SUPABASE_URL"))
-    key_ok = any(
-        os.getenv(k)
-        for k in [
-            "SUPABASE_SERVICE_KEY",
-            "SUPABASE_SERVICE_ROLE_KEY",
-            "SUPABASE_KEY",
-            "SUPABASE_API_KEY",
-            "SUPABASE_ANON_KEY",
-        ]
-    )
-    return url_ok and key_ok
+    return bool(os.getenv("SUPABASE_URL") and os.getenv("SUPABASE_KEY"))
 
 
 def predict(
@@ -111,8 +100,7 @@ def predict(
 
     if not _have_supabase_creds():
         logger.warning(
-            "Supabase credentials missing; set SUPABASE_URL and one of "
-            "SUPABASE_SERVICE_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_KEY or SUPABASE_API_KEY. "
+            "Supabase credentials missing; set SUPABASE_URL and SUPABASE_KEY. "
             "Falling back to heuristic regime (set features.ml=false to run heuristics)."
         )
         return _baseline_action(features)

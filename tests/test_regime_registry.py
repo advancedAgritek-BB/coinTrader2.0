@@ -36,7 +36,7 @@ def test_loads_direct_model_when_latest_missing(monkeypatch, caplog):
         sys.modules, "supabase", types.SimpleNamespace(create_client=create_client)
     )
     monkeypatch.setenv("SUPABASE_URL", "http://example")
-    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "key")
+    monkeypatch.setenv("SUPABASE_KEY", "key")
     monkeypatch.setenv("CT_MODELS_BUCKET", "models")
     monkeypatch.setenv("CT_REGIME_PREFIX", "regime")
     monkeypatch.setenv(
@@ -63,7 +63,7 @@ def test_http_fallback_used_when_supabase_unavailable(monkeypatch, tmp_path, cap
     remote.write_bytes(data)
 
     monkeypatch.delenv("SUPABASE_URL", raising=False)
-    monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
+    monkeypatch.delenv("SUPABASE_KEY", raising=False)
     monkeypatch.setenv("CT_MODEL_FALLBACK_URL", remote.as_uri())
     monkeypatch.setattr(registry, "_no_model_logged", False)
 
