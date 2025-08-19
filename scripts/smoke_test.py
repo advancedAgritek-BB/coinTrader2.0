@@ -40,6 +40,7 @@ async def main() -> None:
                 timeframe=tf,
                 limit=2,
                 config=config,
+                max_concurrent=config.get("max_concurrent_ohlcv"),
             )
         except Exception:  # pragma: no cover - best effort
             pass

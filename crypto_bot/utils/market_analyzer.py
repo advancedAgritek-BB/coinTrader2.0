@@ -503,7 +503,7 @@ async def analyze_symbol(
 
         atr_period = int(config.get("risk", {}).get("atr_period", 14))
         if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
-            atr = calc_atr(df, period=atr_period)
+            atr = calc_atr(df, period=atr_period).iloc[-1]
 
         # Determine how well the selected strategy matches the detected regime
         reg_strength = 0.0

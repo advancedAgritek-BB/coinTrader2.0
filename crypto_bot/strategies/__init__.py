@@ -42,6 +42,12 @@ async def _invoke_strategy(gen: Callable, **kwargs):
             except TypeError:
                 return await _maybe_await(gen(kwargs["df"]))
         raise
+async def _invoke_strategy(
+    gen: Callable, *, df: pd.DataFrame, symbol: str, timeframe: str, **kwargs
+):
+    """Call ``gen`` with df, symbol and timeframe and await the result if needed."""
+    res = gen(df=df, symbol=symbol, timeframe=timeframe, **kwargs)
+    return await _maybe_await(res)
 
 
 def _normalize_result(val):
