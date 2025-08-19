@@ -24,38 +24,54 @@ async def _maybe_await(res: Any) -> Any:
         return await res
     return res
 
+async def run_strategy(
+    gen: Callable,
+    *,
+    df: pd.DataFrame,
+    symbol: str,
+    timeframe: str,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Execute ``gen`` and normalise the result.
 
-async def _invoke_strategy(gen: Callable, **kwargs):
-    """Call generate_signal with only the kwargs it supports; fallback to df-only."""
+    The strategy is first invoked with ``df``, ``symbol`` and ``timeframe``. If the
+    signature does not accept those parameters a second attempt is made with only
+    ``df``. Any other exception is logged and a neutral result is returned.
+    """
+
     try:
-        filtered = _filter_kwargs(gen, **kwargs)
-        return await _maybe_await(gen(**filtered))
+        res = gen(df=df, symbol=symbol, timeframe=timeframe, **kwargs)
+        res = await _maybe_await(res)
     except TypeError:
-        # Some older strategies are df-only; try that before failing.
-        if "df" in kwargs:
-            try:
-                return await _maybe_await(
-                    gen(
-                        kwargs["df"],
-                        kwargs.get("symbol"),
-                        kwargs.get("timeframe"),
-                    )
-                )
-            except TypeError:
-                return await _maybe_await(gen(kwargs["df"]))
-        raise
-async def _invoke_strategy(
-    gen: Callable, *, df: pd.DataFrame, symbol: str, timeframe: str, **kwargs
-):
-    """Call ``gen`` with df, symbol and timeframe and await the result if needed."""
-    res = gen(df=df, symbol=symbol, timeframe=timeframe, **kwargs)
-    return await _maybe_await(res)
+        try:
+            res = await _maybe_await(gen(df=df))
+        except Exception:
+            logger.exception(
+                "Strategy %s execution failed", getattr(gen, "__name__", gen)
+            )
+            return {"score": 0.0, "signal": "none"}
+    except Exception:
+        logger.exception(
+            "Strategy %s execution failed", getattr(gen, "__name__", gen)
+        )
+        return {"score": 0.0, "signal": "none"}
+
+    score, signal = _normalize_result(res)
+    return {"score": score, "signal": signal}
 
 
 def _normalize_result(val):
     """Normalize strategy outputs to (score: float, action: str)."""
     if val is None:
         return 0.0, "none"
+    if isinstance(val, dict):
+        score = val.get("score")
+        try:
+            score = float(score) if score is not None else 0.0
+        except Exception:
+            score = 0.0
+        direction = val.get("signal") or val.get("direction") or "none"
+        return score, str(direction)
     if isinstance(val, (tuple, list)) and len(val) == 2:
         try:
             return float(val[0]), str(val[1])
@@ -111,8 +127,8 @@ async def score(
     * ``generate_signal(df, **kwargs)`` single-asset strategies.
     * ``generate_signal(df_a, df_b, **kwargs)`` pair/stat-arb strategies.
 
-    Returns a dictionary keyed by ``(symbol or "A|B", timeframe)`` mapping to the
-    produced signal or score.
+    Returns a dictionary keyed by ``(symbol or "A|B", timeframe)`` mapping to a
+    result dict with ``score`` and ``signal`` keys.
     """
 
     symbols = list(symbols or [])
@@ -163,7 +179,9 @@ async def score(
                         filtered["symbol_b"] = b
                     if "timeframe" in params:
                         filtered["timeframe"] = tf
-                    res = await _maybe_await(gen(**filtered))
+                    raw = await _maybe_await(gen(**filtered))
+                    sc, signal = _normalize_result(raw)
+                    res = {"score": sc, "signal": signal}
                 except Exception:
                     logger.exception(
                         "Strategy %s scoring failed for %s|%s @ %s",
@@ -172,9 +190,8 @@ async def score(
                         b,
                         tf,
                     )
-                    res = (0.0, "none")
-                score_action = _normalize_result(res)
-                out[(f"{a}|{b}", tf)] = score_action
+                    res = {"score": 0.0, "signal": "none"}
+                out[(f"{a}|{b}", tf)] = res
         return out
 
     # Single-asset strategies
@@ -188,20 +205,13 @@ async def score(
                     "Skipping pairwise strategy %s for single-symbol pass", name
                 )
                 continue
-            try:
-                res = await _invoke_strategy(
-                    gen,
-                    df=df.tail(min_needed),
-                    symbol=sym,
-                    timeframe=tf,
-                )
-            except Exception:
-                logger.exception(
-                    "Strategy %s scoring failed for %s @ %s", name, sym, tf
-                )
-                res = (0.0, "none")
-            score_action = _normalize_result(res)
-            out[(sym, tf)] = score_action
+            res = await run_strategy(
+                gen,
+                df=df.tail(min_needed),
+                symbol=sym,
+                timeframe=tf,
+            )
+            out[(sym, tf)] = res
     return out
 
 
