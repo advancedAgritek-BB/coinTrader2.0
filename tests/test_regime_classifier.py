@@ -439,8 +439,10 @@ def test_voting_direction_override(monkeypatch):
         cfg = {
             "timeframe": "1h",
             "regime_timeframes": ["1h"],
-            "voting_strategies": ["a", "b", "c"],
-            "min_agreeing_votes": 2,
+            "voting_strategies": {
+                "strategies": ["a", "b", "c"],
+                "min_agreeing_votes": 2,
+            },
         }
         df_map = {"1h": df}
         return await analyze_symbol("AAA", df_map, "cex", cfg, None)
@@ -475,8 +477,10 @@ def test_voting_no_consensus(monkeypatch):
         cfg = {
             "timeframe": "1h",
             "regime_timeframes": ["1h"],
-            "voting_strategies": ["a", "b"],
-            "min_agreeing_votes": 2,
+            "voting_strategies": {
+                "strategies": ["a", "b"],
+                "min_agreeing_votes": 2,
+            },
         }
         df_map = {"1h": df}
         return await analyze_symbol("AAA", df_map, "cex", cfg, None)
@@ -508,8 +512,10 @@ def test_voting_single_vote(monkeypatch):
         cfg = {
             "timeframe": "1h",
             "regime_timeframes": ["1h"],
-            "voting_strategies": ["a"],
-            "min_agreeing_votes": 1,
+            "voting_strategies": {
+                "strategies": ["a"],
+                "min_agreeing_votes": 1,
+            },
         }
         df_map = {"1h": df}
         return await analyze_symbol("AAA", df_map, "cex", cfg, None)

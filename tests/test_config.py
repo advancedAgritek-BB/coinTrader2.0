@@ -106,7 +106,10 @@ def test_load_config_returns_dict():
     assert "min_confidence_score" in config
     assert "signal_fusion" in config
     assert "voting_strategies" in config
-    assert "min_agreeing_votes" in config
+    voting = config["voting_strategies"]
+    assert isinstance(voting, dict)
+    assert "strategies" in voting
+    assert "min_agreeing_votes" in voting
     assert "ohlcv_timeout" in config
     assert "grid_bot" in config
     grid_bot = config["grid_bot"]
