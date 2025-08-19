@@ -88,9 +88,9 @@ fees:
 
 # === features ===
 features:
-  ml: false  # set true to use ML regime models (requires SUPABASE_URL and SUPABASE_SERVICE_KEY)
-  helius: false
-  pump_monitor: false
+  ml: true #set true to use ML regime models (requires SUPABASE_URL and SUPABASE_KEY; use service role key for private buckets or anon for public)
+  helius: true
+  pump_monitor: true
   telegram: true
 
 # Regime model is fetched from Supabase; override fallback URL if needed
