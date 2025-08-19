@@ -64,7 +64,7 @@ def generate_signal(
     config: dict | None = None,
     symbol: Optional[str] = None,
     timeframe: Optional[str] = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str]:
     """Generate arb signal using kernel prediction.
 

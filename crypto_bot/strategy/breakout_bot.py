@@ -108,7 +108,7 @@ def generate_signal(
     higher_df: Optional[pd.DataFrame] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str] | Tuple[float, str, float]:
     """Breakout strategy using Bollinger/Keltner squeeze confirmation.
 

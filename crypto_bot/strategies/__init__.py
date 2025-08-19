@@ -31,7 +31,16 @@ async def _invoke_strategy(gen: Callable, **kwargs):
     except TypeError:
         # Some older strategies are df-only; try that before failing.
         if "df" in kwargs:
-            return await _maybe_await(gen(kwargs["df"]))
+            try:
+                return await _maybe_await(
+                    gen(
+                        kwargs["df"],
+                        kwargs.get("symbol"),
+                        kwargs.get("timeframe"),
+                    )
+                )
+            except TypeError:
+                return await _maybe_await(gen(kwargs["df"]))
         raise
 
 

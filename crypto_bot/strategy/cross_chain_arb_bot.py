@@ -31,7 +31,7 @@ def generate_signal(
     mempool_cfg: Optional[Mapping[str, object]] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str]:
     """Return arbitrage signal comparing CEX OHLCV data to Solana prices."""
     if df is None or df.empty:

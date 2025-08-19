@@ -43,7 +43,7 @@ def generate_signal(
     price_fallback: bool = True,
     fallback_atr_mult: float = 1.5,
     fallback_volume_mult: float = 1.2,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str, float, bool]:
     """Detect pumps for newly listed tokens using early price and volume action.
 
@@ -53,6 +53,10 @@ def generate_signal(
         OHLCV data ordered oldest -> newest.
     config : dict, optional
         Configuration values overriding the keyword defaults.
+    symbol : str, optional
+        Asset symbol for the provided data.
+    timeframe : str, optional
+        Candle timeframe for ``df``.
     breakout_pct : float, optional
         Minimum percent change from the first close considered a breakout.
     volume_multiple : float, optional
