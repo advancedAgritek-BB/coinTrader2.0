@@ -56,18 +56,25 @@ strategies:
     atr_stop_mult: 1.0
     max_spread_bp: 8
     time_exit_bars: 6
+    rsi_oversold: 35
+    rsi_overbought: 65
 
   trend_bot:
     enabled: true
     tf: "1m"
+    adx_threshold: 15
+    trend_ema_fast: 10
+    trend_ema_slow: 30
 
   momentum_bot:
     enabled: true
     tf: "1m"
+    volume_z_min: 0.5
 
   breakout_bot:
     enabled: true
     tf: "1m"
+    adx_threshold: 15
 
   sniper_bot:
     enabled: true
@@ -403,6 +410,7 @@ momentum_bot:
   slow_length: 50
   trigger_window: 3
   vol_multiplier: 1.0
+  volume_z_min: 0.5
 ohlcv_batch_size: 10
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
@@ -719,9 +727,9 @@ trade_size_pct: 0.3
 trend_bot:
   atr_period: 10
   k: 0.8
-  adx_threshold: 20
-  trend_ema_fast: 12
-  trend_ema_slow: 35
+  adx_threshold: 15
+  trend_ema_fast: 10
+  trend_ema_slow: 30
 twap_enabled: true
 twap_interval_seconds: 5
 twap_slices: 6
