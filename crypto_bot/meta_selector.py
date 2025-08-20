@@ -17,6 +17,7 @@ from crypto_bot.strategy import (
     grid_bot,
     lstm_bot,
     mean_bot,
+    mean_revert,
     meme_wave_bot,
     micro_scalp_bot,
     momentum_bot,
@@ -102,6 +103,7 @@ for module, name in [
     (meme_wave_bot, "meme_wave_bot"),
     (dca_bot, "dca_bot"),
     (cross_chain_arb_bot, "cross_chain_arb_bot"),
+    (mean_revert, "mean_revert"),
 ]:
     _register(module, name)
 

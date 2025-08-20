@@ -744,8 +744,18 @@ voting_strategies:
   strategies:
     - trend_bot
     - momentum_bot
-    - sniper_solana
-  min_agreeing_votes: 1
+    - mean_revert
+    - breakout_bot
+    - micro_scalp_bot
+  weights:
+    trend_bot: 1.0
+    momentum_bot: 1.0
+    mean_revert: 0.8
+    breakout_bot: 0.6
+    micro_scalp_bot: 0.5
+  min_agree_fraction: 0.35
+  quorum: 2
+  min_agreeing_votes: 2
 wallet_address: your_wallet
 ws_failures_before_disable: 1
 ws_ping_interval: 5
