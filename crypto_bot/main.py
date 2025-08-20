@@ -2407,7 +2407,11 @@ async def execute_signals(ctx: BotContext) -> None:
                     NEW_SOLANA_TOKENS.discard(sym)
                     continue
 
-            sol_score, _ = sniper_solana.generate_signal(df)
+            sol_score, _ = sniper_solana.generate_signal(
+                df,
+                symbol=sym,
+                timeframe=ctx.config.get("timeframe"),
+            )
             if sym in NEW_SOLANA_TOKENS:
                 NEW_SOLANA_TOKENS.discard(sym)
             if sol_score > 0.7:
@@ -2571,7 +2575,7 @@ async def handle_exits(ctx: BotContext) -> None:
 
         # DCA before evaluating exit conditions
         dca_cfg = ctx.config.get("dca", {})
-        dca_score, dca_dir = dca_bot.generate_signal(df)
+        dca_score, dca_dir = dca_bot.generate_signal(df, sym, tf)
         if (
             dca_score > 0
             and pos.get("dca_count", 0) < dca_cfg.get("max_entries", 0)
@@ -2691,7 +2695,7 @@ async def handle_exits(ctx: BotContext) -> None:
             except Exception:
                 pass
         else:
-            score, direction = dca_bot.generate_signal(df)
+            score, direction = dca_bot.generate_signal(df, sym, tf)
             dca_cfg = ctx.config.get("dca", {})
             max_entries = dca_cfg.get("max_entries", 0)
             size_pct = dca_cfg.get("size_pct", 1.0)
