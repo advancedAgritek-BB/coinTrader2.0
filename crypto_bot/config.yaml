@@ -735,7 +735,6 @@ voting_strategies:
   strategies:
     - trend_bot
     - momentum_bot
-    - mean_bot
     - sniper_solana
   min_agreeing_votes: 1
 wallet_address: your_wallet
