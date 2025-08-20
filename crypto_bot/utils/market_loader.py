@@ -495,7 +495,6 @@ async def _ohlcv_batch_worker(
                     limit=base.limit,
                     start_since=base.start_since,
                     use_websocket=base.use_websocket,
-                    force_websocket_history=base.force_websocket_history,
                     config=base.config,
                     max_concurrent=base.max_concurrent,
                     notifier=base.notifier,
@@ -1412,11 +1411,15 @@ async def load_ohlcv(
     for attempt in range(1, max_retries + 1):
         try:
             fetch_fn = getattr(exchange, "fetch_ohlcv")
+            sig = inspect.signature(fetch_fn)
+            fetch_kwargs = {k: v for k, v in kwargs.items() if k in sig.parameters}
             if asyncio.iscoroutinefunction(fetch_fn):
-                coro = fetch_fn(market_id, timeframe=timeframe, limit=limit, **kwargs)
+                coro = fetch_fn(
+                    market_id, timeframe=timeframe, limit=limit, **fetch_kwargs
+                )
             else:  # pragma: no cover - synchronous fallback
                 coro = asyncio.to_thread(
-                    fetch_fn, market_id, timeframe=timeframe, limit=limit, **kwargs
+                    fetch_fn, market_id, timeframe=timeframe, limit=limit, **fetch_kwargs
                 )
             data = await asyncio.wait_for(coro, timeout)
             record_io()
@@ -1782,7 +1785,6 @@ async def _update_ohlcv_cache_inner(
             req_limit,
             curr_since,
             use_websocket=use_websocket,
-            force_websocket_history=force_websocket_history,
             max_concurrent=max_concurrent,
             notifier=notifier,
             priority_symbols=priority_symbols,
@@ -1826,7 +1828,6 @@ async def _update_ohlcv_cache_inner(
                 limit,
                 None,
                 use_websocket=use_websocket,
-                force_websocket_history=force_websocket_history,
                 max_concurrent=max_concurrent,
                 notifier=notifier,
                 priority_symbols=priority_symbols,
@@ -1895,7 +1896,6 @@ async def _update_ohlcv_cache_inner(
                 limit * 2,
                 {sym: since_val},
                 use_websocket=False,
-                force_websocket_history=force_websocket_history,
                 max_concurrent=max_concurrent,
                 notifier=notifier,
                 priority_symbols=priority_symbols,
@@ -2688,7 +2688,6 @@ async def update_multi_tf_ohlcv_cache(
                                         batch_size=batch_size,
                                         start_since=tf_start_since,
                                         use_websocket=use_websocket,
-                                        force_websocket_history=force_websocket_history,
                                         max_concurrent=max_concurrent,
                                         notifier=notifier,
                                         priority_symbols=priority_syms,
@@ -2711,7 +2710,6 @@ async def update_multi_tf_ohlcv_cache(
                                     batch_size=batch_size,
                                     start_since=tf_start_since,
                                     use_websocket=use_websocket,
-                                    force_websocket_history=force_websocket_history,
                                     max_concurrent=max_concurrent,
                                     notifier=notifier,
                                     priority_symbols=priority_syms,
@@ -2746,7 +2744,6 @@ async def update_multi_tf_ohlcv_cache(
                                 batch_size=batch_size,
                                 start_since=tf_start_since,
                                 use_websocket=use_websocket,
-                                force_websocket_history=force_websocket_history,
                                 max_concurrent=max_concurrent,
                                 notifier=notifier,
                                 priority_symbols=prio if prio else None,
@@ -2766,7 +2763,6 @@ async def update_multi_tf_ohlcv_cache(
                             batch_size=batch_size,
                             start_since=tf_start_since,
                             use_websocket=use_websocket,
-                            force_websocket_history=force_websocket_history,
                             max_concurrent=max_concurrent,
                             notifier=notifier,
                             priority_symbols=[s for s in priority_syms if s in syms],
@@ -2818,7 +2814,6 @@ async def update_multi_tf_ohlcv_cache(
                                 limit=req,
                                 mode="rest",
                                 since=current_since,
-                                force_websocket_history=force_websocket_history,
                                 max_retries=max_retries,
                                 timeout=timeout,
                             )
@@ -3154,7 +3149,6 @@ async def update_regime_tf_cache(
             limit=limit,
             start_since=start_since,
             use_websocket=use_websocket,
-            force_websocket_history=force_websocket_history,
             max_concurrent=max_concurrent,
             notifier=notifier,
             priority_queue=None,
