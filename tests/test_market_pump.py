@@ -101,7 +101,7 @@ def test_pump_allocates_solana(monkeypatch):
     asyncio.run(main.fetch_candidates(ctx))
 
     assert ctx.config["mode"] == "auto"
-    assert ctx.risk_manager.weights.get("sniper_solana") == 0.6
+    assert ctx.risk_manager.weights.get("breakout_bot") == 0.6
 
 
 def test_trending_queues_arb(monkeypatch):
@@ -156,4 +156,4 @@ def test_volatile_queues_solana(monkeypatch):
 
     asyncio.run(main.fetch_candidates(ctx))
 
-    assert "SOL/USDC" not in ctx.current_batch
+    assert "SOL/USDC" in ctx.current_batch

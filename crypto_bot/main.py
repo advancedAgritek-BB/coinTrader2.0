@@ -1382,7 +1382,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
         sf["volume_percentile"] = 5
         if ctx.risk_manager:
             weights = ctx.config.get("strategy_allocation", {}).copy()
-            weights["sniper_solana"] = 0.6
+            weights["breakout_bot"] = 0.6
             ctx.config["strategy_allocation"] = weights
             ctx.risk_manager.update_allocation(weights)
         ctx.config["mode"] = "auto"
