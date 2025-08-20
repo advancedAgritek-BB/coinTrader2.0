@@ -7,6 +7,7 @@ from threading import Lock
 from typing import AsyncIterator
 import contextlib
 
+# Import a dedicated logger for symbol filtering
 from .logger import LOG_DIR, setup_logger, pipeline_logger
 from crypto_bot.utils.eval_guard import eval_gate
 
@@ -30,7 +31,10 @@ def fix_symbol(sym: str) -> str:
     return sym.replace("XBT/", "BTC/").replace("XBT", "BTC")
 
 
-logger = setup_logger("bot", LOG_DIR / "bot.log")
+# All symbol-filtering logs go to ``symbol_filter.log``
+logger = setup_logger(
+    "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
+)
 
 
 _cached_symbols: tuple[list[tuple[str, float]], list[str]] | None = None

@@ -12,6 +12,10 @@ DEFAULT_PAIRS = ["BTC/USD", "ETH/USD"]
 ALLOWED_PAIRS = load_liquid_pairs() or DEFAULT_PAIRS
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
+# Shared logger for symbol scoring
+score_logger = setup_logger(
+    "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
+)
 
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model
@@ -121,7 +125,7 @@ def generate_signal(
         and ALLOWED_PAIRS
         and symbol not in ALLOWED_PAIRS
     ):
-        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none", 0.0, False
 
     if config:
@@ -142,12 +146,12 @@ def generate_signal(
         initial_window = max(1, initial_window // 2)
 
     if len(df) < initial_window:
-        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none", 0.0, False
 
     first_close = df["close"].iloc[0]
     if first_close == 0:
-        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none", 0.0, False
 
     price_change = df["close"].iloc[-1] / first_close - 1
@@ -165,7 +169,7 @@ def generate_signal(
                 pass
         if config is None or config.get("atr_normalization", True):
             score = volatility.normalize_score_by_volatility(df, score)
-        logger.info("Signal for %s: %s, %s", symbol, score, "short")
+        score_logger.info("Signal for %s: %s, %s", symbol, score, "short")
         return score, "short", float(atr_value) if atr_value is not None else 0.0, False
 
     base_volume = df["volume"].iloc[:initial_window].mean()
@@ -190,7 +194,7 @@ def generate_signal(
     atr = atr_val
 
     if df["volume"].iloc[-1] < min_volume:
-        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none", float(atr) if atr is not None else 0.0, event
 
     if (
@@ -214,7 +218,7 @@ def generate_signal(
         trade_direction = direction
         if direction == "auto":
             trade_direction = "short" if price_change < 0 else "long"
-        logger.info("Signal for %s: %s, %s", symbol, score, trade_direction)
+        score_logger.info("Signal for %s: %s, %s", symbol, score, trade_direction)
         return score, trade_direction, float(atr) if atr is not None else 0.0, event
 
     trade_direction = direction
@@ -226,7 +230,7 @@ def generate_signal(
         if not math.isfinite(atr_value):
             atr_value = 0.0
         if atr_value <= 0.0:
-            logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+            score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
             return 0.0, "none", 0.0, event
         atr = atr_value
         body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
@@ -254,10 +258,10 @@ def generate_signal(
                     if df["close"].iloc[-1] < df["open"].iloc[-1]
                     else "long"
                 )
-            logger.info("Signal for %s: %s, %s", symbol, score, trade_direction)
+            score_logger.info("Signal for %s: %s, %s", symbol, score, trade_direction)
             return score, trade_direction, atr_value, event
 
-    logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+    score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
     return 0.0, "none", float(atr) if atr is not None else 0.0, event
 
 

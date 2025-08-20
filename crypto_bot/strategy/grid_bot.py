@@ -21,6 +21,10 @@ from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
 DYNAMIC_THRESHOLD = 1.5
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
+# Shared logger for symbol scoring
+score_logger = setup_logger(
+    "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
+)
 
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model
@@ -208,10 +212,10 @@ def generate_signal(
         win_rate = get_recent_win_rate(4, strategy="grid_bot")
         skip_cd = win_rate > 0.7
         if not skip_cd and grid_state.in_cooldown(symbol, cfg.cooldown_bars):
-            logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+            score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
             return 0.0, "none"
         if grid_state.active_leg_count(symbol) >= cfg.max_active_legs:
-            logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+            score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
             return 0.0, "none"
 
     min_len = max(20, cfg.volume_ma_window)
@@ -358,7 +362,7 @@ def generate_signal(
                 pass
         if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
-        logger.info("Signal for %s: %s, %s", symbol, score, "long")
+        score_logger.info("Signal for %s: %s, %s", symbol, score, "long")
         return score, "long"
 
     if price >= upper_bound:
@@ -374,10 +378,10 @@ def generate_signal(
                 pass
         if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
-        logger.info("Signal for %s: %s, %s", symbol, score, "short")
+        score_logger.info("Signal for %s: %s, %s", symbol, score, "short")
         return score, "short"
 
-    logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+    score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
     return 0.0, "none"
 
 

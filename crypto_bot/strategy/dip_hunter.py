@@ -13,6 +13,10 @@ from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
 NAME = "dip_hunter"
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
+# Shared logger for symbol scoring
+score_logger = setup_logger(
+    "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
+)
 
 try:  # Optional LightGBM integration
     from coinTrader_Trainer.ml_trainer import load_model
@@ -61,7 +65,7 @@ def generate_signal(
     strategy = "dip_hunter"
 
     if cooldown_enabled and symbol and in_cooldown(symbol, strategy):
-        logger.info("Signal for %s: %s, %s", symbol, 0.0, "cooldown")
+        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "cooldown")
         return 0.0, "none"
 
     rsi_window = int(params.get("rsi_window", 14))
@@ -83,7 +87,7 @@ def generate_signal(
     recent = df.tail(min_len)
 
     if len(recent) < required_len:
-        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none"
 
     rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
@@ -118,7 +122,7 @@ def generate_signal(
 
     with cooldown(symbol, strategy) as cd:
         if cooldown_enabled and symbol and not cd.allowed:
-            logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+            score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
             return 0.0, "none"
 
         oversold = latest["rsi"] < rsi_oversold and latest["bb_pct"] < 0
@@ -157,7 +161,7 @@ def generate_signal(
                 score = normalize_score_by_volatility(df, score)
 
             score = max(0.0, min(score, 1.0))
-            logger.info("Signal for %s: %s, %s", symbol, score, "long")
+            score_logger.info("Signal for %s: %s, %s", symbol, score, "long")
             if cooldown_enabled and symbol:
                 cd.mark()
             return score, "long"
