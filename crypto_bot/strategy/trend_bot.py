@@ -131,14 +131,40 @@ def generate_signal(
         return 0.0, "none"
 
     adx = float(latest["adx"])
-    close = df["close"]
+    ema_fast = df["ema_fast"]
     ema_slow = df["ema_slow"]
-    if adx > 15 and close.iloc[-1] > ema_slow.iloc[-1]:
-        score = 0.8
-        direction = "long"
-        logger.info(
-            "trend_bot: ADX=%s, EMA_slow=%s, score=%s", adx, ema_slow.iloc[-1], score
-        )
+    if adx > adx_threshold:
+        score = min(1.0, adx / 50)
+        if ema_fast.iloc[-1] > ema_slow.iloc[-1]:
+            direction = "long"
+        elif ema_fast.iloc[-1] < ema_slow.iloc[-1]:
+            direction = "short"
+        else:
+            direction = "none"
+        if score > 0:
+            if MODEL is not None:
+                try:  # pragma: no cover - best effort
+                    ml_score = MODEL.predict(df)
+                    score = (score + ml_score) / 2
+                except Exception:
+                    pass
+            if config is None or config.get("atr_normalization", True):
+                score = normalize_score_by_volatility(df, score)
+            if config:
+                torch_cfg = config.get("torch_signal_model", {})
+                if torch_cfg.get("enabled"):
+                    try:
+                        weight = float(torch_cfg.get("weight", 0.7))
+                    except (TypeError, ValueError):
+                        weight = 0.7
+                    try:  # pragma: no cover - best effort
+                        from crypto_bot.torch_signal_model import predict_signal as _pred
+                        ml_score = _pred(df)
+                        score = score * (1 - weight) + ml_score * weight
+                        score = max(0.0, min(score, 1.0))
+                    except Exception:
+                        pass
+        logger.info("trend_bot: ADX=%s, score=%s, direction=%s", adx, score, direction)
         return score, direction
 
     score = 0.0
