@@ -1,6 +1,5 @@
-from typing import Optional, Tuple
+from typing import Tuple
 
-import asyncio
 import importlib
 
 import numpy as np
@@ -49,7 +48,7 @@ else:  # pragma: no cover - fallback
     warn_ml_unavailable_once()
 
 
-async def generate_signal(
+def generate_signal(
     df: pd.DataFrame,
     symbol: str | None = None,
     timeframe: str | None = None,
@@ -68,7 +67,13 @@ async def generate_signal(
     adx_window = 14
     min_bars = max(50, adx_window + 1)
     if len(df) < min_bars:
-        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            0.0,
+            "none",
+        )
         return 0.0, "none"
 
     try:
@@ -241,7 +246,7 @@ async def generate_signal(
         ml_score = None
         if MODEL is not None:
             try:  # pragma: no cover - best effort
-                ml_score = await asyncio.to_thread(MODEL.predict, df)
+                ml_score = MODEL.predict(df)
             except Exception:
                 ml_score = None
         else:  # pragma: no cover - fallback
@@ -258,7 +263,13 @@ async def generate_signal(
         score = normalize_score_by_volatility(df, score)
 
     score = float(max(0.0, min(score, 1.0)))
-    score_logger.info("Signal for %s: %s, %s", symbol, score, direction)
+    score_logger.info(
+        "Signal for %s:%s -> %.3f, %s",
+        symbol or "unknown",
+        timeframe or "N/A",
+        score,
+        direction,
+    )
     return score, direction
 
 

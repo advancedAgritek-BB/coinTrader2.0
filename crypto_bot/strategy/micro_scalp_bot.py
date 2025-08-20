@@ -108,8 +108,8 @@ def generate_signal(
         timeframe = None
     config = kwargs.get("config")
     higher_df = kwargs.get("higher_df")
-    mempool_monitor: Optional[SolanaMempoolMonitor] = kwargs.get("mempool_monitor")
-    mempool_cfg: Optional[dict] = kwargs.get("mempool_cfg")
+    mempool_monitor = mempool_monitor or kwargs.get("mempool_monitor")
+    mempool_cfg = mempool_cfg or kwargs.get("mempool_cfg")
     tick_data: pd.DataFrame | None = kwargs.get("tick_data")
     book: Optional[dict] = kwargs.get("book")
     ticks: Optional[pd.DataFrame] = kwargs.get("ticks")

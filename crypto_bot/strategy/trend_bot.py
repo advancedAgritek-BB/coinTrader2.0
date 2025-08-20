@@ -67,7 +67,13 @@ def generate_signal(
     adx_window = 7
     min_bars = max(50, adx_window + 1)
     if df.empty or len(df) < min_bars:
-        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            0.0,
+            "none",
+        )
         return 0.0, "none"
 
     df = df.copy()
@@ -131,7 +137,13 @@ def generate_signal(
     if (
         pd.isna(latest["ema_fast"]) or pd.isna(latest["ema_slow"]) or pd.isna(latest["rsi"])
     ):
-        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            0.0,
+            "none",
+        )
         return 0.0, "none"
 
     adx = float(latest["adx"])
@@ -302,7 +314,13 @@ def generate_signal(
                 score = max(0.0, min(score, 1.0))
             except Exception:
                 pass
-    score_logger.info("Signal for %s: %s, %s", symbol, score, direction)
+    score_logger.info(
+        "Signal for %s:%s -> %.3f, %s",
+        symbol or "unknown",
+        timeframe or "N/A",
+        score,
+        direction,
+    )
     return score, direction
 
 
