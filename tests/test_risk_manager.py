@@ -31,6 +31,7 @@ def test_allow_trade_rejects_below_min_volume():
         take_profit_pct=0.01,
         min_volume=1,
         volume_threshold_ratio=0.5,
+        min_atr_pct=0.00005,
     )
     allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
@@ -45,6 +46,7 @@ def test_allow_trade_rejects_below_volume_ratio():
         take_profit_pct=0.01,
         min_volume=0.1,
         volume_threshold_ratio=0.5,
+        min_atr_pct=0.00005,
     )
     allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
@@ -59,6 +61,7 @@ def test_allow_trade_allows_when_volume_sufficient():
         take_profit_pct=0.01,
         min_volume=1,
         volume_threshold_ratio=0.5,
+        min_atr_pct=0.00005,
     )
     allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
@@ -72,6 +75,7 @@ def test_allow_trade_rejects_volume_below_point_zero_one():
         stop_loss_pct=0.01,
         take_profit_pct=0.01,
         min_volume=0.01,
+        min_atr_pct=0.00005,
     )
     allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
@@ -85,6 +89,7 @@ def test_allow_trade_rejects_when_volume_far_below_mean():
         stop_loss_pct=0.01,
         take_profit_pct=0.01,
         min_volume=10,
+        min_atr_pct=0.00005,
     )
     allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
@@ -110,7 +115,12 @@ def test_allow_trade_rejects_volume_too_low():
 def test_allow_trade_rejects_when_flat():
     data = {"open": [1] * 20, "high": [1] * 20, "low": [1] * 20, "close": [1] * 20, "volume": [1] * 20}
     df = pd.DataFrame(data)
-    cfg = RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_atr_pct=0.00005,
+    )
     allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
     assert "volatility too low" in reason.lower()
@@ -126,7 +136,12 @@ def test_allow_trade_rejects_when_hft_volatility_too_low():
         "volume": [1] * 20,
     }
     df = pd.DataFrame(data)
-    cfg = RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_atr_pct=0.00005,
+    )
     allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert not allowed
     assert "volatility too low for hft" in reason.lower()
@@ -327,8 +342,7 @@ def test_position_size_reduces_when_drawdown_high():
     manager = RiskManager(cfg)
     manager.peak_equity = 1.0
     manager.equity = 0.5
-    df = make_vol_df(1.0, 1.0)
-    size = manager.position_size(1.0, 1000, df)
+    size = manager.position_size(1.0, 1000)
     assert size == 1000 * cfg.trade_size_pct * 0.5
 def test_position_size_risk_based():
     manager = RiskManager(
