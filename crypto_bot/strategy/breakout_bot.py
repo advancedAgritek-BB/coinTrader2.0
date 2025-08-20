@@ -11,7 +11,7 @@ The ``breakout`` section of the config may include:
 ``adx_window`` (int)
     Lookback window for the ADX calculation (default ``14``).
 ``adx_threshold`` (float)
-    Minimum ADX value required to qualify a breakout (default ``20``).
+    Minimum ADX value required to qualify a breakout (default ``15``).
 
 Existing options such as ``bb_length`` or ``donchian_window`` remain
 unchanged.
@@ -115,7 +115,7 @@ def generate_signal(
 
     - ``ema_window`` – window for the EMA trend filter (default ``200``)
     - ``adx_window`` – lookback window for ADX (default ``14``)
-    - ``adx_threshold`` – minimum ADX value required (default ``20``)
+    - ``adx_threshold`` – minimum ADX value required (default ``15``)
 
     Returns
     -------
@@ -147,7 +147,7 @@ def generate_signal(
     vol_window = int(cfg.get("volume_window", 20))
     ema_window = int(cfg.get("ema_window", 200))
     adx_window = int(cfg.get("adx_window", 14))
-    adx_threshold = float(cfg.get("adx_threshold", 20))
+    adx_threshold = float(cfg.get("adx_threshold", 15))
     # Volume confirmation is now optional by default to allow breakouts without
     # a prior volume spike. Users can enable the old behaviour by explicitly
     # setting ``vol_confirmation: true`` in the strategy config.

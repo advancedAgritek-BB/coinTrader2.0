@@ -3,7 +3,7 @@ vol_confirmation: true
 vol_multiplier: 0.5  # momentum filter remains disabled
 ema_window: 200
 adx_window: 14
-adx_threshold: 20
+adx_threshold: 15
 setup_window: 10
 trigger_window: 3
 risk:
