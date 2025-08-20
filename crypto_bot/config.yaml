@@ -68,6 +68,7 @@ strategies:
   breakout_bot:
     enabled: true
     tf: "1m"
+    adx_threshold: 15
 
   sniper_bot:
     enabled: true
