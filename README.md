@@ -323,7 +323,7 @@ WALLET_ADDRESS=your_wallet_address     # default on-chain wallet for trades
 TELE_CHAT_ADMINS=123456,789012         # optional comma separated admin IDs
 TELE_CHAT_ADMINS=12345,67890          # comma-separated chat IDs
 GOOGLE_CRED_JSON=path_to_google_credentials.json
-TWITTER_SENTIMENT_URL=https://api.example.com/twitter-sentiment
+TWITTER_SENTIMENT_URL=https://lunarcrush.com/api/v2  # LunarCrush sentiment endpoint (requires LUNARCRUSH_API_KEY)
 FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
 SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
@@ -941,10 +941,13 @@ If the call fails or you do not receive a message, check for these common issues
 
 ### Twitter Sentiment API
 
-Add `TWITTER_SENTIMENT_URL` to `.env` to point at the sentiment
-service used by `sentiment_filter.py`. If this variable is not provided, the bot
-defaults to the placeholder `https://api.example.com/twitter-sentiment`, so
-sentiment fetches will fail until a real URL is supplied.
+Add `TWITTER_SENTIMENT_URL` and `LUNARCRUSH_API_KEY` to `.env` to use the
+LunarCrush sentiment endpoint consumed by `sentiment_filter.py`. Without these
+variables, the bot defaults to the placeholder `https://api.example.com/twitter-sentiment`,
+and sentiment fetches will fail until real values are supplied.
+
+To experiment with other sentiment providers, point `TWITTER_SENTIMENT_URL` at
+a different API and extend `sentiment_filter.py` to parse that service's response.
 
 ### Funding Rate API
 
