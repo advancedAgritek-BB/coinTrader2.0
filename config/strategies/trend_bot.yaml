@@ -1,8 +1,8 @@
 atr_period: 14
 k: 1.0
-trend_ema_fast: 3
-trend_ema_slow: 10
-adx_threshold: 25
+trend_ema_fast: 10
+trend_ema_slow: 30
+adx_threshold: 15
 setup_window: 10
 trigger_window: 3
 risk:
