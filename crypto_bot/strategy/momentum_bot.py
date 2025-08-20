@@ -46,7 +46,7 @@ def generate_signal(
     params = config.get("momentum_bot", {}) if config else {}
     window = int(params.get("donchian_window", 20))
     vol_window = int(params.get("volume_window", 20))
-    vol_mult = float(params.get("volume_mult", 1.5))
+    vol_z_min = float(params.get("volume_z_min", 0.5))
     rsi_threshold = float(params.get("rsi_threshold", 55))
     macd_min = float(params.get("macd_min", 0.0))
     macd_fast = int(params.get("fast_length", 12))
@@ -62,6 +62,7 @@ def generate_signal(
 
     dc_low = recent["low"].rolling(window).min().shift(1)
     vol_ma = recent["volume"].rolling(vol_window).mean()
+    vol_std = recent["volume"].rolling(vol_window).std()
     rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
     macd = ta.trend.macd(
         recent["close"], window_fast=macd_fast, window_slow=macd_slow
@@ -69,12 +70,18 @@ def generate_signal(
 
     dc_low = cache_series("momentum_dc_low", df, dc_low, lookback)
     vol_ma = cache_series("momentum_vol_ma", df, vol_ma, lookback)
+    vol_std = cache_series("momentum_vol_std", df, vol_std, lookback)
+    volume_z = cache_series(
+        "momentum_volume_z", df, (recent["volume"] - vol_ma) / vol_std, lookback
+    )
     rsi = cache_series("momentum_rsi", df, rsi, lookback)
     macd = cache_series("momentum_macd", df, macd, lookback)
 
     recent = recent.copy()
     recent["dc_low"] = dc_low
     recent["vol_ma"] = vol_ma
+    recent["vol_std"] = vol_std
+    recent["volume_z"] = volume_z
     recent["rsi"] = rsi
     recent["macd"] = macd
 
@@ -82,6 +89,7 @@ def generate_signal(
 
     macd_val = latest["macd"]
     rsi_val = latest["rsi"]
+    volume_z = latest["volume_z"]
 
     score = 0.0
     direction = "none"
@@ -92,11 +100,6 @@ def generate_signal(
         and latest["rsi"] < 100 - rsi_threshold
         and latest["macd"] < -macd_min
     )
-    vol_ok = (
-        pd.notna(latest["vol_ma"])
-        and latest["vol_ma"] > 0
-        and latest["volume"] > latest["vol_ma"] * vol_mult
-    )
 
     if long_cond:
         score = 0.8
@@ -104,8 +107,8 @@ def generate_signal(
         logger.info(
             f"momentum_bot long signal: MACD={macd_val}, RSI={rsi_val}"
         )
-    elif short_cond and vol_ok:
-        score = 1.0
+    elif short_cond and volume_z > vol_z_min:
+        score = min(1.0, volume_z / 2)
         direction = "short"
 
     if score > 0:

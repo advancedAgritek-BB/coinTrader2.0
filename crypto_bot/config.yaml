@@ -64,6 +64,7 @@ strategies:
   momentum_bot:
     enabled: true
     tf: "1m"
+    volume_z_min: 0.5
 
   breakout_bot:
     enabled: true
@@ -403,6 +404,7 @@ momentum_bot:
   slow_length: 50
   trigger_window: 3
   vol_multiplier: 1.0
+  volume_z_min: 0.5
 ohlcv_batch_size: 10
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
@@ -533,6 +535,7 @@ sniper_solana:
 momentum_bot:
   donchian_period: 20
   vol_multiplier: 1.0
+  volume_z_min: 0.5
   atr_period: 14
   setup_window: 10
   trigger_window: 3
