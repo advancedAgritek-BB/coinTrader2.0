@@ -646,8 +646,8 @@ strategy_router:
   trending_timeframe: 1h
   volatile_timeframe: 1m
 yamlrouter:
-  min_score: 0.4
-  min_confidence: 0.4
+  min_score: 0.25
+  min_confidence: 0.25
 symbol: XRPUSD
 symbol_batch_size: 50
 ohlcv_chunk_size: 20
