@@ -198,6 +198,27 @@ def test_allow_trade_allows_above_atr_and_volume_thresholds():
     assert allowed
 
 
+def test_allow_trade_rejects_bearish_sentiment(monkeypatch):
+    df = volume_df([1] * 20)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_fng=10,
+        min_sentiment=20,
+    )
+
+    async def fake_too_bearish(min_fng, min_sentiment, symbol=None):
+        return True
+
+    monkeypatch.setattr(
+        "crypto_bot.risk.risk_manager.too_bearish", fake_too_bearish
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
+    assert not allowed
+    assert "bearish sentiment" in reason.lower()
+
+
 def test_stop_order_management():
     manager = RiskManager(RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01))
     order = {"id": "1", "symbol": "XBT/USDT", "side": "sell", "amount": 1, "dry_run": True}
@@ -473,8 +494,8 @@ def test_allow_trade_rejects_on_bearish_sentiment(monkeypatch):
         min_sentiment=30,
     )
     allowed, reason = RiskManager(cfg).allow_trade(_df(), symbol="XBT/USDT")
-    assert allowed
-    assert "trade allowed" in reason.lower()
+    assert not allowed
+    assert "bearish sentiment" in reason.lower()
 
 
 def test_allow_trade_allows_on_positive_sentiment(monkeypatch):
