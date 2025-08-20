@@ -212,7 +212,7 @@ breakout:
   vol_multiplier: 0.5
   volume_window: 15
 cycle_bias:
-  enabled: true
+  enabled: false
   mvrv_url: https://api.example.com/mvrv
   nupl_url: https://api.example.com/nupl
   sopr_url: https://api.example.com/sopr
