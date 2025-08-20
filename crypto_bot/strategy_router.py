@@ -678,8 +678,15 @@ def route(
         sym = (
             cfg.raw.get("symbol", "") if isinstance(cfg, RouterConfig) else cfg.get("symbol", "")
         )
-        logger.warning("Unknown regime for %s; fallback to trend_bot", sym)
-        return _wrap(trend_bot.generate_signal)
+        logger.warning("Unknown regime for %s; no strategy selected", sym)
+        telemetry.inc("router.unknown_regime")
+        if notifier is not None:
+            notifier.notify(f"Unknown regime for {sym}; no signal generated")
+
+        def _no_signal(df: pd.DataFrame | None = None, cfg=None) -> tuple[float, str]:
+            return 0.0, "none"
+
+        return _wrap(_no_signal)
 
     def _post_fastpath():
         symbol = ""
