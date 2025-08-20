@@ -89,16 +89,9 @@ def generate_signal(
         }
 
     lookback = max(rsi_window, vol_window, adx_window, bb_window, dip_bars)
-    required_len = 2 * adx_window - 1
-    min_len = max(50, lookback + 1, required_len)
-    recent = df.tail(min_len)
-
-    if len(recent) < required_len:
-        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
-        return 0.0, "none"
+    recent = df.tail(max(60, adx_window * 4, lookback + 1))
 
     rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
-    # Need > window bars to compute ADX safely
     if len(recent) <= adx_window:
         return 0.0, "none"
     adx = ADXIndicator(

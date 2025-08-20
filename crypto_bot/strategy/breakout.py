@@ -65,6 +65,7 @@ def generate_signal(
     atr_len = int(cfg.get("atr_len", keltner_len))
     max_spread_bp = float(cfg.get("max_spread_bp", 5.0))
     allow_short = bool(cfg.get("allow_short", False))
+    score_threshold = float(cfg.get("score_threshold", 0.0))
 
     lookback = max(donchian_len, keltner_len, bbw_lookback, vol_window, atr_len)
     if len(df) < lookback + 1:
@@ -108,46 +109,26 @@ def generate_signal(
         and spread_bp <= max_spread_bp
     )
 
-    long_reason = None
-    short_reason = None
-    if (
-        close.iloc[-1] > dc_high.iloc[-1]
-        and close.iloc[-2] <= dc_high.iloc[-2]
-    ):
-        long_reason = "donchian"
-    elif close.iloc[-1] > kc_upper.iloc[-1]:
-        long_reason = "keltner"
-
-    if allow_short:
-        if (
-            close.iloc[-1] < dc_low.iloc[-1]
-            and close.iloc[-2] >= dc_low.iloc[-2]
-        ):
-            short_reason = "donchian"
-        elif close.iloc[-1] < kc_lower.iloc[-1]:
-            short_reason = "keltner"
+    upper_break = max(dc_high.iloc[-1], kc_upper.iloc[-1])
+    lower_break = min(dc_low.iloc[-1], kc_lower.iloc[-1])
+    metric = 0.0
+    if close.iloc[-1] > upper_break:
+        metric = (close.iloc[-1] - upper_break) / upper_break
+    elif allow_short and close.iloc[-1] < lower_break:
+        metric = (close.iloc[-1] - lower_break) / lower_break
 
     side = "none"
-    score = 0.0
-    reason = "none"
-    if filters_ok:
-        if long_reason:
-            side = "long"
-            score = 1.0
-            reason = long_reason
-        elif short_reason:
-            side = "short"
-            score = 1.0
-            reason = short_reason
+    if filters_ok and abs(metric) > score_threshold:
+        side = "long" if metric > 0 else "short"
 
     logger.info(
-        "signal=breakout side=%s reason=%s vol_z=%.2f bbw_pct=%.2f",
+        "signal=breakout side=%s metric=%.4f vol_z=%.2f bbw_pct=%.2f",
         side,
-        reason,
+        metric,
         vol_z if pd.notna(vol_z) else float("nan"),
         bbw_pct if pd.notna(bbw_pct) else float("nan"),
     )
-    return score, side, atr_latest
+    return metric, side, atr_latest
 
 
 def should_exit(

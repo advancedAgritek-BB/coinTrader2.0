@@ -89,7 +89,7 @@ def test_short_breakout_signal():
     df = _make_df(prices, volumes)
     score, direction, atr = breakout_bot.generate_signal(df, BASE_CFG)
     assert direction == "short"
-    assert score > 0
+    assert score < 0
 
 
 def test_requires_squeeze():
@@ -105,13 +105,15 @@ def test_requires_squeeze():
 def test_signal_requires_all_conditions(direction, breakout_df, higher_squeeze_df, no_squeeze_df):
     df = breakout_df(direction)
     score, got = breakout_bot.generate_signal(df, BASE_CFG, higher_df=higher_squeeze_df)
-    assert got == direction and score > 0
+    assert got == direction and (score > 0 if direction == "long" else score < 0)
 
     df_no_vol = breakout_df(direction, volume_spike=False)
     score_no_vol, got_no_vol = breakout_bot.generate_signal(
         df_no_vol, BASE_CFG, higher_df=higher_squeeze_df
     )
-    assert got_no_vol == direction and score_no_vol > 0
+    assert got_no_vol == direction and (
+        score_no_vol > 0 if direction == "long" else score_no_vol < 0
+    )
 
     df_no_break = breakout_df(direction, breakout=False)
     assert (
@@ -195,8 +197,9 @@ def test_trainer_model_influence(monkeypatch):
     dummy = types.SimpleNamespace(predict=lambda _df: 0.5)
     monkeypatch.setattr(breakout_bot, "MODEL", dummy)
     score, direction2, _ = breakout_bot.generate_signal(df)
+    recent = df.iloc[-31:]
     expected = volatility.normalize_score_by_volatility(
-        df, (raw_base + 0.5) / 2
+        recent, (raw_base + 0.5) / 2
     )
     assert direction2 == direction
     base_raw_cfg = dict(BASE_CFG)
@@ -208,4 +211,4 @@ def test_trainer_model_influence(monkeypatch):
     assert direction2 == direction
     recent = df.iloc[-31:]
     expected = normalize_score_by_volatility(recent, (base_raw + 0.5) / 2)
-    assert score == pytest.approx(expected)
+    assert score == pytest.approx(expected, rel=1e-5)

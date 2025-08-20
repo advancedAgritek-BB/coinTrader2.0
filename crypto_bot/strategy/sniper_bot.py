@@ -146,7 +146,9 @@ def generate_signal(
         initial_window = max(1, initial_window // 2)
 
     if len(df) < initial_window:
-        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        msg = "Signal for %s: %s, %s"
+        score_logger.info(msg, symbol, 0.0, "none")
+        logger.info(msg, symbol, 0.0, "none")
         return 0.0, "none", 0.0, False
 
     first_close = df["close"].iloc[0]
@@ -156,6 +158,7 @@ def generate_signal(
 
     price_change = df["close"].iloc[-1] / first_close - 1
     if direction == "auto" and price_change < 0:
+        atr_window = min(atr_window, len(df))
         atr_series = volatility.calc_atr(df, period=atr_window)
         atr = float(atr_series.iloc[-1]) if not atr_series.empty else float("nan")
         if not np.isfinite(atr) or atr <= 0.0:
@@ -178,9 +181,10 @@ def generate_signal(
 
     atr_window = min(atr_window, len(df))
     atr_series = volatility.calc_atr(df, period=atr_window)
-    atr = float(atr_series.iloc[-1]) if not atr_series.empty else float("nan")
+    atr_last = float(atr_series.iloc[-1]) if not atr_series.empty else float("nan")
+    atr = atr_last
     event = False
-    if not np.isfinite(atr) or atr <= 0.0:
+    if not np.isfinite(atr_last) or atr_last <= 0.0:
         score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none", {"reason": "bad_atr"}, event
 
@@ -190,13 +194,14 @@ def generate_signal(
         prev_vol = df["volume"].iloc[:-1]
     avg_vol = prev_vol.mean() if not prev_vol.empty else 0.0
     body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
-    if atr > 0.0 and avg_vol > 0:
-        if body >= 2 * atr and df["volume"].iloc[-1] >= 2 * avg_vol:
+    if avg_vol > 0:
+        atr_val = atr_last
+        if atr_val > 0 and body >= 2 * atr_val and df["volume"].iloc[-1] >= 2 * avg_vol:
             event = True
 
     if df["volume"].iloc[-1] < min_volume:
         score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
-        return 0.0, "none", float(atr), event
+        return 0.0, "none", float(atr_last), event
 
     if (
         len(df) <= max_history
