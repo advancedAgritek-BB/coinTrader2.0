@@ -14,11 +14,9 @@ sys.modules.setdefault(
 
 mean_bot = importlib.import_module("crypto_bot.strategy.mean_bot")
 
-import asyncio
-
 
 def _run(df, cfg=None):
-    return asyncio.run(mean_bot.generate_signal(df, cfg))
+    return mean_bot.generate_signal(df, cfg)
 
 
 def _df_with_drop(price: float, last_width: float = 5.0) -> pd.DataFrame:

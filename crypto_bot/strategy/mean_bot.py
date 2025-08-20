@@ -1,6 +1,5 @@
-from typing import Optional, Tuple
+from typing import Tuple
 
-import asyncio
 import importlib
 
 import numpy as np
@@ -49,7 +48,7 @@ else:  # pragma: no cover - fallback
     warn_ml_unavailable_once()
 
 
-async def generate_signal(
+def generate_signal(
     df: pd.DataFrame,
     symbol: str | None = None,
     timeframe: str | None = None,
@@ -241,7 +240,7 @@ async def generate_signal(
         ml_score = None
         if MODEL is not None:
             try:  # pragma: no cover - best effort
-                ml_score = await asyncio.to_thread(MODEL.predict, df)
+                ml_score = MODEL.predict(df)
             except Exception:
                 ml_score = None
         else:  # pragma: no cover - fallback
