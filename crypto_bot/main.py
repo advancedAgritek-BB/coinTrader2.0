@@ -40,7 +40,7 @@ from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.utils.logger import pipeline_logger
 from crypto_bot.ml.selfcheck import log_ml_status_once
-from crypto_bot.utils.ml_utils import ML_AVAILABLE, is_ml_available
+from crypto_bot.utils import ml_utils
 from crypto_bot.ml.model_loader import load_regime_model, _norm_symbol
 
 # Internal project modules are imported lazily in `_import_internal_modules()`
@@ -703,9 +703,9 @@ def _ensure_ml_if_needed(cfg: dict) -> None:
         if not cfg.get("ml_enabled", True):
             _LAST_ML_CFG = ml_cfg
             return
-        if not ML_AVAILABLE:
+        if not ml_utils.ML_AVAILABLE:
             symbol = cfg.get("symbol") or os.getenv("CT_SYMBOL", "XRPUSD")
-            _available, reason = is_ml_available()
+            _available, reason = ml_utils.is_ml_available()
             logger.info(
                 "ML model for %s unavailable (%s); ensure SUPABASE_URL and SUPABASE_KEY are set. "
                 "Install cointrader-trainer only when training new models.",
@@ -3738,7 +3738,7 @@ async def main() -> None:
     global build_priority_queue, get_solana_new_tokens, get_filtered_symbols, fix_symbol, symbol_utils, symbol_cache_guard
     global log_cycle_metrics, PaperWallet, Wallet, compute_strategy_weights, optimize_strategies
     global write_cycle_metrics, TOKEN_MINTS, monitor_pump_raydium, refresh_mints, periodic_mint_sanity_check, fetch_from_helius
-    global pnl_logger, regime_pnl_tracker, ML_AVAILABLE, record_sol_scanner_metrics, registry
+    global pnl_logger, regime_pnl_tracker, record_sol_scanner_metrics, registry
     global auto_convert_funds, check_wallet_balances, detect_non_trade_tokens
     global classify_regime_async, classify_regime_cached, calc_atr, monitor_price, SolanaMempoolMonitor, maybe_refresh_model
     global fetch_geckoterminal_ohlcv, fetch_solana_prices, cross_chain_trade, sniper_solana, sniper_trade
