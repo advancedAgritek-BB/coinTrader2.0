@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import inspect
 import logging
 from typing import Any, Awaitable, Callable, Dict, Iterable, Tuple
@@ -20,7 +19,8 @@ def _filter_kwargs(func: Callable, **kwargs) -> Dict[str, Any]:
 
 
 async def _maybe_await(res: Any) -> Any:
-    if asyncio.iscoroutine(res):
+    """Await ``res`` if it is awaitable."""
+    if inspect.isawaitable(res):
         return await res
     return res
 
@@ -41,10 +41,13 @@ async def run_strategy(
 
     try:
         res = gen(df=df, symbol=symbol, timeframe=timeframe, **kwargs)
-        res = await _maybe_await(res)
+        if inspect.isawaitable(res):
+            res = await res
     except TypeError:
         try:
-            res = await _maybe_await(gen(df=df))
+            res = gen(df=df)
+            if inspect.isawaitable(res):
+                res = await res
         except Exception:
             logger.exception(
                 "Strategy %s execution failed", getattr(gen, "__name__", gen)
