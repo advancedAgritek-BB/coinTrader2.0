@@ -296,12 +296,12 @@ class RiskManager:
         atr_threshold = getattr(self.config, "min_atr_pct", 0.0)
         logger.info("[EVAL] ATR threshold: %.8f", atr_threshold)
 
-        if atr_threshold > 0 and too_flat(df, atr_threshold * 0.2):
+        if atr_threshold > 0 and too_flat(df, threshold=atr_threshold * 0.2):
             reason = "Volatility too low for HFT"
             logger.info("[EVAL] %s", reason)
             return False, reason
 
-        if atr_threshold > 0 and too_flat(df, atr_threshold):
+        if atr_threshold > 0 and too_flat(df, threshold=atr_threshold):
             reason = "Volatility too low"
             logger.info("[EVAL] %s", reason)
             return False, reason
@@ -312,7 +312,7 @@ class RiskManager:
             "Allow %s: vol=%.6f, flat=%s",
             symbol,
             current_volume,
-            too_flat(df, atr_threshold) if atr_threshold > 0 else False,
+            too_flat(df, threshold=atr_threshold) if atr_threshold > 0 else False,
         )
         logger.info("[EVAL] %s", reason)
         return True, reason
