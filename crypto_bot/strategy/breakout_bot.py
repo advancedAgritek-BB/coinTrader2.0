@@ -148,6 +148,7 @@ def generate_signal(
     ema_window = int(cfg.get("ema_window", 200))
     adx_window = int(cfg.get("adx_window", 14))
     adx_threshold = float(cfg.get("adx_threshold", 15))
+    score_threshold = float(cfg.get("score_threshold", 0.0))
     # Volume confirmation is now optional by default to allow breakouts without
     # a prior volume spike. Users can enable the old behaviour by explicitly
     # setting ``vol_confirmation: true`` in the strategy config.
@@ -260,39 +261,37 @@ def generate_signal(
     upper_break = dc_high.iloc[-1] + atr_last * atr_buffer_mult
     lower_break = dc_low.iloc[-1] - atr_last * atr_buffer_mult
 
-    long_cond = (
-        latest["close"] > upper_break
-        and latest["close"] > latest["ema"]
-        and latest["adx"] > adx_threshold
-    )
-    short_cond = (
-        latest["close"] < lower_break
-        and latest["close"] < latest["ema"]
-        and latest["adx"] > adx_threshold
-    )
-
-    logger.info(
-        f"{df.index[-1]} Squeeze: {squeeze.iloc[-1]}, long_cond: {long_cond}, vol_ok: {vol_ok}"
-    )
+    metric = 0.0
+    if latest["close"] > upper_break:
+        metric = (latest["close"] - upper_break) / atr_last if atr_last > 0 else latest["close"] - upper_break
+    elif latest["close"] < lower_break:
+        metric = (latest["close"] - lower_break) / atr_last if atr_last > 0 else latest["close"] - lower_break
 
     direction = "none"
-    score = 0.0
-    if long_cond and vol_ok:
-        direction = "long"
-        score = 1.0
-    elif short_cond and vol_ok:
-        direction = "short"
-        score = 1.0
+    if (
+        vol_ok
+        and abs(metric) > score_threshold
+        and latest["adx"] >= adx_threshold
+        and (
+            (metric > 0 and latest["close"] > latest["ema"]) or
+            (metric < 0 and latest["close"] < latest["ema"])
+        )
+    ):
+        direction = "long" if metric > 0 else "short"
 
-    if score > 0:
-        if MODEL is not None:
-            try:  # pragma: no cover - best effort
-                ml_score = MODEL.predict(df)
-                score = (score + ml_score) / 2
-            except Exception:
-                pass
-        if config is None or config.get("atr_normalization", True):
-            score = normalize_score_by_volatility(recent, score)
+    score = metric
+    if direction != "none" and MODEL is not None:
+        try:  # pragma: no cover - best effort
+            ml_score = MODEL.predict(df)
+            score = (score + ml_score) / 2
+        except Exception:
+            pass
+    if direction != "none" and (config is None or config.get("atr_normalization", True)):
+        score = normalize_score_by_volatility(recent, score)
+
+    logger.info(
+        f"{df.index[-1]} Squeeze: {squeeze.iloc[-1]}, metric: {metric:.4f}, vol_ok: {vol_ok}"
+    )
 
     if higher_df is not None:
         return score, direction
