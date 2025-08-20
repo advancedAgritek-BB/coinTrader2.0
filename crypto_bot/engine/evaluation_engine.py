@@ -131,6 +131,12 @@ class StreamEvaluationEngine:
         return False
 
     async def _evaluate_symbol(self, symbol: str, ctx: dict) -> None:
+        # ensure downstream evaluation has the symbol in context
+        if not isinstance(ctx, dict):
+            ctx = dict(getattr(ctx, "__dict__", {}))
+        else:
+            ctx = dict(ctx)
+        ctx.setdefault("symbol", symbol)
         res = await asyncio.wait_for(self.eval_fn(symbol, ctx), timeout=8)
         if isinstance(res, dict):
             direction = res.get("direction", "none")
