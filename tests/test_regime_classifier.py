@@ -7,6 +7,18 @@ import sys
 import types
 import os
 
+# Stub external Solana dependencies to avoid heavy imports during tests
+sys.modules.setdefault("solana", types.ModuleType("solana"))
+sys.modules.setdefault("solana.rpc", types.ModuleType("solana.rpc"))
+async_api_stub = types.ModuleType("solana.rpc.async_api")
+class _AsyncClient:  # minimal placeholder
+    pass
+async_api_stub.AsyncClient = _AsyncClient
+sys.modules.setdefault("solana.rpc.async_api", async_api_stub)
+sys.modules.setdefault("solders", types.ModuleType("solders"))
+sys.modules.setdefault("solders.rpc", types.ModuleType("solders.rpc"))
+sys.modules.setdefault("solders.rpc.responses", types.ModuleType("solders.rpc.responses"))
+
 from crypto_bot.regime.regime_classifier import (
     classify_regime,
     classify_regime_async,
@@ -1034,5 +1046,28 @@ async def test_analyze_symbol_flags_too_flat(monkeypatch):
     }
     res = await ma.analyze_symbol("AAA", {"1h": df}, "cex", cfg, None)
     assert res["too_flat"] is True
+
+
+@pytest.mark.asyncio
+async def test_classify_regime_cached_unknown_alert():
+    class DummyNotifier:
+        def __init__(self):
+            self.msgs = []
+
+        def notify(self, text):
+            self.msgs.append(text)
+
+    notifier = DummyNotifier()
+    for _ in range(rc.UNKNOWN_ALERT_THRESHOLD):
+        label, info = await rc.classify_regime_cached(
+            "AAA", "1h", df=None, notifier=notifier
+        )
+        assert label == "unknown"
+        assert info == 0.0
+
+    snap = telemetry.snapshot()
+    assert snap["analysis.regime_unknown"] == rc.UNKNOWN_ALERT_THRESHOLD
+    assert snap["analysis.regime_unknown_alerts"] == 1
+    assert any("Regime unknown" in m for m in notifier.msgs)
 
 
