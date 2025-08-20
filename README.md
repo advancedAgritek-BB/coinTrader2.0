@@ -559,7 +559,9 @@ symbol_score_weights:
 * **strategy_evaluation_mode** – how the router chooses a strategy.
 * **ensemble_min_conf** – minimum confidence required for a strategy to
   participate in ensemble evaluation.
-* **voting_strategies**/**min_agreeing_votes** – strategies used for the voting router.
+* **voting_strategies** – strategies used for the voting router. Supports
+  optional `weights`, `min_agree_fraction`, `quorum`, and
+  `min_agreeing_votes` settings.
 * **micro_scalp_bot** – EMA settings plus volume z-score and ATR filters for the scalp bot.
   Supports tick-level aggregation, optional mempool fee checks and order-book
   imbalance filtering with an optional penalty. Set `trend_filter` or
