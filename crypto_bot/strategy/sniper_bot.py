@@ -125,7 +125,13 @@ def generate_signal(
         and ALLOWED_PAIRS
         and symbol not in ALLOWED_PAIRS
     ):
-        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            0.0,
+            "none",
+        )
         return 0.0, "none", 0.0, False
 
     if config:
@@ -146,14 +152,20 @@ def generate_signal(
         initial_window = max(1, initial_window // 2)
 
     if len(df) < initial_window:
-        msg = "Signal for %s: %s, %s"
-        score_logger.info(msg, symbol, 0.0, "none")
-        logger.info(msg, symbol, 0.0, "none")
+        msg = "Signal for %s:%s -> %.3f, %s"
+        score_logger.info(msg, symbol or "unknown", timeframe or "N/A", 0.0, "none")
+        logger.info(msg, symbol or "unknown", timeframe or "N/A", 0.0, "none")
         return 0.0, "none", 0.0, False
 
     first_close = df["close"].iloc[0]
     if first_close == 0:
-        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            0.0,
+            "none",
+        )
         return 0.0, "none", 0.0, False
 
     price_change = df["close"].iloc[-1] / first_close - 1
@@ -162,7 +174,13 @@ def generate_signal(
         atr_series = volatility.calc_atr(df, period=atr_window)
         atr = float(atr_series.iloc[-1]) if not atr_series.empty else float("nan")
         if not np.isfinite(atr) or atr <= 0.0:
-            score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+            score_logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                0.0,
+                "none",
+            )
             return 0.0, "none", {"reason": "bad_atr"}, False
         score = 1.0
         if MODEL is not None:
@@ -173,7 +191,13 @@ def generate_signal(
                 pass
         if config is None or config.get("atr_normalization", True):
             score = volatility.normalize_score_by_volatility(df, score)
-        score_logger.info("Signal for %s: %s, %s", symbol, score, "short")
+        score_logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            score,
+            "short",
+        )
         return score, "short", float(atr), False
 
     base_volume = df["volume"].iloc[:initial_window].mean()
@@ -185,7 +209,13 @@ def generate_signal(
     atr = atr_last
     event = False
     if not np.isfinite(atr_last) or atr_last <= 0.0:
-        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            0.0,
+            "none",
+        )
         return 0.0, "none", {"reason": "bad_atr"}, event
 
     if len(df) > volume_window:
@@ -200,7 +230,13 @@ def generate_signal(
             event = True
 
     if df["volume"].iloc[-1] < min_volume:
-        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            0.0,
+            "none",
+        )
         return 0.0, "none", float(atr_last), event
 
     if (
@@ -224,7 +260,13 @@ def generate_signal(
         trade_direction = direction
         if direction == "auto":
             trade_direction = "short" if price_change < 0 else "long"
-        score_logger.info("Signal for %s: %s, %s", symbol, score, trade_direction)
+        score_logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            score,
+            trade_direction,
+        )
         return score, trade_direction, float(atr), event
 
     trade_direction = direction
@@ -234,7 +276,13 @@ def generate_signal(
         atr_series = volatility.calc_atr(df, period=atr_window)
         atr = float(atr_series.iloc[-1]) if not atr_series.empty else float("nan")
         if not np.isfinite(atr) or atr <= 0.0:
-            score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+            score_logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                0.0,
+                "none",
+            )
             return 0.0, "none", {"reason": "bad_atr"}, event
         body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
         avg_vol = df["volume"].iloc[:-1].mean()
@@ -261,10 +309,22 @@ def generate_signal(
                     if df["close"].iloc[-1] < df["open"].iloc[-1]
                     else "long"
                 )
-            score_logger.info("Signal for %s: %s, %s", symbol, score, trade_direction)
+            score_logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                score,
+                trade_direction,
+            )
             return score, trade_direction, atr, event
 
-    score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+    score_logger.info(
+        "Signal for %s:%s -> %.3f, %s",
+        symbol or "unknown",
+        timeframe or "N/A",
+        0.0,
+        "none",
+    )
     return 0.0, "none", float(atr) if atr is not None else 0.0, event
 
 
