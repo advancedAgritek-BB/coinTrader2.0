@@ -56,6 +56,8 @@ strategies:
     atr_stop_mult: 1.0
     max_spread_bp: 8
     time_exit_bars: 6
+    rsi_overbought_pct: 65
+    rsi_oversold_pct: 35
 
   trend_bot:
     enabled: true

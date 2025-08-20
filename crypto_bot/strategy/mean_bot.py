@@ -72,13 +72,13 @@ async def generate_signal(
     except (TypeError, ValueError):
         lookback_cfg = 14
     try:
-        rsi_overbought_pct = float(config.get("rsi_overbought_pct", 70))
+        rsi_overbought_pct = float(config.get("rsi_overbought_pct", 65))
     except (TypeError, ValueError):
-        rsi_overbought_pct = 70.0
+        rsi_overbought_pct = 65.0
     try:
-        rsi_oversold_pct = float(config.get("rsi_oversold_pct", 30))
+        rsi_oversold_pct = float(config.get("rsi_oversold_pct", 35))
     except (TypeError, ValueError):
-        rsi_oversold_pct = 30.0
+        rsi_oversold_pct = 35.0
     try:
         adx_threshold = float(config.get("adx_threshold", 25))
     except (TypeError, ValueError):
