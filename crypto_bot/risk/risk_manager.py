@@ -47,7 +47,8 @@ class RiskConfig:
     min_sentiment: int = 0
     bull_fng: int = 101
     bull_sentiment: int = 101
-    min_atr_pct: float = 0.0
+    min_atr_pct: float = 0.00005
+    min_hft_atr_pct: float = 0.00001
     max_funding_rate: float = 1.0
     symbol: str = ""
     trade_size_pct: float = 0.1
@@ -182,8 +183,11 @@ class RiskManager:
                 short_atr = float(short_series.iloc[-1])
                 long_atr = float(long_series.iloc[-1])
                 if long_atr > 0 and not isnan(short_atr) and not isnan(long_atr):
+                    ratio = short_atr / long_atr
+                    if abs(short_atr - long_atr) / long_atr < 0.2:
+                        ratio = 1.0
                     volatility_factor = min(
-                        short_atr / long_atr,
+                        ratio,
                         self.config.max_volatility_factor,
                     )
 
@@ -293,12 +297,15 @@ class RiskManager:
             logger.info("[EVAL] %s", reason)
             return False, reason
 
-        if too_flat(df, 0.00001):
+        if (
+            self.config.min_hft_atr_pct
+            and too_flat(df, threshold=self.config.min_hft_atr_pct)
+        ):
             reason = "Volatility too low for HFT"
             logger.info("[EVAL] %s", reason)
             return False, reason
 
-        if too_flat(df, 0.00005):
+        if self.config.min_atr_pct and too_flat(df, threshold=self.config.min_atr_pct):
             reason = "Volatility too low"
             logger.info("[EVAL] %s", reason)
             return False, reason
@@ -309,7 +316,7 @@ class RiskManager:
             "Allow %s: vol=%.6f, flat=%s",
             symbol,
             current_volume,
-            too_flat(df, 0.00005),
+            too_flat(df, threshold=self.config.min_atr_pct),
         )
         logger.info("[EVAL] %s", reason)
         return True, reason

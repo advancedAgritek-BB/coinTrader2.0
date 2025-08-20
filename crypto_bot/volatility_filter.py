@@ -43,13 +43,16 @@ def atr_pct(df: pd.DataFrame, period: int = 14) -> pd.Series:
 def too_flat(
     df: pd.DataFrame,
     atr_period: int = 14,
-    threshold: float = 0.004,
+    threshold: float = 0.0005,
 ) -> bool:
     """Heuristic to detect markets with very low volatility.
 
-    The median ATR% of the last ``atr_period`` values is compared against
+    The mean ATR% of the last ``atr_period`` values is compared against
     ``threshold``.  When insufficient data is provided the function returns
     ``True`` as a conservative default.
+
+    ``threshold`` should typically be provided explicitly from configuration
+    rather than relying on the default placeholder.
 
     For backwards compatibility the second positional argument may be a float
     representing ``threshold`` (the old signature). In that case ``atr_period``
@@ -57,13 +60,13 @@ def too_flat(
     """
 
     # Backwards compatibility for legacy ``too_flat(df, threshold)`` usage.
-    if isinstance(atr_period, float) and threshold == 0.004:
+    if isinstance(atr_period, float) and threshold == 0.0005:
         threshold = atr_period
         atr_period = 14
 
     if len(df) < atr_period:
         return True
-    ap = atr_pct(df, period=atr_period).iloc[-atr_period:].median()
+    ap = atr_pct(df, period=atr_period).iloc[-atr_period:].mean()
     return float(ap) < threshold
 
 
