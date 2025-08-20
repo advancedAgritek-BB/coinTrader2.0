@@ -31,6 +31,14 @@ PROM_COUNTERS: Dict[str, Counter] = {
         "ml_fallbacks",
         "Number of times ML fallback triggered",
     ),
+    "analysis.regime_unknown": Counter(
+        "analysis_regime_unknown",
+        "Number of regime classifications returning unknown due to missing data",
+    ),
+    "analysis.regime_unknown_alerts": Counter(
+        "analysis_regime_unknown_alerts",
+        "Number of alerts triggered for sustained unknown regime classifications",
+    ),
 }
 
 

@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Dict, Optional, Tuple
+from collections import defaultdict
 import asyncio
 import time
 import logging
@@ -831,6 +832,8 @@ async def classify_regime_with_patterns_async(
 regime_cache: Dict[tuple[str, str], str] = {}
 _regime_cache_ts: Dict[tuple[str, str], int] = {}
 _regime_cache_lock = asyncio.Lock()
+_unknown_counts: Dict[tuple[str, str], int] = defaultdict(int)
+UNKNOWN_ALERT_THRESHOLD = 5
 
 
 async def classify_regime_cached(
@@ -844,12 +847,34 @@ async def classify_regime_cached(
     notifier: TelegramNotifier | None = None,
 ) -> Tuple[str, object]:
     """Classify ``symbol`` regime with caching and optional profiling."""
-
+    key = (symbol, timeframe or "")
     if df is None or df.empty:
+        telemetry.inc("analysis.regime_unknown")
+        msg = f"No data for {symbol} {timeframe or ''}; returning unknown"
+        logger.warning(msg)
+        if notifier is not None:
+            try:
+                notifier.notify(f"⚠️ {msg}")
+            except Exception:
+                pass
+        count = _unknown_counts[key] + 1
+        _unknown_counts[key] = count
+        if count >= UNKNOWN_ALERT_THRESHOLD:
+            alert = (
+                f"Regime unknown {count} times for {symbol} {timeframe or ''}; check data feed"
+            )
+            logger.error(alert)
+            telemetry.inc("analysis.regime_unknown_alerts")
+            if notifier is not None:
+                try:
+                    notifier.notify(f"🚨 {alert}")
+                except Exception:
+                    pass
+            _unknown_counts[key] = 0
         return "unknown", 0.0
 
+    _unknown_counts.pop(key, None)
     ts = int(df["timestamp"].iloc[-1]) if "timestamp" in df.columns else len(df)
-    key = (symbol, timeframe or "")
     async with _regime_cache_lock:
         if key in regime_cache and _regime_cache_ts.get(key) == ts:
             label = regime_cache[key]
