@@ -2907,6 +2907,10 @@ async def update_multi_tf_ohlcv_cache(
                         state = "bootstrap"
                         if sym in tf_cache and not tf_cache[sym].empty:
                             last_ts = tf_cache[sym]["timestamp"].iloc[-1]
+                            # Normalize cached timestamp to seconds so comparison with
+                            # `df_new` integer timestamps is consistent.
+                            if isinstance(last_ts, pd.Timestamp):
+                                last_ts = last_ts.value // 10 ** 9
                             df_new = df_new[df_new["timestamp"] > last_ts]
                             if df_new.empty:
                                 continue
