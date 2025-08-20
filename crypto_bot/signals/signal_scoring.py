@@ -98,11 +98,24 @@ async def evaluate_async(
 
             return await asyncio.wait_for(call(), timeout=5)
 
-    tasks = [asyncio.create_task(run(fn)) for fn in strategy_fns]
+    tasks: List[asyncio.Task] = []
+    placeholders: List[int] = []
+    executed_fns: List[Callable[[pd.DataFrame], Tuple]] = []
+    results: List[Tuple[float, str, Optional[float]] | None] = []
+
+    for fn in strategy_fns:
+        min_bars = getattr(fn, "min_bars", 0)
+        if min_bars and len(df) < int(min_bars):
+            results.append((0.0, "none", None))
+            continue
+        placeholders.append(len(results))
+        tasks.append(asyncio.create_task(run(fn)))
+        executed_fns.append(fn)
+        results.append(None)
+
     raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    results: List[Tuple[float, str, Optional[float]]] = []
-    for fn, res in zip(strategy_fns, raw_results):
+    for idx, fn, res in zip(placeholders, executed_fns, raw_results):
         if isinstance(res, Exception):
             if isinstance(res, asyncio.TimeoutError):
                 logger.warning(
@@ -114,11 +127,12 @@ async def evaluate_async(
                     getattr(fn, "__name__", str(fn)),
                     res,
                 )
-            results.append((0.0, "none", None))
+            results[idx] = (0.0, "none", None)
         else:
-            results.append(res)
+            results[idx] = res
 
-    return results
+    # at this point all placeholders replaced
+    return [r if r is not None else (0.0, "none", None) for r in results]
 
 
 def evaluate_strategies(
