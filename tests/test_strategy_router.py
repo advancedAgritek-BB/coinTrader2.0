@@ -151,14 +151,18 @@ def test_route_handles_none_df_map():
 
 
 def test_route_unknown_fallback(monkeypatch, caplog):
-    monkeypatch.setattr(strategy_router, "ML_AVAILABLE", False)
     fake_r = fakeredis.FakeRedis()
     monkeypatch.setattr(strategy_router.commit_lock, "REDIS_CLIENT", fake_r)
-    cfg = RouterConfig.from_dict({"strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]}})
+    cfg = RouterConfig.from_dict(
+        {
+            "symbol": "BTC/USD",
+            "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
+        }
+    )
     with caplog.at_level("WARNING"):
         fn = route("unknown", "cex", cfg)
-    assert fn.__name__ == grid_bot.generate_signal.__name__
-    assert "ML unavailable; using fallback regime and default strategy." in caplog.text
+    assert fn.__name__ == trend_bot.generate_signal.__name__
+    assert "Unknown regime for BTC/USD; fallback to trend_bot" in caplog.text
 
 
 def test_route_notifier(monkeypatch):
@@ -450,18 +454,14 @@ def test_route_mempool_blocks_signal(monkeypatch):
     assert (score, direction) == (0.0, "none")
 
 
-def _unwrap(fn):
-    inner = fn.__closure__[0].cell_contents
-    base_wrapped = inner.__closure__[0].cell_contents
-    return base_wrapped.__closure__[0].cell_contents
-
-
-def test_route_unknown_ml_unavailable(monkeypatch, caplog):
+def test_route_unknown_returns_trend_bot(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
     monkeypatch.setattr(strategy_router, "ML_AVAILABLE", False)
-    cfg = {"strategy_router": {"regimes": {}}}
+    cfg = {"symbol": "ETH/USD", "strategy_router": {"regimes": {}}}
     fn = route("unknown", "cex", cfg)
-    base = _unwrap(fn)
-    assert base is grid_bot.generate_signal
-    assert any("falling back" in r.getMessage() for r in caplog.records)
+    assert fn.__name__ == trend_bot.generate_signal.__name__
+    assert any(
+        "Unknown regime for ETH/USD; fallback to trend_bot" in r.getMessage()
+        for r in caplog.records
+    )
 
