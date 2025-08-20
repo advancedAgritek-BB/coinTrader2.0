@@ -48,8 +48,12 @@ def too_flat(
     """Heuristic to detect markets with very low volatility.
 
     The median ATR% of the last ``atr_period`` values is compared against
-    ``threshold``.  When insufficient data is provided the function returns
+    ``threshold``. When insufficient data is provided the function returns
     ``True`` as a conservative default.
+
+    Callers should normally provide ``threshold`` explicitly—typically from
+    configuration—rather than relying on the default ``0.004`` which is
+    retained only for backward compatibility.
 
     For backwards compatibility the second positional argument may be a float
     representing ``threshold`` (the old signature). In that case ``atr_period``
