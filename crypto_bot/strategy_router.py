@@ -600,7 +600,7 @@ def route(
     """
 
     def _wrap(fn: Callable[[pd.DataFrame], Tuple[float, str]]):
-        async def inner(df: pd.DataFrame | None, cfg=None):
+        def wrapped(df: pd.DataFrame | None, cfg=None):
             data = df if df is not None else pd.DataFrame()
             try:
                 res = fn(
@@ -622,26 +622,25 @@ def route(
             if isinstance(cfg, dict):
                 symbol = cfg.get("symbol", "")
             if direction != "none" and symbol:
-                async with symbol_lock(symbol):
-                    if notifier is not None:
-                        notifier.notify(
-                            f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
-                        )
-                    return score, direction
+                async def notify():
+                    async with symbol_lock(symbol):
+                        if notifier is not None:
+                            notifier.notify(
+                                f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
+                            )
+                        return score, direction
+
+                try:
+                    asyncio.get_running_loop()
+                except RuntimeError:
+                    return asyncio.run(notify())
+                else:
+                    return notify()
             if notifier is not None:
                 notifier.notify(
                     f"\U0001f4c8 Signal: {symbol} \u2192 {direction.upper()} | Confidence: {score:.2f}"
                 )
             return score, direction
-
-        def wrapped(df: pd.DataFrame | None, cfg=None):
-            coro = inner(df, cfg)
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                return asyncio.run(coro)
-            else:
-                return coro
 
         wrapped.__name__ = fn.__name__
         return wrapped
