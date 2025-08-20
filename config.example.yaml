@@ -126,3 +126,8 @@ telegram:
   chat_id: YOUR_CHAT_ID
   status_updates: true
   bootstrap_updates: false
+
+# === volatility filter ===
+volatility_filter:
+  max_funding_rate: 0.3
+  min_atr_pct: 0.0001

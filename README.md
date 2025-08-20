@@ -533,7 +533,7 @@ symbol_score_weights:
 * **max_liquidity_usage** – limit how much of the visible liquidity a single
   order may consume.
 * **weight_liquidity** – scoring weight for available pool liquidity on Solana pairs.
-* **volatility_filter** - skips trading when ATR is too low or funding exceeds `max_funding_rate`. The minimum ATR percent is `0.0005`.
+* **volatility_filter** - skips trading when ATR is too low or funding exceeds `max_funding_rate`. The minimum ATR percent is `0.0001`.
 * **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment to avoid bearish markets.
 * **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
 * **mempool_monitor** – pause or reprice when Solana fees spike.
