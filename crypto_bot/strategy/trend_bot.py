@@ -31,6 +31,10 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
+# Shared logger for symbol scoring
+score_logger = setup_logger(
+    "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
+)
 
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model
@@ -63,7 +67,7 @@ def generate_signal(
     adx_window = 7
     min_bars = max(50, adx_window + 1)
     if df.empty or len(df) < min_bars:
-        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none"
 
     df = df.copy()
@@ -127,7 +131,7 @@ def generate_signal(
     if (
         pd.isna(latest["ema_fast"]) or pd.isna(latest["ema_slow"]) or pd.isna(latest["rsi"])
     ):
-        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none"
 
     adx = float(latest["adx"])
@@ -272,7 +276,7 @@ def generate_signal(
                 score = max(0.0, min(score, 1.0))
             except Exception:
                 pass
-    logger.info("Signal for %s: %s, %s", symbol, score, direction)
+    score_logger.info("Signal for %s: %s, %s", symbol, score, direction)
     return score, direction
 
 

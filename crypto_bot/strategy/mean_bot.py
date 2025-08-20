@@ -31,6 +31,10 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 NAME = "mean_bot"
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
+# Shared logger for symbol scoring
+score_logger = setup_logger(
+    "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
+)
 
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model
@@ -64,7 +68,7 @@ async def generate_signal(
     adx_window = 14
     min_bars = max(50, adx_window + 1)
     if len(df) < min_bars:
-        logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
         return 0.0, "none"
 
     try:
@@ -250,7 +254,7 @@ async def generate_signal(
         score = normalize_score_by_volatility(df, score)
 
     score = float(max(0.0, min(score, 1.0)))
-    logger.info("Signal for %s: %s, %s", symbol, score, direction)
+    score_logger.info("Signal for %s: %s, %s", symbol, score, direction)
     return score, direction
 
 

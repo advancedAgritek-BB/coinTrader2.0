@@ -38,7 +38,7 @@ lastlog = setup_logging("logs/bot.log")
 from crypto_bot.universe import build_tradable_set
 from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
-from crypto_bot.utils.logger import pipeline_logger
+from crypto_bot.utils.logger import pipeline_logger, LOG_DIR, setup_logger
 from crypto_bot.ml.selfcheck import log_ml_status_once
 from crypto_bot.utils import ml_utils
 from crypto_bot.ml.model_loader import load_regime_model, _norm_symbol
@@ -76,6 +76,11 @@ def format_top(scores, n: int = 25) -> str:
 
 logger = logging.getLogger("bot")
 pythonlogger = logging.getLogger("python")
+
+# Dedicated logger for symbol scoring
+score_logger = setup_logger(
+    "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
+)
 
 # Module-level placeholders populated once internal modules are loaded in ``main``
 
@@ -2175,9 +2180,11 @@ async def execute_signals(ctx: BotContext) -> None:
     ctx.reject_reasons = {}
     reject_counts = Counter()
 
-    def _log_rejection(sym: str, score: float, direction: str, min_score: float, verdict: str, category: str) -> None:
+    def _log_rejection(
+        sym: str, score: float, direction: str, min_score: float, verdict: str, category: str
+    ) -> None:
         """Emit structured log for a rejected candidate."""
-        logger.info(
+        score_logger.info(
             "[REJECT][%s] sym=%s score=%.2f dir=%s min_score=%.2f verdict=%s",
             category,
             sym,
@@ -2215,7 +2222,7 @@ async def execute_signals(ctx: BotContext) -> None:
             _log_rejection(sym, score, direction, min_req, "below_min_score", "SCORING")
             reject_counts["below_min_score"] += 1
             continue
-        logger.info(
+        score_logger.info(
             "Passing to execute: symbol=%s, score=%s, dry_run=%s",
             sym,
             score,
@@ -2223,7 +2230,7 @@ async def execute_signals(ctx: BotContext) -> None:
         )
         results.append(r)
 
-    logger.debug(
+    score_logger.debug(
         "Candidate scoring: %d/%d met the minimum score; low_score=%s skip=%s no_direction=%s",
         len(results),
         len(orig_results),
@@ -2233,7 +2240,7 @@ async def execute_signals(ctx: BotContext) -> None:
     )
 
     if not results:
-        logger.info("All signals filtered out - nothing actionable")
+        score_logger.info("All signals filtered out - nothing actionable")
         if ctx.notifier and ctx.config.get("telegram", {}).get("trade_updates", True):
             ctx.notifier.notify("No symbols qualified for trading")
         return

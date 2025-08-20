@@ -6,6 +6,7 @@ import ast
 from pathlib import Path
 from crypto_bot.phase_runner import BotContext
 from crypto_bot.paper_wallet import PaperWallet
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 
 class DummyRM:
@@ -52,6 +53,9 @@ def load_execute_signals():
     ns = {
         "asyncio": asyncio,
         "logger": logging.getLogger("test"),
+        "score_logger": setup_logger(
+            "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
+        ),
         "cex_trade_async": _trade,
         "fetch_order_book_async": lambda *a, **k: {},
         "_closest_wall_distance": lambda *a, **k: None,
@@ -62,6 +66,7 @@ def load_execute_signals():
         "BotContext": BotContext,
         "refresh_balance": lambda ctx: asyncio.sleep(0),
     }
+    ns["score_logger"].setLevel(logging.DEBUG)
     exec(funcs["direction_to_side"], ns)
     exec(funcs["execute_signals"], ns)
     return ns["execute_signals"], called
@@ -186,10 +191,12 @@ async def test_execute_signals_no_symbols_qualify(monkeypatch, caplog):
     ctx.analysis_results = [candidate]
     ctx.timing = {}
 
+    log_file = LOG_DIR / "symbol_filter.log"
     execute_signals, _ = load_execute_signals()
     caplog.set_level(logging.DEBUG)
     await execute_signals(ctx)
 
+    content = log_file.read_text() if log_file.exists() else ""
     assert ctx.notifier.sent == ["No symbols qualified for trading"]
-    assert any("Candidate scoring" in r.getMessage() for r in caplog.records)
-    assert "nothing actionable" in caplog.text
+    assert "Candidate scoring" in content
+    assert "nothing actionable" in content
