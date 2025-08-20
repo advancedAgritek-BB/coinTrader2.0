@@ -1,7 +1,7 @@
-adx_trending_min: 10  # Lower from 20 for more "trending" on Solana volatility
-adx_sideways_max: 25   # Increase for fewer "unknown"
-bb_width_breakout_max: 0.08  # Higher for Solana breakouts
-bb_width_sideways_max: 0.1
+adx_trending_min: 15  # Lower to catch more trends (ADX 15-25 = trending)
+adx_sideways_max: 30   # Raise to reduce "unknown" gaps
+bb_width_breakout_max: 0.12  # Higher for Solana squeezes
+bb_width_sideways_max: 0.15  # Loosen for ranging crypto
 breakout_volume_mult: 1.2
 rsi_mean_rev_min: 30   # Widen for fewer false mean-reversion
 rsi_mean_rev_max: 70
@@ -15,7 +15,7 @@ bb_window: 20
 ma_window: 20
 higher_timeframe: "4h"
 confirm_trend_with_higher_tf: false
-use_ml_regime_classifier: true  # Enable Trainer's LightGBM
+use_ml_regime_classifier: false  # Temp disable to test heuristics; re-enable after training
 use_per_pair_models: true       # Download models per symbol
 model_symbols: []               # Allow-list for per-pair models
 ml_min_bars: 5
@@ -27,7 +27,7 @@ score_weights:
   mean-reverting: 1.0
   volatile: 1.0
 pattern_min_conf: 0.2
-ml_blend_weight: 0.7    # Heavier weight on ML for profitability
+ml_blend_weight: 0.9    # Heavier on ML once trained
 hft_adx_trending_min: 10
 hft_rsi_mean_rev_min: 45
 hft_rsi_mean_rev_max: 55
@@ -42,4 +42,4 @@ hft_rsi_mean_rev_min: 30
 hft_rsi_mean_rev_max: 70
 hft_normalized_range_volatility_min: 0.8
 hft_indicator_window: 5
-ml_blend_weight: 0.8
+ml_blend_weight: 0.9

@@ -502,8 +502,8 @@ secondary_exchange: coinbase
 sentiment_filter:
   bull_fng: 50
   bull_sentiment: 45
-  min_fng: -100
-  min_sentiment: -100
+  min_fng: 20  # Lower if current FNG is blocking
+  min_sentiment: 40
 signal_fusion:
   enabled: true
   fusion_method: weight
@@ -647,8 +647,12 @@ strategy_router:
   trending_timeframe: 1h
   volatile_timeframe: 1m
 yamlrouter:
-  min_score: 0.25
-  min_confidence: 0.25
+  min_score: 0.1  # Lower to allow weaker signals
+  min_confidence: 0.1
+  regimes:
+    unknown:  # Fallback strategy for unknown
+      - mean_bot
+      - grid_bot
 symbol: XRPUSD
 symbol_batch_size: 50
 ohlcv_chunk_size: 20
@@ -736,8 +740,8 @@ use_ml_regime_classifier: true
 use_per_pair_models: true
 use_websocket: true
 volatility_filter:
-  max_funding_rate: 0.3
-  min_atr_pct: 0.0001
+  max_funding_rate: 0.2  # Allow hotter funding
+  min_atr_pct: 0.00005  # Include flatter markets
 voting_strategies:
   strategies:
     - trend_bot
@@ -755,7 +759,7 @@ voting_strategies:
     mean_revert: 0.8
     breakout_bot: 0.6
     micro_scalp_bot: 0.5
-  min_agree_fraction: 0.35
+  min_agree_fraction: 0.25  # Easier consensus
   quorum: 1
   min_agreeing_votes: 1
 wallet_address: your_wallet
