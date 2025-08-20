@@ -56,12 +56,15 @@ strategies:
     atr_stop_mult: 1.0
     max_spread_bp: 8
     time_exit_bars: 6
-    rsi_overbought_pct: 65
-    rsi_oversold_pct: 35
+    rsi_overbought: 65
+    rsi_oversold: 35
 
   trend_bot:
     enabled: true
     tf: "1m"
+    adx_threshold: 15
+    trend_ema_fast: 10
+    trend_ema_slow: 30
 
   momentum_bot:
     enabled: true
