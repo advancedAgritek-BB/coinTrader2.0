@@ -1444,14 +1444,17 @@ Set `FLASK_DEBUG=1` before running the command to enable Flask debug mode.
 
 Navigate to `http://localhost:5000` to start or stop the bot, watch the logs
 refresh live and review the trade statistics stored in
-`crypto_bot/logs/strategy_stats.json` (automatically produced from
+`<LOG_DIR>/strategy_stats.json` (automatically produced from
 `strategy_performance.json`) and the detailed performance records in
-`crypto_bot/logs/strategy_performance.json`. When the bot is stopped a form
+`<LOG_DIR>/strategy_performance.json`. When the bot is stopped a form
 lets you select the execution mode (dry run or live) before launching.
 
 ## Log Files
 
-All runtime information is written under `crypto_bot/logs`. Important files
+All runtime information is written under the directory specified by the
+`LOG_DIR` environment variable. If unset, logs default to
+`~/.cointrader/logs`. References in this README to paths like
+`crypto_bot/logs/*.log` refer to files under this directory. Important files
 include:
 
 - `bot.log` – main log file containing startup events, strategy choices and all

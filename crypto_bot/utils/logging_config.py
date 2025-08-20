@@ -1,6 +1,9 @@
 import logging
 import os
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
+
+from .logger import LOG_DIR
 
 
 class LastLineBuffer(logging.Handler):
@@ -15,8 +18,9 @@ class LastLineBuffer(logging.Handler):
             pass
 
 
-def setup_logging(log_path="logs/bot.log", level=logging.INFO):
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+def setup_logging(log_path: str | os.PathLike = LOG_DIR / "bot.log", level=logging.INFO):
+    log_path = Path(log_path)
+    os.makedirs(log_path.parent, exist_ok=True)
     root = logging.getLogger()
     root.handlers.clear()
     root.setLevel(logging.DEBUG)

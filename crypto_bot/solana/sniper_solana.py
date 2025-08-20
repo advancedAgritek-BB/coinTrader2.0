@@ -129,9 +129,9 @@ from solders.rpc.responses import (
     GetTokenAccountBalanceResp,
     GetAccountInfoResp,
 )
-from crypto_bot.utils.logger import setup_logger
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
-logger = setup_logger(__name__, "crypto_bot/logs/solana_rug_check.log")
+logger = setup_logger(__name__, LOG_DIR / "solana_rug_check.log")
 
 # Constants
 SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"

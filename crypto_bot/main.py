@@ -31,14 +31,14 @@ import numpy as np
 import yaml
 from types import SimpleNamespace
 from pydantic import ValidationError
+from crypto_bot.utils.logger import pipeline_logger, LOG_DIR, setup_logger
 from crypto_bot.utils.logging_config import setup_logging
 
-lastlog = setup_logging("logs/bot.log")
+lastlog = setup_logging(LOG_DIR / "bot.log")
 
 from crypto_bot.universe import build_tradable_set
 from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
-from crypto_bot.utils.logger import pipeline_logger, LOG_DIR, setup_logger
 from crypto_bot.ml.selfcheck import log_ml_status_once
 from crypto_bot.utils import ml_utils
 from crypto_bot.ml.model_loader import load_regime_model, _norm_symbol
