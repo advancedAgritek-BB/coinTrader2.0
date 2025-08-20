@@ -1006,3 +1006,33 @@ def test_hft_env_overrides(monkeypatch):
     assert captured["ml_blend_weight"] == 0.5
 
 
+@pytest.mark.asyncio
+async def test_analyze_symbol_flags_too_flat(monkeypatch):
+    import crypto_bot.utils.market_analyzer as ma
+
+    async def fake_async(*_a, **_k):
+        return "unknown", {"unknown": 1.0}
+
+    monkeypatch.setattr(ma, "ML_AVAILABLE", True)
+    monkeypatch.setattr(ma, "classify_regime_async", fake_async)
+    monkeypatch.setattr(ma, "detect_patterns", lambda _df: {})
+
+    price = np.ones(60)
+    df = pd.DataFrame(
+        {
+            "open": price,
+            "high": price,
+            "low": price,
+            "close": price,
+            "volume": np.ones(60),
+        }
+    )
+    cfg = {
+        "timeframe": "1h",
+        "regime_timeframes": [],
+        "volatility_filter": {"min_atr_pct": 0.1},
+    }
+    res = await ma.analyze_symbol("AAA", {"1h": df}, "cex", cfg, None)
+    assert res["too_flat"] is True
+
+

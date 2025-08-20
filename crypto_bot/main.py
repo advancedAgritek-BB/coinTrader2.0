@@ -2290,6 +2290,12 @@ async def execute_signals(ctx: BotContext) -> None:
         df = candidate["df"]
         price = df["close"].iloc[-1]
         strategy = candidate.get("name", "")
+        if candidate.get("too_flat", False):
+            outcome_reason = "atr too flat"
+            _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
+            logger.info("[EVAL] %s -> %s", sym, outcome_reason)
+            reject_counts["atr_too_flat"] += 1
+            continue
         allowed, reason = ctx.risk_manager.allow_trade(df, strategy, sym)
         if not allowed:
             outcome_reason = f"blocked: {reason}"
@@ -2301,7 +2307,6 @@ async def execute_signals(ctx: BotContext) -> None:
 
         probs = candidate.get("probabilities", {})
         reg_prob = float(probs.get(candidate.get("regime"), 0.0))
-        direction = candidate.get("direction", "long")
         size = ctx.risk_manager.position_size(
             reg_prob,
             ctx.balance,

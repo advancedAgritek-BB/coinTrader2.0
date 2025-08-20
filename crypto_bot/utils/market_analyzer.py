@@ -30,7 +30,7 @@ from crypto_bot.signals.signal_scoring import evaluate_async, evaluate_strategie
 from crypto_bot.utils.rank_logger import log_second_place
 from crypto_bot.strategy import grid_bot
 from crypto_bot.strategy import micro_scalp_bot
-from crypto_bot.volatility_filter import calc_atr
+from crypto_bot.volatility_filter import calc_atr, too_flat
 from ta.volatility import BollingerBands
 from ta.trend import ADXIndicator
 from crypto_bot.utils.stats import zscore
@@ -390,6 +390,9 @@ async def analyze_symbol(
     if total > 0:
         probs = {k: v / total for k, v in probs.items()}
 
+    min_atr_pct = float(config.get("volatility_filter", {}).get("min_atr_pct", 0.0))
+    is_flat = too_flat(df, threshold=min_atr_pct)
+
     result = {
         "symbol": symbol,
         "df": df,
@@ -400,6 +403,7 @@ async def analyze_symbol(
         "confidence": confidence,
         "min_confidence": min_conf_adaptive,
         "probabilities": probs,
+        "too_flat": is_flat,
     }
 
     if regime != "unknown":
