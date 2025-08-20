@@ -117,15 +117,33 @@ def fetch_twitter_sentiment(
     mock = os.getenv("MOCK_TWITTER_SENTIMENT")
     if mock is not None:
         try:
-            return int(mock)
+            score = int(mock)
+            logger.info(
+                "Using mock Twitter sentiment for %s -> %d (mock)", symbol or query, score
+            )
+            return score
         except ValueError:
+            logger.info(
+                "Invalid MOCK_TWITTER_SENTIMENT '%s'; returning fallback 50", mock
+            )
             return 50
 
     target = symbol or query
     if not target:
+        logger.info("No sentiment target provided; returning fallback 50")
         return 50
 
-    return fetch_lunarcrush_sentiment(target)
+    key = f"lunar:{target}"
+    if key in _CACHE:
+        score = _CACHE[key]
+        logger.debug(
+            "Twitter sentiment cache hit for %s -> %d (cached)", target, score
+        )
+        return score
+
+    score = fetch_lunarcrush_sentiment(target)
+    logger.info("Twitter sentiment for %s -> %d (real)", target, score)
+    return score
 
 
 async def fetch_twitter_sentiment_async(
@@ -136,15 +154,33 @@ async def fetch_twitter_sentiment_async(
     mock = os.getenv("MOCK_TWITTER_SENTIMENT")
     if mock is not None:
         try:
-            return int(mock)
+            score = int(mock)
+            logger.info(
+                "Using mock Twitter sentiment for %s -> %d (mock)", symbol or query, score
+            )
+            return score
         except ValueError:
+            logger.info(
+                "Invalid MOCK_TWITTER_SENTIMENT '%s'; returning fallback 50", mock
+            )
             return 50
 
     target = symbol or query
     if not target:
+        logger.info("No sentiment target provided; returning fallback 50")
         return 50
 
-    return await fetch_lunarcrush_sentiment_async(target)
+    key = f"lunar:{target}"
+    if key in _CACHE:
+        score = _CACHE[key]
+        logger.debug(
+            "Twitter sentiment cache hit for %s -> %d (cached)", target, score
+        )
+        return score
+
+    score = await fetch_lunarcrush_sentiment_async(target)
+    logger.info("Twitter sentiment for %s -> %d (real)", target, score)
+    return score
 
 
 async def too_bearish(
