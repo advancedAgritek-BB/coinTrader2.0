@@ -556,17 +556,25 @@ async def analyze_symbol(
                     continue
                 fn = wrap(fn)
                 try:
-                    dir_vote = (await evaluate_async([fn], df, cfg))[0][1]
+                    vote_score, dir_vote, _ = (await evaluate_async([fn], df, cfg))[0]
                 except Exception:  # pragma: no cover - safety
                     continue
-                votes.append(dir_vote)
+                votes.append((dir_vote, vote_score))
 
         original_direction = result["direction"]
         if votes:
             counts = {}
-            for d in votes:
+            for d, _s in votes:
                 counts[d] = counts.get(d, 0) + 1
             best_dir, n = max(counts.items(), key=lambda kv: kv[1])
+            analysis_logger.info("Votes for %s: %s", symbol, votes)
+            analysis_logger.info(
+                "Vote counts for %s: %s (winner=%s, votes=%d)",
+                symbol,
+                counts,
+                best_dir,
+                n,
+            )
             if n >= min_votes:
                 if best_dir != original_direction:
                     analysis_logger.info(
@@ -587,12 +595,30 @@ async def analyze_symbol(
                     )
                 result["direction"] = best_dir
             else:
-                analysis_logger.info(
-                    "Voting kept original direction for %s: %s (%d/%d votes, min=%d)",
+                analysis_logger.warning(
+                    "Insufficient votes for %s: %s won with %d/%d votes (min=%d)",
                     symbol,
-                    original_direction,
+                    best_dir,
                     n,
                     len(votes),
                     min_votes,
                 )
+                result["direction"] = "none"
+
+            if result["direction"] == "none":
+                strong = [
+                    (d, s)
+                    for d, s in votes
+                    if d in ("long", "short") and s > 0.5
+                ]
+                if strong:
+                    strong.sort(key=lambda x: x[1], reverse=True)
+                    fb_dir, fb_score = strong[0]
+                    analysis_logger.info(
+                        "Fallback applied for %s: %s (score=%.2f)",
+                        symbol,
+                        fb_dir,
+                        fb_score,
+                    )
+                    result["direction"] = fb_dir
     return result
