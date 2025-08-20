@@ -29,3 +29,8 @@ yamlmeme_sniper:
   helius_api_key: your_key_here  # For metadata
 
 ohlcv_chunk_size: 20
+
+# === volatility filter ===
+volatility_filter:
+  max_funding_rate: 0.3
+  min_atr_pct: 0.0001
