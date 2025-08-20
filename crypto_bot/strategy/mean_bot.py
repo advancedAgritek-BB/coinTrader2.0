@@ -76,13 +76,17 @@ async def generate_signal(
     except (TypeError, ValueError):
         lookback_cfg = 14
     try:
-        rsi_overbought_pct = float(config.get("rsi_overbought_pct", 65))
+        rsi_overbought = float(
+            config.get("rsi_overbought", config.get("rsi_overbought_pct", 65))
+        )
     except (TypeError, ValueError):
-        rsi_overbought_pct = 65.0
+        rsi_overbought = 65.0
     try:
-        rsi_oversold_pct = float(config.get("rsi_oversold_pct", 35))
+        rsi_oversold = float(
+            config.get("rsi_oversold", config.get("rsi_oversold_pct", 35))
+        )
     except (TypeError, ValueError):
-        rsi_oversold_pct = 35.0
+        rsi_oversold = 35.0
     try:
         adx_threshold = float(config.get("adx_threshold", 25))
     except (TypeError, ValueError):
@@ -181,8 +185,8 @@ async def generate_signal(
 
     rsi_z_last = df["rsi_z"].iloc[-1]
     atr_pct = 0.0 if latest["close"] == 0 else (latest["atr"] / latest["close"]) * 100
-    dynamic_oversold_pct = np.clip(rsi_oversold_pct + atr_pct * sl_mult, 1, 49)
-    dynamic_overbought_pct = np.clip(rsi_overbought_pct - atr_pct * tp_mult, 51, 99)
+    dynamic_oversold_pct = np.clip(rsi_oversold + atr_pct * sl_mult, 1, 49)
+    dynamic_overbought_pct = np.clip(rsi_overbought - atr_pct * tp_mult, 51, 99)
     lower_thr = scipy_stats.norm.ppf(dynamic_oversold_pct / 100)
     upper_thr = scipy_stats.norm.ppf(dynamic_overbought_pct / 100)
     oversold_cond = (
