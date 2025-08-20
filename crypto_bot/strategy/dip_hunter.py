@@ -35,7 +35,7 @@ def generate_signal(
     symbol: str | None = None,
     timeframe: str | None = None,
     **kwargs,
-) -> Tuple[float, str]:
+) -> Tuple[float, str] | Tuple[float, str, dict]:
     """Detect deep dips for mean reversion long entries.
 
     Parameters
@@ -80,6 +80,13 @@ def generate_signal(
     ema_trend = int(params.get("ema_trend", 200))
     ml_weight = float(params.get("ml_weight", 0.5))
     atr_normalization = bool(params.get("atr_normalization", True))
+    ema_slow = int(params.get("ema_slow", 20))
+
+    min_bars = max(adx_window, rsi_window, ema_slow) + 5
+    if len(df) < min_bars:
+        return 0.0, "none", {
+            "reason": f"insufficient_bars: need>={min_bars}, have={len(df)}"
+        }
 
     lookback = max(rsi_window, vol_window, adx_window, bb_window, dip_bars)
     required_len = 2 * adx_window - 1
