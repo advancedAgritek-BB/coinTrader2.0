@@ -68,7 +68,12 @@ async def monitor_pump_websocket(
                             df = await fetch_early_ohlcv(mint)
                             if df is None:
                                 continue
-                            score, direction, _ = generate_signal(df, cfg)
+                            score, direction, _ = generate_signal(
+                                df,
+                                cfg,
+                                symbol=symbol,
+                                timeframe=cfg.get("timeframe"),
+                            )
                             if score > 0.7 and direction == "buy":
                                 await execute_snipe(mint, cfg, exchange)
             except Exception as exc:  # pragma: no cover - network

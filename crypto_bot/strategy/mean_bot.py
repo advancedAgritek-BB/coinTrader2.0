@@ -65,10 +65,17 @@ async def generate_signal(
         timeframe = None
     config = kwargs.get("config") or {}
     symbol = config.get("symbol", "")
+    timeframe = timeframe or config.get("timeframe")
     adx_window = 14
     min_bars = max(50, adx_window + 1)
     if len(df) < min_bars:
-        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+        score_logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            0.0,
+            "none",
+        )
         return 0.0, "none"
 
     try:
@@ -254,7 +261,13 @@ async def generate_signal(
         score = normalize_score_by_volatility(df, score)
 
     score = float(max(0.0, min(score, 1.0)))
-    score_logger.info("Signal for %s: %s, %s", symbol, score, direction)
+    score_logger.info(
+        "Signal for %s:%s -> %.3f, %s",
+        symbol or "unknown",
+        timeframe or "N/A",
+        score,
+        direction,
+    )
     return score, direction
 
 

@@ -64,6 +64,8 @@ def generate_signal(
     position: Optional[Position] = kwargs.get("position")
     config = kwargs.get("config")
     spread_bp: float = kwargs.get("spread_bp", 0.0)
+    symbol = symbol or (config.get("symbol") if config else None)
+    timeframe = timeframe or (config.get("timeframe") if config else None)
 
     if df is None or df.empty:
         return 0.0, "none", None, position
@@ -98,12 +100,24 @@ def generate_signal(
             return 0.0, "none", None, None
         if z <= -cfg.z_entry:
             stop = price - cfg.atr_stop_mult * atr_v
-            logger.info("mr_entry side=long price=%s z=%s", price, z)
+            logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                1.0,
+                "long",
+            )
             pos = Position("long", price, len(df) - 1, stop)
             return 1.0, "long", stop, pos
         if z >= cfg.z_entry:
             stop = price + cfg.atr_stop_mult * atr_v
-            logger.info("mr_entry side=short price=%s z=%s", price, z)
+            logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                1.0,
+                "short",
+            )
             pos = Position("short", price, len(df) - 1, stop)
             return 1.0, "short", stop, pos
         return 0.0, "none", None, None
@@ -115,23 +129,59 @@ def generate_signal(
 
     if position.side == "long":
         if price <= position.stop:
-            logger.info("mr_stop side=long price=%s stop=%s", price, position.stop)
+            logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                1.0,
+                "exit",
+            )
             return 1.0, "exit", None, None
         if z >= -cfg.z_exit:
-            logger.info("mr_exit_z side=long price=%s z=%s", price, z)
+            logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                1.0,
+                "exit",
+            )
             return 1.0, "exit", None, None
         if bars_held >= cfg.time_exit_bars:
-            logger.info("mr_exit_time side=long price=%s bars=%s", price, bars_held)
+            logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                1.0,
+                "exit",
+            )
             return 1.0, "exit", None, None
     else:  # short
         if price >= position.stop:
-            logger.info("mr_stop side=short price=%s stop=%s", price, position.stop)
+            logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                1.0,
+                "exit",
+            )
             return 1.0, "exit", None, None
         if z <= cfg.z_exit:
-            logger.info("mr_exit_z side=short price=%s z=%s", price, z)
+            logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                1.0,
+                "exit",
+            )
             return 1.0, "exit", None, None
         if bars_held >= cfg.time_exit_bars:
-            logger.info("mr_exit_time side=short price=%s bars=%s", price, bars_held)
+            logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                1.0,
+                "exit",
+            )
             return 1.0, "exit", None, None
 
     return 0.0, action, stop, new_pos

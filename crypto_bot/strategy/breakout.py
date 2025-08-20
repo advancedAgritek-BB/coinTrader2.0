@@ -46,10 +46,16 @@ def generate_signal(
         kwargs.setdefault("config", timeframe)
         timeframe = None
     config = kwargs.get("config")
+    symbol = symbol or (config.get("symbol") if config else None)
+    timeframe = timeframe or (config.get("timeframe") if config else None)
 
     if df is None or df.empty:
         logger.info(
-            "signal=breakout side=none reason=insufficient_data vol_z=nan bbw_pct=nan"
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            0.0,
+            "none",
         )
         return 0.0, "none", 0.0
 
@@ -69,7 +75,11 @@ def generate_signal(
     lookback = max(donchian_len, keltner_len, bbw_lookback, vol_window, atr_len)
     if len(df) < lookback + 1:
         logger.info(
-            "signal=breakout side=none reason=insufficient_data vol_z=nan bbw_pct=nan"
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            0.0,
+            "none",
         )
         return 0.0, "none", 0.0
 
@@ -141,8 +151,14 @@ def generate_signal(
             reason = short_reason
 
     logger.info(
-        "signal=breakout side=%s reason=%s vol_z=%.2f bbw_pct=%.2f",
+        "Signal for %s:%s -> %.3f, %s",
+        symbol or "unknown",
+        timeframe or "N/A",
+        score,
         side,
+    )
+    logger.debug(
+        "breakout_reason=%s vol_z=%.2f bbw_pct=%.2f",
         reason,
         vol_z if pd.notna(vol_z) else float("nan"),
         bbw_pct if pd.notna(bbw_pct) else float("nan"),
@@ -156,6 +172,8 @@ def should_exit(
     side: str,
     bars_held: int,
     config: Optional[dict] = None,
+    symbol: str | None = None,
+    timeframe: str | None = None,
 ) -> bool:
     """Check whether to exit a position based on ATR targets or time."""
     if df is None or df.empty:
@@ -187,6 +205,13 @@ def should_exit(
         exit_reason = "time"
 
     if exit_reason:
-        logger.info("signal=exit side=%s reason=%s", side, exit_reason)
+        logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            1.0,
+            "exit",
+        )
+        logger.debug("exit_reason=%s", exit_reason)
         return True
     return False

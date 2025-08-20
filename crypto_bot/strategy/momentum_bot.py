@@ -40,6 +40,9 @@ def generate_signal(
         timeframe = None
     config = kwargs.get("config")
 
+    symbol = symbol or (config.get("symbol") if config else None)
+    timeframe = timeframe or (config.get("timeframe") if config else None)
+
     if df is None or df.empty:
         return 0.0, "none"
 
@@ -104,8 +107,8 @@ def generate_signal(
     if long_cond:
         score = 0.8
         direction = "long"
-        logger.info(
-            f"momentum_bot long signal: MACD={macd_val}, RSI={rsi_val}"
+        logger.debug(
+            "momentum_bot long signal: MACD=%s, RSI=%s", macd_val, rsi_val
         )
     elif short_cond and volume_z > vol_z_min:
         score = min(1.0, volume_z / 2)
@@ -122,9 +125,9 @@ def generate_signal(
             score = normalize_score_by_volatility(recent, score)
 
     logger.info(
-        "RSI %.2f MACD %.5f score %.2f direction %s",
-        float(latest.get("rsi", float("nan"))),
-        float(latest.get("macd", float("nan"))),
+        "Signal for %s:%s -> %.3f, %s",
+        symbol or "unknown",
+        timeframe or "N/A",
         score,
         direction,
     )

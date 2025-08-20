@@ -200,6 +200,7 @@ def generate_signal(
     higher_df: pd.DataFrame | None = kwargs.get("higher_df")
     mempool_monitor: SolanaMempoolMonitor | None = kwargs.get("mempool_monitor")
     mempool_cfg: dict | None = kwargs.get("mempool_cfg")
+    timeframe = timeframe or (config.get("timeframe") if config else None)
 
     cfg = GridConfig.from_dict(_as_dict(config))
 
@@ -212,10 +213,22 @@ def generate_signal(
         win_rate = get_recent_win_rate(4, strategy="grid_bot")
         skip_cd = win_rate > 0.7
         if not skip_cd and grid_state.in_cooldown(symbol, cfg.cooldown_bars):
-            score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+            score_logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                0.0,
+                "none",
+            )
             return 0.0, "none"
         if grid_state.active_leg_count(symbol) >= cfg.max_active_legs:
-            score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+            score_logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                0.0,
+                "none",
+            )
             return 0.0, "none"
 
     min_len = max(20, cfg.volume_ma_window)
@@ -324,7 +337,9 @@ def generate_signal(
     breakout_range = (high - low) / 2
     breakout_threshold = breakout_range * cfg.breakout_mult
     if price > centre + breakout_threshold or price < centre - breakout_threshold:
-        return breakout_bot.generate_signal(df, _as_dict(config))
+        return breakout_bot.generate_signal(
+            df, symbol=symbol, timeframe=timeframe, config=_as_dict(config)
+        )
 
     lower_bound = levels[1]
     upper_bound = levels[-2]
@@ -341,7 +356,9 @@ def generate_signal(
             if micro_scalp_bot is not None:
                 scalp_score, scalp_dir = micro_scalp_bot.generate_signal(
                     df,
-                    _as_dict(config),
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    config=_as_dict(config),
                     higher_df=higher_df,
                     mempool_monitor=mempool_monitor,
                     mempool_cfg=mempool_cfg,
@@ -362,7 +379,13 @@ def generate_signal(
                 pass
         if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
-        score_logger.info("Signal for %s: %s, %s", symbol, score, "long")
+        score_logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            score,
+            "long",
+        )
         return score, "long"
 
     if price >= upper_bound:
@@ -378,10 +401,22 @@ def generate_signal(
                 pass
         if cfg.atr_normalization:
             score = normalize_score_by_volatility(df, score)
-        score_logger.info("Signal for %s: %s, %s", symbol, score, "short")
+        score_logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            score,
+            "short",
+        )
         return score, "short"
 
-    score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+    score_logger.info(
+        "Signal for %s:%s -> %.3f, %s",
+        symbol or "unknown",
+        timeframe or "N/A",
+        0.0,
+        "none",
+    )
     return 0.0, "none"
 
 
