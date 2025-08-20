@@ -672,12 +672,12 @@ def route(
         cfg_get(cfg, "commit_lock_intervals", 0),
     )
 
-    if not ML_AVAILABLE and regime == "unknown":
-        logger.warning(
-            "ML unavailable; using fallback regime and default strategy. falling back to default strategy."
+    if regime == "unknown":
+        sym = (
+            cfg.raw.get("symbol", "") if isinstance(cfg, RouterConfig) else cfg.get("symbol", "")
         )
-        tf = cfg_get(cfg, "timeframe", "1h") if not isinstance(cfg, RouterConfig) else cfg.timeframe
-        return _wrap(wrap_with_tf(grid_bot.generate_signal, tf))
+        logger.warning("Unknown regime for %s; fallback to trend_bot", sym)
+        return _wrap(trend_bot.generate_signal)
 
     def _post_fastpath():
         symbol = ""
