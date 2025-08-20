@@ -618,6 +618,9 @@ def route(
                 score, direction = res[0], res[1]
             else:
                 score, direction = res, "none"
+            logger.info(
+                "Regime %s produced score %.2f direction %s", regime, score, direction
+            )
             symbol = ""
             if isinstance(cfg, dict):
                 symbol = cfg.get("symbol", "")
