@@ -112,7 +112,9 @@ def main(argv: Iterable[str] | None = None) -> None:
                 "volume": [1, 1],
             }
         )
-        sig_score, sig_dir = generate_signal(df, {"token": evt.token_mint})
+        sig_score, sig_dir = generate_signal(
+            df, {"token": evt.token_mint}, timeframe=cfg.get("timeframe")
+        )
         print(
             f"{evt.pool_address} score={score:.2f} dir={direction} "
             f"signal={sig_dir} ({sig_score:.2f})"

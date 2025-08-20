@@ -65,7 +65,13 @@ def generate_signal(
     strategy = "dip_hunter"
 
     if cooldown_enabled and symbol and in_cooldown(symbol, strategy):
-        score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "cooldown")
+        score_logger.info(
+            "Signal for %s:%s -> %.3f, %s",
+            symbol or "unknown",
+            timeframe or "N/A",
+            0.0,
+            "cooldown",
+        )
         return 0.0, "none"
 
     rsi_window = int(params.get("rsi_window", 14))
@@ -122,7 +128,13 @@ def generate_signal(
 
     with cooldown(symbol, strategy) as cd:
         if cooldown_enabled and symbol and not cd.allowed:
-            score_logger.info("Signal for %s: %s, %s", symbol, 0.0, "none")
+            score_logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                0.0,
+                "none",
+            )
             return 0.0, "none"
 
         oversold = latest["rsi"] < rsi_oversold and latest["bb_pct"] < 0
@@ -161,7 +173,13 @@ def generate_signal(
                 score = normalize_score_by_volatility(df, score)
 
             score = max(0.0, min(score, 1.0))
-            score_logger.info("Signal for %s: %s, %s", symbol, score, "long")
+            score_logger.info(
+                "Signal for %s:%s -> %.3f, %s",
+                symbol or "unknown",
+                timeframe or "N/A",
+                score,
+                "long",
+            )
             if cooldown_enabled and symbol:
                 cd.mark()
             return score, "long"
