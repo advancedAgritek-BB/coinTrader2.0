@@ -2161,22 +2161,23 @@ async def execute_signals(ctx: BotContext) -> None:
         if reasons:
             logger.warning("Skipping %s: %s", sym, ", ".join(reasons))
             continue
-        logger.info("Executing dry-run trade...")
-        try:
-            await cex_trade_async(
-                ctx.exchange,
-                ctx.ws_client,
-                sym,
-                direction_to_side(direction),
-                0.0,
-                ctx.notifier,
-                dry_run=True,
-                config=ctx.config.get("exec"),
-                score=score,
-                reason="pre-filter",
-            )
-        except Exception as exc:  # pragma: no cover - best effort logging
-            logger.warning("Dry-run trade failed for %s: %s", sym, exc)
+        if ctx.config.get("execution_mode") == "dry_run":
+            logger.info("Executing dry-run trade...")
+            try:
+                await cex_trade_async(
+                    ctx.exchange,
+                    ctx.ws_client,
+                    sym,
+                    direction_to_side(direction),
+                    0.0,
+                    ctx.notifier,
+                    dry_run=True,
+                    config=ctx.config.get("exec"),
+                    score=score,
+                    reason="pre-filter",
+                )
+            except Exception as exc:  # pragma: no cover - best effort logging
+                logger.warning("Dry-run trade failed for %s: %s", sym, exc)
     ctx.reject_reasons = {}
     reject_counts = Counter()
 
