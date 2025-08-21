@@ -78,13 +78,16 @@ def _heuristic_regime(df: pd.DataFrame) -> tuple[str, dict]:
 
     probs = {"trending": 0.0, "sideways": 0.0, "volatile": 0.0, "unknown": 0.0}
 
-    if adx > 25:
+    if adx >= 20:
         regime = "trending"
-    elif bb_width < 0.05:
+    elif bb_width <= 0.08:
         regime = "sideways"
-    elif bb_width > 0.2:
+    elif bb_width >= 0.15:
         regime = "volatile"
     else:
+        regime = "sideways"
+
+    if adx == 0.0 and bb_width == 0.0:
         regime = "unknown"
 
     probs[regime] = 1.0
@@ -406,84 +409,87 @@ async def analyze_symbol(
         "too_flat": is_flat,
     }
 
-    if regime != "unknown":
-        env = mode if mode != "auto" else "cex"
-        eval_mode = config.get("strategy_evaluation_mode", "mapped")
-        cfg = {**config, "symbol": symbol}
+    env = mode if mode != "auto" else "cex"
+    eval_mode = config.get("strategy_evaluation_mode", "mapped")
+    cfg = {**config, "symbol": symbol}
 
-        atr = None
-        higher_df_1h = df_map.get("1h")
+    atr = None
+    higher_df_1h = df_map.get("1h")
 
-        def wrap(fn):
-            if fn is grid_bot.generate_signal:
-                return functools.partial(
-                    fn,
-                    higher_df=higher_df_1h,
-                    mempool_monitor=mempool_monitor,
-                    mempool_cfg=mempool_cfg,
+    def wrap(fn):
+        if fn is grid_bot.generate_signal:
+            return functools.partial(
+                fn,
+                higher_df=higher_df_1h,
+                mempool_monitor=mempool_monitor,
+                mempool_cfg=mempool_cfg,
+            )
+        if fn is micro_scalp_bot.generate_signal:
+            return functools.partial(
+                fn,
+                mempool_monitor=mempool_monitor,
+                mempool_cfg=mempool_cfg,
+            )
+        return fn
+
+    selected_fn = None
+
+    if eval_mode == "best":
+        strategies = [
+            wrap(s) for s in get_strategies_for_regime(sub_regime, router_cfg)
+        ]
+        res = evaluate_strategies(strategies, df, cfg)
+        name = res.get("name", strategy_name(sub_regime, env))
+        score = float(res.get("score", 0.0))
+        direction = res.get("direction", "none")
+        for fn in strategies:
+            if _fn_name(fn) == name:
+                selected_fn = fn
+                break
+        if len(strategies) > 1:
+            remaining = [s for s in strategies if _fn_name(s) != name]
+            if remaining:
+                second = evaluate_strategies(remaining, df, cfg)
+                second_score = float(second.get("score", 0.0))
+                edge = score - second_score
+                log_second_place(
+                    symbol, sub_regime, second.get("name", ""), second_score, edge
                 )
-            if fn is micro_scalp_bot.generate_signal:
-                return functools.partial(
-                    fn,
-                    mempool_monitor=mempool_monitor,
-                    mempool_cfg=mempool_cfg,
+    elif eval_mode == "ensemble":
+        min_conf = float(config.get("ensemble_min_conf", 0.15))
+        candidates = [wrap(strategy_for(sub_regime, router_cfg))]
+        extra = meta_selector._scores_for(sub_regime)
+        for strat_name, val in extra.items():
+            if val >= min_conf:
+                fn = get_strategy_by_name(strat_name)
+                if fn:
+                    fn = wrap(fn)
+                    if fn not in candidates:
+                        candidates.append(fn)
+        ranked = await run_candidates(df, candidates, symbol, cfg, sub_regime)
+        if ranked:
+            best_fn, raw_score, raw_dir = ranked[0]
+            selected_fn = best_fn
+            name = _fn_name(best_fn)
+            score = raw_score
+            direction = raw_dir if raw_score >= min_conf else "none"
+            if len(ranked) > 1:
+                second = ranked[1]
+                analysis_logger.info(
+                    "%s second %s %.4f %s",
+                    symbol,
+                    _fn_name(second[0]),
+                    second[1],
+                    second[2],
                 )
-            return fn
-
-        selected_fn = None
-
-        if eval_mode == "best":
-            strategies = [
-                wrap(s) for s in get_strategies_for_regime(sub_regime, router_cfg)
-            ]
-            res = evaluate_strategies(strategies, df, cfg)
-            name = res.get("name", strategy_name(sub_regime, env))
-            score = float(res.get("score", 0.0))
-            direction = res.get("direction", "none")
-            for fn in strategies:
-                if _fn_name(fn) == name:
-                    selected_fn = fn
-                    break
-            if len(strategies) > 1:
-                remaining = [s for s in strategies if _fn_name(s) != name]
-                if remaining:
-                    second = evaluate_strategies(remaining, df, cfg)
-                    second_score = float(second.get("score", 0.0))
-                    edge = score - second_score
-                    log_second_place(
-                        symbol, sub_regime, second.get("name", ""), second_score, edge
-                    )
-        elif eval_mode == "ensemble":
-            min_conf = float(config.get("ensemble_min_conf", 0.15))
-            candidates = [wrap(strategy_for(sub_regime, router_cfg))]
-            extra = meta_selector._scores_for(sub_regime)
-            for strat_name, val in extra.items():
-                if val >= min_conf:
-                    fn = get_strategy_by_name(strat_name)
-                    if fn:
-                        fn = wrap(fn)
-                        if fn not in candidates:
-                            candidates.append(fn)
-            ranked = await run_candidates(df, candidates, symbol, cfg, sub_regime)
-            if ranked:
-                best_fn, raw_score, raw_dir = ranked[0]
-                selected_fn = best_fn
-                name = _fn_name(best_fn)
-                score = raw_score
-                direction = raw_dir if raw_score >= min_conf else "none"
-                if len(ranked) > 1:
-                    second = ranked[1]
-                    analysis_logger.info(
-                        "%s second %s %.4f %s",
-                        symbol,
-                        _fn_name(second[0]),
-                        second[1],
-                        second[2],
-                    )
-            else:
-                name = strategy_name(sub_regime, env)
-                score = 0.0
-                direction = "none"
+        else:
+            name = strategy_name(sub_regime, env)
+            score = 0.0
+            direction = "none"
+    else:
+        if sub_regime == "unknown":
+            strategy_fn = wrap(strategy_for("unknown", router_cfg))
+            name = strategy_name("unknown", env)
         else:
             strategy_fn = wrap(
                 route(
@@ -496,154 +502,154 @@ async def analyze_symbol(
                     mempool_cfg=mempool_cfg,
                 )
             )
-            selected_fn = strategy_fn
             name = strategy_name(sub_regime, env)
-            score, direction, atr = (await evaluate_async([strategy_fn], df, cfg))[0]
+        selected_fn = strategy_fn
+        score, direction, atr = (await evaluate_async([strategy_fn], df, cfg))[0]
 
-        atr_period = int(config.get("risk", {}).get("atr_period", 14))
-        if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
-            atr_series = calc_atr(df, period=atr_period)
-            atr_val = float(atr_series.iloc[-1]) if len(atr_series) else np.nan
-            atr = atr_val if np.isfinite(atr_val) and atr_val > 0 else 0.0
+    atr_period = int(config.get("risk", {}).get("atr_period", 14))
+    if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
+        atr_series = calc_atr(df, period=atr_period)
+        atr_val = float(atr_series.iloc[-1]) if len(atr_series) else np.nan
+        atr = atr_val if np.isfinite(atr_val) and atr_val > 0 else 0.0
 
-        # Determine how well the selected strategy matches the detected regime
-        reg_strength = 0.0
-        if selected_fn is not None:
-            reg_filter = getattr(selected_fn, "regime_filter", None)
-            if reg_filter is None:
-                try:
-                    module = importlib.import_module(selected_fn.__module__)
-                    reg_filter = getattr(module, "regime_filter", None)
-                except Exception:  # pragma: no cover - safety
-                    reg_filter = None
+    # Determine how well the selected strategy matches the detected regime
+    reg_strength = 0.0
+    if selected_fn is not None:
+        reg_filter = getattr(selected_fn, "regime_filter", None)
+        if reg_filter is None:
             try:
-                if (
-                    reg_filter
-                    and hasattr(reg_filter, "matches")
-                    and reg_filter.matches(sub_regime)
-                ):
-                    reg_strength = 1.0
+                module = importlib.import_module(selected_fn.__module__)
+                reg_filter = getattr(module, "regime_filter", None)
             except Exception:  # pragma: no cover - safety
-                pass
+                reg_filter = None
+        try:
+            if (
+                reg_filter
+                and hasattr(reg_filter, "matches")
+                and reg_filter.matches(sub_regime)
+            ):
+                reg_strength = 1.0
+        except Exception:  # pragma: no cover - safety
+            pass
 
-        weights = config.get("scoring_weights", {})
-        volume = float(df["volume"].iloc[-1]) if "volume" in df.columns else 0.0
-        final = (
-            weights.get("strategy_score", 1.0) * score
-            + weights.get("regime_confidence", 0.0) * confidence
-            + weights.get("volume_score", 0.0) * 1.0
-            + weights.get("symbol_score", 0.0) * 1.0
-            + weights.get("spread_penalty", 0.0) * 0.0
-            + weights.get("strategy_regime_strength", 0.0) * reg_strength
+    weights = config.get("scoring_weights", {})
+    volume = float(df["volume"].iloc[-1]) if "volume" in df.columns else 0.0
+    final = (
+        weights.get("strategy_score", 1.0) * score
+        + weights.get("regime_confidence", 0.0) * confidence
+        + weights.get("volume_score", 0.0) * 1.0
+        + weights.get("symbol_score", 0.0) * 1.0
+        + weights.get("spread_penalty", 0.0) * 0.0
+        + weights.get("strategy_regime_strength", 0.0) * reg_strength
+    )
+    final /= 1 + np.log1p(volume) / 10
+
+    result.update(
+        {
+            "env": env,
+            "name": name,
+            "score": final,
+            "direction": direction,
+            "atr": atr,
+        }
+    )
+    votes = []
+    voting_cfg = config.get("voting_strategies", [])
+    min_votes = int(config.get("min_agreeing_votes", 1))
+    min_fraction = 0.0
+    quorum = min_votes
+    weights: Dict[str, float] = {}
+    if isinstance(voting_cfg, dict):
+        voting = voting_cfg.get("strategies", [])
+        min_votes = int(voting_cfg.get("min_agreeing_votes", min_votes))
+        quorum = int(voting_cfg.get("quorum", min_votes))
+        min_fraction = float(voting_cfg.get("min_agree_fraction", 0.0))
+        weights = {
+            str(k): float(v)
+            for k, v in (voting_cfg.get("weights", {}) or {}).items()
+        }
+    else:
+        voting = voting_cfg
+    if isinstance(voting, list):
+        for strat_name in voting:
+            fn = get_strategy_by_name(strat_name)
+            if fn is None:
+                continue
+            fn = wrap(fn)
+            try:
+                vote_score, dir_vote, _ = (await evaluate_async([fn], df, cfg))[0]
+            except Exception:  # pragma: no cover - safety
+                continue
+            w = float(weights.get(strat_name, 1.0))
+            votes.append((dir_vote, vote_score, w))
+
+    original_direction = result["direction"]
+    if votes:
+        counts: Dict[str, float] = {}
+        total_weight = 0.0
+        for d, _s, w in votes:
+            counts[d] = counts.get(d, 0.0) + w
+            total_weight += w
+        best_dir, best_weight = max(counts.items(), key=lambda kv: kv[1])
+        analysis_logger.info("Votes for %s: %s", symbol, votes)
+        analysis_logger.info(
+            "Vote weights for %s: %s (winner=%s, weight=%.2f)",
+            symbol,
+            counts,
+            best_dir,
+            best_weight,
         )
-        final /= 1 + np.log1p(volume) / 10
-
-        result.update(
-            {
-                "env": env,
-                "name": name,
-                "score": final,
-                "direction": direction,
-                "atr": atr,
-            }
-        )
-        votes = []
-        voting_cfg = config.get("voting_strategies", [])
-        min_votes = int(config.get("min_agreeing_votes", 1))
-        min_fraction = 0.0
-        quorum = min_votes
-        weights: Dict[str, float] = {}
-        if isinstance(voting_cfg, dict):
-            voting = voting_cfg.get("strategies", [])
-            min_votes = int(voting_cfg.get("min_agreeing_votes", min_votes))
-            quorum = int(voting_cfg.get("quorum", min_votes))
-            min_fraction = float(voting_cfg.get("min_agree_fraction", 0.0))
-            weights = {
-                str(k): float(v)
-                for k, v in (voting_cfg.get("weights", {}) or {}).items()
-            }
-        else:
-            voting = voting_cfg
-        if isinstance(voting, list):
-            for strat_name in voting:
-                fn = get_strategy_by_name(strat_name)
-                if fn is None:
-                    continue
-                fn = wrap(fn)
-                try:
-                    vote_score, dir_vote, _ = (await evaluate_async([fn], df, cfg))[0]
-                except Exception:  # pragma: no cover - safety
-                    continue
-                w = float(weights.get(strat_name, 1.0))
-                votes.append((dir_vote, vote_score, w))
-
-        original_direction = result["direction"]
-        if votes:
-            counts: Dict[str, float] = {}
-            total_weight = 0.0
-            for d, _s, w in votes:
-                counts[d] = counts.get(d, 0.0) + w
-                total_weight += w
-            best_dir, best_weight = max(counts.items(), key=lambda kv: kv[1])
-            analysis_logger.info("Votes for %s: %s", symbol, votes)
-            analysis_logger.info(
-                "Vote weights for %s: %s (winner=%s, weight=%.2f)",
-                symbol,
-                counts,
-                best_dir,
-                best_weight,
-            )
-            meets_quorum = len(votes) >= quorum
-            meets_min = best_weight >= min_votes
-            fraction = best_weight / total_weight if total_weight else 0.0
-            meets_fraction = fraction >= min_fraction if min_fraction > 0 else True
-            if meets_quorum and meets_min and meets_fraction:
-                if best_dir != original_direction:
-                    analysis_logger.info(
-                        "Voting changed direction for %s: %s -> %s (%.2f/%.2f weight)",
-                        symbol,
-                        original_direction,
-                        best_dir,
-                        best_weight,
-                        total_weight,
-                    )
-                else:
-                    analysis_logger.info(
-                        "Voting confirmed direction for %s: %s (%.2f/%.2f weight)",
-                        symbol,
-                        original_direction,
-                        best_weight,
-                        total_weight,
-                    )
-                result["direction"] = best_dir
-            else:
-                analysis_logger.warning(
-                    "Insufficient consensus for %s: %s won with %.2f/%.2f weight (min=%.2f, quorum=%d, frac=%.2f)",
+        meets_quorum = len(votes) >= quorum
+        meets_min = best_weight >= min_votes
+        fraction = best_weight / total_weight if total_weight else 0.0
+        meets_fraction = fraction >= min_fraction if min_fraction > 0 else True
+        if meets_quorum and meets_min and meets_fraction:
+            if best_dir != original_direction:
+                analysis_logger.info(
+                    "Voting changed direction for %s: %s -> %s (%.2f/%.2f weight)",
                     symbol,
+                    original_direction,
                     best_dir,
                     best_weight,
                     total_weight,
-                    min_votes,
-                    quorum,
-                    min_fraction,
                 )
-                result["direction"] = "none"
+            else:
+                analysis_logger.info(
+                    "Voting confirmed direction for %s: %s (%.2f/%.2f weight)",
+                    symbol,
+                    original_direction,
+                    best_weight,
+                    total_weight,
+                )
+            result["direction"] = best_dir
+        else:
+            analysis_logger.warning(
+                "Insufficient consensus for %s: %s won with %.2f/%.2f weight (min=%.2f, quorum=%d, frac=%.2f)",
+                symbol,
+                best_dir,
+                best_weight,
+                total_weight,
+                min_votes,
+                quorum,
+                min_fraction,
+            )
+            result["direction"] = "none"
 
-            if result["direction"] == "none":
-                strong = [
-                    (d, s)
-                    for d, s, _w in votes
-                    if d in ("long", "short") and abs(s) >= 0.65
-                ]
-                if strong and mode == "dry_run" and confidence >= 0.55:
-                    strong.sort(key=lambda x: abs(x[1]), reverse=True)
-                    fb_dir, fb_score = strong[0]
-                    analysis_logger.info(
-                        "Single-strategy override for %s: %s (score=%.2f, conf=%.2f)",
-                        symbol,
-                        fb_dir,
-                        fb_score,
-                        confidence,
-                    )
-                    result["direction"] = fb_dir
+        if result["direction"] == "none":
+            strong = [
+                (d, s)
+                for d, s, _w in votes
+                if d in ("long", "short") and abs(s) >= 0.65
+            ]
+            if strong and mode == "dry_run" and confidence >= 0.55:
+                strong.sort(key=lambda x: abs(x[1]), reverse=True)
+                fb_dir, fb_score = strong[0]
+                analysis_logger.info(
+                    "Single-strategy override for %s: %s (score=%.2f, conf=%.2f)",
+                    symbol,
+                    fb_dir,
+                    fb_score,
+                    confidence,
+                )
+                result["direction"] = fb_dir
     return result
