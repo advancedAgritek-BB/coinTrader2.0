@@ -41,6 +41,9 @@ from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
 from crypto_bot.ml.selfcheck import log_ml_status_once
 from crypto_bot.utils import ml_utils
+
+# Expose ML availability flag for tests and external modules
+ML_AVAILABLE = ml_utils.ML_AVAILABLE
 from crypto_bot.ml.model_loader import load_regime_model, _norm_symbol
 
 # Internal project modules are imported lazily in `_import_internal_modules()`
@@ -712,7 +715,7 @@ def _ensure_ml_if_needed(cfg: dict) -> None:
         if not cfg.get("ml_enabled", True):
             _LAST_ML_CFG = ml_cfg
             return
-        if not ml_utils.ML_AVAILABLE:
+        if not ML_AVAILABLE:
             symbol = cfg.get("symbol") or os.getenv("CT_SYMBOL", "XRPUSD")
             _available, reason = ml_utils.is_ml_available()
             logger.info(

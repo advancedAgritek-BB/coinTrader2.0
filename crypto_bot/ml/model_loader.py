@@ -44,6 +44,21 @@ def _fallback_url(symbol: str) -> Optional[str]:
     return None
 
 
+def _local_model_path() -> Optional[str]:
+    """Return configured local model path if provided."""
+
+    path = os.getenv("CT_MODEL_LOCAL_PATH")
+    if path:
+        return path
+    try:
+        from crypto_bot import main as _main  # type: ignore
+
+        cfg = getattr(_main, "_LAST_ML_CFG", {}) or {}
+        return cfg.get("model_local_path") if isinstance(cfg, dict) else None
+    except Exception:  # pragma: no cover - circular import or missing cfg
+        return None
+
+
 def _deserialize(data: bytes) -> Tuple[object | None, object | None]:
     """Deserialize model data into (model, scaler)."""
 
@@ -117,17 +132,38 @@ def load_regime_model(symbol: str) -> Tuple[object | None, object | None, str | 
                 symbol,
                 exc,
             )
+    repo_root = Path(__file__).resolve().parents[2]
+    explicit = _local_model_path()
+    if explicit:
+        path = Path(explicit).expanduser()
+        if not path.is_absolute():
+            path = (repo_root / path).resolve()
+        if path.exists():
+            try:
+                data = path.read_bytes()
+                model, scaler = _deserialize(data)
+                if model is not None:
+                    log.info("Loaded regime model from explicit local path: %s", path)
+                    return model, scaler, str(path)
+            except Exception as exc:
+                log.warning("Explicit local regime model load failed: %s", exc)
+        else:
+            log.warning("Explicit local regime model path missing: %s", path)
 
-    local_path = Path("crypto_bot") / "models" / "regime" / filename
-    if local_path.exists():
-        try:
-            data = local_path.read_bytes()
-            model, scaler = _deserialize(data)
-            if model is not None:
-                log.info("Loaded local regime model: %s", local_path)
-                return model, scaler, str(local_path)
-        except Exception as exc:
-            log.warning("Local regime model load failed: %s", exc)
+    search_paths = [
+        repo_root / "crypto_bot" / "models" / "regime" / filename,
+        repo_root / "crypto_bot" / "models" / filename,
+    ]
+    for path in search_paths:
+        if path.exists():
+            try:
+                data = path.read_bytes()
+                model, scaler = _deserialize(data)
+                if model is not None:
+                    log.info("Loaded regime model from heuristic path: %s", path)
+                    return model, scaler, str(path)
+            except Exception as exc:
+                log.warning("Heuristic local regime model load failed: %s", exc)
 
     return None, None, None
 

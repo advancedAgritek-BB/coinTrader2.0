@@ -165,16 +165,8 @@ CT_REGIME_PREFIX=
 CT_SYMBOL=XRPUSD
 # Optional override URL used if Supabase is unavailable
 # CT_MODEL_FALLBACK_URL=https://example.com/xrpusd_regime_lgbm.pkl
-```
-
-`CT_SYMBOL` controls which Supabase regime model is loaded. For instance,
-setting `CT_SYMBOL=XRPUSD` downloads the `xrpusd_regime_lgbm.pkl` model from the
-root of the `models` bucket (or under `CT_REGIME_PREFIX` if set). When the
-Supabase download fails the loader uses `CT_MODEL_FALLBACK_URL` (or the
-corresponding `model_fallback_url` configuration) and logs when this fallback is
-used, allowing ML scoring to continue.
-# Optional path to a cached model used if Supabase is unavailable
-CT_MODEL_LOCAL_PATH=xrpusd_regime_lgbm.pkl
+# Optional path to a cached model; absolute or relative to the repo root
+# CT_MODEL_LOCAL_PATH=crypto_bot/models/regime/xrpusd_regime_lgbm.pkl
 # Template used to build the model filename. `{symbol}` expands to the lowercase
 # value of `CT_SYMBOL`.
 CT_REGIME_MODEL_TEMPLATE={symbol}_regime_lgbm.pkl
@@ -187,9 +179,14 @@ loader resolves the filename `xrpusd_regime_lgbm.pkl` in the bucket (under
 as
 `https://prmhankbfjanqffwjcba.supabase.co/storage/v1/object/public/models/xrpusd_regime_lgbm.pkl`
 when credentials are provided or the bucket is public. When the Supabase
-download fails the loader tries `CT_MODEL_LOCAL_PATH` (or the corresponding
-`model_local_path` configuration) and logs when this fallback is used, allowing
-ML scoring to continue with a cached model.
+download fails the loader first tries `CT_MODEL_LOCAL_PATH` (or the corresponding
+`model_local_path` configuration). The path is resolved relative to the project
+root if not absolute. If no explicit path is supplied or the file is missing,
+`load_regime_model` searches `crypto_bot/models/regime/` and
+`crypto_bot/models/` for `<symbol>_regime_lgbm.pkl`, logging which source was
+used so you know whether the model came from Supabase, a fallback URL or local
+storage. Place the file in one of those directories or use `CT_MODEL_LOCAL_PATH`
+to point directly to another location.
 
 To load models for additional pairs set `use_per_pair_models: true` and list
 allowed symbols under `model_symbols` in
