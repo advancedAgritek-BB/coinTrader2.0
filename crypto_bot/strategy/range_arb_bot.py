@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import RobustScaler, StandardScaler
 
 import ta
 from scipy import stats
@@ -51,8 +51,15 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
 
     x_scaler = StandardScaler()
     X_scaled = x_scaler.fit_transform(X)
+
+    use_log = np.all(y > 0)
+    y_proc = np.log1p(y) if use_log else y
+
+    robust_scaler = RobustScaler()
+    y_robust = robust_scaler.fit_transform(y_proc)
+
     y_scaler = StandardScaler()
-    y_scaled = y_scaler.fit_transform(y).ravel()
+    y_scaled = y_scaler.fit_transform(y_robust).ravel()
 
     kernel = (
         ConstantKernel(1.0, constant_value_bounds=(1e-3, 1e3))
@@ -61,9 +68,14 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     )
 
     def _optimizer(obj_func, initial_theta, bounds):
-        theta_opt, func_min, _ = fmin_l_bfgs_b(
+        theta_opt, func_min, info = fmin_l_bfgs_b(
             obj_func, initial_theta, bounds=bounds, maxiter=1000
         )
+        if info.get("warnflag", 0) != 0:
+            logger.warning(
+                "Gaussian Process optimizer did not converge: %s",
+                info.get("task", "unknown"),
+            )
         return theta_opt, func_min
 
     gp = GaussianProcessRegressor(
@@ -80,7 +92,12 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     pred_scaled, _ = gp.predict(
         x_scaler.transform(latest_features), return_std=True
     )
-    pred = y_scaler.inverse_transform(pred_scaled.reshape(-1, 1))[0, 0]
+    pred_robust = y_scaler.inverse_transform(pred_scaled.reshape(-1, 1))
+    pred_proc = robust_scaler.inverse_transform(pred_robust)
+    if use_log:
+        pred = np.expm1(pred_proc)[0, 0]
+    else:
+        pred = pred_proc[0, 0]
     return float(pred)
 
 
