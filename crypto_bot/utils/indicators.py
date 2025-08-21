@@ -51,29 +51,45 @@ def atr(
     return tr.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
 
 
-def calc_atr(df: pd.DataFrame, window: int = 14, **kwargs) -> pd.Series:
+def calc_atr(
+    df: pd.DataFrame,
+    window: int = 14,
+    *,
+    period: int | None = None,
+    high: str = "high",
+    low: str = "low",
+    close: str = "close",
+) -> pd.Series:
     """Convenience wrapper around :func:`atr` for OHLC data frames.
 
     Parameters
     ----------
     df : pandas.DataFrame
-        Input OHLC data containing ``high``, ``low`` and ``close`` columns.
+        Input OHLC data containing columns for ``high``, ``low`` and ``close``
+        prices.  Column names can be customised via ``high``, ``low`` and
+        ``close`` parameters.
     window : int, default 14
         Lookback window for the ATR calculation.
     period : int, optional
-        Alias for ``window`` kept for backwards compatibility.
+        Alias for ``window`` kept for backwards compatibility.  When provided it
+        takes precedence over ``window``.
+    high, low, close : str
+        Column names for the respective OHLC values.
     """
 
-    cols = {"high", "low", "close"}
+    if period is not None:
+        window = int(period)
+
+    cols = {high, low, close}
     if not cols.issubset(df.columns):
         msg = f"calc_atr expects columns {cols}, got {list(df.columns)}"
         raise ValueError(msg)
 
-    period = kwargs.get("period")
-    if period is not None and window == 14:
-        window = int(period)
-
-    return atr(df["high"], df["low"], df["close"], period=window)
+    h = df[high].astype(float)
+    l = df[low].astype(float)
+    c = df[close].astype(float)
+    tr = true_range(h, l, c)
+    return tr.rolling(window=window, min_periods=window).mean()
 
 
 def rsi(close: pd.Series, period: int = 14) -> pd.Series:
