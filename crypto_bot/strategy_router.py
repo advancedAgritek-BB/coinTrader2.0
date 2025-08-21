@@ -678,6 +678,11 @@ def route(
         cfg_get(cfg, "commit_lock_intervals", 0),
     )
 
+    from crypto_bot.utils.market_analyzer import _heuristic_regime
+
+    if regime == "unknown" and df is not None:
+        regime, _ = _heuristic_regime(df)
+
     if regime == "unknown":
         sym = (
             cfg.raw.get("symbol", "") if isinstance(cfg, RouterConfig) else cfg.get("symbol", "")

@@ -182,8 +182,8 @@ def test_route_unknown_fallback(monkeypatch, caplog):
     )
     with caplog.at_level("WARNING"):
         fn = route("unknown", "cex", cfg)
-    assert fn.__name__ == trend_bot.generate_signal.__name__
-    assert "Unknown regime for BTC/USD; fallback to trend_bot" in caplog.text
+    assert fn.__name__ == "_no_signal"
+    assert "Unknown regime for BTC/USD; no strategy selected" in caplog.text
 
 
 def test_route_notifier(monkeypatch):
@@ -480,9 +480,9 @@ def test_route_unknown_returns_trend_bot(monkeypatch, caplog):
     monkeypatch.setattr(strategy_router, "ML_AVAILABLE", False)
     cfg = {"symbol": "ETH/USD", "strategy_router": {"regimes": {}}}
     fn = route("unknown", "cex", cfg)
-    assert fn.__name__ == trend_bot.generate_signal.__name__
+    assert fn.__name__ == "_no_signal"
     assert any(
-        "Unknown regime for ETH/USD; fallback to trend_bot" in r.getMessage()
+        "Unknown regime for ETH/USD; no strategy selected" in r.getMessage()
         for r in caplog.records
     )
 
