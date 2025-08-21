@@ -2,6 +2,7 @@ from typing import Tuple
 
 import pandas as pd
 import ta
+import numpy as np
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.volatility_filter import calc_atr
@@ -55,7 +56,10 @@ def calculate_atr_trailing_stop(df: pd.DataFrame, atr_factor: float = 2.0) -> fl
         Calculated trailing stop using ATR.
     """
     highest = df["close"].max()
-    atr_val = calc_atr(df).iloc[-1]
+    atr_series = calc_atr(df)
+    atr_val = float(atr_series.iloc[-1]) if len(atr_series) else np.nan
+    if np.isnan(atr_val) or atr_val <= 0:
+        return highest
     stop = highest - atr_val * atr_factor
     logger.info(
         "Calculated ATR trailing stop %.4f using high %.4f and ATR %.4f",
