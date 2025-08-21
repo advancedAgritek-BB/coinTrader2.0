@@ -65,7 +65,7 @@ def generate_signal(
     config = kwargs.get("config") or {}
     symbol = config.get("symbol", "")
     adx_window = 7
-    min_bars = max(50, adx_window + 1)
+    min_bars = max(100, adx_window + 1)
     if df.empty or len(df) < min_bars:
         score_logger.info(
             "Signal for %s:%s -> %.3f, %s",
@@ -109,7 +109,7 @@ def generate_signal(
         df["high"], df["low"], df["close"], window=atr_period
     )
 
-    lookback = max(50, volume_window)
+    lookback = max(100, volume_window)
 
     rsi_full = ta.momentum.rsi(df["close"], window=14)
     rsi_full = cache_series("rsi", df, rsi_full, lookback)
