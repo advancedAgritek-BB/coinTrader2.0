@@ -23,6 +23,14 @@ trading:
   hft_symbols: ["BTC/USD","ETH/USD","SOL/USDC","BONK/USDC","BNB/USDT","SHIB/USDT","PEPE/USD"]   # seed list, can expand
   exclude_symbols: ["AIBTC/USD"]   # remove noisy/synthetic pairs
 
+# === router ===
+router:
+  min_accept_score: 0.5
+  prefer_timeframes: ["5m","15m","1m"]
+  require_warm: true
+  top_k_per_strategy: 3
+  fast_track_score: 0.95
+
 # === ohlcv cache ===
 ohlcv:
   storage_path: crypto_bot/data/ohlcv   # directory for persisted OHLCV data
@@ -515,6 +523,7 @@ scalp_timeframe: 1m
 scan_deep_top: 30
 scan_in_background: true
 scan_lookback_limit: 1200
+initial_history_candles: 600
 scan_markets: true
 scoring:
   lookback_bars: 30
@@ -691,7 +700,7 @@ symbol_filter:
   change_pct_percentile: 10
   correlation_max_pairs: 200
   http_timeout: 5
-  initial_history_candles: 50
+  initial_history_candles: 600
   initial_timeframes:
   - 1m
   - 5m
