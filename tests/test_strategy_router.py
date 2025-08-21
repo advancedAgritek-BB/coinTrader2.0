@@ -234,6 +234,35 @@ def test_route_multi_tf_combo(monkeypatch, tmp_path):
     assert (score, direction) == (0.1, "long")
 
 
+def test_router_consensus_from_score_only_strats(monkeypatch):
+    def strat1(df, cfg=None):
+        return 0.4
+
+    def strat2(df, cfg=None):
+        return 0.6
+
+    import crypto_bot.meta_selector as ms
+
+    monkeypatch.setattr(
+        ms,
+        "_STRATEGY_FN_MAP",
+        {"s1": strat1, "s2": strat2},
+        raising=False,
+    )
+    cfg = RouterConfig.from_dict(
+        {
+            "signal_fusion": {
+                "enabled": True,
+                "strategies": [("s1", 1.0), ("s2", 1.0)],
+            }
+        }
+    )
+    fn = route("trending", "cex", cfg)
+    df = pd.DataFrame({"close": [1, 1], "high": [1, 1], "low": [1, 1], "volume": [1, 1]})
+    _, direction = fn(df)
+    assert direction in {"long", "short"}
+
+
 def test_regime_commit_lock(monkeypatch):
     fake_r = fakeredis.FakeRedis()
     monkeypatch.setattr(strategy_router.commit_lock, "REDIS_CLIENT", fake_r)

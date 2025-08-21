@@ -37,6 +37,7 @@ class SignalFusionEngine:
         long_votes = 0
         short_votes = 0
         signed_sum = 0.0
+        first_direction: str | None = None
 
         for fn, weight in self.strategies:
             w = opt_weights.get(fn.__name__, weight)
@@ -54,6 +55,9 @@ class SignalFusionEngine:
                 short_votes += 1
                 signed_sum -= score * w
 
+            if direction != "none" and first_direction is None:
+                first_direction = direction
+
         if total_weight == 0:
             return 0.0, "none"
 
@@ -68,6 +72,8 @@ class SignalFusionEngine:
                 direction = "long"
             elif signed_sum < 0:
                 direction = "short"
+            elif first_direction is not None:
+                direction = first_direction
             else:
                 direction = "none"
 

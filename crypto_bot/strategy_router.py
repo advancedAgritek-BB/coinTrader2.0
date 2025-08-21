@@ -619,9 +619,17 @@ def route(
                 except TypeError:
                     res = fn(data)
             if isinstance(res, tuple):
-                score, direction = res[0], res[1]
+                raw_score = float(res[0])
+                if len(res) > 1:
+                    direction = res[1]
+                else:
+                    direction = (
+                        "long" if raw_score > 0 else "short" if raw_score < 0 else "none"
+                    )
             else:
-                score, direction = res, "none"
+                raw_score = float(res)
+                direction = "long" if raw_score > 0 else "short" if raw_score < 0 else "none"
+            score = abs(raw_score)
             logger.info(
                 "Regime %s produced score %.2f direction %s", regime, score, direction
             )
