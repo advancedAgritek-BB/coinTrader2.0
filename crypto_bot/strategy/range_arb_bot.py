@@ -7,7 +7,7 @@ import logging
 import numpy as np
 import pandas as pd
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF, ConstantKernel
+from sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel
 from sklearn.preprocessing import StandardScaler
 
 import ta
@@ -54,9 +54,11 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     y_scaler = StandardScaler()
     y_scaled = y_scaler.fit_transform(y).ravel()
 
-    kernel = ConstantKernel(
-        1.0, constant_value_bounds=(1e-3, 1e3)
-    ) * RBF(1.0, length_scale_bounds=(1e-3, 1e3))
+    kernel = (
+        ConstantKernel(1.0, constant_value_bounds=(1e-3, 1e3))
+        * RBF(1.0, length_scale_bounds=(1e-3, 1e3))
+        + WhiteKernel(noise_level=1e-6)
+    )
 
     def _optimizer(obj_func, initial_theta, bounds):
         theta_opt, func_min, _ = fmin_l_bfgs_b(
@@ -65,7 +67,11 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
         return theta_opt, func_min
 
     gp = GaussianProcessRegressor(
-        kernel=kernel, optimizer=_optimizer, n_restarts_optimizer=15
+        kernel=kernel,
+        optimizer=_optimizer,
+        n_restarts_optimizer=15,
+        alpha=1e-6,
+        normalize_y=True,
     )
     gp.fit(X_scaled, y_scaled)
     latest_features = (
