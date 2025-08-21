@@ -26,12 +26,20 @@ def evaluate(
         result = strategy_fn(df)
 
     if isinstance(result, tuple):
-        score, direction, *extras = result
+        raw_score = float(result[0])
+        if len(result) > 1:
+            direction = result[1]
+        else:
+            direction = (
+                "long" if raw_score > 0 else "short" if raw_score < 0 else "none"
+            )
+        extras = result[2:]
         atr = extras[0] if extras else None
     else:
-        score, direction = result, "none"
+        raw_score = float(result)
+        direction = "long" if raw_score > 0 else "short" if raw_score < 0 else "none"
         atr = None
-    score = max(0.0, min(score, 1.0))
+    score = max(0.0, min(abs(raw_score), 1.0))
     if atr is not None and hasattr(atr, "iloc"):
         atr = float(atr.iloc[-1]) if len(atr) else np.nan
     if atr is not None and not (pd.isna(atr) or atr <= 0):
