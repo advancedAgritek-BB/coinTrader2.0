@@ -47,8 +47,8 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     y_scaled = y_scaler.fit_transform(y).ravel()
 
     kernel = ConstantKernel(
-        1.0, constant_value_bounds=(1e-5, 1e5)
-    ) * RBF(1.0, length_scale_bounds=(1e-5, 1e5))
+        1.0, constant_value_bounds=(1e-3, 1e3)
+    ) * RBF(1.0, length_scale_bounds=(1e-3, 1e3))
     gp = GaussianProcessRegressor(
         kernel=kernel, optimizer="fmin_l_bfgs_b", n_restarts_optimizer=15
     )
