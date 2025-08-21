@@ -180,10 +180,11 @@ def test_route_unknown_fallback(monkeypatch, caplog):
             "strategy_router": {"regimes": SAMPLE_CFG["strategy_router"]["regimes"]},
         }
     )
+    fallback = strategy_for("unknown", cfg).__name__
     with caplog.at_level("WARNING"):
         fn = route("unknown", "cex", cfg)
-    assert fn.__name__ == trend_bot.generate_signal.__name__
-    assert "Unknown regime for BTC/USD; fallback to trend_bot" in caplog.text
+    assert fn.__name__ == fallback
+    assert f"Unknown regime for BTC/USD; falling back to {fallback}" in caplog.text
 
 
 def test_route_notifier(monkeypatch):
@@ -475,14 +476,22 @@ def test_route_mempool_blocks_signal(monkeypatch):
     assert (score, direction) == (0.0, "none")
 
 
-def test_route_unknown_returns_trend_bot(monkeypatch, caplog):
+def test_route_unknown_invokes_strategy(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
-    monkeypatch.setattr(strategy_router, "ML_AVAILABLE", False)
+
+    def dummy_signal(df, cfg=None):
+        return 0.5, "long"
+
+    monkeypatch.setattr(
+        strategy_router, "strategy_for", lambda *_a, **_k: dummy_signal
+    )
     cfg = {"symbol": "ETH/USD", "strategy_router": {"regimes": {}}}
     fn = route("unknown", "cex", cfg)
-    assert fn.__name__ == trend_bot.generate_signal.__name__
+    assert fn.__name__ == dummy_signal.__name__
+    score, direction = fn(pd.DataFrame(), cfg)
+    assert (score, direction) == (0.5, "long")
     assert any(
-        "Unknown regime for ETH/USD; fallback to trend_bot" in r.getMessage()
+        f"Unknown regime for ETH/USD; falling back to {dummy_signal.__name__}" in r.getMessage()
         for r in caplog.records
     )
 
