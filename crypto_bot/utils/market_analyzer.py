@@ -502,7 +502,9 @@ async def analyze_symbol(
 
         atr_period = int(config.get("risk", {}).get("atr_period", 14))
         if direction != "none" and {"high", "low", "close"}.issubset(df.columns):
-            atr = calc_atr(df, period=atr_period).iloc[-1]
+            atr_series = calc_atr(df, period=atr_period)
+            atr_val = float(atr_series.iloc[-1]) if len(atr_series) else np.nan
+            atr = atr_val if np.isfinite(atr_val) and atr_val > 0 else 0.0
 
         # Determine how well the selected strategy matches the detected regime
         reg_strength = 0.0
