@@ -3,31 +3,55 @@ from __future__ import annotations
 
 import math
 import pandas as pd
-from ta.volatility import AverageTrueRange
+
+from crypto_bot.utils.indicators import calc_atr as _calc_atr
 
 
-def calc_atr(df: pd.DataFrame | None, period: int | None = None, window: int = 14) -> pd.Series:
+def calc_atr(
+    df: pd.DataFrame | None,
+    window: int = 14,
+    *,
+    period: int | None = None,
+    high: str = "high",
+    low: str = "low",
+    close: str = "close",
+) -> pd.Series:
     """Return the Average True Range (ATR) as a :class:`pandas.Series`.
 
-    ``period`` takes precedence over ``window`` when both are provided. The
-    underlying calculation uses :class:`ta.volatility.AverageTrueRange`.
+    ``period`` is accepted as an alias for ``window`` to maintain backwards
+    compatibility.  Column names for ``high``, ``low`` and ``close`` may also be
+    customised.
     """
 
     n = int(period or window or 14)
     if df is None or df.empty or len(df) < max(2, n):
-        if df is not None and "close" in df:
-            return df["close"].iloc[:0]
+        if df is not None and close in df:
+            return df[close].iloc[:0]
         return pd.Series([], dtype=float)
 
-    atr = AverageTrueRange(high=df["high"], low=df["low"], close=df["close"], window=n)
-    return pd.Series(atr.average_true_range())
+    return _calc_atr(df, window=n, high=high, low=low, close=close)
 
 
-def atr_percent(df: pd.DataFrame, period: int | None = None, window: int = 14) -> float:
+def atr_percent(
+    df: pd.DataFrame,
+    period: int | None = None,
+    window: int = 14,
+    *,
+    high: str = "high",
+    low: str = "low",
+    close: str = "close",
+) -> float:
     """Return ATR as a percentage of the latest close price."""
 
-    last_close = float(df["close"].iloc[-1])
-    atr_series = calc_atr(df, period=period, window=window)
+    last_close = float(df[close].iloc[-1])
+    kwargs = {}
+    if high != "high":
+        kwargs["high"] = high
+    if low != "low":
+        kwargs["low"] = low
+    if close != "close":
+        kwargs["close"] = close
+    atr_series = calc_atr(df, period=period, window=window, **kwargs)
     if atr_series.empty:
         return float("nan")
     atr_val = float(atr_series.iloc[-1])
@@ -36,7 +60,15 @@ def atr_percent(df: pd.DataFrame, period: int | None = None, window: int = 14) -
     return 100.0 * atr_val / last_close
 
 
-def normalize_score_by_volatility(df: pd.DataFrame, score: float, atr_period: int = 14) -> float:
+def normalize_score_by_volatility(
+    df: pd.DataFrame,
+    score: float,
+    atr_period: int = 14,
+    *,
+    high: str = "high",
+    low: str = "low",
+    close: str = "close",
+) -> float:
     """Normalize ``score`` by dividing by the latest ATR.
 
     If the ATR cannot be computed or is non‑positive the ``score`` is returned
@@ -44,7 +76,14 @@ def normalize_score_by_volatility(df: pd.DataFrame, score: float, atr_period: in
     periods of heightened volatility.
     """
 
-    atr = calc_atr(df, period=atr_period)
+    kwargs = {}
+    if high != "high":
+        kwargs["high"] = high
+    if low != "low":
+        kwargs["low"] = low
+    if close != "close":
+        kwargs["close"] = close
+    atr = calc_atr(df, period=atr_period, **kwargs)
     if hasattr(atr, "iloc"):
         if len(atr) == 0:
             return float(score)

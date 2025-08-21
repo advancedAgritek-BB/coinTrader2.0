@@ -135,8 +135,16 @@ def too_hot(symbol: str, max_funding_rate: float) -> bool:
 
 
 # Keep legacy import path working for existing callers
-def calc_atr(df: pd.DataFrame, window: int = 14, **kwargs) -> pd.Series:
-    """Compatibility wrapper returning an ATR series for backward compatibility.
+def calc_atr(
+    df: pd.DataFrame,
+    window: int = 14,
+    *,
+    period: int | None = None,
+    high: str = "high",
+    low: str = "low",
+    close: str = "close",
+) -> pd.Series:
+    """Compatibility wrapper returning an ATR series.
 
     Parameters
     ----------
@@ -145,17 +153,27 @@ def calc_atr(df: pd.DataFrame, window: int = 14, **kwargs) -> pd.Series:
     window : int, default 14
         Lookback window for the ATR calculation.
     period : int, optional
-        Alias for ``window`` kept for backwards compatibility.
+        Alias for ``window`` kept for backwards compatibility.  When provided it
+        takes precedence over ``window``.
+    high, low, close : str
+        Column names for the respective OHLC values.
 
     Exposes :func:`calc_atr` under the historical import while mirroring the
     original return type.
     """
 
-    period = kwargs.get("period")
-    if period is not None and window == 14:
+    if period is not None:
         window = int(period)
 
-    return _calc_atr(df, window)
+    kwargs: dict[str, str] = {}
+    if high != "high":
+        kwargs["high"] = high
+    if low != "low":
+        kwargs["low"] = low
+    if close != "close":
+        kwargs["close"] = close
+
+    return _calc_atr(df, window, **kwargs)
 
 
 __all__ = ["atr_pct", "too_flat", "fetch_funding_rate", "too_hot", "calc_atr"]
