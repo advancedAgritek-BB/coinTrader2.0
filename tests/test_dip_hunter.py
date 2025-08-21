@@ -90,12 +90,9 @@ def test_cooldown_blocks(monkeypatch):
     assert direction2 == "none" and score2 == 0.0
 
 
-@pytest.mark.parametrize("rows", [15, 27])
+@pytest.mark.parametrize("rows", [15, 104])
 def test_handles_small_frames(monkeypatch, rows):
     df = _df_dip(rows)
     _patch_indicators(monkeypatch, len(df))
     result = dip_hunter.generate_signal(df, config={"symbol": "BTC/USD"})
-    assert result[0] == 0.0
-    assert result[1] == "none"
-    if len(result) == 3:
-        assert "insufficient_bars" in result[2]["reason"]
+    assert result == (0.0, "none")
