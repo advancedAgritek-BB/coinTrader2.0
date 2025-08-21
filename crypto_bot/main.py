@@ -2329,10 +2329,12 @@ async def execute_signals(ctx: BotContext) -> None:
         )
         score = candidate.get("score", 0.0)
         direction = candidate.get("direction", "none")
+        sym = candidate["symbol"]
+        logger.info(f"Pre-execution candidate: {sym} score={score} dir={direction}")
         if ctx.position_guard and not ctx.position_guard.can_open(ctx.positions):
             logger.debug("Position guard blocked opening a new position")
             _log_rejection(
-                candidate.get("symbol", ""),
+                sym,
                 score,
                 direction,
                 min_req,
@@ -2346,7 +2348,6 @@ async def execute_signals(ctx: BotContext) -> None:
                 max_trades,
             )
             break
-        sym = candidate["symbol"]
         logger.info("[EVAL] evaluating %s", sym)
         outcome_reason = ""
         if ctx.balance <= 0:
