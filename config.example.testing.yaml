@@ -40,3 +40,9 @@ ohlcv_chunk_size: 20
 volatility_filter:
   max_funding_rate: 0.3
   min_atr_pct: 0.0001
+
+# === sentiment filter ===
+sentiment_filter:
+  require_sentiment: false
+  min_fng: 20
+  min_sentiment: 40
