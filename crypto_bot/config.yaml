@@ -748,8 +748,8 @@ trend_bot:
 twap_enabled: true
 twap_interval_seconds: 5
 twap_slices: 6
-use_ml_regime_classifier: true
-use_per_pair_models: true
+use_ml_regime_classifier: false
+use_per_pair_models: false
 use_websocket: true
 volatility_filter:
   max_funding_rate: 0.2  # Allow hotter funding
