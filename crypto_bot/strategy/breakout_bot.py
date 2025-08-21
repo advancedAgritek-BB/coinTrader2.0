@@ -160,7 +160,7 @@ def generate_signal(
     lookback_cfg = int(cfg_all.get("indicator_lookback", 250))
     squeeze_pct = float(cfg_all.get("bb_squeeze_pct", 20))
 
-    min_bars = adx_window + 1
+    min_bars = max(100, adx_window + 1)
     lookback = max(
         bb_len,
         kc_len,

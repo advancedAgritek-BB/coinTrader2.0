@@ -88,14 +88,14 @@ def generate_signal(
     atr_normalization = bool(params.get("atr_normalization", True))
     ema_slow = int(params.get("ema_slow", 20))
 
-    min_bars = max(adx_window, rsi_window, ema_slow) + 5
+    min_bars = max(100, adx_window, rsi_window, ema_slow) + 5
     if len(df) < min_bars:
         return 0.0, "none", {
             "reason": f"insufficient_bars: need>={min_bars}, have={len(df)}"
         }
 
     lookback = max(rsi_window, vol_window, adx_window, bb_window, dip_bars)
-    recent = df.tail(max(60, adx_window * 4, lookback + 1))
+    recent = df.tail(max(100, adx_window * 4, lookback + 1))
 
     rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
     if len(recent) <= adx_window:

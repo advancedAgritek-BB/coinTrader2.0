@@ -71,7 +71,7 @@ def generate_signal(
     cfg = Config.from_dict(config)
 
     std_len = cfg.std_len or cfg.ema_len
-    min_bars = cfg.adx_window + 1
+    min_bars = max(100, cfg.adx_window + 1)
     lookback = max(cfg.ema_len, std_len, cfg.adx_window, cfg.atr_period) + 1
     lookback = max(lookback, min_bars)
     if len(df) < lookback:

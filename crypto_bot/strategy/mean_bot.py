@@ -65,7 +65,7 @@ def generate_signal(
     config = kwargs.get("config") or {}
     symbol = config.get("symbol", "")
     adx_window = 14
-    min_bars = max(50, adx_window + 1)
+    min_bars = max(100, adx_window + 1)
     if len(df) < min_bars:
         score_logger.info(
             "Signal for %s:%s -> %.3f, %s",
