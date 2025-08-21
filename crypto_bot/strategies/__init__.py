@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable, Dict, Iterable, Tuple
 import pandas as pd
 
 from crypto_bot.config import cfg
+from crypto_bot.signals.normalize import normalize_strategy_result
 
 logger = logging.getLogger(__name__)
 log = logger
@@ -36,7 +37,7 @@ async def run_strategy(
 
     The strategy is invoked with ``df``, ``symbol`` and ``timeframe``. Unexpected
     keyword arguments are filtered out before invocation. Any exception is
-    logged and a neutral result is returned.
+    logged and a neutral result with ``meta['reason']`` set is returned.
     """
 
     try:
@@ -48,33 +49,16 @@ async def run_strategy(
         logger.exception(
             "Strategy %s execution failed", getattr(gen, "__name__", gen)
         )
-        return {"score": 0.0, "signal": "none"}
+        return {"score": 0.0, "signal": "none", "meta": {"reason": "exception"}}
 
-    score, signal = _normalize_result(res)
-    return {"score": score, "signal": signal}
+    res = normalize_strategy_result(res)
+    reason = res.get("meta", {}).get("reason")
+    if reason:
+        logger.debug("Strategy %s result %s (%s)", getattr(gen, "__name__", gen), res, reason)
+    else:
+        logger.debug("Strategy %s result %s", getattr(gen, "__name__", gen), res)
+    return res
 
-
-def _normalize_result(val):
-    """Normalize strategy outputs to (score: float, action: str)."""
-    if val is None:
-        return 0.0, "none"
-    if isinstance(val, dict):
-        score = val.get("score")
-        try:
-            score = float(score) if score is not None else 0.0
-        except Exception:
-            score = 0.0
-        direction = val.get("signal") or val.get("direction") or "none"
-        return score, str(direction)
-    if isinstance(val, (tuple, list)) and len(val) == 2:
-        try:
-            return float(val[0]), str(val[1])
-        except Exception:
-            return 0.0, "none"
-    if isinstance(val, (int, float)):
-        return float(val), "none"
-    logger.warning("Unexpected strategy result type: %r", val)
-    return 0.0, "none"
 
 # Optional OHLCV DataFrame provider supplied by the application. Strategies can
 # request recent price data via :func:`get_ohlcv_df`.
@@ -122,7 +106,7 @@ async def score(
     * ``generate_signal(df_a, df_b, **kwargs)`` pair/stat-arb strategies.
 
     Returns a dictionary keyed by ``(symbol or "A|B", timeframe)`` mapping to a
-    result dict with ``score`` and ``signal`` keys.
+    result dict with ``score``, ``signal`` and ``meta`` keys.
     """
 
     symbols = list(symbols or [])
@@ -174,8 +158,7 @@ async def score(
                     if "timeframe" in params:
                         filtered["timeframe"] = tf
                     raw = await _maybe_await(gen(**filtered))
-                    sc, signal = _normalize_result(raw)
-                    res = {"score": sc, "signal": signal}
+                    res = normalize_strategy_result(raw)
                 except Exception:
                     logger.exception(
                         "Strategy %s scoring failed for %s|%s @ %s",
@@ -184,7 +167,27 @@ async def score(
                         b,
                         tf,
                     )
-                    res = {"score": 0.0, "signal": "none"}
+                    res = {"score": 0.0, "signal": "none", "meta": {"reason": "exception"}}
+                reason = res.get("meta", {}).get("reason")
+                if reason:
+                    logger.debug(
+                        "%s %s|%s @ %s -> %s (%s)",
+                        name,
+                        a,
+                        b,
+                        tf,
+                        res,
+                        reason,
+                    )
+                else:
+                    logger.debug(
+                        "%s %s|%s @ %s -> %s",
+                        name,
+                        a,
+                        b,
+                        tf,
+                        res,
+                    )
                 out[(f"{a}|{b}", tf)] = res
         return out
 
