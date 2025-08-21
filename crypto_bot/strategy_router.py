@@ -535,8 +535,12 @@ def _bandit_context(
             except Exception:
                 pass
 
-        atr_val = calc_atr(df).iloc[-1]
-        context["atr_pct"] = atr_val / price if price else 0.0
+        atr_series = calc_atr(df)
+        atr_val = float(atr_series.iloc[-1]) if len(atr_series) else np.nan
+        if np.isnan(atr_val) or atr_val <= 0 or price <= 0:
+            context["atr_pct"] = 0.0
+        else:
+            context["atr_pct"] = atr_val / price
 
         ts = df.index[-1]
         if not isinstance(ts, pd.Timestamp):
