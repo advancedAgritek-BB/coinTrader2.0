@@ -25,6 +25,9 @@ class DummyRM:
     def register_stop_order(self, *a, **k):
         pass
 
+    def sentiment_factor_or_default(self, *a, **k):
+        return 1.0
+
 
 class DummyPG:
     def __init__(self, max_open_trades: int = 2) -> None:
@@ -265,3 +268,50 @@ async def test_execute_signals_no_symbols_qualify(monkeypatch, caplog):
     assert ctx.notifier.sent == ["No symbols qualified for trading"]
     assert "Candidate scoring" in content
     assert "nothing actionable" in content
+
+
+@pytest.mark.asyncio
+async def test_execute_signals_threshold_overrides_allow_low_score(monkeypatch, caplog):
+    df = pd.DataFrame({"close": [100.0]})
+    candidate = {
+        "symbol": "XBT/USDT",
+        "direction": "long",
+        "df": df,
+        "name": "test",
+        "probabilities": {},
+        "regime": "bull",
+        "score": 0.05,
+        "entry": {"price": 100.0},
+        "size": 1.0,
+        "valid": True,
+    }
+    ctx = BotContext(
+        positions={},
+        df_cache={"1h": {"XBT/USDT": df}},
+        regime_cache={},
+        config={
+            "execution_mode": "dry_run",
+            "top_n_symbols": 1,
+            "min_confidence_score": 0.2,
+            "yamlrouter": {"min_score": 0.2},
+        },
+        exchange=object(),
+        ws_client=None,
+        risk_manager=DummyRM(),
+        notifier=None,
+        paper_wallet=PaperWallet(1000.0),
+        position_guard=DummyPG(),
+    )
+    ctx.balance = 1000.0
+    ctx.analysis_results = [candidate]
+    ctx.timing = {}
+
+    execute_signals, called = load_execute_signals()
+    caplog.set_level(logging.INFO)
+    await execute_signals(ctx)
+    assert not called["called"]
+
+    called["called"] = False
+    ctx.analysis_results = [candidate]
+    await execute_signals(ctx, min_score=0.0, min_confidence=0.0)
+    assert called["called"]

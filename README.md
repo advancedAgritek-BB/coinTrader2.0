@@ -622,6 +622,11 @@ size = risk_manager.position_size(
 * Specify ``direction="short"`` to return a negative size for short trades.
 * **ml_signal_model**/**signal_weight_optimizer** – blend strategy scores with machine-learning predictions.
 * **signal_threshold**, **min_confidence_score**, **min_consistent_agreement** – thresholds for entering a trade. `min_confidence_score` and `signal_fusion.min_confidence` default to `0.0001`.
+* During dry‑run debugging you can relax these gates from the command line:
+  `python -m crypto_bot.cli --min-score 0 --min-confidence 0 --paper`
+  will allow simulated trades to execute even when signals have marginal
+  confidence.  The same values may be set in `config.yaml` under
+  `trading.min_score` and `min_confidence_score`.
 * **regime_timeframes**/**regime_return_period** – windows used for regime detection.
 * **regime_overrides** – optional settings that replace values in the `risk` or strategy sections when a specific regime is active.
 ```yaml

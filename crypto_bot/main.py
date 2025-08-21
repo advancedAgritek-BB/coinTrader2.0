@@ -2148,10 +2148,27 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
         pass
 
 
-async def execute_signals(ctx: BotContext) -> None:
-    """Open trades for qualified analysis results."""
+async def execute_signals(
+    ctx: BotContext,
+    *,
+    min_score: float | None = None,
+    min_confidence: float | None = None,
+) -> None:
+    """Open trades for qualified analysis results.
+
+    Parameters
+    ----------
+    min_score:
+        Optional override for the minimum score threshold.  If not provided,
+        the function falls back to the value defined in the configuration or
+        the ``MIN_SCORE`` environment variable.
+    min_confidence:
+        Optional override for the minimum confidence threshold.  Falls back to
+        configuration or ``MIN_CONFIDENCE`` environment variable.
+    """
     from collections import Counter
     import dataclasses
+    import os
 
     raw_results = getattr(ctx, "analysis_results", [])
     results: list[dict[str, Any]] = []
@@ -2205,8 +2222,38 @@ async def execute_signals(ctx: BotContext) -> None:
         globals()["pipeline_logger"] = logger
     if "state" not in globals():
         globals()["state"] = {"running": True}
+    # Resolve global thresholds with CLI/env overrides taking precedence
+    if min_score is None:
+        env_score = os.getenv("MIN_SCORE")
+        if env_score is not None:
+            try:
+                min_score = float(env_score)
+            except ValueError:
+                min_score = 0.0
+        else:
+            min_score = (
+                ctx.config.get("min_score")
+                or ctx.config.get("trading", {}).get("min_score")
+                or ctx.config.get("yamlrouter", {}).get("min_score", 0.0)
+            )
+    if min_confidence is None:
+        env_conf = os.getenv("MIN_CONFIDENCE")
+        if env_conf is not None:
+            try:
+                min_confidence = float(env_conf)
+            except ValueError:
+                min_confidence = 0.0
+        else:
+            min_confidence = (
+                ctx.config.get("min_confidence")
+                or ctx.config.get("min_confidence_score")
+                or ctx.config.get("trading", {}).get("min_confidence")
+                or 0.0
+            )
+
     # Log raw analysis results before filtering to clarify decision paths
-    min_score = ctx.config.get("yamlrouter", {}).get("min_score", 0.0)
+    min_score = float(min_score)
+    min_confidence = float(min_confidence)
     for res in results:
         sym = res.get("symbol", "")
         score = float(res.get("score", 0.0))
@@ -2276,7 +2323,7 @@ async def execute_signals(ctx: BotContext) -> None:
         logger.debug("Analysis result: %s", r)
         sym = r.get("symbol", "")
         direction = r.get("direction", "none")
-        min_req = r.get("min_confidence", ctx.config.get("min_confidence_score", 0.0))
+        min_req = r.get("min_confidence", min_confidence)
         score = r.get("score", 0.0)
         if r.get("skip"):
             skipped_syms.append(sym)
@@ -2324,9 +2371,7 @@ async def execute_signals(ctx: BotContext) -> None:
         logger.info("Analysis result: %s", candidate)
         max_trades = ctx.position_guard.max_open_trades if ctx.position_guard else 0
         logger.debug("Open trades: %d / %d", len(ctx.positions), max_trades)
-        min_req = candidate.get(
-            "min_confidence", ctx.config.get("min_confidence_score", 0.0)
-        )
+        min_req = candidate.get("min_confidence", min_confidence)
         score = candidate.get("score", 0.0)
         direction = candidate.get("direction", "none")
         if ctx.position_guard and not ctx.position_guard.can_open(ctx.positions):
