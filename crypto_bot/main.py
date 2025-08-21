@@ -2331,6 +2331,19 @@ async def execute_signals(
 
     for candidate in results[:top_n]:
         logger.info("Analysis result: %s", candidate)
+        if (
+            candidate.get("score", 0.0)
+            < ctx.config.get("min_score_to_trade", 1.0)
+            or candidate.get("signal", candidate.get("direction")) == "none"
+        ):
+            logger.debug(
+                "Skip: score/signal filter (score=%.4f, signal=%s, need>=%.2f) %s",
+                candidate.get("score", 0.0),
+                candidate.get("signal", candidate.get("direction")),
+                ctx.config.get("min_score_to_trade", 1.0),
+                candidate,
+            )
+            continue
         max_trades = ctx.position_guard.max_open_trades if ctx.position_guard else 0
         logger.debug("Open trades: %d / %d", len(ctx.positions), max_trades)
         min_req = candidate.get("min_confidence", min_confidence)
@@ -2419,9 +2432,12 @@ async def execute_signals(
             logger.info("Trade BLOCKED (%s)", reason)
             continue
 
-        sentiment_factor = ctx.risk_manager.sentiment_factor_or_default(
-            ctx.config.get("trading", {}).get("require_sentiment", True)
-        )
+        if hasattr(ctx.risk_manager, "sentiment_factor_or_default"):
+            sentiment_factor = ctx.risk_manager.sentiment_factor_or_default(
+                ctx.config.get("trading", {}).get("require_sentiment", True)
+            )
+        else:
+            sentiment_factor = 1.0
 
         probs = candidate.get("probabilities", {})
         reg_prob = float(probs.get(candidate.get("regime"), 0.0))
