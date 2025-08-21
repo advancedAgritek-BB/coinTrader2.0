@@ -38,22 +38,32 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     if len(df) < window:
         return np.nan
     recent = df.iloc[-window:]
-    X = recent[["close", "volume"]].values
+    X = recent[["close", "volume"]]
     y = recent["close"].values.reshape(-1, 1)
 
+    # Drop constant features to avoid zero variance in StandardScaler
+    X = X.loc[:, X.std() > 0]
+    if X.empty or np.std(y) == 0:
+        return np.nan
+
     x_scaler = StandardScaler()
-    X_scaled = x_scaler.fit_transform(X)
+    X_scaled = x_scaler.fit_transform(X.values)
     y_scaler = StandardScaler()
     y_scaled = y_scaler.fit_transform(y).ravel()
 
     kernel = ConstantKernel(
         1.0, constant_value_bounds=(1e-5, 1e5)
     ) * RBF(1.0, length_scale_bounds=(1e-5, 1e5))
+    from scipy.optimize import fmin_l_bfgs_b
+
+    def _lbfgs_opt(obj_func, initial_theta, bounds):
+        return fmin_l_bfgs_b(obj_func, initial_theta, bounds=bounds, maxiter=1000)
+
     gp = GaussianProcessRegressor(
-        kernel=kernel, optimizer="fmin_l_bfgs_b", n_restarts_optimizer=15
+        kernel=kernel, optimizer=_lbfgs_opt, n_restarts_optimizer=15
     )
     gp.fit(X_scaled, y_scaled)
-    latest_features = recent[["close", "volume"]].iloc[-1].values.reshape(1, -1)
+    latest_features = recent[X.columns].iloc[-1].values.reshape(1, -1)
     pred_scaled, _ = gp.predict(x_scaler.transform(latest_features), return_std=True)
     pred = y_scaler.inverse_transform(pred_scaled.reshape(-1, 1))[0, 0]
     return float(pred)
