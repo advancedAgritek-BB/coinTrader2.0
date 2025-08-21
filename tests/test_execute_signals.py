@@ -111,6 +111,11 @@ async def test_execute_signals_respects_allow_short(monkeypatch, caplog):
     assert not called["called"]
     assert "[EVAL] evaluating XBT/USDT" in caplog.text
     assert "[EVAL] XBT/USDT -> short selling disabled" in caplog.text
+    assert (
+        "Gate summary for XBT/USDT: sentiment=True risk=False budget=True cooldown=True min_score=True"
+        in caplog.text
+    )
+    assert "Trade BLOCKED (short selling disabled)" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -152,6 +157,11 @@ async def test_execute_signals_respects_too_flat(monkeypatch, caplog):
     assert ctx.positions == {}
     assert not called["called"]
     assert "[EVAL] XBT/USDT -> atr too flat" in caplog.text
+    assert (
+        "Gate summary for XBT/USDT: sentiment=True risk=False budget=True cooldown=True min_score=True"
+        in caplog.text
+    )
+    assert "Trade BLOCKED (atr too flat)" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -191,6 +201,11 @@ async def test_execute_signals_logs_execution(monkeypatch, caplog):
 
     assert called["called"]
     assert "[EVAL] evaluating XBT/USDT" in caplog.text
+    assert (
+        "Gate summary for XBT/USDT: sentiment=True risk=True budget=True cooldown=True min_score=True"
+        in caplog.text
+    )
+    assert "DRY-RUN: simulated buy XBT/USDT x1.0 @100.0" in caplog.text
     assert "[EVAL] XBT/USDT -> executed buy 1.0000" in caplog.text
 
 

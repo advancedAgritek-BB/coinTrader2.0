@@ -2368,19 +2368,47 @@ async def execute_signals(ctx: BotContext) -> None:
         df = candidate["df"]
         price = df["close"].iloc[-1]
         strategy = candidate.get("name", "")
+        gate_results = {
+            "sentiment": True,
+            "risk": True,
+            "budget": True,
+            "cooldown": True,
+            "min_score": True,
+        }
+
+        def _log_gates() -> None:
+            logger.info(
+                "Gate summary for %s: sentiment=%s risk=%s budget=%s cooldown=%s min_score=%s",
+                sym,
+                gate_results["sentiment"],
+                gate_results["risk"],
+                gate_results["budget"],
+                gate_results["cooldown"],
+                gate_results["min_score"],
+            )
+
         if candidate.get("too_flat", False):
             outcome_reason = "atr too flat"
+            gate_results["risk"] = False
             _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             reject_counts["atr_too_flat"] += 1
+            _log_gates()
+            logger.info("Trade BLOCKED (%s)", outcome_reason)
             continue
         allowed, reason = ctx.risk_manager.allow_trade(df, strategy, sym)
         if not allowed:
             outcome_reason = f"blocked: {reason}"
+            if reason == "Bearish sentiment":
+                gate_results["sentiment"] = False
+            else:
+                gate_results["risk"] = False
             _log_rejection(sym, score, direction, min_req, reason, "RISK_MANAGER")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             key = reason.lower().replace(" ", "_")
             reject_counts[key] += 1
+            _log_gates()
+            logger.info("Trade BLOCKED (%s)", reason)
             continue
 
         sentiment_factor = ctx.risk_manager.sentiment_factor_or_default(
@@ -2417,9 +2445,12 @@ async def execute_signals(ctx: BotContext) -> None:
             )
             if size == 0:
                 outcome_reason = f"size {size:.4f}"
+                gate_results["budget"] = False
                 _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
                 logger.info("[EVAL] %s -> %s", sym, outcome_reason)
                 reject_counts["size_zero"] += 1
+                _log_gates()
+                logger.info("Trade BLOCKED (%s)", outcome_reason)
                 continue
 
         if not ctx.risk_manager.can_allocate(strategy, abs(size), ctx.balance):
@@ -2430,19 +2461,40 @@ async def execute_signals(ctx: BotContext) -> None:
                 strategy,
             )
             outcome_reason = "insufficient capital"
+            gate_results["budget"] = False
             _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             reject_counts["insufficient_capital"] += 1
+            _log_gates()
+            logger.info("Trade BLOCKED (%s)", outcome_reason)
             continue
 
         amount = abs(size) / price if price > 0 else 0.0
         side = direction_to_side(direction)
         if side == "sell" and not ctx.config.get("allow_short", False):
             outcome_reason = "short selling disabled"
+            gate_results["risk"] = False
             _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             reject_counts["short_selling_disabled"] += 1
+            _log_gates()
+            logger.info("Trade BLOCKED (%s)", outcome_reason)
             continue
+        try:  # cooldown check
+            from crypto_bot.cooldown_manager import in_cooldown
+
+            if in_cooldown(sym, strategy):
+                outcome_reason = "cooldown"
+                gate_results["cooldown"] = False
+                _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
+                logger.info("[EVAL] %s -> %s", sym, outcome_reason)
+                reject_counts["cooldown"] += 1
+                _log_gates()
+                logger.info("Trade BLOCKED (%s)", outcome_reason)
+                continue
+        except Exception:  # pragma: no cover - cooldown optional
+            pass
+        _log_gates()
         start_exec = time.perf_counter()
         executed_via_sniper = False
         executed_via_cross = False
@@ -2550,6 +2602,14 @@ async def execute_signals(ctx: BotContext) -> None:
             )
             if order:
                 executed += 1
+                if ctx.config.get("execution_mode") == "dry_run":
+                    logger.info(
+                        "DRY-RUN: simulated %s %s x%s @%s", side, sym, amount, price
+                    )
+                else:
+                    logger.info(
+                        "Trade EXECUTED %s %s x%s @%s", side, sym, amount, price
+                    )
                 logger.info("[EVAL] %s -> executed %s %.4f", sym, side, amount)
                 take_profit = None
                 if strategy == "bounce_scalper":
@@ -2568,9 +2628,29 @@ async def execute_signals(ctx: BotContext) -> None:
                     take_profit=take_profit,
                     regime=candidate.get("regime"),
                 )
+                try:
+                    from crypto_bot.cooldown_manager import mark_cooldown
+
+                    mark_cooldown(sym, strategy)
+                except Exception:  # pragma: no cover - optional cooldown
+                    pass
         else:
             executed += 1
+            if ctx.config.get("execution_mode") == "dry_run":
+                logger.info(
+                    "DRY-RUN: simulated %s %s x%s @%s", side, sym, amount, price
+                )
+            else:
+                logger.info(
+                    "Trade EXECUTED %s %s x%s @%s", side, sym, amount, price
+                )
             logger.info("[EVAL] %s -> executed %s %.4f", sym, side, amount)
+            try:
+                from crypto_bot.cooldown_manager import mark_cooldown
+
+                mark_cooldown(sym, strategy)
+            except Exception:  # pragma: no cover - optional cooldown
+                pass
         ctx.timing["execution_latency"] = max(
             ctx.timing.get("execution_latency", 0.0),
             time.perf_counter() - start_exec,
