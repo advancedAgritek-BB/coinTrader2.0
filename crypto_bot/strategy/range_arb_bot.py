@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel
-from sklearn.preprocessing import RobustScaler, StandardScaler
+from sklearn.preprocessing import StandardScaler
 
 import ta
 from scipy import stats
@@ -55,11 +55,8 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     use_log = np.all(y > 0)
     y_proc = np.log1p(y) if use_log else y
 
-    robust_scaler = RobustScaler()
-    y_robust = robust_scaler.fit_transform(y_proc)
-
     y_scaler = StandardScaler()
-    y_scaled = y_scaler.fit_transform(y_robust).ravel()
+    y_scaled = y_scaler.fit_transform(y_proc).ravel()
 
     kernel = (
         ConstantKernel(1.0, constant_value_bounds=(1e-3, 1e3))
@@ -81,9 +78,9 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     gp = GaussianProcessRegressor(
         kernel=kernel,
         optimizer=_optimizer,
-        n_restarts_optimizer=15,
+        n_restarts_optimizer=0,
         alpha=1e-6,
-        normalize_y=True,
+        normalize_y=False,
     )
     gp.fit(X_scaled, y_scaled)
     latest_features = (
@@ -92,8 +89,7 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     pred_scaled, _ = gp.predict(
         x_scaler.transform(latest_features), return_std=True
     )
-    pred_robust = y_scaler.inverse_transform(pred_scaled.reshape(-1, 1))
-    pred_proc = robust_scaler.inverse_transform(pred_robust)
+    pred_proc = y_scaler.inverse_transform(pred_scaled.reshape(-1, 1))
     if use_log:
         pred = np.expm1(pred_proc)[0, 0]
     else:
