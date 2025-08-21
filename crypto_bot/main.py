@@ -1303,6 +1303,11 @@ async def warm_deferred_timeframes(
     if not defer_tfs:
         return
 
+    from crypto_bot.strategy import registry as strategy_registry
+
+    strategies = strategy_registry.load_from_config(config)
+    required_bars = strategy_registry.compute_required_lookback_per_tf(strategies)
+
     original_count = len(symbols)
     sf = config.get("symbol_filter", {})
     ohlcv_batch_size = config.get("ohlcv_batch_size")
@@ -1313,45 +1318,47 @@ async def warm_deferred_timeframes(
     )
 
     tfs = sorted(set(defer_tfs), key=lambda t: timeframe_seconds(None, t))
-    tf_sec = timeframe_seconds(None, tfs[0])
-    lookback_since = int(time.time() * 1000 - scan_limit * tf_sec * 1000)
+    regime_tfs = set(tf for tf in config.get("regime_timeframes", []) if tf in tfs)
     batch_size = int(config.get("symbol_batch_size", 10))
     for i in range(0, len(symbols), batch_size):
         batch = symbols[i : i + batch_size]
-        async with OHLCV_LOCK:
-            state.df_cache = await update_multi_tf_ohlcv_cache(
-                exchange,
-                state.df_cache,
-                batch,
-                {**config, "timeframes": tfs},
-                limit=scan_limit,
-                start_since=lookback_since,
-                use_websocket=False,
-                force_websocket_history=config.get("force_websocket_history", False),
-                max_concurrent=config.get("max_concurrent_ohlcv"),
-                notifier=None,
-                priority_queue=symbol_priority_queue,
-                batch_size=ohlcv_batch_size,
-            )
-
-            regime_tfs = [tf for tf in config.get("regime_timeframes", []) if tf in tfs]
-            if regime_tfs:
-                state.regime_cache = await update_regime_tf_cache(
+        for tf in tfs:
+            limit = max(int(required_bars.get(tf, 0)), scan_limit)
+            tf_sec = timeframe_seconds(None, tf)
+            lookback_since = int(time.time() * 1000 - limit * tf_sec * 1000)
+            async with OHLCV_LOCK:
+                state.df_cache = await update_multi_tf_ohlcv_cache(
                     exchange,
-                    state.regime_cache,
+                    state.df_cache,
                     batch,
-                    {**config, "regime_timeframes": regime_tfs},
-                    limit=scan_limit,
+                    {**config, "timeframes": [tf]},
+                    limit=limit,
                     start_since=lookback_since,
                     use_websocket=False,
-                    force_websocket_history=config.get(
-                        "force_websocket_history", False
-                    ),
+                    force_websocket_history=config.get("force_websocket_history", False),
                     max_concurrent=config.get("max_concurrent_ohlcv"),
                     notifier=None,
-                    df_map=state.df_cache,
+                    priority_queue=symbol_priority_queue,
                     batch_size=ohlcv_batch_size,
                 )
+
+                if tf in regime_tfs:
+                    state.regime_cache = await update_regime_tf_cache(
+                        exchange,
+                        state.regime_cache,
+                        batch,
+                        {**config, "regime_timeframes": [tf]},
+                        limit=limit,
+                        start_since=lookback_since,
+                        use_websocket=False,
+                        force_websocket_history=config.get(
+                            "force_websocket_history", False
+                        ),
+                        max_concurrent=config.get("max_concurrent_ohlcv"),
+                        notifier=None,
+                        df_map=state.df_cache,
+                        batch_size=ohlcv_batch_size,
+                    )
     await asyncio.sleep(0)
     assert len(symbols) == original_count, "Symbol count changed during warm-up"
 
