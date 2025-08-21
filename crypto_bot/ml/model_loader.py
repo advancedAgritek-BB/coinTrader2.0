@@ -9,7 +9,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Optional, Tuple
 
-import requests
+import urllib.request
 
 log = logging.getLogger(__name__)
 
@@ -24,6 +24,24 @@ def _norm_symbol(symbol: str) -> str:
     """Normalise exchange symbols to storage naming convention."""
 
     return symbol.replace("/", "_").replace(":", "_").upper()
+
+
+def _fallback_url(symbol: str) -> Optional[str]:
+    """Return configured fallback URL for ``symbol`` if available."""
+
+    tmpl = os.getenv("CT_MODEL_FALLBACK_URL")
+    if not tmpl:
+        try:
+            from crypto_bot import main as _main  # type: ignore
+
+            cfg = getattr(_main, "_LAST_ML_CFG", {}) or {}
+            tmpl = cfg.get("model_fallback_url") if isinstance(cfg, dict) else None
+        except Exception:  # pragma: no cover - circular import or missing cfg
+            tmpl = None
+    if tmpl:
+        norm = _norm_symbol(symbol)
+        return tmpl.format(symbol=norm, symbol_lower=norm.lower())
+    return None
 
 
 def _deserialize(data: bytes) -> Tuple[object | None, object | None]:
@@ -48,11 +66,10 @@ def _deserialize(data: bytes) -> Tuple[object | None, object | None]:
 def load_regime_model(symbol: str) -> Tuple[object | None, object | None, str | None]:
     """Load a regime model for ``symbol`` with multiple fallbacks.
 
-    The loader attempts three strategies in order:
-
-    1. Supabase storage using ``supabase-py`` if available.
-    2. Direct HTTP request to the public object URL.
-    3. Local file located under ``crypto_bot/models/regime``.
+    The loader first tries Supabase storage. If the object does not exist or
+    an error occurs a configurable remote URL is tried as a secondary source.
+    When both strategies fail ``None`` is returned and callers should treat
+    this as a neutral regime.
 
     ``CT_MODELS_BUCKET`` specifies the bucket name (default ``"models"``) and
     ``CT_REGIME_PREFIX`` controls the prefix/path within the bucket (default is
@@ -68,7 +85,6 @@ def load_regime_model(symbol: str) -> Tuple[object | None, object | None, str | 
     url = os.getenv("SUPABASE_URL")
     sb_key = _supabase_key()
 
-    # 1) Supabase storage client path
     if url and sb_key:
         try:  # pragma: no cover - supabase optional
             from supabase import create_client  # type: ignore
@@ -81,26 +97,27 @@ def load_regime_model(symbol: str) -> Tuple[object | None, object | None, str | 
                 return model, scaler, key
         except Exception as exc:
             log.warning(
-                "Supabase storage download failed (%s); trying public URL fallback",
+                "Supabase regime model for %s not found (%s); falling back to remote URL",
+                symbol,
                 exc,
             )
 
-    # 2) Public HTTP fallback
-    if url:
-        http_url = f"{url.rstrip('/')}/storage/v1/object/public/{bucket}/{key}"
+    fb_url = _fallback_url(norm)
+    if fb_url:
         try:
-            resp = requests.get(http_url, timeout=10)
-            if resp.ok:
-                model, scaler = _deserialize(resp.content)
-                if model is not None:
-                    log.info("Loaded regime model via public URL: %s", http_url)
-                    return model, scaler, http_url
-            else:
-                log.warning("Public URL returned %s for %s", resp.status_code, http_url)
+            with urllib.request.urlopen(fb_url, timeout=5) as resp:
+                data = resp.read()
+            model, scaler = _deserialize(data)
+            if model is not None:
+                log.info("Loaded regime model from fallback URL: %s", fb_url)
+                return model, scaler, fb_url
         except Exception as exc:
-            log.warning("Public URL fetch failed: %s", exc)
+            log.error(
+                "Fallback URL for %s also failed (%s); regime=neutral",
+                symbol,
+                exc,
+            )
 
-    # 3) Local file fallback
     local_path = Path("crypto_bot") / "models" / "regime" / filename
     if local_path.exists():
         try:
