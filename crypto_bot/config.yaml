@@ -26,6 +26,16 @@ ohlcv:
   storage_path: crypto_bot/data/ohlcv   # directory for persisted OHLCV data
   tail_overlap_bars: 3                  # overlap bars to avoid gaps when appending
   max_bootstrap_bars: 1000              # limit initial bootstrap to this many bars
+  bootstrap_timeframes: ["1m", "5m", "15m", "1h"]
+  defer_timeframes: ["4h", "1d"]
+  warmup_candles:
+    "1m": 500
+    "5m": 500
+    "15m": 400
+    "1h": 300
+    "1d": 120
+  initial_history_candles: 600
+  scan_lookback_limit: 1200
 
 # === strategies and params ===
 strategies:
@@ -495,7 +505,8 @@ safety:
 scalp_timeframe: 1m
 scan_deep_top: 30
 scan_in_background: true
-scan_lookback_limit: 700
+scan_lookback_limit: 1200
+initial_history_candles: 600
 scan_markets: true
 scoring:
   lookback_bars: 30
@@ -672,7 +683,7 @@ symbol_filter:
   change_pct_percentile: 10
   correlation_max_pairs: 200
   http_timeout: 5
-  initial_history_candles: 50
+  initial_history_candles: 600
   initial_timeframes:
   - 1m
   - 5m
@@ -727,10 +738,11 @@ deep_backfill_days:
   '15m': 60
   '1h': 180
 warmup_candles:
-  '1m': 1000
-  '5m': 600
+  '1m': 500
+  '5m': 500
   '15m': 400
-  '1h': 240
+  '1h': 300
+  '1d': 120
 allowed_quotes: ['USD','USDT','USDC','EUR']
 hft: true
 token_registry:
