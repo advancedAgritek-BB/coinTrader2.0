@@ -341,7 +341,7 @@ def test_execute_trade_skips_on_slippage(monkeypatch):
         dry_run=False,
         config={"max_slippage_pct": 0.05, "liquidity_depth": 10},
     )
-    assert order == {}
+    assert order["rejection_reason"] == "slippage"
 
 
 class LowBookExchange:
@@ -367,7 +367,7 @@ def test_execute_trade_skips_on_liquidity_usage(monkeypatch):
         dry_run=False,
         config={"max_liquidity_usage": 0.5, "liquidity_depth": 10},
     )
-    assert order == {}
+    assert order["rejection_reason"] == "insufficient_liquidity"
 
 
 def test_ws_client_refreshes_expired_token(monkeypatch):
@@ -615,7 +615,7 @@ def test_execute_trade_async_skips_on_slippage(monkeypatch):
         )
     )
 
-    assert order == {}
+    assert order["rejection_reason"] == "slippage"
 
 
 def test_execute_trade_async_insufficient_liquidity(monkeypatch):
@@ -642,7 +642,7 @@ def test_execute_trade_async_insufficient_liquidity(monkeypatch):
         )
     )
 
-    assert order == {}
+    assert order["rejection_reason"] == "insufficient_liquidity"
 
 
 def test_execute_trade_async_retries(monkeypatch):
