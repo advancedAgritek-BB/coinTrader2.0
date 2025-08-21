@@ -20,6 +20,8 @@ class DummyRM:
         pass
     def register_stop_order(self, *a, **k):
         pass
+    def sentiment_factor_or_default(self, *a, **k):
+        return 1.0
 
 
 class DummyPG:
@@ -42,12 +44,20 @@ def load_execute_signals(sniper_stub):
 
     import types, sys
     sys.modules['crypto_bot.solana_trading'] = types.SimpleNamespace(sniper_trade=sniper_stub)
-    sys.modules['crypto_bot.solana'] = types.SimpleNamespace(sniper_solana=types.SimpleNamespace(generate_signal=lambda _df:(1.0, None)))
+    sys.modules['crypto_bot.solana'] = types.SimpleNamespace(
+        sniper_solana=types.SimpleNamespace(generate_signal=lambda _df: (1.0, None))
+    )
+
+    from crypto_bot.utils.task_manager import TaskManager
+
+    manager = TaskManager()
 
     ns = {
         "asyncio": asyncio,
         "logger": logging.getLogger("test"),
-        "score_logger": setup_logger("symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False),
+        "score_logger": setup_logger(
+            "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
+        ),
         "cex_trade_async": _trade,
         "fetch_order_book_async": lambda *a, **k: {},
         "_closest_wall_distance": lambda *a, **k: None,
@@ -58,15 +68,17 @@ def load_execute_signals(sniper_stub):
         "BotContext": BotContext,
         "refresh_balance": lambda ctx: asyncio.sleep(0),
         "sniper_trade": sniper_stub,
-        "sniper_solana": types.SimpleNamespace(generate_signal=lambda _df, **k: (1.0, None)),
-        "register_task": lambda t: t,
-        "SNIPER_TASKS": set(),
+        "sniper_solana": types.SimpleNamespace(
+            generate_signal=lambda _df, **k: (1.0, None)
+        ),
+        "register_task": manager.register,
+        "TASK_MANAGER": manager,
         "NEW_SOLANA_TOKENS": set(),
     }
     ns["score_logger"].setLevel(logging.DEBUG)
     exec(funcs["direction_to_side"], ns)
     exec(funcs["execute_signals"], ns)
-    return ns["execute_signals"], ns["SNIPER_TASKS"], ns["NEW_SOLANA_TOKENS"]
+    return ns["execute_signals"], manager, ns["NEW_SOLANA_TOKENS"]
 
 
 @pytest.mark.asyncio
@@ -79,7 +91,8 @@ async def test_execute_signals_spawns_sniper_task():
         await asyncio.sleep(0.05)
         finished.set()
 
-    execute_signals, sniper_tasks, new_tokens = load_execute_signals(stub)
+    execute_signals, manager, new_tokens = load_execute_signals(stub)
+    sniper_tasks = manager.tasks["sniper"]
 
     df = pd.DataFrame({"close": [1.0]})
     candidate = {
@@ -126,7 +139,8 @@ async def test_new_token_regime_filter():
     async def stub(*a, **k):
         called.set()
 
-    execute_signals, sniper_tasks, new_tokens = load_execute_signals(stub)
+    execute_signals, manager, new_tokens = load_execute_signals(stub)
+    sniper_tasks = manager.tasks["sniper"]
     new_tokens.add("SOL/USDC")
 
     df = pd.DataFrame({"close": [1.0]})
@@ -171,7 +185,8 @@ async def test_new_token_regime_allows_trade():
     async def stub(*a, **k):
         started.set()
 
-    execute_signals, sniper_tasks, new_tokens = load_execute_signals(stub)
+    execute_signals, manager, new_tokens = load_execute_signals(stub)
+    sniper_tasks = manager.tasks["sniper"]
     new_tokens.add("SOL/USDC")
 
     df = pd.DataFrame({"close": [1.0]})
