@@ -751,11 +751,7 @@ voting_strategies:
     - trend_bot
     - momentum_bot
     - mean_revert
-
     - breakout_bot
-
-    - breakout
-
     - micro_scalp_bot
   weights:
     trend_bot: 1.0
