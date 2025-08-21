@@ -347,6 +347,18 @@ class RiskManager:
         logger.info("[EVAL] %s", reason)
         return True, reason
 
+    def sentiment_factor_or_default(self, require_sentiment: bool = True) -> float:
+        """Return sentiment sizing multiplier or ``1.0`` when disabled.
+
+        Parameters
+        ----------
+        require_sentiment:
+            When ``False`` the internal sentiment ``boost`` is ignored and
+            ``1.0`` is returned.
+        """
+
+        return self.boost if require_sentiment else 1.0
+
     def register_stop_order(
         self,
         order: dict,

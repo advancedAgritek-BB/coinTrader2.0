@@ -41,6 +41,7 @@ class Config:
     hft: bool = True
     strict_cex: bool = False
     denylist_symbols: List[str] = field(default_factory=list)
+    require_sentiment: bool = True
 
 
 # Default global configuration used by modules that expect a ``cfg`` object.

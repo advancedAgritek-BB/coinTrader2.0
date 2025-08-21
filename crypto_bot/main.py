@@ -853,6 +853,7 @@ def _load_config_file() -> dict:
     trading_cfg.setdefault("hft_enabled", False)
     trading_cfg.setdefault("hft_symbols", [])
     trading_cfg.setdefault("exclude_symbols", [])
+    trading_cfg.setdefault("require_sentiment", True)
     data["trading"] = trading_cfg
     data.setdefault("allowed_quotes", allowed_quotes)
     sf_cfg = data.get("symbol_filter", {}) or {}
@@ -2330,20 +2331,14 @@ async def execute_signals(ctx: BotContext) -> None:
             reject_counts[key] += 1
             continue
 
+        sentiment_factor = ctx.risk_manager.sentiment_factor_or_default(
+            ctx.config.get("trading", {}).get("require_sentiment", True)
+        )
+
         probs = candidate.get("probabilities", {})
         reg_prob = float(probs.get(candidate.get("regime"), 0.0))
-        size = ctx.risk_manager.position_size(
-            reg_prob,
-            ctx.balance,
-            df,
-            atr=candidate.get("atr"),
-            price=price,
-            name=strategy,
-            direction=direction,
-        )
-        if size == 0:
-            await refresh_balance(ctx)
-            size = ctx.risk_manager.position_size(
+        size = (
+            ctx.risk_manager.position_size(
                 reg_prob,
                 ctx.balance,
                 df,
@@ -2351,6 +2346,22 @@ async def execute_signals(ctx: BotContext) -> None:
                 price=price,
                 name=strategy,
                 direction=direction,
+            )
+            * sentiment_factor
+        )
+        if size == 0:
+            await refresh_balance(ctx)
+            size = (
+                ctx.risk_manager.position_size(
+                    reg_prob,
+                    ctx.balance,
+                    df,
+                    atr=candidate.get("atr"),
+                    price=price,
+                    name=strategy,
+                    direction=direction,
+                )
+                * sentiment_factor
             )
             if size == 0:
                 outcome_reason = f"size {size:.4f}"
