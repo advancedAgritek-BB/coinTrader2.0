@@ -331,6 +331,7 @@ TELE_CHAT_ADMINS=123456,789012         # optional comma separated admin IDs
 TELE_CHAT_ADMINS=12345,67890          # comma-separated chat IDs
 GOOGLE_CRED_JSON=path_to_google_credentials.json
 TWITTER_SENTIMENT_URL=https://lunarcrush.com/api/v2  # LunarCrush sentiment endpoint (requires LUNARCRUSH_API_KEY)
+CT_REQUIRE_SENTIMENT=false             # skip sentiment vetoes entirely when set to false
 FUNDING_RATE_URL=https://futures.kraken.com/derivatives/api/v3/historical-funding-rates?symbol=
 SECRETS_PROVIDER=aws                     # optional
 SECRETS_PATH=/path/to/secret
@@ -544,7 +545,8 @@ symbol_score_weights:
 * **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment
   to avoid bearish markets. Set `require_sentiment` to `true` to block trades
   when sentiment data is missing. Leave it `false` in dry-run or tests to treat
-  missing data as a neutral score.
+  missing data as a neutral score. Set `CT_REQUIRE_SENTIMENT=false` to skip
+  sentiment vetoes entirely, ignoring `min_fng` and `min_sentiment` thresholds.
 * **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
 * **mempool_monitor** – pause or reprice when Solana fees spike.
 * **priority_fee_cap_micro_lamports** – abort scalper trades when priority fees exceed this.
@@ -968,7 +970,25 @@ When `require_sentiment` is `false` (the default for dry-run and testing), the
 sentiment gate falls back to a neutral score of `50` whenever the endpoint or
 API key is missing so simulations continue deterministically. Set
 `require_sentiment: true` in the config to fail closed instead of using this
-placeholder value.
+placeholder value. Alternatively, set `CT_REQUIRE_SENTIMENT=false` to disable
+sentiment vetoes entirely.
+
+### CT_REQUIRE_SENTIMENT
+
+`CT_REQUIRE_SENTIMENT` overrides all sentiment requirements. When set to
+`false`, the bot skips Fear & Greed and Twitter sentiment vetoes even if
+`min_fng`, `min_sentiment` or `require_sentiment` are configured. Use this for
+backtests or integrations where sentiment data is unreliable.
+
+```bash
+# .env
+CT_REQUIRE_SENTIMENT=false
+
+# inline when launching
+CT_REQUIRE_SENTIMENT=false python -m crypto_bot.main
+```
+
+Leave the variable unset or set to `true` to respect configured thresholds.
 
 ### Funding Rate API
 
