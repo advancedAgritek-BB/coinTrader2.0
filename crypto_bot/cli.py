@@ -66,6 +66,16 @@ def build_parser():
         action="store_true",
         help="Reset bootstrap progress tracker and start over",
     )
+    p.add_argument(
+        "--min-score",
+        type=float,
+        help="Override minimum score threshold for signal execution",
+    )
+    p.add_argument(
+        "--min-confidence",
+        type=float,
+        help="Override minimum confidence threshold for signal execution",
+    )
     return p
 
 
@@ -85,6 +95,10 @@ def main():
         return
     if args.ohlcv_chunk_size is not None:
         os.environ["OHLCV_CHUNK_SIZE"] = str(args.ohlcv_chunk_size)
+    if args.min_score is not None:
+        os.environ["MIN_SCORE"] = str(args.min_score)
+    if args.min_confidence is not None:
+        os.environ["MIN_CONFIDENCE"] = str(args.min_confidence)
     if args.reset_bootstrap_progress:
         reset_bootstrap_progress()
     from crypto_bot.main import main as bot_main
