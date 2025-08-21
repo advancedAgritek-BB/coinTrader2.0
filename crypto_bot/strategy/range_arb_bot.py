@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - optional dependency
     from coinTrader_Trainer.ml_trainer import load_model
+
     ML_AVAILABLE = True
 except Exception:  # pragma: no cover - trainer missing
     ML_AVAILABLE = False
@@ -46,11 +47,15 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     y_scaler = StandardScaler()
     y_scaled = y_scaler.fit_transform(y).ravel()
 
-    kernel = ConstantKernel(
-        1.0, constant_value_bounds=(1e-5, 1e5)
-    ) * RBF(1.0, length_scale_bounds=(1e-5, 1e5))
+    kernel = ConstantKernel(1.0, constant_value_bounds=(1e-5, 1e5)) * RBF(
+        1.0, length_scale_bounds=(1e-5, 1e5)
+    )
     gp = GaussianProcessRegressor(
-        kernel=kernel, optimizer="fmin_l_bfgs_b", n_restarts_optimizer=15
+        kernel=kernel,
+        optimizer="fmin_l_bfgs_b",
+        n_restarts_optimizer=15,
+        alpha=1e-6,
+        normalize_y=True,
     )
     gp.fit(X_scaled, y_scaled)
     latest_features = recent[["close", "volume"]].iloc[-1].values.reshape(1, -1)
@@ -85,9 +90,7 @@ def generate_signal(
     atr_window = int(params.get("atr_window", 14))
     kr_window = int(params.get("kr_window", 20))
     z_threshold = float(params.get("z_threshold", 1.5))
-    vol_z_threshold = float(
-        params.get("vol_z_threshold", 1.0)
-    )  # Low vol confirm
+    vol_z_threshold = float(params.get("vol_z_threshold", 1.0))  # Low vol confirm
     volume_mult = float(params.get("volume_mult", 1.5))
     atr_normalization = bool(params.get("atr_normalization", True))
 
@@ -117,10 +120,7 @@ def generate_signal(
     latest = recent.iloc[-1]
 
     # Ignore if not low vol
-    if (
-        latest["atr_z"] >= vol_z_threshold
-        or latest["vol_z"] >= vol_z_threshold
-    ):
+    if latest["atr_z"] >= vol_z_threshold or latest["vol_z"] >= vol_z_threshold:
         return 0.0, "none"
 
     # Avoid volume spikes
