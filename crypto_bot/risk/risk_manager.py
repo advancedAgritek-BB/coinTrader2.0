@@ -4,6 +4,7 @@ from typing import Any, Optional, Mapping
 
 import asyncio
 import time
+import os
 
 import pandas as pd
 from math import isnan
@@ -76,6 +77,7 @@ class RiskConfig:
     win_rate_threshold: float = 0.7
     win_rate_boost_factor: float = 1.5
     win_rate_half_life: float = 5.0
+    require_sentiment: bool = True
 
 
 class RiskManager:
@@ -311,7 +313,17 @@ class RiskManager:
             logger.info("[EVAL] %s", reason)
             return False, reason
 
-        require_sentiment = self.config.min_fng > 0 or self.config.min_sentiment > 0
+        env_val = os.getenv("CT_REQUIRE_SENTIMENT")
+        if env_val is not None:
+            require_sentiment = env_val.lower() in ("1", "true", "yes", "on")
+        else:
+            require_sentiment = self.config.require_sentiment
+            if os.getenv("EXECUTION_MODE", "").lower() == "dry_run":
+                require_sentiment = False
+
+        if self.config.min_fng > 0 or self.config.min_sentiment > 0:
+            require_sentiment = True
+
         sentiment_score = sentiment_factor_or_default(
             time.time(), require_sentiment, 3600
         )

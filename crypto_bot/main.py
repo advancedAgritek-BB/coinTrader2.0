@@ -181,6 +181,10 @@ def build_risk_config(config: dict, volume_ratio: float) -> RiskConfig:
         "take_profit_atr_mult", 4.0
     )
     risk_params["volume_ratio"] = volume_ratio
+    risk_params["require_sentiment"] = config.get("trading", {}).get(
+        "require_sentiment",
+        config.get("require_sentiment", True),
+    )
     fields = {f.name for f in dataclasses.fields(RiskConfig)}
     risk_params = {k: v for k, v in risk_params.items() if k in fields}
     return RiskConfig(**risk_params)
@@ -815,7 +819,16 @@ def _load_config_file() -> dict:
     trading_cfg.setdefault("hft_enabled", False)
     trading_cfg.setdefault("hft_symbols", [])
     trading_cfg.setdefault("exclude_symbols", [])
-    trading_cfg.setdefault("require_sentiment", True)
+    env_req = os.getenv("CT_REQUIRE_SENTIMENT")
+    if env_req is not None:
+        trading_cfg["require_sentiment"] = env_req.lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+    else:
+        trading_cfg.setdefault("require_sentiment", trading_mode != "dry_run")
     data["trading"] = trading_cfg
     data.setdefault("allowed_quotes", allowed_quotes)
     sf_cfg = data.get("symbol_filter", {}) or {}

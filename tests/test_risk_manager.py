@@ -156,6 +156,31 @@ def test_allow_trade_allows_with_valid_data():
     assert "trade allowed" in reason.lower()
 
 
+def test_allow_trade_skips_missing_sentiment(tmp_path, monkeypatch):
+    """Trading proceeds when sentiment is optional and data is absent."""
+
+    df = _df()
+    monkeypatch.delenv("CT_REQUIRE_SENTIMENT", raising=False)
+    from crypto_bot.risk import sentiment_gate
+
+    monkeypatch.setattr(
+        sentiment_gate,
+        "SENTIMENT_FILE",
+        tmp_path / "missing.json",
+        raising=False,
+    )
+
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        require_sentiment=False,
+    )
+    allowed, reason = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
+    assert allowed
+    assert "trade allowed" in reason.lower()
+
+
 def test_allow_trade_allows_high_score():
     df = volume_df([1] * 19 + [0.0005])
     cfg = RiskConfig(max_drawdown=1, stop_loss_pct=0.01, take_profit_pct=0.01)
