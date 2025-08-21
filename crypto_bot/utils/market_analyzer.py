@@ -252,6 +252,9 @@ async def analyze_symbol(
             regime, info = await classify_regime_async(
                 df, higher_df, notifier=notifier, symbol=symbol
             )
+            tmp_probs = info if isinstance(info, dict) else {regime: float(info or 0.0)}
+            if regime == "unknown" and float(tmp_probs.get("unknown", 0.0)) >= 1.0:
+                regime, info = _heuristic_regime(df)
         except Exception as exc:
             analysis_logger.error("classify_regime_async failed: %s", exc)
             regime, info = _heuristic_regime(df)
