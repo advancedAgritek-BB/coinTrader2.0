@@ -2219,7 +2219,7 @@ async def execute_signals(
     for res in results:
         sym = res.get("symbol", "")
         score = float(res.get("score", 0.0))
-        direction = res.get("direction", "none")
+        direction = res.get("direction") or res.get("signal") or "none"
         atr = res.get("atr")
         logger.info(
             "Raw result: symbol=%s score=%.2f direction=%s atr=%s",
@@ -2284,7 +2284,7 @@ async def execute_signals(
     for r in orig_results:
         logger.debug("Analysis result: %s", r)
         sym = r.get("symbol", "")
-        direction = r.get("direction", "none")
+        direction = r.get("direction") or r.get("signal") or "none"
         min_req = r.get("min_confidence", min_confidence)
         score = r.get("score", 0.0)
         if r.get("skip"):
@@ -2335,7 +2335,7 @@ async def execute_signals(
         logger.debug("Open trades: %d / %d", len(ctx.positions), max_trades)
         min_req = candidate.get("min_confidence", min_confidence)
         score = candidate.get("score", 0.0)
-        direction = candidate.get("direction", "none")
+        direction = candidate.get("direction") or candidate.get("signal") or "none"
         sym = candidate["symbol"]
         logger.info(f"Pre-execution candidate: {sym} score={score} dir={direction}")
         if ctx.position_guard and not ctx.position_guard.can_open(ctx.positions):
@@ -2478,13 +2478,49 @@ async def execute_signals(
             continue
 
         amount = abs(size) / price if price > 0 else 0.0
-        side = direction_to_side(direction)
-        if side == "sell" and not ctx.config.get("allow_short", False):
+        raw = candidate.get("direction") or candidate.get("signal")
+        def _to_side(x):
+            if not x:
+                return None
+            x = x.lower()
+            if x in ("long", "buy"):
+                return "buy"
+            if x in ("short", "sell"):
+                return "sell"
+            return None
+        side = _to_side(raw)
+        if side is None:
+            logging.debug("Skip: no actionable side (signal/direction missing) %s", candidate)
+            outcome_reason = "no actionable side"
+            _log_rejection(sym, score, direction, min_req, outcome_reason, "SCORING")
+            reject_counts["no_actionable_side"] += 1
+            continue
+        allow_short = bool(ctx.config.get("allow_short", False))
+        if side == "sell" and not allow_short:
+            logging.info("Skip: short selling disabled; %s", candidate)
             outcome_reason = "short selling disabled"
             gate_results["risk"] = False
             _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             reject_counts["short_selling_disabled"] += 1
+            _log_gates()
+            logger.info("Trade BLOCKED (%s)", outcome_reason)
+            continue
+        tradable_here = True
+        if getattr(ctx, "markets", None):
+            tradable_here = candidate["symbol"] in ctx.markets and ctx.markets[candidate["symbol"]].get("active", True)
+        if not tradable_here:
+            logging.info(
+                "Skip: symbol not tradable on %s (dry_run=%s): %s",
+                ctx.config.get("exchange", "unknown"),
+                ctx.execution_mode == "dry_run",
+                candidate["symbol"],
+            )
+            outcome_reason = "symbol not tradable"
+            gate_results["risk"] = False
+            _log_rejection(sym, score, direction, min_req, outcome_reason, "MARKET")
+            logger.info("[EVAL] %s -> %s", sym, outcome_reason)
+            reject_counts["symbol_not_tradable"] += 1
             _log_gates()
             logger.info("Trade BLOCKED (%s)", outcome_reason)
             continue
