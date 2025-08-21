@@ -695,7 +695,12 @@ async def execute_trade_async(
 
     skip = await _check_slippage_async(exchange, symbol, side, amount, config, notifier)
     if skip:
-        return {}
+        return {
+            "symbol": symbol,
+            "side": side,
+            "amount": amount,
+            "rejection_reason": "slippage",
+        }
 
     async def has_liquidity(order_size: float) -> bool:
         return await _has_liquidity_async(
@@ -708,7 +713,12 @@ async def execute_trade_async(
         and not await has_liquidity(amount)
     ):
         notifier.notify("Insufficient liquidity for order size")
-        return {}
+        return {
+            "symbol": symbol,
+            "side": side,
+            "amount": amount,
+            "rejection_reason": "insufficient_liquidity",
+        }
 
     async def place(size: float) -> List[Dict]:
         return await _place_order_async(

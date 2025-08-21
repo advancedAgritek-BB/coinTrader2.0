@@ -26,7 +26,7 @@ async def execute_trade_async(
 
     if trading_paused:
         logger.info("Trading is paused; signal suppressed (use 'start' to resume)")
-        return {}
+        return {"rejection_reason": "trading_paused"}
 
     if dry_run:
         price = None
@@ -48,15 +48,23 @@ async def execute_trade_async(
             price,
             reason,
         )
-        return {
+        result = {
             "symbol": symbol,
             "side": side,
             "amount": amount,
             "price": price,
             "dry_run": True,
         }
+        logger.info(
+            "DRY-RUN: simulated %s %.4f %s @ %s",
+            side.upper(),
+            amount,
+            symbol,
+            price,
+        )
+        return result
 
-    return await cex_executor.execute_trade_async(
+    result = await cex_executor.execute_trade_async(
         exchange,
         ws_client,
         symbol,
@@ -68,3 +76,32 @@ async def execute_trade_async(
         config=config,
         score=score,
     )
+
+    price = result.get("price") if isinstance(result, dict) else None
+    if not result:
+        logger.warning(
+            "ORDER FAILED: %s %.4f %s @ %s",
+            side.upper(),
+            amount,
+            symbol,
+            price,
+        )
+    elif result.get("rejection_reason"):
+        logger.warning(
+            "ORDER REJECTED: %s %.4f %s @ %s reason=%s",
+            side.upper(),
+            amount,
+            symbol,
+            price,
+            result.get("rejection_reason"),
+        )
+    else:
+        logger.info(
+            "ORDER EXECUTED: %s %.4f %s @ %s",
+            side.upper(),
+            amount,
+            symbol,
+            price,
+        )
+
+    return result
