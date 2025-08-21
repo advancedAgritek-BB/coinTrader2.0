@@ -69,7 +69,7 @@ def test_handles_insufficient_history():
     prices = [100] * 20
     volumes = [100] * 20
     df = _make_df(prices, volumes)
-    score, direction, atr = breakout_bot.generate_signal(df, cfg)
+    score, direction, atr = breakout_bot.generate_signal(df, config=cfg)
     assert direction == "none" and score == 0.0
     indicator_cache.CACHE.clear()
 
@@ -78,7 +78,7 @@ def test_long_breakout_signal():
     prices = [100] * 35 + [102]
     volumes = [100] * 35 + [300]
     df = _make_df(prices, volumes)
-    score, direction, atr = breakout_bot.generate_signal(df, BASE_CFG)
+    score, direction, atr = breakout_bot.generate_signal(df, config=BASE_CFG)
     assert direction == "long"
     assert score > 0
 
@@ -87,7 +87,7 @@ def test_short_breakout_signal():
     prices = [100] * 35 + [98]
     volumes = [100] * 35 + [300]
     df = _make_df(prices, volumes)
-    score, direction, atr = breakout_bot.generate_signal(df, BASE_CFG)
+    score, direction, atr = breakout_bot.generate_signal(df, config=BASE_CFG)
     assert direction == "short"
     assert score < 0
 
@@ -96,7 +96,7 @@ def test_requires_squeeze():
     prices = list(range(80, 106))
     volumes = [100] * 26
     df = _make_df(prices, volumes)
-    score, direction, atr = breakout_bot.generate_signal(df, BASE_CFG)
+    score, direction, atr = breakout_bot.generate_signal(df, config=BASE_CFG)
     assert direction == "none"
     assert score == 0.0
 
@@ -104,7 +104,7 @@ def test_requires_squeeze():
 @pytest.mark.parametrize("direction", ["long", "short"])
 def test_signal_requires_all_conditions(direction, breakout_df, higher_squeeze_df, no_squeeze_df):
     df = breakout_df(direction)
-    score, got = breakout_bot.generate_signal(df, BASE_CFG, higher_df=higher_squeeze_df)
+    score, got = breakout_bot.generate_signal(df, config=BASE_CFG, higher_df=higher_squeeze_df)
     assert got == direction and (score > 0 if direction == "long" else score < 0)
 
     df_no_vol = breakout_df(direction, volume_spike=False)
@@ -117,12 +117,12 @@ def test_signal_requires_all_conditions(direction, breakout_df, higher_squeeze_d
 
     df_no_break = breakout_df(direction, breakout=False)
     assert (
-        breakout_bot.generate_signal(df_no_break, BASE_CFG, higher_df=higher_squeeze_df)[1]
+        breakout_bot.generate_signal(df_no_break, config=BASE_CFG, higher_df=higher_squeeze_df)[1]
         == "none"
     )
 
     assert (
-        breakout_bot.generate_signal(no_squeeze_df, BASE_CFG, higher_df=higher_squeeze_df)[1]
+        breakout_bot.generate_signal(no_squeeze_df, config=BASE_CFG, higher_df=higher_squeeze_df)[1]
         == "none"
     )
 
@@ -130,10 +130,10 @@ def test_signal_requires_all_conditions(direction, breakout_df, higher_squeeze_d
 @pytest.mark.parametrize("direction", ["long", "short"])
 def test_higher_timeframe_optional(direction, breakout_df, higher_squeeze_df, no_squeeze_df):
     df = breakout_df(direction)
-    _, got = breakout_bot.generate_signal(df, BASE_CFG, higher_df=higher_squeeze_df)
+    _, got = breakout_bot.generate_signal(df, config=BASE_CFG, higher_df=higher_squeeze_df)
     assert got == direction
 
-    _, got_no = breakout_bot.generate_signal(df, BASE_CFG, higher_df=no_squeeze_df)
+    _, got_no = breakout_bot.generate_signal(df, config=BASE_CFG, higher_df=no_squeeze_df)
     assert got_no == direction
 
 
@@ -161,7 +161,7 @@ def test_squeeze_zscore(monkeypatch):
             "adx_threshold": 0,
         },
     }
-    score, direction, _ = breakout_bot.generate_signal(df, cfg)
+    score, direction, _ = breakout_bot.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0
 
@@ -176,7 +176,7 @@ def test_no_volume_confirmation_still_signals(breakout_df):
             "adx_threshold": 0,
         }
     }
-    score, direction, _ = breakout_bot.generate_signal(df, cfg)
+    score, direction, _ = breakout_bot.generate_signal(df, config=cfg)
     assert direction == "long" and score > 0
 
 
@@ -204,10 +204,10 @@ def test_trainer_model_influence(monkeypatch):
     assert direction2 == direction
     base_raw_cfg = dict(BASE_CFG)
     base_raw_cfg["atr_normalization"] = False
-    base_raw, direction, _ = breakout_bot.generate_signal(df, base_raw_cfg)
+    base_raw, direction, _ = breakout_bot.generate_signal(df, config=base_raw_cfg)
     dummy = types.SimpleNamespace(predict=lambda _df: 0.5)
     monkeypatch.setattr(breakout_bot, "MODEL", dummy)
-    score, direction2, _ = breakout_bot.generate_signal(df, BASE_CFG)
+    score, direction2, _ = breakout_bot.generate_signal(df, config=BASE_CFG)
     assert direction2 == direction
     recent = df.iloc[-31:]
     expected = normalize_score_by_volatility(recent, (base_raw + 0.5) / 2)

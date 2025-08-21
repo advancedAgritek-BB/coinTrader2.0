@@ -52,7 +52,7 @@ def test_direction_override_short():
         [10, 12, 11, 200]
     )
     config = {"direction": "short"}
-    score, direction, _, event = sniper_bot.generate_signal(df, config)
+    score, direction, _, event = sniper_bot.generate_signal(df, config=config)
     assert direction == "short"
     assert score > 0.8
     assert not event
@@ -88,7 +88,7 @@ def test_symbol_filter_blocks_disallowed():
         [10, 12, 40]
     )
     score, direction, _, event = sniper_bot.generate_signal(
-        df, {"symbol": "XRP/USD"}
+        df, config={"symbol": "XRP/USD"}
     )
     assert direction == "none"
     assert score == 0.0
@@ -141,7 +141,7 @@ def test_price_fallback_long_signal():
         "volume": [100] * (bars - 1) + [250],
     })
     score, direction, atr, event = sniper_bot.generate_signal(
-        df, {"price_fallback": True}
+        df, config={"price_fallback": True}
     )
     assert direction == "long"
     assert score > 0
@@ -156,10 +156,10 @@ def test_trainer_model_influence(monkeypatch):
     )
     cfg = {"atr_normalization": False}
     monkeypatch.setattr(sniper_bot, "MODEL", None)
-    base, direction, _, _ = sniper_bot.generate_signal(df, cfg)
+    base, direction, _, _ = sniper_bot.generate_signal(df, config=cfg)
     dummy = types.SimpleNamespace(predict=lambda _df: 0.5)
     monkeypatch.setattr(sniper_bot, "MODEL", dummy)
-    score, direction2, _, _ = sniper_bot.generate_signal(df, cfg)
+    score, direction2, _, _ = sniper_bot.generate_signal(df, config=cfg)
     assert direction2 == direction
     assert score == pytest.approx((base + 0.5) / 2)
 

@@ -4,12 +4,9 @@ import ta
 
 def generate_signal(
     df: pd.DataFrame,
-    config: dict | None = None,
-    *,
-    pyth_price: float | None = None,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> tuple[float, str]:
     """Return a simple Solana scalping signal using RSI and MACD.
 
@@ -20,6 +17,15 @@ def generate_signal(
     config : dict, optional
         Optional configuration overriding default indicator windows.
     """
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config = kwargs.get("config")
+    pyth_price: float | None = kwargs.get("pyth_price")
+
     if df is None or df.empty:
         return 0.0, "none"
 

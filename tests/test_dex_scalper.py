@@ -64,7 +64,7 @@ def test_scalper_custom_config():
     close = pd.Series(range(1, 41))
     df = pd.DataFrame({'close': close})
     cfg = {'dex_scalper': {'ema_fast': 3, 'ema_slow': 10, 'min_signal_score': 0.05}}
-    score, direction = dex_scalper.generate_signal(df, cfg)
+    score, direction = dex_scalper.generate_signal(df, config=cfg)
     assert direction == 'long'
     assert score > 0
 
@@ -74,7 +74,7 @@ def test_priority_fee_aborts(monkeypatch):
     df = pd.DataFrame({"close": close})
     monkeypatch.setenv("MOCK_PRIORITY_FEE", "50")
     cfg = {"dex_scalper": {"priority_fee_cap_micro_lamports": 10}}
-    score, direction = dex_scalper.generate_signal(df, cfg)
+    score, direction = dex_scalper.generate_signal(df, config=cfg)
     assert score == 0.0
     assert direction == "none"
 
@@ -84,7 +84,7 @@ def test_priority_fee_below_threshold(monkeypatch):
     df = pd.DataFrame({"close": close})
     monkeypatch.setenv("MOCK_PRIORITY_FEE", "5")
     cfg = {"dex_scalper": {"priority_fee_cap_micro_lamports": 10}}
-    score, direction = dex_scalper.generate_signal(df, cfg)
+    score, direction = dex_scalper.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0
 
@@ -101,7 +101,7 @@ def test_monitor_fee_blocks_signal():
     df = pd.DataFrame({"close": pd.Series(range(1, 21))})
     cfg = {"dex_scalper": {"priority_fee_cap_micro_lamports": 10}}
     score, direction = dex_scalper.generate_signal(
-        df, cfg, mempool_monitor=DummyMonitor(15)
+        df, config=cfg, mempool_monitor=DummyMonitor(15)
     )
     assert score == 0.0
     assert direction == "none"
@@ -111,7 +111,7 @@ def test_monitor_fee_allows_signal():
     df = pd.DataFrame({"close": pd.Series(range(1, 21))})
     cfg = {"dex_scalper": {"priority_fee_cap_micro_lamports": 10}}
     score, direction = dex_scalper.generate_signal(
-        df, cfg, mempool_monitor=DummyMonitor(5)
+        df, config=cfg, mempool_monitor=DummyMonitor(5)
     )
     assert direction == "long"
     assert score > 0

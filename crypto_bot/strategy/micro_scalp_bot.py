@@ -52,11 +52,6 @@ def generate_signal(
     df: pd.DataFrame,
     symbol: str | None = None,
     timeframe: str | None = None,
-    mempool_monitor: Optional[SolanaMempoolMonitor] = None,
-    mempool_cfg: Optional[dict] = None,
-    tick_data: pd.DataFrame | None = None,
-    book: Optional[dict] = None,
-    ticks: Optional[pd.DataFrame] = None,
     **kwargs,
 ) -> Tuple[float, str]:
     """Return short-term signal using EMA crossover on 1m data.
@@ -108,8 +103,8 @@ def generate_signal(
         timeframe = None
     config = kwargs.get("config")
     higher_df = kwargs.get("higher_df")
-    mempool_monitor = mempool_monitor or kwargs.get("mempool_monitor")
-    mempool_cfg = mempool_cfg or kwargs.get("mempool_cfg")
+    mempool_monitor: Optional[SolanaMempoolMonitor] = kwargs.get("mempool_monitor")
+    mempool_cfg: Optional[dict] = kwargs.get("mempool_cfg")
     tick_data: pd.DataFrame | None = kwargs.get("tick_data")
     book: Optional[dict] = kwargs.get("book")
     ticks: Optional[pd.DataFrame] = kwargs.get("ticks")

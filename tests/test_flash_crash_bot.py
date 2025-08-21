@@ -49,4 +49,4 @@ def test_ema_filter_blocks():
         }
     )
     cfg = {"flash_crash": {"ema_window": 5}}
-    assert flash_crash_bot.generate_signal(df, cfg) == (0.0, "none")
+    assert flash_crash_bot.generate_signal(df, config=cfg) == (0.0, "none")

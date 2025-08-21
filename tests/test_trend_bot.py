@@ -71,7 +71,7 @@ def test_no_signal_when_volume_below_ma():
 def test_long_signal_with_filters():
     df = _df_trend(150.0)
     cfg = {"donchian_confirmation": False}
-    score, direction = trend_bot.generate_signal(df, cfg)
+    score, direction = trend_bot.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0.0
 
@@ -79,7 +79,7 @@ def test_long_signal_with_filters():
 def test_donchian_confirmation_blocks_false_breakout():
     df = _df_trend(150.0)
     cfg = {"donchian_confirmation": True}
-    score, direction = trend_bot.generate_signal(df, cfg)
+    score, direction = trend_bot.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0.0
 
@@ -87,7 +87,7 @@ def test_donchian_confirmation_blocks_false_breakout():
 def test_donchian_confirmation_allows_breakout():
     df = _df_trend(150.0, high_equals_close=True)
     cfg = {"donchian_confirmation": True}
-    score, direction = trend_bot.generate_signal(df, cfg)
+    score, direction = trend_bot.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0.0
 
@@ -100,7 +100,7 @@ def test_rsi_zscore(monkeypatch):
         lambda s, lookback=3: pd.Series([2] * len(s), index=s.index),
     )
     cfg = {"indicator_lookback": 3, "rsi_overbought_pct": 90, "donchian_confirmation": False}
-    score, direction = trend_bot.generate_signal(df, cfg)
+    score, direction = trend_bot.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0.0
 
@@ -113,7 +113,7 @@ def test_rsi_zscore_quantile_threshold(monkeypatch):
         lambda s, lookback=3: pd.Series(range(len(s)), index=s.index, dtype=float),
     )
     cfg = {"indicator_lookback": 3, "rsi_overbought_pct": 90, "donchian_confirmation": False}
-    score, direction = trend_bot.generate_signal(df, cfg)
+    score, direction = trend_bot.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0.0
 
@@ -164,7 +164,7 @@ def test_torch_signal_default_weight(monkeypatch):
         "torch_signal_model": {"enabled": True},
         "adx_threshold": 5,
     }
-    score, _ = trend_bot.generate_signal(df, cfg)
+    score, _ = trend_bot.generate_signal(df, config=cfg)
     expected = base_score * 0.3 + 0.2 * 0.7
     assert score == pytest.approx(expected)
 
@@ -178,10 +178,10 @@ def test_trainer_model_influence(monkeypatch):
         lambda s, lookback=250: pd.Series(range(len(s)), index=s.index, dtype=float),
     )
     monkeypatch.setattr(trend_bot, "MODEL", None)
-    base, direction = trend_bot.generate_signal(df, cfg)
+    base, direction = trend_bot.generate_signal(df, config=cfg)
     dummy = types.SimpleNamespace(predict=lambda _df: 0.7)
     monkeypatch.setattr(trend_bot, "MODEL", dummy)
-    score, direction2 = trend_bot.generate_signal(df, cfg)
+    score, direction2 = trend_bot.generate_signal(df, config=cfg)
     assert direction2 == direction
     assert score == pytest.approx((base + 0.7) / 2)
 

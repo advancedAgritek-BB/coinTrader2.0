@@ -594,7 +594,7 @@ grid_bot:
 
 * **atr_normalization** – adjust signal scores using ATR.
 ```python
-score, direction, atr = breakout_bot.generate_signal(lower_df, cfg, higher_df)
+score, direction, atr = breakout_bot.generate_signal(lower_df, config=cfg, higher_df=higher_df)
 size = risk_manager.position_size(
     score,
     balance,

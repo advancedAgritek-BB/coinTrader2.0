@@ -153,7 +153,7 @@ def test_high_volume_positive_sentiment(meme_df, high_monitor, monkeypatch):
     )
     cfg = {"meme_wave_bot": {"volume_threshold": 3, "sentiment_threshold": 0.6}}
     score, direction = asyncio.run(
-        meme_wave_bot.generate_signal(df, cfg, mempool_monitor=high_monitor)
+        meme_wave_bot.generate_signal(df, config=cfg, mempool_monitor=high_monitor)
     )
     assert (score, direction) == (1.0, "long")
 
@@ -175,7 +175,7 @@ def test_high_volume_negative_sentiment(meme_df, high_monitor, monkeypatch):
     )
     cfg = {"meme_wave_bot": {"volume_threshold": 3, "sentiment_threshold": 0.6}}
     score, direction = asyncio.run(
-        meme_wave_bot.generate_signal(df, cfg, mempool_monitor=high_monitor)
+        meme_wave_bot.generate_signal(df, config=cfg, mempool_monitor=high_monitor)
     )
     assert (score, direction) == (0.0, "none")
 
@@ -197,7 +197,7 @@ def test_low_volume_any_sentiment(meme_df, low_monitor, monkeypatch):
     )
     cfg = {"meme_wave_bot": {"volume_threshold": 3, "sentiment_threshold": 0.6}}
     score, direction = asyncio.run(
-        meme_wave_bot.generate_signal(df, cfg, mempool_monitor=low_monitor)
+        meme_wave_bot.generate_signal(df, config=cfg, mempool_monitor=low_monitor)
     )
     assert (score, direction) == (0.0, "none")
 

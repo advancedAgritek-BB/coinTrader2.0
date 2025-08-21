@@ -34,18 +34,6 @@ def generate_signal(
     df: pd.DataFrame,
     symbol: str | None = None,
     timeframe: str | None = None,
-    breakout_pct: float = 0.01,
-    volume_multiple: float = 1.2,
-    max_history: int = 30,
-    initial_window: int = 3,
-    min_volume: float = 100.0,
-    direction: str = "auto",
-    high_freq: bool = False,
-    atr_window: int = 14,
-    volume_window: int = 5,
-    price_fallback: bool = True,
-    fallback_atr_mult: float = 1.5,
-    fallback_volume_mult: float = 1.2,
     **kwargs,
 ) -> Tuple[float, str, float | dict, bool]:
     """Detect pumps for newly listed tokens using early price and volume action.
