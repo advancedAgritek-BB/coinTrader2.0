@@ -3,8 +3,10 @@ import ast
 from pathlib import Path
 import pandas as pd
 import pytest
+import logging
 from crypto_bot.phase_runner import BotContext
 from crypto_bot.paper_wallet import PaperWallet
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 
 class DummyRM:
@@ -44,7 +46,8 @@ def load_execute_signals(sniper_stub):
 
     ns = {
         "asyncio": asyncio,
-        "logger": __import__("logging").getLogger("test"),
+        "logger": logging.getLogger("test"),
+        "score_logger": setup_logger("symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False),
         "cex_trade_async": _trade,
         "fetch_order_book_async": lambda *a, **k: {},
         "_closest_wall_distance": lambda *a, **k: None,
@@ -55,9 +58,12 @@ def load_execute_signals(sniper_stub):
         "BotContext": BotContext,
         "refresh_balance": lambda ctx: asyncio.sleep(0),
         "sniper_trade": sniper_stub,
+        "sniper_solana": types.SimpleNamespace(generate_signal=lambda _df, **k: (1.0, None)),
+        "register_task": lambda t: t,
         "SNIPER_TASKS": set(),
         "NEW_SOLANA_TOKENS": set(),
     }
+    ns["score_logger"].setLevel(logging.DEBUG)
     exec(funcs["direction_to_side"], ns)
     exec(funcs["execute_signals"], ns)
     return ns["execute_signals"], ns["SNIPER_TASKS"], ns["NEW_SOLANA_TOKENS"]
@@ -84,6 +90,9 @@ async def test_execute_signals_spawns_sniper_task():
         "probabilities": {},
         "regime": "bull",
         "score": 1.0,
+        "entry": {"price": 1.0},
+        "size": 1.0,
+        "valid": True,
     }
 
     ctx = BotContext(
@@ -129,6 +138,9 @@ async def test_new_token_regime_filter():
         "probabilities": {},
         "regime": "bull",
         "score": 1.0,
+        "entry": {"price": 1.0},
+        "size": 1.0,
+        "valid": True,
     }
 
     ctx = BotContext(
@@ -171,6 +183,9 @@ async def test_new_token_regime_allows_trade():
         "probabilities": {},
         "regime": "volatile",
         "score": 1.0,
+        "entry": {"price": 1.0},
+        "size": 1.0,
+        "valid": True,
     }
 
     ctx = BotContext(
