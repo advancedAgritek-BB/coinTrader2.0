@@ -4,7 +4,7 @@ trading:
   min_score: 0.20
   min_confidence: 0.30
   consensus: weighted
-  require_sentiment: false
+  require_sentiment: false   # CT_REQUIRE_SENTIMENT=false also disables checks
 exchange:
   name: kraken
   max_concurrency: 3
@@ -49,6 +49,6 @@ volatility_filter:
 
 # === sentiment filter ===
 sentiment_filter:
-  require_sentiment: false
+  require_sentiment: false   # CT_REQUIRE_SENTIMENT=false skips vetoes regardless
   min_fng: 20
   min_sentiment: 40

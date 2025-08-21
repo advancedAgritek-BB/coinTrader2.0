@@ -539,7 +539,7 @@ scoring_weights:
   volume_score: 0.05
 secondary_exchange: coinbase
 sentiment_filter:
-  require_sentiment: false  # treat missing sentiment as neutral in dry-run/testing
+  require_sentiment: false  # treat missing sentiment as neutral; CT_REQUIRE_SENTIMENT=false bypasses
   bull_fng: 50
   bull_sentiment: 45
   min_fng: 20  # Lower if current FNG is blocking

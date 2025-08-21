@@ -16,7 +16,9 @@ trading:
   hft_enabled: true
   hft_symbols: ["BTC/USD","ETH/USD","SOL/USDC","BONK/USDC"]   # seed list, can expand
   exclude_symbols: ["AIBTC/USD"]   # remove noisy/synthetic pairs
-  require_sentiment: false
+<<<<<< codex/add-ct_require_sentiment-section-in-readme
+  require_sentiment: false          # override with CT_REQUIRE_SENTIMENT=false to bypass
+
 
 # === ohlcv cache ===
 ohlcv:
@@ -139,6 +141,6 @@ volatility_filter:
 
 # === sentiment filter ===
 sentiment_filter:
-  require_sentiment: false    # neutral defaults during dry-run/tests
+  require_sentiment: false    # neutral defaults; CT_REQUIRE_SENTIMENT=false also bypasses checks
   min_fng: 20
   min_sentiment: 40
