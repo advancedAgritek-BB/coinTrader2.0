@@ -138,6 +138,8 @@ def load_regime_model(symbol: str) -> Tuple[object | None, object | None, str | 
         path = Path(explicit).expanduser()
         if not path.is_absolute():
             path = (repo_root / path).resolve()
+        if path.is_dir():
+            path = path / filename
         if path.exists():
             try:
                 data = path.read_bytes()
