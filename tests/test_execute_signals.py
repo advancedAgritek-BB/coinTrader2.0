@@ -83,6 +83,9 @@ async def test_execute_signals_respects_allow_short(monkeypatch, caplog):
         "probabilities": {},
         "regime": "bull",
         "score": 1.0,
+        "entry": {"price": 100.0},
+        "size": 1.0,
+        "valid": True,
     }
     ctx = BotContext(
         positions={},
@@ -122,6 +125,9 @@ async def test_execute_signals_respects_too_flat(monkeypatch, caplog):
         "regime": "bull",
         "score": 1.0,
         "too_flat": True,
+        "entry": {"price": 100.0},
+        "size": 1.0,
+        "valid": True,
     }
     ctx = BotContext(
         positions={},
@@ -159,6 +165,9 @@ async def test_execute_signals_logs_execution(monkeypatch, caplog):
         "probabilities": {},
         "regime": "bull",
         "score": 1.0,
+        "entry": {"price": 100.0},
+        "size": 1.0,
+        "valid": True,
     }
     ctx = BotContext(
         positions={},
@@ -197,6 +206,9 @@ async def test_execute_signals_no_symbols_qualify(monkeypatch, caplog):
         "regime": "bull",
         "score": 0.05,
         "min_confidence": 0.1,
+        "entry": {"price": 100.0},
+        "size": 1.0,
+        "valid": True,
     }
 
     class DummyNotifier:

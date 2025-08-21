@@ -2151,8 +2151,53 @@ async def _analyse_batch_impl(ctx: BotContext) -> None:
 async def execute_signals(ctx: BotContext) -> None:
     """Open trades for qualified analysis results."""
     from collections import Counter
+    import dataclasses
 
-    results = getattr(ctx, "analysis_results", [])
+    raw_results = getattr(ctx, "analysis_results", [])
+    results: list[dict[str, Any]] = []
+    for res in raw_results:
+        if isinstance(res, dict):
+            data = dict(res)
+        elif dataclasses.is_dataclass(res):  # pragma: no cover - defensive
+            data = dataclasses.asdict(res)
+        elif hasattr(res, "__dict__"):
+            data = dict(res.__dict__)
+        else:  # pragma: no cover - best effort
+            logger.warning("Skipping %s: unsupported signal type", type(res).__name__)
+            continue
+
+        entry_obj = data.get("entry") or getattr(res, "entry", None)
+        entry_price = None
+        if isinstance(entry_obj, dict):
+            entry_price = entry_obj.get("price")
+        elif entry_obj is not None:
+            entry_price = getattr(entry_obj, "price", None)
+
+        size = data.get("size") if "size" in data else getattr(res, "size", None)
+        valid = data.get("valid") if "valid" in data else getattr(res, "valid", None)
+        sym = data.get("symbol") or getattr(res, "symbol", "")
+
+        missing = [
+            name
+            for name, val in [
+                ("entry.price", entry_price),
+                ("size", size),
+                ("valid", valid),
+            ]
+            if val is None
+        ]
+        if missing:
+            logger.warning("Skipping %s: missing %s", sym or "<unknown>", ", ".join(missing))
+            continue
+        if not bool(valid):
+            logger.info("Skipping %s: signal marked invalid", sym or "<unknown>")
+            continue
+
+        data["entry"] = {"price": entry_price}
+        data["size"] = size
+        data["valid"] = bool(valid)
+        results.append(data)
+
     if not results:
         logger.info("No analysis results to act on")
         return

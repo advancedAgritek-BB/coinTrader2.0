@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 import ast
 from pathlib import Path
+from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 from crypto_bot.phase_runner import BotContext
 from crypto_bot.paper_wallet import PaperWallet
@@ -49,6 +50,7 @@ def load_execute_signals():
     ns = {
         "asyncio": asyncio,
         "logger": logging.getLogger("test"),
+        "score_logger": setup_logger("symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False),
         "cex_trade_async": _trade,
         "fetch_order_book_async": lambda *a, **k: {},
         "_closest_wall_distance": lambda *a, **k: None,
@@ -60,7 +62,7 @@ def load_execute_signals():
         "refresh_balance": lambda ctx: asyncio.sleep(0),
         "Counter": __import__("collections").Counter,
     }
-
+    ns["score_logger"].setLevel(logging.DEBUG)
     exec(funcs["direction_to_side"], ns)
     exec(funcs["execute_signals"], ns)
     return ns["execute_signals"], called
@@ -77,6 +79,9 @@ async def test_positive_balance_generates_position():
         "probabilities": {},
         "regime": "bull",
         "score": 1.0,
+        "entry": {"price": 100.0},
+        "size": 1.0,
+        "valid": True,
     }
     ctx = BotContext(
         positions={},
