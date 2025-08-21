@@ -34,25 +34,17 @@ async def run_strategy(
 ) -> Dict[str, Any]:
     """Execute ``gen`` and normalise the result.
 
-    The strategy is first invoked with ``df``, ``symbol`` and ``timeframe``. If the
-    signature does not accept those parameters a second attempt is made with only
-    ``df``. Any other exception is logged and a neutral result is returned.
+    The strategy is invoked with ``df``, ``symbol`` and ``timeframe`` but only
+    parameters supported by its signature are passed. Any exception is logged and
+    a neutral result is returned.
     """
 
     try:
-        res = gen(df=df, symbol=symbol, timeframe=timeframe, **kwargs)
-        if inspect.isawaitable(res):
-            res = await res
-    except TypeError:
-        try:
-            res = gen(df=df)
-            if inspect.isawaitable(res):
-                res = await res
-        except Exception:
-            logger.exception(
-                "Strategy %s execution failed", getattr(gen, "__name__", gen)
-            )
-            return {"score": 0.0, "signal": "none"}
+        filtered = _filter_kwargs(
+            gen, df=df, symbol=symbol, timeframe=timeframe, **kwargs
+        )
+        res = gen(**filtered)
+        res = await _maybe_await(res)
     except Exception:
         logger.exception(
             "Strategy %s execution failed", getattr(gen, "__name__", gen)
