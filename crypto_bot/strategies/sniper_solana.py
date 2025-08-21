@@ -7,16 +7,6 @@ from crypto_bot.solana.helius_client import HeliusClient
 from crypto_bot.solana.jupiter_client import JupiterClient
 from crypto_bot.solana.raydium_client import RaydiumClient
 
-# Simple config (could be moved to YAML)
-SLIPPAGE_BPS = int(os.getenv("SNIPER_SLIPPAGE_BPS", "200"))     # 2%
-MAX_PRICE_IMPACT_BPS = int(os.getenv("SNIPER_MAX_IMPACT_BPS", "250"))  # 2.5%
-MIN_LP_USD = float(os.getenv("SNIPER_MIN_LP_USD", "10000"))
-MIN_TOKEN_AGE_SEC = int(os.getenv("SNIPER_MIN_AGE_SEC", "60"))
-BUY_AMOUNT_USD = float(os.getenv("SNIPER_BUY_USD", "50"))
-
-USDC_MINT = os.getenv("USDC_MINT", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
-SOL_MINT  = os.getenv("SOL_MINT",  "So11111111111111111111111111111111111111112")
-
 
 class Strategy:
     """
@@ -27,6 +17,21 @@ class Strategy:
     def __init__(self):
         self._task: Optional[asyncio.Task] = None
         self._stop = asyncio.Event()
+        self.load_config()
+
+    def load_config(self) -> None:
+        """Load configuration from environment variables."""
+        self.slippage_bps = int(os.getenv("SNIPER_SLIPPAGE_BPS", "200"))
+        self.max_price_impact_bps = int(os.getenv("SNIPER_MAX_IMPACT_BPS", "250"))
+        self.min_lp_usd = float(os.getenv("SNIPER_MIN_LP_USD", "10000"))
+        self.min_token_age_sec = int(os.getenv("SNIPER_MIN_AGE_SEC", "60"))
+        self.buy_amount_usd = float(os.getenv("SNIPER_BUY_USD", "50"))
+        self.usdc_mint = os.getenv(
+            "USDC_MINT", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+        )
+        self.sol_mint = os.getenv(
+            "SOL_MINT", "So11111111111111111111111111111111111111112"
+        )
 
     async def start(self):
         if self._task and not self._task.done():
@@ -50,8 +55,10 @@ class Strategy:
         Very conservative gates: min LP USD, token age, no obvious mint authority risks.
         Expand with renounced checks, freeze authority checks (requires RPC read).
         """
-        age_ok = (meta.get("createdAt", 0) or 0) <= (int(asyncio.get_event_loop().time()) - MIN_TOKEN_AGE_SEC)
-        lp_ok = float(pool_info.get("liquidityUsd", 0) or 0) >= MIN_LP_USD
+        age_ok = (meta.get("createdAt", 0) or 0) <= (
+            int(asyncio.get_event_loop().time()) - self.min_token_age_sec
+        )
+        lp_ok = float(pool_info.get("liquidityUsd", 0) or 0) >= self.min_lp_usd
         return age_ok and lp_ok
 
     # --- RUNNER ---
@@ -88,14 +95,17 @@ class Strategy:
 
                         # Attempt Jupiter route USDC -> mint
                         # For demo purposes, compute a nominal USDC amount in base units (6 decimals)
-                        usdc_amount = int(BUY_AMOUNT_USD * 1_000_000)
-                        route = await jup.quote(USDC_MINT, mint, usdc_amount, SLIPPAGE_BPS)
+                        usdc_amount = int(self.buy_amount_usd * 1_000_000)
+                        route = await jup.quote(
+                            self.usdc_mint, mint, usdc_amount, self.slippage_bps
+                        )
                         if not route:
                             # Fallback or skip; you can build a Raydium Tx here if desired
                             continue
 
                         # (Optional) check price impact in bps if route has that info
-                        # if route.get("priceImpactPct", 0) * 10000 > MAX_PRICE_IMPACT_BPS: continue
+                        # if route.get("priceImpactPct", 0) * 10000 > self.max_price_impact_bps:
+                        #     continue
 
                         # At this point call your wallet/tx builder to submit the trade using
                         # Jupiter swap instructions or your own Raydium instruction builder.
