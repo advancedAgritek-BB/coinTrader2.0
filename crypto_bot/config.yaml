@@ -7,6 +7,8 @@ exchange:
 # === trading/base ===
 trading:
   mode: dry_run           # cex | onchain | auto | dry_run
+  enable_execution: true          # make sure the trader loop can place paper orders
+  allow_shorting: false           # unless you really want simulated shorts
   allowed_quotes: [USD, USDT, USDC, EUR]
   min_ticker_volume: 10000
   timeframes: ["1m","5m","15m","1h"]
@@ -20,12 +22,31 @@ trading:
   hft_enabled: true
   hft_symbols: ["BTC/USD","ETH/USD","SOL/USDC","BONK/USDC","BNB/USDT","SHIB/USDT","PEPE/USD"]   # seed list, can expand
   exclude_symbols: ["AIBTC/USD"]   # remove noisy/synthetic pairs
+  require_sentiment: false
+
+# === router ===
+router:
+  min_accept_score: 0.5
+  prefer_timeframes: ["5m","15m","1m"]
+  require_warm: true
+  top_k_per_strategy: 3
+  fast_track_score: 0.95
 
 # === ohlcv cache ===
 ohlcv:
   storage_path: crypto_bot/data/ohlcv   # directory for persisted OHLCV data
   tail_overlap_bars: 3                  # overlap bars to avoid gaps when appending
   max_bootstrap_bars: 1000              # limit initial bootstrap to this many bars
+  bootstrap_timeframes: ["1m","5m","15m","1h"]
+  defer_timeframes: ["4h","1d"]
+  warmup_candles:
+    "1m": 500
+    "5m": 500
+    "15m": 400
+    "1h": 300
+    "1d": 120
+  initial_history_candles: 600
+  scan_lookback_limit: 1200
 
 # === strategies and params ===
 strategies:
@@ -163,7 +184,7 @@ adaptive_scan:
   enabled: true
   max_factor: 10.0
 adx_threshold: 15
-allow_short: true
+allow_short: false
 arbitrage_enabled: true
 arbitrage_threshold: 0.005
 atr_normalization: true
@@ -463,6 +484,7 @@ regime_timeframes:
 - 15m
 # === risk & sizing ===
 risk:
+  require_sentiment: false        # unblock while you have no sentiment feed
   atr_long_window: 40
   atr_period: 10
   atr_short_window: 10
@@ -481,6 +503,12 @@ risk:
   min_score_to_trade: 0.15
   min_votes: 2
 
+router:
+  min_accept_score: 0.5
+  prefer_timeframes: ["5m","15m","1m"]
+  require_warm: true
+  top_k_per_strategy: 3
+
 execution:
   dry_run: true
   min_notional_usd: 20
@@ -495,7 +523,8 @@ safety:
 scalp_timeframe: 1m
 scan_deep_top: 30
 scan_in_background: true
-scan_lookback_limit: 700
+scan_lookback_limit: 1200
+initial_history_candles: 600
 scan_markets: true
 scoring:
   lookback_bars: 30
@@ -672,7 +701,7 @@ symbol_filter:
   change_pct_percentile: 10
   correlation_max_pairs: 200
   http_timeout: 5
-  initial_history_candles: 50
+  initial_history_candles: 600
   initial_timeframes:
   - 1m
   - 5m
@@ -727,10 +756,11 @@ deep_backfill_days:
   '15m': 60
   '1h': 180
 warmup_candles:
-  '1m': 1000
-  '5m': 600
+  '1m': 500
+  '5m': 500
   '15m': 400
-  '1h': 240
+  '1h': 300
+  '1d': 120
 allowed_quotes: ['USD','USDT','USDC','EUR']
 hft: true
 token_registry:

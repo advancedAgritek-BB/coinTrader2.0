@@ -11,8 +11,19 @@ exchange:
   request_timeout_ms: 10000
 timeframes: ["1h", "4h", "1d"]
 ohlcv:
-  bootstrap_timeframes: ['1h']
-  defer_timeframes: ['4h', '1d']
+  storage_path: crypto_bot/data/ohlcv   # directory for persisted OHLCV data
+  tail_overlap_bars: 3                  # overlap bars to avoid gaps when appending
+  max_bootstrap_bars: 1000              # limit initial bootstrap to this many bars
+  bootstrap_timeframes: ["1m", "5m", "15m", "1h"]
+  defer_timeframes: ["4h", "1d"]
+  warmup_candles:
+    "1m": 500
+    "5m": 500
+    "15m": 400
+    "1h": 300
+    "1d": 120
+  initial_history_candles: 600
+  scan_lookback_limit: 1200
 filters:
   min_ticker_volume: 10000
 features:
@@ -20,11 +31,6 @@ features:
   helius: false
   pump_monitor: false
   telegram: false
-
-ohlcv:
-  storage_path: crypto_bot/data/ohlcv   # directory for persisted OHLCV data
-  tail_overlap_bars: 3                  # overlap bars to avoid gaps when appending
-  max_bootstrap_bars: 1000              # limit initial bootstrap to this many bars
 
 solana_rpc: https://api.mainnet-beta.solana.com  # Custom endpoint
 yamlmeme_sniper:
