@@ -1,7 +1,9 @@
 import importlib
 import sys
 import types
+
 import pandas as pd
+import pytest
 from crypto_bot import cooldown_manager
 
 sys.modules.setdefault(
@@ -14,14 +16,14 @@ sys.modules.setdefault(
 dip_hunter = importlib.import_module("crypto_bot.strategy.dip_hunter")
 
 
-def _df_dip() -> pd.DataFrame:
-    close = [100.0] * 50 + [98.0, 97.0, 95.0]
+def _df_dip(size: int = 150) -> pd.DataFrame:
+    close = [100.0] * (size - 3) + [98.0, 97.0, 95.0]
     data = {
         "open": close,
         "high": [c + 1 for c in close],
         "low": [c - 1 for c in close],
         "close": close,
-        "volume": [100.0] * 52 + [200.0],
+        "volume": [100.0] * (size - 1) + [200.0],
     }
     return pd.DataFrame(data)
 
@@ -86,3 +88,14 @@ def test_cooldown_blocks(monkeypatch):
 
     score2, direction2 = dip_hunter.generate_signal(df, config=cfg)
     assert direction2 == "none" and score2 == 0.0
+
+
+@pytest.mark.parametrize("rows", [15, 27])
+def test_handles_small_frames(monkeypatch, rows):
+    df = _df_dip(rows)
+    _patch_indicators(monkeypatch, len(df))
+    result = dip_hunter.generate_signal(df, config={"symbol": "BTC/USD"})
+    assert result[0] == 0.0
+    assert result[1] == "none"
+    if len(result) == 3:
+        assert "insufficient_bars" in result[2]["reason"]
