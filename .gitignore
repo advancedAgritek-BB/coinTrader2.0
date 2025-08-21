@@ -1,6 +1,7 @@
 __pycache__/
 
-crypto_bot/logs/
+crypto_bot/logs/*
+!crypto_bot/logs/.gitignore
 crypto_bot/user_config.yaml
 crypto_bot/state/
 *.log

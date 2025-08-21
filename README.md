@@ -1452,10 +1452,10 @@ lets you select the execution mode (dry run or live) before launching.
 ## Log Files
 
 All runtime information is written under the directory specified by the
-`LOG_DIR` environment variable. If unset, logs default to
-`~/.cointrader/logs`. References in this README to paths like
-`crypto_bot/logs/*.log` refer to files under this directory. Important files
-include:
+`LOG_DIR` environment variable. If unset, logs default to the
+`crypto_bot/logs` directory in this repository. References in this README to
+paths like `crypto_bot/logs/*.log` refer to files under this directory.
+Important files include:
 
 - `bot.log` – main log file containing startup events, strategy choices and all
   decision messages. `[EVAL]` lines record each symbol's evaluation outcome in
