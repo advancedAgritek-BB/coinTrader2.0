@@ -191,13 +191,23 @@ def save_ohlcv(
     filename = symbol.replace("/", "_") + ".csv"
     df.to_csv(path / filename, index=False)
 
-async def _maybe_enqueue_eval(symbol: str, timeframe: str, cache: Dict[str, Dict[str, pd.DataFrame]], config: Dict[str, Any]) -> None:
-    if timeframe not in ("1m", "5m"):
-        return
+async def _maybe_enqueue_eval(
+    symbol: str,
+    timeframe: str,
+    cache: Dict[str, Dict[str, pd.DataFrame]],
+    config: Dict[str, Any],
+) -> None:
     try:
-        if warmup_reached_for(symbol, timeframe, cache, config):
-            logger.info("OHLCV[%s] warmup met for %s \u2192 enqueue for evaluation", timeframe, symbol)
-            ctx = {"timeframes": ["1m", "5m"], "symbol": symbol}
+        if warmup_reached_for(symbol, cache, config):
+            logger.info(
+                "OHLCV[%s] warmup met for %s \u2192 enqueue for evaluation",
+                timeframe,
+                symbol,
+            )
+            ctx = {
+                "timeframes": list((config.get("warmup_candles") or {}).keys()),
+                "symbol": symbol,
+            }
             try:
                 evaluator = get_stream_evaluator()
             except Exception:
@@ -280,16 +290,14 @@ def set_stream_evaluator(ev: StreamEvaluator | None) -> None:
 
 def warmup_reached_for(
     symbol: str,
-    timeframe: str,
     cache: Dict[str, Dict[str, pd.DataFrame]],
     config: Dict,
 ) -> bool:
-    """Return ``True`` if 1m and 5m warmup requirements are met for ``symbol``."""
+    """Return ``True`` if all configured warmup requirements are met for ``symbol``."""
     warmup_map = config.get("warmup_candles", {}) or {}
-    for tf in ("1m", "5m"):
-        required = int(warmup_map.get(tf, 1))
+    for tf, required in warmup_map.items():
         df = cache.get(tf, {}).get(symbol)
-        if df is None or len(df) < required:
+        if df is None or len(df) < int(required):
             return False
     return True
 
@@ -2925,8 +2933,7 @@ async def update_multi_tf_ohlcv_cache(
                         clear_regime_cache(sym, tf)
                         if (
                             STREAM_EVALUATOR
-                            and tf in ("1m", "5m")
-                            and warmup_reached_for(sym, tf, cache, config)
+                            and warmup_reached_for(sym, cache, config)
                         ):
                             if sym not in _WARMED_UP:
                                 logger.info(
@@ -3073,8 +3080,7 @@ async def update_multi_tf_ohlcv_cache(
                     clear_regime_cache(sym, tf)
                     if (
                         STREAM_EVALUATOR
-                        and tf in ("1m", "5m")
-                        and warmup_reached_for(sym, tf, cache, config)
+                        and warmup_reached_for(sym, cache, config)
                     ):
                         if sym not in _WARMED_UP:
                             logger.info(
