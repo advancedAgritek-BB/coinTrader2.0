@@ -797,6 +797,13 @@ def _load_config_file() -> dict:
         or "dry_run"
     )
     allowed_quotes = trading_cfg.get("allowed_quotes", [])
+    require_env = os.getenv("CT_REQUIRE_SENTIMENT")
+    if require_env is not None:
+        trading_cfg["require_sentiment"] = require_env.lower() in ("1", "true", "yes")
+    elif trading_mode == "dry_run":
+        trading_cfg["require_sentiment"] = False
+    else:
+        trading_cfg.setdefault("require_sentiment", True)
     logger.info(
         "Exchange=%s timeframes=%s mode=%s allowed_quotes=%s hft=%s",
         exchange_id,
@@ -815,7 +822,6 @@ def _load_config_file() -> dict:
     trading_cfg.setdefault("hft_enabled", False)
     trading_cfg.setdefault("hft_symbols", [])
     trading_cfg.setdefault("exclude_symbols", [])
-    trading_cfg.setdefault("require_sentiment", True)
     data["trading"] = trading_cfg
     data.setdefault("allowed_quotes", allowed_quotes)
     sf_cfg = data.get("symbol_filter", {}) or {}
