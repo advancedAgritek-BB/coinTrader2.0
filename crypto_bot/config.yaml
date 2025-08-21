@@ -478,6 +478,13 @@ risk:
   volume_threshold_ratio: 0.01
   win_rate_threshold: 0.7
   win_rate_boost_factor: 1.5
+  min_score_to_trade: 0.15
+  min_votes: 2
+
+execution:
+  dry_run: true
+  min_notional_usd: 20
+  max_positions: 3
 rl_selector:
   enabled: true
 rsi_overbought_pct: 80
