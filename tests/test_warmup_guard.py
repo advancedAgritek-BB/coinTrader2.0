@@ -1,6 +1,8 @@
 import logging
 from types import SimpleNamespace
 
+import pandas as pd
+
 from crypto_bot.utils import market_loader
 from crypto_bot.strategy import registry
 
@@ -40,3 +42,15 @@ def test_warn_if_strategy_skipped_after_auto_raise(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
     market_loader._ensure_strategy_warmup(cfg)
     assert "Skipping strategies due to insufficient warmup" in caplog.text
+
+
+def test_warmup_reached_for_all_timeframes():
+    cache = {
+        "1m": {"BTC/USD": pd.DataFrame({"close": range(1000)})},
+        "5m": {"BTC/USD": pd.DataFrame({"close": range(600)})},
+        "15m": {"BTC/USD": pd.DataFrame({"close": range(100)})},
+    }
+    cfg = {"warmup_candles": {"1m": 1000, "5m": 600, "15m": 100}}
+    assert market_loader.warmup_reached_for("BTC/USD", cache, cfg)
+    cache["15m"]["BTC/USD"] = cache["15m"]["BTC/USD"].iloc[:-1]
+    assert not market_loader.warmup_reached_for("BTC/USD", cache, cfg)

@@ -32,18 +32,20 @@ def test_update_multi_tf_ohlcv_cache_clamps(monkeypatch, caplog, tmp_path):
     monkeypatch.setattr(main, "update_df_cache", lambda cache, tf, sym, df: cache.setdefault(tf, {}).update({sym: df}))
     monkeypatch.setattr(market_loader, "BOOTSTRAP_STATE_FILE", tmp_path / "state.json")
 
-    with caplog.at_level(logging.INFO):
-        asyncio.run(
-            market_loader.update_multi_tf_ohlcv_cache(
-                Ex(),
-                {},
-                ["BTC/USD"],
-                cfg,
-                limit=5000,
-                start_since=0,
-            )
+    log_file = market_loader.LOG_DIR / "bot.log"
+    before = log_file.read_text() if log_file.exists() else ""
+    asyncio.run(
+        market_loader.update_multi_tf_ohlcv_cache(
+            Ex(),
+            {},
+            ["BTC/USD"],
+            cfg,
+            limit=5000,
+            start_since=0,
         )
-    assert "starting from" in caplog.text
-    assert "dropping start_since" not in caplog.text
-    assert "Clamping warmup candles for 1m" in caplog.text
-    assert "Clamping warmup candles for 5m" in caplog.text
+    )
+    log_text = log_file.read_text()[len(before):]
+    assert "starting from" in log_text
+    assert "dropping start_since" not in log_text
+    assert "Clamping warmup candles for 1m" in log_text
+    assert "Clamping warmup candles for 5m" in log_text
