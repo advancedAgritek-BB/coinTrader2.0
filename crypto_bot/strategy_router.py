@@ -834,14 +834,21 @@ def route(
         from ta.trend import ADXIndicator
 
         adx_thr = float(fp.get('trend_adx_threshold', 25))
-        adx_val = (
-            ADXIndicator(df['high'], df['low'], df['close'], window=window)
-            .adx()
-            .iloc[-1]
-        )
-        if adx_val > adx_thr:
-            logger.info('FAST-PATH: trend_bot via ADX > %.1f', adx_thr)
-            return _wrap(trend_bot.generate_signal)
+        if len(df) < window + 1:
+            logger.debug(
+                'FAST-PATH: skipping ADX check; need at least %d rows (got %d)',
+                window + 1,
+                len(df),
+            )
+        else:
+            adx_val = (
+                ADXIndicator(df['high'], df['low'], df['close'], window=window)
+                .adx()
+                .iloc[-1]
+            )
+            if adx_val > adx_thr:
+                logger.info('FAST-PATH: trend_bot via ADX > %.1f', adx_thr)
+                return _wrap(trend_bot.generate_signal)
 
         # 3) breakdown pattern with heavy volume
         from crypto_bot.regime.pattern_detector import detect_patterns

@@ -141,6 +141,27 @@ def test_route_returns_lstm_bot():
     assert fn.__name__ == lstm_bot.generate_signal.__name__
 
 
+def test_route_skips_adx_fast_path_for_small_df(caplog):
+    cfg = {
+        "strategy_router": {
+            "regimes": {"trending": ["trend_bot"]},
+            "fast_path": {"trend_adx_threshold": 0},
+        }
+    }
+    df = pd.DataFrame(
+        {
+            "high": [1] * 10,
+            "low": [1] * 10,
+            "close": [1] * 10,
+            "volume": [1] * 10,
+        }
+    )
+    with caplog.at_level("DEBUG", logger="crypto_bot.strategy_router"):
+        fn = route("trending", "cex", cfg, df_map=df)
+    assert fn.__name__ == trend_bot.generate_signal.__name__
+    assert "skipping ADX" in caplog.text
+
+
 def test_route_handles_none_df_map():
     cfg = {"strategy_router": {"regimes": {"trending": ["trend_bot"]}}}
     fn = route("trending", "cex", cfg, df_map=None)
