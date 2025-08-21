@@ -205,10 +205,10 @@ def generate_signal(
 
     atr_window = min(atr_window, len(df))
     atr_series = volatility.calc_atr(df, period=atr_window)
-    atr_last = float(atr_series.iloc[-1]) if not atr_series.empty else float("nan")
-    atr = atr_last
+    atr_val = float(atr_series.iloc[-1]) if not atr_series.empty else float("nan")
+    atr = atr_val
     event = False
-    if not np.isfinite(atr_last) or atr_last <= 0.0:
+    if not np.isfinite(atr_val) or atr_val <= 0.0:
         score_logger.info(
             "Signal for %s:%s -> %.3f, %s",
             symbol or "unknown",
@@ -224,10 +224,13 @@ def generate_signal(
         prev_vol = df["volume"].iloc[:-1]
     avg_vol = prev_vol.mean() if not prev_vol.empty else 0.0
     body = abs(df["close"].iloc[-1] - df["open"].iloc[-1])
-    if avg_vol > 0:
-        atr_val = atr_last
-        if atr_val > 0 and body >= 2 * atr_val and df["volume"].iloc[-1] >= 2 * avg_vol:
-            event = True
+    if (
+        avg_vol > 0
+        and atr_val > 0
+        and body >= 2 * atr_val
+        and df["volume"].iloc[-1] >= 2 * avg_vol
+    ):
+        event = True
 
     if df["volume"].iloc[-1] < min_volume:
         score_logger.info(
@@ -237,7 +240,7 @@ def generate_signal(
             0.0,
             "none",
         )
-        return 0.0, "none", float(atr_last), event
+        return 0.0, "none", float(atr_val), event
 
     if (
         len(df) <= max_history
