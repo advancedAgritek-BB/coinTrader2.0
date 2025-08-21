@@ -82,18 +82,20 @@ def load_latest_regime(symbol: str) -> Tuple[Any, Dict]:
 
         if not_found or client is None:
             # Attempt HTTP fallback when Supabase download is unavailable
-            fallback_url = os.getenv("CT_MODEL_FALLBACK_URL")
-            if not fallback_url:
-                try:
-                    from crypto_bot import main as _main  # type: ignore
+            candidates = []
+            env_url = os.getenv("CT_MODEL_FALLBACK_URL")
+            if env_url:
+                candidates.append(env_url)
+            try:  # Look for config provided fallback URL
+                from crypto_bot import main as _main  # type: ignore
 
-                    cfg = getattr(_main, "_LAST_ML_CFG", {}) or {}
-                    if isinstance(cfg, dict):
-                        fallback_url = cfg.get("model_fallback_url")
-                except Exception:  # pragma: no cover - circular import or missing cfg
-                    fallback_url = None
+                cfg = getattr(_main, "_LAST_ML_CFG", {}) or {}
+                if isinstance(cfg, dict) and cfg.get("model_fallback_url"):
+                    candidates.append(cfg["model_fallback_url"])
+            except Exception:  # pragma: no cover - circular import or missing cfg
+                pass
 
-            if fallback_url:
+            for fallback_url in candidates:
                 try:
                     import urllib.request
 

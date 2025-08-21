@@ -60,10 +60,32 @@ def test_corrupted_model_data(monkeypatch):
     from crypto_bot.regime import ml_fallback as mf
 
     df = _make_df()
-    monkeypatch.setattr(mf, "MODEL_B64", "!!")
     mf._model = None
 
-    assert mf.load_model() is None
+    monkeypatch.setattr(
+        mf.base64, "b64decode", lambda *_a, **_k: (_ for _ in ()).throw(ValueError("bad"))
+    )
+
+    model = mf.load_model()
+    assert model is not None
     label, conf = mf.predict_regime(df)
-    assert label == "unknown"
-    assert conf == 0.0
+    assert label != "unknown"
+    assert conf > 0.0
+
+
+def test_joblib_failure_returns_stub_model(monkeypatch):
+    from crypto_bot.regime import ml_fallback as mf
+
+    df = _make_df()
+    mf._model = None
+
+    def bad_load(*_a, **_k):
+        raise RuntimeError("bad model")
+
+    monkeypatch.setattr(mf.joblib, "load", bad_load)
+
+    model = mf.load_model()
+    assert model is not None
+    label, conf = mf.predict_regime(df)
+    assert label != "unknown"
+    assert conf > 0.0
