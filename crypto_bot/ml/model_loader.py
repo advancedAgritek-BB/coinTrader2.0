@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import urllib.request
+from urllib.error import HTTPError, URLError
 
 log = logging.getLogger(__name__)
 
@@ -93,23 +94,34 @@ def load_regime_model(symbol: str) -> Tuple[object | None, object | None, str | 
 
     bucket = os.getenv("CT_MODELS_BUCKET", "models")
     prefix = os.getenv("CT_REGIME_PREFIX", "").strip("/")
+    if prefix.startswith(f"{bucket}/"):
+        prefix = prefix[len(bucket) + 1 :]
     norm = _norm_symbol(symbol)
     filename = f"{norm.lower()}_regime_lgbm.pkl"
     key = f"{prefix}/{filename}" if prefix else filename
+    key = key.lstrip("/")
 
     url = os.getenv("SUPABASE_URL")
     sb_key = _supabase_key()
 
+    blob: bytes | None = None
     if url and sb_key:
         try:  # pragma: no cover - supabase optional
             from supabase import create_client  # type: ignore
 
             supa = create_client(url, sb_key)
-            data = supa.storage.from_(bucket).download(key)
-            model, scaler = _deserialize(data)
-            if model is not None:
-                log.info("Loaded regime model from Supabase: %s/%s", bucket, key)
-                return model, scaler, key
+            res = supa.storage.from_(bucket).download(key)
+            status = getattr(res, "status_code", 200)
+            data = getattr(res, "data", res)
+            if status == 200 and data:
+                blob = data
+            else:
+                log.warning(
+                    "Supabase regime model %s/%s missing or bad status (%s)",
+                    bucket,
+                    key,
+                    status,
+                )
         except Exception as exc:
             log.warning(
                 "Supabase regime model for %s not found (%s); falling back to remote URL",
@@ -117,21 +129,39 @@ def load_regime_model(symbol: str) -> Tuple[object | None, object | None, str | 
                 exc,
             )
 
-    fb_url = _fallback_url(norm)
-    if fb_url:
-        try:
-            with urllib.request.urlopen(fb_url, timeout=5) as resp:
-                data = resp.read()
-            model, scaler = _deserialize(data)
-            if model is not None:
-                log.info("Loaded regime model from fallback URL: %s", fb_url)
-                return model, scaler, fb_url
-        except Exception as exc:
-            log.error(
-                "Fallback URL for %s also failed (%s); regime=neutral",
-                symbol,
-                exc,
-            )
+    if blob is not None:
+        model, scaler = _deserialize(blob)
+        if model is not None:
+            log.info("Loaded regime model from Supabase: %s/%s", bucket, key)
+            return model, scaler, key
+        blob = None
+
+    if blob is None:
+        fb_url = _fallback_url(norm)
+        if fb_url:
+            try:
+                with urllib.request.urlopen(fb_url, timeout=5) as resp:
+                    status = getattr(resp, "status", getattr(resp, "code", None))
+                    if status and status != 200:
+                        log.warning(
+                            "Fallback URL for %s returned HTTP %s", symbol, status
+                        )
+                    else:
+                        data = resp.read()
+                        model, scaler = _deserialize(data)
+                        if model is not None:
+                            log.info(
+                                "Loaded regime model from fallback URL: %s", fb_url
+                            )
+                            return model, scaler, fb_url
+            except HTTPError as exc:
+                log.error(
+                    "Fallback URL for %s returned HTTP %s",
+                    symbol,
+                    getattr(exc, "code", "unknown"),
+                )
+            except URLError as exc:
+                log.error("Fallback URL for %s failed (%s)", symbol, exc)
     repo_root = Path(__file__).resolve().parents[2]
     explicit = _local_model_path()
     if explicit:
@@ -167,5 +197,6 @@ def load_regime_model(symbol: str) -> Tuple[object | None, object | None, str | 
             except Exception as exc:
                 log.warning("Heuristic local regime model load failed: %s", exc)
 
+    log.warning("Regime model for %s could not be found; using neutral regime", symbol)
     return None, None, None
 
