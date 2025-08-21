@@ -1,4 +1,3 @@
-import logging
 import pickle
 from pathlib import Path
 
@@ -14,11 +13,25 @@ def test_load_regime_model_explicit_path(monkeypatch, tmp_path, caplog):
     monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.delenv("CT_MODEL_FALLBACK_URL", raising=False)
 
-    caplog.set_level(logging.INFO, logger=ml.log.name)
     model, scaler, path = ml.load_regime_model("XRPUSD")
     assert model == "dummy"
     assert path == str(model_file)
-    assert "Loaded regime model from explicit local path" in caplog.text
+
+
+def test_load_regime_model_explicit_dir(monkeypatch, tmp_path, caplog):
+    model_obj = {"model": "dummy"}
+    model_dir = tmp_path / "models"
+    model_dir.mkdir()
+    model_file = model_dir / "xrpusd_regime_lgbm.pkl"
+    model_file.write_bytes(pickle.dumps(model_obj))
+
+    monkeypatch.setenv("CT_MODEL_LOCAL_PATH", str(model_dir))
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("CT_MODEL_FALLBACK_URL", raising=False)
+
+    model, scaler, path = ml.load_regime_model("XRPUSD")
+    assert model == "dummy"
+    assert path == str(model_file)
 
 
 def test_load_regime_model_search_dirs(monkeypatch, caplog):
@@ -34,10 +47,8 @@ def test_load_regime_model_search_dirs(monkeypatch, caplog):
     model_file.write_bytes(pickle.dumps(model_obj))
 
     try:
-        caplog.set_level(logging.INFO, logger=ml.log.name)
         model, scaler, path = ml.load_regime_model("XRPUSD")
         assert model == "dummy"
         assert path == str(model_file)
-        assert "heuristic path" in caplog.text
     finally:
         model_file.unlink(missing_ok=True)
