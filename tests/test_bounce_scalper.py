@@ -48,7 +48,7 @@ def test_long_bounce_signal(monkeypatch):
         "up_candles": 2,
         "body_pct": 0.5,
     }
-    score, direction = bounce_scalper.generate_signal(df, cfg)
+    score, direction = bounce_scalper.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0
 
@@ -79,7 +79,7 @@ def test_short_bounce_signal(monkeypatch):
         "up_candles": 2,
         "body_pct": 0.5,
     }
-    score, direction = bounce_scalper.generate_signal(df, cfg)
+    score, direction = bounce_scalper.generate_signal(df, config=cfg)
     assert direction == "short"
     assert score > 0
 
@@ -103,7 +103,7 @@ def test_no_signal_without_volume_spike():
         "up_candles": 2,
         "body_pct": 0.5,
     }
-    score, direction = bounce_scalper.generate_signal(df, cfg)
+    score, direction = bounce_scalper.generate_signal(df, config=cfg)
     assert direction == "none"
     assert score == 0.0
 
@@ -119,7 +119,7 @@ def test_respects_cooldown(monkeypatch):
         overbought=70,
         volume_multiple=2.0,
     )
-    score, direction = bounce_scalper.generate_signal(df, cfg)
+    score, direction = bounce_scalper.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0
 
@@ -147,7 +147,7 @@ def test_mark_cooldown_called(monkeypatch):
         overbought=70,
         volume_multiple=2.0,
     )
-    score, direction = bounce_scalper.generate_signal(df, cfg)
+    score, direction = bounce_scalper.generate_signal(df, config=cfg)
     assert direction == "short"
     assert score > 0
 
@@ -159,7 +159,7 @@ def test_mark_cooldown_called(monkeypatch):
 
     monkeypatch.setattr(bounce_scalper.cooldown_manager, "mark_cooldown", fake_mark)
 
-    score, direction = bounce_scalper.generate_signal(df, {"symbol": "ETH/USD"})
+    score, direction = bounce_scalper.generate_signal(df, config={"symbol": "ETH/USD"})
     assert direction == "long"
     assert score > 0.0
     assert called == {"symbol": "ETH/USD", "strategy": "bounce_scalper"}
@@ -184,7 +184,7 @@ def test_order_book_imbalance_blocks(monkeypatch):
     }
 
     cfg = {"symbol": "BTC/USD", "imbalance_ratio": 2.0}
-    score, direction = bounce_scalper.generate_signal(df, cfg, book=snap)
+    score, direction = bounce_scalper.generate_signal(df, config=cfg, book=snap)
     assert direction == "none"
     assert score == 0.0
 
@@ -208,7 +208,7 @@ def test_order_book_imbalance_blocks_short(monkeypatch):
     }
 
     cfg = {"symbol": "BTC/USD", "imbalance_ratio": 2.0}
-    score, direction = bounce_scalper.generate_signal(df, cfg, book=snap)
+    score, direction = bounce_scalper.generate_signal(df, config=cfg, book=snap)
     assert direction == "none"
     assert score == 0.0
 
@@ -235,7 +235,7 @@ def test_imbalance_penalty_reduces_score(monkeypatch):
     }
 
     cfg = {"symbol": "BTC/USD", "imbalance_ratio": 2.0, "imbalance_penalty": 0.5}
-    score, direction = bounce_scalper.generate_signal(df, cfg, book=snap)
+    score, direction = bounce_scalper.generate_signal(df, config=cfg, book=snap)
     assert direction == "long"
     assert 0 < score < base_score
 
@@ -315,8 +315,8 @@ def test_cooldown_blocks_successive_signals(monkeypatch):
         overbought=70,
         volume_multiple=2.0,
     )
-    first = bounce_scalper.generate_signal(df, cfg)
-    second = bounce_scalper.generate_signal(df, cfg)
+    first = bounce_scalper.generate_signal(df, config=cfg)
+    second = bounce_scalper.generate_signal(df, config=cfg)
 
     assert first[1] != "none"
     assert second[1] == "none"
@@ -356,7 +356,7 @@ def test_adaptive_rsi_threshold(monkeypatch):
         "rsi_oversold_pct": 10,
         "body_pct": 0.5,
     }
-    score, direction = bounce_scalper.generate_signal(df, cfg)
+    score, direction = bounce_scalper.generate_signal(df, config=cfg)
     assert direction == "long"
     assert score > 0
 
@@ -388,10 +388,10 @@ def test_trigger_once(monkeypatch):
         bounce_scalper, "normalize_score_by_volatility", lambda df, score: score
     )
     cfg = BounceScalperConfig(symbol="XBT/USDT", cooldown_enabled=True)
-    first = bounce_scalper.generate_signal(df, cfg)
-    second = bounce_scalper.generate_signal(df, cfg)
-    third = bounce_scalper.generate_signal(df, cfg, force=True)
-    fourth = bounce_scalper.generate_signal(df, cfg)
+    first = bounce_scalper.generate_signal(df, config=cfg)
+    second = bounce_scalper.generate_signal(df, config=cfg)
+    third = bounce_scalper.generate_signal(df, config=cfg, force=True)
+    fourth = bounce_scalper.generate_signal(df, config=cfg)
 
     assert first[1] != "none"
     assert second[1] == "none"
@@ -417,10 +417,10 @@ def test_trainer_model_influence(monkeypatch):
         "atr_normalization": False,
     }
     monkeypatch.setattr(bounce_scalper, "MODEL", None)
-    base, direction = bounce_scalper.generate_signal(df, cfg)
+    base, direction = bounce_scalper.generate_signal(df, config=cfg)
     dummy = types.SimpleNamespace(predict=lambda _df: 0.6)
     monkeypatch.setattr(bounce_scalper, "MODEL", dummy)
-    score, direction2 = bounce_scalper.generate_signal(df, cfg)
+    score, direction2 = bounce_scalper.generate_signal(df, config=cfg)
     assert direction2 == direction
     assert score == pytest.approx((base + 0.6) / 2)
 
@@ -459,7 +459,7 @@ def test_lower_df_pattern_detection(monkeypatch):
         "up_candles": 2,
         "body_pct": 0.5,
     }
-    score, direction = bounce_scalper.generate_signal(df, cfg, lower_df=lower_df)
+    score, direction = bounce_scalper.generate_signal(df, config=cfg, lower_df=lower_df)
     assert direction == "long"
     assert score > 0
 
@@ -474,7 +474,7 @@ def test_short_df_returns_none():
             "volume": [1.0],
         }
     )
-    score, direction = bounce_scalper.generate_signal(df, {})
+    score, direction = bounce_scalper.generate_signal(df, config={})
     assert direction == "none"
     assert score == 0.0
 

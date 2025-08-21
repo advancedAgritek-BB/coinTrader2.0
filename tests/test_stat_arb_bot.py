@@ -32,7 +32,7 @@ def test_signal_direction_and_score(correlated_dfs):
     score, direction = stat_arb_bot.generate_signal(
         df_a,
         df_b,
-        {"zscore_threshold": 1.0, "lookback": 20},
+        config={"zscore_threshold": 1.0, "lookback": 20},
     )
     assert score > 0
     assert direction == "short"
@@ -40,6 +40,6 @@ def test_signal_direction_and_score(correlated_dfs):
 
 def test_no_signal_when_not_cointegrated(not_cointegrated_dfs):
     df_a, df_b = not_cointegrated_dfs
-    score, direction = stat_arb_bot.generate_signal(df_a, df_b, {"zscore_threshold": 1.0})
+    score, direction = stat_arb_bot.generate_signal(df_a, df_b, config={"zscore_threshold": 1.0})
     assert score == 0.0
     assert direction == "none"

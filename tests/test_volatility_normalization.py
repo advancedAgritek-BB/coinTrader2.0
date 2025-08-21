@@ -11,8 +11,8 @@ def test_normalized_score_lower_when_atr_low():
     df = pd.DataFrame({"open": close, "high": high, "low": low, "close": close, "volume": volume})
 
     cfg = {"atr_normalization": False, "donchian_confirmation": False}
-    raw_score, _ = trend_bot.generate_signal(df, cfg)
-    norm_score, _ = trend_bot.generate_signal(df, {"donchian_confirmation": False})
+    raw_score, _ = trend_bot.generate_signal(df, config=cfg)
+    norm_score, _ = trend_bot.generate_signal(df, config={"donchian_confirmation": False})
 
     assert norm_score < raw_score
     assert raw_score > 0

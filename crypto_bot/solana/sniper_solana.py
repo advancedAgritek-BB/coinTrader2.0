@@ -23,12 +23,19 @@ class RugCheckAPI:
 
 def generate_signal(
     df: pd.DataFrame,
-    config: Optional[dict] = None,
     symbol: str | None = None,
     timeframe: str | None = None,
-    **_,
+    **kwargs,
 ) -> Tuple[float, str]:
     """Return a signal score and direction based on ATR jumps."""
+
+    if isinstance(symbol, dict) and timeframe is None:
+        kwargs.setdefault("config", symbol)
+        symbol = None
+    if isinstance(timeframe, dict):
+        kwargs.setdefault("config", timeframe)
+        timeframe = None
+    config: Optional[dict] = kwargs.get("config")
 
     if df is None or df.empty:
         return 0.0, "none"
