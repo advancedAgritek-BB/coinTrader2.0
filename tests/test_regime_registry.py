@@ -104,3 +104,36 @@ def test_http_fallback_logs_and_uses_heuristic_when_download_fails(
     assert [r for r in caplog.records if "Failed to download fallback model" in r.message]
     assert [r for r in caplog.records if "No regime model found" in r.message]
 
+
+def test_config_url_unreachable_uses_heuristic(monkeypatch, caplog):
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_KEY", raising=False)
+    monkeypatch.delenv("CT_MODEL_FALLBACK_URL", raising=False)
+
+    import urllib.request
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda url: (_ for _ in ()).throw(OSError("network down")),
+    )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "crypto_bot.main",
+        types.SimpleNamespace(_LAST_ML_CFG={"model_fallback_url": "http://example"}),
+    )
+
+    sentinel = object()
+
+    monkeypatch.setattr(registry, "_load_fallback", lambda: sentinel)
+    monkeypatch.setattr(registry, "_no_model_logged", False)
+
+    caplog.set_level(logging.INFO, logger="crypto_bot.regime.registry")
+
+    blob, meta = registry.load_latest_regime("BTCUSD")
+
+    assert blob is sentinel
+    assert meta == {}
+    assert [r for r in caplog.records if "Failed to download fallback model" in r.message]
+    assert [r for r in caplog.records if "No regime model found" in r.message]
+

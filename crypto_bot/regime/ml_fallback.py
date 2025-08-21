@@ -12,7 +12,6 @@ import pandas as pd
 
 from .model_data import MODEL_B64
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from pathlib import Path
 
 
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
@@ -21,27 +20,34 @@ _model = None
 _scaler = None
 
 
+def _heuristic_model():
+    """Return a minimal heuristic model used when decoding/loading fails."""
+
+    class _SimpleModel:
+        def predict_proba(self, X):
+            change = float(X[0][0])
+            prob = 1.0 if change > 0 else 0.0
+            return np.array([[1.0 - prob, prob]])
+
+    return _SimpleModel()
+
+
 def load_model():
     """Decode and return the embedded LightGBM model."""
-    global _model
+    global _model, _scaler
     if _model is None:
         try:
             data = base64.b64decode(MODEL_B64)
-        except Exception as exc:  # pragma: no cover - log decode failure
-            logger.error("Failed to decode ML model: %s", exc)
-            return None
-        try:
             obj = joblib.load(io.BytesIO(data))
             if isinstance(obj, dict):
                 _model = obj.get("model")
-                global _scaler
                 _scaler = obj.get("scaler")
             else:
                 _model = obj
-        except Exception as exc:  # pragma: no cover - log load failure
-            logger.error("Failed to load ML model: %s", exc)
-            _model = None
-            return None
+        except Exception as exc:  # pragma: no cover - log decode/load failure
+            logger.error("Failed to decode or load ML model: %s", exc)
+            _model = _heuristic_model()
+            _scaler = None
     return _model
 
 
