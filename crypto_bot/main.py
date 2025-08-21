@@ -733,12 +733,22 @@ def _ensure_ml_if_needed(cfg: dict) -> None:
             from crypto_bot.regime import regime_classifier as rc
 
             model, scaler, model_path = load_regime_model(symbol)
+            if model is None:
+                raise RuntimeError("regime model unavailable")
             rc._supabase_model = model
             rc._supabase_scaler = scaler
             rc._supabase_symbol = _norm_symbol(symbol)
+            source = "Supabase"
+            if model_path:
+                path_str = str(model_path)
+                if path_str.startswith("http"):
+                    source = "URL"
+                elif Path(path_str).exists():
+                    source = "local file"
             logger.info(
-                "Loaded global regime model for %s from Supabase: %s",
+                "Loaded global regime model for %s from %s: %s",
                 symbol,
+                source,
                 model_path,
             )
         except Exception as exc:
