@@ -300,7 +300,7 @@ def generate_signal(
     else:
         centre = (high + low) / 2
 
-    atr_pct_1h = atr_percent(higher_df or df, atr_period)
+    atr_pct_1h = atr_percent(higher_df or df, window=atr_period)
     spacing_pct = max(0.3, 1.2 * atr_pct_1h)
     grid_step = price * spacing_pct / 100
 
@@ -336,9 +336,7 @@ def generate_signal(
     breakout_range = (high - low) / 2
     breakout_threshold = breakout_range * cfg.breakout_mult
     if price > centre + breakout_threshold or price < centre - breakout_threshold:
-        return breakout_bot.generate_signal(
-            df, symbol=symbol, timeframe=timeframe, config=_as_dict(config)
-        )
+        return breakout_bot.generate_signal(df, config=_as_dict(config))
 
     lower_bound = levels[1]
     upper_bound = levels[-2]

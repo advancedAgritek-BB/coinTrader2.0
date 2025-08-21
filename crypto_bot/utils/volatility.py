@@ -43,6 +43,7 @@ def atr_percent(
 ) -> float:
     """Return ATR as a percentage of the latest close price."""
 
+    n = int(period or window or 14)
     last_close = float(df[close].iloc[-1])
     kwargs = {}
     if high != "high":
@@ -51,7 +52,7 @@ def atr_percent(
         kwargs["low"] = low
     if close != "close":
         kwargs["close"] = close
-    atr_series = calc_atr(df, period=period, window=window, **kwargs)
+    atr_series = calc_atr(df, window=n, **kwargs)
     if atr_series.empty:
         return float("nan")
     atr_val = float(atr_series.iloc[-1])
@@ -83,7 +84,7 @@ def normalize_score_by_volatility(
         kwargs["low"] = low
     if close != "close":
         kwargs["close"] = close
-    atr = calc_atr(df, period=atr_period, **kwargs)
+    atr = calc_atr(df, window=atr_period, **kwargs)
     if hasattr(atr, "iloc"):
         if len(atr) == 0:
             return float(score)
