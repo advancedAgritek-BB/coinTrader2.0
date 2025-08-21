@@ -16,7 +16,7 @@ trading:
   hft_enabled: true
   hft_symbols: ["BTC/USD","ETH/USD","SOL/USDC","BONK/USDC"]   # seed list, can expand
   exclude_symbols: ["AIBTC/USD"]   # remove noisy/synthetic pairs
-  require_sentiment: true
+  require_sentiment: false
 
 # === ohlcv cache ===
 ohlcv:

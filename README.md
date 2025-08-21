@@ -542,9 +542,9 @@ symbol_score_weights:
 * **weight_liquidity** – scoring weight for available pool liquidity on Solana pairs.
 * **volatility_filter** - skips trading when ATR is too low or funding exceeds `max_funding_rate`. The minimum ATR percent is `0.0001`.
 * **sentiment_filter** - checks the Fear & Greed index and Twitter sentiment
-  to avoid bearish markets. Set `require_sentiment` to `true` to block trades
-  when sentiment data is missing. Leave it `false` in dry-run or tests to treat
-  missing data as a neutral score.
+  to avoid bearish markets. Dry-run configs set `require_sentiment: false` so
+  missing data is treated as neutral. Set `require_sentiment: true` or export
+  `CT_REQUIRE_SENTIMENT=true` to block trades when sentiment data is missing.
 * **sl_pct**/**tp_pct** – defaults for Solana scalper strategies.
 * **mempool_monitor** – pause or reprice when Solana fees spike.
 * **priority_fee_cap_micro_lamports** – abort scalper trades when priority fees exceed this.
@@ -967,8 +967,8 @@ a different API and extend `sentiment_filter.py` to parse that service's respons
 When `require_sentiment` is `false` (the default for dry-run and testing), the
 sentiment gate falls back to a neutral score of `50` whenever the endpoint or
 API key is missing so simulations continue deterministically. Set
-`require_sentiment: true` in the config to fail closed instead of using this
-placeholder value.
+`require_sentiment: true` or export `CT_REQUIRE_SENTIMENT=true` to fail closed
+instead of using this placeholder value.
 
 ### Funding Rate API
 
