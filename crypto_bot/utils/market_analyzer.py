@@ -631,16 +631,17 @@ async def analyze_symbol(
                 strong = [
                     (d, s)
                     for d, s, _w in votes
-                    if d in ("long", "short") and s > 0.5
+                    if d in ("long", "short") and abs(s) >= 0.65
                 ]
-                if strong:
-                    strong.sort(key=lambda x: x[1], reverse=True)
+                if strong and mode == "dry_run" and confidence >= 0.55:
+                    strong.sort(key=lambda x: abs(x[1]), reverse=True)
                     fb_dir, fb_score = strong[0]
                     analysis_logger.info(
-                        "Fallback applied for %s: %s (score=%.2f)",
+                        "Single-strategy override for %s: %s (score=%.2f, conf=%.2f)",
                         symbol,
                         fb_dir,
                         fb_score,
+                        confidence,
                     )
                     result["direction"] = fb_dir
     return result
