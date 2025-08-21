@@ -271,6 +271,7 @@ async def analyze_symbol(
     max_prob = max(probs.values()) if probs else 0.0
     if max_prob > 0:
         base_conf /= max_prob
+    analysis_logger.info(f"Regime for {symbol}: {regime}, confidence {base_conf}")
 
     bias_cfg = config.get("sentiment_filter", {})
     try:
