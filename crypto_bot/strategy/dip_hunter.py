@@ -90,15 +90,11 @@ def generate_signal(
 
     min_bars = max(100, adx_window, rsi_window, ema_slow) + 5
     required_bars = max(min_bars, 2 * adx_window + 1)
-    if len(df) < required_bars:
-        return 0.0, "none", {
-            "reason": f"insufficient_bars: need>={required_bars}, have={len(df)}"
-        }
 
     lookback = max(rsi_window, vol_window, adx_window, bb_window, dip_bars)
-    recent = df.tail(
-        max(100, adx_window * 4, lookback + 1, 2 * adx_window + 1)
-    )
+    recent = df.tail(required_bars)
+    if len(recent) < required_bars:
+        return 0.0, "none"
 
     rsi = ta.momentum.rsi(recent["close"], window=rsi_window)
     # ADX requires at least twice the window length for a stable reading
