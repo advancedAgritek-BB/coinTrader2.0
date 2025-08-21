@@ -1,5 +1,6 @@
 import os
 import asyncio
+import time
 from typing import Any, Dict, Optional
 from loguru import logger
 
@@ -50,7 +51,7 @@ class Strategy:
         Very conservative gates: min LP USD, token age, no obvious mint authority risks.
         Expand with renounced checks, freeze authority checks (requires RPC read).
         """
-        age_ok = (meta.get("createdAt", 0) or 0) <= (int(asyncio.get_event_loop().time()) - MIN_TOKEN_AGE_SEC)
+        age_ok = (meta.get("createdAt", 0) or 0) <= (int(time.time()) - MIN_TOKEN_AGE_SEC)
         lp_ok = float(pool_info.get("liquidityUsd", 0) or 0) >= MIN_LP_USD
         return age_ok and lp_ok
 
