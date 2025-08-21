@@ -636,7 +636,7 @@ strategy_router:
     - momentum_bot
     - lstm_bot
     volatile:
-    - sniper_solana
+    - sniper_bot
     - momentum_bot
     - meme_wave_bot
     - cross_chain_arb_bot
