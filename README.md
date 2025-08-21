@@ -79,6 +79,13 @@ on startup, and the bot begins scoring once these frames are ready. Additional
 initialization is not blocked. The legacy `trading.backfill.warmup_high_tf`
 option has been removed.
 
+### Warm-up candles
+
+The `warmup_candles` mapping controls how many bars are preloaded for each
+timeframe. Ensure the count for a given timeframe exceeds the longest
+indicator lookback used by your strategies plus a safety margin so indicators
+have enough history to stabilize.
+
 ### Optional ML Fallback
 
 Set `use_ml_regime_classifier` to `true` in `crypto_bot/config.yaml` to fall

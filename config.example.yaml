@@ -112,6 +112,8 @@ timeframes: ['1m','5m']
 warmup_candles:
   '1m': 1000
   '5m': 600
+  '15m': 500
+  '1h': 500
 
 backfill_days:
   '1m': 2

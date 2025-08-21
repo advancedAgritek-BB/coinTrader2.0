@@ -27,7 +27,7 @@ class Config:
 
     timeframes: List[str] = field(default_factory=lambda: ["1m", "5m"])
     warmup_candles: Dict[str, int] = field(
-        default_factory=lambda: {"1m": 1000, "5m": 600}
+        default_factory=lambda: {"1m": 1000, "5m": 600, "15m": 500, "1h": 500}
     )
     deep_backfill_days: Dict[str, int] = field(default_factory=dict)
     backfill_days: Dict[str, int] = field(
