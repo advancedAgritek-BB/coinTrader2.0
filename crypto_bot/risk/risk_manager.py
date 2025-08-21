@@ -3,6 +3,7 @@ import dataclasses
 from typing import Any, Optional, Mapping
 
 import asyncio
+import time
 
 import pandas as pd
 from math import isnan
@@ -14,6 +15,7 @@ from crypto_bot.volatility_filter import too_flat, calc_atr
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 from crypto_bot.sentiment_filter import too_bearish, boost_factor
+from crypto_bot.risk.sentiment_gate import sentiment_factor_or_default
 
 
 def kelly_fraction(win_prob: float, win_loss_ratio: float) -> float:
@@ -309,7 +311,12 @@ class RiskManager:
             logger.info("[EVAL] %s", reason)
             return False, reason
 
-        if self.config.min_fng > 0 or self.config.min_sentiment > 0:
+        require_sentiment = self.config.min_fng > 0 or self.config.min_sentiment > 0
+        sentiment_score = sentiment_factor_or_default(
+            time.time(), require_sentiment, 3600
+        )
+
+        if sentiment_score != 1.0 and require_sentiment:
             try:
                 if asyncio.run(
                     too_bearish(
@@ -325,7 +332,9 @@ class RiskManager:
                 logger.error("Sentiment check failed: %s", exc)
 
         self.boost = 1.0
-        if self.config.bull_fng < 101 or self.config.bull_sentiment < 101:
+        if sentiment_score != 1.0 and (
+            self.config.bull_fng < 101 or self.config.bull_sentiment < 101
+        ):
             try:
                 self.boost = asyncio.run(
                     boost_factor(
