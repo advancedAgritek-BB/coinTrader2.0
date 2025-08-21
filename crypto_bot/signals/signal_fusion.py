@@ -41,17 +41,23 @@ class SignalFusionEngine:
         for fn, weight in self.strategies:
             w = opt_weights.get(fn.__name__, weight)
             score, direction, _ = evaluate(fn, df, config)
+            if direction == "none" and score == 0.0:
+                continue
+
             weighted_score += score * w
             total_weight += w
 
             if direction == "long":
                 long_votes += 1
-                signed_sum += score * weight
+                signed_sum += score * w
             elif direction == "short":
                 short_votes += 1
-                signed_sum -= score * weight
+                signed_sum -= score * w
 
-        score = weighted_score / total_weight if total_weight else 0.0
+        if total_weight == 0:
+            return 0.0, "none"
+
+        score = weighted_score / total_weight
 
         if long_votes > short_votes:
             direction = "long"
