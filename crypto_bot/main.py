@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 import time
-from collections import Counter, OrderedDict, deque
+from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 import dataclasses
 import types
@@ -358,63 +358,27 @@ class MLUnavailableError(RuntimeError):
         self.cfg = cfg
 
 
-# Track WebSocket ping tasks
-WS_PING_TASKS: set[asyncio.Task] = set()
-# Track async sniper trade tasks
-SNIPER_TASKS: set[asyncio.Task] = set()
 # Track newly scanned Solana tokens pending evaluation
 NEW_SOLANA_TOKENS: set[str] = set()
-# Track async cross-chain arb tasks
-CROSS_ARB_TASKS: set[asyncio.Task] = set()
-# Track all spawned background tasks for coordinated shutdown
-BACKGROUND_TASKS: list[asyncio.Task] = []
 # Track pending OHLCV tasks during startup
 pending_tasks: list[asyncio.Task] = []
-# Track outstanding bootstrap tasks between cycles
-BOOTSTRAP_TASKS: set[asyncio.Task] = set()
 
-# Track background task failures to surface repeated issues
-TASK_FAILURE_COUNTS: Counter[str] = Counter()
-TASK_FAILURE_NOTIFIER: "TelegramNotifier" | None = None
-TASK_FAILURE_NOTIFY_THRESHOLD = 3
+# Central manager for background and auxiliary tasks
+from crypto_bot.utils.task_manager import TaskManager
+
+TASK_MANAGER = TaskManager()
 
 
 def register_task(task: asyncio.Task | None) -> asyncio.Task | None:
-    """Add a task to the background task registry."""
-    if not task:
-        return None
-
-    BACKGROUND_TASKS.append(task)
-
-    def _handle_task_completion(t: asyncio.Task) -> None:
-        if t.cancelled():
-            return
-        exc = t.exception()
-        if exc is None:
-            return
-        name = t.get_name()
-        logger.error("Background task %s raised an exception", name, exc_info=exc)
-        TASK_FAILURE_COUNTS[name] += 1
-        if (
-            TASK_FAILURE_NOTIFIER
-            and TASK_FAILURE_COUNTS[name] >= TASK_FAILURE_NOTIFY_THRESHOLD
-        ):
-            try:
-                TASK_FAILURE_NOTIFIER.notify(
-                    f"Task {name} failed {TASK_FAILURE_COUNTS[name]} times: {exc}"
-                )
-            except Exception:
-                logger.exception("Failed to send failure notification for %s", name)
-
-    task.add_done_callback(_handle_task_completion)
-    return task
+    """Register a background task with the global task manager."""
+    return TASK_MANAGER.register(task)
 
 
 def _schedule_bootstrap(coro: Awaitable[Any]) -> None:
     """Schedule ``coro`` as a background bootstrap task."""
     task = register_task(asyncio.create_task(coro))
     if task:
-        BOOTSTRAP_TASKS.add(task)
+        TASK_MANAGER.add(task, "bootstrap", remove_on_done=True)
 
 
 async def _run_bootstrap(
@@ -447,9 +411,7 @@ async def _run_bootstrap(
 
 def _prune_bootstrap_tasks() -> None:
     """Remove completed bootstrap tasks from the tracker."""
-    for task in list(BOOTSTRAP_TASKS):
-        if task.done():
-            BOOTSTRAP_TASKS.discard(task)
+    TASK_MANAGER.prune("bootstrap")
 
 
 # Queue of symbols awaiting evaluation across loops
@@ -1227,14 +1189,14 @@ async def initial_scan(
 
         async with symbol_cache_guard():
             async with OHLCV_LOCK:
-                for tf in tfs:
+                for tf in bootstrap_tfs:
                     logger.info("Starting OHLCV update for timeframe %s", tf)
                 res = await _run_bootstrap(
                     update_multi_tf_ohlcv_cache,
                     exchange,
                     state.df_cache,
                     batch,
-                    {**config, "timeframes": tfs},
+                    {**config, "timeframes": bootstrap_tfs},
                     limit=deep_limit,
                     start_since=history_since,
                     use_websocket=False,
@@ -1256,7 +1218,7 @@ async def initial_scan(
                     exchange,
                     state.regime_cache,
                     batch,
-                    {**config, "timeframes": tfs},
+                    {**config, "timeframes": bootstrap_tfs},
                     limit=scan_limit,
                     start_since=lookback_since,
                     use_websocket=False,
@@ -2575,8 +2537,7 @@ async def execute_signals(
                     )
                 )
             )
-            CROSS_ARB_TASKS.add(task)
-            task.add_done_callback(CROSS_ARB_TASKS.discard)
+            TASK_MANAGER.add(task, "cross_arb", remove_on_done=True)
             executed_via_cross = True
         elif sym.endswith("/USDC"):
             if sym in NEW_SOLANA_TOKENS:
@@ -2616,8 +2577,7 @@ async def execute_signals(
                         )
                     )
                 )
-                SNIPER_TASKS.add(task)
-                task.add_done_callback(SNIPER_TASKS.discard)
+                TASK_MANAGER.add(task, "sniper", remove_on_done=True)
                 executed_via_sniper = True
 
         if not executed_via_sniper and not executed_via_cross:
@@ -3332,8 +3292,7 @@ async def _main_impl() -> MainResult:
     balance_updates = tg_cfg.get("balance_updates", balance_updates)
 
     notifier = TelegramNotifier.from_config(tg_cfg)
-    global TASK_FAILURE_NOTIFIER
-    TASK_FAILURE_NOTIFIER = notifier
+    TASK_MANAGER.set_notifier(notifier)
     if status_updates:
         notifier.notify("🤖 CoinTrader2.0 started")
 
@@ -3393,7 +3352,7 @@ async def _main_impl() -> MainResult:
         task = register_task(
             asyncio.create_task(_ws_ping_loop(exchange, ping_interval))
         )
-        WS_PING_TASKS.add(task)
+        TASK_MANAGER.add(task, "ws_ping")
 
     if not hasattr(exchange, "load_markets"):
         logger.error("The installed ccxt package is missing or a local stub is in use.")
@@ -3909,13 +3868,7 @@ async def _main_impl() -> MainResult:
                     await asyncio.to_thread(ws_client.close)
         if telegram_bot:
             telegram_bot.stop()
-        for task in list(BACKGROUND_TASKS):
-            task.cancel()
-        await asyncio.gather(*BACKGROUND_TASKS, return_exceptions=True)
-        BACKGROUND_TASKS.clear()
-        WS_PING_TASKS.clear()
-        SNIPER_TASKS.clear()
-        CROSS_ARB_TASKS.clear()
+        await TASK_MANAGER.cancel_all()
         NEW_SOLANA_TOKENS.clear()
 
     if not state.get("running", True) and stop_reason == "completed":
