@@ -73,7 +73,7 @@ the various bots.
 ### OHLCV bootstrap and defer
 
 Specify higher timeframes in the `ohlcv` section of the config to control how
-the candle cache warms up. `bootstrap_timeframes` (default ['1h']) are loaded
+the candle cache warms up. `bootstrap_timeframes` (default ['1m', '5m', '15m', '1h']) are loaded
 on startup, and the bot begins scoring once these frames are ready. Additional
 `defer_timeframes` such as ['4h', '1d'] warm in the background so
 initialization is not blocked. The legacy `trading.backfill.warmup_high_tf`
@@ -480,7 +480,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   The same batch size controls the initial market scan at startup where
   progress is logged after each batch.
 * **scan_lookback_limit** – default maximum candles per timeframe fetched during
-  the initial scan (`700`). `update_multi_tf_ohlcv_cache` trims this value for
+  the initial scan (`1200`). `update_multi_tf_ohlcv_cache` trims this value for
   newly listed pairs using `get_kraken_listing_date` so requests never exceed the
   available history. The caches store at least this many bars when history
   permits.
@@ -1098,7 +1098,7 @@ regardless of the WebSocket setting. It relies on
 omitted the helper `get_kraken_listing_date` checks when every pair was
 listed on Kraken and caps the request so no more candles are fetched than the
 exchange actually offers. When sufficient history is available the loader
-retrieves up to `scan_lookback_limit` candles per pair (700 by default on
+retrieves up to `scan_lookback_limit` candles per pair (1200 by default on
 Kraken) before switching to WebSocket updates.
 
 The client now records heartbeat events and exposes `is_alive(conn_type)` to
@@ -1229,7 +1229,7 @@ excluded_symbols: [ETH/USD]
 exchange_market_types: ["spot"]  # options: spot, margin, futures
 min_symbol_age_days: 2           # skip pairs with less history
 symbol_batch_size: 50            # symbols processed per cycle
-scan_lookback_limit: 700         # max candles per pair during startup
+scan_lookback_limit: 1200        # max candles per pair during startup
                                  # trimmed using Kraken listing data
 scan_deep_top: 50                # deep load this many ranked symbols
 start_since: 365d                # backfill candles this far in the past
@@ -1308,7 +1308,7 @@ max_concurrent_ohlcv: 10         # simultaneous OHLCV requests during startup
   ticker_backoff_initial: 2        # seconds after first failure
   ticker_backoff_max: 60           # cap for exponential backoff
   initial_timeframes: [1m, 5m, 15m, 1h]  # preloaded intervals (4h unsupported on Coinbase)
-initial_history_candles: 700     # candles fetched per timeframe initially
+initial_history_candles: 600     # candles fetched per timeframe initially
 ```
 
 For thin markets you may want to relax the filters and trading
@@ -1331,7 +1331,7 @@ during the startup scan. It defaults to `10` but can be overridden in
 omitted it falls back to the `timeframes` list (1m, 5m, 15m and 1h by
 default; Coinbase does not offer 4h candles). `initial_history_candles` sets how many bars to download for each of
 these intervals during the initial scan and defaults to the
-`scan_lookback_limit` of `700`. Together these options ensure enough historical
+`scan_lookback_limit` of `1200`. Together these options ensure enough historical
 data is fetched for regime detection and correlation checks before live trading
 starts.
   max_concurrent_ohlcv: 10       # limit OHLCV requests when loading history
