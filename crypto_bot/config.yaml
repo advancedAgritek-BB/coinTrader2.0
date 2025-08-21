@@ -10,6 +10,9 @@ trading:
   allowed_quotes: [USD, USDT, USDC, EUR]
   min_ticker_volume: 10000
   timeframes: ["1m","5m","15m","1h"]
+  min_score: 0.20
+  min_confidence: 0.30
+  consensus: weighted
   backfill:
     warmup_high_tf: ["1h","4h","1d"]
     deep_low_tf: true        # backfill 1m/5m history for strategies
@@ -647,8 +650,9 @@ strategy_router:
   trending_timeframe: 1h
   volatile_timeframe: 1m
 yamlrouter:
-  min_score: 0.1  # Lower to allow weaker signals
-  min_confidence: 0.1
+  min_score: 0.20
+  min_confidence: 0.30
+  consensus: weighted
   regimes:
     unknown:  # Fallback strategy for unknown
       - mean_bot

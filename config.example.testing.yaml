@@ -1,4 +1,9 @@
 mode: paper
+
+trading:
+  min_score: 0.20
+  min_confidence: 0.30
+  consensus: weighted
 exchange:
   name: kraken
   max_concurrency: 3
