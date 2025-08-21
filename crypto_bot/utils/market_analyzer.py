@@ -161,7 +161,19 @@ async def run_candidates(
                 except Exception:  # pragma: no cover - safety
                     pass
 
-    return ranked
+    router_cfg = (cfg or {}).get("router", {}) if isinstance(cfg, dict) else {}
+    fast_track = float(router_cfg.get("fast_track_score", 0.95))
+    min_accept = float(router_cfg.get("min_accept_score", 0.0))
+    top_k = int(router_cfg.get("top_k_per_strategy", 0))
+
+    for fn, sc, d in ranked:
+        if sc >= fast_track:
+            return [(fn, sc, d)]
+
+    filtered = [(fn, sc, d) for fn, sc, d in ranked if sc >= min_accept]
+    if top_k > 0:
+        filtered = filtered[:top_k]
+    return filtered
 
 
 async def analyze_symbol(
