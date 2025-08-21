@@ -12,6 +12,7 @@ from sklearn.preprocessing import StandardScaler
 
 import ta
 from scipy import stats
+from scipy.optimize import fmin_l_bfgs_b
 from crypto_bot.utils.stats import last_window_zscore
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.volatility import normalize_score_by_volatility
@@ -38,8 +39,15 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     if len(df) < window:
         return np.nan
     recent = df.iloc[-window:]
-    X = recent[["close", "volume"]].values
+
+    X_df = recent[["close", "volume"]].copy()
+    non_constant = X_df.loc[:, X_df.nunique() > 1]
+    if non_constant.empty:
+        return np.nan
+    X = non_constant.values
     y = recent["close"].values.reshape(-1, 1)
+    if np.allclose(y, y[0]):
+        return np.nan
 
     x_scaler = StandardScaler()
     X_scaled = x_scaler.fit_transform(X)
@@ -49,12 +57,23 @@ def kernel_regression(df: pd.DataFrame, window: int) -> float:
     kernel = ConstantKernel(
         1.0, constant_value_bounds=(1e-3, 1e3)
     ) * RBF(1.0, length_scale_bounds=(1e-3, 1e3))
+
+    def _optimizer(obj_func, initial_theta, bounds):
+        theta_opt, func_min, _ = fmin_l_bfgs_b(
+            obj_func, initial_theta, bounds=bounds, maxiter=1000
+        )
+        return theta_opt, func_min
+
     gp = GaussianProcessRegressor(
-        kernel=kernel, optimizer="fmin_l_bfgs_b", n_restarts_optimizer=15
+        kernel=kernel, optimizer=_optimizer, n_restarts_optimizer=15
     )
     gp.fit(X_scaled, y_scaled)
-    latest_features = recent[["close", "volume"]].iloc[-1].values.reshape(1, -1)
-    pred_scaled, _ = gp.predict(x_scaler.transform(latest_features), return_std=True)
+    latest_features = (
+        recent[non_constant.columns].iloc[-1].values.reshape(1, -1)
+    )
+    pred_scaled, _ = gp.predict(
+        x_scaler.transform(latest_features), return_std=True
+    )
     pred = y_scaler.inverse_transform(pred_scaled.reshape(-1, 1))[0, 0]
     return float(pred)
 
