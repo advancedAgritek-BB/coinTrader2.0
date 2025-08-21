@@ -71,8 +71,8 @@ def calc_atr(
     window : int, default 14
         Lookback window for the ATR calculation.
     period : int, optional
-        Alias for ``window`` kept for backwards compatibility.  When provided it
-        takes precedence over ``window``.
+        Deprecated alias for ``window`` kept for backwards compatibility. When
+        provided it takes precedence over ``window``.
     high, low, close : str
         Column names for the respective OHLC values.
     """
