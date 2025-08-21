@@ -4,10 +4,10 @@ from pathlib import Path
 
 # Default directory for all log files used across the project. Users can
 # override the location by setting the ``LOG_DIR`` environment variable.
-# If not provided, logs are written under ``~/.cointrader/logs``.
-LOG_DIR = Path(
-    os.environ.get("LOG_DIR", Path.home() / ".cointrader" / "logs")
-).expanduser()
+# If not provided, logs are written under ``crypto_bot/logs`` within the
+# repository.
+DEFAULT_LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
+LOG_DIR = Path(os.environ.get("LOG_DIR", DEFAULT_LOG_DIR)).expanduser()
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 
