@@ -1,5 +1,6 @@
 from typing import Tuple, Callable, Optional, Iterable, Dict, List
 import pandas as pd
+import numpy as np
 import asyncio
 from crypto_bot.ml_signal_model import predict_signal
 from crypto_bot.indicators.cycle_bias import get_cycle_bias
@@ -31,7 +32,9 @@ def evaluate(
         score, direction = result, "none"
         atr = None
     score = max(0.0, min(score, 1.0))
-    if atr is not None:
+    if atr is not None and hasattr(atr, "iloc"):
+        atr = float(atr.iloc[-1]) if len(atr) else np.nan
+    if atr is not None and not (pd.isna(atr) or atr <= 0):
         indicator_logger.info(
             "ATR provided by %s: %.6f",
             getattr(strategy_fn, "__name__", str(strategy_fn)),
