@@ -340,6 +340,7 @@ hft_mode: true
 max_age_days: 90
 max_change_pct: 20
 max_concurrent_ohlcv: 50
+http_pool_size: 50
 max_concurrent_tickers: 20
 max_latency_ms: 500
 max_ohlcv_failures: 2

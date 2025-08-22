@@ -28,14 +28,15 @@ class DummyResponse:
 def test_get_ws_token_success(monkeypatch):
     captured = {}
 
-    def fake_post(url, data=None, headers=None, timeout=None):
-        captured["url"] = url
-        captured["data"] = data
-        captured["headers"] = headers
-        captured["timeout"] = timeout
-        return DummyResponse({"result": {"token": "abc"}})
+    class DummySession:
+        def post(self, url, data=None, headers=None, timeout=None):
+            captured["url"] = url
+            captured["data"] = data
+            captured["headers"] = headers
+            captured["timeout"] = timeout
+            return DummyResponse({"result": {"token": "abc"}})
 
-    monkeypatch.setattr(requests, "post", fake_post)
+    monkeypatch.setattr(kraken, "get_http_session", lambda: DummySession())
     monkeypatch.setattr(time, "time", lambda: 1)
 
     secret = base64.b64encode(b"secret").decode()
@@ -47,14 +48,15 @@ def test_get_ws_token_success(monkeypatch):
 def test_get_ws_token(monkeypatch):
     captured = {}
 
-    def fake_post(url, data=None, headers=None, timeout=None):
-        captured["url"] = url
-        captured["data"] = data
-        captured["headers"] = headers
-        captured["timeout"] = timeout
-        return DummyResponse({"result": {"token": "abc"}})
+    class DummySession:
+        def post(self, url, data=None, headers=None, timeout=None):
+            captured["url"] = url
+            captured["data"] = data
+            captured["headers"] = headers
+            captured["timeout"] = timeout
+            return DummyResponse({"result": {"token": "abc"}})
 
-    monkeypatch.setattr(requests, "post", fake_post)
+    monkeypatch.setattr(kraken, "get_http_session", lambda: DummySession())
     monkeypatch.setattr(time, "time", lambda: 1)
 
     secret = base64.b64encode(b"secret").decode()
@@ -80,9 +82,9 @@ def test_get_ws_token(monkeypatch):
 
 def test_get_ws_token_top_level(monkeypatch):
     monkeypatch.setattr(
-        requests,
-        "post",
-        lambda *a, **k: DummyResponse({"token": "abc"}),
+        kraken,
+        "get_http_session",
+        lambda: type("S", (), {"post": lambda *a, **k: DummyResponse({"token": "abc"})})(),
     )
     monkeypatch.setattr(time, "time", lambda: 1)
     secret = base64.b64encode(b"secret").decode()
@@ -90,7 +92,11 @@ def test_get_ws_token_top_level(monkeypatch):
 
 
 def test_get_ws_token_missing_token(monkeypatch):
-    monkeypatch.setattr(requests, "post", lambda *a, **k: DummyResponse({"result": {}}))
+    monkeypatch.setattr(
+        kraken,
+        "get_http_session",
+        lambda: type("S", (), {"post": lambda *a, **k: DummyResponse({"result": {}})})(),
+    )
     monkeypatch.setattr(time, "time", lambda: 1)
     secret = base64.b64encode(b"secret").decode()
     with pytest.raises(RuntimeError):
@@ -100,14 +106,15 @@ def test_get_ws_token_missing_token(monkeypatch):
 def test_get_ws_token_request_failure(monkeypatch):
     captured = {}
 
-    def fake_post(url, data=None, headers=None, timeout=None):
-        captured["url"] = url
-        captured["data"] = data
-        captured["headers"] = headers
-        captured["timeout"] = timeout
-        raise requests.RequestException("boom")
+    class DummySession:
+        def post(self, url, data=None, headers=None, timeout=None):
+            captured["url"] = url
+            captured["data"] = data
+            captured["headers"] = headers
+            captured["timeout"] = timeout
+            raise requests.RequestException("boom")
 
-    monkeypatch.setattr(requests, "post", fake_post)
+    monkeypatch.setattr(kraken, "get_http_session", lambda: DummySession())
     monkeypatch.setattr(time, "time", lambda: 1)
     secret = base64.b64encode(b"secret").decode()
     with pytest.raises(requests.RequestException):

@@ -797,7 +797,7 @@ flash_crash_scalper:
 * **timeframe**, **timeframes**, **scalp_timeframe** – candle intervals used for analysis. Default `timeframe` is `15m` and `timeframes` include `1m`, `5m`, `15m`, and `1h` (Coinbase lacks a `4h` interval).
 * **ohlcv_snapshot_frequency_minutes**/**ohlcv_snapshot_limit** – OHLCV caching options. The snapshot limit defaults to `500`.
 * **loop_interval_minutes** – delay between trading cycles (default `0.05`). Shorter delays increase CPU usage as the loop runs more often.
-* **ohlcv_timeout**, **max_concurrent_ohlcv**, **max_ohlcv_failures** – limits for candle requests.
+* **ohlcv_timeout**, **max_concurrent_ohlcv**, **http_pool_size**, **max_ohlcv_failures** – limits for candle requests.
 * **ohlcv_batch_size** – number of symbols grouped per OHLCV request.
 * **redis_url** – optional Redis connection string for caching OHLCV data.
 * **ohlcv.storage_path** – directory used to persist OHLCV caches between runs.
@@ -845,6 +845,7 @@ within the limit:
 
 * **max_concurrent_tickers** – maximum ticker requests processed in parallel.
 * **max_concurrent_ohlcv** – maximum concurrent OHLCV fetches.
+* **http_pool_size** – size of Kraken REST connection pool (should be ≥ `max_concurrent_ohlcv`).
 * **ohlcv_batch_size** – number of symbols loaded per OHLCV batch.
 * **ticker_backoff_initial** – seconds to wait after a ticker failure.
 * **ticker_backoff_max** – maximum delay between ticker retries.
@@ -1063,6 +1064,7 @@ max_ws_limit: 50             # skip WebSocket when request exceeds this
 gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 4      # limit simultaneous OHLCV fetches
+http_pool_size: 4            # HTTP connection pool size
 ohlcv_batch_size: 10         # group symbols per OHLCV fetch
 max_concurrent_tickers: 20   # limit simultaneous ticker fetches
 ticker_rate_limit: 0         # override exchange rate limit (ms)
@@ -1072,6 +1074,7 @@ max_ws_limit: 200            # skip WebSocket when request exceeds this
 gecko_limit: 10              # concurrent GeckoTerminal requests
 ohlcv_timeout: 60             # request timeout for OHLCV fetches
 max_concurrent_ohlcv: 20     # limit simultaneous OHLCV fetches
+http_pool_size: 20           # HTTP connection pool size
 ohlcv_batch_size: 10         # group symbols per OHLCV fetch
 metrics:
   enabled: true              # write cycle statistics to metrics.csv
@@ -1352,6 +1355,8 @@ symbol_filter:
 `max_concurrent_ohlcv` controls how many OHLCV requests are made in parallel
 during the startup scan. It defaults to `10` but can be overridden in
 `config.yaml` to stay within Kraken's connection pool capacity.
+`http_pool_size` configures the size of the reusable HTTP connection pool and
+should be at least as large as `max_concurrent_ohlcv`.
 `initial_timeframes` lists the intervals preloaded before trading begins. When
 omitted it falls back to the `timeframes` list (1m, 5m, 15m and 1h by
 default; Coinbase does not offer 4h candles). `initial_history_candles` sets how many bars to download for each of

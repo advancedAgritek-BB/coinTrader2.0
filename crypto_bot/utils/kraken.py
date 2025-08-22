@@ -26,6 +26,12 @@ KrakenClient = Any  # type: ignore
 _client: KrakenClient | None = None
 
 
+def get_http_session():
+    from .market_loader import get_http_session as _get_http_session
+
+    return _get_http_session()
+
+
 def get_client(api_key: str | None = None, api_secret: str | None = None):
     """Return a singleton ``ccxt.kraken`` client instance."""
 
@@ -83,8 +89,9 @@ def get_ws_token(
         "Content-Type": "application/x-www-form-urlencoded",
     }
 
+    session = get_http_session()
     try:
-        resp = requests.post(
+        resp = session.post(
             f"{environment}{PATH}",
             data=encoded_body,
             headers=headers,
