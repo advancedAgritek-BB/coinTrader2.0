@@ -595,7 +595,11 @@ async def get_market_regime(ctx: BotContext) -> str:
 
 def direction_to_side(direction: str) -> str:
     """Translate strategy direction to trade side."""
-    return "buy" if direction == "long" else "sell"
+    if direction == "long":
+        return "buy"
+    if direction == "short":
+        return "sell"
+    return "none"
 
 
 def opposite_side(side: str) -> str:
@@ -2295,14 +2299,15 @@ async def execute_signals(
             direction,
             atr,
         )
+        side = direction_to_side(direction)
         reasons: list[str] = []
         if score <= min_score:
             reasons.append("score below min_score")
-        if direction == "none":
+        if side == "none":
             reasons.append("no direction")
         if res.get("too_flat", False):
             reasons.append("atr too flat")
-        if direction == "short" and not ctx.config.get("allow_short", True):
+        if side == "sell" and not ctx.config.get("allow_short", True):
             reasons.append("short selling disabled")
         if reasons:
             logger.warning("Skipping %s: %s", sym, ", ".join(reasons))
@@ -2314,7 +2319,7 @@ async def execute_signals(
                     ctx.exchange,
                     ctx.ws_client,
                     sym,
-                    direction_to_side(direction),
+                    side,
                     0.0,
                     ctx.notifier,
                     dry_run=True,
@@ -2418,6 +2423,11 @@ async def execute_signals(
         direction = candidate.get("direction") or candidate.get("signal") or "none"
         sym = candidate["symbol"]
         side = direction_to_side(direction)
+        if side == "none":
+            logger.debug("Skip: no actionable side %s", candidate)
+            _log_rejection(sym, score, direction, min_req, "no actionable side", "SCORING")
+            reject_counts["no_actionable_side"] += 1
+            continue
         logger.info(f"Pre-execution candidate: {sym} score={score} dir={direction}")
         if ctx.position_guard and not ctx.position_guard.can_open(ctx.positions):
             logger.debug("Position guard blocked opening a new position")
