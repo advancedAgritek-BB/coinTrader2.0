@@ -19,8 +19,9 @@ def test_monitor_loop_custom_trade_file(monkeypatch, tmp_path):
 
     def fake_print(*args, **kwargs):
         text = " ".join(str(a) for a in args)
-        if "[Monitor]" in text:
-            outputs.append(text)
+        if text.startswith("\033"):
+            return
+        outputs.append(text)
 
     call_count = 0
 
@@ -51,6 +52,10 @@ def test_monitor_loop_custom_trade_file(monkeypatch, tmp_path):
     first_lines = outputs[0].splitlines()
     second_lines = outputs[1].splitlines()
 
-    assert first_lines[1:] == ["XBT/USDT -- 100.00 -- +10.00"]
-    assert second_lines[1:] == []
+    assert first_lines[0] == "start"
+    assert first_lines[1] == "Balance: 0"
+    assert first_lines[2:] == ["XBT/USDT -- 100.00 -- +10.00"]
+    assert second_lines[0] == "start"
+    assert second_lines[1] == "Balance: 0"
+    assert second_lines[2:] == []
     assert first_lines != second_lines

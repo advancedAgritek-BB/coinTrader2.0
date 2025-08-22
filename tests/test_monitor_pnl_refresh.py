@@ -13,10 +13,12 @@ def test_monitor_pnl_refresh(monkeypatch, tmp_path):
     log_file.write_text("start\n")
 
     outputs = []
+
     def fake_print(*args, **kwargs):
         text = " ".join(str(a) for a in args)
-        if "[Monitor]" in text:
-            outputs.append(text)
+        if text.startswith("\033"):
+            return
+        outputs.append(text)
 
     call_counts = {"sleep": 0, "stats": 0}
 
@@ -43,6 +45,10 @@ def test_monitor_pnl_refresh(monkeypatch, tmp_path):
     first_lines = outputs[0].splitlines()
     second_lines = outputs[1].splitlines()
 
-    assert first_lines[1:] == ["XBT/USDT -- 100.00 -- +0.00"]
-    assert second_lines[1:] == ["XBT/USDT -- 100.00 -- +10.00"]
+    assert first_lines[0] == "start"
+    assert first_lines[1] == "Balance: 0"
+    assert first_lines[2:] == ["XBT/USDT -- 100.00 -- +0.00"]
+    assert second_lines[0] == "start"
+    assert second_lines[1] == "Balance: 0"
+    assert second_lines[2:] == ["XBT/USDT -- 100.00 -- +10.00"]
     assert first_lines != second_lines
