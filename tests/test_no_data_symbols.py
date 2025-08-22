@@ -34,8 +34,13 @@ def test_symbols_with_no_data_skipped(monkeypatch):
     async def fake_get_filtered_symbols(ex, cfg):
         return [("FOO/USDC", 1.0)], []
 
+    class DummyResult(dict):
+        def __init__(self):
+            super().__init__({"1h": {"FOO/USDC": pd.DataFrame()}})
+            self.remaining = {}
+
     async def fake_update_multi(*args, **kwargs):
-        return {"1h": {"FOO/USDC": pd.DataFrame()}}
+        return DummyResult()
 
     monkeypatch.setattr(main, "get_filtered_symbols", fake_get_filtered_symbols)
     monkeypatch.setattr(main, "calc_atr", lambda df, period=14: pd.Series([0.01]))
@@ -47,13 +52,13 @@ def test_symbols_with_no_data_skipped(monkeypatch):
 
     monkeypatch.setattr(main, "update_regime_tf_cache", fake_update_regime)
     monkeypatch.setattr(main, "symbol_priority_queue", deque())
-    monkeypatch.setattr(main, "no_data_symbols", set())
+    monkeypatch.setattr(main, "pending_backfill", set())
 
     asyncio.run(main.fetch_candidates(ctx))
     assert "FOO/USDC" in ctx.current_batch
 
     asyncio.run(main.update_caches(ctx))
-    assert "FOO/USDC" in main.no_data_symbols
+    assert ("FOO/USDC", "1h") in main.pending_backfill
 
     asyncio.run(main.fetch_candidates(ctx))
     assert "FOO/USDC" not in ctx.current_batch
