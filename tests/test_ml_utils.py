@@ -16,6 +16,7 @@ def test_no_warning_when_models_available(monkeypatch, caplog):
         return True, ""
 
     monkeypatch.setattr(ml_utils, "init_ml_components", fake_init)
+    monkeypatch.setattr(ml_utils, "is_ml_available", lambda: (True, ""))
     monkeypatch.setattr(ml_utils, "_ml_checked", False)
     monkeypatch.setattr(
         ml_utils, "_LOGGER_ONCE", {k: False for k in ml_utils._LOGGER_ONCE}
@@ -30,7 +31,25 @@ def test_no_warning_when_models_available(monkeypatch, caplog):
 
     caplog.set_level(logging.INFO)
     assert ml_utils.init_ml_or_warn() is True
-    assert "Machine learning model not found" not in caplog.text
+    assert "Machine learning disabled" not in caplog.text
     caplog.clear()
     ml_utils.warn_ml_unavailable_once()
-    assert "Machine learning model not found" not in caplog.text
+    assert "Machine learning disabled" not in caplog.text
+
+
+def test_warn_ml_unavailable_logs_reason(monkeypatch, caplog):
+    monkeypatch.setattr(
+        ml_utils,
+        "is_ml_available",
+        lambda: (False, "Missing required ML packages: sklearn, joblib"),
+    )
+    monkeypatch.setattr(ml_utils, "_LOGGER_ONCE", {k: False for k in ml_utils._LOGGER_ONCE})
+    caplog.set_level(logging.INFO)
+    ml_utils.warn_ml_unavailable_once()
+    assert (
+        "Machine learning disabled: Missing required ML packages: sklearn, joblib"
+        in caplog.text
+    )
+    caplog.clear()
+    ml_utils.warn_ml_unavailable_once()
+    assert caplog.text == ""
