@@ -46,6 +46,7 @@ from crypto_bot.strategy import registry
 from .logger import LOG_DIR, setup_logger
 from .constants import NON_SOLANA_BASES
 from crypto_bot.data.locks import timeframe_lock, TF_LOCKS as _TF_LOCKS
+from .bootstrap_progress import update_bootstrap_progress
 
 try:  # optional dependency
     from .telegram import TelegramNotifier
@@ -2415,23 +2416,39 @@ async def update_multi_tf_ohlcv_cache(
     _ensure_strategy_warmup(config)
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    progress_state: dict[str, list[str]] = {}
+    progress_state: dict[str, dict[str, dict[str, int]]] = {}
+    required_candles: dict[str, dict[str, int]] = {}
+    fetched_candles: dict[str, dict[str, int]] = {}
     completed_pairs: set[tuple[str, str]] = set()
     if BOOTSTRAP_STATE_FILE.exists():
         try:
             with BOOTSTRAP_STATE_FILE.open() as f:
                 progress_state = json.load(f)
-            for tf, syms in progress_state.items():
-                for sym in syms:
-                    completed_pairs.add((sym, tf))
+            for tf, sym_map in progress_state.items():
+                for sym, stats in sym_map.items():
+                    req = int(stats.get("required", 0))
+                    fetched = int(stats.get("fetched", 0))
+                    required_candles.setdefault(tf, {})[sym] = req
+                    fetched_candles.setdefault(tf, {})[sym] = fetched
+                    if fetched >= req and req > 0:
+                        completed_pairs.add((sym, tf))
         except Exception:
             progress_state = {}
+            required_candles = {}
+            fetched_candles = {}
             completed_pairs = set()
 
-    def mark_completed(sym: str, tf: str) -> None:
-        if sym in progress_state.get(tf, []):
+    def mark_progress(sym: str, tf: str) -> None:
+        req = required_candles.get(tf, {}).get(sym)
+        if req is None:
             return
-        progress_state.setdefault(tf, []).append(sym)
+        df = cache.get(tf, {}).get(sym)
+        fetched = len(df) if df is not None else 0
+        fetched = int(min(fetched, req))
+        fetched_candles.setdefault(tf, {})[sym] = fetched
+        progress_state.setdefault(tf, {})[sym] = {"fetched": fetched, "required": int(req)}
+        if req > 0 and fetched >= req:
+            completed_pairs.add((sym, tf))
         with BOOTSTRAP_STATE_FILE.open("w") as f:
             json.dump(progress_state, f)
 
@@ -2708,6 +2725,14 @@ async def update_multi_tf_ohlcv_cache(
                 cex_symbols = [s for s in priority_syms if s in cex_symbols] + [s for s in cex_symbols if s not in prio_set]
                 dex_symbols = [s for s in priority_syms if s in dex_symbols] + [s for s in dex_symbols if s not in prio_set]
 
+            # Track required candles and initial progress for each symbol
+            required_candles.setdefault(tf, {})
+            fetched_candles.setdefault(tf, {})
+            for sym in cex_symbols + dex_symbols:
+                sym_req = min(tf_limit, dynamic_limits.get(sym, tf_limit))
+                required_candles[tf][sym] = sym_req
+                mark_progress(sym, tf)
+
             total_syms = len(cex_symbols) + len(dex_symbols)
             completed = 0
             recent_times: Deque[float] = deque(maxlen=50)
@@ -2719,6 +2744,13 @@ async def update_multi_tf_ohlcv_cache(
                 nonlocal completed, processed_syms, start_fetch
                 if total_syms <= 0:
                     return
+                fetched_total = sum(fetched_candles.get(tf, {}).values())
+                required_total = sum(required_candles.get(tf, {}).values())
+                pct_candles = (
+                    fetched_total / required_total * 100
+                    if required_total
+                    else 0.0
+                )
                 if ts is not None:
                     completed += 1
                     recent_times.append(ts)
@@ -2731,12 +2763,16 @@ async def update_multi_tf_ohlcv_cache(
                     eta = remaining / rate if rate > 0 else float("inf")
                     eta_str = f"{eta:.1f}s" if eta != float("inf") else "?"
                     logger.info(
-                        "Progress[%s] %d/%d (%.2f req/s, ETA %s)",
+                        "Progress[%s] %d/%d (%.2f req/s, ETA %s, %.1f%%)",
                         tf,
                         completed,
                         total_syms,
                         rate,
                         eta_str,
+                        pct_candles,
+                    )
+                    update_bootstrap_progress(
+                        {tf: {"fetched": fetched_total, "required": required_total}}
                     )
                     processed_syms = 0
                     start_fetch = time.perf_counter()
@@ -2747,13 +2783,17 @@ async def update_multi_tf_ohlcv_cache(
                     eta = (total_syms - processed_syms) / rate if rate > 0 else 0
                     eta_str = str(timedelta(seconds=int(eta))) if rate > 0 else "?"
                     logger.info(
-                        "%s: %d/%d fetched (%.0f%%), avg %.1f req/s, ETA %s",
+                        "%s: %d/%d fetched (%.0f%%), avg %.1f req/s, ETA %s, %.1f%%",
                         tf,
                         processed_syms,
                         total_syms,
                         pct,
                         rate,
                         eta_str,
+                        pct_candles,
+                    )
+                    update_bootstrap_progress(
+                        {tf: {"fetched": fetched_total, "required": required_total}}
                     )
 
             if cex_symbols:
@@ -2878,8 +2918,7 @@ async def update_multi_tf_ohlcv_cache(
                             priority_symbols=[s for s in priority_syms if s in syms],
                         )
                         for s in syms:
-                            if s in tf_cache and not getattr(tf_cache.get(s), "empty", True):
-                                mark_completed(s, tf)
+                            mark_progress(s, tf)
                         done_time = time.perf_counter()
                         for _ in syms:
                             log_progress(done_time)
@@ -3055,7 +3094,7 @@ async def update_multi_tf_ohlcv_cache(
                             for tf_rest in tfs[idx + 1 :]:
                                 remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
                             return MultiTFUpdateResult(cache, remaining)
-                        mark_completed(sym, tf)
+                        mark_progress(sym, tf)
                         processed_syms += 1
                         log_progress()
 
@@ -3204,6 +3243,9 @@ async def update_multi_tf_ohlcv_cache(
                         for tf_rest in tfs[idx + 1 :]:
                             remaining[tf_rest] = list(tf_symbol_map.get(tf_rest, []))
                         return MultiTFUpdateResult(cache, remaining)
+                    mark_progress(sym, tf)
+                    processed_syms += 1
+                    log_progress()
             cache[tf] = tf_cache
             logger.info("Completed OHLCV update for timeframe %s", tf)
 
