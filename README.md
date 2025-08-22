@@ -427,6 +427,9 @@ telegram:
   status_updates: true
   bootstrap_updates: false
   balance_updates: false
+  connect_timeout: 10
+  read_timeout: 20
+  connection_pool_size: 8
   mempool_monitor:
     enabled: false
     suspicious_fee_threshold: 100
@@ -814,6 +817,9 @@ flash_crash_scalper:
   control startup messages, bootstrap progress and balance alerts.
 * **telegram.message_interval** – minimum seconds between notifications.
 * **telegram.max_messages_per_minute** – maximum Telegram sends per minute.
+* **telegram.connect_timeout**, **telegram.read_timeout**,
+  **telegram.connection_pool_size** – HTTP timeouts and connection pool
+  size for Telegram API requests.
 * **balance_change_threshold** – delta for Telegram balance alerts.
 * **balance_poll_mod** – how often to poll balance between trades.
 * **tax_tracking** – CSV export of executed trades.

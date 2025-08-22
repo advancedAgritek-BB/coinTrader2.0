@@ -133,6 +133,9 @@ telegram:
   chat_id: YOUR_CHAT_ID
   status_updates: true
   bootstrap_updates: false
+  connect_timeout: 10.0
+  read_timeout: 20.0
+  connection_pool_size: 8
 
 # === volatility filter ===
 volatility_filter:

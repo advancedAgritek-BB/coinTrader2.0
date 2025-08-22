@@ -122,6 +122,7 @@ sniper_trade = None  # type: ignore
 load_token_mints = None  # type: ignore
 set_token_mints = None  # type: ignore
 TelegramBotUI = None  # type: ignore
+TelegramNotifier = types.SimpleNamespace(from_config=None)
 start_runner = None  # type: ignore
 sniper_run = None  # type: ignore
 load_or_create = None  # type: ignore
@@ -3716,6 +3717,7 @@ async def _main_impl() -> MainResult:
     )
     print("Bot running. Type 'stop' to pause, 'start' to resume, 'quit' to exit.")
 
+    telegram_cfg = config.get("telegram", {})
     telegram_bot = (
         TelegramBotUI(
             notifier,
@@ -3724,7 +3726,10 @@ async def _main_impl() -> MainResult:
             rotator,
             exchange,
             user.get("wallet_address", ""),
-            command_cooldown=config.get("telegram", {}).get("command_cooldown", 5),
+            command_cooldown=telegram_cfg.get("command_cooldown", 5),
+            connect_timeout=telegram_cfg.get("connect_timeout", 10.0),
+            read_timeout=telegram_cfg.get("read_timeout", 20.0),
+            connection_pool_size=telegram_cfg.get("connection_pool_size", 8),
         )
         if notifier.enabled and notifier.token and notifier.chat_id
         else None
