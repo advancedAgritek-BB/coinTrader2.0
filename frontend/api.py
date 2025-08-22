@@ -9,6 +9,7 @@ from crypto_bot.utils.logger import LOG_DIR
 import yaml
 from pathlib import Path
 from wallet import Wallet
+from crypto_bot.config import short_selling_enabled
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
     from crypto_bot.bot_controller import TradingBotController
@@ -32,7 +33,7 @@ def get_controller() -> "TradingBotController":
             wallet = Wallet(
                 cfg.get("start_balance", 1000.0),
                 exec_cfg.get("max_positions", cfg.get("max_open_trades", 1)),
-                cfg.get("allow_short", False),
+                short_selling_enabled(cfg),
                 stake_usd=exec_cfg.get("stake_usd"),
                 min_price=exec_cfg.get("min_price", 0.0),
                 min_notional=exec_cfg.get("min_notional", 0.0),

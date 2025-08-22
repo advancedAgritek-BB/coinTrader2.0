@@ -53,3 +53,37 @@ class Config:
 cfg = Config()
 
 
+def short_selling_enabled(cfg_dict: dict, default: bool = False) -> bool:
+    """Return True if short selling is enabled in the configuration.
+
+    This centralises backward-compatibility handling for legacy keys. New
+    configurations should define ``trading.short_selling``. Older configs may
+    use ``allow_short`` or ``allow_shorting`` either at the top level or within
+    ``trading``. This helper resolves the setting with the following
+    precedence:
+
+    1. ``trading.short_selling``
+    2. ``trading.allow_shorting``
+    3. ``allow_short`` (top level)
+    4. ``allow_shorting`` (top level)
+
+    Parameters
+    ----------
+    cfg_dict:
+        Configuration dictionary to inspect.
+    default:
+        Value to return if none of the known keys are present.
+    """
+
+    trading = cfg_dict.get("trading", {}) or {}
+    if "short_selling" in trading:
+        return bool(trading["short_selling"])
+    if "allow_shorting" in trading:
+        return bool(trading["allow_shorting"])
+    if "allow_short" in cfg_dict:
+        return bool(cfg_dict["allow_short"])
+    if "allow_shorting" in cfg_dict:
+        return bool(cfg_dict["allow_shorting"])
+    return bool(default)
+
+

@@ -9,6 +9,7 @@ import ta
 from crypto_bot.utils import stats
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.market_loader import get_progress_eta
+from crypto_bot.config import short_selling_enabled
 
 NAME = "breakout"
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ def generate_signal(
     volume_z_min = float(cfg.get("volume_z_min", 1.0))
     atr_len = int(cfg.get("atr_len", keltner_len))
     max_spread_bp = float(cfg.get("max_spread_bp", 5.0))
-    allow_short = bool(cfg.get("allow_short", False))
+    allow_short = short_selling_enabled(cfg_all)
     score_threshold = float(cfg.get("score_threshold", 0.0))
     lookback = max(donchian_len, keltner_len, bbw_lookback, vol_window, atr_len)
     progress_logging = bool(cfg_all.get("ohlcv", {}).get("progress_logging", False))
