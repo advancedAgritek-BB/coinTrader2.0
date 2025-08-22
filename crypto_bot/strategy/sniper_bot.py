@@ -6,7 +6,7 @@ import pandas as pd
 from crypto_bot.utils import volatility
 from crypto_bot.utils.pair_cache import load_liquid_pairs
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
-from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
+from crypto_bot.utils.ml_utils import init_ml_or_warn
 NAME = "sniper_bot"
 DEFAULT_PAIRS = ["BTC/USD", "ETH/USD"]
 ALLOWED_PAIRS = load_liquid_pairs() or DEFAULT_PAIRS
@@ -17,14 +17,9 @@ score_logger = setup_logger(
     "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
 )
 
-try:  # pragma: no cover - optional dependency
-    from coinTrader_Trainer.ml_trainer import load_model
-    ML_AVAILABLE = True
-except Exception:  # pragma: no cover - trainer missing
-    ML_AVAILABLE = False
-    warn_ml_unavailable_once()
-
+ML_AVAILABLE = init_ml_or_warn()
 if ML_AVAILABLE:
+    from coinTrader_Trainer.ml_trainer import load_model
     MODEL = load_model("sniper_bot")
 else:  # pragma: no cover - fallback
     MODEL = None

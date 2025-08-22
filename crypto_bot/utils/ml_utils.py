@@ -24,12 +24,14 @@ _LOGGER_ONCE = {
 
 def warn_ml_unavailable_once() -> None:
     """Log a one-time notice when ML components are missing."""
-    if not _LOGGER_ONCE["ml_unavailable"]:
+    if _LOGGER_ONCE["ml_unavailable"]:
+        return
+    available, _ = init_ml_components()
+    if not available:
         logger.info(
-            "Machine learning model not found; running without ML features."
+            "Machine learning model not found; running without ML features.",
         )
         _LOGGER_ONCE["ml_unavailable"] = True
-
 
 def _check_packages(pkgs: Iterable[str]) -> list[str]:
     """Return a list of packages from ``pkgs`` that cannot be imported."""
@@ -159,10 +161,26 @@ def init_ml_components() -> tuple[bool, str]:
     return ML_AVAILABLE, ML_UNAVAILABLE_REASON
 
 
+def init_ml_or_warn() -> bool:
+    """Attempt to initialize ML components; warn once if unavailable."""
+    available, _ = init_ml_components()
+    if not available:
+        warn_ml_unavailable_once()
+        return False
+    try:
+        import coinTrader_Trainer.ml_trainer  # type: ignore  # noqa: F401
+    except Exception:
+        warn_ml_unavailable_once()
+        return False
+    return True
+
+
 __all__ = [
     "is_ml_available",
     "ML_AVAILABLE",
     "ML_UNAVAILABLE_REASON",
     "warn_ml_unavailable_once",
     "init_ml_components",
+    "init_ml_or_warn",
 ]
+
