@@ -140,7 +140,9 @@ def get_recent_win_rate(
     -------
     float
         Win rate over the evaluated trades. Newer trades count more when
-        ``half_life`` is provided.
+        ``half_life`` is provided. If the log file is missing or contains no
+        trades, a default win rate of ``0.6`` is returned as a conservative
+        fallback.
     """
     file = Path(path)
     if not file.exists():
