@@ -17,7 +17,11 @@ _RETRIES = 6
 
 class PumpFunClient:
     def __init__(self) -> None:
-        self._c = httpx.AsyncClient(timeout=_TIMEOUT, headers={"User-Agent": "coinTrader/pump"})
+        self._c = httpx.AsyncClient(
+            limits=httpx.Limits(max_connections=100, max_keepalive_connections=50),
+            timeout=_TIMEOUT,
+            headers={"User-Agent": "coinTrader/pump"},
+        )
 
     async def aclose(self) -> None:
         try:
