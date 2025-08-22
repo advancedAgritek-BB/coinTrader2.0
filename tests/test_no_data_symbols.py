@@ -22,7 +22,12 @@ def test_symbols_with_no_data_skipped(monkeypatch):
         positions={},
         df_cache={},
         regime_cache={},
-        config={"timeframe": "1h", "symbols": ["FOO/USDC"], "symbol_batch_size": 5},
+        config={
+            "timeframe": "1h",
+            "symbols": ["FOO/USDC"],
+            "symbol_batch_size": 5,
+            "abort_on_empty_universe": False,
+        },
     )
     ctx.exchange = object()
 

@@ -1496,6 +1496,14 @@ async def fetch_candidates(ctx: BotContext) -> None:
     ctx.active_universe = [s for s, _ in symbols]
     ctx.resolved_mode = resolved_mode
 
+    if not ctx.active_universe:
+        msg = (
+            "Active universe is empty; configure 'symbols' or adjust filters"
+        )
+        logger.warning(msg)
+        if ctx.config.get("abort_on_empty_universe", True):
+            raise RuntimeError(msg)
+
     logger.info(
         "Symbol summary: total=%d selected=%d filtered=%d first=%s",
         total_candidates,
