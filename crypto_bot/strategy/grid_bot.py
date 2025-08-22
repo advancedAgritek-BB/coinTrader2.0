@@ -17,7 +17,7 @@ from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.volatility import atr_percent
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.volatility_filter import calc_atr
-from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
+from crypto_bot.utils.ml_utils import init_ml_or_warn
 
 DYNAMIC_THRESHOLD = 1.5
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
@@ -26,11 +26,7 @@ score_logger = setup_logger(
     "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
 )
 
-try:  # pragma: no cover - optional dependency
-    from coinTrader_Trainer.ml_trainer import load_model
-    ML_AVAILABLE = True
-except Exception:  # pragma: no cover - trainer missing
-    ML_AVAILABLE = False
+ML_AVAILABLE = init_ml_or_warn()
 
 # ``micro_scalp_bot`` is imported lazily inside ``generate_signal`` to avoid
 # issues if the module has optional dependencies or is otherwise unavailable
@@ -40,10 +36,10 @@ from crypto_bot.execution.solana_mempool import SolanaMempoolMonitor
 from crypto_bot.utils.regime_pnl_tracker import get_recent_win_rate
 
 if ML_AVAILABLE:
+    from coinTrader_Trainer.ml_trainer import load_model
     MODEL = load_model("grid_bot")
 else:  # pragma: no cover - fallback
     MODEL = None
-    warn_ml_unavailable_once()
 
 
 @dataclass

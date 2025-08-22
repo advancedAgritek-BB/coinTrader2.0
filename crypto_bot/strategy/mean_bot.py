@@ -23,7 +23,7 @@ except Exception:  # pragma: no cover - fallback
 from ta.trend import ADXIndicator
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
-from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
+from crypto_bot.utils.ml_utils import init_ml_or_warn
 
 from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
@@ -35,17 +35,12 @@ score_logger = setup_logger(
     "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
 )
 
-try:  # pragma: no cover - optional dependency
-    from coinTrader_Trainer.ml_trainer import load_model
-    ML_AVAILABLE = True
-except Exception:  # pragma: no cover - trainer missing
-    ML_AVAILABLE = False
-
+ML_AVAILABLE = init_ml_or_warn()
 if ML_AVAILABLE:
+    from coinTrader_Trainer.ml_trainer import load_model
     MODEL = load_model("mean_bot")
 else:  # pragma: no cover - fallback
     MODEL = None
-    warn_ml_unavailable_once()
 
 
 def generate_signal(

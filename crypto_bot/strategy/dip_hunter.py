@@ -9,7 +9,7 @@ from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils import stats
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 from crypto_bot.cooldown_manager import cooldown, in_cooldown
-from crypto_bot.utils.ml_utils import warn_ml_unavailable_once
+from crypto_bot.utils.ml_utils import init_ml_or_warn
 
 NAME = "dip_hunter"
 logger = setup_logger(__name__, LOG_DIR / "bot.log")
@@ -18,14 +18,9 @@ score_logger = setup_logger(
     "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
 )
 
-try:  # Optional LightGBM integration
-    from coinTrader_Trainer.ml_trainer import load_model
-    ML_AVAILABLE = True
-except Exception:  # pragma: no cover - trainer missing
-    ML_AVAILABLE = False
-    warn_ml_unavailable_once()
-
+ML_AVAILABLE = init_ml_or_warn()
 if ML_AVAILABLE:
+    from coinTrader_Trainer.ml_trainer import load_model
     MODEL = load_model("dip_hunter")
 else:  # pragma: no cover - fallback
     MODEL = None
