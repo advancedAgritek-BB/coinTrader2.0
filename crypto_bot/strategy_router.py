@@ -803,84 +803,63 @@ def route(
 
     # === FAST-PATH FOR STRONG SIGNALS ===
     fp = (
-        cfg.raw.get('strategy_router', {}).get('fast_path', {})
-        if hasattr(cfg, 'raw')
-        else cfg.get('strategy_router', {}).get('fast_path', {})
+        cfg.raw.get("strategy_router", {}).get("fast_path", {})
+        if hasattr(cfg, "raw")
+        else cfg.get("strategy_router", {}).get("fast_path", {})
     )
+    if not fp.get("enabled", False):
+        return _post_fastpath()
+
+    window = 20
+    adx_thr = float(fp.get("adx_threshold", 25))
+    bbw_pct_max = float(fp.get("bbw_pct_max", 5))
+    vol_z_min = float(fp.get("vol_z_min", -1.0))
+    fp_min_score = float(fp.get("min_score", 0))
+
+    def _fast_score(fn: Callable[[pd.DataFrame], Tuple[float, str]] | Callable[[pd.DataFrame], float]) -> float:
+        try:
+            res = fn(df, cfg)
+        except TypeError:
+            res = fn(df)
+        raw = float(res[0]) if isinstance(res, tuple) else float(res)
+        return abs(raw)
+
     try:
-        # 1) breakout squeeze detected by Bollinger band z-score and
-        #    concurrent volume spike
         from ta.volatility import BollingerBands
-
-        window = int(fp.get('breakout_squeeze_window', 15))
-        bw_z_thr = float(fp.get('breakout_bandwidth_zscore', -0.84))
-        vol_mult = float(fp.get('breakout_volume_multiplier', 4))
-        max_bw = float(fp.get('breakout_max_bandwidth', 0.04))
-
-        bb = BollingerBands(df['close'], window=window)
-        wband_series = bb.bollinger_wband()
-        wband = wband_series.iloc[-1]
-        w_mean = wband_series.rolling(window).mean().iloc[-1]
-        w_std = wband_series.rolling(window).std().iloc[-1]
-        z = (wband - w_mean) / w_std if w_std > 0 else float('inf')
-        vol_mean = df['volume'].rolling(window).mean().iloc[-1]
-        if z < bw_z_thr and df['volume'].iloc[-1] > vol_mean * vol_mult:
-            logger.info(
-                'FAST-PATH: breakout_bot via bandwidth z-score and volume spike',
-            )
-            return _wrap(breakout_bot.generate_signal)
-        z_series = (
-            wband_series - wband_series.rolling(window).mean()
-        ) / wband_series.rolling(window).std()
-        vol_ma = df['volume'].rolling(window).mean()
-
-        if (
-            z_series.iloc[-1] < -0.84
-            and wband < max_bw
-            and df['volume'].iloc[-1] > vol_ma.iloc[-1] * vol_mult
-        ):
-            logger.info(
-                'FAST-PATH: breakout_bot via BB squeeze z-score + volume spike',
-            )
-            return _wrap(breakout_bot.generate_signal)
-
-        # 2) ultra-strong trend by ADX
         from ta.trend import ADXIndicator
+        from crypto_bot.utils import stats
 
-        adx_thr = float(fp.get('trend_adx_threshold', 25))
+        bb = BollingerBands(df["close"], window=window)
+        wband_pct = float(bb.bollinger_wband().iloc[-1]) * 100
+        vol_z = stats.zscore(df["volume"], lookback=window)
+        vol_z_val = float(vol_z.iloc[-1]) if not vol_z.empty else 0.0
+
+        if wband_pct <= bbw_pct_max and vol_z_val >= vol_z_min:
+            if _fast_score(breakout_bot.generate_signal) >= fp_min_score:
+                logger.info(
+                    "FAST-PATH: breakout_bot via BBW %.2f%% and volume z %.2f",
+                    wband_pct,
+                    vol_z_val,
+                )
+                return _wrap(breakout_bot.generate_signal)
+
         if len(df) < window + 1:
             logger.debug(
-                'FAST-PATH: skipping ADX check; need at least %d rows (got %d)',
+                "FAST-PATH: skipping ADX check; need at least %d rows (got %d)",
                 window + 1,
                 len(df),
             )
         else:
             adx_val = (
-                ADXIndicator(df['high'], df['low'], df['close'], window=window)
+                ADXIndicator(df["high"], df["low"], df["close"], window=window)
                 .adx()
                 .iloc[-1]
             )
-            if adx_val > adx_thr:
-                logger.info('FAST-PATH: trend_bot via ADX > %.1f', adx_thr)
+            if adx_val >= adx_thr and _fast_score(trend_bot.generate_signal) >= fp_min_score:
+                logger.info("FAST-PATH: trend_bot via ADX %.2f", adx_val)
                 return _wrap(trend_bot.generate_signal)
-
-        # 3) breakdown pattern with heavy volume
-        from crypto_bot.regime.pattern_detector import detect_patterns
-
-        bd_win = int(fp.get('breakdown_window', 20))
-        bd_mult = float(fp.get('breakdown_volume_multiplier', 4))
-        patterns = detect_patterns(df)
-        if patterns.get('breakdown', 0) >= 1.0:
-            vol_avg = df['volume'].rolling(bd_win).mean().iloc[-1]
-            if vol_avg > 0 and df['volume'].iloc[-1] > vol_avg * bd_mult:
-                logger.info(
-                    'FAST-PATH: sniper bot via breakdown pattern + volume spike',
-                )
-                if mode == 'onchain':
-                    return _wrap(sniper_solana.generate_signal)
-                return _wrap(sniper_bot.generate_signal)
     except Exception:  # pragma: no cover - safety
         pass
-    # === end fast-path ===
 
+    # === end fast-path ===
     return _post_fastpath()

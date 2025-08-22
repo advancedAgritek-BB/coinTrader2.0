@@ -639,12 +639,11 @@ strategy_router:
   bounce_timeframe: 5m
   breakout_timeframe: 15m
   fast_path:
-    breakout_max_bandwidth: 0.03
-    breakout_squeeze_window: 10
-    breakout_volume_multiplier: 3
-    trend_adx_threshold: 20
-    breakdown_window: 20
-    breakdown_volume_multiplier: 3
+    enabled: true
+    adx_threshold: 25
+    bbw_pct_max: 5
+    vol_z_min: -1.0
+    min_score: 10
   mean_reverting_timeframe: 1h
   flash_crash_timeframe: 1m
   min_confidence: 0.0005

@@ -145,7 +145,11 @@ def test_route_skips_adx_fast_path_for_small_df(caplog):
     cfg = {
         "strategy_router": {
             "regimes": {"trending": ["trend_bot"]},
-            "fast_path": {"trend_adx_threshold": 0},
+            "fast_path": {
+                "enabled": True,
+                "adx_threshold": 0,
+                "min_score": 0,
+            },
         }
     }
     df = pd.DataFrame(
@@ -330,39 +334,43 @@ def make_breakdown_df() -> pd.DataFrame:
 
 
 def test_fastpath_breakout(tmp_path, monkeypatch):
-    cfg = {"strategy_router": {"fast_path": {
-        "breakout_squeeze_window": 5,
-        "breakout_bandwidth_zscore": -0.84,
-        "breakout_volume_multiplier": 2,
-        "trend_adx_threshold": 1000
-    }}, "regime": {"sideways": ["grid_bot"]}}
+    cfg = {
+        "strategy_router": {
+            "fast_path": {
+                "enabled": True,
+                "adx_threshold": 1000,
+                "bbw_pct_max": 10,
+                "vol_z_min": -1.0,
+                "min_score": 0,
+            },
+            "regimes": {"sideways": ["grid_bot"]},
+        }
+    }
 
-    close = list(range(10))
-    volume = [1] * 9 + [10]
+    close = [1] * 20
+    volume = [1] * 19 + [10]
     df = make_df(close, volume)
     fn = route("sideways", "cex", cfg, None, df)
     assert fn.__name__ == breakout_bot.generate_signal.__name__
 
 
 def test_fastpath_trend(tmp_path):
-    cfg = {"strategy_router": {"fast_path": {
-        "breakout_squeeze_window": 3,
-        "breakout_max_bandwidth": 0,
-        "breakout_volume_multiplier": 100,
-        "trend_adx_threshold": 5
-    }}, "regime": {"trending": ["trend_bot"]}}
-    # create rising series so ADX > threshold
-    vals = list(range(10))
-    df = make_df(vals, [1]*10)
+    cfg = {
+        "strategy_router": {
+            "fast_path": {
+                "enabled": True,
+                "adx_threshold": 5,
+                "bbw_pct_max": 0,
+                "vol_z_min": 10,
+                "min_score": 0,
+            },
+            "regimes": {"trending": ["trend_bot"]},
+        }
+    }
+    vals = list(range(20))
+    df = make_df(vals, [1] * 20)
     fn = route("trending", "cex", cfg, None, df)
     assert fn.__name__ == trend_bot.generate_signal.__name__
-
-
-def test_fastpath_breakdown_sniper():
-    cfg = {"strategy_router": {"fast_path": {"breakdown_window": 5, "breakdown_volume_multiplier": 2}}}
-    df = make_breakdown_df()
-    fn = route("sideways", "cex", cfg, None, df)
-    assert fn.__name__ == sniper_bot.generate_signal.__name__
 
 
 def test_onchain_solana_route():
