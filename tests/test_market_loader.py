@@ -1168,7 +1168,10 @@ def test_update_multi_tf_ohlcv_cache_resume(tmp_path, monkeypatch):
         )
     )
     data = json.loads(state_file.read_text())
-    assert set(data.get("1h", [])) == {"BTC/USD", "ETH/USD"}
+    assert set(data.get("1h", {}).keys()) == {"BTC/USD", "ETH/USD"}
+    for sym in ("BTC/USD", "ETH/USD"):
+        assert data["1h"][sym]["fetched"] == 1
+        assert data["1h"][sym]["required"] == 1
     assert set(calls) == {"BTC/USD", "ETH/USD"}
 
     calls.clear()
