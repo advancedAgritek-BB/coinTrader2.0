@@ -26,6 +26,7 @@ def load_funcs():
         'pd': pd,
         'np': np,
         'time': __import__('time'),
+        'os': __import__('os'),
         'logger': logging.getLogger('test'),
         'pipeline_logger': logging.getLogger('pipeline'),
         'deque': deque,
@@ -45,7 +46,8 @@ def load_funcs():
         'enqueue_solana_tokens': lambda tokens, mark_new=False: None,
         'recent_solana_set': set(),
         'recent_solana_tokens': deque(),
-        'no_data_symbols': set(),
+        'pending_backfill': set(),
+        '_prune_bootstrap_tasks': lambda: None,
         'symbol_cache_guard': lambda: type(
             'G',
             (),
@@ -54,8 +56,7 @@ def load_funcs():
                 '__aexit__': lambda self, exc_type, exc, tb: asyncio.sleep(0),
             },
         )(),
-        '_update_caches_impl': lambda ctx: asyncio.sleep(0),
-        '_analyse_batch_impl': lambda ctx: asyncio.sleep(0),
+        '_update_caches_impl': lambda ctx, chunk_size=None: asyncio.sleep(0),
         'TOTAL_ANALYSES': 0,
         'UNKNOWN_COUNT': 0,
     }
@@ -69,9 +70,14 @@ def load_funcs():
         'volume': [1, 1],
     })
 
+    class DummyResult(dict):
+        def __init__(self, batch):
+            super().__init__({'1h': {sym: preload_df for sym in batch}})
+            self.remaining = {}
+
     async def fake_update_multi(*args, **kwargs):
         batch = args[2]
-        return {'1h': {sym: preload_df for sym in batch}}
+        return DummyResult(batch)
 
     async def fake_update_regime(*args, **kwargs):
         return {}
@@ -82,6 +88,11 @@ def load_funcs():
         return {'symbol': sym, 'regime': 'bull', 'score': 1.0}
 
     ns['analyze_symbol'] = fake_analyze_symbol
+
+    async def fake_analyse_batch_impl(ctx):
+        ctx.analysis_results = [{'symbol': s} for s in ctx.current_batch]
+
+    ns['_analyse_batch_impl'] = fake_analyse_batch_impl
 
     for name, code in funcs.items():
         exec(code, ns)

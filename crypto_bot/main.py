@@ -425,8 +425,8 @@ def _prune_bootstrap_tasks() -> None:
 # Queue of symbols awaiting evaluation across loops
 symbol_priority_queue: deque[str] = deque()
 
-# Symbols that produced no OHLCV data and should be skipped until refreshed
-no_data_symbols: set[str] = set()
+# Track symbols/timeframes still missing OHLCV data
+pending_backfill: set[tuple[str, str]] = set()
 
 # Cache of recently queued Solana tokens to avoid duplicates
 SOLANA_CACHE_SIZE = 50
@@ -1352,13 +1352,12 @@ async def fetch_candidates(ctx: BotContext) -> None:
     _prune_bootstrap_tasks()
 
     if not ctx.df_cache:
-        no_data_symbols.clear()
+        pending_backfill.clear()
     else:
-        timeframe = ctx.config.get("timeframe", "1h")
-        for sym in list(no_data_symbols):
-            df = ctx.df_cache.get(timeframe, {}).get(sym)
+        for sym, tf in list(pending_backfill):
+            df = ctx.df_cache.get(tf, {}).get(sym)
             if isinstance(df, pd.DataFrame) and not df.empty:
-                no_data_symbols.discard(sym)
+                pending_backfill.discard((sym, tf))
 
     sf = ctx.config.setdefault("symbol_filter", {})
 
@@ -1399,12 +1398,13 @@ async def fetch_candidates(ctx: BotContext) -> None:
         if pump:
             sf["min_volume_usd"] = orig_min_volume
             sf["volume_percentile"] = orig_volume_pct
-    symbols = [(s, sc) for s, sc in symbols if s not in no_data_symbols]
+    pending_syms = {s for s, _ in pending_backfill}
+    symbols = [(s, sc) for s, sc in symbols if s not in pending_syms]
     allowed_syms = set(ctx.config.get("symbols", []))
     onchain_syms = [
         s
         for s in ctx.config.get("onchain_symbols", [])
-        if s not in no_data_symbols and s in allowed_syms
+        if s not in pending_syms and s in allowed_syms
     ]
     cex_candidates = list(symbols)
     onchain_candidates = [(s, 0.0) for s in onchain_syms]
@@ -1488,7 +1488,7 @@ async def fetch_candidates(ctx: BotContext) -> None:
             logger.error("Solana scanner failed: %s", exc)
 
     total_candidates = len(symbols)
-    symbols = [(s, sc) for s, sc in symbols if s not in no_data_symbols]
+    symbols = [(s, sc) for s, sc in symbols if s not in pending_syms]
     allowed_syms = set(ctx.config.get("symbols", []))
     allowed_syms.update(benchmark_symbols or [])
     symbols = [(s, sc) for s, sc in symbols if s in allowed_syms]
@@ -1801,13 +1801,53 @@ async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) ->
         key=lambda t: timeframe_seconds(None, t),
     )
 
+    # Remove any attempted pairs from the pending set
+    attempted_pairs = {(sym, tf) for sym in batch for tf in tfs}
+    pending_backfill.difference_update(attempted_pairs)
+
+    async def _retry_remaining(remaining: dict[str, list[str]]) -> None:
+        pairs = {(s, tf) for tf, syms in remaining.items() for s in syms}
+        pending_backfill.update(pairs)
+        prev_pairs = pairs
+        while prev_pairs:
+            pending_symbols = sorted({s for s, _ in prev_pairs})
+            pending_tfs = list({tf for _, tf in prev_pairs})
+            pending_backfill.difference_update(prev_pairs)
+            res = await update_multi_tf_ohlcv_cache(
+                ctx.exchange,
+                ctx.df_cache,
+                pending_symbols,
+                {**ctx.config, "timeframes": pending_tfs},
+                limit=limit,
+                start_since=start_since,
+                use_websocket=ctx.config.get("use_websocket", False),
+                force_websocket_history=ctx.config.get(
+                    "force_websocket_history", False
+                ),
+                max_concurrent=max_concurrent,
+                notifier=(
+                    ctx.notifier
+                    if ctx.config.get("telegram", {}).get("status_updates", True)
+                    else None
+                ),
+                priority_queue=symbol_priority_queue,
+                batch_size=ohlcv_batch_size,
+                timeout=bootstrap_timeout,
+            )
+            ctx.df_cache = res
+            new_pairs = {(s, tf) for tf, syms in res.remaining.items() for s in syms}
+            pending_backfill.update(new_pairs)
+            if new_pairs == prev_pairs:
+                break
+            prev_pairs = new_pairs
+
     bootstrap_timeout = float(ctx.config.get("bootstrap_timeout_minutes", 10) or 10) * 60
 
     async with OHLCV_LOCK:
         try:
             for tf in tfs:
                 logger.info("Starting OHLCV update for timeframe %s", tf)
-            ctx.df_cache = await update_multi_tf_ohlcv_cache(
+            res = await update_multi_tf_ohlcv_cache(
                 ctx.exchange,
                 ctx.df_cache,
                 batch,
@@ -1827,11 +1867,13 @@ async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) ->
                 batch_size=ohlcv_batch_size,
                 timeout=bootstrap_timeout,
             )
+            ctx.df_cache = res
+            await _retry_remaining(res.remaining)
         except Exception as exc:
             logger.warning("WS OHLCV failed: %s - falling back to REST", exc)
             for tf in tfs:
                 logger.info("Starting OHLCV update for timeframe %s", tf)
-            ctx.df_cache = await update_multi_tf_ohlcv_cache(
+            res = await update_multi_tf_ohlcv_cache(
                 ctx.exchange,
                 ctx.df_cache,
                 batch,
@@ -1852,6 +1894,8 @@ async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) ->
                 batch_size=ohlcv_batch_size,
                 timeout=bootstrap_timeout,
             )
+            ctx.df_cache = res
+            await _retry_remaining(res.remaining)
         ctx.regime_cache = await update_regime_tf_cache(
             ctx.exchange,
             ctx.regime_cache,
@@ -1883,9 +1927,9 @@ async def _update_caches_impl(ctx: BotContext, chunk_size: int | None = None) ->
                     symbol_priority_queue.remove(sym)
                 except ValueError:
                     pass
-            no_data_symbols.add(sym)
+            pending_backfill.add((sym, timeframe))
             continue
-        no_data_symbols.discard(sym)
+        pending_backfill.discard((sym, timeframe))
         filtered_batch.append(sym)
 
     ctx.current_batch = filtered_batch
