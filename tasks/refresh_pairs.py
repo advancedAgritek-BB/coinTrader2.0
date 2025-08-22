@@ -71,9 +71,9 @@ def get_exchange(config: dict) -> ccxt.Exchange:
     return exchange
 
 
-async def _fetch_tickers(exchange: ccxt.Exchange) -> dict:
+async def _fetch_tickers(exchange: ccxt.Exchange, symbols: list[str] | None = None) -> dict:
     """Fetch tickers with a 10 second timeout."""
-    return await asyncio.wait_for(exchange.fetch_tickers(), 10)
+    return await asyncio.wait_for(exchange.fetch_tickers(symbols), 10)
 
 
 async def _close_exchange(exchange: ccxt.Exchange) -> None:
@@ -193,30 +193,48 @@ async def refresh_pairs_async(
     sec_name = config.get("refresh_pairs", {}).get("secondary_exchange")
     secondary = get_exchange({"exchange": sec_name}) if sec_name else None
     try:
-        tasks = [_fetch_tickers(exchange)]
+        markets = await exchange.load_markets()
         if secondary:
-            tasks.append(_fetch_tickers(secondary))
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        primary_res = results[0]
-        if isinstance(primary_res, Exception):
-            raise primary_res
-        tickers = primary_res
-        if not isinstance(tickers, dict):
-            raise TypeError("fetch_tickers returned invalid data")
-        if secondary:
-            sec_res = results[1]
-            if not isinstance(sec_res, Exception) and isinstance(sec_res, dict):
-                for sym, data in sec_res.items():
-                    vol2 = data.get("quoteVolume")
-                    if sym in tickers:
-                        vol1 = tickers[sym].get("quoteVolume")
-                        if vol2 is not None and (vol1 is None or float(vol2) > float(vol1)):
+            await secondary.load_markets()
+        symbols: list[str] = []
+        for sym, m in markets.items():
+            quote = str(m.get("quote", "")).upper()
+            if not m.get("active"):
+                continue
+            if m.get("contract") or m.get("index"):
+                continue
+            if str(m.get("type")) == "swap":
+                continue
+            if allowed_quotes and quote and quote not in allowed_quotes:
+                continue
+            symbols.append(sym)
+        tickers: dict[str, dict] = {}
+        if symbols:
+            tasks = [_fetch_tickers(exchange, symbols)]
+            if secondary:
+                tasks.append(_fetch_tickers(secondary, symbols))
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            primary_res = results[0]
+            if isinstance(primary_res, Exception):
+                raise primary_res
+            if not isinstance(primary_res, dict):
+                raise TypeError("fetch_tickers returned invalid data")
+            tickers = primary_res
+            if secondary:
+                sec_res = results[1]
+                if not isinstance(sec_res, Exception) and isinstance(sec_res, dict):
+                    for sym, data in sec_res.items():
+                        vol2 = data.get("quoteVolume")
+                        if sym in tickers:
+                            vol1 = tickers[sym].get("quoteVolume")
+                            if vol2 is not None and (vol1 is None or float(vol2) > float(vol1)):
+                                tickers[sym] = data
+                        else:
                             tickers[sym] = data
-                    else:
-                        tickers[sym] = data
         sol_pairs = await get_solana_liquid_pairs(min_volume_usd, onchain_quote)
         for sym in sol_pairs:
             tickers.setdefault(sym, {"quoteVolume": min_volume_usd})
+            symbols.append(sym)
     except Exception as exc:  # pragma: no cover - network failures
         logger.error("Failed to fetch tickers: %s", exc)
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -229,7 +247,10 @@ async def refresh_pairs_async(
             await _close_exchange(secondary)
 
     pairs: list[tuple[str, float]] = []
-    for symbol, data in tickers.items():
+    for symbol in symbols:
+        data = tickers.get(symbol)
+        if not isinstance(data, dict):
+            continue
         vol = data.get("quoteVolume")
         if vol is None:
             continue
@@ -237,17 +258,17 @@ async def refresh_pairs_async(
         parts = symbol.split("/")
         if len(parts) != 2:
             continue
-        base, quote = parts[0].upper(), parts[1].upper()
+        base = parts[0].upper()
 
-        if allowed_quotes and quote not in allowed_quotes:
-            continue
         if base in blacklist:
             continue
 
         pairs.append((symbol, float(vol)))
 
     pairs.sort(key=lambda x: x[1], reverse=True)
-    top_list = [sym for sym, vol in pairs if vol >= min_volume_usd][:top_k]
+    top_list = [sym for sym, vol in pairs if vol >= min_volume_usd]
+    if top_k is not None:
+        top_list = top_list[:top_k]
     top_map = {sym: time.time() for sym in top_list}
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)

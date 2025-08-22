@@ -18,6 +18,7 @@ async def _dummy_gecko(*_a, **_k):
     return None
 ml_mod.fetch_geckoterminal_ohlcv = _dummy_gecko
 ml_mod.get_kraken_listing_date = lambda *_a, **_k: None
+ml_mod._is_valid_base_token = lambda *_a, **_k: True
 sys.modules.setdefault("crypto_bot.utils.market_loader", ml_mod)
 import tasks.refresh_pairs as rp
 
@@ -32,7 +33,18 @@ def test_refresh_pairs_error_keeps_old_cache(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(rp, "PAIR_FILE", file)
 
     class DummyExchange:
-        async def fetch_tickers(self):
+        async def load_markets(self):
+            return {
+                "BTC/USD": {
+                    "active": True,
+                    "contract": False,
+                    "index": False,
+                    "type": "spot",
+                    "quote": "USD",
+                }
+            }
+
+        async def fetch_tickers(self, symbols=None):
             raise RuntimeError("boom")
 
     monkeypatch.setattr(rp, "get_exchange", lambda cfg: DummyExchange())
@@ -63,7 +75,9 @@ def test_refresh_pairs_returns_cached_when_fresh(monkeypatch, tmp_path):
     monkeypatch.setattr(rp, "PAIR_FILE", file)
 
     class BadExchange:
-        async def fetch_tickers(self):
+        async def load_markets(self):
+            return {}
+        async def fetch_tickers(self, symbols=None):
             raise RuntimeError("should not be called")
 
     monkeypatch.setattr(rp, "get_exchange", lambda cfg: BadExchange())
@@ -78,7 +92,18 @@ def test_refresh_pairs_force_refresh(monkeypatch, tmp_path):
     monkeypatch.setattr(rp, "PAIR_FILE", file)
 
     class DummyExchange:
-        async def fetch_tickers(self):
+        async def load_markets(self):
+            return {
+                "NEW/USD": {
+                    "active": True,
+                    "contract": False,
+                    "index": False,
+                    "type": "spot",
+                    "quote": "USD",
+                }
+            }
+
+        async def fetch_tickers(self, symbols=None):
             return {"NEW/USD": {"quoteVolume": 2_000_000}}
 
     monkeypatch.setattr(rp, "get_exchange", lambda cfg: DummyExchange())

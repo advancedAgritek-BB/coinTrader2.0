@@ -22,21 +22,55 @@ async def _dummy_gecko(*_a, **_k):
     return None
 ml_mod.fetch_geckoterminal_ohlcv = _dummy_gecko
 ml_mod.get_kraken_listing_date = lambda *_a, **_k: None
+ml_mod._is_valid_base_token = lambda *_a, **_k: True
 sys.modules.setdefault("crypto_bot.utils.market_loader", ml_mod)
 
 from tasks import refresh_pairs as rp
 
 
 class DummyExchange:
-    def __init__(self, tickers):
+    def __init__(self, tickers, markets=None):
         self.tickers = tickers
+        if markets is None:
+            markets = {
+                sym: {
+                    "active": True,
+                    "contract": False,
+                    "index": False,
+                    "type": "spot",
+                    "quote": sym.split("/")[1],
+                }
+                for sym in tickers
+            }
+        self.markets = markets
+        self.requested = None
 
-    async def fetch_tickers(self):
-        return self.tickers
+    async def load_markets(self):
+        return self.markets
+
+    async def fetch_tickers(self, symbols=None):
+        self.requested = symbols
+        if symbols is None:
+            return self.tickers
+        return {s: self.tickers[s] for s in symbols if s in self.tickers}
 
 
 class FailingExchange:
-    async def fetch_tickers(self):
+    def __init__(self, markets=None):
+        self.markets = markets or {
+            "BTC/USD": {
+                "active": True,
+                "contract": False,
+                "index": False,
+                "type": "spot",
+                "quote": "USD",
+            }
+        }
+
+    async def load_markets(self):
+        return self.markets
+
+    async def fetch_tickers(self, symbols=None):
         raise Exception("boom")
 
 
@@ -115,6 +149,48 @@ def test_refresh_pairs_blacklist(monkeypatch, tmp_path):
     pairs = rp.refresh_pairs(1_000_000, 2, cfg)
     assert pairs == ["BTC/USD"]
     assert set(json.loads(pair_file.read_text())) == {"BTC/USD"}
+
+
+def test_refresh_pairs_filters_market_flags(monkeypatch, tmp_path):
+    cache_dir = tmp_path / "cache"
+    pair_file = cache_dir / "liquid_pairs.json"
+    monkeypatch.setattr(rp, "CACHE_DIR", cache_dir)
+    monkeypatch.setattr(rp, "PAIR_FILE", pair_file)
+    tickers = {
+        "GOOD/USD": {"quoteVolume": 5_000_000},
+        "BAD1/USD": {"quoteVolume": 5_000_000},
+        "BAD2/USD": {"quoteVolume": 5_000_000},
+        "BAD3/USD": {"quoteVolume": 5_000_000},
+        "EUR/EUR": {"quoteVolume": 5_000_000},
+    }
+    markets = {
+        "GOOD/USD": {
+            "active": True,
+            "contract": False,
+            "index": False,
+            "type": "spot",
+            "quote": "USD",
+        },
+        "BAD1/USD": {"active": False, "contract": False, "index": False, "type": "spot", "quote": "USD"},
+        "BAD2/USD": {"active": True, "contract": True, "index": False, "type": "spot", "quote": "USD"},
+        "BAD3/USD": {"active": True, "contract": False, "index": False, "type": "swap", "quote": "USD"},
+        "EUR/EUR": {
+            "active": True,
+            "contract": False,
+            "index": False,
+            "type": "spot",
+            "quote": "EUR",
+        },
+    }
+    ex = DummyExchange(tickers, markets)
+    monkeypatch.setattr(rp, "get_exchange", lambda _cfg: ex)
+    async def no_sol(*_a):
+        return []
+    monkeypatch.setattr(rp, "get_solana_liquid_pairs", no_sol)
+    cfg = {"refresh_pairs": {"allowed_quote_currencies": ["USD"]}}
+    pairs = rp.refresh_pairs(1_000_000, 10, cfg)
+    assert pairs == ["GOOD/USD"]
+    assert ex.requested == ["GOOD/USD"]
 
 
 class DummyResp:
