@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 import logging
 import pandas as pd
 import ta
+from crypto_bot.utils.config_helpers import short_selling_enabled
 
 from crypto_bot.utils import stats
 from crypto_bot.utils.indicator_cache import cache_series
@@ -59,7 +60,7 @@ def generate_signal(
     volume_z_min = float(cfg.get("volume_z_min", 1.0))
     atr_len = int(cfg.get("atr_len", keltner_len))
     max_spread_bp = float(cfg.get("max_spread_bp", 5.0))
-    allow_short = bool(cfg.get("allow_short", False))
+    shorting = short_selling_enabled(cfg_all)
     score_threshold = float(cfg.get("score_threshold", 0.0))
     lookback = max(donchian_len, keltner_len, bbw_lookback, vol_window, atr_len)
     progress_logging = bool(cfg_all.get("ohlcv", {}).get("progress_logging", False))
@@ -121,7 +122,7 @@ def generate_signal(
     metric = 0.0
     if close.iloc[-1] > upper_break:
         metric = (close.iloc[-1] - upper_break) / upper_break
-    elif allow_short and close.iloc[-1] < lower_break:
+    elif shorting and close.iloc[-1] < lower_break:
         metric = (close.iloc[-1] - lower_break) / lower_break
 
     side = "none"

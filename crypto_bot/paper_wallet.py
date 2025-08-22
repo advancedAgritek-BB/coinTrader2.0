@@ -11,18 +11,22 @@ class PaperWallet:
         self,
         balance: float,
         max_open_trades: int = 10,
-        allow_short: bool = True,
+        short_selling: bool = True,
         stake_usd: float | None = None,
         min_price: float = 0.0,
         min_notional: float = 0.0,
+        *,
+        allow_short: bool | None = None,
     ) -> None:
+        if allow_short is not None:
+            short_selling = allow_short
         self.balance = balance
         # mapping of identifier (symbol or trade id) -> position details
         # each position: {"symbol": str | None, "side": str, "amount": float, "entry_price": float}
         self.positions: Dict[str, Dict[str, Any]] = {}
         self.realized_pnl = 0.0
         self.max_open_trades = max_open_trades
-        self.allow_short = allow_short
+        self.short_selling = short_selling
         self.stake_usd = stake_usd
         self.min_price = min_price
         self.min_notional = min_notional
@@ -103,7 +107,7 @@ class PaperWallet:
             if symbol in self.positions:
                 raise RuntimeError("Position already open for symbol")
 
-        if side == "sell" and not self.allow_short:
+        if side == "sell" and not self.short_selling:
             raise RuntimeError("Short selling disabled")
 
         if len(self.positions) >= self.max_open_trades:

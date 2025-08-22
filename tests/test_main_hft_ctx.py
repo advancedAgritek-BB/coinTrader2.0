@@ -18,7 +18,7 @@ class DummyExchange:
 
 
 class DummyWallet:
-    def __init__(self, balance, max_trades, allow_short):
+    def __init__(self, balance, max_trades, short_selling, **kwargs):
         self.total_balance = balance
         self.positions = {}
 

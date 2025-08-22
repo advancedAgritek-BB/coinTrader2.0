@@ -13,6 +13,7 @@ from wallet import Wallet
 
 from crypto_bot.utils.logger import LOG_DIR
 from crypto_bot import main
+from crypto_bot.utils.config_helpers import short_selling_enabled
 
 
 import yaml
@@ -45,7 +46,7 @@ class TradingBotController:
             self.wallet = Wallet(
                 self.config.get("start_balance", 1000.0),
                 exec_cfg.get("max_positions", self.config.get("max_open_trades", 1)),
-                self.config.get("allow_short", False),
+                short_selling_enabled(self.config),
                 stake_usd=exec_cfg.get("stake_usd"),
                 min_price=exec_cfg.get("min_price", 0.0),
                 min_notional=exec_cfg.get("min_notional", 0.0),

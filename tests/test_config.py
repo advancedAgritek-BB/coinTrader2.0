@@ -98,7 +98,7 @@ def test_load_config_returns_dict():
     assert "arbitrage_threshold" in config
     assert "sl_mult" in config
     assert "tp_mult" in config
-    assert "allow_short" in config
+    assert "trading" in config and "short_selling" in config["trading"]
     assert "ml_enabled" in config
     assert "scan_lookback_limit" in config
     assert "cycle_lookback_limit" in config

@@ -7,6 +7,7 @@ from pathlib import Path
 from crypto_bot.phase_runner import BotContext
 from crypto_bot.paper_wallet import PaperWallet
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils.config_helpers import short_selling_enabled
 
 
 class DummyRM:
@@ -68,6 +69,7 @@ def load_execute_signals():
         "_monitor_micro_scalp_exit": lambda *a, **k: None,
         "BotContext": BotContext,
         "refresh_balance": lambda ctx: asyncio.sleep(0),
+        "short_selling_enabled": short_selling_enabled,
     }
     ns["score_logger"].setLevel(logging.DEBUG)
     exec(funcs["direction_to_side"], ns)
@@ -76,7 +78,7 @@ def load_execute_signals():
 
 
 @pytest.mark.asyncio
-async def test_execute_signals_respects_allow_short(monkeypatch, caplog):
+async def test_execute_signals_respects_short_selling(monkeypatch, caplog):
     df = pd.DataFrame({"close": [100.0]})
     candidate = {
         "symbol": "XBT/USDT",
@@ -94,12 +96,16 @@ async def test_execute_signals_respects_allow_short(monkeypatch, caplog):
         positions={},
         df_cache={"1h": {"XBT/USDT": df}},
         regime_cache={},
-        config={"execution_mode": "dry_run", "allow_short": False, "top_n_symbols": 1},
+        config={
+            "execution_mode": "dry_run",
+            "trading": {"short_selling": False},
+            "top_n_symbols": 1,
+        },
         exchange=object(),
         ws_client=None,
         risk_manager=DummyRM(),
         notifier=None,
-        paper_wallet=PaperWallet(1000.0, allow_short=False),
+        paper_wallet=PaperWallet(1000.0, short_selling=False),
         position_guard=DummyPG(),
     )
     ctx.balance = 1000.0

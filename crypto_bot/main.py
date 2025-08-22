@@ -33,6 +33,7 @@ from types import SimpleNamespace
 from pydantic import ValidationError
 from crypto_bot.utils.logger import pipeline_logger, LOG_DIR, setup_logger
 from crypto_bot.utils.logging_config import setup_logging
+from crypto_bot.utils.config_helpers import short_selling_enabled
 
 lastlog = setup_logging(LOG_DIR / "bot.log")
 
@@ -2302,7 +2303,7 @@ async def execute_signals(
             reasons.append("no direction")
         if res.get("too_flat", False):
             reasons.append("atr too flat")
-        if direction == "short" and not ctx.config.get("allow_short", True):
+        if direction == "short" and not short_selling_enabled(ctx.config):
             reasons.append("short selling disabled")
         if reasons:
             logger.warning("Skipping %s: %s", sym, ", ".join(reasons))
@@ -2488,7 +2489,7 @@ async def execute_signals(
                 "skip_trade reason flags | symbol=%s side=%s short_selling=%s sentiment_enabled=%s sentiment_ok=%s ml_enabled=%s ml_ok=%s model_found=%s pred=%s thr=%s venue_ok=%s cooldown=%s sizing_ok=%s budget_ok=%s",
                 sym,
                 side,
-                bool(ctx.config.get("allow_short", False)),
+                short_selling_enabled(ctx.config),
                 ctx.config.get("trading", {}).get("require_sentiment", True),
                 sentiment_ok,
                 ctx.config.get("ml_enabled", True),
@@ -2611,7 +2612,7 @@ async def execute_signals(
             _log_rejection(sym, score, direction, min_req, outcome_reason, "SCORING")
             reject_counts["no_actionable_side"] += 1
             continue
-        allow_short = bool(ctx.config.get("allow_short", False))
+        allow_short = short_selling_enabled(ctx.config)
         if side == "sell" and not allow_short:
             logger.info("Skip: short selling disabled; %s", candidate)
             outcome_reason = "short selling disabled"
@@ -3670,7 +3671,7 @@ async def _main_impl() -> MainResult:
         wallet = Wallet(
             start_bal,
             exec_cfg.get("max_positions", config.get("max_open_trades", 1)),
-            config.get("allow_short", False),
+            short_selling_enabled(config),
             stake_usd=exec_cfg.get("stake_usd"),
             min_price=exec_cfg.get("min_price", 0.0),
             min_notional=exec_cfg.get("min_notional", 0.0),
