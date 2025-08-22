@@ -822,6 +822,9 @@ def _load_config_file() -> dict:
     trading_cfg.setdefault("hft_enabled", False)
     trading_cfg.setdefault("hft_symbols", [])
     trading_cfg.setdefault("exclude_symbols", [])
+    sent_cfg = data.get("sentiment_filter", {}) or {}
+    sent_cfg.setdefault("require_sentiment", trading_cfg["require_sentiment"])
+    data["sentiment_filter"] = sent_cfg
     data["trading"] = trading_cfg
     data.setdefault("allowed_quotes", allowed_quotes)
     sf_cfg = data.get("symbol_filter", {}) or {}
