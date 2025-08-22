@@ -17,6 +17,37 @@ from crypto_bot.utils.logger import LOG_DIR, setup_logger
 logger = setup_logger(__name__, LOG_DIR / "meme_sniper.log")
 
 
+_EXCHANGE: kraken_utils.KrakenClient | None = None
+
+
+def _get_exchange(cfg: Mapping[str, object]):
+    """Return a cached exchange instance based on ``cfg`` options."""
+
+    global _EXCHANGE
+    if _EXCHANGE is None:
+        ex_cfg = cfg.get("exchange", "kraken")
+        if isinstance(ex_cfg, dict):
+            ex_name = ex_cfg.get("name", "kraken").lower()
+            params = {"enableRateLimit": True}
+            timeout = ex_cfg.get("request_timeout_ms")
+            if timeout:
+                params["timeout"] = int(timeout)
+            max_conc = ex_cfg.get("max_concurrency")
+        else:
+            ex_name = str(ex_cfg).lower()
+            params = {"enableRateLimit": True}
+            max_conc = None
+
+        if ex_name == "kraken":
+            _EXCHANGE = kraken_utils.get_client()
+        else:
+            exchange_cls = getattr(ccxt, ex_name)
+            _EXCHANGE = exchange_cls(params)
+            if max_conc is not None:
+                setattr(_EXCHANGE, "max_concurrency", int(max_conc))
+    return _EXCHANGE
+
+
 async def get_solana_new_tokens(
     cfg: Mapping[str, object], exchange: kraken_utils.KrakenClient | None = None
 ) -> List[str]:
@@ -81,50 +112,17 @@ async def get_solana_new_tokens(
         return []
 
     min_score = float(cfg.get("min_symbol_score", 0.0))
-    close_exchange = False
     if exchange is None:
-        ex_cfg = cfg.get("exchange", "kraken")
-        if isinstance(ex_cfg, dict):
-            ex_name = ex_cfg.get("name", "kraken").lower()
-            params = {"enableRateLimit": True}
-            timeout = ex_cfg.get("request_timeout_ms")
-            if timeout:
-                params["timeout"] = int(timeout)
-            max_conc = ex_cfg.get("max_concurrency")
-        else:
-            ex_name = str(ex_cfg).lower()
-            params = {"enableRateLimit": True}
-            max_conc = None
+        exchange = _get_exchange(cfg)
 
-        if ex_name == "kraken":
-            exchange = kraken_utils.get_client()
-        else:
-            exchange_cls = getattr(ccxt, ex_name)
-            exchange = exchange_cls(params)
-            if max_conc is not None:
-                setattr(exchange, "max_concurrency", int(max_conc))
-            close_exchange = True
-
-    try:
-        scores = await asyncio.gather(
-            *[
-                symbol_scoring.score_symbol(
-                    exchange, sym, vol, 0.0, 0.0, 1.0, cfg
-                )
-                for sym, vol in resolved
-            ]
-        )
-    finally:
-        if close_exchange:
-            close = getattr(exchange, "close", None)
-            if close:
-                try:
-                    if asyncio.iscoroutinefunction(close):
-                        await close()
-                    else:
-                        close()
-                except Exception:  # pragma: no cover - best effort
-                    pass
+    scores = await asyncio.gather(
+        *[
+            symbol_scoring.score_symbol(
+                exchange, sym, vol, 0.0, 0.0, 1.0, cfg
+            )
+            for sym, vol in resolved
+        ]
+    )
 
     scored = [
         (sym, score) for (sym, _), score in zip(resolved, scores) if score >= min_score

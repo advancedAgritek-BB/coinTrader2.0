@@ -118,6 +118,7 @@ def test_get_solana_new_tokens_filters_by_score(monkeypatch):
 
     monkeypatch.setattr(scanner.symbol_scoring, "score_symbol", fake_score)
     monkeypatch.setattr(scanner.kraken_utils, "get_client", lambda *_a, **_k: DummyEx())
+    monkeypatch.setattr(scanner, "_EXCHANGE", None, raising=False)
 
     cfg = {
         "url": "http://x", 
