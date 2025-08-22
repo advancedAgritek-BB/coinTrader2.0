@@ -322,26 +322,38 @@ def _run_wallet_manager() -> None:
             file=sys.stderr,
         )
         sys.exit(2)
-    result = subprocess.run([sys.executable, "-m", "crypto_bot.wallet_manager"])
-    if result.returncode not in (0, None):
-        sys.exit(result.returncode)
+    code = subprocess.call([sys.executable, "-m", "crypto_bot.wallet_manager"])
+    if code not in (0, None):
+        sys.exit(code)
 
 
 def _ensure_user_setup() -> None:
-    """Ensure required credentials exist or launch the wallet setup wizard."""
-    _load_env()
-    if USER_CONFIG_PATH.exists() and all(os.getenv(var) for var in REQUIRED_ENV_VARS):
-        return
-    _run_wallet_manager()
-    _load_env()
-    env = _load_env()
-    if _needs_wallet_setup(env, USER_CONFIG_PATH) or not all(
-        os.getenv(var) for var in REQUIRED_ENV_VARS
-    ):
+    """Ensure credentials exist, running the setup wizard as needed.
+
+    State transitions
+    -----------------
+    ``CHECK`` → ``READY``
+        Prerequisites are met and the function returns.
+    ``CHECK`` → ``SETUP`` → ``CHECK``
+        Validation fails, the wallet manager runs, and validation repeats.
+
+    Returns
+    -------
+    ``None`` when a configuration file exists and all required environment
+    variables are defined. The loop continues until these conditions are
+    satisfied or the wallet manager exits the process.
+    """
+
+    first = True
+    while True:
+        env = _load_env()
+        if USER_CONFIG_PATH.exists() and all(
+            os.getenv(var) for var in REQUIRED_ENV_VARS
+        ):
+            if first or not _needs_wallet_setup(env, USER_CONFIG_PATH):
+                return
         _run_wallet_manager()
-        _load_env()
-    if _needs_wallet_setup(env):
-        _run_wallet_manager()
+        first = False
 
 
 def _fix_symbol(symbol: str) -> str:
