@@ -333,7 +333,8 @@ def test_reload_config_clears_symbol_cache(monkeypatch, tmp_path):
 
 def test_load_config_async_detects_section_changes(tmp_path, monkeypatch):
     main = _import_main(monkeypatch)
-    monkeypatch.setattr(main, "ML_AVAILABLE", True, raising=False)
+    monkeypatch.setattr(main.ml_utils, "init_ml_components", lambda: (True, ""))
+    monkeypatch.setattr(main.ml_utils, "ML_AVAILABLE", True, raising=False)
 
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text("ml_enabled: true\nrisk:\n  max_drawdown: 1\n")
@@ -381,7 +382,8 @@ def test_ensure_ml_only_on_change(tmp_path, monkeypatch):
         return object(), None, "path"
 
     monkeypatch.setattr(main, "load_regime_model", fake_load)
-    monkeypatch.setattr(main, "ML_AVAILABLE", True)
+    monkeypatch.setattr(main.ml_utils, "init_ml_components", lambda: (True, ""))
+    monkeypatch.setattr(main.ml_utils, "ML_AVAILABLE", True)
 
     asyncio.run(main.load_config_async())
     assert calls == [True]

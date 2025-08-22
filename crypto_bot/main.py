@@ -935,7 +935,13 @@ def _load_config_file() -> dict:
 
 def _load_config_internal() -> tuple[dict, set[str]]:
     """Load config if underlying files changed and track updates."""
-    global _CONFIG_CACHE
+    global _CONFIG_CACHE, ML_AVAILABLE
+
+    # Initialize ML components early so availability reflects installed files
+    # before config processing. ``ML_AVAILABLE`` mirrors the value in
+    # :mod:`ml_utils` after initialization to avoid stale copies.
+    ml_utils.init_ml_components()
+    ML_AVAILABLE = ml_utils.ML_AVAILABLE
 
     main_stat = CONFIG_PATH.stat() if CONFIG_PATH.exists() else None
     main_mtime = main_stat.st_mtime if main_stat else 0.0
