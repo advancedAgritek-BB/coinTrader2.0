@@ -18,6 +18,7 @@ def test_ensure_ml_uses_fallback_url(monkeypatch, tmp_path, caplog):
 
     monkeypatch.setattr(main, "load_regime_model", fail_load)
     monkeypatch.setattr(main, "ML_AVAILABLE", True)
+    monkeypatch.setattr(main.ml_utils, "ML_AVAILABLE", True)
 
     cfg = {
         "ml_enabled": True,
@@ -43,6 +44,7 @@ def test_model_none_triggers_fallback(monkeypatch, tmp_path, caplog):
 
     monkeypatch.setattr(main, "load_regime_model", return_none)
     monkeypatch.setattr(main, "ML_AVAILABLE", True)
+    monkeypatch.setattr(main.ml_utils, "ML_AVAILABLE", True)
     main._LAST_ML_CFG = None
 
     cfg = {
