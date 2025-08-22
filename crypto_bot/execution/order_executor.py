@@ -64,6 +64,17 @@ async def execute_trade_async(
         )
         return result
 
+    def log_event(event: str, order: Dict) -> None:
+        logger.info(
+            "%s %s %s id=%s score=%s reason=%s",
+            event.upper(),
+            side.upper(),
+            symbol,
+            order.get("id"),
+            score,
+            reason,
+        )
+
     result = await cex_executor.execute_trade_async(
         exchange,
         ws_client,
@@ -75,6 +86,7 @@ async def execute_trade_async(
         use_websocket=use_websocket,
         config=config,
         score=score,
+        event_cb=log_event,
     )
 
     price = result.get("price") if isinstance(result, dict) else None

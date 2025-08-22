@@ -275,6 +275,8 @@ async def _place_order_common(
     sleep,
     create_limit=None,
     fetch_ticker=None,
+    cancel_order=None,
+    event_cb=None,
 ) -> List[Dict]:
     """Shared implementation for order placement."""
 
@@ -283,6 +285,14 @@ async def _place_order_common(
 
     remaining = size
     orders: List[Dict] = []
+
+    async def emit(event: str, order: Dict) -> None:
+        if event_cb is None:
+            return
+        if asyncio.iscoroutinefunction(event_cb):
+            await event_cb(event, order)
+        else:
+            event_cb(event, order)
 
     while remaining > 0:
         delay = 1.0
@@ -304,9 +314,15 @@ async def _place_order_common(
                         if config.get("hidden_limit"):
                             params["hidden"] = True
                         order = await create_limit(symbol, side, remaining, price, params)
+                        await emit("submitted", order)
+                        logger.info(
+                            "SUBMITTED %s %s id=%s", side, symbol, order["id"]
+                        )
                         break
 
                 order = await create_market(symbol, side, remaining)
+                await emit("submitted", order)
+                logger.info("SUBMITTED %s %s id=%s", side, symbol, order["id"])
                 break
             except (NetworkError, RateLimitExceeded) as exc:
                 if attempt < max_retries - 1:
@@ -332,20 +348,50 @@ async def _place_order_common(
 
         start = time.time()
         filled = 0.0
+        ack_logged = False
         while time.time() - start < poll_timeout:
             try:
                 info = await fetch_order(order["id"], symbol)
                 filled = float(info.get("filled") or 0.0)
                 order.update(info)
+                if not ack_logged:
+                    logger.info("ACK %s id=%s", symbol, order["id"])
+                    await emit("ack", order)
+                    ack_logged = True
                 if 0 < filled < remaining:
-                    err_pf = notifier.notify(f"Partial fill: {filled}/{remaining} {symbol}")
+                    err_pf = notifier.notify(
+                        f"Partial fill: {filled}/{remaining} {symbol}"
+                    )
                     if err_pf:
                         logger.error("Failed to send message: %s", err_pf)
-                if info.get("status") == "closed":
+                status = info.get("status")
+                if status == "closed":
+                    logger.info(
+                        "FILLED %s id=%s price=%s",
+                        symbol,
+                        order["id"],
+                        info.get("price"),
+                    )
+                    await emit("filled", order)
+                    break
+                if status == "canceled":
+                    logger.info("CANCELLED %s id=%s", symbol, order["id"])
+                    await emit("cancelled", order)
                     break
             except Exception as err:
                 logger.debug("Order polling error: %s", err)
             await sleep(1)
+        else:
+            if cancel_order is not None:
+                try:
+                    await cancel_order(order["id"], symbol)
+                    order.setdefault("status", "canceled")
+                    logger.info("CANCELLED %s id=%s", symbol, order["id"])
+                    await emit("cancelled", order)
+                except Exception as err:
+                    logger.error(
+                        "Cancel failed for %s id=%s: %s", symbol, order["id"], err
+                    )
 
         orders.append(order)
         if filled and filled < remaining:
@@ -367,6 +413,7 @@ def _place_order_sync(
     poll_timeout: int,
     score: float,
     config: Dict,
+    event_cb=None,
 ) -> List[Dict]:
     """Place ``size`` amount and wait for completion (synchronous wrapper)."""
 
@@ -393,6 +440,13 @@ def _place_order_sync(
             async def fetch_ticker():
                 return await asyncio.to_thread(exchange.fetch_ticker, symbol)
 
+    cancel_order = None
+    if hasattr(exchange, "cancel_order") or ws_client is not None:
+        async def cancel_order(oid: str, sym: str):
+            if ws_client is not None:
+                return ws_client.cancel_order(oid)
+            return await asyncio.to_thread(exchange.cancel_order, oid, sym)
+
     return asyncio.run(
         _place_order_common(
             symbol,
@@ -409,6 +463,8 @@ def _place_order_sync(
             sleep=sleep,
             create_limit=create_limit,
             fetch_ticker=fetch_ticker,
+            cancel_order=cancel_order,
+            event_cb=event_cb,
         )
     )
 
@@ -426,6 +482,7 @@ async def _place_order_async(
     score: float,
     config: Dict,
     use_websocket: bool,
+    event_cb=None,
 ) -> List[Dict]:
     """Async variant of order placement."""
 
@@ -460,6 +517,17 @@ async def _place_order_async(
                     return await exchange.fetch_ticker(symbol)
                 return await asyncio.to_thread(exchange.fetch_ticker, symbol)
 
+    cancel_order = None
+    if hasattr(exchange, "cancel_order") or (
+        ws_client is not None and hasattr(ws_client, "cancel_order")
+    ):
+        async def cancel_order(oid: str, sym: str):
+            if use_websocket and ws_client is not None and hasattr(ws_client, "cancel_order"):
+                return ws_client.cancel_order(oid)
+            if asyncio.iscoroutinefunction(getattr(exchange, "cancel_order", None)):
+                return await exchange.cancel_order(oid, sym)
+            return await asyncio.to_thread(exchange.cancel_order, oid, sym)
+
     return await _place_order_common(
         symbol,
         side,
@@ -475,6 +543,8 @@ async def _place_order_async(
         sleep=sleep,
         create_limit=create_limit,
         fetch_ticker=fetch_ticker,
+        cancel_order=cancel_order,
+        event_cb=event_cb,
     )
 
 
@@ -669,6 +739,7 @@ async def execute_trade_async(
     score: float = 0.0,
     max_retries: int = 3,
     poll_timeout: int = 60,
+    event_cb=None,
 ) -> Dict:
     """Asynchronous version of :func:`execute_trade` with retry support.
 
@@ -734,6 +805,7 @@ async def execute_trade_async(
             score,
             config,
             use_websocket,
+            event_cb=event_cb,
         )
 
     all_orders: List[Dict] = []
