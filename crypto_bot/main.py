@@ -1497,6 +1497,11 @@ async def fetch_candidates(ctx: BotContext) -> None:
     allowed_syms = set(ctx.config.get("symbols", []))
     allowed_syms.update(benchmark_symbols or [])
     symbols = [(s, sc) for s, sc in symbols if s in allowed_syms]
+    logger.info(
+        "FILTERED: selected %d of %d candidates",
+        len(symbols),
+        total_candidates,
+    )
     ctx.active_universe = [s for s, _ in symbols]
     ctx.resolved_mode = resolved_mode
 
