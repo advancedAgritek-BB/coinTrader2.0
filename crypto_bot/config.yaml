@@ -245,6 +245,8 @@ breakout:
   squeeze_threshold: 0.01
   vol_multiplier: 0.5
   volume_window: 15
+  min_intensity:
+    "1h": 0.03
 cycle_bias:
   enabled: false
   mvrv_url: https://api.example.com/mvrv
