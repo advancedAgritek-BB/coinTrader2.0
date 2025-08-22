@@ -158,6 +158,7 @@ class StreamEvaluationEngine:
         while not self._stop.is_set():
             try:
                 symbol, ctx = await self.queue.get()
+                logger.info("DEQUEUED %s", symbol)
                 try:
                     needs_5m = self._symbol_requires_5m(ctx)
                     if not self.data.ready(symbol, "1m"):
@@ -182,6 +183,7 @@ class StreamEvaluationEngine:
         await asyncio.sleep(0)
 
     async def enqueue(self, symbol: str, ctx: dict) -> None:
+        logger.info("ENQUEUED %s", symbol)
         await self.queue.put((symbol, ctx))
 
     async def drain(self) -> None:
