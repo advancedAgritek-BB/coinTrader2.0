@@ -493,17 +493,18 @@ risk:
   atr_long_window: 40
   atr_period: 10
   atr_short_window: 10
-  max_drawdown: 0.35
+  max_drawdown: 0.2
   max_volatility_factor: 3
   min_atr_pct: 0.0005
   min_expected_value: 0.0
+  default_expected_value: 0.1
   min_volume: 0.0001
   stop_loss_atr_mult: 1.0
   stop_loss_pct: 0.01
   take_profit_atr_mult: 3.0
   take_profit_pct: 0.1
   volume_threshold_ratio: 0.01
-  win_rate_threshold: 0.7
+  win_rate_threshold: 0.4
   win_rate_boost_factor: 1.5
   min_score_to_trade: 0.15
   min_votes: 2
@@ -777,7 +778,7 @@ token_registry:
 top_n_symbols: 20
 tp_mult: 2.0
 tp_pct: 0.1
-trade_size_pct: 0.3
+trade_size_pct: 0.05
 trend_bot:
   atr_period: 10
   k: 0.8
