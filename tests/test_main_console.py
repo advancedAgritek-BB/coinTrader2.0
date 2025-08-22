@@ -64,8 +64,9 @@ def test_monitor_loop_reads_incremental(monkeypatch, tmp_path):
 
     def fake_print(*args, **kwargs):
         text = " ".join(str(a) for a in args)
-        if "[Monitor]" in text:
-            outputs.append(text)
+        if text.startswith("\033"):
+            return
+        outputs.append(text)
 
     async def fake_stats(*_a, **_kw):
         return ["stat1", "stat2"]
@@ -90,9 +91,11 @@ def test_monitor_loop_reads_incremental(monkeypatch, tmp_path):
     with pytest.raises(StopLoop):
         asyncio.run(console_monitor.monitor_loop(ex, None, log_file))
 
-    assert outputs[0].splitlines()[0].endswith("first'")
-    assert outputs[1].splitlines()[0].endswith("second'")
-    assert outputs[0].splitlines()[1:] == ["stat1", "stat2"]
+    assert outputs[0].splitlines()[0] == "first"
+    assert outputs[0].splitlines()[1] == "Balance: 0"
+    assert outputs[1].splitlines()[0] == "second"
+    assert outputs[1].splitlines()[1] == "Balance: 0"
+    assert outputs[0].splitlines()[2:] == ["stat1", "stat2"]
 
 
 def test_monitor_loop_stringio_no_extra_newlines(monkeypatch, tmp_path):
@@ -127,7 +130,8 @@ def test_monitor_loop_stringio_no_extra_newlines(monkeypatch, tmp_path):
     # monitor_loop stops before printing on the final iteration and
     # should skip duplicate lines when stdout is not a TTY
     printed_lines = buf.getvalue().count("\n")
-    assert printed_lines == 1
+    assert printed_lines == 2
+    assert buf.getvalue().splitlines() == ["start", "Balance: 0"]
 
 
 def test_monitor_loop_skips_duplicate_lines(monkeypatch, tmp_path):
@@ -158,8 +162,9 @@ def test_monitor_loop_skips_duplicate_lines(monkeypatch, tmp_path):
 
     def fake_print(*args, **kwargs):
         text = " ".join(str(a) for a in args)
-        if "[Monitor]" in text:
-            outputs.append(text)
+        if text.startswith("\033"):
+            return
+        outputs.append(text)
 
     ex = type("Ex", (), {"fetch_balance": lambda self: {"USDT": {"free": 0}}})()
 
@@ -172,8 +177,10 @@ def test_monitor_loop_skips_duplicate_lines(monkeypatch, tmp_path):
         asyncio.run(console_monitor.monitor_loop(ex, None, log_file))
 
     assert len(outputs) == 2
-    assert outputs[0].splitlines()[0].endswith("same'")
-    assert outputs[1].splitlines()[0].endswith("other'")
+    assert outputs[0].splitlines()[0] == "same"
+    assert outputs[0].splitlines()[1] == "Balance: 0"
+    assert outputs[1].splitlines()[0] == "other"
+    assert outputs[1].splitlines()[1] == "Balance: 0"
 
 
 def test_monitor_loop_quiet_mode(monkeypatch, tmp_path):
@@ -201,8 +208,9 @@ def test_monitor_loop_quiet_mode(monkeypatch, tmp_path):
 
     def fake_print(*args, **kwargs):
         text = " ".join(str(a) for a in args)
-        if "[Monitor]" in text:
-            outputs.append(text)
+        if text.startswith("\033"):
+            return
+        outputs.append(text)
 
     ex = type("Ex", (), {"fetch_balance": lambda self: {"USDT": {"free": 0}}})()
 
@@ -219,7 +227,8 @@ def test_monitor_loop_quiet_mode(monkeypatch, tmp_path):
         )
 
     assert len(outputs) == 1
-    assert outputs[0].splitlines()[0].endswith("first'")
+    assert outputs[0].splitlines()[0] == "first"
+    assert outputs[0].splitlines()[1] == "Balance: 0"
 
 
 def test_monitor_loop_async_balance(monkeypatch, tmp_path):

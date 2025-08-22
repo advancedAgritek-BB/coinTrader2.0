@@ -124,14 +124,14 @@ async def monitor_loop(
     *,
     quiet_mode: bool = False,
 ) -> None:
-    """Periodically output balance, last log line and open trade stats.
+    """Periodically print the latest log line, balance and open trade stats.
 
     This coroutine runs until cancelled and is intentionally lightweight so
     tests can easily patch it. The monitor fetches the current balance from
-    ``exchange`` or ``paper_wallet`` and prints the last line of ``log_file``.
-    Open trade PnL lines are generated from ``trade_file`` and printed below the
-    status line when positions exist. Set ``quiet_mode`` to ``True`` to print
-    a single update when stdout is not a TTY.
+    ``exchange`` or ``paper_wallet`` and prints the most recent line of
+    ``log_file``. A separate balance line and one line per open trade PnL are
+    rendered below. Set ``quiet_mode`` to ``True`` to print a single update when
+    stdout is not a TTY.
     """
     log_path = Path(log_file)
     last_line = ""
@@ -162,12 +162,11 @@ async def monitor_loop(
                         last_line = line.rstrip("\n")
                 offset = fh.tell()
 
-                message = f"[Monitor] balance={balance} log='{last_line}'"
-                lines = await trade_stats_lines(exchange, Path(trade_file))
+                log_line = last_line
+                balance_line = f"Balance: {balance}"
+                trade_lines = await trade_stats_lines(exchange, Path(trade_file))
 
-                output = message
-                if lines:
-                    output += "\n" + "\n".join(lines)
+                output = "\n".join([log_line, balance_line, *trade_lines])
 
                 if sys.stdout.isatty():
                     # Clear previously printed lines
