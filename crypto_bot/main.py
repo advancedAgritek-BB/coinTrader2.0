@@ -36,6 +36,7 @@ from crypto_bot.utils.logging_config import setup_logging
 
 lastlog = setup_logging(LOG_DIR / "bot.log")
 
+from crypto_bot.core.queues import trade_queue
 from crypto_bot.universe import build_tradable_set
 from crypto_bot.strategy.evaluator import StreamEvaluator, set_stream_evaluator
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig
