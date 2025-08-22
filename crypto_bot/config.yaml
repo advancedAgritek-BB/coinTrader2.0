@@ -792,8 +792,8 @@ use_ml_regime_classifier: false
 use_per_pair_models: false
 use_websocket: true
 volatility_filter:
-  max_funding_rate: 0.2  # Allow hotter funding
-  min_atr_pct: 0.00005  # Include flatter markets
+  max_funding_rate: 0.5  # Allow hotter funding
+  min_atr_pct: 0.00001  # Include flatter markets
 voting_enabled: false  # Run each strategy independently unless enabled
 voting_strategies:
   strategies:
