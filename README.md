@@ -476,7 +476,7 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
   `onchain_symbols`. Defaults to `USDC`.
 * **benchmark_symbols** – list of markets always added for performance comparison.
   Defaults to `[symbol, "SOL/USDC"]`. Set to `[]` to disable benchmarks.
-* **allow_short** – enable short selling. Set to `true` only when your exchange account supports short selling.
+* **trading.short_selling** – enable short selling. Set to `true` only when your exchange account supports short selling.
 * Trades and swaps automatically retry transient errors up to three times.
 
 ### Market Scanning
