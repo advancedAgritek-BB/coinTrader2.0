@@ -23,6 +23,7 @@ import pandas as pd
 import requests
 
 from crypto_bot.utils.indicators import calc_atr as _calc_atr
+from crypto_bot.utils.market_loader import get_http_session
 
 # Default API used when ``FUNDING_RATE_URL`` is not provided.  This value is
 # only a placeholder; tests patch the HTTP request so no real network call is
@@ -91,7 +92,8 @@ def fetch_funding_rate(symbol: str) -> float:
     url = f"{base_url}{symbol}"
 
     try:  # pragma: no cover - network best effort
-        resp = requests.get(url, timeout=5)
+        session = get_http_session()
+        resp = session.get(url, timeout=5)
         resp.raise_for_status()
         data = resp.json()
     except Exception:

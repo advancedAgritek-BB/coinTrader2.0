@@ -6,6 +6,7 @@ import os
 from typing import Optional
 
 import requests
+from crypto_bot.utils.market_loader import get_http_session
 
 LAMPORTS_PER_SOL = 1_000_000_000
 DEFAULT_SOL_FEE_URL = "https://quote-api.jup.ag/v6/estimate"
@@ -25,7 +26,8 @@ def _fetch_solana_fee_lamports(url: str = DEFAULT_SOL_FEE_URL) -> float:
         except ValueError:
             return 0.0
     try:
-        resp = requests.get(url, timeout=5)
+        session = get_http_session()
+        resp = session.get(url, timeout=5)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, dict):

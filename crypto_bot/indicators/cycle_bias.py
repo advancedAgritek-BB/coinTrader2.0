@@ -6,6 +6,7 @@ import os
 import requests
 
 from crypto_bot.utils.logger import indicator_logger
+from crypto_bot.utils.market_loader import get_http_session
 
 DEFAULT_MVRV_URL = "https://api.example.com/mvrv"
 DEFAULT_NUPL_URL = "https://api.example.com/nupl"
@@ -21,7 +22,8 @@ def _fetch_value(url: str, mock_env: str) -> float:
         except ValueError:
             return 0.0
     try:
-        resp = requests.get(url, timeout=5)
+        session = get_http_session()
+        resp = session.get(url, timeout=5)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, dict):
