@@ -11,6 +11,10 @@ from typing import List
 import aiohttp
 import ccxt.async_support as ccxt
 
+from .http_client import get_session
+
+AIOHTTP_ERROR = getattr(aiohttp, "ClientError", Exception)
+
 from .gecko import gecko_request
 from . import symbol_scoring
 from . import kraken as kraken_utils
@@ -84,14 +88,16 @@ async def search_geckoterminal_token(query: str) -> tuple[str, float] | None:
     return mint, volume
 
 
-async def _fetch_json(url: str) -> list | dict | None:
-    """Return parsed JSON from ``url`` using ``aiohttp``."""
+async def _fetch_json(
+    url: str, session: aiohttp.ClientSession | None = None
+) -> list | dict | None:
+    """Return parsed JSON from ``url`` using a shared ``aiohttp`` session."""
+    session = session or get_session()
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=10) as resp:
-                resp.raise_for_status()
-                return await resp.json()
-    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
+        async with session.get(url, timeout=10) as resp:
+            resp.raise_for_status()
+            return await resp.json()
+    except (AIOHTTP_ERROR, asyncio.TimeoutError, ValueError) as exc:
         logger.error("Solana scanner request failed: %s", exc)
         return None
 
@@ -223,11 +229,13 @@ async def _extract_pump_fun_tokens(data: list | dict) -> List[str]:
     return results
 
 
-async def fetch_new_raydium_pools(limit: int) -> List[str]:
+async def fetch_new_raydium_pools(
+    limit: int, session: aiohttp.ClientSession | None = None
+) -> List[str]:
     """Return new Raydium pool token mints."""
 
     url = f"{RAYDIUM_URL}?limit={limit}"
-    data = await _fetch_json(url)
+    data = await _fetch_json(url, session)
     if not data:
         return []
 
@@ -263,7 +271,9 @@ async def fetch_new_raydium_pools(limit: int) -> List[str]:
     return tokens[:limit]
 
 
-async def fetch_pump_fun_launches(*args) -> List[str]:
+async def fetch_pump_fun_launches(
+    *args, session: aiohttp.ClientSession | None = None
+) -> List[str]:
     """Return recent Pump.fun launches.
 
     The function accepts ``limit`` as the last positional argument to
@@ -281,7 +291,7 @@ async def fetch_pump_fun_launches(*args) -> List[str]:
     global last_pump_ts
 
     url = f"{PUMP_FUN_URL}?limit={limit}&offset=0"
-    data = await _fetch_json(url)
+    data = await _fetch_json(url, session)
     if not isinstance(data, list):
         return []
 
@@ -327,7 +337,11 @@ async def fetch_pump_fun_launches(*args) -> List[str]:
     return results
 
 
-async def get_solana_new_tokens(config: dict, exchange=None) -> List[str]:
+async def get_solana_new_tokens(
+    config: dict,
+    exchange=None,
+    session: aiohttp.ClientSession | None = None,
+) -> List[str]:
     """Return deduplicated Solana token symbols from multiple sources."""
 
     global _MIN_VOLUME_USD
@@ -341,7 +355,10 @@ async def get_solana_new_tokens(config: dict, exchange=None) -> List[str]:
     tasks: list[asyncio.Future] = []
 
     if raydium_key:
-        coro = fetch_new_raydium_pools(limit)
+        try:
+            coro = fetch_new_raydium_pools(limit, session=session)
+        except TypeError:
+            coro = fetch_new_raydium_pools(limit)
         if not asyncio.iscoroutine(coro):
             async def _wrap(res=coro):
                 return res
@@ -349,7 +366,10 @@ async def get_solana_new_tokens(config: dict, exchange=None) -> List[str]:
         tasks.append(coro)
 
     if pump_key or raydium_key:
-        coro = fetch_pump_fun_launches(limit)
+        try:
+            coro = fetch_pump_fun_launches(limit, session=session)
+        except TypeError:
+            coro = fetch_pump_fun_launches(limit)
         if not asyncio.iscoroutine(coro):
             async def _wrap(res=coro):
                 return res

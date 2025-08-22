@@ -9,6 +9,8 @@ from typing import Mapping, List
 import aiohttp
 import ccxt.async_support as ccxt
 
+from crypto_bot.utils.http_client import get_session
+
 from crypto_bot.utils.solana_scanner import search_geckoterminal_token
 from crypto_bot.utils import symbol_scoring
 from crypto_bot.utils import kraken as kraken_utils
@@ -49,7 +51,9 @@ def _get_exchange(cfg: Mapping[str, object]):
 
 
 async def get_solana_new_tokens(
-    cfg: Mapping[str, object], exchange: kraken_utils.KrakenClient | None = None
+    cfg: Mapping[str, object],
+    exchange: kraken_utils.KrakenClient | None = None,
+    session: aiohttp.ClientSession | None = None,
 ) -> List[str]:
     """Return a list of new token mint addresses using ``cfg`` options."""
 
@@ -64,11 +68,11 @@ async def get_solana_new_tokens(
         url = url.replace("YOUR_KEY", key)
 
     limit = int(cfg.get("limit", 0))
+    session = session or get_session()
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=10) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
+        async with session.get(url, timeout=10) as resp:
+            resp.raise_for_status()
+            data = await resp.json()
     except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
         logger.error("Solana scanner error: %s", exc)
         return []

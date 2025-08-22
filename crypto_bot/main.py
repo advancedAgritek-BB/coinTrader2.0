@@ -17,8 +17,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-import aiohttp
 from dotenv import dotenv_values, load_dotenv
+
+import aiohttp
+from crypto_bot.utils.http_client import get_session, close_session
 
 
 try:
@@ -4233,8 +4235,12 @@ async def main() -> None:
 
     notifier: TelegramNotifier | None = None
     reason = "completed"
+    session = get_session()
     try:
-        await refresh_mints()
+        try:
+            await refresh_mints(session=session)
+        except TypeError:
+            await refresh_mints()
         result = await _main_impl()
         notifier = result.notifier
         reason = result.reason
@@ -4266,6 +4272,7 @@ async def main() -> None:
         except Exception as exc:  # pragma: no cover - cleanup error
             logger.exception("Error during shutdown: %s", exc)
         finally:
+            await close_session()
             logger.info("Shutdown complete")
 
 

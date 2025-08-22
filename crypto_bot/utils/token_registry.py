@@ -12,6 +12,10 @@ from typing import Any, Dict, Iterable, List, Optional
 import aiohttp
 import yaml
 
+from .http_client import get_session
+
+AIOHTTP_ERROR = getattr(aiohttp, "ClientError", Exception)
+
 try:  # optional dependency
     import ccxt.async_support as ccxt  # type: ignore
 except ImportError:  # pragma: no cover - optional
@@ -134,7 +138,9 @@ def extract_mint_from_logs(logs: Iterable[str]) -> str | None:
     return None
 
 
-async def get_symbol_from_mint(mint: str, client: Any) -> str | None:
+async def get_symbol_from_mint(
+    mint: str, client: Any, session: aiohttp.ClientSession | None = None
+) -> str | None:
     """Attempt to resolve a token symbol from its mint address."""
     if AsyncClient is None or client is None:
         return None
@@ -144,11 +150,11 @@ async def get_symbol_from_mint(mint: str, client: Any) -> str | None:
             return sym
     url = f"{HELIUS_TOKEN_API}?api-key={HELIUS_API_KEY}"
     payload = {"mintAccounts": [mint]}
+    session = session or get_session()
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=10) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
+        async with session.post(url, json=payload, timeout=10) as resp:
+            resp.raise_for_status()
+            data = await resp.json()
     except Exception as exc:  # pragma: no cover - network best effort
         logger.debug("mint lookup failed for %s: %s", mint, _exc_str(exc))
         return None
@@ -175,12 +181,14 @@ def to_base_units(amount_tokens: float, decimals: int) -> int:
     return int(quantized)
 
 
-async def fetch_from_jupiter() -> Dict[str, str]:
+async def fetch_from_jupiter(
+    session: aiohttp.ClientSession | None = None,
+) -> Dict[str, str]:
     """Return mapping of symbols to mints using Jupiter token list."""
-    async with aiohttp.ClientSession() as session:
-        async with session.get(JUPITER_TOKEN_URL, timeout=10) as resp:
-            resp.raise_for_status()
-            data = await resp.json(content_type=None)
+    session = session or get_session()
+    async with session.get(JUPITER_TOKEN_URL, timeout=10) as resp:
+        resp.raise_for_status()
+        data = await resp.json(content_type=None)
 
     result: Dict[str, str] = {}
     tokens = data if isinstance(data, list) else data.get("tokens") or []
@@ -267,6 +275,7 @@ async def load_token_mints(
     *,
     unknown: List[str] | None = None,
     force_refresh: bool = False,
+    session: aiohttp.ClientSession | None = None,
 ) -> Dict[str, str]:
     """Return mapping of token symbols to mint addresses.
 
@@ -283,14 +292,15 @@ async def load_token_mints(
 
     mapping: Dict[str, str] = {}
 
+    session = session or get_session()
+
     # Try static GitHub token registry first
     fetch_url = url or os.getenv("TOKEN_MINTS_URL", TOKEN_REGISTRY_URL)
     for attempt in range(3):
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(fetch_url, timeout=10) as resp:
-                    resp.raise_for_status()
-                    data = await resp.json(content_type=None)
+            async with session.get(fetch_url, timeout=10) as resp:
+                resp.raise_for_status()
+                data = await resp.json(content_type=None)
             tokens = data.get("tokens") or data.get("data", {}).get("tokens") or []
             temp: Dict[str, str] = {}
             for item in tokens:
@@ -318,7 +328,10 @@ async def load_token_mints(
     if not mapping:
         for attempt in range(3):
             try:
-                mapping = await fetch_from_jupiter()
+                try:
+                    mapping = await fetch_from_jupiter(session)
+                except TypeError:
+                    mapping = await fetch_from_jupiter()
                 if mapping:
                     break
             except Exception:  # pragma: no cover - network failures
@@ -401,9 +414,12 @@ TOKEN_MINTS.update(MANUAL_OVERRIDES)
 _write_cache()  # Save immediately
 
 
-async def refresh_mints() -> None:
+async def refresh_mints(session: aiohttp.ClientSession | None = None) -> None:
     """Force refresh cached token mints and add known symbols."""
-    loaded = await load_token_mints(force_refresh=True)
+    try:
+        loaded = await load_token_mints(force_refresh=True, session=session)
+    except TypeError:
+        loaded = await load_token_mints(force_refresh=True)
     if not loaded:
         raise RuntimeError("Failed to load token mints")
     global MANUAL_OVERRIDES
@@ -447,7 +463,9 @@ def add_manual_override(symbol: str, mint: str) -> None:
     _write_cache()
 
 
-async def get_mint_from_gecko(base: str) -> str | None:
+async def get_mint_from_gecko(
+    base: str, session: aiohttp.ClientSession | None = None
+) -> str | None:
     """Return Solana mint address for ``base`` using GeckoTerminal.
 
     ``None`` is returned if the request fails or no token matches the
@@ -491,11 +509,16 @@ async def get_mint_from_gecko(base: str) -> str | None:
 
     # Fallback: Helius if Gecko fails
     logger.info("Gecko failed; falling back to Helius for %s", base)
-    helius = await fetch_from_helius([base])
+    try:
+        helius = await fetch_from_helius([base], session=session)
+    except TypeError:
+        helius = await fetch_from_helius([base])
     return helius.get(base_upper)
 
 
-async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Dict[str, Any]:
+async def fetch_from_helius(
+    symbols: Iterable[str], *, full: bool = False, session: aiohttp.ClientSession | None = None
+) -> Dict[str, Any]:
     """Return token metadata for ``symbols`` via Helius.
 
     The Helius token-metadata endpoint accepts mint addresses.  ``symbols``
@@ -543,19 +566,20 @@ async def fetch_from_helius(symbols: Iterable[str], *, full: bool = False) -> Di
     url = f"{HELIUS_TOKEN_API}?api-key={api_key}"
     payload = {"mintAccounts": mints}
 
+    session = session or get_session()
+
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=10) as resp:
-                if 400 <= resp.status < 500:
-                    logger.warning(
-                        "Helius lookup failed for %s [%s]",
-                        ",".join(mint_to_symbol.values()),
-                        resp.status,
-                    )
-                    return result
-                resp.raise_for_status()
-                data = await resp.json()
-    except aiohttp.ClientError as exc:  # pragma: no cover - network
+        async with session.post(url, json=payload, timeout=10) as resp:
+            if 400 <= resp.status < 500:
+                logger.warning(
+                    "Helius lookup failed for %s [%s]",
+                    ",".join(mint_to_symbol.values()),
+                    resp.status,
+                )
+                return result
+            resp.raise_for_status()
+            data = await resp.json()
+    except AIOHTTP_ERROR as exc:  # pragma: no cover - network
         logger.error("Helius lookup failed: %s", exc)
         return result
     except Exception as exc:  # pragma: no cover - network
@@ -623,7 +647,10 @@ async def get_decimals(mint: str) -> int:
     return 0
 
 
-async def periodic_mint_sanity_check(interval_hours: float = 24.0) -> None:
+async def periodic_mint_sanity_check(
+    interval_hours: float = 24.0,
+    session: aiohttp.ClientSession | None = None,
+) -> None:
     """Periodically verify manual mint overrides via Helius metadata."""
 
     symbols = list(MANUAL_OVERRIDES.keys())
@@ -631,7 +658,10 @@ async def periodic_mint_sanity_check(interval_hours: float = 24.0) -> None:
     while True:
         try:
             if symbols:
-                metadata = await fetch_from_helius(symbols, full=True)
+                try:
+                    metadata = await fetch_from_helius(symbols, full=True, session=session)
+                except TypeError:
+                    metadata = await fetch_from_helius(symbols, full=True)
                 for sym, expected_mint in MANUAL_OVERRIDES.items():
                     meta = metadata.get(sym)
                     if not isinstance(meta, dict):
@@ -746,7 +776,9 @@ async def monitor_pump_websocket(cfg: Dict[str, Any] | None = None) -> None:
                 await asyncio.sleep(5)
 
 
-async def monitor_pump_raydium() -> None:
+async def monitor_pump_raydium(
+    session: aiohttp.ClientSession | None = None,
+) -> None:
     """Monitor Pump.fun and Raydium for new tokens."""
 
     # ``crypto_bot.main`` may not be loaded when this module is imported. Try to
@@ -773,137 +805,144 @@ async def monitor_pump_raydium() -> None:
     last_pump_ts = datetime.utcnow() - timedelta(minutes=5)
     last_ray_ts = datetime.utcnow() - timedelta(minutes=5)
 
-    async with aiohttp.ClientSession() as session:
-        backoff = 1
-        last_log = 0
-        while True:
-            try:
-                pump_resp, ray_resp = await asyncio.gather(
-                    session.get(PUMP_URL, timeout=10),
-                    session.get(RAYDIUM_URL, timeout=10),
-                )
+    session = session or get_session()
+    backoff = 1
+    last_log = 0
+    while True:
+        try:
+            pump_resp_task = asyncio.create_task(
+                session.get(PUMP_URL, timeout=10)
+            )
+            ray_resp_task = asyncio.create_task(
+                session.get(RAYDIUM_URL, timeout=10)
+            )
+            pump_resp, ray_resp = await asyncio.gather(
+                pump_resp_task, ray_resp_task
+            )
+            async with pump_resp:
                 pump_data = await pump_resp.json(content_type=None)
+            async with ray_resp:
                 ray_data = await ray_resp.json(content_type=None)
-                backoff = 1
-                last_log = 0
+            backoff = 1
+            last_log = 0
 
-                # Pump.fun tokens
-                for item in pump_data if isinstance(pump_data, list) else []:
-                    symbol = item.get("symbol")
-                    mint = item.get("mint") or item.get("address")
-                    created = item.get("created_at") or item.get("createdAt")
-                    initial_buy = item.get("initial_buy") or item.get("initialBuy")
-                    market_cap = item.get("market_cap") or item.get("marketCap")
-                    twitter = item.get("twitter") or item.get("twitter_profile")
-                    if not (symbol and mint and created and market_cap):
+            # Pump.fun tokens
+            for item in pump_data if isinstance(pump_data, list) else []:
+                symbol = item.get("symbol")
+                mint = item.get("mint") or item.get("address")
+                created = item.get("created_at") or item.get("createdAt")
+                initial_buy = item.get("initial_buy") or item.get("initialBuy")
+                market_cap = item.get("market_cap") or item.get("marketCap")
+                twitter = item.get("twitter") or item.get("twitter_profile")
+                if not (symbol and mint and created and market_cap):
+                    logger.debug(
+                        "Skipping Pump.fun token with incomplete data: %s", item
+                    )
+                    continue
+                try:
+                    ts = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+                    if float(market_cap) <= 0:
                         logger.debug(
-                            "Skipping Pump.fun token with incomplete data: %s", item
+                            "Skipping Pump.fun token %s due to non-positive market cap %s",
+                            symbol,
+                            market_cap,
                         )
                         continue
-                    try:
-                        ts = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
-                        if float(market_cap) <= 0:
-                            logger.debug(
-                                "Skipping Pump.fun token %s due to non-positive market cap %s",
-                                symbol,
-                                market_cap,
-                            )
-                            continue
-                    except Exception as exc:
-                        logger.debug(
-                            "Skipping Pump.fun token with invalid data %s: %s", item, exc
-                        )
-                        continue
-                    if ts > last_pump_ts:
-                        last_pump_ts = ts
-                        key = str(symbol).upper()
-                        if key not in TOKEN_MINTS:
-                            TOKEN_MINTS[key] = mint
-                            logger.info("Pump.fun %s market cap %s", symbol, market_cap)
-                            if enqueue_solana_tokens:
-                                try:
-                                    enqueue_solana_tokens([f"{key}/{mint}"])
-                                except Exception as exc:  # pragma: no cover - best effort
-                                    logger.error("enqueue_solana_tokens failed: %s", _exc_str(exc))
-                            _write_cache()
+                except Exception as exc:
+                    logger.debug(
+                        "Skipping Pump.fun token with invalid data %s: %s", item, exc
+                    )
+                    continue
+                if ts > last_pump_ts:
+                    last_pump_ts = ts
+                    key = str(symbol).upper()
+                    if key not in TOKEN_MINTS:
+                        TOKEN_MINTS[key] = mint
+                        logger.info("Pump.fun %s market cap %s", symbol, market_cap)
+                        if enqueue_solana_tokens:
                             try:
-                                from .symbol_utils import invalidate_symbol_cache
+                                enqueue_solana_tokens([f"{key}/{mint}"])
+                            except Exception as exc:  # pragma: no cover - best effort
+                                logger.error("enqueue_solana_tokens failed: %s", _exc_str(exc))
+                        _write_cache()
+                        try:
+                            from .symbol_utils import invalidate_symbol_cache
 
-                                invalidate_symbol_cache()
-                            except Exception:  # pragma: no cover - best effort
-                                pass
-                            start = ts - timedelta(hours=1)
-                            end = ts
-                            asyncio.create_task(_fetch_and_train(start, end))
+                            invalidate_symbol_cache()
+                        except Exception:  # pragma: no cover - best effort
+                            pass
+                        start = ts - timedelta(hours=1)
+                        end = ts
+                        asyncio.create_task(_fetch_and_train(start, end))
 
-                # Raydium pools
-                for pool in ray_data if isinstance(ray_data, list) else []:
-                    symbol = (
-                        pool.get("baseSymbol")
-                        or pool.get("symbol")
-                        or pool.get("name")
-                    )
-                    mint = pool.get("baseMint")
-                    created = (
-                        pool.get("created_at")
-                        or pool.get("createdAt")
-                        or pool.get("creationTime")
-                    )
-                    liquidity = pool.get("liquidity")
-                    if not (symbol and mint and created and liquidity):
+            # Raydium pools
+            for pool in ray_data if isinstance(ray_data, list) else []:
+                symbol = (
+                    pool.get("baseSymbol")
+                    or pool.get("symbol")
+                    or pool.get("name")
+                )
+                mint = pool.get("baseMint")
+                created = (
+                    pool.get("created_at")
+                    or pool.get("createdAt")
+                    or pool.get("creationTime")
+                )
+                liquidity = pool.get("liquidity")
+                if not (symbol and mint and created and liquidity):
+                    continue
+                try:
+                    ts = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+                    if float(liquidity) <= 50_000:
                         continue
-                    try:
-                        ts = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
-                        if float(liquidity) <= 50_000:
-                            continue
-                    except Exception:
-                        continue
-                    if ts > last_ray_ts:
-                        last_ray_ts = ts
-                        key = str(symbol).split("/")[0].upper()
-                        if key not in TOKEN_MINTS:
-                            TOKEN_MINTS[key] = mint
-                            logger.info("Raydium %s liquidity %s", symbol, liquidity)
-                            if enqueue_solana_tokens:
-                                try:
-                                    enqueue_solana_tokens([f"{key}/{mint}"])
-                                except Exception as exc:  # pragma: no cover - best effort
-                                    logger.error("enqueue_solana_tokens failed: %s", _exc_str(exc))
-                            _write_cache()
+                except Exception:
+                    continue
+                if ts > last_ray_ts:
+                    last_ray_ts = ts
+                    key = str(symbol).split("/")[0].upper()
+                    if key not in TOKEN_MINTS:
+                        TOKEN_MINTS[key] = mint
+                        logger.info("Raydium %s liquidity %s", symbol, liquidity)
+                        if enqueue_solana_tokens:
                             try:
-                                from .symbol_utils import invalidate_symbol_cache
+                                enqueue_solana_tokens([f"{key}/{mint}"])
+                            except Exception as exc:  # pragma: no cover - best effort
+                                logger.error("enqueue_solana_tokens failed: %s", _exc_str(exc))
+                        _write_cache()
+                        try:
+                            from .symbol_utils import invalidate_symbol_cache
 
-                                invalidate_symbol_cache()
-                            except Exception:  # pragma: no cover - best effort
-                                pass
-                            start = ts - timedelta(hours=1)
-                            end = datetime.utcnow()
-                            asyncio.create_task(_fetch_and_train(start, end))
+                            invalidate_symbol_cache()
+                        except Exception:  # pragma: no cover - best effort
+                            pass
+                        start = ts - timedelta(hours=1)
+                        end = datetime.utcnow()
+                        asyncio.create_task(_fetch_and_train(start, end))
 
-                await asyncio.sleep(POLL_INTERVAL)
-            except asyncio.CancelledError:
-                logger.info("monitor_pump_raydium cancelled")
-                raise
-            except (aiohttp.ClientError, asyncio.TimeoutError, OSError) as exc:
-                if backoff != last_log:
-                    logger.error(
-                        "monitor_pump_raydium network error: %s; retrying in %ss",
-                        _exc_str(exc),
-                        backoff,
-                    )
-                    last_log = backoff
-                await asyncio.sleep(backoff)
-                backoff = min(backoff * 2, 60)
-            except Exception as exc:  # pragma: no cover - network errors
-                if backoff != last_log:
-                    logger.error(
-                        "monitor_pump_raydium error: %s; retrying in %ss",
-                        _exc_str(exc),
-                        backoff,
-                    )
-                    last_log = backoff
-                await asyncio.sleep(backoff)
-                backoff = min(backoff * 2, 60)
+            await asyncio.sleep(POLL_INTERVAL)
+        except asyncio.CancelledError:
+            logger.info("monitor_pump_raydium cancelled")
+            raise
+        except (AIOHTTP_ERROR, asyncio.TimeoutError, OSError) as exc:
+            if backoff != last_log:
+                logger.error(
+                    "monitor_pump_raydium network error: %s; retrying in %ss",
+                    _exc_str(exc),
+                    backoff,
+                )
+                last_log = backoff
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 60)
+        except Exception as exc:  # pragma: no cover - network errors
+            if backoff != last_log:
+                logger.error(
+                    "monitor_pump_raydium error: %s; retrying in %ss",
+                    _exc_str(exc),
+                    backoff,
+                )
+                last_log = backoff
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, 60)
 
 
 # Backward compatibility
