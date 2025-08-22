@@ -8,6 +8,7 @@ import ta
 
 from crypto_bot.utils import stats
 from crypto_bot.utils.indicator_cache import cache_series
+from crypto_bot.utils.market_loader import get_progress_eta
 
 NAME = "breakout"
 logger = logging.getLogger(__name__)
@@ -47,12 +48,6 @@ def generate_signal(
         timeframe = None
     config = kwargs.get("config")
 
-    if df is None or df.empty:
-        logger.info(
-            "signal=breakout side=none reason=insufficient_data vol_z=nan bbw_pct=nan"
-        )
-        return 0.0, "none", 0.0
-
     cfg_all = config or {}
     cfg = cfg_all.get("breakout", cfg_all)
     donchian_len = int(cfg.get("donchian_len", 20))
@@ -66,12 +61,24 @@ def generate_signal(
     max_spread_bp = float(cfg.get("max_spread_bp", 5.0))
     allow_short = bool(cfg.get("allow_short", False))
     score_threshold = float(cfg.get("score_threshold", 0.0))
-
     lookback = max(donchian_len, keltner_len, bbw_lookback, vol_window, atr_len)
-    if len(df) < lookback + 1:
-        logger.info(
-            "signal=breakout side=none reason=insufficient_data vol_z=nan bbw_pct=nan"
-        )
+    progress_logging = bool(cfg_all.get("ohlcv", {}).get("progress_logging", False))
+    required = lookback + 1
+
+    if df is None or df.empty:
+        msg = "signal=breakout side=none reason=insufficient_data vol_z=nan bbw_pct=nan"
+        if progress_logging and symbol and timeframe:
+            pct, eta = get_progress_eta(symbol, timeframe, required)
+            msg += f" progress={pct:.1f}% eta={eta:.1f}s"
+        logger.info(msg)
+        return 0.0, "none", 0.0
+
+    if len(df) < required:
+        msg = "signal=breakout side=none reason=insufficient_data vol_z=nan bbw_pct=nan"
+        if progress_logging and symbol and timeframe:
+            pct, eta = get_progress_eta(symbol, timeframe, required)
+            msg += f" progress={pct:.1f}% eta={eta:.1f}s"
+        logger.info(msg)
         return 0.0, "none", 0.0
 
     recent = df.iloc[-(lookback + 1) :].copy()
