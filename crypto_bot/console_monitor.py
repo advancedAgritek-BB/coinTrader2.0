@@ -11,6 +11,11 @@ import sys
 import csv
 import pandas as pd
 
+# Flag indicating whether ``monitor_loop`` is currently running. The main
+# application checks this to disable its own status output when the console
+# monitor is active.
+MONITOR_ACTIVE = False
+
 TRADE_FILE = LOG_DIR / "trades.csv"
 
 from rich.console import Console
@@ -133,6 +138,8 @@ async def monitor_loop(
     rendered below. Set ``quiet_mode`` to ``True`` to print a single update when
     stdout is not a TTY.
     """
+    global MONITOR_ACTIVE
+    MONITOR_ACTIVE = True
     log_path = Path(log_file)
     last_line = ""
     prev_lines = 0
@@ -152,7 +159,11 @@ async def monitor_loop(
                             bal = await exchange.fetch_balance()
                         else:
                             bal = await asyncio.to_thread(exchange.fetch_balance)
-                        balance = bal.get("USDT", {}).get("free", 0) if isinstance(bal.get("USDT"), dict) else bal.get("USDT", 0)
+                        balance = (
+                            bal.get("USDT", {}).get("free", 0)
+                            if isinstance(bal.get("USDT"), dict)
+                            else bal.get("USDT", 0)
+                        )
                 except Exception:
                     pass
 
@@ -189,6 +200,8 @@ async def monitor_loop(
         # Propagate cancellation after the file handle is closed by the
         # context manager.
         raise
+    finally:
+        MONITOR_ACTIVE = False
 
 
 def display_trades(
