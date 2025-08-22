@@ -2381,6 +2381,7 @@ async def execute_signals(
         score = candidate.get("score", 0.0)
         direction = candidate.get("direction") or candidate.get("signal") or "none"
         sym = candidate["symbol"]
+        side = direction_to_side(direction)
         logger.info(f"Pre-execution candidate: {sym} score={score} dir={direction}")
         if ctx.position_guard and not ctx.position_guard.can_open(ctx.positions):
             logger.debug("Position guard blocked opening a new position")
@@ -2428,6 +2429,15 @@ async def execute_signals(
             "min_score": True,
         }
 
+        sentiment_ok = True
+        ml_ok = candidate.get("ml_ok", True)
+        model = candidate.get("model")
+        pred = candidate.get("prediction")
+        venue_ok = True
+        cooldown = True
+        sizing_ok = True
+        budget_ok = True
+
         def _log_gates() -> None:
             logger.info(
                 "Gate summary for %s: sentiment=%s risk=%s budget=%s cooldown=%s min_score=%s",
@@ -2438,10 +2448,28 @@ async def execute_signals(
                 gate_results["cooldown"],
                 gate_results["min_score"],
             )
+            logger.info(
+                "skip_trade reason flags | symbol=%s side=%s short_selling=%s sentiment_enabled=%s sentiment_ok=%s ml_enabled=%s ml_ok=%s model_found=%s pred=%s thr=%s venue_ok=%s cooldown=%s sizing_ok=%s budget_ok=%s",
+                sym,
+                side,
+                bool(ctx.config.get("allow_short", False)),
+                ctx.config.get("trading", {}).get("require_sentiment", True),
+                sentiment_ok,
+                ctx.config.get("ml_enabled", True),
+                ml_ok,
+                bool(model),
+                getattr(pred, "value", pred),
+                ctx.config.get("ml_threshold", ctx.config.get("ml", {}).get("threshold")),
+                venue_ok,
+                cooldown,
+                sizing_ok,
+                budget_ok,
+            )
 
         if candidate.get("too_flat", False):
             outcome_reason = "atr too flat"
             gate_results["risk"] = False
+            sizing_ok = False
             _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             reject_counts["atr_too_flat"] += 1
@@ -2453,8 +2481,10 @@ async def execute_signals(
             outcome_reason = f"blocked: {reason}"
             if reason == "Bearish sentiment":
                 gate_results["sentiment"] = False
+                sentiment_ok = False
             else:
                 gate_results["risk"] = False
+                sizing_ok = False
             _log_rejection(sym, score, direction, min_req, reason, "RISK_MANAGER")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             key = reason.lower().replace(" ", "_")
@@ -2501,6 +2531,8 @@ async def execute_signals(
             if size == 0:
                 outcome_reason = f"size {size:.4f}"
                 gate_results["budget"] = False
+                budget_ok = False
+                sizing_ok = False
                 _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
                 logger.info("[EVAL] %s -> %s", sym, outcome_reason)
                 reject_counts["size_zero"] += 1
@@ -2517,6 +2549,7 @@ async def execute_signals(
             )
             outcome_reason = "insufficient capital"
             gate_results["budget"] = False
+            budget_ok = False
             _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             reject_counts["insufficient_capital"] += 1
@@ -2537,16 +2570,17 @@ async def execute_signals(
             return None
         side = _to_side(raw)
         if side is None:
-            logging.debug("Skip: no actionable side (signal/direction missing) %s", candidate)
+            logger.debug("Skip: no actionable side (signal/direction missing) %s", candidate)
             outcome_reason = "no actionable side"
             _log_rejection(sym, score, direction, min_req, outcome_reason, "SCORING")
             reject_counts["no_actionable_side"] += 1
             continue
         allow_short = bool(ctx.config.get("allow_short", False))
         if side == "sell" and not allow_short:
-            logging.info("Skip: short selling disabled; %s", candidate)
+            logger.info("Skip: short selling disabled; %s", candidate)
             outcome_reason = "short selling disabled"
             gate_results["risk"] = False
+            sizing_ok = False
             _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             reject_counts["short_selling_disabled"] += 1
@@ -2557,7 +2591,7 @@ async def execute_signals(
         if getattr(ctx, "markets", None):
             tradable_here = candidate["symbol"] in ctx.markets and ctx.markets[candidate["symbol"]].get("active", True)
         if not tradable_here:
-            logging.info(
+            logger.info(
                 "Skip: symbol not tradable on %s (dry_run=%s): %s",
                 ctx.config.get("exchange", "unknown"),
                 ctx.execution_mode == "dry_run",
@@ -2565,6 +2599,7 @@ async def execute_signals(
             )
             outcome_reason = "symbol not tradable"
             gate_results["risk"] = False
+            venue_ok = False
             _log_rejection(sym, score, direction, min_req, outcome_reason, "MARKET")
             logger.info("[EVAL] %s -> %s", sym, outcome_reason)
             reject_counts["symbol_not_tradable"] += 1
@@ -2577,6 +2612,7 @@ async def execute_signals(
             if in_cooldown(sym, strategy):
                 outcome_reason = "cooldown"
                 gate_results["cooldown"] = False
+                cooldown = False
                 _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
                 logger.info("[EVAL] %s -> %s", sym, outcome_reason)
                 reject_counts["cooldown"] += 1
