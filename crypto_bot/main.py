@@ -3572,10 +3572,14 @@ async def _main_impl() -> MainResult:
         start_bal = float(
             os.getenv("PAPER_BALANCE") or config.get("paper_balance", 1000.0)
         )
+        exec_cfg = config.get("execution", {}) or {}
         wallet = Wallet(
             start_bal,
-            config.get("max_open_trades", 1),
+            exec_cfg.get("max_positions", config.get("max_open_trades", 1)),
             config.get("allow_short", False),
+            stake_usd=exec_cfg.get("stake_usd"),
+            min_price=exec_cfg.get("min_price", 0.0),
+            min_notional=exec_cfg.get("min_notional", 0.0),
         )
         log_balance(wallet.total_balance)
         last_balance = notify_balance_change(

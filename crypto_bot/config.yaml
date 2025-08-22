@@ -514,8 +514,10 @@ router:
   top_k_per_strategy: 3
 
 execution:
-  dry_run: true
-  min_notional_usd: 20
+  mode: dry_run
+  stake_usd: 50
+  min_price: 0.00000001
+  min_notional: 5
   max_positions: 3
 rl_selector:
   enabled: true

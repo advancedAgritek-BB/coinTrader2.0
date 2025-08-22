@@ -41,6 +41,7 @@ class Wallet(PaperWallet):
             # buying back part of a short position
             self.close(symbol, amount, price)
             return
+        self._check_limits(price, amount)
 
         if pos and pos.get("side") == "buy":
             # increase existing long without opening a new trade id
@@ -69,6 +70,7 @@ class Wallet(PaperWallet):
             # selling part of a long position
             self.close(symbol, amount, price)
             return
+        self._check_limits(price, amount)
 
         if pos and pos.get("side") == "sell":
             # increase existing short
