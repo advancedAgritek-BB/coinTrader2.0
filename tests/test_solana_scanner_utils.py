@@ -312,12 +312,7 @@ def test_fetch_pump_fun_launches_filters(monkeypatch):
     session = DummySession(data)
     aiohttp_mod = type("M", (), {"ClientSession": lambda: session})
     monkeypatch.setattr(solana_scanner, "aiohttp", aiohttp_mod)
-    monkeypatch.setattr(solana_scanner, "TOKEN_MINTS", {})
 
-    async def fake_gecko(base):
-        return base
-
-    monkeypatch.setattr(solana_scanner, "get_mint_from_gecko", fake_gecko)
     solana_scanner._MIN_VOLUME_USD = 0
 
     tokens = asyncio.run(solana_scanner.fetch_pump_fun_launches("k", 10))
@@ -343,7 +338,8 @@ def test_get_solana_new_tokens(monkeypatch):
             pass
 
     monkeypatch.setattr(solana_scanner.symbol_scoring, "score_symbol", fake_score)
-    monkeypatch.setattr(solana_scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
+    monkeypatch.setattr(solana_scanner.kraken_utils, "get_client", lambda *_a, **_k: DummyEx())
+    monkeypatch.setattr(solana_scanner, "_EXCHANGE", None, raising=False)
 
     cfg = {
         "pump_fun_api_key": "p",
@@ -408,13 +404,15 @@ def test_get_solana_new_tokens_gecko_filter(monkeypatch):
             pass
 
     monkeypatch.setattr(solana_scanner.symbol_scoring, "score_symbol", fake_score)
-    monkeypatch.setattr(solana_scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
+    monkeypatch.setattr(solana_scanner.kraken_utils, "get_client", lambda *_a, **_k: DummyEx())
+    monkeypatch.setattr(solana_scanner, "_EXCHANGE", None, raising=False)
 
     cfg = {
         "max_tokens_per_scan": 10,
         "min_volume_usd": 100,
         "gecko_search": True,
         "min_symbol_score": 0.5,
+        "raydium_api_key": "r",
     }
     tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
     assert tokens == ["A/USDC"]
@@ -449,13 +447,15 @@ def test_get_solana_new_tokens_scoring(monkeypatch):
         return {"A/USDC": 0.6, "B/USDC": 0.8}[sym]
 
     monkeypatch.setattr(solana_scanner.symbol_scoring, "score_symbol", fake_score)
-    monkeypatch.setattr(solana_scanner.ccxt, "kraken", lambda *_a, **_k: DummyEx(), raising=False)
+    monkeypatch.setattr(solana_scanner.kraken_utils, "get_client", lambda *_a, **_k: DummyEx())
+    monkeypatch.setattr(solana_scanner, "_EXCHANGE", None, raising=False)
 
     cfg = {
         "max_tokens_per_scan": 10,
         "min_volume_usd": 0,
         "gecko_search": True,
         "min_symbol_score": 0.0,
+        "raydium_api_key": "r",
     }
     tokens = asyncio.run(solana_scanner.get_solana_new_tokens(cfg))
     assert tokens == ["B/USDC", "A/USDC"]

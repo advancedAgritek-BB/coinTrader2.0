@@ -13,6 +13,7 @@ import ccxt.async_support as ccxt
 
 from .gecko import gecko_request
 from . import symbol_scoring
+from . import kraken as kraken_utils
 
 logger = logging.getLogger(__name__)
 
@@ -95,17 +96,36 @@ async def _fetch_json(url: str) -> list | dict | None:
         return None
 
 
-async def _close_exchange(exchange) -> None:
-    """Close ``exchange`` ignoring errors."""
-    close = getattr(exchange, "close", None)
-    if close:
-        try:
-            if asyncio.iscoroutinefunction(close):
-                await close()
-            else:
-                close()
-        except Exception:  # pragma: no cover - best effort
-            pass
+# Cached exchange instance
+_EXCHANGE = None
+
+
+def _get_exchange(config: dict):
+    """Return a cached ccxt exchange instance."""
+
+    global _EXCHANGE
+    if _EXCHANGE is None:
+        ex = config.get("exchange", "kraken")
+        if isinstance(ex, dict):
+            ex_name = ex.get("name", "kraken").lower()
+            params = {"enableRateLimit": True}
+            timeout = ex.get("request_timeout_ms")
+            if timeout:
+                params["timeout"] = int(timeout)
+            max_conc = ex.get("max_concurrency")
+        else:
+            ex_name = str(ex).lower()
+            params = {"enableRateLimit": True}
+            max_conc = None
+
+        if ex_name == "kraken":
+            _EXCHANGE = kraken_utils.get_client()
+        else:
+            exchange_cls = getattr(ccxt, ex_name)
+            _EXCHANGE = exchange_cls(params)
+            if max_conc is not None:
+                setattr(_EXCHANGE, "max_concurrency", int(max_conc))
+    return _EXCHANGE
 
 
 async def _extract_tokens(data: list | dict) -> List[str]:
@@ -307,7 +327,7 @@ async def fetch_pump_fun_launches(*args) -> List[str]:
     return results
 
 
-async def get_solana_new_tokens(config: dict) -> List[str]:
+async def get_solana_new_tokens(config: dict, exchange=None) -> List[str]:
     """Return deduplicated Solana token symbols from multiple sources."""
 
     global _MIN_VOLUME_USD
@@ -375,34 +395,17 @@ async def get_solana_new_tokens(config: dict) -> List[str]:
         return []
 
     min_score = float(config.get("min_symbol_score", 0.0))
-    ex = config.get("exchange", "kraken")
-    if isinstance(ex, dict):
-        ex_name = ex.get("name", "kraken").lower()
-        params = {"enableRateLimit": True}
-        timeout = ex.get("request_timeout_ms")
-        if timeout:
-            params["timeout"] = int(timeout)
-        max_conc = ex.get("max_concurrency")
-    else:
-        ex_name = str(ex).lower()
-        params = {"enableRateLimit": True}
-        max_conc = None
-    exchange_cls = getattr(ccxt, ex_name)
-    exchange = exchange_cls(params)
-    if max_conc is not None:
-        setattr(exchange, "max_concurrency", int(max_conc))
+    if exchange is None:
+        exchange = _get_exchange(config)
 
-    try:
-        scores = await asyncio.gather(
-            *[
-                symbol_scoring.score_symbol(
-                    exchange, sym, vol, 0.0, 0.0, 1.0, config
-                )
-                for sym, vol in final
-            ]
-        )
-    finally:
-        await _close_exchange(exchange)
+    scores = await asyncio.gather(
+        *[
+            symbol_scoring.score_symbol(
+                exchange, sym, vol, 0.0, 0.0, 1.0, config
+            )
+            for sym, vol in final
+        ]
+    )
 
     scored = [
         (sym, score)
