@@ -2,6 +2,8 @@ import logging
 from typing import Optional
 import requests
 
+from crypto_bot.utils.market_loader import get_http_session
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,7 +19,8 @@ def get_pyth_price(symbol: str) -> Optional[float]:
     base, quote = parts
     query = f"Crypto.{base}/{quote}"
     try:
-        resp = requests.get(
+        session = get_http_session()
+        resp = session.get(
             "https://hermes.pyth.network/v2/price_feeds",
             params={"query": query},
             timeout=5,
@@ -29,7 +32,7 @@ def get_pyth_price(symbol: str) -> Optional[float]:
         feed_id = data[0].get("id")
         if not feed_id:
             return None
-        resp = requests.get(
+        resp = session.get(
             "https://hermes.pyth.network/api/latest_price_feeds",
             params={"ids[]": feed_id},
             timeout=5,

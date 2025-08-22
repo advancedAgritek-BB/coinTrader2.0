@@ -16,7 +16,7 @@ import pandas as pd
 import requests
 
 from crypto_bot.sentiment_filter import fetch_twitter_sentiment_async
-from crypto_bot.utils.market_loader import fetch_geckoterminal_ohlcv
+from crypto_bot.utils.market_loader import fetch_geckoterminal_ohlcv, get_http_session
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
 try:  # optional dependency
@@ -51,7 +51,8 @@ async def assess_early_token(symbol: str, mint: str, cfg: Dict[str, Any]) -> flo
     if helius_api:
         url = f"https://api.helius.xyz/v0/token-metadata?api-key={helius_api}&mints={mint}"
         try:
-            resp = await asyncio.to_thread(requests.get, url, timeout=10)
+            session = get_http_session()
+            resp = await asyncio.to_thread(session.get, url, timeout=10)
             data = resp.json().get(mint, {}) if resp.ok else {}
         except Exception as exc:  # pragma: no cover - network best effort
             logger.error("Helius token lookup failed for %s: %s", mint, exc)

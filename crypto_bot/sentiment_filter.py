@@ -8,6 +8,8 @@ from typing import Optional
 import requests
 from cachetools import TTLCache
 
+from crypto_bot.utils.market_loader import get_http_session
+
 from crypto_bot.lunarcrush_client import LunarCrushClient
 from crypto_bot.utils.env import env_or_prompt
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
@@ -37,7 +39,8 @@ def fetch_fng_index() -> int:
         return _CACHE[key]
 
     try:
-        resp = requests.get(FNG_URL, timeout=5)
+        session = get_http_session()
+        resp = session.get(FNG_URL, timeout=5)
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, dict):

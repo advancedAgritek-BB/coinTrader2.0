@@ -63,6 +63,7 @@ import os
 from typing import Optional
 
 import requests
+from crypto_bot.utils.market_loader import get_http_session
 
 
 def get_pyth_price(symbol: str, config: Optional[dict] = None) -> float:
@@ -78,7 +79,8 @@ def get_pyth_price(symbol: str, config: Optional[dict] = None) -> float:
     url = config.get("pyth_url") if config else None
     if url:
         try:
-            resp = requests.get(f"{url}/{symbol}", timeout=5)
+            session = get_http_session()
+            resp = session.get(f"{url}/{symbol}", timeout=5)
             resp.raise_for_status()
             data = resp.json()
             if isinstance(data, dict):

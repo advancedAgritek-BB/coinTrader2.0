@@ -18,6 +18,7 @@ import logging
 import json
 import requests
 from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -258,7 +259,11 @@ def get_http_session(pool_size: int | None = None) -> requests.Session:
     if _HTTP_SESSION is None:
         size = pool_size or DEFAULT_MAX_CONCURRENT_OHLCV
         session = requests.Session()
-        adapter = HTTPAdapter(pool_maxsize=size)
+        adapter = HTTPAdapter(
+            pool_connections=size,
+            pool_maxsize=size,
+            max_retries=Retry(total=3, backoff_factor=0.3),
+        )
         session.mount("https://", adapter)
         session.mount("http://", adapter)
         _HTTP_SESSION = session
@@ -706,7 +711,11 @@ def configure(
                 raise ValueError
             maxc = max(size, int(cfg.get("max_concurrent_ohlcv", DEFAULT_MAX_CONCURRENT_OHLCV)))
             session = requests.Session()
-            adapter = HTTPAdapter(pool_maxsize=maxc)
+            adapter = HTTPAdapter(
+                pool_connections=maxc,
+                pool_maxsize=maxc,
+                max_retries=Retry(total=3, backoff_factor=0.3),
+            )
             session.mount("https://", adapter)
             session.mount("http://", adapter)
             if _HTTP_SESSION is not None:

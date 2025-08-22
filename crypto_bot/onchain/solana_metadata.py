@@ -5,6 +5,7 @@ from functools import lru_cache
 from typing import Dict, List
 
 import requests
+from crypto_bot.utils.market_loader import get_http_session
 
 from crypto_bot.solana.helius_client import HELIUS_API_KEY, helius_available
 
@@ -33,7 +34,8 @@ def _do_helius_request(mint_addresses: List[str], *, api_key: str):
     """Perform the Helius metadata request for ``mint_addresses``."""
     url = f"https://api.helius.xyz/v0/token-metadata?api-key={api_key}"
     payload = {"mintAccounts": mint_addresses}
-    return requests.post(url, json=payload, timeout=10)
+    session = get_http_session()
+    return session.post(url, json=payload, timeout=10)
 
 
 def fetch_token_metadata(mint_addresses: List[str]) -> Dict[str, Dict]:
