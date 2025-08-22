@@ -13,7 +13,7 @@ from typing import Dict
 import schedule
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.error import BadRequest, NetworkError
+from telegram.error import BadRequest, NetworkError, TimedOut
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -23,6 +23,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from telegram.request import HTTPXRequest
 from crypto_bot.telegram_ctl import _paginate, get_page, set_page
 
 from crypto_bot.portfolio_rotator import PortfolioRotator
@@ -79,6 +80,10 @@ class TelegramBotUI:
         exchange: object | None = None,
         wallet: str | None = None,
         command_cooldown: float = 5,
+        *,
+        connect_timeout: float = 10.0,
+        read_timeout: float = 20.0,
+        connection_pool_size: int = 8,
     ) -> None:
         self.notifier = notifier
         self.token = notifier.token
@@ -93,7 +98,14 @@ class TelegramBotUI:
         self._last_exec: Dict[tuple[str, str], float] = {}
         self.logger = setup_logger(__name__, LOG_DIR / "telegram_ui.log")
 
-        self.app = ApplicationBuilder().token(self.token).build()
+        request = HTTPXRequest(
+            connection_pool_size=connection_pool_size,
+            connect_timeout=connect_timeout,
+            read_timeout=read_timeout,
+        )
+        self.app = (
+            ApplicationBuilder().token(self.token).request(request).build()
+        )
         if hasattr(self.app, "bot_data"):
             self.app.bot_data["controller"] = self.controller
             self.app.bot_data["admin_id"] = self.chat_id
@@ -173,7 +185,28 @@ class TelegramBotUI:
         """Start polling within the current event loop with retry/backoff."""
 
         async def run() -> None:
-            await self.app.initialize()
+            backoff = 1
+            for _ in range(5):
+                try:
+                    await self.app.initialize()
+                    with contextlib.suppress(AttributeError):
+                        await self.app.bot.get_me()
+                    break
+                except TimedOut as exc:
+                    self.logger.error(
+                        "Telegram init timed out: retrying in %ss", backoff
+                    )
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, 60)
+                except Exception as exc:
+                    self.logger.error(
+                        "Failed to initialize Telegram bot: %s", exc
+                    )
+                    return
+            else:
+                self.logger.error("Telegram API unreachable; disabling UI")
+                return
+
             self.notifier.notify(MENU_TEXT)
             backoff = 1
             last_log = 0

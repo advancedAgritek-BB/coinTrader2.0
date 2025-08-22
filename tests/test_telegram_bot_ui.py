@@ -83,6 +83,9 @@ class DummyBuilder:
     def token(self, *a, **k):
         return self
 
+    def request(self, *a, **k):
+        return self
+
     def build(self):
         return DummyApplication()
 
