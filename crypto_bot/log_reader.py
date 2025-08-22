@@ -76,7 +76,10 @@ def trade_summary(path: Path | str) -> Dict[str, float]:
             # Excess sell amount opens short position
             if amount > 0:
                 open_shorts.append((price, amount))
-    win_rate = wins / closed if closed else 0.0
+    # When no round-trip trades have been closed, assume a neutral bootstrap
+    # win rate of ``0.6`` so downstream components are not overly penalised by
+    # lack of history.
+    win_rate = wins / closed if closed else 0.6
     active = sum(qty for _, qty in open_longs) + sum(qty for _, qty in open_shorts)
     return {
         "num_trades": num_trades,

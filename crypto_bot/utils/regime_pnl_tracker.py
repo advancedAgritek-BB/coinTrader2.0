@@ -159,8 +159,11 @@ def get_recent_win_rate(
 
     outcomes = (recent["pnl"] > 0).astype(float)
     total = len(outcomes)
+    # If there are no trades in the requested window (or for the filtered
+    # strategy), fall back to the bootstrap win rate of ``0.6`` to avoid
+    # overly pessimistic defaults.
     if not total:
-        return 0.0
+        return 0.6
 
     if half_life and half_life > 0:
         ages = np.arange(total - 1, -1, -1)

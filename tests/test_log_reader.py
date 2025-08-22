@@ -31,6 +31,16 @@ def test_trade_summary_handles_bad_rows(tmp_path):
     assert stats["total_pnl"] == 0
 
 
+def test_trade_summary_no_history_defaults_win_rate(tmp_path):
+    """When no trades are present the win rate should fall back to 0.6."""
+    path = tmp_path / "trades.csv"
+
+    stats = log_reader.trade_summary(path)
+    assert stats["num_trades"] == 0
+    assert stats["total_pnl"] == 0
+    assert stats["win_rate"] == 0.6
+
+
 def test_trade_summary_short_positions(tmp_path):
     path = tmp_path / "trades.csv"
     data = [

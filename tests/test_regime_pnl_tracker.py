@@ -89,6 +89,23 @@ def test_win_rate_default(tmp_path, monkeypatch):
     assert rpt.get_recent_win_rate(5, log) == 0.6
 
 
+def test_win_rate_no_history_for_strategy(tmp_path, monkeypatch):
+    """If other strategies have history but the requested one does not, the
+    bootstrap win rate of 0.6 should be returned."""
+    log = tmp_path / "pnl.csv"
+    perf = tmp_path / "perf.json"
+    monkeypatch.setattr(rpt, "LOG_FILE", log)
+    monkeypatch.setattr(rpt, "PERF_FILE", perf)
+
+    # Log trades for a different strategy
+    rpt.log_trade("trending", "grid_bot", 1.0)
+    rpt.log_trade("trending", "grid_bot", -0.5)
+
+    # Request win rate for strategy with no trades
+    rate = rpt.get_recent_win_rate(5, log, strategy="trend_bot")
+    assert rate == 0.6
+
+
 def test_recent_win_rate_decay_weights_newer_trades(tmp_path, monkeypatch):
     log = tmp_path / "pnl.csv"
     perf = tmp_path / "perf.json"
