@@ -54,11 +54,26 @@ def sentiment_factor_or_default(
     now_ts : float
         Current timestamp used for age comparison.
     require_sentiment : bool
-        Whether sentiment data is required. If ``False`` the function
-        immediately returns ``1.0``.
+        Whether sentiment data is required. If ``False`` or when the global
+        configuration disables the sentiment filter, the function immediately
+        returns ``1.0``.
     max_age_s : float
         Maximum allowed age in seconds for the sentiment data.
     """
+
+    env_val = os.getenv("CT_REQUIRE_SENTIMENT")
+    if env_val is not None:
+        require_sentiment = env_val.lower() in ("1", "true", "yes")
+    else:
+        try:  # Check top-level filters in config.yaml
+            from crypto_bot.main import load_config  # type: ignore
+
+            cfg = load_config()
+            enabled = cfg.get("filters", {}).get("sentiment", {}).get("enabled", True)
+            require_sentiment = require_sentiment and enabled
+        except Exception:  # pragma: no cover - config loading issues
+            pass
+
     if not require_sentiment:
         return 1.0
 
