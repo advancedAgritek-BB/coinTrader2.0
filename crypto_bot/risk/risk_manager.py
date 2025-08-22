@@ -46,9 +46,9 @@ logger = setup_logger(__name__, LOG_DIR / "bot.log")
 class RiskConfig:
     """Configuration values governing risk limits."""
 
-    max_drawdown: float
     stop_loss_pct: float
     take_profit_pct: float
+    max_drawdown: float = 0.2
     min_fng: int = 0
     min_sentiment: int = 0
     require_sentiment: bool = True
@@ -57,7 +57,7 @@ class RiskConfig:
     min_atr_pct: float = 0.0
     max_funding_rate: float = 1.0
     symbol: str = ""
-    trade_size_pct: float = 0.1
+    trade_size_pct: float = 0.05
     risk_pct: float = 0.01
     slippage_factor: float = 0.0
     min_volume: float = 0.0
@@ -68,14 +68,14 @@ class RiskConfig:
     atr_long_window: int = 50
     max_volatility_factor: float = 1.5
     min_expected_value: float = 0.0
-    default_expected_value: float | None = None
+    default_expected_value: float | None = 0.1
     atr_period: int = 14
     stop_loss_atr_mult: float = 2.0
     take_profit_atr_mult: float = 4.0
     max_pair_drawdown: float = 0.0
     pair_drawdown_lookback: int = 20
     min_history_bars: int = 20
-    win_rate_threshold: float = 0.7
+    win_rate_threshold: float = 0.4
     win_rate_boost_factor: float = 1.5
     win_rate_half_life: float = 5.0
 
