@@ -793,6 +793,7 @@ use_websocket: true
 volatility_filter:
   max_funding_rate: 0.2  # Allow hotter funding
   min_atr_pct: 0.00005  # Include flatter markets
+voting_enabled: false  # Run each strategy independently unless enabled
 voting_strategies:
   strategies:
     - trend_bot

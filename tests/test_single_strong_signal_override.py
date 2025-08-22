@@ -39,6 +39,7 @@ async def test_single_strong_signal_override_dry_run(monkeypatch):
     cfg = {
         "timeframe": "1h",
         "regime_timeframes": ["1h"],
+        "voting_enabled": True,
         "voting_strategies": {"strategies": ["s"], "min_agreeing_votes": 2},
     }
     res = await ma.analyze_symbol("AAA", {"1h": df}, "dry_run", cfg, None)
@@ -63,6 +64,7 @@ async def test_single_strong_signal_live_respects_quorum(monkeypatch):
     cfg = {
         "timeframe": "1h",
         "regime_timeframes": ["1h"],
+        "voting_enabled": True,
         "voting_strategies": {"strategies": ["s"], "min_agreeing_votes": 2},
     }
     res = await ma.analyze_symbol("AAA", {"1h": df}, "cex", cfg, None)
