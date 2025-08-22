@@ -3817,6 +3817,9 @@ async def _main_impl() -> MainResult:
                             for (sym, tf), val in res.items():
                                 if isinstance(val, tuple):
                                     score, action = val
+                                elif isinstance(val, dict):
+                                    score = val.get("score", 0.0)
+                                    action = val.get("signal", "none")
                                 else:
                                     score, action = val, "none"
                                 logger.info(
@@ -3827,7 +3830,7 @@ async def _main_impl() -> MainResult:
                                     score,
                                     action,
                                 )
-                                scores[f"{strat.name}:{sym}:{tf}"] = score
+                                scores[f"{strat.name}:{sym}:{tf}"] = float(score)
                         except Exception:
                             logger.exception(
                                 "Strategy %s scoring failed", getattr(strat, "name", str(strat))
