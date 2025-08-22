@@ -81,7 +81,8 @@ class StreamEvaluationEngine:
         cfg: Any | None = None,
         data: Any | None = None,
     ) -> None:
-        self.queue: asyncio.Queue[tuple[str, dict]] = asyncio.Queue()
+        # queue stores tuple of (symbol, ctx, enqueued_ts)
+        self.queue: asyncio.Queue[tuple[str, dict, float]] = asyncio.Queue()
         self.eval_fn = eval_fn
         self.concurrency = concurrency
         self.cfg = cfg
@@ -123,6 +124,9 @@ class StreamEvaluationEngine:
         for idx in range(workers):
             task = asyncio.create_task(self._worker(), name=f"eval-worker-{idx}")
             self._workers.append(task)
+        # start metrics loop to periodically report queue stats
+        metrics_task = asyncio.create_task(self._metrics_loop(), name="eval-metrics")
+        self._tasks.append(metrics_task)
         logger.info(f"Evaluation workers online: {len(self._workers)}")
 
     def _symbol_requires_5m(self, ctx: dict) -> bool:
@@ -157,7 +161,7 @@ class StreamEvaluationEngine:
         logger.info("Evaluation worker online")
         while not self._stop.is_set():
             try:
-                symbol, ctx = await self.queue.get()
+                symbol, ctx, _ = await self.queue.get()
                 logger.info("DEQUEUED %s", symbol)
                 try:
                     needs_5m = self._symbol_requires_5m(ctx)
@@ -184,7 +188,22 @@ class StreamEvaluationEngine:
 
     async def enqueue(self, symbol: str, ctx: dict) -> None:
         logger.info("ENQUEUED %s", symbol)
-        await self.queue.put((symbol, ctx))
+        await self.queue.put((symbol, ctx, time.monotonic()))
+
+    async def _metrics_loop(self) -> None:
+        """Periodically log queue size and processing lag."""
+        while not self._stop.is_set():
+            await asyncio.sleep(10)
+            qsize = len(self.queue._queue)
+            lag = 0.0
+            if qsize:
+                try:
+                    oldest_ts = self.queue._queue[0][2]
+                    lag = time.monotonic() - oldest_ts
+                except Exception:
+                    # queue mutated concurrently; ignore
+                    pass
+            logger.info(f"eval-queue size={qsize} lag={lag:.2f}s")
 
     async def drain(self) -> None:
         await self.queue.join()
