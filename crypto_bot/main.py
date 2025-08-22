@@ -503,23 +503,15 @@ def format_monitor_line(
     positions: dict[str, Any],
     last_log: str,
 ) -> str:
-    """Return a formatted status line with OHLCV progress and IOPS."""
-    tickers = ",".join(sorted(positions.keys())) or "-"
-    active = getattr(ctx, "active_universe", [])
-    total = len(active)
-    parts: list[str] = []
-    for tf in ctx.config.get("timeframes", []):
-        tf_cache = session_state.df_cache.get(tf, {})
-        count = sum(1 for s in active if s in tf_cache)
-        parts.append(f"{tf}: {count}/{total}")
-    ohlcv_summary = " | ".join(parts) if parts else "-"
-    from crypto_bot.utils import market_loader
+    """Return a minimal status line showing balance and the last log entry."""
 
-    iops = market_loader.get_iops()
-    return (
-        f"[Monitor] balance=${balance:,.2f} open={len(positions)} ({tickers}) "
-        f"last='{last_log}' OHLCV {ohlcv_summary} IOPS {iops:.1f}/s"
-    )
+    # ``ctx``, ``session_state`` and ``positions`` are accepted for backward
+    # compatibility but no longer used. The console monitor is responsible for
+    # detailed statistics such as open trade PnL lines and OHLCV progress. This
+    # function now outputs only the wallet balance and the last log message to
+    # avoid duplicating information.
+
+    return f"[Monitor] balance=${balance:,.2f} last='{last_log}'"
 
 
 def enqueue_solana_tokens(tokens: list[str]) -> None:
@@ -3690,8 +3682,23 @@ async def _main_impl() -> MainResult:
     set_ohlcv_provider(_ohlcv_provider)
 
     async def status_loop() -> None:
+        """Periodic console status output.
+
+        When the dedicated console monitor is active this loop exits
+        immediately to avoid conflicting output. The console monitor handles
+        detailed status information including open trade PnL lines.
+        """
+
+        from crypto_bot import console_monitor  # local import to avoid cycles
+
+        if getattr(console_monitor, "MONITOR_ACTIVE", False):
+            return
+
         last_line = ""
         while True:
+            # Abort if the console monitor starts while this loop is running
+            if getattr(console_monitor, "MONITOR_ACTIVE", False):
+                return
             try:
                 balance = await fetch_balance(exchange, wallet, config)
             except Exception:
