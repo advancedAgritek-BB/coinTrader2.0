@@ -161,8 +161,9 @@ class StreamEvaluationEngine:
         logger.info("Evaluation worker online")
         while not self._stop.is_set():
             try:
-                symbol, ctx, _ = await self.queue.get()
-                logger.info("DEQUEUED %s", symbol)
+                symbol, ctx, ts = await self.queue.get()
+                lag = time.monotonic() - ts
+                logger.info("DEQUEUED %s lag=%.2fs", symbol, lag)
                 try:
                     needs_5m = self._symbol_requires_5m(ctx)
                     if not self.data.ready(symbol, "1m"):
@@ -188,7 +189,8 @@ class StreamEvaluationEngine:
 
     async def enqueue(self, symbol: str, ctx: dict) -> None:
         logger.info("ENQUEUED %s", symbol)
-        await self.queue.put((symbol, ctx, time.monotonic()))
+        ts = time.monotonic()
+        await self.queue.put((symbol, ctx, ts))
 
     async def _metrics_loop(self) -> None:
         """Periodically log queue size and processing lag."""
