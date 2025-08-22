@@ -1,7 +1,10 @@
 import json
 import logging
+import os
+import time
 
 import pandas as pd
+import pytest
 
 from crypto_bot.risk.risk_manager import RiskManager, RiskConfig, kelly_fraction
 from crypto_bot.volatility_filter import calc_atr
@@ -16,6 +19,12 @@ def volume_df(volumes: list[float]) -> pd.DataFrame:
         "volume": volumes,
     }
     return pd.DataFrame(data)
+
+
+@pytest.fixture(autouse=True)
+def _disable_sentiment_env(monkeypatch):
+    """Disable sentiment requirement by default for tests."""
+    monkeypatch.setenv("CT_REQUIRE_SENTIMENT", "false")
 
 
 def test_kelly_fraction_basic() -> None:
@@ -206,6 +215,11 @@ def test_allow_trade_rejects_bearish_sentiment(monkeypatch):
         take_profit_pct=0.01,
         min_fng=10,
         min_sentiment=20,
+    )
+    monkeypatch.setenv("CT_REQUIRE_SENTIMENT", "true")
+    monkeypatch.setattr(
+        "crypto_bot.risk.sentiment_gate.load_sentiment",
+        lambda path=None: (time.time(), 0.5),
     )
 
     async def fake_too_bearish(min_fng, min_sentiment, symbol=None):
@@ -486,6 +500,11 @@ def _df() -> pd.DataFrame:
 def test_allow_trade_rejects_on_bearish_sentiment(monkeypatch):
     monkeypatch.setenv("MOCK_FNG_VALUE", "10")
     monkeypatch.setenv("MOCK_TWITTER_SENTIMENT", "20")
+    monkeypatch.setenv("CT_REQUIRE_SENTIMENT", "true")
+    monkeypatch.setattr(
+        "crypto_bot.risk.sentiment_gate.load_sentiment",
+        lambda path=None: (time.time(), 0.5),
+    )
     cfg = RiskConfig(
         max_drawdown=1,
         stop_loss_pct=0.01,
@@ -501,6 +520,11 @@ def test_allow_trade_rejects_on_bearish_sentiment(monkeypatch):
 def test_allow_trade_allows_on_positive_sentiment(monkeypatch):
     monkeypatch.setenv("MOCK_FNG_VALUE", "80")
     monkeypatch.setenv("MOCK_TWITTER_SENTIMENT", "80")
+    monkeypatch.setenv("CT_REQUIRE_SENTIMENT", "true")
+    monkeypatch.setattr(
+        "crypto_bot.risk.sentiment_gate.load_sentiment",
+        lambda path=None: (time.time(), 0.5),
+    )
     cfg = RiskConfig(
         max_drawdown=1,
         stop_loss_pct=0.01,
@@ -509,6 +533,46 @@ def test_allow_trade_allows_on_positive_sentiment(monkeypatch):
         min_sentiment=40,
     )
     allowed, _ = RiskManager(cfg).allow_trade(_df(), symbol="XBT/USDT")
+    assert allowed
+
+
+def test_allow_trade_proceeds_without_sentiment_when_disabled(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("CT_REQUIRE_SENTIMENT", raising=False)
+    monkeypatch.setattr(
+        "crypto_bot.risk.sentiment_gate.SENTIMENT_FILE",
+        tmp_path / "sentiment.json",
+    )
+    df = volume_df([1] * 20)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_fng=30,
+        min_sentiment=30,
+        require_sentiment=False,
+    )
+    allowed, _ = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
+    assert allowed
+
+
+def test_allow_trade_proceeds_when_env_disables_sentiment(tmp_path, monkeypatch):
+    monkeypatch.setenv("CT_REQUIRE_SENTIMENT", "false")
+    monkeypatch.setattr(
+        "crypto_bot.risk.sentiment_gate.SENTIMENT_FILE",
+        tmp_path / "sentiment.json",
+    )
+    df = volume_df([1] * 20)
+    cfg = RiskConfig(
+        max_drawdown=1,
+        stop_loss_pct=0.01,
+        take_profit_pct=0.01,
+        min_fng=30,
+        min_sentiment=30,
+        require_sentiment=True,
+    )
+    allowed, _ = RiskManager(cfg).allow_trade(df, symbol="XBT/USDT")
     assert allowed
 
 

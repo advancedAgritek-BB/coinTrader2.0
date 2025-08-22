@@ -3,6 +3,7 @@ import dataclasses
 from typing import Any, Optional, Mapping
 
 import asyncio
+import os
 import time
 
 import pandas as pd
@@ -50,6 +51,7 @@ class RiskConfig:
     take_profit_pct: float
     min_fng: int = 0
     min_sentiment: int = 0
+    require_sentiment: bool = True
     bull_fng: int = 101
     bull_sentiment: int = 101
     min_atr_pct: float = 0.0
@@ -311,12 +313,24 @@ class RiskManager:
             logger.info("[EVAL] %s", reason)
             return False, reason
 
-        require_sentiment = self.config.min_fng > 0 or self.config.min_sentiment > 0
+        env_val = os.getenv("CT_REQUIRE_SENTIMENT")
+        if env_val is not None:
+            require_sentiment = env_val.lower() in ("1", "true", "yes")
+        elif os.getenv("EXECUTION_MODE", "").lower() == "dry_run":
+            require_sentiment = False
+        else:
+            require_sentiment = self.config.require_sentiment
+
         sentiment_score = sentiment_factor_or_default(
             time.time(), require_sentiment, 3600
         )
 
-        if sentiment_score != 1.0 and require_sentiment:
+        if require_sentiment and sentiment_score == 1.0:
+            reason = "Sentiment data missing"
+            logger.info("[EVAL] %s", reason)
+            return False, reason
+
+        if require_sentiment and sentiment_score != 1.0:
             try:
                 if asyncio.run(
                     too_bearish(
