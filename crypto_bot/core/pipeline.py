@@ -1,10 +1,9 @@
-import asyncio
 import logging
 from typing import Any, Dict
 
-log = logging.getLogger(__name__)
+from .queues import trade_queue
 
-trade_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+log = logging.getLogger(__name__)
 
 
 async def scoring_loop(config, strategy, symbol: str, timeframe: str, ohlcv) -> None:
