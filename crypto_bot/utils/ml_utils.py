@@ -24,12 +24,13 @@ _LOGGER_ONCE = {
 
 def warn_ml_unavailable_once() -> None:
     """Log a one-time notice when ML components are missing."""
-    if not _LOGGER_ONCE["ml_unavailable"]:
-        logger.info(
-            "Machine learning model not found; running without ML features."
-        )
-        _LOGGER_ONCE["ml_unavailable"] = True
+    if _LOGGER_ONCE["ml_unavailable"]:
+        return
 
+    available, reason = is_ml_available()
+    if not available:
+        logger.info("Machine learning disabled: %s", reason)
+        _LOGGER_ONCE["ml_unavailable"] = True
 
 def _check_packages(pkgs: Iterable[str]) -> list[str]:
     """Return a list of packages from ``pkgs`` that cannot be imported."""
