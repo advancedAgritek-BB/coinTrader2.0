@@ -608,6 +608,22 @@ def opposite_side(side: str) -> str:
     return "sell" if side == "buy" else "buy"
 
 
+def regime_allows_trade(ctx: BotContext, symbol: str) -> bool:
+    """Return ``True`` if trading is permitted for the current regime.
+
+    Logs when trading is suppressed to provide visibility into regime-based
+    halts.
+    """
+    if getattr(ctx, "trading_disabled", False):
+        logger.info(
+            "Trade for %s suppressed by regime: %s",
+            symbol,
+            getattr(ctx, "regime", "unknown"),
+        )
+        return False
+    return True
+
+
 def _closest_wall_distance(book: dict, entry: float, side: str) -> float | None:
     """Return distance to the nearest bid/ask wall from ``entry``."""
     if not isinstance(book, dict):
@@ -1468,6 +1484,10 @@ async def fetch_candidates(ctx: BotContext) -> None:
         regime = await get_market_regime(ctx)
     except Exception:  # pragma: no cover - safety
         pass
+    ctx.regime = regime
+    ctx.trading_disabled = regime == "risk_off"
+    if ctx.trading_disabled:
+        logger.warning("Trading disabled by regime model: %s", regime)
 
     if regime == "trending" and ctx.config.get("arbitrage_enabled", True):
         try:
@@ -2432,6 +2452,11 @@ async def execute_signals(
             reject_counts["no_actionable_side"] += 1
             continue
         logger.info(f"Pre-execution candidate: {sym} score={score} dir={direction}")
+        if not regime_allows_trade(ctx, sym):
+            outcome_reason = f"regime {getattr(ctx, 'regime', 'unknown')}"
+            _log_rejection(sym, score, direction, min_req, outcome_reason, "REGIME")
+            reject_counts["regime_disabled"] += 1
+            continue
         if ctx.position_guard and not ctx.position_guard.can_open(ctx.positions):
             logger.debug("Position guard blocked opening a new position")
             _log_rejection(
