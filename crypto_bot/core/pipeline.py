@@ -1,0 +1,38 @@
+import asyncio
+import logging
+from typing import Any, Dict
+
+log = logging.getLogger(__name__)
+
+trade_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+
+
+async def scoring_loop(config, strategy, symbol: str, timeframe: str, ohlcv) -> None:
+    """Score a strategy and enqueue trade candidates."""
+    side, score, meta = strategy.signal(symbol, timeframe, ohlcv)
+    log.info(
+        "Signal for %s | %s | %s: %.6f, %s",
+        strategy.name,
+        symbol,
+        timeframe,
+        score,
+        side,
+    )
+    if side != "none" and score >= config.thresholds.get(strategy.name, {}).get(timeframe, 0.02):
+        cand = {
+            "symbol": symbol,
+            "side": side,
+            "score": score,
+            "strategy": strategy.name,
+            "timeframe": timeframe,
+            "meta": meta,
+        }
+        trade_queue.put_nowait(cand)
+        log.info(
+            "ENQUEUED %s %s %s score=%.4f",
+            strategy.name,
+            symbol,
+            timeframe,
+            score,
+        )
+
