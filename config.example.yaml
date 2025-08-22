@@ -18,6 +18,11 @@ trading:
   exclude_symbols: ["AIBTC/USD"]   # remove noisy/synthetic pairs
 <<<<<< codex/add-ct_require_sentiment-section-in-readme
   require_sentiment: false          # override with CT_REQUIRE_SENTIMENT=false to bypass
+voting_enabled: false  # set true to enable strategy voting
+# Example voting configuration
+voting_strategies:
+  strategies: []
+  min_agreeing_votes: 1
 
 
 # === ohlcv cache ===

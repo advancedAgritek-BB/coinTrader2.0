@@ -569,103 +569,104 @@ async def analyze_symbol(
             "atr": atr,
         }
     )
-    votes = []
-    voting_cfg = config.get("voting_strategies", [])
-    min_votes = int(config.get("min_agreeing_votes", 1))
-    min_fraction = 0.0
-    quorum = min_votes
-    weights: Dict[str, float] = {}
-    if isinstance(voting_cfg, dict):
-        voting = voting_cfg.get("strategies", [])
-        min_votes = int(voting_cfg.get("min_agreeing_votes", min_votes))
-        quorum = int(voting_cfg.get("quorum", min_votes))
-        min_fraction = float(voting_cfg.get("min_agree_fraction", 0.0))
-        weights = {
-            str(k): float(v)
-            for k, v in (voting_cfg.get("weights", {}) or {}).items()
-        }
-    else:
-        voting = voting_cfg
-    if isinstance(voting, list):
-        for strat_name in voting:
-            fn = get_strategy_by_name(strat_name)
-            if fn is None:
-                continue
-            fn = wrap(fn)
-            try:
-                vote_score, dir_vote, _ = (await evaluate_async([fn], df, cfg))[0]
-            except Exception:  # pragma: no cover - safety
-                continue
-            w = float(weights.get(strat_name, 1.0))
-            votes.append((dir_vote, vote_score, w))
-
+    votes: List[Tuple[str, float, float]] = []
     original_direction = result["direction"]
-    if votes:
-        counts: Dict[str, float] = {}
-        total_weight = 0.0
-        for d, _s, w in votes:
-            counts[d] = counts.get(d, 0.0) + w
-            total_weight += w
-        best_dir, best_weight = max(counts.items(), key=lambda kv: kv[1])
-        analysis_logger.info("Votes for %s: %s", symbol, votes)
-        analysis_logger.info(
-            "Vote weights for %s: %s (winner=%s, weight=%.2f)",
-            symbol,
-            counts,
-            best_dir,
-            best_weight,
-        )
-        meets_quorum = len(votes) >= quorum
-        meets_min = best_weight >= min_votes
-        fraction = best_weight / total_weight if total_weight else 0.0
-        meets_fraction = fraction >= min_fraction if min_fraction > 0 else True
-        if meets_quorum and meets_min and meets_fraction:
-            if best_dir != original_direction:
-                analysis_logger.info(
-                    "Voting changed direction for %s: %s -> %s (%.2f/%.2f weight)",
+    if config.get("voting_enabled", False):
+        voting_cfg = config.get("voting_strategies", [])
+        min_votes = int(config.get("min_agreeing_votes", 1))
+        min_fraction = 0.0
+        quorum = min_votes
+        weights: Dict[str, float] = {}
+        if isinstance(voting_cfg, dict):
+            voting = voting_cfg.get("strategies", [])
+            min_votes = int(voting_cfg.get("min_agreeing_votes", min_votes))
+            quorum = int(voting_cfg.get("quorum", min_votes))
+            min_fraction = float(voting_cfg.get("min_agree_fraction", 0.0))
+            weights = {
+                str(k): float(v)
+                for k, v in (voting_cfg.get("weights", {}) or {}).items()
+            }
+        else:
+            voting = voting_cfg
+        if isinstance(voting, list):
+            for strat_name in voting:
+                fn = get_strategy_by_name(strat_name)
+                if fn is None:
+                    continue
+                fn = wrap(fn)
+                try:
+                    vote_score, dir_vote, _ = (await evaluate_async([fn], df, cfg))[0]
+                except Exception:  # pragma: no cover - safety
+                    continue
+                w = float(weights.get(strat_name, 1.0))
+                votes.append((dir_vote, vote_score, w))
+
+        if votes:
+            counts: Dict[str, float] = {}
+            total_weight = 0.0
+            for d, _s, w in votes:
+                counts[d] = counts.get(d, 0.0) + w
+                total_weight += w
+            best_dir, best_weight = max(counts.items(), key=lambda kv: kv[1])
+            analysis_logger.info("Votes for %s: %s", symbol, votes)
+            analysis_logger.info(
+                "Vote weights for %s: %s (winner=%s, weight=%.2f)",
+                symbol,
+                counts,
+                best_dir,
+                best_weight,
+            )
+            meets_quorum = len(votes) >= quorum
+            meets_min = best_weight >= min_votes
+            fraction = best_weight / total_weight if total_weight else 0.0
+            meets_fraction = fraction >= min_fraction if min_fraction > 0 else True
+            if meets_quorum and meets_min and meets_fraction:
+                if best_dir != original_direction:
+                    analysis_logger.info(
+                        "Voting changed direction for %s: %s -> %s (%.2f/%.2f weight)",
+                        symbol,
+                        original_direction,
+                        best_dir,
+                        best_weight,
+                        total_weight,
+                    )
+                else:
+                    analysis_logger.info(
+                        "Voting confirmed direction for %s: %s (%.2f/%.2f weight)",
+                        symbol,
+                        original_direction,
+                        best_weight,
+                        total_weight,
+                    )
+                result["direction"] = best_dir
+            else:
+                analysis_logger.warning(
+                    "Insufficient consensus for %s: %s won with %.2f/%.2f weight (min=%.2f, quorum=%d, frac=%.2f)",
                     symbol,
-                    original_direction,
                     best_dir,
                     best_weight,
                     total_weight,
+                    min_votes,
+                    quorum,
+                    min_fraction,
                 )
-            else:
-                analysis_logger.info(
-                    "Voting confirmed direction for %s: %s (%.2f/%.2f weight)",
-                    symbol,
-                    original_direction,
-                    best_weight,
-                    total_weight,
-                )
-            result["direction"] = best_dir
-        else:
-            analysis_logger.warning(
-                "Insufficient consensus for %s: %s won with %.2f/%.2f weight (min=%.2f, quorum=%d, frac=%.2f)",
-                symbol,
-                best_dir,
-                best_weight,
-                total_weight,
-                min_votes,
-                quorum,
-                min_fraction,
-            )
-            result["direction"] = "none"
+                result["direction"] = "none"
 
-        if result["direction"] == "none":
-            strong = [
-                (d, s)
-                for d, s, _w in votes
-                if d in ("long", "short") and abs(s) >= 0.65
-            ]
-            if strong and mode == "dry_run" and confidence >= 0.55:
-                strong.sort(key=lambda x: abs(x[1]), reverse=True)
-                fb_dir, fb_score = strong[0]
-                analysis_logger.info(
-                    "Single-strategy override for %s: %s (score=%.2f, conf=%.2f)",
-                    symbol,
-                    fb_dir,
-                    fb_score,
-                    confidence,
-                )
-                result["direction"] = fb_dir
+            if result["direction"] == "none":
+                strong = [
+                    (d, s)
+                    for d, s, _w in votes
+                    if d in ("long", "short") and abs(s) >= 0.65
+                ]
+                if strong and mode == "dry_run" and confidence >= 0.55:
+                    strong.sort(key=lambda x: abs(x[1]), reverse=True)
+                    fb_dir, fb_score = strong[0]
+                    analysis_logger.info(
+                        "Single-strategy override for %s: %s (score=%.2f, conf=%.2f)",
+                        symbol,
+                        fb_dir,
+                        fb_score,
+                        confidence,
+                    )
+                    result["direction"] = fb_dir
     return result

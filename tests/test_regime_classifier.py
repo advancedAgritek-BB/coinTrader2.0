@@ -453,6 +453,7 @@ def test_voting_direction_override(monkeypatch):
         cfg = {
             "timeframe": "1h",
             "regime_timeframes": ["1h"],
+            "voting_enabled": True,
             "voting_strategies": {
                 "strategies": ["a", "b", "c"],
                 "min_agreeing_votes": 2,
@@ -491,6 +492,7 @@ def test_voting_no_consensus(monkeypatch):
         cfg = {
             "timeframe": "1h",
             "regime_timeframes": ["1h"],
+            "voting_enabled": True,
             "voting_strategies": {
                 "strategies": ["a", "b"],
                 "min_agreeing_votes": 2,
@@ -526,6 +528,7 @@ def test_voting_single_vote(monkeypatch):
         cfg = {
             "timeframe": "1h",
             "regime_timeframes": ["1h"],
+            "voting_enabled": True,
             "voting_strategies": {
                 "strategies": ["a"],
                 "min_agreeing_votes": 1,
@@ -536,6 +539,38 @@ def test_voting_single_vote(monkeypatch):
 
     res = asyncio.run(run())
     assert res["direction"] == "long"
+
+
+def test_voting_disabled_runs_base(monkeypatch):
+    df = _make_trending_df()
+
+    def base(df, cfg=None):
+        return 0.4, "short"
+
+    def v1(df, cfg=None):
+        return 0.9, "long"
+
+    import crypto_bot.utils.market_analyzer as ma
+    monkeypatch.setattr(ma, "route", lambda *a, **k: base)
+    monkeypatch.setattr(strategy_router, "route", lambda *a, **k: base)
+    monkeypatch.setattr(ma, "get_strategy_by_name", lambda n: {"a": v1}.get(n))
+    monkeypatch.setattr(
+        strategy_router,
+        "get_strategy_by_name",
+        lambda name: {"a": v1}.get(name),
+    )
+
+    async def run():
+        cfg = {
+            "timeframe": "1h",
+            "regime_timeframes": ["1h"],
+            "voting_strategies": {"strategies": ["a"], "min_agreeing_votes": 1},
+        }
+        df_map = {"1h": df}
+        return await analyze_symbol("AAA", df_map, "cex", cfg, None)
+
+    res = asyncio.run(run())
+    assert res["direction"] == "short"
 
 
 def test_regime_voting_disagreement_unknown():

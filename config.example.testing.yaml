@@ -5,6 +5,11 @@ trading:
   min_confidence: 0.30
   consensus: weighted
   require_sentiment: false   # CT_REQUIRE_SENTIMENT=false also disables checks
+voting_enabled: false  # set true to enable strategy voting
+# Example voting configuration
+voting_strategies:
+  strategies: []
+  min_agreeing_votes: 1
 exchange:
   name: kraken
   max_concurrency: 3

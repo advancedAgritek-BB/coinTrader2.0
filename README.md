@@ -580,6 +580,18 @@ symbol_score_weights:
 * **voting_strategies** – strategies used for the voting router. Supports
   optional `weights`, `min_agree_fraction`, `quorum`, and
   `min_agreeing_votes` settings.
+* **voting_enabled** – when `true`, uses the voting strategies above to
+  override the base strategy. Defaults to `false`, so each strategy runs
+  independently unless enabled.
+
+Example:
+
+```yaml
+voting_enabled: true
+voting_strategies:
+  strategies: ["trend_bot", "momentum_bot"]
+  min_agreeing_votes: 2
+```
 * **micro_scalp_bot** – EMA settings plus volume z-score and ATR filters for the scalp bot.
   Supports tick-level aggregation, optional mempool fee checks and order-book
   imbalance filtering with an optional penalty. Set `trend_filter` or

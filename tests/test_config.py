@@ -105,6 +105,7 @@ def test_load_config_returns_dict():
     assert "top_n_symbols" in config
     assert "min_confidence_score" in config
     assert "signal_fusion" in config
+    assert "voting_enabled" in config
     assert "voting_strategies" in config
     voting = config["voting_strategies"]
     assert isinstance(voting, dict)
