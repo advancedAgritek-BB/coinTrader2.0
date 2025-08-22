@@ -81,7 +81,7 @@ class StreamEvaluationEngine:
         cfg: Any | None = None,
         data: Any | None = None,
     ) -> None:
-        self.queue: asyncio.Queue[tuple[str, dict]] = asyncio.Queue()
+        self.queue: asyncio.Queue[tuple[str, dict, float]] = asyncio.Queue()
         self.eval_fn = eval_fn
         self.concurrency = concurrency
         self.cfg = cfg
@@ -123,6 +123,8 @@ class StreamEvaluationEngine:
         for idx in range(workers):
             task = asyncio.create_task(self._worker(), name=f"eval-worker-{idx}")
             self._workers.append(task)
+        metrics_task = asyncio.create_task(self._metrics_loop(), name="eval-metrics")
+        self._tasks.append(metrics_task)
         logger.info(f"Evaluation workers online: {len(self._workers)}")
 
     def _symbol_requires_5m(self, ctx: dict) -> bool:
@@ -157,7 +159,9 @@ class StreamEvaluationEngine:
         logger.info("Evaluation worker online")
         while not self._stop.is_set():
             try:
-                symbol, ctx = await self.queue.get()
+                symbol, ctx, ts = await self.queue.get()
+                lag = time.monotonic() - ts
+                logger.info("DEQUEUED %s lag=%.2fs", symbol, lag)
                 try:
                     needs_5m = self._symbol_requires_5m(ctx)
                     if not self.data.ready(symbol, "1m"):
@@ -182,7 +186,21 @@ class StreamEvaluationEngine:
         await asyncio.sleep(0)
 
     async def enqueue(self, symbol: str, ctx: dict) -> None:
-        await self.queue.put((symbol, ctx))
+        ts = time.monotonic()
+        await self.queue.put((symbol, ctx, ts))
+
+    async def _metrics_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                qsize = self.queue.qsize()
+                oldest_lag = 0.0
+                if qsize:
+                    oldest_ts = self.queue._queue[0][2]
+                    oldest_lag = time.monotonic() - oldest_ts
+                logger.info("QUEUE qsize=%d oldest_lag=%.2fs", qsize, oldest_lag)
+            except Exception:
+                logger.exception("Metrics loop error")
+            await asyncio.sleep(5)
 
     async def drain(self) -> None:
         await self.queue.join()
