@@ -71,8 +71,15 @@ shutdown_event = asyncio.Event()
 def format_top(scores, n: int = 25) -> str:
     """Return formatted top-N entries from a score mapping."""
     try:
-        items = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:n]
-        return "\n".join(f"{sym}: {val}" for sym, val in items)
+        items = sorted(
+            scores.items(),
+            key=lambda x: x[1].get("score", 0.0) if isinstance(x[1], dict) else x[1],
+            reverse=True,
+        )[:n]
+        return "\n".join(
+            f"{sym}: {val.get('score', 0.0) if isinstance(val, dict) else val}"
+            for sym, val in items
+        )
     except Exception:
         return str(scores)
 
