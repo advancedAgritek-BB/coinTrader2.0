@@ -16,6 +16,8 @@ import aiohttp
 import base58
 import logging
 import json
+import requests
+from requests.adapters import HTTPAdapter
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -243,6 +245,23 @@ _WARMED_UP: set[str] = set()
 # Rolling window of OHLCV fetch timestamps for IOPS calculation
 IOPS_WINDOW = 5.0
 IO_TIMESTAMPS: Deque[float] = deque()
+
+# Shared HTTP session for Kraken REST requests
+_HTTP_SESSION: requests.Session | None = None
+
+
+def get_http_session(pool_size: int | None = None) -> requests.Session:
+    """Return a shared :class:`requests.Session` with connection pooling."""
+
+    global _HTTP_SESSION
+    if _HTTP_SESSION is None:
+        size = pool_size or DEFAULT_MAX_CONCURRENT_OHLCV
+        session = requests.Session()
+        adapter = HTTPAdapter(pool_maxsize=size)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        _HTTP_SESSION = session
+    return _HTTP_SESSION
 
 
 def record_io() -> None:
@@ -564,9 +583,10 @@ def configure(
     rest_ohlcv_timeout: int | float | None = None,
     max_concurrent: int | None = None,
     gecko_limit: int | None = None,
+    http_pool_size: int | None = None,
 ) -> None:
     """Configure module-wide settings."""
-    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES, GECKO_SEMAPHORE
+    global OHLCV_TIMEOUT, MAX_OHLCV_FAILURES, MAX_WS_LIMIT, STATUS_UPDATES, GECKO_SEMAPHORE, _HTTP_SESSION
     try:
         with open(CONFIG_PATH) as f:
             cfg = yaml.safe_load(f) or {}
@@ -588,6 +608,10 @@ def configure(
         cfg_val = cfg.get("max_concurrent_ohlcv")
         if cfg_val is not None:
             max_concurrent = cfg_val
+    if http_pool_size is None:
+        cfg_val = cfg.get("http_pool_size")
+        if cfg_val is not None:
+            http_pool_size = cfg_val
     if ohlcv_timeout is not None:
         try:
             val = max(1, int(ohlcv_timeout))
@@ -649,6 +673,25 @@ def configure(
             GECKO_SEMAPHORE = asyncio.Semaphore(val)
         except (TypeError, ValueError):
             logger.warning("Invalid gecko_limit %s; using default", gecko_limit)
+
+    if http_pool_size is not None:
+        try:
+            size = int(http_pool_size)
+            if size < 1:
+                raise ValueError
+            maxc = max(size, int(cfg.get("max_concurrent_ohlcv", DEFAULT_MAX_CONCURRENT_OHLCV)))
+            session = requests.Session()
+            adapter = HTTPAdapter(pool_maxsize=maxc)
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
+            if _HTTP_SESSION is not None:
+                try:
+                    _HTTP_SESSION.close()
+                except Exception:
+                    pass
+            _HTTP_SESSION = session
+        except (TypeError, ValueError):
+            logger.warning("Invalid http_pool_size %s; using default", http_pool_size)
 
 
 def is_symbol_type(pair_info: dict, allowed: List[str]) -> bool:
@@ -950,6 +993,56 @@ async def load_kraken_symbols(
     return symbols
 
 
+KRAKEN_OHLCV_URL = "https://api.kraken.com/0/public/OHLC"
+KRAKEN_TIMEFRAMES = {
+    "1m": 1,
+    "5m": 5,
+    "15m": 15,
+    "1h": 60,
+    "4h": 240,
+    "1d": 1440,
+}
+
+
+async def _kraken_fetch_ohlcv_rest(
+    symbol: str,
+    timeframe: str,
+    limit: int,
+    since: int | None,
+    session: requests.Session,
+) -> list:
+    """Fetch OHLCV data directly from Kraken's REST API."""
+
+    pair = symbol.replace("/", "")
+    interval = KRAKEN_TIMEFRAMES.get(timeframe)
+    params = {"pair": pair, "interval": interval}
+    if since is not None:
+        params["since"] = int(since // 1000)
+    resp = await asyncio.to_thread(
+        session.get,
+        KRAKEN_OHLCV_URL,
+        params=params,
+        timeout=REST_OHLCV_TIMEOUT,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("error"):
+        raise ccxt.ExchangeError(",".join(data["error"]))
+    result = next(iter(data.get("result", {}).values()), [])
+    ohlcv = [
+        [
+            int(row[0]) * 1000,
+            float(row[1]),
+            float(row[2]),
+            float(row[3]),
+            float(row[4]),
+            float(row[6]),
+        ]
+        for row in result[:limit]
+    ]
+    return ohlcv
+
+
 async def _fetch_ohlcv_async_inner(
     exchange,
     symbol: str,
@@ -1005,6 +1098,15 @@ async def _fetch_ohlcv_async_inner(
             market_id = markets.get(symbol, {}).get("id", symbol)
         else:
             market_id = symbol
+
+        if getattr(exchange, "id", "").lower() == "kraken":
+            session = get_http_session()
+            try:
+                return await _kraken_fetch_ohlcv_rest(
+                    market_id, timeframe, limit, since, session
+                )
+            except Exception:
+                pass
 
         if limit > 0:
             data_all: list = []
