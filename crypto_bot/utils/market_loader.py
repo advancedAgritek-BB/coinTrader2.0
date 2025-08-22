@@ -280,6 +280,30 @@ def get_iops() -> float:
         IO_TIMESTAMPS.popleft()
     return len(IO_TIMESTAMPS) / IOPS_WINDOW
 
+
+def get_progress_eta(symbol: str, timeframe: str, required_candles: int) -> tuple[float, float]:
+    """Return ``(percent_complete, eta_seconds)`` for OHLCV loading.
+
+    Progress is read from :data:`BOOTSTRAP_STATE_FILE` and the ETA is
+    estimated using the current OHLCV request rate measured by
+    :func:`get_iops`.
+    """
+
+    fetched = 0
+    try:
+        with BOOTSTRAP_STATE_FILE.open() as f:
+            state = json.load(f)
+        fetched = int(state.get(timeframe, {}).get(symbol, {}).get("fetched", 0))
+    except Exception:
+        fetched = 0
+
+    percent = (fetched / required_candles * 100) if required_candles > 0 else 0.0
+    remaining = max(required_candles - fetched, 0)
+    rate = get_iops()
+    candles_per_sec = rate * MAX_WS_LIMIT
+    eta = remaining / candles_per_sec if candles_per_sec > 0 else float("inf")
+    return percent, eta
+
 # Redis settings
 REDIS_TTL = 3600  # cache expiry in seconds
 _REDIS_URL: str | None = None

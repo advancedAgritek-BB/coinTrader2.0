@@ -30,6 +30,7 @@ ohlcv:
   storage_path: crypto_bot/data/ohlcv   # directory for persisted OHLCV data
   tail_overlap_bars: 3                  # overlap bars to avoid gaps when appending
   max_bootstrap_bars: 1000              # limit initial bootstrap to this many bars
+  progress_logging: false               # include percent/ETA when data is missing
   bootstrap_timeframes: ["1m", "5m", "15m", "1h"]
   defer_timeframes: ["4h", "1d"]
   warmup_candles:
