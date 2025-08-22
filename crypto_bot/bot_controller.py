@@ -41,10 +41,14 @@ class TradingBotController:
         self.rotator = PortfolioRotator()
         self.wallet = wallet or paper_wallet
         if self.wallet is None and self.config.get("execution_mode") == "dry_run":
+            exec_cfg = self.config.get("execution", {}) or {}
             self.wallet = Wallet(
                 self.config.get("start_balance", 1000.0),
-                self.config.get("max_open_trades", 1),
+                exec_cfg.get("max_positions", self.config.get("max_open_trades", 1)),
                 self.config.get("allow_short", False),
+                stake_usd=exec_cfg.get("stake_usd"),
+                min_price=exec_cfg.get("min_price", 0.0),
+                min_notional=exec_cfg.get("min_notional", 0.0),
             )
         # Backwards compat – retain attribute name expected in some tests
         self.paper_wallet = self.wallet

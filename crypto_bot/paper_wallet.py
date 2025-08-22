@@ -8,7 +8,13 @@ class PaperWallet:
     """Simple wallet for paper trading supporting multiple positions."""
 
     def __init__(
-        self, balance: float, max_open_trades: int = 10, allow_short: bool = True
+        self,
+        balance: float,
+        max_open_trades: int = 10,
+        allow_short: bool = True,
+        stake_usd: float | None = None,
+        min_price: float = 0.0,
+        min_notional: float = 0.0,
     ) -> None:
         self.balance = balance
         # mapping of identifier (symbol or trade id) -> position details
@@ -17,6 +23,19 @@ class PaperWallet:
         self.realized_pnl = 0.0
         self.max_open_trades = max_open_trades
         self.allow_short = allow_short
+        self.stake_usd = stake_usd
+        self.min_price = min_price
+        self.min_notional = min_notional
+
+    # ------------------------------------------------------------------
+    def _check_limits(self, price: float, amount: float) -> None:
+        if price < self.min_price:
+            raise RuntimeError("Price below minimum limit")
+        cost = price * amount
+        if cost < self.min_notional:
+            raise RuntimeError("Notional below minimum limit")
+        if self.stake_usd is not None and cost > self.stake_usd:
+            raise RuntimeError("Stake exceeds limit")
 
     # ------------------------------------------------------------------
     # Properties
@@ -90,6 +109,7 @@ class PaperWallet:
         if len(self.positions) >= self.max_open_trades:
             raise RuntimeError("Position limit reached")
 
+        self._check_limits(price, amount)
         trade_id = identifier or symbol or str(uuid4())
 
         cost = amount * price

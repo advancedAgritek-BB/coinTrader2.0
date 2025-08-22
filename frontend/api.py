@@ -28,10 +28,14 @@ def get_controller() -> "TradingBotController":
                 cfg = yaml.safe_load(f) or {}
         wallet = None
         if cfg.get("execution_mode") == "dry_run":
+            exec_cfg = cfg.get("execution", {}) or {}
             wallet = Wallet(
                 cfg.get("start_balance", 1000.0),
-                cfg.get("max_open_trades", 1),
+                exec_cfg.get("max_positions", cfg.get("max_open_trades", 1)),
                 cfg.get("allow_short", False),
+                stake_usd=exec_cfg.get("stake_usd"),
+                min_price=exec_cfg.get("min_price", 0.0),
+                min_notional=exec_cfg.get("min_notional", 0.0),
             )
         CONTROLLER = TradingBotController(wallet=wallet)
     return CONTROLLER
