@@ -24,6 +24,10 @@ trading:
   exclude_symbols: ["AIBTC/USD"]   # remove noisy/synthetic pairs
   require_sentiment: false
 
+filters:
+  sentiment:
+    enabled: false
+
 # === router ===
 router:
   min_accept_score: 0.5
