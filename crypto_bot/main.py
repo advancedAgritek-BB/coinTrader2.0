@@ -2647,7 +2647,7 @@ async def execute_signals(
         try:  # cooldown check
             from crypto_bot.cooldown_manager import in_cooldown
 
-            if in_cooldown(sym, strategy):
+            if in_cooldown(sym, direction_to_side(direction)):
                 outcome_reason = "cooldown"
                 gate_results["cooldown"] = False
                 cooldown = False
@@ -2794,7 +2794,7 @@ async def execute_signals(
                 try:
                     from crypto_bot.cooldown_manager import mark_cooldown
 
-                    mark_cooldown(sym, strategy)
+                    mark_cooldown(sym, direction_to_side(direction))
                 except Exception:  # pragma: no cover - optional cooldown
                     pass
         else:
@@ -2811,7 +2811,7 @@ async def execute_signals(
             try:
                 from crypto_bot.cooldown_manager import mark_cooldown
 
-                mark_cooldown(sym, strategy)
+                mark_cooldown(sym, direction_to_side(direction))
             except Exception:  # pragma: no cover - optional cooldown
                 pass
         ctx.timing["execution_latency"] = max(
