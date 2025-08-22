@@ -23,31 +23,31 @@ def configure(min_cooldown: int) -> None:
     MIN_COOLDOWN = max(0, int(min_cooldown))
 
 
-def in_cooldown(symbol: str, strategy: str) -> bool:
-    """Return ``True`` if the strategy is cooling down for the symbol."""
-    key = f"{symbol}_{strategy}"
+def in_cooldown(symbol: str, side: str) -> bool:
+    """Return ``True`` if the trade side is cooling down for the symbol."""
+    key = f"{symbol}_{side}"
     if key in cooldowns and (
         datetime.now() - cooldowns[key]
     ).seconds < MIN_COOLDOWN:
-        logger.info("%s in cooldown for %s", strategy, symbol)
+        logger.info("%s in cooldown for %s", side, symbol)
         return True
     return False
 
 
-def mark_cooldown(symbol: str, strategy: str) -> None:
-    """Record cooldown start time for the strategy on the symbol."""
-    cooldowns[f"{symbol}_{strategy}"] = datetime.now()
-    logger.info("Marked cooldown for %s on %s", strategy, symbol)
+def mark_cooldown(symbol: str, side: str) -> None:
+    """Record cooldown start time for the trade side on the symbol."""
+    cooldowns[f"{symbol}_{side}"] = datetime.now()
+    logger.info("Marked cooldown for %s on %s", side, symbol)
 
 
 @contextmanager
-def cooldown(symbol: str, strategy: str):
+def cooldown(symbol: str, side: str):
     """Context manager to atomically check and mark cooldown.
 
     Yields an object with an ``allowed`` attribute indicating whether the
-    strategy is currently in cooldown. The object's ``mark`` method will mark
-    the cooldown for the symbol. Both the check and any subsequent call to
-    ``mark`` occur while holding an internal lock, making the operation
+    trade side is currently in cooldown. The object's ``mark`` method will mark
+    the cooldown for the symbol and side. Both the check and any subsequent call
+    to ``mark`` occur while holding an internal lock, making the operation
     thread-safe.
     """
 
@@ -56,8 +56,6 @@ def cooldown(symbol: str, strategy: str):
         return
 
     with _lock:
-        allowed = not in_cooldown(symbol, strategy)
-        ctx = SimpleNamespace(
-            allowed=allowed, mark=lambda: mark_cooldown(symbol, strategy)
-        )
+        allowed = not in_cooldown(symbol, side)
+        ctx = SimpleNamespace(allowed=allowed, mark=lambda: mark_cooldown(symbol, side))
         yield ctx

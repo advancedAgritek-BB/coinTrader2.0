@@ -57,9 +57,8 @@ def generate_signal(
     symbol = symbol or (config.get("symbol", "") if config else "")
     params = config.get("dip_hunter", {}) if config else {}
     cooldown_enabled = bool(params.get("cooldown_enabled", False))
-    strategy = "dip_hunter"
 
-    if cooldown_enabled and symbol and in_cooldown(symbol, strategy):
+    if cooldown_enabled and symbol and in_cooldown(symbol, "buy"):
         score_logger.info(
             "Signal for %s:%s -> %.3f, %s",
             symbol or "unknown",
@@ -121,7 +120,7 @@ def generate_signal(
     dip_size = recent_returns.sum()
     is_dip = dip_size <= -dip_pct
 
-    with cooldown(symbol, strategy) as cd:
+    with cooldown(symbol, "buy") as cd:
         if cooldown_enabled and symbol and not cd.allowed:
             score_logger.info(
                 "Signal for %s:%s -> %.3f, %s",
