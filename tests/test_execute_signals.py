@@ -113,12 +113,7 @@ async def test_execute_signals_respects_allow_short(monkeypatch, caplog):
     assert ctx.positions == {}
     assert not called["called"]
     assert "[EVAL] evaluating XBT/USDT" in caplog.text
-    assert "[EVAL] XBT/USDT -> short selling disabled" in caplog.text
-    assert (
-        "Gate summary for XBT/USDT: sentiment=True risk=False budget=True cooldown=True min_score=True"
-        in caplog.text
-    )
-    assert "Trade BLOCKED (short selling disabled)" in caplog.text
+    assert "blocked_short_selling" in caplog.text
 
 
 @pytest.mark.asyncio

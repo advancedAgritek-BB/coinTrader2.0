@@ -593,9 +593,16 @@ async def get_market_regime(ctx: BotContext) -> str:
     return regime
 
 
-def direction_to_side(direction: str) -> str:
-    """Translate strategy direction to trade side."""
-    return "buy" if direction == "long" else "sell"
+def direction_to_side(direction: str | None) -> str | None:
+    """Translate strategy direction or signal to a trade side."""
+    if not direction:
+        return None
+    direction = direction.lower()
+    if direction in ("long", "buy"):
+        return "buy"
+    if direction in ("short", "sell"):
+        return "sell"
+    return None
 
 
 def opposite_side(side: str) -> str:
@@ -2595,34 +2602,19 @@ async def execute_signals(
 
         amount = abs(size) / price if price > 0 else 0.0
         raw = candidate.get("direction") or candidate.get("signal")
-        def _to_side(x):
-            if not x:
-                return None
-            x = x.lower()
-            if x in ("long", "buy"):
-                return "buy"
-            if x in ("short", "sell"):
-                return "sell"
-            return None
-        side = _to_side(raw)
+        side = direction_to_side(raw)
         if side is None:
             logger.debug("Skip: no actionable side (signal/direction missing) %s", candidate)
             outcome_reason = "no actionable side"
             _log_rejection(sym, score, direction, min_req, outcome_reason, "SCORING")
             reject_counts["no_actionable_side"] += 1
             continue
-        allow_short = bool(ctx.config.get("allow_short", False))
+        allow_short = (
+            ctx.config.get("trading", {}).get("short_selling", ctx.config.get("allow_short", False))
+        )
         if side == "sell" and not allow_short:
-            logger.info("Skip: short selling disabled; %s", candidate)
-            outcome_reason = "short selling disabled"
-            gate_results["risk"] = False
-            sizing_ok = False
-            _log_rejection(sym, score, direction, min_req, outcome_reason, "RISK_MANAGER")
-            logger.info("[EVAL] %s -> %s", sym, outcome_reason)
-            reject_counts["short_selling_disabled"] += 1
-            _log_gates()
-            logger.info("Trade BLOCKED (%s)", outcome_reason)
-            continue
+            logger.info("blocked_short_selling")
+            return
         tradable_here = True
         if getattr(ctx, "markets", None):
             tradable_here = candidate["symbol"] in ctx.markets and ctx.markets[candidate["symbol"]].get("active", True)
