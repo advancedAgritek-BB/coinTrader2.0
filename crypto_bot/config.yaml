@@ -153,6 +153,7 @@ strategies:
 
   mean_revert:
     enabled: true
+    trade_enabled: true
 
   range_arb_bot:
     enabled: true
