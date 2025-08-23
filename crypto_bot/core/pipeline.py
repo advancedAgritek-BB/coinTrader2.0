@@ -8,7 +8,7 @@ log = logging.getLogger(__name__)
 
 async def scoring_loop(config, strategy, symbol: str, timeframe: str, ohlcv) -> None:
     """Score a strategy and enqueue trade candidates."""
-    side, score, meta = strategy.signal(symbol, timeframe, ohlcv)
+    side, score, meta = strategy.generate_signal(symbol, timeframe, ohlcv)
     log.info(
         "Signal for %s | %s | %s: %.6f, %s",
         strategy.name,
