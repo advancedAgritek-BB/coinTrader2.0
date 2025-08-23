@@ -75,6 +75,7 @@ strategies:
 
   mean_bot:
     enabled: true
+    trade_enabled: true
     tf: "1m"
     ema_len: 50
     z_entry: 2.0

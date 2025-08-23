@@ -30,7 +30,10 @@ def load_strategies(
         if name != "sniper_solana" and mode == "onchain":
             # Only the on-chain sniper is relevant in onchain mode
             continue
-        strategies.append(inst)
+        # Strategies may opt out of trading via a ``trade_enabled`` attribute.
+        # This replaces the previous name-based ``*_bot`` heuristic.
+        if getattr(inst, "trade_enabled", True):
+            strategies.append(inst)
 
     for mod_name, err in errors.items():
         logger.error("Failed to load strategy {}: {}", mod_name, err)
