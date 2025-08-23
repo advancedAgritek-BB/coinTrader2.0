@@ -62,9 +62,6 @@ async def async_get_pyth_price(symbol: str, config: Mapping[str, object]) -> tup
 import os
 from typing import Optional
 
-import requests
-from crypto_bot.utils.market_loader import get_http_session
-
 
 def get_pyth_price(symbol: str, config: Optional[dict] = None) -> float:
     """Return the latest price for ``symbol`` from the Pyth network."""
@@ -79,6 +76,7 @@ def get_pyth_price(symbol: str, config: Optional[dict] = None) -> float:
     url = config.get("pyth_url") if config else None
     if url:
         try:
+            from crypto_bot.utils.market_loader import get_http_session
             session = get_http_session()
             resp = session.get(f"{url}/{symbol}", timeout=5)
             resp.raise_for_status()
