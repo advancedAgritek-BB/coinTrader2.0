@@ -160,6 +160,25 @@ def _log_unsupported(symbol: str) -> None:
         logger.debug("Skipping unsupported symbol %s", symbol)
         _UNSUPPORTED_LOGGED.add(symbol)
 
+
+def _get_warmup_map(config: Dict[str, Any]) -> Dict[str, int]:
+    """Return ``warmup_candles`` with environment overrides.
+
+    Environment variables named ``CT_WARMUP_<TF>`` (e.g. ``CT_WARMUP_1M``)
+    override the corresponding timeframe in ``config``. Values must be
+    integers.
+    """
+
+    warmup_map = dict(config.get("warmup_candles", {}) or {})
+    for tf in ["1m", "5m", "15m", "1h", "4h", "1d"]:
+        env_val = os.getenv(f"CT_WARMUP_{tf.upper()}")
+        if env_val:
+            try:
+                warmup_map[tf] = int(env_val)
+            except ValueError:
+                logger.warning("Invalid warmup override for %s: %s", tf, env_val)
+    return warmup_map
+
 # Base suffixes that indicate a synthetic or index pair when appended to
 # another asset (e.g. ``AIBTC/USD`` represents the AI/BTC index).
 _SYNTH_SUFFIXES = {"BTC", "ETH", "USD", "EUR", "USDT"}
@@ -209,7 +228,7 @@ async def _maybe_enqueue_eval(
                 symbol,
             )
             ctx = {
-                "timeframes": list((config.get("warmup_candles") or {}).keys()),
+                "timeframes": list(_get_warmup_map(config).keys()),
                 "symbol": symbol,
             }
             try:
@@ -343,7 +362,7 @@ def warmup_reached_for(
     config: Dict,
 ) -> bool:
     """Return ``True`` if all configured warmup requirements are met for ``symbol``."""
-    warmup_map = config.get("warmup_candles", {}) or {}
+    warmup_map = _get_warmup_map(config)
     for tf, required in warmup_map.items():
         df = cache.get(tf, {}).get(symbol)
         if df is None or len(df) < int(required):
@@ -2245,7 +2264,7 @@ async def update_ohlcv_cache(
     _ensure_strategy_warmup(config)
     backfill_map = config.get("backfill_days", {}) or {}
     deep_backfill_map = config.get("deep_backfill_days", {}) or {}
-    warmup_map = config.get("warmup_candles", {}) or {}
+    warmup_map = _get_warmup_map(config)
     now_ms = utc_now_ms()
     if start_since is not None:
         bf_days = deep_backfill_map.get(timeframe)
@@ -2624,7 +2643,7 @@ async def update_multi_tf_ohlcv_cache(
 
             backfill_map = config.get("backfill_days", {}) or {}
             deep_backfill_map = config.get("deep_backfill_days", {}) or {}
-            warmup_map = config.get("warmup_candles", {}) or {}
+            warmup_map = _get_warmup_map(config)
             tf_start = start_since
             bf_days = deep_backfill_map.get(tf)
             if bf_days is None:
