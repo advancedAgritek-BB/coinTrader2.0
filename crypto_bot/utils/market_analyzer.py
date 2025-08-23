@@ -170,7 +170,24 @@ async def run_candidates(
         if sc >= fast_track:
             return [(fn, sc, d)]
 
-    filtered = [(fn, sc, d) for fn, sc, d in ranked if sc >= min_accept]
+    tf = (
+        cfg.get("timeframe", "")
+        if isinstance(cfg, dict)
+        else getattr(cfg, "timeframe", "")
+    )
+    filtered = []
+    for fn, sc, d in ranked:
+        if sc < min_accept:
+            analysis_logger.debug(
+                "REJECT %s %s %s: score=%.5f < min_accept=%.5f",
+                symbol,
+                tf,
+                _fn_name(fn),
+                sc,
+                min_accept,
+            )
+            continue
+        filtered.append((fn, sc, d))
     if top_k > 0:
         filtered = filtered[:top_k]
     return filtered
