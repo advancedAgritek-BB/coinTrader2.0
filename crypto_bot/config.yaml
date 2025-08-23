@@ -44,10 +44,10 @@ ohlcv:
   bootstrap_timeframes: ["1m","5m","15m","1h"]
   defer_timeframes: ["4h","1d"]
   warmup_candles:
-    "1m": 400
-    "5m": 400
-    "15m": 400
-    "1h": 400
+    "1m": 2000
+    "5m": 2000
+    "15m": 2000
+    "1h": 1500
     "1d": 120
   initial_history_candles: 600
   scan_lookback_limit: 1200
@@ -767,10 +767,10 @@ deep_backfill_days:
   '15m': 60
   '1h': 180
 warmup_candles:
-  '1m': 400
-  '5m': 400
-  '15m': 400
-  '1h': 400
+  '1m': 2000
+  '5m': 2000
+  '15m': 2000
+  '1h': 1500
   '1d': 120
 allowed_quotes: ['USD','USDT','USDC','EUR']
 hft: true

@@ -23,10 +23,10 @@ ohlcv:
   bootstrap_timeframes: ["1m", "5m", "15m", "1h"]
   defer_timeframes: ["4h", "1d"]
   warmup_candles:
-    "1m": 500
-    "5m": 500
-    "15m": 400
-    "1h": 300
+    "1m": 2000
+    "5m": 2000
+    "15m": 2000
+    "1h": 1500
     "1d": 120
   initial_history_candles: 600
   scan_lookback_limit: 1200

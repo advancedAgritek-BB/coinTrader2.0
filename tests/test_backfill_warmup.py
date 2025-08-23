@@ -26,7 +26,7 @@ def test_update_multi_tf_ohlcv_cache_clamps(monkeypatch, caplog, tmp_path):
     cfg = {
         "timeframes": ["1m", "5m"],
         "backfill_days": {"1m": 2, "5m": 3},
-        "warmup_candles": {"1m": 1000, "5m": 600},
+        "warmup_candles": {"1m": 2000, "5m": 2000},
     }
     import crypto_bot.main as main
     monkeypatch.setattr(main, "update_df_cache", lambda cache, tf, sym, df: cache.setdefault(tf, {}).update({sym: df}))
