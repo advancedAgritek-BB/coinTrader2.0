@@ -57,10 +57,11 @@ def generate_signal(
     if isinstance(timeframe, dict):
         kwargs.setdefault("config", timeframe)
         timeframe = None
-    config = kwargs.get("config") or {}
+    full_cfg = kwargs.get("config") or {}
+    config = full_cfg.get("mean_bot", full_cfg)
     symbol = config.get("symbol", "")
     adx_window = 14
-    min_bars = max(100, adx_window + 1)
+    min_bars = max(55, adx_window + 1)
     if len(df) < min_bars:
         score_logger.info(
             "Signal for %s:%s -> %.3f, %s",
@@ -254,7 +255,7 @@ def generate_signal(
         if ml_score is not None:
             score = (score + ml_score) / 2
 
-    if config is None or config.get("atr_normalization", True):
+    if not full_cfg or full_cfg.get("atr_normalization", True):
         score = normalize_score_by_volatility(df, score)
 
     score = float(max(0.0, min(score, 1.0)))

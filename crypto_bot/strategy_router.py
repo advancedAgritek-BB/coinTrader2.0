@@ -335,15 +335,23 @@ def _build_mappings(config: Mapping[str, Any] | RouterConfig) -> tuple[
     """Return mapping dictionaries from configuration."""
     if isinstance(config, RouterConfig):
         regimes = config.regimes
+        cfg_dict: Mapping[str, Any] = config.as_dict()
     else:
         regimes = config.get("strategy_router", {}).get("regimes", {})
+        cfg_dict = config
     strat_map: Dict[str, Callable[[pd.DataFrame], Tuple[float, str]]] = {}
     regime_map: Dict[str, list[Callable[[pd.DataFrame], Tuple[float, str]]]] = {}
     for regime, names in regimes.items():
         if isinstance(names, str):
             names = [names]
-        funcs = [get_strategy_by_name(n) for n in names]
-        funcs = [f for f in funcs if f]
+        funcs = []
+        for n in names:
+            strat_cfg = cfg_dict.get(n, {}) if isinstance(cfg_dict, Mapping) else {}
+            if isinstance(strat_cfg, Mapping) and not strat_cfg.get("enabled", True):
+                continue
+            fn = get_strategy_by_name(n)
+            if fn:
+                funcs.append(fn)
         if funcs:
             strat_map[regime] = funcs[0]
             regime_map[regime] = funcs
@@ -415,12 +423,17 @@ def get_strategies_for_regime(
     _register_config(cfg)
     if isinstance(cfg, RouterConfig):
         names = cfg.regimes.get(regime, [])
+        cfg_dict: Mapping[str, Any] = cfg.as_dict()
     else:
         names = cfg.get("strategy_router", {}).get("regimes", {}).get(regime, [])
+        cfg_dict = cfg
     if isinstance(names, str):
         names = [names]
     pairs: list[tuple[str, Callable[[pd.DataFrame], Tuple[float, str]]]] = []
     for name in names:
+        strat_cfg = cfg_dict.get(name, {}) if isinstance(cfg_dict, Mapping) else {}
+        if isinstance(strat_cfg, Mapping) and not strat_cfg.get("enabled", True):
+            continue
         fn = get_strategy_by_name(name)
         if fn:
             pairs.append((name, fn))
