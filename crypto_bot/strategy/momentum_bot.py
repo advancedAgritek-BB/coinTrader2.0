@@ -132,3 +132,19 @@ class regime_filter:
     @staticmethod
     def matches(regime: str) -> bool:
         return regime in {"trending", "volatile"}
+
+
+class Strategy:
+    """Strategy wrapper so :func:`load_strategies` can auto-register it."""
+
+    def __init__(self) -> None:
+        self.name = "momentum_bot"
+        self.generate_signal = generate_signal
+        self.regime_filter = regime_filter
+
+    def signal(self, *args, **kwargs):
+        """Compatibility wrapper for pipelines expecting ``signal``."""
+        return self.generate_signal(*args, **kwargs)
+
+
+__all__ = ["generate_signal", "regime_filter", "Strategy"]
