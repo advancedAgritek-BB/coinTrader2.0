@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict
+from typing import Any, Mapping
 
 from .queues import trade_queue
 
@@ -17,7 +17,11 @@ async def scoring_loop(config, strategy, symbol: str, timeframe: str, ohlcv) -> 
         score,
         side,
     )
-    if side != "none" and score >= config.thresholds.get(strategy.name, {}).get(timeframe, 0.02):
+    if isinstance(config, Mapping):
+        thresholds = config.get("thresholds", {})  # type: ignore[assignment]
+    else:
+        thresholds = getattr(config, "thresholds", {})
+    if side != "none" and score >= thresholds.get(strategy.name, {}).get(timeframe, 0.02):
         cand = {
             "symbol": symbol,
             "side": side,
