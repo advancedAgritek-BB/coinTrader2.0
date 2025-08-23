@@ -17,8 +17,7 @@ import base58
 import logging
 import json
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+from crypto_bot.net.session import make_session
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -277,15 +276,7 @@ def get_http_session(pool_size: int | None = None) -> requests.Session:
     global _HTTP_SESSION
     if _HTTP_SESSION is None:
         size = pool_size or DEFAULT_MAX_CONCURRENT_OHLCV
-        session = requests.Session()
-        adapter = HTTPAdapter(
-            pool_connections=size,
-            pool_maxsize=size,
-            max_retries=Retry(total=3, backoff_factor=0.3),
-        )
-        session.mount("https://", adapter)
-        session.mount("http://", adapter)
-        _HTTP_SESSION = session
+        _HTTP_SESSION = make_session(pool=size)
     return _HTTP_SESSION
 
 
@@ -729,14 +720,7 @@ def configure(
             if size < 1:
                 raise ValueError
             maxc = max(size, int(cfg.get("max_concurrent_ohlcv", DEFAULT_MAX_CONCURRENT_OHLCV)))
-            session = requests.Session()
-            adapter = HTTPAdapter(
-                pool_connections=maxc,
-                pool_maxsize=maxc,
-                max_retries=Retry(total=3, backoff_factor=0.3),
-            )
-            session.mount("https://", adapter)
-            session.mount("http://", adapter)
+            session = make_session(pool=maxc)
             if _HTTP_SESSION is not None:
                 try:
                     _HTTP_SESSION.close()
