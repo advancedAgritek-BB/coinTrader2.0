@@ -33,12 +33,12 @@ ohlcv:
   progress_logging: false               # include percent/ETA when data is missing
   bootstrap_timeframes: ["1m", "5m", "15m", "1h"]
   defer_timeframes: ["4h", "1d"]
-  warmup_candles:
-    "1m": 2000
-    "5m": 2000
-    "15m": 2000
-    "1h": 1500
-    "1d": 120
+  warmup_candles:            # override with CT_WARMUP_<TF> env vars
+    "1m": 2000   # CT_WARMUP_1M
+    "5m": 2000   # CT_WARMUP_5M
+    "15m": 2000  # CT_WARMUP_15M
+    "1h": 1500   # CT_WARMUP_1H
+    "1d": 120    # CT_WARMUP_1D
   initial_history_candles: 600
   scan_lookback_limit: 1200
 
