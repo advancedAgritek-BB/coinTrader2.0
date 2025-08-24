@@ -10,6 +10,7 @@ import logging
 import ccxt.async_support as ccxt
 import aiohttp
 from crypto_bot.utils.market_loader import timeframe_seconds
+from crypto_bot.utils.http_client import get_session
 from configy import load_config
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "crypto_bot" / "config.yaml"
@@ -91,11 +92,11 @@ async def _close_exchange(exchange: ccxt.Exchange) -> None:
 async def get_solana_liquid_pairs(min_volume: float, quote: str = "USDC") -> list[str]:
     """Return Raydium symbols with liquidity above ``min_volume`` using ``quote`` as quote currency."""
     url = "https://api.raydium.io/v2/main/pairs"
+    session = get_session()
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=10) as resp:
-                resp.raise_for_status()
-                data = await resp.json()
+        async with session.get(url, timeout=10) as resp:
+            resp.raise_for_status()
+            data = await resp.json()
     except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
         logger.error("Failed to fetch Solana pairs: %s", exc)
         return []

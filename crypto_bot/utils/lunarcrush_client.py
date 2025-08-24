@@ -7,6 +7,7 @@ from typing import Any, Mapping
 import aiohttp
 
 from .logger import LOG_DIR, setup_logger
+from .http_client import get_session, close_session
 
 logger = setup_logger(__name__, LOG_DIR / "lunarcrush_client.log")
 
@@ -19,16 +20,14 @@ class LunarCrushClient:
     def __init__(self, api_key: str | None = None) -> None:
         """Create client using ``api_key`` or ``LUNARCRUSH_API_KEY`` env var."""
         self.api_key = api_key or os.getenv("LUNARCRUSH_API_KEY")
-        self._session: aiohttp.ClientSession | None = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
-        return self._session
+        """Return the shared HTTP session."""
+        return get_session()
 
     async def close(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
+        """Close the shared session if open."""
+        await close_session()
 
     async def request(
         self, endpoint: str, params: Mapping[str, Any] | None = None
