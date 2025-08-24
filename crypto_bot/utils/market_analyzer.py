@@ -163,7 +163,21 @@ async def run_candidates(
 
     router_cfg = (cfg or {}).get("router", {}) if isinstance(cfg, dict) else {}
     fast_track = float(router_cfg.get("fast_track_score", 0.95))
-    min_accept = float(router_cfg.get("min_accept_score", 0.0))
+
+    fusion_active = False
+    if isinstance(cfg, dict):
+        fusion_active = bool(cfg.get("signal_fusion", {}).get("enabled")) or bool(
+            router_cfg.get("fusion_enabled")
+        )
+
+    min_accept = router_cfg.get("min_accept_score")
+    if min_accept is None:
+        min_accept = 0.1
+    min_accept = float(min_accept)
+    if fusion_active:
+        max_weight = max(weights.values(), default=1.0)
+        min_accept *= max_weight
+
     top_k = int(router_cfg.get("top_k_per_strategy", 0))
 
     for fn, sc, d in ranked:
