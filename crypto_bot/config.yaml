@@ -653,7 +653,7 @@ strategy_router:
     adx_threshold: 25
     bbw_pct_max: 5
     vol_z_min: -1.0
-    min_score: 10
+    min_score: 0.05
   mean_reverting_timeframe: 1h
   flash_crash_timeframe: 1m
   min_confidence: 0.0005
