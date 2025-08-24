@@ -78,3 +78,10 @@ def test_compute_required_lookback_aggregate(monkeypatch):
     out = registry.compute_required_lookback_per_tf([breakout_bot, trend_bot, mean_bot])
     assert out == {"1m": 250}
 
+
+def test_breakout_required_lookback_cfg_dataclass(monkeypatch):
+    cfg_obj = config.Config()
+    monkeypatch.setattr(config, "cfg", cfg_obj)
+    out = breakout_bot.required_lookback()
+    assert out == {tf: 200 for tf in cfg_obj.timeframes}
+
