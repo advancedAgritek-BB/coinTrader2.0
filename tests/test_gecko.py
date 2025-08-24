@@ -49,7 +49,7 @@ def test_gecko_request_retry_backoff(monkeypatch):
         DummyResponse(429),
         DummyResponse(200, {"ok": True}),
     ]
-    monkeypatch.setattr(gecko.aiohttp, "ClientSession", lambda: DummySession(responses))
+    monkeypatch.setattr(gecko, "get_session", lambda: DummySession(responses))
 
     sleeps: list[float] = []
 

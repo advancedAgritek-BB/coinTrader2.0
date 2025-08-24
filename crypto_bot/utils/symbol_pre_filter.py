@@ -44,6 +44,7 @@ from .correlation import incremental_correlation
 from .symbol_scoring import score_symbol
 from .telemetry import telemetry
 from .pair_cache import PAIR_FILE, load_liquid_map
+from .http_client import get_session
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 try:
@@ -191,25 +192,25 @@ async def _fetch_ticker_async(
         rate_ms = getattr(exchange, "rateLimit", 0) if exchange is not None else 0
     delay = rate_ms / 1000 if rate_ms else 0
     combined: dict = {"result": {}, "error": []}
-    async with aiohttp.ClientSession() as session:
-        async def fetch(url: str):
-            resp = await session.get(url, timeout=timeout)
+    session = get_session()
+
+    async def fetch(url: str):
+        async with session.get(url, timeout=timeout) as resp:
             if delay:
                 await asyncio.sleep(delay)
-            return resp
-
-        tasks = []
-        for i in range(0, len(pairs_list), 20):
-            chunk = pairs_list[i : i + 20]
-            url = f"{API_URL}/Ticker?pair={','.join(chunk)}"
-            tasks.append(asyncio.create_task(fetch(url)))
-
-        responses = await asyncio.gather(*tasks)
-        for resp in responses:
             resp.raise_for_status()
-            data = await resp.json()
-            combined["error"] += data.get("error", [])
-            combined["result"].update(data.get("result", {}))
+            return await resp.json()
+
+    tasks = []
+    for i in range(0, len(pairs_list), 20):
+        chunk = pairs_list[i : i + 20]
+        url = f"{API_URL}/Ticker?pair={','.join(chunk)}"
+        tasks.append(asyncio.create_task(fetch(url)))
+
+    responses = await asyncio.gather(*tasks)
+    for data in responses:
+        combined["error"] += data.get("error", [])
+        combined["result"].update(data.get("result", {}))
 
     return combined
 

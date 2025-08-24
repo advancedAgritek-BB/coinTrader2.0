@@ -1,6 +1,7 @@
 import aiohttp
 import pytest
 
+import crypto_bot.lunarcrush_client as lc
 from crypto_bot.lunarcrush_client import LunarCrushClient
 
 
@@ -40,7 +41,7 @@ class DummySession:
 @pytest.mark.asyncio
 async def test_get_sentiment(monkeypatch):
     session = DummySession({"data": [{"sentiment": 4}]})
-    monkeypatch.setattr(aiohttp, "ClientSession", lambda: session)
+    monkeypatch.setattr(lc, "get_session", lambda: session)
     client = LunarCrushClient()
     score = await client.get_sentiment("BTC")
     assert session.last_params["symbol"] == "BTC"

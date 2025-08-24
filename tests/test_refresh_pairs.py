@@ -6,6 +6,8 @@ import pytest
 import os
 import time
 
+import crypto_bot.utils.http_client  # ensure module present
+
 yaml_mod = types.ModuleType("yaml")
 yaml_mod.safe_load = lambda *_a, **_k: {}
 sys.modules.setdefault("yaml", yaml_mod)
@@ -233,8 +235,7 @@ def test_get_solana_liquid_pairs(monkeypatch):
         {"base": {"symbol": "C"}, "quote": {"symbol": "OTHER"}, "liquidity": 5_000_000},
     ]
     session = DummySession(data)
-    aiohttp_mod = type("M", (), {"ClientSession": lambda: session, "ClientError": Exception})
-    monkeypatch.setattr(rp, "aiohttp", aiohttp_mod)
+    monkeypatch.setattr(rp, "get_session", lambda: session)
     res = asyncio.run(rp.get_solana_liquid_pairs(1_000_000))
     assert res == ["A/USDC"]
     assert session.url == "https://api.raydium.io/v2/main/pairs"

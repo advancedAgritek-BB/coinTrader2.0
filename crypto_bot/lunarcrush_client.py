@@ -8,6 +8,7 @@ import asyncio
 import aiohttp
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
+from crypto_bot.utils.http_client import get_session
 
 
 logger = setup_logger(__name__, LOG_DIR / "lunarcrush.log")
@@ -32,10 +33,8 @@ class LunarCrushClient:
         if self.api_key:
             params["key"] = self.api_key
 
-        if self.session is None:
-            async with aiohttp.ClientSession() as session:
-                return await self._fetch(session, params)
-        return await self._fetch(self.session, params)
+        session = self.session or get_session()
+        return await self._fetch(session, params)
 
     def get_sentiment_sync(self, symbol: str) -> float:
         """Return sentiment score for ``symbol`` using ``asyncio.run``.

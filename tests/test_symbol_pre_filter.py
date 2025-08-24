@@ -1212,6 +1212,12 @@ def test_fetch_ticker_async_timeout(monkeypatch):
     calls: list[int | None] = []
 
     class FakeResp:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            pass
+
         def raise_for_status(self):
             pass
 
@@ -1219,17 +1225,11 @@ def test_fetch_ticker_async_timeout(monkeypatch):
             return {}
 
     class FakeSession:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *exc):
-            pass
-
         async def get(self, url, timeout=None):
             calls.append(timeout)
             return FakeResp()
 
-    monkeypatch.setattr(sp.aiohttp, "ClientSession", lambda: FakeSession())
+    monkeypatch.setattr(sp, "get_session", lambda: FakeSession())
 
     asyncio.run(sp._fetch_ticker_async(["XBTUSD"], timeout=5))
 
