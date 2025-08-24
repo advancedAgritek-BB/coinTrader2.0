@@ -136,6 +136,40 @@ def test_get_filtered_symbols_basic(monkeypatch):
     assert result == ([("ETH/USD", 0.5)], [])
 
 
+def test_get_filtered_symbols_dry_run_excludes_non_kraken(monkeypatch):
+    class KrakenExchange:
+        id = "kraken"
+        markets = {"BTC/USD": {"quote": "USD", "quoteVolume": 1_000}}
+
+        def list_markets(self, **_):
+            return {"BTC/USD": {"quote": "USD", "quoteVolume": 1_000}}
+
+    class DummyService:
+        def __init__(self, _ex):
+            pass
+
+        def get_candidates(self):
+            return ["BTC/USD", "ETH/USDT"]
+
+    async def fake_filter_symbols(_ex, syms, _cfg):
+        return [(s, 0.0) for s in syms], []
+
+    monkeypatch.setattr(symbol_utils, "SymbolService", DummyService)
+    monkeypatch.setattr(symbol_utils, "filter_symbols", fake_filter_symbols)
+
+    config = {
+        "mode": "dry_run",
+        "symbols": ["BTC/USD", "ETH/USDT"],
+        "symbol_filter": {},
+    }
+
+    symbol_utils._cached_symbols = None
+    symbol_utils._last_refresh = 0.0
+
+    result = asyncio.run(symbol_utils.get_filtered_symbols(KrakenExchange(), config))
+    assert [s for s, _ in result[0]] == ["BTC/USD"]
+
+
 def test_get_filtered_symbols_invalid_usdc_token(monkeypatch):
     calls: list[list[str]] = []
 
