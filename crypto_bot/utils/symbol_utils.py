@@ -291,10 +291,16 @@ async def get_filtered_symbols(
             prev_strict = getattr(cfg, "strict_cex", False)
             prev_quotes = list(getattr(cfg, "allowed_quotes", []) or [])
             prev_vol = float(getattr(cfg, "min_volume", 0.0) or 0.0)
+            strict = bool(config.get("strict_cex", prev_strict))
             try:
-                cfg.strict_cex = True
+                cfg.strict_cex = strict
                 cfg.allowed_quotes = list(allowed_quotes)
                 cfg.min_volume = float(sf.get("min_volume_usd", 0) or 0)
+                if not strict:
+                    try:
+                        exchange.markets = markets
+                    except Exception:
+                        pass
                 symbols = service.get_candidates()
             finally:
                 cfg.strict_cex = prev_strict
