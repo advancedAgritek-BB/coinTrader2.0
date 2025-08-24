@@ -32,7 +32,7 @@ def generate_signal(
                     "kc_mult": float,
                     "volume_window": int,
                     "vol_multiplier": float,
-                    "min_intensity": {"1h": 0.03, ...}
+                    "min_intensity": {"1h": 0.015, ...}
                 }
             }
 
