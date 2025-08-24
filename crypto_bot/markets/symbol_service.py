@@ -1,4 +1,7 @@
 import logging
+from functools import lru_cache
+
+import requests
 
 try:  # pragma: no cover - the global cfg may not exist in tests
     from crypto_bot.config import cfg  # type: ignore
@@ -36,6 +39,26 @@ class SymbolService:
         min_vol = float(getattr(cfg, "min_volume", 0.0) or 0.0)
         return vol >= min_vol
 
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _kraken_symbols() -> set[str]:  # pragma: no cover - network best effort
+        """Return Kraken spot symbols from the public AssetPairs endpoint."""
+        url = "https://api.kraken.com/0/public/AssetPairs"
+        try:
+            resp = requests.get(url, timeout=5)
+            data = resp.json().get("result", {})
+            syms = set()
+            for info in data.values():
+                ws = info.get("wsname") or ""
+                if ws:
+                    syms.add(ws.replace(" ", "/"))
+            return syms
+        except Exception:  # pragma: no cover - external API
+            logging.getLogger(__name__).warning(
+                "Failed to fetch Kraken asset list", exc_info=True
+            )
+            return set()
+
     # ------------------------------------------------------------------
     def get_candidates(self) -> list[str]:
         """Return candidate symbols for CEX trading.
@@ -63,6 +86,13 @@ class SymbolService:
                     self.logger.info(
                         "Purged denylisted symbol from candidates: %s", bad
                     )
+            kraken = self._kraken_symbols()
+            if kraken:
+                before_kraken = len(allowed)
+                allowed.intersection_update(kraken)
+                self.logger.info(
+                    "Kraken asset filter: %d → %d", before_kraken, len(allowed)
+                )
             self.logger.info(
                 "CEX candidates: %d → %d after denylist", before, len(allowed)
             )
