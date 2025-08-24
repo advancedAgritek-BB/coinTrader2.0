@@ -6,6 +6,7 @@ import numpy as np
 
 import pandas as pd
 import ta
+from crypto_bot import config as _config
 try:  # pragma: no cover - optional dependency
     from scipy import stats as scipy_stats
     if not hasattr(scipy_stats, "norm"):
@@ -41,6 +42,21 @@ if ML_AVAILABLE:
     MODEL = load_model("mean_bot")
 else:  # pragma: no cover - fallback
     MODEL = None
+
+
+def required_lookback() -> dict[str, int]:
+    """Return per-timeframe history required by the mean reversion bot."""
+    params = _config.cfg.get("mean_bot", {})
+    lookback_cfg = int(params.get("indicator_lookback", 14))
+    adx_window = int(params.get("adx_window", 14))
+
+    lookback = max(55, adx_window + 1, lookback_cfg, 14)
+
+    tfs = _config.cfg.get("timeframes")
+    if not tfs:
+        tf = params.get("tf") or _config.cfg.get("timeframe")
+        tfs = [tf] if tf else ["1h"]
+    return {tf: lookback for tf in tfs}
 
 
 def generate_signal(

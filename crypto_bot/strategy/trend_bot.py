@@ -9,6 +9,7 @@ from typing import Optional, Tuple
 import pandas as pd
 import numpy as np
 import ta
+from crypto_bot import config as _config
 try:  # pragma: no cover - optional dependency
     from scipy import stats as scipy_stats
     if not hasattr(scipy_stats, "norm"):
@@ -42,6 +43,37 @@ if ML_AVAILABLE:
     MODEL = load_model("trend_bot")
 else:  # pragma: no cover - fallback
     MODEL = None
+
+
+def required_lookback() -> dict[str, int]:
+    """Return per-timeframe history required by the trend bot."""
+    params = _config.cfg.get("trend_bot", {})
+
+    lookback_cfg = int(params.get("indicator_lookback", 250))
+    fast = int(params.get("trend_ema_fast", 3))
+    slow = int(params.get("trend_ema_slow", 10))
+    atr_period = int(params.get("atr_period", 14))
+    volume_window = int(params.get("volume_window", 20))
+    adx_window = int(params.get("adx_window", 7))
+
+    lookback = max(
+        100,
+        lookback_cfg,
+        volume_window,
+        fast,
+        slow,
+        atr_period,
+        50,
+        20,
+        14,
+        adx_window + 1,
+    )
+
+    tfs = _config.cfg.get("timeframes")
+    if not tfs:
+        tf = params.get("tf") or _config.cfg.get("timeframe")
+        tfs = [tf] if tf else ["1h"]
+    return {tf: lookback for tf in tfs}
 
 
 def generate_signal(
