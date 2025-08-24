@@ -364,13 +364,31 @@ def warmup_reached_for(
 def _ensure_strategy_warmup(config: Dict[str, Any]) -> None:
     """Ensure warmup settings meet strategy lookback requirements.
 
-    When ``data.auto_raise_warmup`` is enabled the configured warmup counts are
-    automatically increased to satisfy each strategy's ``required_lookback``.  If
-    any strategies still lack sufficient history after this adjustment a warning
-    is logged and those strategies are skipped.
+    The maximum ``required_lookback`` across all strategies is calculated via
+    :func:`compute_required_lookback_per_tf`.  When ``data.auto_adjust_warmup``
+    is enabled ``warmup_candles`` entries are reduced to this exact
+    requirement.  After any optional lowering the regular warmup guard is
+    applied which may raise counts when ``data.auto_raise_warmup`` is enabled.
+    If strategies still lack sufficient history a warning is logged and those
+    strategies are skipped.
     """
 
     strategies = registry.load_from_config(config)
+    required = registry.compute_required_lookback_per_tf(strategies)
+
+    warmup_map = config.setdefault("warmup_candles", {})
+    if config.get("data", {}).get("auto_adjust_warmup", False):
+        for tf, have in list(warmup_map.items()):
+            need = int(required.get(tf, 0))
+            if have > need:
+                logger.info(
+                    "Auto-adjusting warmup_candles[%s] %d -> %d based on strategy requirements.",
+                    tf,
+                    have,
+                    need,
+                )
+                warmup_map[tf] = need
+
     enabled = registry.filter_by_warmup(config, strategies)
 
     if config.get("data", {}).get("auto_raise_warmup", False):
