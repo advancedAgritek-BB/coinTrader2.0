@@ -261,21 +261,50 @@ async def get_filtered_symbols(
     )
     allowed_quotes = {str(q).upper() for q in (allowed_quotes_cfg or [])}
     markets: dict[str, dict] = {}
-    if mode == "cex" and hasattr(exchange, "list_markets"):
-        service = SymbolService(exchange)
-        prev_strict = getattr(cfg, "strict_cex", False)
-        prev_quotes = list(getattr(cfg, "allowed_quotes", []) or [])
-        prev_vol = float(getattr(cfg, "min_volume", 0.0) or 0.0)
+    timeout = config.get("symbol_scan_timeout")
+    kraken = getattr(exchange, "id", "").lower() == "kraken"
+    if mode != "onchain" and hasattr(exchange, "list_markets"):
+        list_markets_fn = getattr(exchange, "list_markets")
+
+        if timeout is not None:
+            if asyncio.iscoroutinefunction(list_markets_fn):
+                async def lm_wrapper(*args, **kwargs):
+                    kwargs.setdefault("timeout", timeout)
+                    return await list_markets_fn(*args, **kwargs)
+            else:
+                def lm_wrapper(*args, **kwargs):
+                    kwargs.setdefault("timeout", timeout)
+                    return list_markets_fn(*args, **kwargs)
+        else:
+            lm_wrapper = list_markets_fn
+
         try:
-            cfg.strict_cex = True
-            cfg.allowed_quotes = list(allowed_quotes)
-            cfg.min_volume = float(sf.get("min_volume_usd", 0) or 0)
-            symbols = service.get_candidates()
+            markets = (
+                await lm_wrapper()
+                if asyncio.iscoroutinefunction(lm_wrapper)
+                else lm_wrapper()
+            )
+            if lm_wrapper is not list_markets_fn:
+                exchange.list_markets = lm_wrapper
+
+            service = SymbolService(exchange)
+            prev_strict = getattr(cfg, "strict_cex", False)
+            prev_quotes = list(getattr(cfg, "allowed_quotes", []) or [])
+            prev_vol = float(getattr(cfg, "min_volume", 0.0) or 0.0)
+            try:
+                cfg.strict_cex = True
+                cfg.allowed_quotes = list(allowed_quotes)
+                cfg.min_volume = float(sf.get("min_volume_usd", 0) or 0)
+                symbols = service.get_candidates()
+            finally:
+                cfg.strict_cex = prev_strict
+                cfg.allowed_quotes = prev_quotes
+                cfg.min_volume = prev_vol
         finally:
-            cfg.strict_cex = prev_strict
-            cfg.allowed_quotes = prev_quotes
-            cfg.min_volume = prev_vol
-        markets = getattr(exchange, "markets", {}) or {}
+            if lm_wrapper is not list_markets_fn:
+                exchange.list_markets = list_markets_fn
+
+        markets = getattr(exchange, "markets", {}) or markets or {}
         cfg_syms = config.get("symbols") or [config.get("symbol")]
         if cfg_syms:
             symbols = [s for s in symbols if s in cfg_syms]
@@ -283,7 +312,28 @@ async def get_filtered_symbols(
     else:
         symbols = config.get("symbols", [config.get("symbol")])
         onchain = list(config.get("onchain_symbols", []))
-        markets = getattr(exchange, "markets", {}) or {}
+        if kraken and hasattr(exchange, "list_markets"):
+            list_markets_fn = getattr(exchange, "list_markets")
+            if timeout is not None:
+                markets = (
+                    await list_markets_fn(timeout=timeout)
+                    if asyncio.iscoroutinefunction(list_markets_fn)
+                    else list_markets_fn(timeout=timeout)
+                )
+            else:
+                markets = (
+                    await list_markets_fn()
+                    if asyncio.iscoroutinefunction(list_markets_fn)
+                    else list_markets_fn()
+                )
+        else:
+            markets = getattr(exchange, "markets", {}) or {}
+
+    if kraken and markets:
+        market_keys = (
+            set(markets.keys()) if isinstance(markets, dict) else set(markets)
+        )
+        symbols = [s for s in symbols if s in market_keys]
     pipeline_logger.info(
         "discovered_cex=%d discovered_onchain=%d",
         len(symbols),
@@ -408,7 +458,7 @@ async def get_filtered_symbols(
         config["mode"] = "cex"
         mode = "cex"
     cex_candidates = [s for s, _ in scored]
-    active_universe = cex_candidates if mode == "cex" else list(onchain_syms)
+    active_universe = cex_candidates if mode != "onchain" else list(onchain_syms)
     if not active_universe:
         if mode == "auto" and cex_candidates:
             global _AUTO_FALLBACK_WARNED
