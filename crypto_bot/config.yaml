@@ -40,11 +40,11 @@ router:
 ohlcv:
   storage_path: crypto_bot/data/ohlcv   # directory for persisted OHLCV data
   tail_overlap_bars: 3                  # overlap bars to avoid gaps when appending
-  max_bootstrap_bars: 1000              # limit initial bootstrap to this many bars
+  max_bootstrap_bars: 3000              # limit initial bootstrap to this many bars
   bootstrap_timeframes: ["1m","5m","15m","1h"]
   defer_timeframes: ["4h","1d"]
   warmup_candles:              # override with CT_WARMUP_<TF> env vars
-    "1m": 2000   # CT_WARMUP_1M
+    "1m": 1000   # CT_WARMUP_1M
     "5m": 2000   # CT_WARMUP_5M
     "15m": 2000  # CT_WARMUP_15M
     "1h": 1500   # CT_WARMUP_1H
@@ -341,8 +341,9 @@ loop_interval_seconds: 0.05
 hft_mode: true
 max_age_days: 90
 max_change_pct: 20
-max_concurrent_ohlcv: 50
-http_pool_size: 50
+# reduce concurrency so Kraken's HTTP pool doesn't thrash
+max_concurrent_ohlcv: 8
+http_pool_size: 25
 max_concurrent_tickers: 20
 max_latency_ms: 500
 max_ohlcv_failures: 2
@@ -509,12 +510,12 @@ risk:
   win_rate_threshold: 0.4
   win_rate_boost_factor: 1.5
   min_score_to_trade: 0.15
-  min_votes: 2
+  min_votes: 1
 
 router:
-  min_accept_score: 0.5
+  min_accept_score: 0.02
   prefer_timeframes: ["5m","15m","1m"]
-  require_warm: true
+  require_warm: false
   top_k_per_strategy: 3
 
 execution:
@@ -557,12 +558,13 @@ sentiment_filter:
 signal_fusion:
   enabled: true
   fusion_method: weight
-  min_confidence: 0.01
+  min_confidence: 0.005
   strategies:
     - [trend_bot, 0.3]
     - [momentum_bot, 0.25]
     - [mean_bot, 0.15]
     - [breakout_bot, 0.1]
+    - [breakout, 0.1]
     - [sniper_bot, 0.1]
     - [grid_bot, 0.05]
     - [micro_scalp_bot, 0.05]
@@ -653,7 +655,7 @@ strategy_router:
     adx_threshold: 25
     bbw_pct_max: 5
     vol_z_min: -1.0
-    min_score: 10
+    min_score: 0.02
   mean_reverting_timeframe: 1h
   flash_crash_timeframe: 1m
   min_confidence: 0.0005
@@ -663,6 +665,7 @@ strategy_router:
     - lstm_bot
     breakout:
     - breakout_bot
+    - breakout
     - lstm_bot
     dip_hunter:
     - dip_hunter
@@ -828,6 +831,8 @@ evaluation:
 onchain_watchers:
   enabled: false   # hard off in CEX mode
 
+# enforce real markets only during discovery
 strict_cex: true   # only symbols the exchange actually lists
+skip_symbol_filters: false
 denylist_symbols: ['AIBTC/USD','AIBTC:USD','AIBTC/EUR','AIBTC:EUR']
 
