@@ -21,6 +21,20 @@ def test_auto_raise_warmup(monkeypatch, caplog):
     assert "Auto-raising warmup_candles[1m]" in caplog.text
 
 
+def test_auto_adjust_warmup(monkeypatch, caplog):
+    stub = SimpleNamespace(__name__="stub", required_lookback=lambda: {"1m": 100})
+    monkeypatch.setattr(registry, "load_from_config", lambda cfg: [stub])
+    cfg = {
+        "timeframes": ["1m"],
+        "warmup_candles": {"1m": 200},
+        "data": {"auto_adjust_warmup": True},
+    }
+    caplog.set_level(logging.INFO)
+    market_loader._ensure_strategy_warmup(cfg)
+    assert cfg["warmup_candles"]["1m"] == 100
+    assert "Auto-adjusting warmup_candles[1m]" in caplog.text
+
+
 def test_registry_disables_strategy(caplog):
     stub = SimpleNamespace(__name__="stub", required_lookback=lambda: {"1m": 1440})
     cfg = {"warmup_candles": {"1m": 1000}}
