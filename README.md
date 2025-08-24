@@ -693,6 +693,9 @@ regime_overrides:
   parallel evaluation cycle.
 * **ensemble_min_conf** – minimum score required for a strategy to be
   ranked in ensemble mode.
+* **router.min_accept_score** – minimum score a strategy must achieve to be
+  kept after ranking. Defaults to `0.1` and when `signal_fusion.enabled` is
+  true the threshold is scaled by the highest fusion strategy weight.
 
 To enable the Thompson sampling router add the following to `crypto_bot/config.yaml`:
 
