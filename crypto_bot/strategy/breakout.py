@@ -10,6 +10,7 @@ from crypto_bot.utils import stats
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils.market_loader import get_progress_eta
 from crypto_bot.config import short_selling_enabled
+from crypto_bot.utils.ohlcv_check import ensure_ohlcv
 
 NAME = "breakout"
 logger = logging.getLogger(__name__)
@@ -66,12 +67,14 @@ def generate_signal(
     progress_logging = bool(cfg_all.get("ohlcv", {}).get("progress_logging", False))
     required = lookback + 1
 
-    if df is None or df.empty:
-        msg = "signal=breakout side=none reason=insufficient_data vol_z=nan bbw_pct=nan"
+    if not ensure_ohlcv(symbol or "", df):
         if progress_logging and symbol and timeframe:
             pct, eta = get_progress_eta(symbol, timeframe, required)
-            msg += f" progress={pct:.1f}% eta={eta:.1f}s"
-        logger.info(msg)
+            logger.info(
+                "signal=breakout side=none reason=insufficient_data vol_z=nan bbw_pct=nan progress=%.1f%% eta=%.1fs",
+                pct,
+                eta,
+            )
         return 0.0, "none", 0.0
 
     if len(df) < required:

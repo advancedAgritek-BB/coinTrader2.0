@@ -42,6 +42,7 @@ from crypto_bot.utils.volatility import normalize_score_by_volatility
 from crypto_bot.utils.indicator_cache import cache_series
 from crypto_bot.utils import stats
 from crypto_bot.utils.ml_utils import init_ml_or_warn
+from crypto_bot.utils.ohlcv_check import ensure_ohlcv
 
 NAME = "breakout_bot"
 logger = logging.getLogger(__name__)
@@ -128,8 +129,7 @@ def generate_signal(
         timeframe = None
     config = kwargs.get("config")
     higher_df: Optional[pd.DataFrame] = kwargs.get("higher_df")
-
-    if df is None or df.empty:
+    if not ensure_ohlcv(symbol or "", df):
         return (0.0, "none") if higher_df is not None else (0.0, "none", 0.0)
 
     cfg_all = config or {}

@@ -2,7 +2,7 @@ import pandas as pd
 import ta
 from typing import Any, Dict
 
-
+from crypto_bot.utils.ohlcv_check import ensure_ohlcv
 def generate_signal(
     df: pd.DataFrame,
     symbol: str | None = None,
@@ -42,6 +42,8 @@ def generate_signal(
         ``(metric, signal, meta)`` where ``metric`` is the breakout intensity
         and ``signal`` is ``"long"`` or ``"none"``.
     """
+    if not ensure_ohlcv(symbol or "", df):
+        return 0.0, "none", {"reason": "missing_ohlcv"}
 
     cfg = config or {}
     brk = cfg.get("breakout", {})

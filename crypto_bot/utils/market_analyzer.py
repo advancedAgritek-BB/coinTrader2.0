@@ -36,6 +36,7 @@ from ta.trend import ADXIndicator
 from crypto_bot.utils.stats import zscore
 from crypto_bot.utils.telemetry import telemetry
 from .ml_utils import ML_AVAILABLE
+from crypto_bot.utils.ohlcv_check import ensure_ohlcv
 
 
 def _fn_name(fn: Callable) -> str:
@@ -226,13 +227,7 @@ async def analyze_symbol(
     base_tf = router_cfg.timeframe
     higher_tf = config.get("higher_timeframe", "1d")
     df = df_map.get(base_tf)
-    if df is None:
-        telemetry.inc("analysis.skipped_no_df")
-        return {"symbol": symbol, "skip": "no_ohlcv"}
-
-    if df.empty:
-        telemetry.inc("analysis.skipped_no_df")
-        analysis_logger.info("Skipping %s: no data for %s", symbol, base_tf)
+    if not ensure_ohlcv(symbol, df, metric="analysis.skipped_no_df"):
         return {
             "symbol": symbol,
             "df": df,
