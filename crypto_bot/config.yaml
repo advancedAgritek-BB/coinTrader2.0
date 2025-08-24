@@ -12,8 +12,8 @@ trading:
   allowed_quotes: [USD, USDT, USDC, EUR]
   min_ticker_volume: 10000
   timeframes: ["1m","5m","15m","1h"]
-  min_score: 0.02
-  min_confidence: 0.30
+  min_score: 0.10
+  min_confidence: 0.05
   consensus: weighted
   backfill:
     warmup_high_tf: ["1h","4h","1d"]
@@ -30,11 +30,11 @@ filters:
 
 # === router ===
 router:
-  min_accept_score: 0.02
+  min_accept_score: 0.12        # was 0.5
   prefer_timeframes: ["5m","15m","1m"]
-  require_warm: false
-  top_k_per_strategy: 3
-  fast_track_score: 0.95
+  require_warm: true
+  top_k_per_strategy: 5
+  fast_track_score: 0.85        # keep fast-path possible
 
 # === ohlcv cache ===
 ohlcv:
@@ -247,7 +247,7 @@ breakout:
   vol_multiplier: 0.5
   volume_window: 15
   min_intensity:
-    "1h": 0.03
+    "1h": 0.015                 # was 0.03
 cycle_bias:
   enabled: false
   mvrv_url: https://api.example.com/mvrv
@@ -508,21 +508,22 @@ risk:
   volume_threshold_ratio: 0.01
   win_rate_threshold: 0.4
   win_rate_boost_factor: 1.5
-  min_score_to_trade: 0.02
-  min_votes: 1
+  min_score_to_trade: 0.05      # was 0.15
+  min_votes: 1                  # was 2
 
 router:
-  min_accept_score: 0.02
+  min_accept_score: 0.12        # was 0.5
   prefer_timeframes: ["5m","15m","1m"]
-  require_warm: false
-  top_k_per_strategy: 3
+  require_warm: true
+  top_k_per_strategy: 5
+  fast_track_score: 0.85        # keep fast-path possible
 
 execution:
-  mode: dry_run
+  mode: dry_run                 # keep paper until confirmed
   stake_usd: 50
   min_price: 0.00000001
-  min_notional: 5
-  max_positions: 3
+  min_notional: 10              # safer for Kraken spot
+  max_positions: 5
 rl_selector:
   enabled: true
 rsi_overbought_pct: 80
@@ -556,21 +557,13 @@ sentiment_filter:
   min_sentiment: 40
 signal_fusion:
   enabled: true
-  fusion_method: weight
-  min_confidence: 0.005
+  fusion_method: max            # was weight
+  min_confidence: 0.0
+  # weights retained but no longer suppress the max
   strategies:
-    - [trend_bot, 0.3]
+    - [breakout_bot, 0.50]
     - [momentum_bot, 0.25]
-    - [mean_bot, 0.15]
-    - [breakout_bot, 0.1]
-    - [breakout, 0.1]
-    - [sniper_bot, 0.1]
-    - [grid_bot, 0.05]
-    - [micro_scalp_bot, 0.05]
-    - [lstm_bot, 0.1]
-    - [bounce_scalper, 0.1]
-    - [flash_crash_bot, 0.05]
-    - [meme_wave_bot, 0.05]
+    - [trend_bot,   0.25]
 signal_threshold: 0.0001
 signal_weight_optimizer:
   enabled: true
