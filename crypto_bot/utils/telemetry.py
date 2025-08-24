@@ -39,6 +39,10 @@ PROM_COUNTERS: Dict[str, Counter] = {
         "analysis_regime_unknown_alerts",
         "Number of alerts triggered for sustained unknown regime classifications",
     ),
+    "signals.missing_ohlcv": Counter(
+        "signals_missing_ohlcv",
+        "Number of symbols skipped due to missing OHLCV data during signal generation",
+    ),
 }
 
 
