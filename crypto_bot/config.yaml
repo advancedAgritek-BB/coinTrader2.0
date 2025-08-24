@@ -556,7 +556,7 @@ sentiment_filter:
   min_fng: 20  # Lower if current FNG is blocking
   min_sentiment: 40
 signal_fusion:
-  enabled: true
+  enabled: false
   fusion_method: max            # was weight
   min_confidence: 0.0
   # weights retained but no longer suppress the max
