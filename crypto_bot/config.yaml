@@ -30,7 +30,7 @@ filters:
 
 # === router ===
 router:
-  min_accept_score: 0.02
+  min_accept_score: 0.12
   prefer_timeframes: ["5m","15m","1m"]
   require_warm: false
   top_k_per_strategy: 3
@@ -512,7 +512,7 @@ risk:
   min_votes: 1
 
 router:
-  min_accept_score: 0.02
+  min_accept_score: 0.12
   prefer_timeframes: ["5m","15m","1m"]
   require_warm: false
   top_k_per_strategy: 3
