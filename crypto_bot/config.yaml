@@ -8,7 +8,7 @@ exchange:
 trading:
   mode: dry_run           # cex | onchain | auto | dry_run
   enable_execution: true          # make sure the trader loop can place paper orders
-  short_selling: false            # unless you really want simulated shorts
+  short_selling: true            # unless you really want simulated shorts
   allowed_quotes: [USD, USDT, USDC, EUR]
   min_ticker_volume: 10000
   timeframes: ["1m","5m","15m","1h"]
