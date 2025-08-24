@@ -9,7 +9,7 @@ look up limits for any supported timeframe (e.g., ``1m`` or ``5m``).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Any, Dict, List
 
 
 @dataclass
@@ -42,6 +42,15 @@ class Config:
     strict_cex: bool = False
     denylist_symbols: List[str] = field(default_factory=list)
     require_sentiment: bool = True
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Return the value of ``key`` or ``default`` if not present."""
+        return getattr(self, key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        if not hasattr(self, key):
+            raise KeyError(key)
+        return getattr(self, key)
 
 
 # Default global configuration used by modules that expect a ``cfg`` object.
