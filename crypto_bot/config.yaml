@@ -509,7 +509,7 @@ risk:
   win_rate_threshold: 0.4
   win_rate_boost_factor: 1.5
   min_score_to_trade: 0.15
-  min_votes: 2
+  min_votes: 1
 
 router:
   min_accept_score: 0.5
