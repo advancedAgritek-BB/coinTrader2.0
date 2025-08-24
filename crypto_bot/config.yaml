@@ -12,7 +12,7 @@ trading:
   allowed_quotes: [USD, USDT, USDC, EUR]
   min_ticker_volume: 10000
   timeframes: ["1m","5m","15m","1h"]
-  min_score: 0.20
+  min_score: 0.02
   min_confidence: 0.30
   consensus: weighted
   backfill:
@@ -30,7 +30,7 @@ filters:
 
 # === router ===
 router:
-  min_accept_score: 0.5
+  min_accept_score: 0.02
   prefer_timeframes: ["5m","15m","1m"]
   require_warm: true
   top_k_per_strategy: 3
@@ -218,7 +218,7 @@ bounce_scalper:
   ema_window: 40
   lookback: 200
   max_concurrent_signals: 8
-  min_score: 0.1
+  min_score: 0.02
   overbought: 75
   oversold: 30
   pattern_timeframe: 1m
@@ -508,11 +508,11 @@ risk:
   volume_threshold_ratio: 0.01
   win_rate_threshold: 0.4
   win_rate_boost_factor: 1.5
-  min_score_to_trade: 0.15
+  min_score_to_trade: 0.02
   min_votes: 2
 
 router:
-  min_accept_score: 0.5
+  min_accept_score: 0.02
   prefer_timeframes: ["5m","15m","1m"]
   require_warm: true
   top_k_per_strategy: 3
@@ -696,7 +696,7 @@ strategy_router:
   trending_timeframe: 1h
   volatile_timeframe: 1m
 yamlrouter:
-  min_score: 0.20
+  min_score: 0.02
   min_confidence: 0.30
   consensus: weighted
   regimes:
