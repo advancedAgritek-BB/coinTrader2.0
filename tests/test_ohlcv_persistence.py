@@ -5,7 +5,7 @@ import time
 from crypto_bot.utils import market_loader
 
 timeframe_seconds = market_loader.timeframe_seconds
-update_multi_tf_ohlcv_cache = market_loader.update_multi_tf_ohlcv_cache
+update_ohlcv_cache = market_loader.update_ohlcv_cache
 
 
 class DummyExchange:
@@ -39,25 +39,25 @@ def test_ohlcv_persistence(tmp_path, monkeypatch):
     new = 2
 
     ex = DummyExchange()
-    config = {"timeframes": [timeframe], "tail_overlap_bars": tail, "storage_path": str(tmp_path)}
-
-    cache: dict[str, dict[str, pd.DataFrame]] = {}
+    config = {"tail_overlap_bars": tail, "storage_path": str(tmp_path)}
+    cache: dict[str, pd.DataFrame] = {}
     tf_sec = timeframe_seconds(None, timeframe)
     now = int(time.time())
     start_since = (now // tf_sec - max_bootstrap) * tf_sec * 1000
     cache = asyncio.run(
-        update_multi_tf_ohlcv_cache(
+        update_ohlcv_cache(
             ex,
             cache,
             [symbol],
-            config,
+            timeframe=timeframe,
             limit=max_bootstrap,
             start_since=start_since,
+            config=config,
         )
     )
     assert ex.calls[0]["limit"] >= max_bootstrap
 
-    last_ts_ms = cache[timeframe][symbol]["timestamp"].iloc[-1] * 1000
+    last_ts_ms = cache[symbol]["timestamp"].iloc[-1] * 1000
 
     ex.calls = []
     monkeypatch.setattr(
@@ -66,13 +66,14 @@ def test_ohlcv_persistence(tmp_path, monkeypatch):
         lambda: last_ts_ms + (new - 1) * tf_sec * 1000,
     )
     cache = asyncio.run(
-        update_multi_tf_ohlcv_cache(
+        update_ohlcv_cache(
             ex,
             cache,
             [symbol],
-            config,
+            timeframe=timeframe,
             limit=new,
             start_since=last_ts_ms - tail * tf_sec * 1000,
+            config=config,
         )
     )
     assert len(ex.calls) == 1

@@ -32,7 +32,7 @@ filters:
 router:
   min_accept_score: 0.5
   prefer_timeframes: ["5m","15m","1m"]
-  require_warm: true
+  require_warm: false
   top_k_per_strategy: 3
   fast_track_score: 0.95
 
@@ -514,7 +514,7 @@ risk:
 router:
   min_accept_score: 0.5
   prefer_timeframes: ["5m","15m","1m"]
-  require_warm: true
+  require_warm: false
   top_k_per_strategy: 3
 
 execution:

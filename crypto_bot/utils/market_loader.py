@@ -2265,9 +2265,9 @@ async def update_ohlcv_cache(
                 )
                 start_since = cutoff
     warmup = warmup_map.get(timeframe)
-    if warmup is not None and limit > int(warmup):
+    if warmup is not None and limit < int(warmup):
         logger.info(
-            "Clamping warmup candles for %s to %d (was %d)",
+            "Raising warmup candles for %s to %d (was %d)",
             timeframe,
             warmup,
             limit,
@@ -2648,9 +2648,9 @@ async def update_multi_tf_ohlcv_cache(
                 needed = int((now_ms - tf_start) // (tf_sec * 1000)) + 1
                 tf_limit = max(tf_limit, needed)
             warmup = warmup_map.get(tf)
-            if warmup is not None and tf_limit > int(warmup):
+            if warmup is not None and tf_limit < int(warmup):
                 logger.info(
-                    "Clamping warmup candles for %s to %d (was %d)",
+                    "Raising warmup candles for %s to %d (was %d)",
                     tf,
                     warmup,
                     tf_limit,

@@ -4,7 +4,7 @@ import logging
 from crypto_bot.utils import market_loader
 
 
-def test_update_multi_tf_ohlcv_cache_clamps(monkeypatch, caplog, tmp_path):
+def test_update_multi_tf_ohlcv_cache_raises(monkeypatch, caplog, tmp_path):
     async def fake_load(exchange, symbol, timeframe="1m", limit=100, mode="rest", since=None, **kwargs):
         return [[(since or 0) + i * 60000, 0, 0, 0, 0, 0] for i in range(limit)]
 
@@ -34,18 +34,16 @@ def test_update_multi_tf_ohlcv_cache_clamps(monkeypatch, caplog, tmp_path):
 
     log_file = market_loader.LOG_DIR / "bot.log"
     before = log_file.read_text() if log_file.exists() else ""
-    asyncio.run(
+    cache = asyncio.run(
         market_loader.update_multi_tf_ohlcv_cache(
             Ex(),
             {},
             ["BTC/USD"],
             cfg,
-            limit=5000,
-            start_since=0,
+            limit=1000,
+            start_since=now_ms - 50 * 60 * 1000,
         )
     )
     log_text = log_file.read_text()[len(before):]
-    assert "starting from" in log_text
-    assert "dropping start_since" not in log_text
-    assert "Clamping warmup candles for 1m" in log_text
-    assert "Clamping warmup candles for 5m" in log_text
+    assert "Raising warmup candles for 1m" in log_text
+    assert "Raising warmup candles for 5m" in log_text
