@@ -10,6 +10,14 @@ import contextlib
 # Import a dedicated logger for symbol filtering
 from .logger import LOG_DIR, setup_logger, pipeline_logger
 from crypto_bot.utils.eval_guard import eval_gate
+from crypto_bot.markets.symbol_service import SymbolService
+
+try:  # pragma: no cover - optional global config
+    from crypto_bot.config import cfg  # type: ignore
+except Exception:  # pragma: no cover - minimal fallback
+    from types import SimpleNamespace
+
+    cfg = SimpleNamespace(strict_cex=False, allowed_quotes=[], min_volume=0.0, denylist_symbols=[])  # type: ignore
 
 try:
     from .symbol_pre_filter import filter_symbols  # legacy dependency
@@ -254,29 +262,20 @@ async def get_filtered_symbols(
     allowed_quotes = {str(q).upper() for q in (allowed_quotes_cfg or [])}
     markets: dict[str, dict] = {}
     if mode == "cex" and hasattr(exchange, "list_markets"):
-        timeout = config.get("symbol_scan_timeout", 30)
-        list_fn = getattr(exchange, "list_markets")
+        service = SymbolService(exchange)
+        prev_strict = getattr(cfg, "strict_cex", False)
+        prev_quotes = list(getattr(cfg, "allowed_quotes", []) or [])
+        prev_vol = float(getattr(cfg, "min_volume", 0.0) or 0.0)
         try:
-            markets = list_fn(timeout=timeout)
-        except TypeError:
-            try:
-                markets = list_fn(timeout)
-            except TypeError:
-                markets = list_fn()
-        if asyncio.iscoroutine(markets):
-            markets = await markets
-        if isinstance(markets, list):
-            markets = {m: {} for m in markets}
-        symbols = []
-        min_vol = float(sf.get("min_volume_usd", 0) or 0)
-        for sym, info in markets.items():
-            quote = str(info.get("quote") or sym.split("/")[1]).upper()
-            vol = float(info.get("quoteVolume") or info.get("baseVolume") or 0)
-            if allowed_quotes and quote not in allowed_quotes:
-                continue
-            if min_vol and vol < min_vol:
-                continue
-            symbols.append(sym)
+            cfg.strict_cex = True
+            cfg.allowed_quotes = list(allowed_quotes)
+            cfg.min_volume = float(sf.get("min_volume_usd", 0) or 0)
+            symbols = service.get_candidates()
+        finally:
+            cfg.strict_cex = prev_strict
+            cfg.allowed_quotes = prev_quotes
+            cfg.min_volume = prev_vol
+        markets = getattr(exchange, "markets", {}) or {}
         cfg_syms = config.get("symbols") or [config.get("symbol")]
         if cfg_syms:
             symbols = [s for s in symbols if s in cfg_syms]

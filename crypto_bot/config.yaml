@@ -829,5 +829,5 @@ onchain_watchers:
   enabled: false   # hard off in CEX mode
 
 strict_cex: true   # only symbols the exchange actually lists
-denylist_symbols: ['AIBTC/USD','AIBTC:USD','AIBTC/EUR','AIBTC:EUR']
+denylist_symbols: ['AIBTC/USD','AIBTC:USD','AIBTC/EUR','AIBTC:EUR','BTC/USD.P','ETH/USD.P']
 

@@ -155,4 +155,4 @@ sentiment_filter:
   min_fng: 20
   min_sentiment: 40
 strict_cex: true   # only symbols the exchange actually lists
-denylist_symbols: ['AIBTC/USD','AIBTC:USD','AIBTC/EUR','AIBTC:EUR']
+denylist_symbols: ['AIBTC/USD','AIBTC:USD','AIBTC/EUR','AIBTC:EUR','BTC/USD.P','ETH/USD.P']
