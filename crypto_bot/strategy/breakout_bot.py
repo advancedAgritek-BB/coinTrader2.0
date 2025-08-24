@@ -23,6 +23,7 @@ import logging
 
 import pandas as pd
 import ta
+from crypto_bot import config as _config
 try:  # pragma: no cover - optional dependency
     from scipy import stats as scipy_stats
     if not hasattr(scipy_stats, "norm"):
@@ -53,6 +54,29 @@ if ML_AVAILABLE:
     MODEL = load_model("breakout_bot")
 else:  # pragma: no cover - fallback
     MODEL = None
+
+
+def required_lookback() -> dict[str, int]:
+    """Return per-timeframe history needed for the breakout bot."""
+    params: dict = {}
+    # Merge generic and strategy-specific config sections, allowing overrides
+    params.update(_config.cfg.get("breakout", {}))
+    params.update(_config.cfg.get("breakout_bot", {}))
+
+    bb_len = int(params.get("bb_length", params.get("bb_len", 12)))
+    kc_len = int(params.get("kc_length", params.get("kc_len", 12)))
+    donchian = int(params.get("donchian_window", params.get("dc_length", 30)))
+    vol_window = int(params.get("volume_window", params.get("vol_window", 20)))
+    ema_window = int(params.get("ema_window", 200))
+    adx_window = int(params.get("adx_window", 14))
+
+    lookback = max(100, bb_len, kc_len, donchian, vol_window, ema_window, adx_window + 1)
+
+    tfs = _config.cfg.get("timeframes")
+    if not tfs:
+        tf = params.get("tf") or _config.cfg.get("timeframe")
+        tfs = [tf] if tf else ["1h"]
+    return {tf: lookback for tf in tfs}
 
 
 def _squeeze(
