@@ -663,6 +663,7 @@ strategy_router:
     - lstm_bot
     breakout:
     - breakout_bot
+    - breakout
     - lstm_bot
     dip_hunter:
     - dip_hunter
