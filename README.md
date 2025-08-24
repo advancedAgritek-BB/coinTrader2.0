@@ -82,9 +82,16 @@ option has been removed.
 ### Warm-up candles
 
 The `warmup_candles` mapping controls how many bars are preloaded for each
-timeframe. Ensure the count for a given timeframe exceeds the longest
-indicator lookback used by your strategies plus a safety margin so indicators
-have enough history to stabilize.
+timeframe. Default values roughly match the largest indicator lookback used by
+the built-in strategies (about **100–300** bars on intraday frames).  At
+startup a *warmup guard* inspects enabled strategies and automatically raises
+any entries that are too low, so keeping these numbers small speeds up
+bootstrap while still ensuring sufficient history.
+
+To override a timeframe explicitly, edit the `warmup_candles` mapping in your
+configuration or set an environment variable such as `CT_WARMUP_1M=500`. When
+choosing manual values, use at least the longest indicator lookback plus a
+safety margin so indicators have time to stabilise.
 
 ### Optional ML Fallback
 
