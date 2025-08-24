@@ -556,21 +556,22 @@ sentiment_filter:
   min_sentiment: 40
 signal_fusion:
   enabled: true
-  fusion_method: weight
+  fusion_method: max
   min_confidence: 0.005
-  strategies:
-    - [trend_bot, 0.3]
-    - [momentum_bot, 0.25]
-    - [mean_bot, 0.15]
-    - [breakout_bot, 0.1]
-    - [breakout, 0.1]
-    - [sniper_bot, 0.1]
-    - [grid_bot, 0.05]
-    - [micro_scalp_bot, 0.05]
-    - [lstm_bot, 0.1]
-    - [bounce_scalper, 0.1]
-    - [flash_crash_bot, 0.05]
-    - [meme_wave_bot, 0.05]
+  # Strategies are retained for documentation purposes only.
+  # strategies:
+  #   - [trend_bot, 0.3]
+  #   - [momentum_bot, 0.25]
+  #   - [mean_bot, 0.15]
+  #   - [breakout_bot, 0.1]
+  #   - [breakout, 0.1]
+  #   - [sniper_bot, 0.1]
+  #   - [grid_bot, 0.05]
+  #   - [micro_scalp_bot, 0.05]
+  #   - [lstm_bot, 0.1]
+  #   - [bounce_scalper, 0.1]
+  #   - [flash_crash_bot, 0.05]
+  #   - [meme_wave_bot, 0.05]
 signal_threshold: 0.0001
 signal_weight_optimizer:
   enabled: true
