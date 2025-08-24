@@ -12,7 +12,7 @@ trading:
   allowed_quotes: [USD, USDT, USDC, EUR]
   min_ticker_volume: 10000
   timeframes: ["1m","5m","15m","1h"]
-  min_score: 0.10
+  min_score: 0.05
   min_confidence: 0.05
   consensus: weighted
   backfill:
