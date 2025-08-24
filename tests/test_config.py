@@ -103,6 +103,7 @@ def test_load_config_returns_dict():
     assert "scan_lookback_limit" in config
     assert "cycle_lookback_limit" in config
     assert "top_n_symbols" in config
+    assert "top_n_symbols_total" in config
     assert "min_confidence_score" in config
     assert "signal_fusion" in config
     assert "voting_enabled" in config

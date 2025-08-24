@@ -988,6 +988,7 @@ def _load_config_internal() -> tuple[dict, set[str]]:
         return _CONFIG_CACHE, set()
 
     new_data = _load_config_file()
+    _ensure_ml_if_needed(new_data)
     changed = _diff_keys(_CONFIG_CACHE, new_data)
     _CONFIG_CACHE = new_data
     _CONFIG_MTIMES[CONFIG_PATH] = (main_mtime, main_size)
@@ -996,7 +997,6 @@ def _load_config_internal() -> tuple[dict, set[str]]:
     else:
         _CONFIG_MTIMES.pop(trend_file, None)
 
-    _ensure_ml_if_needed(_CONFIG_CACHE)
     return _CONFIG_CACHE, changed
 
 
@@ -3587,6 +3587,7 @@ async def _main_impl() -> MainResult:
                 whitelist=discovered,
                 blacklist=config.get("excluded_symbols"),
                 max_pairs=config.get("top_n_symbols"),
+                max_pairs_total=config.get("top_n_symbols_total"),
             )
             config["tradable_symbols"] = tradable
             onchain_syms = list(config.get("onchain_symbols", []))

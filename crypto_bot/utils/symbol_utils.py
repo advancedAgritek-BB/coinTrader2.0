@@ -36,7 +36,7 @@ def fix_symbol(sym: str) -> str:
     """Normalize different notations of Bitcoin."""
     if not isinstance(sym, str):
         return sym
-    return sym.replace("XBT/", "BTC/").replace("XBT", "BTC")
+    return sym.replace("XBT", "BTC").replace("/", "")
 
 
 # All symbol-filtering logs go to ``symbol_filter.log``
