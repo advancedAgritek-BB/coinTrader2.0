@@ -3589,7 +3589,24 @@ async def _main_impl() -> MainResult:
                 max_pairs=config.get("top_n_symbols"),
             )
             config["tradable_symbols"] = tradable
-            config["symbols"] = tradable + config.get("onchain_symbols", [])
+            onchain_syms = list(config.get("onchain_symbols", []))
+            mode = config.get("mode")
+            if mode == "onchain":
+                config["symbols"] = tradable + onchain_syms
+            else:
+                filtered_onchain: list[str] = []
+                if mode in {"cex", "dry_run"} and onchain_syms and hasattr(
+                    exchange, "list_markets"
+                ):
+                    markets = exchange.list_markets()
+                    if asyncio.iscoroutine(markets):
+                        markets = await markets
+                    if isinstance(markets, list):
+                        market_set = set(markets)
+                    else:
+                        market_set = set(markets.keys())
+                    filtered_onchain = [s for s in onchain_syms if s in market_set]
+                config["symbols"] = tradable + filtered_onchain
             final_syms = config["symbols"]
             for tf in config.get("timeframes", []):
                 logger.info(

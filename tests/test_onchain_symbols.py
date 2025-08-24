@@ -136,3 +136,72 @@ def test_auto_mode_falls_back_to_cex(monkeypatch, caplog):
     assert ctx.resolved_mode == "cex"
     assert "falling back to CEX" in caplog.text
     assert "BTC/USD" in ctx.active_universe
+
+
+@pytest.mark.parametrize("mode", ["cex", "dry_run"])
+def test_final_symbols_only_kraken_markets(monkeypatch, mode):
+    cfg = {
+        "mode": mode,
+        "execution_mode": "dry_run",
+        "onchain_symbols": ["BONK/USDC"],
+        "scan_markets": True,
+        "telegram": {},
+    }
+
+    async def fake_load_config_async():
+        return cfg, False
+
+    async def fake_load_mints():
+        return {}
+
+    class DummyNotifier:
+        token = None
+        chat_id = None
+
+        def notify(self, _msg):
+            pass
+
+    class DummyExchange:
+        options: dict = {}
+        markets = {"BTC/USD": {}, "ETH/USD": {}}
+
+        def list_markets(self):
+            return self.markets
+
+        def load_markets(self):
+            return self.markets
+
+        async def fetch_balance(self):  # pragma: no cover - stops after symbol merge
+            raise RuntimeError("stop")
+
+    async def fake_load_syms(_ex, *_a, **_k):
+        return ["BTC/USD", "ETH/USD"]
+
+    async def fake_build_tradable_set(_ex, **_k):
+        return ["BTC/USD", "ETH/USD"]
+
+    monkeypatch.setattr(main, "load_config_async", fake_load_config_async)
+    monkeypatch.setattr(main, "load_token_mints", fake_load_mints)
+    monkeypatch.setattr(main, "set_token_mints", lambda *_a, **_k: None)
+    monkeypatch.setattr(main, "dotenv_values", lambda *_a, **_k: {})
+    monkeypatch.setattr(main, "load_or_create", lambda **_k: {})
+    monkeypatch.setattr(main, "cooldown_configure", lambda *_a, **_k: None)
+    monkeypatch.setattr(main, "market_loader_configure", lambda *_a, **_k: None)
+    monkeypatch.setattr(main, "send_test_message", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        main,
+        "TelegramNotifier",
+        types.SimpleNamespace(from_config=lambda _cfg: DummyNotifier()),
+        raising=False,
+    )
+    monkeypatch.setattr(main, "get_exchange", lambda _cfg: (DummyExchange(), None))
+    monkeypatch.setattr(main, "load_kraken_symbols", fake_load_syms)
+    monkeypatch.setattr(main, "build_tradable_set", fake_build_tradable_set)
+    monkeypatch.setattr(
+        main, "record_sol_scanner_metrics", lambda *_a, **_k: None, raising=False
+    )
+
+    asyncio.run(main._main_impl())
+
+    assert cfg["symbols"] == ["BTC/USD", "ETH/USD"]
+    assert set(cfg["symbols"]).issubset(DummyExchange.markets.keys())
