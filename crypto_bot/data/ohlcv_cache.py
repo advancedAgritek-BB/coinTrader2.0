@@ -43,7 +43,7 @@ class OHLCVCache:
                     start.isoformat(),
                 )
             if warmup:
-                self.logger.info("Clamping warmup candles for %s to %s", tf, warmup)
+                self.logger.info("Ensuring warmup candles for %s: %s", tf, warmup)
 
             await self._fetch_and_store(tf, warmup=warmup, start=start)
             self.logger.info("Completed OHLCV update for timeframe %s", tf)
