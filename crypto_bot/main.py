@@ -4008,6 +4008,7 @@ async def _main_impl() -> MainResult:
     eval_cfg = SimpleNamespace(
         trading=SimpleNamespace(**config.get("trading", {})),
         evaluation=SimpleNamespace(**config.get("runtime", {}).get("evaluation", {})),
+        router=SimpleNamespace(**config.get("router", {})),
     )
     # Initialize the stream evaluator once
     stream_evaluator = StreamEvaluator(_eval_wrapper, cfg=eval_cfg)

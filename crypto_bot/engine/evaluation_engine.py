@@ -92,6 +92,8 @@ class StreamEvaluationEngine:
         self._stop = asyncio.Event()
         self.gate: EvalGate | None = None
         self.strategies: list[Any] = []
+        self.router_cfg = getattr(cfg, "router", None)
+        self.require_warm = getattr(self.router_cfg, "require_warm", True)
 
     async def start(self) -> None:
         # discover and instantiate strategies based on mode
@@ -166,12 +168,15 @@ class StreamEvaluationEngine:
                 logger.info("DEQUEUED %s lag=%.2fs", symbol, lag)
                 try:
                     needs_5m = self._symbol_requires_5m(ctx)
-                    if not self.data.ready(symbol, "1m"):
-                        logger.debug(f"EVAL SKIP {symbol}: 1m warmup not met")
-                        continue
-                    if needs_5m and not self.data.ready(symbol, "5m"):
-                        logger.debug(f"EVAL SKIP {symbol}: 5m warmup not met")
-                        continue
+                    if self.require_warm:
+                        if not self.data.ready(symbol, "1m"):
+                            logger.debug(f"EVAL SKIP {symbol}: 1m warmup not met")
+                            continue
+                        if needs_5m and not self.data.ready(symbol, "5m"):
+                            logger.debug(
+                                f"EVAL SKIP {symbol}: 5m warmup not met"
+                            )
+                            continue
 
                     async with self.gate.hold(f"{symbol}"):
                         logger.info(f"EVAL START {symbol}")
