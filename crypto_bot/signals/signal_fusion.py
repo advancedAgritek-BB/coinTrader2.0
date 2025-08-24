@@ -42,7 +42,7 @@ class SignalFusionEngine:
         for fn, weight in self.strategies:
             w = opt_weights.get(fn.__name__, weight)
             score, direction, _ = evaluate(fn, df, config)
-            if direction == "none" and score == 0.0:
+            if score == 0.0:
                 continue
 
             weighted_score += score * w
