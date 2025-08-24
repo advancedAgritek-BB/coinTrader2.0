@@ -247,7 +247,7 @@ breakout:
   vol_multiplier: 0.5
   volume_window: 15
   min_intensity:
-    "1h": 0.015                 # was 0.03
+    "1h": 0.015
 cycle_bias:
   enabled: false
   mvrv_url: https://api.example.com/mvrv
