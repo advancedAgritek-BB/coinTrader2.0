@@ -520,7 +520,9 @@ symbol_score_weights:
 * If the cache file does not exist and the initial scan yields no symbols, the bot calls `tasks.refresh_pairs.refresh_pairs_async` to fetch a fresh list before aborting.
 * **min_symbol_age_days** – skip newly listed pairs.
 * **min_symbol_score** – minimum score required for trading.
-* **top_n_symbols** – maximum number of active markets.
+* **top_n_symbols** – maximum number of active markets per quote currency.
+* **top_n_symbols_total** – optional cap on the combined list after per-quote
+  selection.
 * **max_age_days**, **max_change_pct**, **max_spread_pct**, **max_latency_ms**, **max_vol** – additional scanning limits.
 * **use_numba_scoring** – enable numba acceleration for symbol scoring when available.
 * **arbitrage_enabled** – compare CEX and Solana DEX prices each cycle. See

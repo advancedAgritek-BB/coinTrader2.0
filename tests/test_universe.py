@@ -97,3 +97,17 @@ async def test_build_tradable_set_retains_breadth():
         max_spread_pct=2.0,
     )
     assert len(res) == 70
+
+
+@pytest.mark.asyncio
+async def test_build_tradable_set_total_cap():
+    ex = BroadExchange()
+    res = await build_tradable_set(
+        ex,
+        allowed_quotes=["USD", "USDT"],
+        min_daily_volume_quote=500,
+        max_spread_pct=2.0,
+        max_pairs=5,
+        max_pairs_total=7,
+    )
+    assert len(res) == 7

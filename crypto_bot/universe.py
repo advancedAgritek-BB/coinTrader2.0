@@ -15,12 +15,15 @@ async def build_tradable_set(
     whitelist: Iterable[str] | None = None,
     blacklist: Iterable[str] | None = None,
     max_pairs: int | None = None,
+    max_pairs_total: int | None = None,
 ) -> list[str]:
     """Return symbols meeting basic liquidity/spread criteria.
 
     Markets and tickers are fetched once from *exchange* and filtered by the
     provided constraints.  If ``max_pairs`` is set, only the top-N pairs by
-    quote volume are kept for each quote currency.
+    quote volume are kept for each quote currency.  After this per-quote
+    selection, the combined list is truncated to ``max_pairs_total`` if
+    provided.
     """
 
     allowed_quotes_set = {str(q).upper() for q in (allowed_quotes or [])}
@@ -80,17 +83,21 @@ async def build_tradable_set(
     else:
         selected = [sym for sym, _, _ in tradable]
 
+    if max_pairs_total is not None:
+        selected = selected[:max_pairs_total]
+
     logger.info(
-        "Discovered=%d \u2192 tradable=%d (quotes: %s, max_pairs=%s)",
+        "Discovered=%d \u2192 tradable=%d (quotes: %s, max_pairs=%s, max_pairs_total=%s)",
         discovered,
         len(selected),
         sorted(allowed_quotes_set) if allowed_quotes_set else sorted({q for _, q, _ in tradable}),
         max_pairs,
+        max_pairs_total,
     )
-    if max_pairs and len(selected) < max_pairs:
+    if max_pairs_total and len(selected) < max_pairs_total:
         logger.warning(
-            "Filtered symbols fewer than requested max_pairs=%s (got %d)",
-            max_pairs,
+            "Filtered symbols fewer than requested max_pairs_total=%s (got %d)",
+            max_pairs_total,
             len(selected),
         )
     logger.debug("Final tradable symbols: %s", ", ".join(sorted(selected)))

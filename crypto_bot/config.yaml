@@ -772,6 +772,7 @@ hft: true
 token_registry:
   refresh_interval_minutes: 15
 top_n_symbols: 20
+top_n_symbols_total: 20  # overall cap across all quotes after per-quote limit
 tp_mult: 2.0
 tp_pct: 0.1
 trade_size_pct: 0.05
