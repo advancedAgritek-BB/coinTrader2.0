@@ -27,7 +27,9 @@ async def evaluate_all(
     for strat in strategies:
         name = getattr(strat, "__name__", str(strat))
         try:
-            results = await _score(strat, symbols=symbols, timeframes=timeframes)
+            results = _score(strat, symbols=symbols, timeframes=timeframes)
+            if asyncio.iscoroutine(results):
+                results = await results
         except Exception as exc:  # pragma: no cover - defensive
             logger.error("Strategy %s evaluation failed: %s", name, exc)
             continue
