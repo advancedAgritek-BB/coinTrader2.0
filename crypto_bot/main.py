@@ -4084,7 +4084,7 @@ async def _main_impl() -> MainResult:
                         len(selected_symbols),
                         len(config.get("timeframes", [])),
                     )
-                    signals = strategy_manager.evaluate_all(
+                    signals = await strategy_manager.evaluate_all(
                         selected_symbols, config.get("timeframes", [])
                     )
                     logger.info(
