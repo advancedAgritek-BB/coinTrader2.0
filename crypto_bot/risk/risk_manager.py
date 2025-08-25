@@ -466,3 +466,82 @@ class RiskManager:
 
         fraction = kelly_fraction(win_prob, win_loss_ratio)
         return max(fraction, 0.0) * balance
+
+    def plan_orders(self, candidates: list[dict]) -> tuple[list[dict], list[tuple[str, str]]]:
+        """Build order payloads for executable candidates.
+
+        Parameters
+        ----------
+        candidates:
+            List of candidate dictionaries produced by the router. Each
+            candidate should contain at minimum ``symbol`` and ``direction``
+            fields along with optional metadata used for sizing.
+
+        Returns
+        -------
+        tuple[list[dict], list[tuple[str, str]]]
+            A tuple containing the planned orders and a list of rejected
+            candidates along with the rejection reason.
+        """
+
+        orders: list[dict] = []
+        rejected: list[tuple[str, str]] = []
+
+        for cand in candidates:
+            symbol = cand.get("symbol")
+            direction = cand.get("direction") or cand.get("signal")
+            if not symbol or direction not in ("long", "short"):
+                rejected.append((symbol or "?", "invalid_direction"))
+                continue
+
+            balance = float(cand.get("balance", self.equity))
+            if balance <= 0:
+                rejected.append((symbol, "no_balance"))
+                continue
+
+            confidence = float(cand.get("confidence", cand.get("score", 1.0)))
+            df = cand.get("df")
+            stop_dist = cand.get("stop_distance")
+            atr = cand.get("atr")
+            price = (
+                cand.get("entry", {}).get("price")
+                if isinstance(cand.get("entry"), dict)
+                else cand.get("price")
+            )
+
+            size = self.position_size(
+                confidence,
+                balance,
+                df=df,
+                stop_distance=stop_dist,
+                atr=atr,
+                price=price,
+                name=cand.get("name"),
+                direction=direction,
+            )
+
+            if size == 0:
+                rejected.append((symbol, "zero_size"))
+                continue
+
+            side = "buy" if size > 0 else "sell"
+            amount = abs(size)
+
+            order = {
+                "exchange": cand.get("exchange"),
+                "ws_client": cand.get("ws_client"),
+                "symbol": symbol,
+                "side": side,
+                "amount": amount,
+                "notifier": cand.get("notifier"),
+                "dry_run": cand.get("dry_run", True),
+                "use_websocket": cand.get("use_websocket", False),
+                "config": cand.get("config"),
+                "score": cand.get("score", 0.0),
+                "reason": cand.get("reason", ""),
+                "trading_paused": cand.get("trading_paused", False),
+            }
+
+            orders.append(order)
+
+        return orders, rejected
