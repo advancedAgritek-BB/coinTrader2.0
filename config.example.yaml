@@ -16,13 +16,11 @@ trading:
   hft_enabled: true
   hft_symbols: ["BTC/USD","ETH/USD","SOL/USDC","BONK/USDC"]   # seed list, can expand
   exclude_symbols: ["AIBTC/USD"]   # remove noisy/synthetic pairs
-<<<<<< codex/add-ct_require_sentiment-section-in-readme
-  require_sentiment: false          # override with CT_REQUIRE_SENTIMENT=false to bypass
-voting_enabled: false  # set true to enable strategy voting
-# Example voting configuration
-voting_strategies:
-  strategies: []
-  min_agreeing_votes: 1
+  voting_enabled: false  # set true to enable strategy voting
+  # Example voting configuration
+  voting_strategies:
+    strategies: []
+    min_agreeing_votes: 1
 
 
 # === ohlcv cache ===
@@ -44,7 +42,7 @@ ohlcv:
 
 # Default on-chain universe and scanner options
 onchain_symbols: ["SOL/USDC"]
-  benchmark_symbols: ["XRP/USD", "SOL/USDC"]  # set [] to disable benchmarks
+benchmark_symbols: ["XRP/USD", "SOL/USDC"]  # set [] to disable benchmarks
 solana_scanner:
   enabled: true
   interval_minutes: 0.1
