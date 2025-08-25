@@ -34,10 +34,10 @@ async def place_order(candidate: TradeCandidate, config: Dict[str, Any]) -> Dict
     candidate:
         Description of the trade to execute.
     config:
-        Runtime configuration. The function honours ``execution_mode`` or
-        ``trading.mode`` set to ``"dry_run"`` by returning a mock order object.
-        When live trading, an exchange client is resolved from ``config`` and
-        used to submit the order via ``create_order``.
+        Runtime configuration. The function honours ``execution_mode`` set to
+        ``"dry_run"`` by returning a mock order object. When live trading, an
+        exchange client is resolved from ``config`` and used to submit the
+        order via ``create_order``.
 
     Returns
     -------
@@ -46,10 +46,7 @@ async def place_order(candidate: TradeCandidate, config: Dict[str, Any]) -> Dict
         guaranteed to contain an ``id`` key for logging.
     """
 
-    mode = str(
-        config.get("execution_mode")
-        or config.get("trading", {}).get("mode", "")
-    ).lower()
+    mode = str(config.get("execution_mode", "")).lower()
     if mode in {"dry_run", "paper", "paper_trading"} or config.get("paper_trading"):
         # Paper trading – fabricate a lightweight order object
         return {

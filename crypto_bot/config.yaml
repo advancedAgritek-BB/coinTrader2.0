@@ -6,7 +6,6 @@ exchange:
 
 # === trading/base ===
 trading:
-  mode: dry_run           # cex | onchain | auto | dry_run
   enable_execution: true          # make sure the trader loop can place paper orders
   short_selling: true            # unless you really want simulated shorts
   allowed_quotes: [USD, USDT, USDC, EUR]
@@ -292,7 +291,7 @@ excluded_symbols:
 exec:
   allow_market_orders: true
   order_retry_interval: 3
-execution_mode: dry_run
+execution_mode: dry_run  # cex | onchain | auto | dry_run
 exit_strategy:
   default_sl_pct: 0.015
   default_tp_pct: 0.07
@@ -425,8 +424,6 @@ ml_enabled: true
 ml_signal_model:
   enabled: true
   weight: 0.9
-mode: auto
-mode_degrade_window: 15
 ohlcv_batch_size: 10
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500

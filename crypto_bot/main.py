@@ -838,6 +838,7 @@ def _load_config_file() -> dict:
         or trading_cfg.get("mode")
         or "dry_run"
     )
+    trading_cfg["mode"] = trading_mode
     allowed_quotes = trading_cfg.get("allowed_quotes", [])
     require_env = os.getenv("CT_REQUIRE_SENTIMENT")
     if require_env is not None:
@@ -3511,6 +3512,10 @@ async def _main_impl() -> MainResult:
         logger.warning("SUPABASE_URL missing; disabling ML features")
 
     user = load_or_create(interactive=False)
+    wallet_mode = user.get("mode")
+    if wallet_mode:
+        config["execution_mode"] = wallet_mode
+        config.setdefault("trading", {})["mode"] = wallet_mode
 
     status_updates = config.get("telegram", {}).get("status_updates", True)
     balance_updates = config.get("telegram", {}).get("balance_updates", False)

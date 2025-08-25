@@ -422,8 +422,7 @@ Edit `crypto_bot/config.yaml` to adjust trading behaviour. Key settings include:
 primary_exchange: coinbase  # coinbase or kraken
 secondary_exchange: kraken
 solana_rpc: https://api.mainnet-beta.solana.com
-execution_mode: dry_run  # or live
-mode: auto               # router chooses CEX or on-chain based on token mints
+execution_mode: dry_run  # cex | onchain | auto | dry_run
 use_websocket: true
 kraken:
   use_private_ws: false  # set true only if private WS feeds are required
@@ -455,8 +454,8 @@ The `crypto_bot/config.yaml` file holds the runtime settings for the bot. Below 
 
 ### Exchange and Execution
 * **exchange** – target CEX (`coinbase` or `kraken`).
-* **execution_mode** – choose `dry_run` for simulation or `live` for real orders.
-  Paper trading defaults to long-only on spot exchanges.
+* **execution_mode** – choose `dry_run` for simulation or `cex`, `onchain`, or
+  `auto` for real orders. Paper trading defaults to long-only on spot exchanges.
 * **use_websocket** – enable WebSocket data via `KrakenWSClient`.
 * **force_websocket_history** – disable REST fallbacks when streaming (default: true).
 * **kraken.use_private_ws** – enable private WebSocket feeds for trading; REST-only trading continues when `false`.
@@ -679,7 +678,6 @@ regime_overrides:
 * **scoring_weights** - weighting factors for regime confidence, symbol score and volume metrics.
 * **signal_fusion** – enable to combine scores from multiple strategies via a `fusion_method` for improved selection.
 * **strategy_router** - maps market regimes to lists of strategy names. Each regime also accepts a `<regime>_timeframe` key (e.g. `trending_timeframe: 1h`, `volatile_timeframe: 1m`). The `range_arb_bot` strategy is always active and does not need to be listed in any regime.
-* **mode_threshold**/**mode_degrade_window** - degrade to manual mode when auto selection underperforms.
 * **meta_selector**/**rl_selector** – experimental strategy routers. Enable these along with `signal_fusion` for improved strategy selection.
   Train the meta selector on your historical trade results with:
 
@@ -1056,7 +1054,7 @@ environment so the bot can retrieve social metrics. The free tier allows about
    exchanges: [coinbase, kraken]
    primary_exchange: coinbase
    secondary_exchange: kraken
-   execution_mode: dry_run  # or live
+   execution_mode: dry_run  # cex | onchain | auto | dry_run
    use_websocket: true      # enable when trading on Kraken via WebSocket
    ```
 
@@ -1072,7 +1070,7 @@ For Kraken, a WebSocket token is requested automatically using your API key and 
     exchanges: [coinbase, kraken]
     primary_exchange: coinbase
     secondary_exchange: kraken
-    execution_mode: dry_run  # or live
+    execution_mode: dry_run  # cex | onchain | auto | dry_run
     use_websocket: true      # enable when trading on Kraken via WebSocket
     ```
 
