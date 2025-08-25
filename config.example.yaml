@@ -4,6 +4,9 @@ exchange:
   max_concurrency: 3
   request_timeout_ms: 10000
 
+kraken:
+  http_pool_size: 50
+
 # === trading/base ===
 trading:
   mode: dry_run           # cex | onchain | auto | dry_run

@@ -14,6 +14,9 @@ exchange:
   name: kraken
   max_concurrency: 3
   request_timeout_ms: 10000
+
+kraken:
+  http_pool_size: 50
 timeframes: ["1h", "4h", "1d"]
 ohlcv:
   storage_path: crypto_bot/data/ohlcv   # directory for persisted OHLCV data

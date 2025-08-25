@@ -69,7 +69,16 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
         params["password"] = os.getenv("API_PASSPHRASE")
         exchange = ccxt.coinbase(params)
     elif exchange_name == "kraken":
-        exchange = KrakenClient(ccxt.kraken(params))
+        kraken_cfg = config.get("kraken", {})
+        pool_size = int(kraken_cfg.get("http_pool_size", 100))
+        params["session"] = kraken._build_session(pool_size)
+        try:
+            base_ex = ccxt.kraken(params)
+        except AttributeError:
+            base_ex = kraken.get_client(api_key, api_secret, pool_maxsize=pool_size)
+        exchange = KrakenClient(base_ex)
+        if timeout:
+            setattr(exchange, "timeout", int(timeout))
 
         if use_ws:
             if use_private_ws and not (api_key and api_secret):
@@ -87,8 +96,8 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
                         api_key,
                         api_secret,
                         ws_token=ws_token if use_private_ws else None,
-                        exchange=exchange,
                     )
+                    ws_client.exchange = exchange
                 except Exception as err:  # pragma: no cover - optional dependency
                     logger.warning("Failed to initialize Kraken WS client: %s", err)
                     ws_client = None
@@ -614,15 +623,33 @@ def execute_trade(
     err = notifier.notify(f"Placing {side} order for {amount} {symbol}")
     if err:
         logger.error("Failed to send message: %s", err)
-    force_twap, skip_trade = _check_slippage_sync(
-        order_book, side, amount, config, notifier
+    slippage = estimate_book_slippage(order_book, side, amount)
+    force_twap, skip_trade = _evaluate_slippage(
+        slippage, order_book, side, amount, config, notifier
     )
     if skip_trade:
-        return {}
+        reason = "slippage"
+        if order_book:
+            book = order_book["asks" if side == "buy" else "bids"]
+            total_vol = sum(qty for _, qty in book)
+            max_use = total_vol * config.get("max_liquidity_usage", 0.8)
+            if amount > max_use and slippage <= config.get("max_slippage_pct", 1.0):
+                reason = "insufficient_liquidity"
+        return {
+            "symbol": symbol,
+            "side": side,
+            "amount": amount,
+            "rejection_reason": reason,
+        }
 
     if config.get("liquidity_check", True) and order_book and not has_liquidity(amount):
         notifier.notify("Insufficient liquidity for order size")
-        return {}
+        return {
+            "symbol": symbol,
+            "side": side,
+            "amount": amount,
+            "rejection_reason": "insufficient_liquidity",
+        }
 
     orders: List[Dict] = []
     if (force_twap or config.get("twap_enabled", False)) and config.get("twap_slices", 1) > 1:

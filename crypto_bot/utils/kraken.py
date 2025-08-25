@@ -6,6 +6,8 @@ import time
 import urllib.parse
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from typing import Any
 
@@ -26,13 +28,33 @@ KrakenClient = Any  # type: ignore
 _client: KrakenClient | None = None
 
 
+def _build_session(pool_maxsize: int = 100, retries: int = 3) -> requests.Session:
+    """Return a ``requests.Session`` with an expanded connection pool."""
+
+    session = requests.Session()
+    retry = Retry(total=retries, backoff_factor=0.3, raise_on_status=False)
+    adapter = HTTPAdapter(
+        pool_connections=pool_maxsize,
+        pool_maxsize=pool_maxsize,
+        max_retries=retry,
+    )
+    session.mount("https://api.kraken.com", adapter)
+    session.mount("http://api.kraken.com", adapter)
+    session.headers.update({"User-Agent": "coinTrader2.0"})
+    return session
+
+
 def get_http_session():
     from .market_loader import get_http_session as _get_http_session
 
     return _get_http_session()
 
 
-def get_client(api_key: str | None = None, api_secret: str | None = None):
+def get_client(
+    api_key: str | None = None,
+    api_secret: str | None = None,
+    pool_maxsize: int | None = None,
+) -> KrakenClient:
     """Return a singleton ``ccxt.kraken`` client instance."""
 
     if ccxt is None:  # pragma: no cover - optional dependency
@@ -48,6 +70,7 @@ def get_client(api_key: str | None = None, api_secret: str | None = None):
                 "apiKey": api_key or os.getenv("API_KEY"),
                 "secret": api_secret or os.getenv("API_SECRET"),
                 "enableRateLimit": True,
+                "session": _build_session(pool_maxsize or 100),
             }
         )
     return _client
