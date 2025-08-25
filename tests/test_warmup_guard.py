@@ -68,3 +68,13 @@ def test_warmup_reached_for_all_timeframes():
     assert market_loader.warmup_reached_for("BTC/USD", cache, cfg)
     cache["15m"]["BTC/USD"] = cache["15m"]["BTC/USD"].iloc[:-1]
     assert not market_loader.warmup_reached_for("BTC/USD", cache, cfg)
+
+
+def test_cap_warmup_high_values(monkeypatch, caplog):
+    stub = SimpleNamespace(__name__="stub", required_lookback=lambda: {"1m": 100})
+    monkeypatch.setattr(registry, "load_from_config", lambda cfg: [stub])
+    cfg = {"timeframes": ["1m"], "warmup_candles": {"1m": 2000}}
+    caplog.set_level(logging.INFO)
+    market_loader._ensure_strategy_warmup(cfg)
+    assert cfg["warmup_candles"]["1m"] == 150
+    assert "Capping warmup_candles[1m]" in caplog.text
