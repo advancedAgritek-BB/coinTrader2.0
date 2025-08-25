@@ -4087,6 +4087,8 @@ async def _main_impl() -> MainResult:
                     signals = await strategy_manager.evaluate_all(
                         selected_symbols, config.get("timeframes", [])
                     )
+                    if asyncio.iscoroutine(signals):
+                        signals = await signals
                     logger.info(
                         "Strategy manager produced %d signals", len(signals)
                     )
