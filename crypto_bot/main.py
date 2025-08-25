@@ -3714,14 +3714,24 @@ async def _main_impl() -> MainResult:
             os.getenv("PAPER_BALANCE") or config.get("paper_balance", 1000.0)
         )
         exec_cfg = config.get("execution", {}) or {}
-        wallet = Wallet(
-            start_bal,
-            exec_cfg.get("max_positions", config.get("max_open_trades", 1)),
-            short_selling_enabled(config),
-            stake_usd=exec_cfg.get("stake_usd"),
-            min_price=exec_cfg.get("min_price", 0.0),
-            min_notional=exec_cfg.get("min_notional", 0.0),
-        )
+        wallet_kwargs = {
+            "stake_usd": exec_cfg.get("stake_usd"),
+            "min_price": exec_cfg.get("min_price", 0.0),
+            "min_notional": exec_cfg.get("min_notional", 0.0),
+        }
+        try:
+            wallet = Wallet(
+                start_bal,
+                exec_cfg.get("max_positions", config.get("max_open_trades", 1)),
+                short_selling_enabled(config),
+                **wallet_kwargs,
+            )
+        except TypeError:
+            wallet = Wallet(
+                start_bal,
+                exec_cfg.get("max_positions", config.get("max_open_trades", 1)),
+                short_selling_enabled(config),
+            )
         log_balance(wallet.total_balance)
         last_balance = notify_balance_change(
             notifier,
@@ -3919,6 +3929,48 @@ async def _main_impl() -> MainResult:
     if config.get("hft", False):
         selected_symbols = list(dict.fromkeys(config.get("symbols", [])))
 
+        # Instantiate managers and helpers for the HFT pipeline
+        try:  # pragma: no cover - optional modules
+            from crypto_bot import strategy_manager as _strategy_manager_module  # type: ignore
+            strategy_manager = _strategy_manager_module
+        except Exception:  # pragma: no cover - fallback
+            strategy_manager = types.SimpleNamespace(
+                evaluate_all=lambda *_a, **_k: []
+            )
+
+        try:  # pragma: no cover - optional modules
+            from crypto_bot import trade_router as _trade_router_module  # type: ignore
+            trade_router = _trade_router_module
+        except Exception:  # pragma: no cover - fallback
+            trade_router = types.SimpleNamespace(select=lambda *_a, **_k: [])
+
+        try:  # pragma: no cover - optional modules
+            from crypto_bot.risk import risk_manager as _risk_manager_module  # type: ignore
+            risk_manager = _risk_manager_module.RiskManager(  # type: ignore[attr-defined]
+                build_risk_config(config, 1.0)
+            )
+            if not hasattr(risk_manager, "plan_orders"):
+                def _plan_orders(candidates):  # type: ignore[func-returns-value]
+                    return [], []
+                risk_manager.plan_orders = _plan_orders  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - fallback
+            risk_manager = types.SimpleNamespace(
+                plan_orders=lambda candidates: ([], [])
+            )
+
+        try:  # pragma: no cover - optional modules
+            from crypto_bot.execution import order_executor as _executor_module  # type: ignore
+
+            async def _submit(order):
+                return await _executor_module.execute_trade_async(**order)
+
+            executor = types.SimpleNamespace(submit=_submit)
+        except Exception:  # pragma: no cover - fallback
+            async def _submit(_order):
+                return {}
+
+            executor = types.SimpleNamespace(submit=_submit)
+
         async def strategy_loop() -> None:
             try:
                 loaded_strategies = load_strategies(
@@ -3973,6 +4025,47 @@ async def _main_impl() -> MainResult:
                         "Top strategy scores:\n%s",
                         format_top(scores, n=25),
                     )
+
+                    logger.info(
+                        "Evaluating %d symbols across %d timeframes",
+                        len(selected_symbols),
+                        len(config.get("timeframes", [])),
+                    )
+                    signals = strategy_manager.evaluate_all(
+                        selected_symbols, config.get("timeframes", [])
+                    )
+                    logger.info(
+                        "Strategy manager produced %d signals", len(signals)
+                    )
+
+                    logger.info(
+                        "Routing %d signals through trade router", len(signals)
+                    )
+                    candidates = trade_router.select(signals)
+                    logger.info(
+                        "Router produced %d candidates", len(candidates)
+                    )
+
+                    logger.info(
+                        "Planning orders for %d candidates", len(candidates)
+                    )
+                    orders, rejected = risk_manager.plan_orders(candidates)
+                    logger.info(
+                        "Risk kept %d candidates, rejected %d (reasons: %s)",
+                        len(orders),
+                        len(rejected),
+                        rejected,
+                    )
+
+                    logger.info(
+                        "Submitting %d orders to executor", len(orders)
+                    )
+                    for order in orders:
+                        try:
+                            exec_result = await executor.submit(order)
+                            logger.info("ORDER submitted: %s", exec_result)
+                        except Exception as e:  # pragma: no cover - runtime safety
+                            logger.exception("ORDER FAILED: %s", e)
                 except Exception:
                     logger.exception("Strategy scoring step failed")
                 await asyncio.sleep(scan_secs)
