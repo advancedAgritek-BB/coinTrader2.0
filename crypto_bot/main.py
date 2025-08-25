@@ -683,7 +683,11 @@ async def fetch_balance(exchange, wallet, config):
             bal = await exchange.fetch_balance()
         else:
             bal = await asyncio.to_thread(exchange.fetch_balance)
-        return bal["USDT"]["free"] if isinstance(bal["USDT"], dict) else bal["USDT"]
+        quote = config.get("quote") or config.get("allowed_quotes", ["USDT"])[0]
+        balance_entry = bal.get(quote)
+        if isinstance(balance_entry, dict):
+            return balance_entry.get("free", 0.0)
+        return balance_entry if isinstance(balance_entry, (int, float)) else 0.0
     if wallet:
         return getattr(wallet, "total_balance", getattr(wallet, "balance", 0.0))
     return 0.0
