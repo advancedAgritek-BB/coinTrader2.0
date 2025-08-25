@@ -50,6 +50,7 @@ from crypto_bot.utils import ml_utils
 ML_AVAILABLE = ml_utils.ML_AVAILABLE
 from crypto_bot.ml.model_loader import load_regime_model, _norm_symbol
 from .config import short_selling_enabled
+from crypto_bot.config import cfg
 
 # Internal project modules are imported lazily in `_import_internal_modules()`
 
@@ -1080,6 +1081,15 @@ def _flatten_config(data: dict, parent: str = "") -> dict:
     return flat
 
 
+def _apply_runtime_cfg(config: dict) -> None:
+    """Populate global ``cfg`` with fields needed by symbol services."""
+    strict = config.get("strict_cex")
+    if strict is None and config.get("mode") == "cex":
+        strict = True
+    cfg.strict_cex = bool(strict)
+    cfg.denylist_symbols = list(config.get("denylist_symbols", []))
+
+
 async def reload_config(
     config: dict,
     ctx: BotContext,
@@ -1095,6 +1105,7 @@ async def reload_config(
         return
 
     _merge_dict(config, new_config)
+    _apply_runtime_cfg(config)
     if (
         not config.get("symbols")
         and not config.get("onchain_symbols")
@@ -3419,6 +3430,7 @@ async def _main_impl() -> MainResult:
     logger.info("Starting bot")
     global UNKNOWN_COUNT, TOTAL_ANALYSES
     config, _ = await load_config_async()
+    _apply_runtime_cfg(config)
     config["timeframes"] = collect_timeframes(config)
     if (
         not config.get("symbols")
