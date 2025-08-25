@@ -73,6 +73,9 @@ async def place_order(candidate: TradeCandidate, config: Dict[str, Any]) -> Dict
         params = dict(ex_cfg) if isinstance(ex_cfg, dict) else {}
         params.pop("name", None)
         if name.lower() == "kraken":
+            pool_size = config.get("http_pool_size")
+            if pool_size is not None:
+                params["pool_maxsize"] = int(pool_size)
             client = get_kraken_client(**params)
         else:  # pragma: no cover - optional exchanges
             try:
