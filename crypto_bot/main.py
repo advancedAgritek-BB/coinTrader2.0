@@ -15,7 +15,7 @@ import dataclasses
 import types
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Iterable
 
 from dotenv import dotenv_values, load_dotenv
 
@@ -4108,8 +4108,21 @@ async def _main_impl() -> MainResult:
                     signals = strategy_manager.evaluate_all(
                         selected_symbols, config.get("timeframes", [])
                     )
-                    if inspect.isawaitable(signals):
+                    if inspect.iscoroutine(signals):
                         signals = await signals
+                    elif inspect.isasyncgen(signals):
+                        signals = [s async for s in signals]
+                    elif isinstance(signals, Iterable):
+                        if any(inspect.isawaitable(s) for s in signals):
+                            signals = await asyncio.gather(*signals)
+                        else:
+                            signals = list(signals)
+                    else:
+                        logger.error(
+                            "Strategy manager returned unsupported result type: %r",
+                            signals,
+                        )
+                        signals = []
                     logger.info(
                         "Strategy manager produced %d signals", len(signals)
                     )
@@ -4118,6 +4131,8 @@ async def _main_impl() -> MainResult:
                         "Routing %d signals through trade router", len(signals)
                     )
                     candidates = trade_router.select(signals)
+                    if inspect.isawaitable(candidates):
+                        candidates = await candidates
                     logger.info(
                         "Router produced %d candidates", len(candidates)
                     )
