@@ -51,7 +51,7 @@ ohlcv:
     "15m": 300   # CT_WARMUP_15M
     "1h": 200    # CT_WARMUP_1H
     "1d": 100    # CT_WARMUP_1D
-  initial_history_candles: 600
+  initial_history_candles: 300
   scan_lookback_limit: 1200
 
 # === strategies and params ===
@@ -427,25 +427,6 @@ ml_signal_model:
   weight: 0.9
 mode: auto
 mode_degrade_window: 15
-mode_threshold: 0.3
-momentum_bot:
-  adx_threshold: 25
-  atr_period: 14
-  donchian_period: 20
-  fast_length: 20
-  rsi_threshold: 55
-  macd_min: 0.0
-  risk:
-    max_drawdown: 0.4
-    risk_pct: 0.01
-    stop_loss_pct: 0.01
-    take_profit_pct: 0.03
-    trailing_stop_factor: 1.2
-  setup_window: 10
-  slow_length: 50
-  trigger_window: 3
-  vol_multiplier: 1.0
-  volume_z_min: 0.5
 ohlcv_batch_size: 10
 ohlcv_snapshot_frequency_minutes: 720
 ohlcv_snapshot_limit: 500
@@ -515,15 +496,6 @@ risk:
   min_score_to_trade: 0.02      # was 0.15
   min_votes: 1                  # was 2
 
-router:
-  # Example threshold for setups using heavy signal fusion. Default is 0.1 and
-  # is scaled by the largest strategy weight when fusion is enabled.
-  min_accept_score: 0.02
-  prefer_timeframes: ["5m","15m","1m","1h"]
-  require_warm: true
-  top_k_per_strategy: 5
-  fast_track_score: 0.80        # keep fast-path possible
-
 execution:
   mode: dry_run                 # keep paper until confirmed
   stake_usd: 50
@@ -541,7 +513,6 @@ scalp_timeframe: 1m
 scan_deep_top: 30
 scan_in_background: true
 scan_lookback_limit: 1200
-initial_history_candles: 600
 scan_markets: true
 scoring:
   lookback_bars: 30
@@ -583,24 +554,6 @@ sniper_solana:
   fallback_volume_mult: 1.0
   max_history: 20
   price_fallback: true
-  volume_multiple: 1.2
-  volume_window: 3
-momentum_bot:
-  donchian_period: 20
-  vol_multiplier: 1.0
-  volume_z_min: 0.5
-  atr_period: 14
-  setup_window: 10
-  trigger_window: 3
-  fast_length: 20
-  slow_length: 50
-  adx_threshold: 25
-  risk:
-    stop_loss_pct: 0.01
-    take_profit_pct: 0.03
-    trailing_stop_factor: 1.5  # ATR multiple for trailing stop
-    risk_pct: 0.01
-    max_drawdown: 0.4
 flash_crash_bot:
   drop_thr: -0.10   # 10% 1m drop
   vol_thr: 5.0      # volume spike multiplier
@@ -631,11 +584,6 @@ solana_scanner:
   max_tokens_per_scan: 50
   min_volume_usd: 10000
 solana_slippage_bps: 10
-stat_arb_bot:
-  pairs:
-  - SOL/USDC,ETH/USDC
-  window: 50
-  z_threshold: 2.0
 strategy_allocation:
   grid_bot: 0.2
   trend_bot: 0.2
@@ -709,7 +657,6 @@ symbol_filter:
   change_pct_percentile: 10
   correlation_max_pairs: 200
   http_timeout: 5
-  initial_history_candles: 600
   initial_timeframes:
   - 1m
   - 5m
@@ -766,12 +713,6 @@ deep_backfill_days:
   '5m': 14
   '15m': 60
   '1h': 180
-warmup_candles:       # auto-adjusts; override with CT_WARMUP_<TF> env vars
-  '1m': 300    # CT_WARMUP_1M
-  '5m': 300    # CT_WARMUP_5M
-  '15m': 300   # CT_WARMUP_15M
-  '1h': 200    # CT_WARMUP_1H
-  '1d': 100    # CT_WARMUP_1D
 allowed_quotes: ['USD','USDT','USDC','EUR']
 hft: true
 token_registry:
