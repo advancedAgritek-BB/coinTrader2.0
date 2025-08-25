@@ -25,8 +25,9 @@ from crypto_bot.utils.http_client import get_session, close_session
 
 try:
     import ccxt  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    ccxt = types.SimpleNamespace()
+except Exception as exc:  # pragma: no cover - optional dependency
+    logging.getLogger(__name__).error("Failed to import ccxt: %s", exc)
+    raise
 
 import pandas as pd
 import numpy as np
@@ -56,18 +57,11 @@ try:  # pragma: no cover - optional strategies module
     from crypto_bot import strategies
     from crypto_bot.strategies import set_ohlcv_provider
     from crypto_bot.strategies.loader import load_strategies
-except Exception:  # pragma: no cover - fallback if strategies module missing
-    strategies = types.SimpleNamespace(
-        initialize=lambda *_a, **_k: asyncio.sleep(0),
-        score=lambda *_a, **_k: {},
+except Exception as exc:  # pragma: no cover - fallback if strategies module missing
+    logging.getLogger(__name__).error(
+        "Failed to import strategies module: %s", exc
     )
-
-    def set_ohlcv_provider(*_a, **_k):
-        """Fallback no-op when strategies module is unavailable."""
-        return None
-
-    def load_strategies(*_a, **_k):
-        return []
+    raise
 
 shutdown_event = asyncio.Event()
 
@@ -173,6 +167,21 @@ def collect_timeframes(config: dict) -> list[str]:
 
 def market_loader_configure(*_a, **_k) -> None:  # pragma: no cover - placeholder
     pass
+
+
+def _verify_hft_modules(strategy_manager, trade_router, risk_manager, executor) -> None:
+    """Ensure critical HFT modules expose required interfaces."""
+    required = {
+        "strategy_manager.evaluate_all": getattr(strategy_manager, "evaluate_all", None),
+        "trade_router.select": getattr(trade_router, "select", None),
+        "risk_manager.plan_orders": getattr(risk_manager, "plan_orders", None),
+        "executor.submit": getattr(executor, "submit", None),
+    }
+    missing = [name for name, func in required.items() if not callable(func)]
+    if missing:
+        raise RuntimeError(
+            "Missing required HFT components: %s" % ", ".join(missing)
+        )
 
 
 fetch_order_book_async = None  # type: ignore
@@ -3942,16 +3951,16 @@ async def _main_impl() -> MainResult:
         try:  # pragma: no cover - optional modules
             from crypto_bot import strategy_manager as _strategy_manager_module  # type: ignore
             strategy_manager = _strategy_manager_module
-        except Exception:  # pragma: no cover - fallback
-            strategy_manager = types.SimpleNamespace(
-                evaluate_all=lambda *_a, **_k: []
-            )
+        except Exception as exc:  # pragma: no cover - fallback
+            logger.error("Failed to import strategy_manager: %s", exc)
+            return MainResult(notifier, "missing strategy_manager")
 
         try:  # pragma: no cover - optional modules
             from crypto_bot import trade_router as _trade_router_module  # type: ignore
             trade_router = _trade_router_module
-        except Exception:  # pragma: no cover - fallback
-            trade_router = types.SimpleNamespace(select=lambda *_a, **_k: [])
+        except Exception as exc:  # pragma: no cover - fallback
+            logger.error("Failed to import trade_router: %s", exc)
+            return MainResult(notifier, "missing trade_router")
 
         try:  # pragma: no cover - optional modules
             from crypto_bot.risk import risk_manager as _risk_manager_module  # type: ignore
@@ -3962,10 +3971,9 @@ async def _main_impl() -> MainResult:
                 def _plan_orders(candidates):  # type: ignore[func-returns-value]
                     return [], []
                 risk_manager.plan_orders = _plan_orders  # type: ignore[attr-defined]
-        except Exception:  # pragma: no cover - fallback
-            risk_manager = types.SimpleNamespace(
-                plan_orders=lambda candidates: ([], [])
-            )
+        except Exception as exc:  # pragma: no cover - fallback
+            logger.error("Failed to import risk_manager: %s", exc)
+            return MainResult(notifier, "missing risk_manager")
 
         try:  # pragma: no cover - optional modules
             from crypto_bot.execution import order_executor as _executor_module  # type: ignore
@@ -3974,11 +3982,15 @@ async def _main_impl() -> MainResult:
                 return await _executor_module.execute_trade_async(**order)
 
             executor = types.SimpleNamespace(submit=_submit)
-        except Exception:  # pragma: no cover - fallback
-            async def _submit(_order):
-                return {}
+        except Exception as exc:  # pragma: no cover - fallback
+            logger.error("Failed to import order_executor: %s", exc)
+            return MainResult(notifier, "missing order_executor")
 
-            executor = types.SimpleNamespace(submit=_submit)
+        try:
+            _verify_hft_modules(strategy_manager, trade_router, risk_manager, executor)
+        except Exception as exc:
+            logger.error(str(exc))
+            return MainResult(notifier, "invalid hft setup")
 
         async def strategy_loop() -> None:
             try:
