@@ -69,6 +69,8 @@ def get_exchange(config) -> Tuple[ccxt.Exchange, Optional[KrakenWSClient]]:
         params["password"] = os.getenv("API_PASSPHRASE")
         exchange = ccxt.coinbase(params)
     elif exchange_name == "kraken":
+        pool_size = int(config.get("http_pool_size", 50))
+        params["session"] = kraken._build_session(pool_maxsize=pool_size)
         exchange = KrakenClient(ccxt.kraken(params))
 
         if use_ws:

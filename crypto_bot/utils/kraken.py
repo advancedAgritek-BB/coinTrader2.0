@@ -6,6 +6,8 @@ import time
 import urllib.parse
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from typing import Any
 
@@ -32,7 +34,27 @@ def get_http_session():
     return _get_http_session()
 
 
-def get_client(api_key: str | None = None, api_secret: str | None = None):
+def _build_session(pool_maxsize: int = 100, retries: int = 3) -> requests.Session:
+    """Return a :class:`requests.Session` with an expanded adapter pool."""
+
+    session = requests.Session()
+    retry = Retry(total=retries, backoff_factor=0.3, raise_on_status=False)
+    adapter = HTTPAdapter(
+        pool_connections=pool_maxsize,
+        pool_maxsize=pool_maxsize,
+        max_retries=retry,
+    )
+    session.mount("https://api.kraken.com", adapter)
+    session.mount("http://api.kraken.com", adapter)
+    session.headers.update({"User-Agent": "coinTrader2.0"})
+    return session
+
+
+def get_client(
+    api_key: str | None = None,
+    api_secret: str | None = None,
+    pool_maxsize: int | None = None,
+) -> KrakenClient:
     """Return a singleton ``ccxt.kraken`` client instance."""
 
     if ccxt is None:  # pragma: no cover - optional dependency
@@ -43,13 +65,15 @@ def get_client(api_key: str | None = None, api_secret: str | None = None):
         exchange_cls = getattr(ccxt, "kraken", None)
         if exchange_cls is None:
             raise RuntimeError("Kraken exchange not supported by ccxt")
-        _client = exchange_cls(
-            {
-                "apiKey": api_key or os.getenv("API_KEY"),
-                "secret": api_secret or os.getenv("API_SECRET"),
-                "enableRateLimit": True,
-            }
-        )
+        params = {
+            "apiKey": api_key or os.getenv("API_KEY"),
+            "secret": api_secret or os.getenv("API_SECRET"),
+            "enableRateLimit": True,
+            "session": _build_session(
+                pool_maxsize=pool_maxsize or int(os.getenv("HTTP_POOL_SIZE", "50"))
+            ),
+        }
+        _client = exchange_cls(params)
     return _client
 
 
