@@ -70,6 +70,7 @@ def load_execute_signals():
         "BotContext": BotContext,
         "refresh_balance": lambda ctx: asyncio.sleep(0),
         "short_selling_enabled": short_selling_enabled,
+        "regime_allows_trade": lambda *a, **k: True,
     }
     ns["score_logger"].setLevel(logging.DEBUG)
     exec(funcs["direction_to_side"], ns)
@@ -311,3 +312,42 @@ async def test_execute_signals_threshold_overrides_allow_low_score(monkeypatch, 
     ctx.analysis_results = [candidate]
     await execute_signals(ctx, min_score=0.0, min_confidence=0.0)
     assert called["called"]
+
+
+@pytest.mark.asyncio
+async def test_filtered_signal_logs(monkeypatch, caplog):
+    df = pd.DataFrame({"close": [100.0]})
+    candidate = {
+        "symbol": "XBT/USDT",
+        "direction": "long",
+        "df": df,
+        "name": "demo",
+        "probabilities": {},
+        "regime": "bull",
+        "score": 0.1,
+        "confidence": 0.05,
+        "entry": {"price": 100.0},
+        "size": 1.0,
+        "valid": True,
+    }
+    ctx = BotContext(
+        positions={},
+        df_cache={"1h": {"XBT/USDT": df}},
+        regime_cache={},
+        config={"execution_mode": "dry_run", "top_n_symbols": 1},
+        exchange=object(),
+        ws_client=None,
+        risk_manager=DummyRM(),
+        notifier=None,
+        paper_wallet=PaperWallet(1000.0),
+        position_guard=DummyPG(),
+    )
+    ctx.balance = 1000.0
+    ctx.analysis_results = [candidate]
+    ctx.timing = {}
+
+    execute_signals, _ = load_execute_signals()
+    caplog.set_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG, logger="symbol_filter")
+    await execute_signals(ctx, min_score=0.0, min_confidence=0.1)
+    assert "Filtered signal" in caplog.text

@@ -60,7 +60,7 @@ def test_regime_filter_zero_scores(monkeypatch):
     monkeypatch.setattr(ma, "evaluate_async", fake_eval)
     monkeypatch.setattr(ma.perf, "edge", lambda name, sym, coef=0.0: 1.0)
 
-    res = asyncio.run(ma.run_candidates(df, [b, a], "AAA", {}, "trending"))
+    res = asyncio.run(ma.run_candidates(df, [b, a], "AAA", {"router": {"min_accept_score": 0.0}}, "trending"))
     assert res[0][0] is a
 
 
@@ -136,4 +136,27 @@ def test_fast_track(monkeypatch):
 
     res = asyncio.run(ma.run_candidates(df, [normal, fast], "AAA", {}, "trending"))
     assert len(res) == 1 and res[0][0] is fast
+
+
+def test_min_accept_scaled_with_fusion(monkeypatch):
+    df = pd.DataFrame({"close": [1, 2]})
+
+    def low(df, cfg=None):
+        return 0.4, "long"
+
+    def high(df, cfg=None):
+        return 0.7, "long"
+
+    async def fake_eval(strats, df_, cfg_, max_parallel=4):
+        scores = {low: (0.4, "long"), high: (0.7, "long")}
+        return [(*scores[s], None) for s in strats]
+
+    monkeypatch.setattr(ma, "evaluate_async", fake_eval)
+    monkeypatch.setattr(ma.perf, "edge", lambda name, sym, coef=0.0: 1.0)
+    monkeypatch.setattr(ma, "compute_strategy_weights", lambda: {"low": 0.5, "high": 0.2})
+
+    cfg = {"router": {"min_accept_score": 0.5}, "signal_fusion": {"enabled": True}}
+    res = asyncio.run(ma.run_candidates(df, [low, high], "AAA", cfg, "trending"))
+    names = [fn.__name__ for fn, _s, _d in res]
+    assert set(names) == {"low", "high"}
 

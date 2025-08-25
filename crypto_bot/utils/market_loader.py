@@ -48,6 +48,8 @@ from .constants import NON_SOLANA_BASES
 from crypto_bot.data.locks import timeframe_lock, TF_LOCKS as _TF_LOCKS
 from .bootstrap_progress import update_bootstrap_progress
 
+WARMUP_MARGIN = 50
+
 try:  # optional dependency
     from .telegram import TelegramNotifier
 except Exception:  # pragma: no cover - optional
@@ -377,6 +379,17 @@ def _ensure_strategy_warmup(config: Dict[str, Any]) -> None:
     required = registry.compute_required_lookback_per_tf(strategies)
 
     warmup_map = config.setdefault("warmup_candles", {})
+    for tf, have in list(warmup_map.items()):
+        need = int(required.get(tf, 0))
+        cap = need + WARMUP_MARGIN if need else have
+        if have > cap:
+            logger.info(
+                "Capping warmup_candles[%s] %d -> %d based on strategy requirements.",
+                tf,
+                have,
+                cap,
+            )
+            warmup_map[tf] = cap
     if config.get("data", {}).get("auto_adjust_warmup", False):
         for tf, have in list(warmup_map.items()):
             need = int(required.get(tf, 0))

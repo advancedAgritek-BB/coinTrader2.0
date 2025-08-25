@@ -2395,33 +2395,64 @@ async def execute_signals(
             verdict,
         )
 
-    # Filter and prioritize by score
+    # Filter and prioritize by score and confidence
     orig_results = results
     results = []
     skipped_syms: list[str] = []
     no_dir_syms: list[str] = []
     low_score: list[str] = []
+    low_conf: list[str] = []
     dry_run = ctx.config.get("execution_mode") == "dry_run"
     for r in orig_results:
         logger.debug("Analysis result: %s", r)
         sym = r.get("symbol", "")
         direction = r.get("direction") or r.get("signal") or "none"
-        min_req = r.get("min_confidence", min_confidence)
-        score = r.get("score", 0.0)
+        score = float(r.get("score", 0.0))
+        conf = float(r.get("confidence", 0.0))
+        min_score_req = float(r.get("min_score", min_score))
+        min_conf_req = float(r.get("min_confidence", min_confidence))
         if r.get("skip"):
             skipped_syms.append(sym)
-            _log_rejection(sym, score, direction, min_req, "skip_flag", "SCORING")
+            _log_rejection(sym, score, direction, min_score_req, "skip_flag", "SCORING")
             reject_counts["skip_flag"] += 1
             continue
-        if direction == "none":
-            no_dir_syms.append(sym)
-            _log_rejection(sym, score, direction, min_req, "no_direction", "SCORING")
-            reject_counts["no_direction"] += 1
-            continue
-        if score < min_req:
-            low_score.append(f"{sym}({score:.2f}<{min_req:.2f})")
-            _log_rejection(sym, score, direction, min_req, "below_min_score", "SCORING")
-            reject_counts["below_min_score"] += 1
+        if direction == "none" or conf < min_conf_req or score < min_score_req:
+            logger.debug(
+                "Filtered signal %s %s: side=%s score=%.4f conf=%.4f (min_score=%.3f, min_conf=%.3f)",
+                r.get("name", ""),
+                sym,
+                direction,
+                score,
+                conf,
+                min_score_req,
+                min_conf_req,
+            )
+            if direction == "none":
+                no_dir_syms.append(sym)
+                _log_rejection(sym, score, direction, min_score_req, "no_direction", "SCORING")
+                reject_counts["no_direction"] += 1
+            elif conf < min_conf_req:
+                low_conf.append(f"{sym}({conf:.2f}<{min_conf_req:.2f})")
+                _log_rejection(
+                    sym,
+                    conf,
+                    direction,
+                    min_conf_req,
+                    "below_min_confidence",
+                    "SCORING",
+                )
+                reject_counts["below_min_confidence"] += 1
+            else:
+                low_score.append(f"{sym}({score:.2f}<{min_score_req:.2f})")
+                _log_rejection(
+                    sym,
+                    score,
+                    direction,
+                    min_score_req,
+                    "below_min_score",
+                    "SCORING",
+                )
+                reject_counts["below_min_score"] += 1
             continue
         score_logger.info(
             "Passing to execute: symbol=%s, score=%s, dry_run=%s",
@@ -2432,10 +2463,11 @@ async def execute_signals(
         results.append(r)
 
     score_logger.debug(
-        "Candidate scoring: %d/%d met the minimum score; low_score=%s skip=%s no_direction=%s",
+        "Candidate scoring: %d/%d met the minimum score; low_score=%s low_conf=%s skip=%s no_direction=%s",
         len(results),
         len(orig_results),
         low_score,
+        low_conf,
         skipped_syms,
         no_dir_syms,
     )
