@@ -4108,8 +4108,19 @@ async def _main_impl() -> MainResult:
                     signals = strategy_manager.evaluate_all(
                         selected_symbols, config.get("timeframes", [])
                     )
-                    if inspect.isawaitable(signals):
+                    if inspect.iscoroutine(signals):
                         signals = await signals
+                    elif inspect.isasyncgen(signals):
+                        signals = [s async for s in signals]
+                    elif not isinstance(signals, (list, tuple)):
+                        try:
+                            if all(hasattr(s, "__await__") for s in signals):
+                                signals = await asyncio.gather(*signals)
+                        except TypeError:
+                            logger.error(
+                                "Unexpected signals type: %r", type(signals)
+                            )
+                            signals = []
                     logger.info(
                         "Strategy manager produced %d signals", len(signals)
                     )
@@ -4118,6 +4129,8 @@ async def _main_impl() -> MainResult:
                         "Routing %d signals through trade router", len(signals)
                     )
                     candidates = trade_router.select(signals)
+                    if inspect.isawaitable(candidates):
+                        candidates = await candidates
                     logger.info(
                         "Router produced %d candidates", len(candidates)
                     )
