@@ -96,6 +96,15 @@ score_logger = setup_logger(
     "symbol_filter", LOG_DIR / "symbol_filter.log", to_console=False
 )
 
+# Core orchestration modules used by the CLI.  Fail fast if they cannot be
+# imported so errors surface during startup instead of manifesting as subtle
+# runtime issues later on.
+try:
+    from crypto_bot import strategy_manager, trade_router
+except Exception as exc:  # pragma: no cover - import is critical
+    logger.error("Failed to import strategy manager or trade router: %s", exc)
+    raise
+
 # Module-level placeholders populated once internal modules are loaded in ``main``
 
 
