@@ -4084,8 +4084,11 @@ async def _main_impl() -> MainResult:
                         len(selected_symbols),
                         len(config.get("timeframes", [])),
                     )
-                    signals = await strategy_manager.evaluate_all(
+                    raw_signals = await strategy_manager.evaluate_all(
                         selected_symbols, config.get("timeframes", [])
+                    )
+                    signals = (
+                        await raw_signals if inspect.isawaitable(raw_signals) else raw_signals
                     )
                     logger.info(
                         "Strategy manager produced %d signals", len(signals)

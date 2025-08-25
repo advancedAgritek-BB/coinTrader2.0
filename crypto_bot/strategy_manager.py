@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import logging
 from typing import Iterable, List, Dict, Any
 
@@ -27,7 +28,8 @@ async def evaluate_all(
     for strat in strategies:
         name = getattr(strat, "__name__", str(strat))
         try:
-            results = await _score(strat, symbols=symbols, timeframes=timeframes)
+            pending = _score(strat, symbols=symbols, timeframes=timeframes)
+            results = await pending if inspect.isawaitable(pending) else pending
         except Exception as exc:  # pragma: no cover - defensive
             logger.error("Strategy %s evaluation failed: %s", name, exc)
             continue
