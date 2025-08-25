@@ -69,12 +69,14 @@ strategies:
     tf: "5m"
     donchian_len: 40
     keltner_len: 20
-    bbw_pct_max: 15               # BB width in bottom 15th percentile
-    volume_z_min: 1.0
+    bbw_pct_max: 20               # BB width in bottom 15th percentile
+    volume_z_min: 0.0
     atr_mult_stop: 1.2
     atr_mult_tp: 1.2
     max_spread_bp: 10
     time_exit_bars: 12
+    min_intensity:
+      "1h": 0.01
 
   mean_bot:
     enabled: true
@@ -249,7 +251,7 @@ breakout:
   vol_multiplier: 0.5
   volume_window: 15
   min_intensity:
-    "1h": 0.015
+    "1h": 0.01
 cycle_bias:
   enabled: false
   mvrv_url: https://api.example.com/mvrv
