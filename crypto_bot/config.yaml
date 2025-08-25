@@ -32,11 +32,11 @@ filters:
 router:
   # When signal fusion heavily weights strategies, lower this threshold so
   # scaled scores are not rejected. Defaults to 0.1 when omitted.
-  min_accept_score: 0.05        # example value for fusion-heavy setups
+  min_accept_score: 0.02        # example value for fusion-heavy setups
   prefer_timeframes: ["5m","15m","1m","1h"]
   require_warm: true
   top_k_per_strategy: 5
-  fast_track_score: 0.85        # keep fast-path possible
+  fast_track_score: 0.80        # keep fast-path possible
 
 # === ohlcv cache ===
 ohlcv:
@@ -510,17 +510,17 @@ risk:
   volume_threshold_ratio: 0.01
   win_rate_threshold: 0.4
   win_rate_boost_factor: 1.5
-  min_score_to_trade: 0.05      # was 0.15
+  min_score_to_trade: 0.02      # was 0.15
   min_votes: 1                  # was 2
 
 router:
   # Example threshold for setups using heavy signal fusion. Default is 0.1 and
   # is scaled by the largest strategy weight when fusion is enabled.
-  min_accept_score: 0.05
+  min_accept_score: 0.02
   prefer_timeframes: ["5m","15m","1m","1h"]
   require_warm: true
   top_k_per_strategy: 5
-  fast_track_score: 0.85        # keep fast-path possible
+  fast_track_score: 0.80        # keep fast-path possible
 
 execution:
   mode: dry_run                 # keep paper until confirmed
