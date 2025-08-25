@@ -567,8 +567,7 @@ signal_fusion:
   min_confidence: 0.0
   # weights retained but no longer suppress the max
   strategies:
-    - [breakout_bot, 0.50]
-    - [momentum_bot, 0.25]
+    - [momentum_bot, 0.75]
     - [trend_bot,   0.25]
 signal_threshold: 0.0001
 signal_weight_optimizer:
