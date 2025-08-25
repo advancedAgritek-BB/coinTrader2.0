@@ -7,6 +7,9 @@ from collections import deque
 from typing import Any, Awaitable, Callable, Deque
 
 import ccxt.async_support as ccxt  # type: ignore
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from crypto_bot.utils.logger import LOG_DIR, setup_logger
 
@@ -20,6 +23,22 @@ semaphore = asyncio.Semaphore(_max_concurrency)
 _REQUEST_WINDOW = 300.0  # 5 minutes
 
 logger = setup_logger(__name__, LOG_DIR / "kraken_client.log")
+
+
+def _build_session(pool_maxsize: int = 100, retries: int = 3) -> requests.Session:
+    """Return a :class:`requests.Session` with an expanded adapter pool."""
+
+    session = requests.Session()
+    retry = Retry(total=retries, backoff_factor=0.3, raise_on_status=False)
+    adapter = HTTPAdapter(
+        pool_connections=pool_maxsize,
+        pool_maxsize=pool_maxsize,
+        max_retries=retry,
+    )
+    session.mount("https://api.kraken.com", adapter)
+    session.mount("http://api.kraken.com", adapter)
+    session.headers.update({"User-Agent": "coinTrader2.0"})
+    return session
 
 
 class KrakenClient:
@@ -98,19 +117,25 @@ _client: KrakenClient | None = None
 
 
 def get_kraken_client(
-    *, max_concurrency: int = DEFAULT_MAX_CONCURRENCY, **exchange_kwargs: Any
+    *,
+    max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
+    pool_maxsize: int | None = None,
+    **exchange_kwargs: Any,
 ) -> KrakenClient:
     """Return a shared :class:`KrakenClient` instance.
 
     The first call may specify ``max_concurrency`` and keyword arguments passed to
-    ``ccxt.kraken``. Subsequent calls ignore these parameters and return the same
-    instance.
+    ``ccxt.kraken``. ``pool_maxsize`` controls the underlying HTTP connection pool.
+    Subsequent calls ignore these parameters and return the same instance.
     """
     global _client, semaphore, _max_concurrency
     if _client is None:
         _max_concurrency = max_concurrency
         semaphore = asyncio.Semaphore(_max_concurrency)
         params = {"enableRateLimit": True}
+        if pool_maxsize is None:
+            pool_maxsize = int(os.getenv("HTTP_POOL_SIZE", "50"))
+        params["session"] = _build_session(pool_maxsize=pool_maxsize)
         params.update(exchange_kwargs)
         exchange = ccxt.kraken(params)
         _client = KrakenClient(exchange)
